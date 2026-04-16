@@ -1,0 +1,47 @@
+services:
+  web:
+    build:
+      context: ./apps/web
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+    depends_on:
+      - api
+
+  api:
+    build:
+      context: ./apps/api
+    ports:
+      - "8000:8000"
+    environment:
+      CASEOPS_ENV: local
+      CASEOPS_API_HOST: 0.0.0.0
+      CASEOPS_API_PORT: 8000
+      CASEOPS_API_NAME: CaseOps API
+      CASEOPS_API_VERSION: 0.1.0
+      CASEOPS_API_DOCS_ENABLED: "true"
+      CASEOPS_PUBLIC_APP_URL: http://localhost:3000
+      CASEOPS_AUTH_SECRET: change-me-change-me-change-me-2026
+    depends_on:
+      - postgres
+      - valkey
+
+  postgres:
+    image: pgvector/pgvector:pg17
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: caseops
+      POSTGRES_USER: caseops
+      POSTGRES_PASSWORD: caseops
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  valkey:
+    image: valkey/valkey:8.1
+    ports:
+      - "6379:6379"
+
+volumes:
+  postgres_data:

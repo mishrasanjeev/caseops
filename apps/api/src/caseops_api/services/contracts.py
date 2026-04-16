@@ -1,0 +1,624 @@
+from __future__ import annotations
+
+from fastapi import HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.orm import Session, joinedload, selectinload
+
+from caseops_api.db.models import (
+    CompanyMembership,
+    Contract,
+    ContractActivity,
+    ContractClause,
+    ContractObligation,
+    ContractPlaybookRule,
+    Matter,
+)
+from caseops_api.schemas.contracts import (
+    ContractActivityRecord,
+    ContractClauseCreateRequest,
+    ContractClauseRecord,
+    ContractCreateRequest,
+    ContractLinkedMatterRecord,
+    ContractListResponse,
+    ContractObligationCreateRequest,
+    ContractObligationRecord,
+    ContractPlaybookHitRecord,
+    ContractPlaybookRuleCreateRequest,
+    ContractPlaybookRuleRecord,
+    ContractRecord,
+    ContractUpdateRequest,
+    ContractWorkspaceMembership,
+    ContractWorkspaceResponse,
+)
+from caseops_api.services.identity import SessionContext
+
+
+def _contract_record(contract: Contract) -> ContractRecord:
+    return ContractRecord.model_validate(contract)
+
+
+def _membership_summary(membership: CompanyMembership) -> ContractWorkspaceMembership:
+    return ContractWorkspaceMembership(
+        membership_id=membership.id,
+        user_id=membership.user.id,
+        full_name=membership.user.full_name,
+        email=membership.user.email,
+        role=membership.role,
+        is_active=membership.is_active and membership.user.is_active,
+    )
+
+
+def _linked_matter_record(matter: Matter) -> ContractLinkedMatterRecord:
+    return ContractLinkedMatterRecord(
+        id=matter.id,
+        matter_code=matter.matter_code,
+        title=matter.title,
+        status=matter.status,
+        forum_level=matter.forum_level,
+    )
+
+
+def _clause_record(clause: ContractClause) -> ContractClauseRecord:
+    return ContractClauseRecord(
+        id=clause.id,
+        contract_id=clause.contract_id,
+        created_by_membership_id=clause.created_by_membership_id,
+        created_by_name=(
+            clause.created_by_membership.user.full_name
+            if clause.created_by_membership and clause.created_by_membership.user
+            else None
+        ),
+        title=clause.title,
+        clause_type=clause.clause_type,
+        clause_text=clause.clause_text,
+        risk_level=clause.risk_level,
+        notes=clause.notes,
+        created_at=clause.created_at,
+    )
+
+
+def _obligation_record(obligation: ContractObligation) -> ContractObligationRecord:
+    return ContractObligationRecord(
+        id=obligation.id,
+        contract_id=obligation.contract_id,
+        owner_membership_id=obligation.owner_membership_id,
+        owner_name=(
+            obligation.owner_membership.user.full_name
+            if obligation.owner_membership and obligation.owner_membership.user
+            else None
+        ),
+        title=obligation.title,
+        description=obligation.description,
+        due_on=obligation.due_on,
+        status=obligation.status,
+        priority=obligation.priority,
+        completed_at=obligation.completed_at,
+        created_at=obligation.created_at,
+    )
+
+
+def _playbook_rule_record(rule: ContractPlaybookRule) -> ContractPlaybookRuleRecord:
+    return ContractPlaybookRuleRecord(
+        id=rule.id,
+        contract_id=rule.contract_id,
+        created_by_membership_id=rule.created_by_membership_id,
+        created_by_name=(
+            rule.created_by_membership.user.full_name
+            if rule.created_by_membership and rule.created_by_membership.user
+            else None
+        ),
+        rule_name=rule.rule_name,
+        clause_type=rule.clause_type,
+        expected_position=rule.expected_position,
+        severity=rule.severity,
+        keyword_pattern=rule.keyword_pattern,
+        fallback_text=rule.fallback_text,
+        created_at=rule.created_at,
+    )
+
+
+def _activity_record(activity: ContractActivity) -> ContractActivityRecord:
+    return ContractActivityRecord(
+        id=activity.id,
+        contract_id=activity.contract_id,
+        actor_membership_id=activity.actor_membership_id,
+        actor_name=(
+            activity.actor_membership.user.full_name
+            if activity.actor_membership and activity.actor_membership.user
+            else None
+        ),
+        event_type=activity.event_type,
+        title=activity.title,
+        detail=activity.detail,
+        created_at=activity.created_at,
+    )
+
+
+def _append_activity(
+    session: Session,
+    *,
+    contract_id: str,
+    actor_membership_id: str | None,
+    event_type: str,
+    title: str,
+    detail: str | None = None,
+) -> None:
+    session.add(
+        ContractActivity(
+            contract_id=contract_id,
+            actor_membership_id=actor_membership_id,
+            event_type=event_type,
+            title=title,
+            detail=detail,
+        )
+    )
+
+
+def _get_company_membership(
+    session: Session,
+    *,
+    company_id: str,
+    membership_id: str,
+    not_found_detail: str,
+) -> CompanyMembership:
+    membership = session.scalar(
+        select(CompanyMembership)
+        .options(joinedload(CompanyMembership.user))
+        .where(
+            CompanyMembership.id == membership_id,
+            CompanyMembership.company_id == company_id,
+            CompanyMembership.is_active.is_(True),
+        )
+    )
+    if not membership or not membership.user.is_active:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=not_found_detail)
+    return membership
+
+
+def _get_linked_matter(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+) -> Matter:
+    matter = session.scalar(
+        select(Matter).where(Matter.id == matter_id, Matter.company_id == context.company.id)
+    )
+    if not matter:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Linked matter not found in the current company.",
+        )
+    return matter
+
+
+def _get_contract_model(session: Session, *, context: SessionContext, contract_id: str) -> Contract:
+    contract = session.scalar(
+        select(Contract)
+        .options(
+            joinedload(Contract.linked_matter),
+            joinedload(Contract.owner_membership).joinedload(CompanyMembership.user),
+            selectinload(Contract.clauses)
+            .joinedload(ContractClause.created_by_membership)
+            .joinedload(CompanyMembership.user),
+            selectinload(Contract.obligations)
+            .joinedload(ContractObligation.owner_membership)
+            .joinedload(CompanyMembership.user),
+            selectinload(Contract.playbook_rules)
+            .joinedload(ContractPlaybookRule.created_by_membership)
+            .joinedload(CompanyMembership.user),
+            selectinload(Contract.activity_events)
+            .joinedload(ContractActivity.actor_membership)
+            .joinedload(CompanyMembership.user),
+        )
+        .where(Contract.id == contract_id, Contract.company_id == context.company.id)
+    )
+    if not contract:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found.")
+    return contract
+
+
+def _build_playbook_hits(contract: Contract) -> list[ContractPlaybookHitRecord]:
+    clauses_by_type: dict[str, list[ContractClause]] = {}
+    for clause in contract.clauses:
+        clauses_by_type.setdefault(clause.clause_type.strip().lower(), []).append(clause)
+
+    hits: list[ContractPlaybookHitRecord] = []
+    for rule in contract.playbook_rules:
+        relevant_clauses = clauses_by_type.get(rule.clause_type.strip().lower(), [])
+        matched_clause: ContractClause | None = None
+        normalized_keyword = rule.keyword_pattern.strip().lower() if rule.keyword_pattern else None
+
+        if relevant_clauses:
+            if normalized_keyword:
+                matched_clause = next(
+                    (
+                        clause
+                        for clause in relevant_clauses
+                        if normalized_keyword in clause.clause_text.lower()
+                        or normalized_keyword in clause.title.lower()
+                    ),
+                    None,
+                )
+            else:
+                matched_clause = relevant_clauses[0]
+
+        if matched_clause is not None:
+            hits.append(
+                ContractPlaybookHitRecord(
+                    rule_id=rule.id,
+                    rule_name=rule.rule_name,
+                    clause_type=rule.clause_type,
+                    severity=rule.severity,
+                    expected_position=rule.expected_position,
+                    keyword_pattern=rule.keyword_pattern,
+                    fallback_text=rule.fallback_text,
+                    matched_clause_id=matched_clause.id,
+                    matched_clause_title=matched_clause.title,
+                    status="matched",
+                    detail=(
+                        f"Matched against clause '{matched_clause.title}'"
+                        + (
+                            f" using keyword '{rule.keyword_pattern}'."
+                            if rule.keyword_pattern
+                            else "."
+                        )
+                    ),
+                )
+            )
+            continue
+
+        if relevant_clauses:
+            hits.append(
+                ContractPlaybookHitRecord(
+                    rule_id=rule.id,
+                    rule_name=rule.rule_name,
+                    clause_type=rule.clause_type,
+                    severity=rule.severity,
+                    expected_position=rule.expected_position,
+                    keyword_pattern=rule.keyword_pattern,
+                    fallback_text=rule.fallback_text,
+                    matched_clause_id=None,
+                    matched_clause_title=None,
+                    status="flagged",
+                    detail=(
+                        f"Found {len(relevant_clauses)} clause(s) of type '{rule.clause_type}', "
+                        f"but none matched keyword '{rule.keyword_pattern}'."
+                        if rule.keyword_pattern
+                        else f"Clause type '{rule.clause_type}' exists but needs manual review."
+                    ),
+                )
+            )
+            continue
+
+        hits.append(
+            ContractPlaybookHitRecord(
+                rule_id=rule.id,
+                rule_name=rule.rule_name,
+                clause_type=rule.clause_type,
+                severity=rule.severity,
+                expected_position=rule.expected_position,
+                keyword_pattern=rule.keyword_pattern,
+                fallback_text=rule.fallback_text,
+                matched_clause_id=None,
+                matched_clause_title=None,
+                status="missing",
+                detail=(
+                    f"No clause of type '{rule.clause_type}' is currently "
+                    "tracked on this contract."
+                ),
+            )
+        )
+    return hits
+
+
+def create_contract(
+    session: Session,
+    *,
+    context: SessionContext,
+    payload: ContractCreateRequest,
+) -> ContractRecord:
+    existing_contract = session.scalar(
+        select(Contract).where(
+            Contract.company_id == context.company.id,
+            Contract.contract_code == payload.contract_code.strip(),
+        )
+    )
+    if existing_contract:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A contract with this code already exists for the current company.",
+        )
+
+    linked_matter = None
+    if payload.linked_matter_id:
+        linked_matter = _get_linked_matter(
+            session,
+            context=context,
+            matter_id=payload.linked_matter_id,
+        )
+
+    owner_membership_id = context.membership.id
+    if payload.owner_membership_id:
+        owner_membership_id = _get_company_membership(
+            session,
+            company_id=context.company.id,
+            membership_id=payload.owner_membership_id,
+            not_found_detail="Contract owner membership was not found in the current company.",
+        ).id
+
+    contract = Contract(
+        company_id=context.company.id,
+        linked_matter_id=linked_matter.id if linked_matter else None,
+        owner_membership_id=owner_membership_id,
+        title=payload.title.strip(),
+        contract_code=payload.contract_code.strip(),
+        counterparty_name=payload.counterparty_name.strip() if payload.counterparty_name else None,
+        contract_type=payload.contract_type.strip(),
+        status=payload.status,
+        jurisdiction=payload.jurisdiction.strip() if payload.jurisdiction else None,
+        effective_on=payload.effective_on,
+        expires_on=payload.expires_on,
+        renewal_on=payload.renewal_on,
+        auto_renewal=payload.auto_renewal,
+        currency=payload.currency.strip().upper(),
+        total_value_minor=payload.total_value_minor,
+        summary=payload.summary.strip() if payload.summary else None,
+    )
+    session.add(contract)
+    session.flush()
+    _append_activity(
+        session,
+        contract_id=contract.id,
+        actor_membership_id=context.membership.id,
+        event_type="contract_created",
+        title="Contract created",
+        detail=f"{contract.contract_code} created as {contract.status}.",
+    )
+    session.commit()
+    session.refresh(contract)
+    return _contract_record(contract)
+
+
+def list_contracts(session: Session, *, context: SessionContext) -> ContractListResponse:
+    contracts = list(
+        session.scalars(
+            select(Contract)
+            .where(Contract.company_id == context.company.id)
+            .order_by(Contract.updated_at.desc())
+        )
+    )
+    return ContractListResponse(
+        company_id=context.company.id,
+        contracts=[_contract_record(contract) for contract in contracts],
+    )
+
+
+def get_contract(session: Session, *, context: SessionContext, contract_id: str) -> ContractRecord:
+    return _contract_record(_get_contract_model(session, context=context, contract_id=contract_id))
+
+
+def update_contract(
+    session: Session,
+    *,
+    context: SessionContext,
+    contract_id: str,
+    payload: ContractUpdateRequest,
+) -> ContractRecord:
+    contract = _get_contract_model(session, context=context, contract_id=contract_id)
+    raw_updates = payload.model_dump(exclude_unset=True)
+
+    if "linked_matter_id" in raw_updates:
+        linked_matter_id = raw_updates.pop("linked_matter_id")
+        contract.linked_matter_id = (
+            _get_linked_matter(session, context=context, matter_id=linked_matter_id).id
+            if linked_matter_id
+            else None
+        )
+
+    if "owner_membership_id" in raw_updates:
+        owner_membership_id = raw_updates.pop("owner_membership_id")
+        contract.owner_membership_id = (
+            _get_company_membership(
+                session,
+                company_id=context.company.id,
+                membership_id=owner_membership_id,
+                not_found_detail="Contract owner membership was not found in the current company.",
+            ).id
+            if owner_membership_id
+            else None
+        )
+
+    for field_name, value in raw_updates.items():
+        if isinstance(value, str):
+            value = value.strip()
+        setattr(contract, field_name, value)
+
+    if contract.currency:
+        contract.currency = contract.currency.upper()
+
+    session.add(contract)
+    _append_activity(
+        session,
+        contract_id=contract.id,
+        actor_membership_id=context.membership.id,
+        event_type="contract_updated",
+        title="Contract updated",
+        detail=f"Status is now {contract.status}.",
+    )
+    session.commit()
+    session.refresh(contract)
+    return _contract_record(contract)
+
+
+def get_contract_workspace(
+    session: Session,
+    *,
+    context: SessionContext,
+    contract_id: str,
+) -> ContractWorkspaceResponse:
+    contract = _get_contract_model(session, context=context, contract_id=contract_id)
+    memberships = list(
+        session.scalars(
+            select(CompanyMembership)
+            .options(joinedload(CompanyMembership.user))
+            .where(CompanyMembership.company_id == context.company.id)
+            .order_by(CompanyMembership.created_at.asc())
+        )
+    )
+    available_owners = [
+        _membership_summary(membership)
+        for membership in memberships
+        if membership.is_active and membership.user.is_active
+    ]
+    return ContractWorkspaceResponse(
+        contract=_contract_record(contract),
+        linked_matter=(
+            _linked_matter_record(contract.linked_matter)
+            if contract.linked_matter
+            else None
+        ),
+        owner=_membership_summary(contract.owner_membership) if contract.owner_membership else None,
+        available_owners=available_owners,
+        clauses=[_clause_record(clause) for clause in contract.clauses],
+        obligations=[_obligation_record(obligation) for obligation in contract.obligations],
+        playbook_rules=[_playbook_rule_record(rule) for rule in contract.playbook_rules],
+        playbook_hits=_build_playbook_hits(contract),
+        activity=[_activity_record(activity) for activity in contract.activity_events],
+    )
+
+
+def create_contract_clause(
+    session: Session,
+    *,
+    context: SessionContext,
+    contract_id: str,
+    payload: ContractClauseCreateRequest,
+) -> ContractClauseRecord:
+    contract = _get_contract_model(session, context=context, contract_id=contract_id)
+    clause = ContractClause(
+        contract_id=contract.id,
+        created_by_membership_id=context.membership.id,
+        title=payload.title.strip(),
+        clause_type=payload.clause_type.strip(),
+        clause_text=payload.clause_text.strip(),
+        risk_level=payload.risk_level,
+        notes=payload.notes.strip() if payload.notes else None,
+    )
+    session.add(clause)
+    session.flush()
+    _append_activity(
+        session,
+        contract_id=contract.id,
+        actor_membership_id=context.membership.id,
+        event_type="contract_clause_added",
+        title="Contract clause added",
+        detail=f"{clause.clause_type} clause '{clause.title}' recorded.",
+    )
+    session.commit()
+    refreshed_clause = session.scalar(
+        select(ContractClause)
+        .options(
+            joinedload(ContractClause.created_by_membership).joinedload(CompanyMembership.user)
+        )
+        .where(ContractClause.id == clause.id)
+    )
+    assert refreshed_clause is not None
+    return _clause_record(refreshed_clause)
+
+
+def create_contract_obligation(
+    session: Session,
+    *,
+    context: SessionContext,
+    contract_id: str,
+    payload: ContractObligationCreateRequest,
+) -> ContractObligationRecord:
+    contract = _get_contract_model(session, context=context, contract_id=contract_id)
+    owner_membership_id = None
+    if payload.owner_membership_id:
+        owner_membership_id = _get_company_membership(
+            session,
+            company_id=context.company.id,
+            membership_id=payload.owner_membership_id,
+            not_found_detail="Contract obligation owner was not found in the current company.",
+        ).id
+
+    completed_at = None
+    if payload.status == "completed":
+        from caseops_api.db.models import utcnow
+
+        completed_at = utcnow()
+
+    obligation = ContractObligation(
+        contract_id=contract.id,
+        owner_membership_id=owner_membership_id,
+        title=payload.title.strip(),
+        description=payload.description.strip() if payload.description else None,
+        due_on=payload.due_on,
+        status=payload.status,
+        priority=payload.priority,
+        completed_at=completed_at,
+    )
+    session.add(obligation)
+    session.flush()
+    _append_activity(
+        session,
+        contract_id=contract.id,
+        actor_membership_id=context.membership.id,
+        event_type="contract_obligation_added",
+        title="Contract obligation added",
+        detail=f"{obligation.title} created with status {obligation.status}.",
+    )
+    session.commit()
+    refreshed_obligation = session.scalar(
+        select(ContractObligation)
+        .options(
+            joinedload(ContractObligation.owner_membership).joinedload(CompanyMembership.user)
+        )
+        .where(ContractObligation.id == obligation.id)
+    )
+    assert refreshed_obligation is not None
+    return _obligation_record(refreshed_obligation)
+
+
+def create_contract_playbook_rule(
+    session: Session,
+    *,
+    context: SessionContext,
+    contract_id: str,
+    payload: ContractPlaybookRuleCreateRequest,
+) -> ContractPlaybookRuleRecord:
+    contract = _get_contract_model(session, context=context, contract_id=contract_id)
+    rule = ContractPlaybookRule(
+        contract_id=contract.id,
+        created_by_membership_id=context.membership.id,
+        rule_name=payload.rule_name.strip(),
+        clause_type=payload.clause_type.strip(),
+        expected_position=payload.expected_position.strip(),
+        severity=payload.severity,
+        keyword_pattern=payload.keyword_pattern.strip() if payload.keyword_pattern else None,
+        fallback_text=payload.fallback_text.strip() if payload.fallback_text else None,
+    )
+    session.add(rule)
+    session.flush()
+    _append_activity(
+        session,
+        contract_id=contract.id,
+        actor_membership_id=context.membership.id,
+        event_type="contract_playbook_rule_added",
+        title="Playbook rule added",
+        detail=f"{rule.rule_name} now checks clause type {rule.clause_type}.",
+    )
+    session.commit()
+    refreshed_rule = session.scalar(
+        select(ContractPlaybookRule)
+        .options(
+            joinedload(ContractPlaybookRule.created_by_membership).joinedload(
+                CompanyMembership.user
+            )
+        )
+        .where(ContractPlaybookRule.id == rule.id)
+    )
+    assert refreshed_rule is not None
+    return _playbook_rule_record(refreshed_rule)
