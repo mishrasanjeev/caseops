@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import BinaryIO
+
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload, selectinload
@@ -8,6 +10,7 @@ from caseops_api.db.models import (
     CompanyMembership,
     Contract,
     ContractActivity,
+    ContractAttachment,
     ContractClause,
     ContractObligation,
     ContractPlaybookRule,
@@ -15,6 +18,7 @@ from caseops_api.db.models import (
 )
 from caseops_api.schemas.contracts import (
     ContractActivityRecord,
+    ContractAttachmentRecord,
     ContractClauseCreateRequest,
     ContractClauseRecord,
     ContractCreateRequest,
@@ -29,6 +33,11 @@ from caseops_api.schemas.contracts import (
     ContractUpdateRequest,
     ContractWorkspaceMembership,
     ContractWorkspaceResponse,
+)
+from caseops_api.services.document_storage import (
+    persist_contract_attachment,
+    resolve_storage_path,
+    sanitize_filename,
 )
 from caseops_api.services.identity import SessionContext
 
@@ -134,6 +143,24 @@ def _activity_record(activity: ContractActivity) -> ContractActivityRecord:
     )
 
 
+def _attachment_record(attachment: ContractAttachment) -> ContractAttachmentRecord:
+    return ContractAttachmentRecord(
+        id=attachment.id,
+        contract_id=attachment.contract_id,
+        uploaded_by_membership_id=attachment.uploaded_by_membership_id,
+        uploaded_by_name=(
+            attachment.uploaded_by_membership.user.full_name
+            if attachment.uploaded_by_membership and attachment.uploaded_by_membership.user
+            else None
+        ),
+        original_filename=attachment.original_filename,
+        content_type=attachment.content_type,
+        size_bytes=attachment.size_bytes,
+        sha256_hex=attachment.sha256_hex,
+        created_at=attachment.created_at,
+    )
+
+
 def _append_activity(
     session: Session,
     *,
@@ -200,6 +227,9 @@ def _get_contract_model(session: Session, *, context: SessionContext, contract_i
             joinedload(Contract.owner_membership).joinedload(CompanyMembership.user),
             selectinload(Contract.clauses)
             .joinedload(ContractClause.created_by_membership)
+            .joinedload(CompanyMembership.user),
+            selectinload(Contract.attachments)
+            .joinedload(ContractAttachment.uploaded_by_membership)
             .joinedload(CompanyMembership.user),
             selectinload(Contract.obligations)
             .joinedload(ContractObligation.owner_membership)
@@ -480,6 +510,7 @@ def get_contract_workspace(
         ),
         owner=_membership_summary(contract.owner_membership) if contract.owner_membership else None,
         available_owners=available_owners,
+        attachments=[_attachment_record(attachment) for attachment in contract.attachments],
         clauses=[_clause_record(clause) for clause in contract.clauses],
         obligations=[_obligation_record(obligation) for obligation in contract.obligations],
         playbook_rules=[_playbook_rule_record(rule) for rule in contract.playbook_rules],
@@ -622,3 +653,99 @@ def create_contract_playbook_rule(
     )
     assert refreshed_rule is not None
     return _playbook_rule_record(refreshed_rule)
+
+
+def create_contract_attachment(
+    session: Session,
+    *,
+    context: SessionContext,
+    contract_id: str,
+    filename: str,
+    content_type: str | None,
+    stream: BinaryIO,
+) -> ContractAttachmentRecord:
+    contract = _get_contract_model(session, context=context, contract_id=contract_id)
+    attachment = ContractAttachment(
+        contract_id=contract.id,
+        uploaded_by_membership_id=context.membership.id,
+        original_filename=sanitize_filename(filename),
+        storage_key="pending",
+        content_type=content_type,
+        size_bytes=0,
+        sha256_hex="0" * 64,
+    )
+    session.add(attachment)
+    session.flush()
+
+    try:
+        stored = persist_contract_attachment(
+            company_id=context.company.id,
+            contract_id=contract.id,
+            attachment_id=attachment.id,
+            filename=filename,
+            stream=stream,
+        )
+        attachment.storage_key = stored.storage_key
+        attachment.size_bytes = stored.size_bytes
+        attachment.sha256_hex = stored.sha256_hex
+        session.add(attachment)
+        _append_activity(
+            session,
+            contract_id=contract.id,
+            actor_membership_id=context.membership.id,
+            event_type="contract_attachment_added",
+            title="Contract document uploaded",
+            detail=f"{attachment.original_filename} uploaded to the contract workspace.",
+        )
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+
+    refreshed_attachment = session.scalar(
+        select(ContractAttachment)
+        .options(
+            joinedload(ContractAttachment.uploaded_by_membership).joinedload(
+                CompanyMembership.user
+            )
+        )
+        .where(ContractAttachment.id == attachment.id)
+    )
+    assert refreshed_attachment is not None
+    return _attachment_record(refreshed_attachment)
+
+
+def get_contract_attachment_download(
+    session: Session,
+    *,
+    context: SessionContext,
+    contract_id: str,
+    attachment_id: str,
+) -> tuple[ContractAttachment, str]:
+    attachment = session.scalar(
+        select(ContractAttachment)
+        .options(
+            joinedload(ContractAttachment.uploaded_by_membership).joinedload(
+                CompanyMembership.user
+            )
+        )
+        .join(Contract, Contract.id == ContractAttachment.contract_id)
+        .where(
+            ContractAttachment.id == attachment_id,
+            ContractAttachment.contract_id == contract_id,
+            Contract.company_id == context.company.id,
+        )
+    )
+    if not attachment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Contract attachment not found.",
+        )
+
+    storage_path = resolve_storage_path(attachment.storage_key)
+    if not storage_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Contract attachment file is no longer available.",
+        )
+    return attachment, str(storage_path)

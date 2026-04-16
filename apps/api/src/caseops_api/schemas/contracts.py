@@ -101,6 +101,18 @@ class ContractLinkedMatterRecord(BaseModel):
     forum_level: str
 
 
+class ContractAttachmentRecord(BaseModel):
+    id: str
+    contract_id: str
+    uploaded_by_membership_id: str | None
+    uploaded_by_name: str | None
+    original_filename: str
+    content_type: str | None
+    size_bytes: int
+    sha256_hex: str
+    created_at: datetime
+
+
 class ContractClauseCreateRequest(BaseModel):
     title: str = Field(min_length=2, max_length=255)
     clause_type: str = Field(min_length=2, max_length=120)
@@ -198,6 +210,7 @@ class ContractWorkspaceResponse(BaseModel):
     linked_matter: ContractLinkedMatterRecord | None
     owner: ContractWorkspaceMembership | None
     available_owners: list[ContractWorkspaceMembership]
+    attachments: list[ContractAttachmentRecord]
     clauses: list[ContractClauseRecord]
     obligations: list[ContractObligationRecord]
     playbook_rules: list[ContractPlaybookRuleRecord]

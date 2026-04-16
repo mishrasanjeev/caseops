@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi.responses import FileResponse
 
 from caseops_api.api.dependencies import DbSession, get_current_context
 from caseops_api.schemas.contracts import (
+    ContractAttachmentRecord,
     ContractClauseCreateRequest,
     ContractClauseRecord,
     ContractCreateRequest,
@@ -20,10 +22,12 @@ from caseops_api.schemas.contracts import (
 )
 from caseops_api.services.contracts import (
     create_contract,
+    create_contract_attachment,
     create_contract_clause,
     create_contract_obligation,
     create_contract_playbook_rule,
     get_contract,
+    get_contract_attachment_download,
     get_contract_workspace,
     list_contracts,
     update_contract,
@@ -141,4 +145,49 @@ async def post_current_company_contract_playbook_rule(
         context=context,
         contract_id=contract_id,
         payload=payload,
+    )
+
+
+@router.post(
+    "/{contract_id}/attachments",
+    response_model=ContractAttachmentRecord,
+    summary="Upload an attachment into a contract workspace",
+)
+async def post_current_company_contract_attachment(
+    contract_id: str,
+    file: Annotated[UploadFile, File(...)],
+    context: CurrentContext,
+    session: DbSession,
+) -> ContractAttachmentRecord:
+    return create_contract_attachment(
+        session,
+        context=context,
+        contract_id=contract_id,
+        filename=file.filename or "document",
+        content_type=file.content_type,
+        stream=file.file,
+    )
+
+
+@router.get(
+    "/{contract_id}/attachments/{attachment_id}/download",
+    response_class=FileResponse,
+    summary="Download a contract attachment",
+)
+async def download_current_company_contract_attachment(
+    contract_id: str,
+    attachment_id: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> FileResponse:
+    attachment, storage_path = get_contract_attachment_download(
+        session,
+        context=context,
+        contract_id=contract_id,
+        attachment_id=attachment_id,
+    )
+    return FileResponse(
+        path=storage_path,
+        media_type=attachment.content_type or "application/octet-stream",
+        filename=attachment.original_filename,
     )

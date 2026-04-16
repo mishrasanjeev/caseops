@@ -234,3 +234,183 @@ def test_cross_tenant_user_cannot_access_another_company_contract(client: TestCl
     )
 
     assert forbidden_workspace.status_code == 404
+
+
+def test_contract_attachment_upload_and_download_are_available_in_workspace(
+    client: TestClient,
+) -> None:
+    bootstrap_payload = bootstrap_company(client)
+    token = str(bootstrap_payload["access_token"])
+
+    contract_response = client.post(
+        "/api/contracts/",
+        headers=auth_headers(token),
+        json={
+            "title": "Managed services agreement",
+            "contract_code": "CTR-2026-200",
+            "contract_type": "MSA",
+            "status": "under_review",
+        },
+    )
+    contract_id = contract_response.json()["id"]
+
+    upload_response = client.post(
+        f"/api/contracts/{contract_id}/attachments",
+        headers=auth_headers(token),
+        files={
+            "file": (
+                "msa.txt",
+                (
+                    b"Termination. Either party may terminate this agreement by providing 30 days "
+                    b"written notice.\n\nConfidentiality. Recipient shall notify the disclosing "
+                    b"party within 24 hours of any breach."
+                ),
+                "text/plain",
+            )
+        },
+    )
+
+    assert upload_response.status_code == 200
+    attachment = upload_response.json()
+    assert attachment["original_filename"] == "msa.txt"
+
+    workspace_response = client.get(
+        f"/api/contracts/{contract_id}/workspace",
+        headers=auth_headers(token),
+    )
+    assert workspace_response.status_code == 200
+    workspace = workspace_response.json()
+    assert len(workspace["attachments"]) == 1
+    assert workspace["attachments"][0]["id"] == attachment["id"]
+    assert any(
+        event["event_type"] == "contract_attachment_added" for event in workspace["activity"]
+    )
+
+    download_response = client.get(
+        f"/api/contracts/{contract_id}/attachments/{attachment['id']}/download",
+        headers=auth_headers(token),
+    )
+    assert download_response.status_code == 200
+    assert b"30 days written notice" in download_response.content
+
+
+def test_cross_tenant_user_cannot_download_another_company_contract_attachment(
+    client: TestClient,
+) -> None:
+    first_company = bootstrap_company(client)
+    first_token = str(first_company["access_token"])
+
+    contract_response = client.post(
+        "/api/contracts/",
+        headers=auth_headers(first_token),
+        json={
+            "title": "Restricted vendor contract",
+            "contract_code": "CTR-2026-201",
+            "contract_type": "Vendor",
+            "status": "draft",
+        },
+    )
+    contract_id = contract_response.json()["id"]
+
+    upload_response = client.post(
+        f"/api/contracts/{contract_id}/attachments",
+        headers=auth_headers(first_token),
+        files={"file": ("confidential.txt", b"Private contract schedule", "text/plain")},
+    )
+    attachment_id = upload_response.json()["id"]
+
+    second_company_response = client.post(
+        "/api/bootstrap/company",
+        json={
+            "company_name": "Second Tenant Legal",
+            "company_slug": "second-tenant-contract-attachments",
+            "company_type": "corporate_legal",
+            "owner_full_name": "Second Owner",
+            "owner_email": "owner@secondattachments.in",
+            "owner_password": "SecondOwner123!",
+        },
+    )
+    second_token = str(second_company_response.json()["access_token"])
+
+    forbidden_download = client.get(
+        f"/api/contracts/{contract_id}/attachments/{attachment_id}/download",
+        headers=auth_headers(second_token),
+    )
+
+    assert forbidden_download.status_code == 404
+
+
+def test_ai_contract_review_uses_uploaded_contract_text_and_playbook_hits(
+    client: TestClient,
+) -> None:
+    bootstrap_payload = bootstrap_company(client)
+    token = str(bootstrap_payload["access_token"])
+
+    contract_response = client.post(
+        "/api/contracts/",
+        headers=auth_headers(token),
+        json={
+            "title": "Cloud services agreement",
+            "contract_code": "CTR-2026-202",
+            "counterparty_name": "Nimbus Cloud Services",
+            "contract_type": "MSA",
+            "status": "under_review",
+        },
+    )
+    contract_id = contract_response.json()["id"]
+
+    client.post(
+        f"/api/contracts/{contract_id}/attachments",
+        headers=auth_headers(token),
+        files={
+            "file": (
+                "cloud-msa.txt",
+                (
+                    b"Termination. Either party may terminate this agreement by providing 30 days "
+                    b"written notice.\n\nConfidentiality. Recipient shall protect confidential "
+                    b"information and must notify the disclosing party within 24 hours "
+                    b"of any breach."
+                ),
+                "text/plain",
+            )
+        },
+    )
+
+    client.post(
+        f"/api/contracts/{contract_id}/playbook-rules",
+        headers=auth_headers(token),
+        json={
+            "rule_name": "Termination requires 30-day notice",
+            "clause_type": "termination",
+            "expected_position": "Termination should require at least 30 days written notice.",
+            "severity": "medium",
+            "keyword_pattern": "30 days",
+        },
+    )
+    client.post(
+        f"/api/contracts/{contract_id}/playbook-rules",
+        headers=auth_headers(token),
+        json={
+            "rule_name": "Indemnity fallback required",
+            "clause_type": "indemnity",
+            "expected_position": "Indemnity must be capped to fees paid in the prior 12 months.",
+            "severity": "high",
+            "fallback_text": "Indemnity is capped to fees paid in the prior 12 months.",
+        },
+    )
+
+    review_response = client.post(
+        f"/api/ai/contracts/{contract_id}/reviews/generate",
+        headers=auth_headers(token),
+        json={"review_type": "intake_review", "focus": "Security and breach posture"},
+    )
+
+    assert review_response.status_code == 200
+    payload = review_response.json()
+    assert payload["provider"] == "caseops-contract-heuristic-v1"
+    assert payload["headline"].startswith("Contract review")
+    assert any("Termination" in item for item in payload["key_clauses"])
+    assert any("24 hours" in item for item in payload["extracted_obligations"])
+    assert any("Indemnity fallback required" in risk for risk in payload["risks"])
+    assert any("Security and breach posture" in item for item in payload["recommended_actions"])
+    assert payload["source_attachments"] == ["cloud-msa.txt"]

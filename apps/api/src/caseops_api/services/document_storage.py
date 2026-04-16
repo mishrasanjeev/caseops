@@ -41,8 +41,46 @@ def persist_matter_attachment(
     filename: str,
     stream: BinaryIO,
 ) -> StoredDocument:
+    return persist_workspace_attachment(
+        company_id=company_id,
+        workspace_id=matter_id,
+        attachment_id=attachment_id,
+        filename=filename,
+        stream=stream,
+    )
+
+
+def persist_contract_attachment(
+    *,
+    company_id: str,
+    contract_id: str,
+    attachment_id: str,
+    filename: str,
+    stream: BinaryIO,
+) -> StoredDocument:
+    return persist_workspace_attachment(
+        company_id=company_id,
+        workspace_id=contract_id,
+        attachment_id=attachment_id,
+        filename=filename,
+        stream=stream,
+        namespace="contracts",
+    )
+
+
+def persist_workspace_attachment(
+    *,
+    company_id: str,
+    workspace_id: str,
+    attachment_id: str,
+    filename: str,
+    stream: BinaryIO,
+    namespace: str = "matters",
+) -> StoredDocument:
     safe_filename = sanitize_filename(filename)
-    relative_path = Path(company_id) / matter_id / f"{attachment_id}-{safe_filename}"
+    relative_path = (
+        Path(company_id) / namespace / workspace_id / f"{attachment_id}-{safe_filename}"
+    )
     target_path = _document_root() / relative_path
     target_path.parent.mkdir(parents=True, exist_ok=True)
 

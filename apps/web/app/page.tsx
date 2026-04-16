@@ -362,11 +362,38 @@ type ContractWorkspaceResponse = {
   linked_matter: ContractLinkedMatterRecord | null;
   owner: ContractWorkspaceMembership | null;
   available_owners: ContractWorkspaceMembership[];
+  attachments: ContractAttachmentRecord[];
   clauses: ContractClauseRecord[];
   obligations: ContractObligationRecord[];
   playbook_rules: ContractPlaybookRuleRecord[];
   playbook_hits: ContractPlaybookHitRecord[];
   activity: ContractActivityRecord[];
+};
+
+type ContractAttachmentRecord = {
+  id: string;
+  contract_id: string;
+  uploaded_by_membership_id: string | null;
+  uploaded_by_name: string | null;
+  original_filename: string;
+  content_type: string | null;
+  size_bytes: number;
+  sha256_hex: string;
+  created_at: string;
+};
+
+type ContractReviewResponse = {
+  contract_id: string;
+  review_type: "intake_review";
+  provider: string;
+  generated_at: string;
+  headline: string;
+  summary: string;
+  key_clauses: string[];
+  extracted_obligations: string[];
+  risks: string[];
+  recommended_actions: string[];
+  source_attachments: string[];
 };
 
 const pillars = [
@@ -443,6 +470,7 @@ export default function HomePage() {
     null,
   );
   const [matterBrief, setMatterBrief] = useState<MatterBriefResponse | null>(null);
+  const [contractReview, setContractReview] = useState<ContractReviewResponse | null>(null);
   const [notice, setNotice] = useState<string>("");
   const [isBusy, setIsBusy] = useState(false);
 
@@ -519,6 +547,8 @@ export default function HomePage() {
     ownerMembershipId: "",
     linkedMatterId: "",
   });
+  const [contractAttachmentFile, setContractAttachmentFile] = useState<File | null>(null);
+  const [contractAttachmentInputKey, setContractAttachmentInputKey] = useState(0);
   const [contractClauseForm, setContractClauseForm] = useState({
     title: "",
     clauseType: "",
@@ -541,6 +571,10 @@ export default function HomePage() {
     severity: "medium",
     keywordPattern: "",
     fallbackText: "",
+  });
+  const [contractReviewForm, setContractReviewForm] = useState({
+    reviewType: "intake_review",
+    focus: "",
   });
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
   const [attachmentInputKey, setAttachmentInputKey] = useState(0);
@@ -672,6 +706,7 @@ export default function HomePage() {
       } catch {
         setSelectedContractId(null);
         setContractWorkspace(null);
+        setContractReview(null);
       }
     }
   }
@@ -696,6 +731,7 @@ export default function HomePage() {
       setMatterWorkspace(null);
       setContractWorkspace(null);
       setMatterBrief(null);
+      setContractReview(null);
     });
   }, []);
 
@@ -1268,6 +1304,7 @@ export default function HomePage() {
       await loadContext(token);
       setSelectedContractId(contract.id);
       await loadContractWorkspace(token, contract.id);
+      setContractReview(null);
       setContractForm({
         title: "",
         contractCode: "",
@@ -1303,6 +1340,7 @@ export default function HomePage() {
     try {
       setSelectedContractId(contractId);
       await loadContractWorkspace(token, contractId);
+      setContractReview(null);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Could not load contract workspace.");
     } finally {
@@ -1465,6 +1503,102 @@ export default function HomePage() {
     }
   }
 
+  async function handleUploadContractAttachment(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!token || !selectedContractId || !contractAttachmentFile) {
+      return;
+    }
+
+    setIsBusy(true);
+    setNotice("");
+    try {
+      const formData = new FormData();
+      formData.append("file", contractAttachmentFile);
+      await callApi<ContractAttachmentRecord>(
+        `/api/contracts/${selectedContractId}/attachments`,
+        {
+          method: "POST",
+          body: formData,
+        },
+        token,
+      );
+      await loadContext(token);
+      await loadContractWorkspace(token, selectedContractId);
+      setContractAttachmentFile(null);
+      setContractAttachmentInputKey((current) => current + 1);
+      setNotice("Contract document uploaded.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not upload contract document.");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function handleDownloadContractAttachment(attachment: ContractAttachmentRecord) {
+    if (!token || !selectedContractId) {
+      return;
+    }
+
+    setIsBusy(true);
+    setNotice("");
+    try {
+      const response = await fetch(
+        `${apiBaseUrl}/api/contracts/${selectedContractId}/attachments/${attachment.id}/download`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { detail?: string } | null;
+        throw new Error(payload?.detail ?? "Download failed.");
+      }
+
+      const blob = await response.blob();
+      const objectUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = attachment.original_filename;
+      link.click();
+      window.URL.revokeObjectURL(objectUrl);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not download contract document.");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function handleGenerateContractReview(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!token || !selectedContractId) {
+      return;
+    }
+
+    setIsBusy(true);
+    setNotice("");
+    try {
+      const review = await callApi<ContractReviewResponse>(
+        `/api/ai/contracts/${selectedContractId}/reviews/generate`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            review_type: contractReviewForm.reviewType,
+            focus: contractReviewForm.focus || null,
+          }),
+        },
+        token,
+      );
+      setContractReview(review);
+      setNotice("Contract review generated.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not generate contract review.");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
   function handleLogout() {
     window.localStorage.removeItem(tokenStorageKey);
     setToken(null);
@@ -1478,6 +1612,7 @@ export default function HomePage() {
     setMatterWorkspace(null);
     setContractWorkspace(null);
     setMatterBrief(null);
+    setContractReview(null);
     setNotice("Session cleared.");
   }
 
@@ -3303,6 +3438,27 @@ export default function HomePage() {
                   </strong>
                 </div>
               </div>
+
+              <form className="form-grid compact" onSubmit={handleUploadContractAttachment}>
+                <label className="full-span">
+                  Contract document
+                  <input
+                    key={contractAttachmentInputKey}
+                    type="file"
+                    onChange={(event) =>
+                      setContractAttachmentFile(event.target.files?.[0] ?? null)
+                    }
+                    required
+                  />
+                </label>
+                <button
+                  className="secondary-button"
+                  disabled={isBusy || !contractAttachmentFile}
+                  type="submit"
+                >
+                  {isBusy ? "Uploading..." : "Upload contract document"}
+                </button>
+              </form>
             </>
           ) : (
             <p className="empty-state">
@@ -3321,13 +3477,106 @@ export default function HomePage() {
             </div>
             <span className="pill">
               {contractWorkspace
-                ? `${contractWorkspace.clauses.length} clauses / ${contractWorkspace.obligations.length} obligations / ${contractWorkspace.playbook_rules.length} rules`
+                ? `${contractWorkspace.attachments.length} files / ${contractWorkspace.clauses.length} clauses / ${contractWorkspace.obligations.length} obligations / ${contractWorkspace.playbook_rules.length} rules`
                 : "No contract workspace"}
             </span>
           </div>
 
           {loggedIn && contractWorkspace ? (
             <>
+              <form className="form-grid compact" onSubmit={handleGenerateContractReview}>
+                <label>
+                  Review type
+                  <select
+                    value={contractReviewForm.reviewType}
+                    onChange={(event) =>
+                      setContractReviewForm((current) => ({
+                        ...current,
+                        reviewType: event.target.value,
+                      }))
+                    }
+                  >
+                    <option value="intake_review">Intake review</option>
+                  </select>
+                </label>
+                <label className="full-span">
+                  Focus
+                  <input
+                    value={contractReviewForm.focus}
+                    onChange={(event) =>
+                      setContractReviewForm((current) => ({
+                        ...current,
+                        focus: event.target.value,
+                      }))
+                    }
+                    placeholder="Security posture, renewal risk, fallback language, or approval issues."
+                  />
+                </label>
+                <button className="primary-button" disabled={isBusy} type="submit">
+                  {isBusy ? "Generating..." : "Generate contract review"}
+                </button>
+              </form>
+
+              {contractReview ? (
+                <div className="brief-shell">
+                  <article className="timeline-item">
+                    <div className="timeline-meta">
+                      <strong>{contractReview.headline}</strong>
+                      <span>{new Date(contractReview.generated_at).toLocaleString()}</span>
+                    </div>
+                    <p>{contractReview.summary}</p>
+                    <small>{contractReview.provider}</small>
+                  </article>
+                  <div className="brief-grid">
+                    <div className="timeline-shell">
+                      <article className="timeline-item">
+                        <div className="timeline-meta">
+                          <strong>Key clauses</strong>
+                        </div>
+                        {contractReview.key_clauses.map((item) => (
+                          <p key={item}>{item}</p>
+                        ))}
+                      </article>
+                    </div>
+                    <div className="timeline-shell">
+                      <article className="timeline-item">
+                        <div className="timeline-meta">
+                          <strong>Extracted obligations</strong>
+                        </div>
+                        {contractReview.extracted_obligations.map((item) => (
+                          <p key={item}>{item}</p>
+                        ))}
+                      </article>
+                    </div>
+                    <div className="timeline-shell">
+                      <article className="timeline-item">
+                        <div className="timeline-meta">
+                          <strong>Risks</strong>
+                        </div>
+                        {contractReview.risks.map((item) => (
+                          <p key={item}>{item}</p>
+                        ))}
+                      </article>
+                    </div>
+                    <div className="timeline-shell">
+                      <article className="timeline-item">
+                        <div className="timeline-meta">
+                          <strong>Recommended actions</strong>
+                        </div>
+                        {contractReview.recommended_actions.map((item) => (
+                          <p key={item}>{item}</p>
+                        ))}
+                        <small>{contractReview.source_attachments.join(", ")}</small>
+                      </article>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="empty-state">
+                  Upload a readable contract file and generate a structured intake review.
+                </p>
+              )}
+
               <form className="form-grid compact" onSubmit={handleAddContractClause}>
                 <label>
                   Clause title
@@ -3605,7 +3854,7 @@ export default function HomePage() {
           <div className="card-head">
             <div>
               <span className="label">Playbook analysis</span>
-              <h2>Rule hits, obligations, and contract activity</h2>
+              <h2>Rule hits, uploaded documents, and contract activity</h2>
             </div>
             <span className="pill">
               {contractWorkspace
@@ -3628,6 +3877,27 @@ export default function HomePage() {
                       {hit.clause_type} - {hit.severity}
                       {hit.matched_clause_title ? ` - ${hit.matched_clause_title}` : ""}
                     </small>
+                  </article>
+                ))}
+              </div>
+              <div className="timeline-shell">
+                {contractWorkspace.attachments.map((attachment) => (
+                  <article key={attachment.id} className="timeline-item">
+                    <div className="timeline-meta">
+                      <strong>{attachment.original_filename}</strong>
+                      <span>{new Date(attachment.created_at).toLocaleString()}</span>
+                    </div>
+                    <p>
+                      {(attachment.content_type ?? "application/octet-stream")} -{" "}
+                      {attachment.size_bytes.toLocaleString()} bytes
+                    </p>
+                    <button
+                      className="ghost-button small-button"
+                      onClick={() => void handleDownloadContractAttachment(attachment)}
+                      type="button"
+                    >
+                      Download
+                    </button>
                   </article>
                 ))}
               </div>

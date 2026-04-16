@@ -215,6 +215,10 @@ class CompanyMembership(Base):
         back_populates="created_by_membership",
         foreign_keys="ContractPlaybookRule.created_by_membership_id",
     )
+    uploaded_contract_attachments: Mapped[list[ContractAttachment]] = relationship(
+        back_populates="uploaded_by_membership",
+        foreign_keys="ContractAttachment.uploaded_by_membership_id",
+    )
     contract_activity_events: Mapped[list[ContractActivity]] = relationship(
         back_populates="actor_membership",
         foreign_keys="ContractActivity.actor_membership_id",
@@ -667,6 +671,11 @@ class Contract(Base):
         cascade="all, delete-orphan",
         order_by="desc(ContractPlaybookRule.created_at)",
     )
+    attachments: Mapped[list[ContractAttachment]] = relationship(
+        back_populates="contract",
+        cascade="all, delete-orphan",
+        order_by="desc(ContractAttachment.created_at)",
+    )
     activity_events: Mapped[list[ContractActivity]] = relationship(
         back_populates="contract",
         cascade="all, delete-orphan",
@@ -815,6 +824,38 @@ class ContractActivity(Base):
     actor_membership: Mapped[CompanyMembership | None] = relationship(
         back_populates="contract_activity_events",
         foreign_keys=[actor_membership_id],
+    )
+
+
+class ContractAttachment(Base):
+    __tablename__ = "contract_attachments"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    contract_id: Mapped[str] = mapped_column(
+        ForeignKey("contracts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    uploaded_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    storage_key: Mapped[str] = mapped_column(String(500), unique=True, nullable=False)
+    content_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    sha256_hex: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+
+    contract: Mapped[Contract] = relationship(back_populates="attachments")
+    uploaded_by_membership: Mapped[CompanyMembership | None] = relationship(
+        back_populates="uploaded_contract_attachments",
+        foreign_keys=[uploaded_by_membership_id],
     )
 
 
