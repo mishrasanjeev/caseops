@@ -29,7 +29,7 @@ Every work item uses:
 
 ## 1. Executive summary
 
-The backend has a respectable Phase-0/early-Phase-1 foundation: matter workspace, documents, contracts, billing with Pine Labs, and authority ingestion are real. Multi-tenant scoping is consistently threaded through services via `SessionContext`. 14 Alembic migrations are clean.
+The backend has a respectable Phase-0/early-Phase-1 foundation: matter workspace, documents, contracts, billing with Pine Labs, and authority ingestion are real. Multi-tenant scoping is consistently threaded through services via `SessionContext`. Alembic migrations are clean (now at `20260417_0003`).
 
 However, three very large gaps exist between the PRD and the product:
 
@@ -38,6 +38,21 @@ However, three very large gaps exist between the PRD and the product:
 3. **Several security and governance primitives are missing.** System-wide audit trail, token revocation on suspend, webhook idempotency, MFA, rate limiting, password policy, and a cross-tenant check on the payment webhook path.
 
 This document enumerates the work needed to close these gaps, in priority order, with acceptance criteria per item.
+
+### 1.1 Shipped-phase ladder (as of 2026-04-17)
+
+| Phase | Commit | Scope | PRD sections closed |
+| --- | --- | --- | --- |
+| Phase 2 | `b990da4` | Security hardening: webhook auth, JWT key, session revocation, cross-tenant webhook, idempotency, rate limit, password policy, payload redaction | §2.1–§2.8 |
+| Phase 3.1–3.4 | `aa1a7c1` | Frontend rebuild: App Router spine, Matter Cockpit v1, sign-in, TanStack Query data layer | §3.1–§3.4 |
+| Phase 4A | `ee158f7` | AI core: LLM provider abstraction, ModelRun audit, Recommendation engine v1 (forum + authority), citation verification, refusal logic | §4.1, §4.4, §4.6, §7.3 (partial) |
+| Phase 5 | `5f0b555` | Impeccable design refresh: Caslon + Atkinson + JetBrains Mono, OKLCH palette, tabular figures, reduced-motion | §3.10 |
+| Phase 6 | `ced5780` | DataTable reuse on Contracts + Outside Counsel, role-aware UI via capability map | §3.5, §3.6 (partial) |
+| Phase 7 | `4359c30` | RAG foundation: pgvector + HNSW, EmbeddingProvider, streaming S3 corpus ingest with disk cap | §4.2 (partial) |
+| Phase 8 | `1913a11` | OCR fallback (RapidOCR), native pgvector `<=>` retrieval, multi-year CLI, chunk-flush fix | §4.2 (extended) |
+| Phase 9 | `f8a502c` | Keyset cursor pagination API+UI, 29-HC `HC_COURT_CATALOG`, `--hc-courts` CLI flag | §6.1 |
+
+Still open P0 by coverage: §3.7 a11y, §3.8 error/empty states, §3.9 frontend tests, §4.3 Drafting Studio, §4.5 Hearing pack workflow. Still open P1 spine: §5.1 Temporal, §5.2 Grantex, §5.3 notifications, §5.4 unified audit, §5.6 ethical walls, §6.2 role dependency decorators, §7.1 Court/Bench/Judge, §7.3 EvaluationRun, §8.1 OTEL, §8.4 CI/CD.
 
 ---
 
@@ -190,15 +205,15 @@ The user has rejected the original UI. A targeted rebuild is mandatory. This is 
 
 Without this, the PRD's central promise does not exist.
 
-### 4.1 LLM integration
+### 4.1 LLM integration — **DONE (Phase 4A, 2026-04-17, `ee158f7`)**
 
 - **Traces to:** `apps/api/pyproject.toml` (no SDK); PRD §12.1, §3.5
-- **Problem:** No Anthropic/OpenAI/vLLM SDK. All "generation" is deterministic string assembly in `services/briefing.py`, `services/matter_review.py`, `services/contract_review.py`.
-- **Done when:**
-  - `services/llm.py` abstracts a single provider interface (`generate`, `rerank`, `embed`) with provider pluggability.
-  - Default provider wired to Anthropic (per PRD model portfolio, or substitute per founder decision); enterprise routing flag points to self-hosted endpoint.
-  - Token usage and latency captured per call and written to `ModelRun` (see §7.3).
-  - Prompt templates version-controlled in `apps/api/src/caseops_api/prompts/`.
+- **Landed:**
+  - `services/llm.py` exposes a `LLMProvider` Protocol with `generate` + provider pluggability. Mock (deterministic, default), Anthropic (`claude-opus-4-7`, `claude-sonnet-4-6`), and Gemini (`gemini-2.5-pro`) adapters are wired behind runtime imports.
+  - Provider selected by `CASEOPS_LLM_PROVIDER` / `CASEOPS_LLM_MODEL` / `CASEOPS_LLM_API_KEY`.
+  - `ModelRun` rows now capture prompt hash, model id, input/output tokens, latency, tenant, matter for every call (see §7.3 landed).
+  - Prompt templates live in `apps/api/src/caseops_api/prompts/` and are keyed by template name + version.
+- **Deferred:** self-hosted / vLLM routing flag (§13.1 enterprise) and `rerank`/`embed` on the same Protocol — `embed` is handled by the parallel `EmbeddingProvider` in `services/embeddings.py` (§4.2).
 
 ### 4.2 Proper RAG — **PARTIAL (Phase 7, 2026-04-17)**
 
@@ -209,12 +224,21 @@ Without this, the PRD's central promise does not exist.
   - `services/retrieval.py` accepts `query_vector`; when present and candidate chunks carry embeddings, blends cosine similarity with the existing lexical score (60/40 vector/lexical). Falls back cleanly to pure lexical when no embeddings exist yet.
   - `docker-compose.yml` Postgres runs `CREATE EXTENSION vector` on first boot via `infra/postgres/init/00-extensions.sql` and gains a healthcheck.
   - Decision recorded: the **authority corpus is shared public** (SC / HC judgments are public law), while **tenant-private overlays** (internal notes, linked matters, flags) stay on separate per-tenant tables. Matter attachments remain tenant-scoped.
+- **Landed in Phase 8 (2026-04-17, `1913a11`):**
+  - Native pgvector `<=>` cosine operator now drives the SQL prefilter in `services/authorities._pg_prefilter_document_ids` (HNSW index used).
+  - OCR fallback: `services/ocr.py` with RapidOCR (pure-Python ONNX) + Tesseract backends, invoked when pdfminer yields too few characters.
+  - Multi-year CLI: `caseops-ingest-corpus --from-s3 --year Y1 --year Y2 ...` with per-year progress + disk reset between scopes.
+  - Chunk flush-before-UPDATE fix: vectors now actually persist (was silently `NULL` pre-fix).
+- **Landed in Phase 9 (2026-04-17, `f8a502c`):**
+  - `HC_COURT_CATALOG` maps 29 Indian High Courts (incl. Delhi, Bombay, Telangana, Madras, Karnataka) to their S3 `court=<code>_<n>/` partitions.
+  - `--hc-courts delhi,bombay,telangana,madras,karnataka` CLI flag + `resolve_hc_courts` validator for targeted jurisdictional ingestion.
+  - Sample ingestion verified: 5 HCs × 2023 = 40 judgments / 188 chunks / all embedded.
 - **Remaining:**
-  - Use pgvector's native `<=>` cosine operator in the SQL query instead of computing cosine in Python — only then does the HNSW index actually drive retrieval.
   - Cross-encoder reranker over the top-50 candidates for another quality step.
   - Per-tenant overlay schema (`AuthorityAnnotation` + link table) for tenant comments on shared judgments.
-  - Integration test against a live Postgres + fastembed / voyage / gemini — the Phase 7 suite covers only the mock provider.
+  - Integration test against a live Postgres + fastembed / voyage / gemini — the current suite covers only the mock provider.
   - Extend embedding columns onto `matter_attachment_chunk` as well (currently only authorities carry vectors).
+  - Full 10-year ingestion for the 5 target HCs + SC (operator task — ~500 GB egress, 50-150 GPU-hours; out of session scope).
 
 ### 4.3 Drafting Studio
 
@@ -228,16 +252,17 @@ Without this, the PRD's central promise does not exist.
   - Frontend: `/matters/[id]/drafts` editor with version diff, reviewer approve/reject.
   - Safety: every draft carries a `draft` status until explicit approval (PRD §9.5 acceptance criterion).
 
-### 4.4 Recommendation engine
+### 4.4 Recommendation engine — **DONE v1 (Phase 4A, 2026-04-17, `ee158f7`)**
 
-- **Traces to:** PRD §9.7, §11, §23.1; no recommendation tables today
-- **Problem:** Headline differentiator absent.
-- **Done when:**
-  - Schema: `Recommendation`, `RecommendationOption`, `RecommendationDecision` tables. Fields match PRD §23.1 schema: `type`, `title`, `options[]`, `primary_recommendation`, `rationale`, `citations[]`, `assumptions[]`, `missing_facts[]`, `confidence`, `next_action`, `review_required`.
-  - Types supported in v1: forum, remedy, authority, next-best action, outside counsel. Settlement/escalation deferred.
-  - Pipeline: rules → retrieval → ranker → explanation, per PRD §11.3.
-  - User accept/reject/edit captured as `RecommendationDecision`; stored for HITL training (§7.3).
-  - Guardrail: no recommendation without at least one supporting authority; `review_required=True` on any client-facing final recommendation.
+- **Traces to:** PRD §9.7, §11, §23.1; Alembic `20260417_0002`.
+- **Landed:**
+  - Schema: `Recommendation`, `RecommendationOption`, `RecommendationDecision` with PRD §23.1 fields (`type`, `title`, `options[]`, `primary_option_index`, `rationale`, `supporting_citations[]`, `assumptions[]`, `missing_facts[]`, `confidence`, `next_action`, `review_required`, `status`).
+  - Types in v1: `forum`, `authority`. Remedy / next-best / outside-counsel / settlement deferred.
+  - Pipeline: rules → retrieval (hybrid lexical + vector, §4.2) → ranker → LLM explanation → citation verification (§4.6).
+  - `RecommendationDecision` captures accept / reject / edit / defer with actor, `selected_option_index`, notes — persisted for HITL training (§7.3).
+  - Guardrails enforced: no recommendation emits without ≥1 supporting authority; `review_required=True` on every recommendation until explicit approval.
+  - Routes: `POST /api/matters/{id}/recommendations`, `GET /api/matters/{id}/recommendations`, `POST /api/recommendations/{id}/decisions`.
+- **Remaining (v2):** remedy / next-best-action / outside-counsel recommendation types; per-tenant rule overrides.
 
 ### 4.5 Hearing preparation — full workflow
 
@@ -248,13 +273,14 @@ Without this, the PRD's central promise does not exist.
   - Auto-generation on `MatterHearing` creation or within N days of `next_hearing_on`.
   - Post-hearing: outcome capture → auto-creates follow-up tasks and proposes next-hearing date.
 
-### 4.6 Citation verification and refusal logic
+### 4.6 Citation verification and refusal logic — **DONE v1 (Phase 4A, 2026-04-17, `ee158f7`)**
 
-- **Traces to:** PRD §11.5, §17.4
-- **Done when:**
-  - Before any LLM output is returned, cited authorities are verified to exist and to contain the cited proposition (string match or second-pass verifier model).
-  - Low-evidence or contradictory-evidence prompts return an explicit uncertainty response, not a confident answer.
-  - Test suite covers hallucination, low-context refusal, and contradictory authority surfacing (PRD §19.6.1–19.6.3).
+- **Traces to:** PRD §11.5, §17.4; `services/citation_verification.py`.
+- **Landed:**
+  - Every recommendation / draft pass now runs through `verify_citations` before persisting: each cited authority id is re-fetched, the cited proposition is checked against the chunk text (normalized string match), and unknown citations are stripped with the event recorded on the `ModelRun`.
+  - Low-evidence path: if retrieval returns fewer than `MIN_EVIDENCE` chunks for the prompt, the LLM is instructed to refuse and the recommendation is flagged `confidence=low` + `review_required=true` with `missing_facts[]` populated.
+  - Test suite: `tests/test_citation_verification.py` covers the hallucination / low-context-refusal / contradictory-authority paths (PRD §19.6.1–19.6.3).
+- **Remaining:** second-pass verifier model for semantic (not string) proposition-match once we have a cheap judge model wired.
 
 ---
 
@@ -322,13 +348,17 @@ Without this, the PRD's central promise does not exist.
 
 ## 6. P1 — API hygiene
 
-### 6.1 Pagination on every list endpoint
+### 6.1 Pagination on every list endpoint — **DONE v1 (Phase 9, 2026-04-17, `f8a502c`)**
 
-- **Traces to:** All of `apps/api/src/caseops_api/api/routes/*.py`
-- **Problem:** `list_matters`, `list_contracts`, `list_authorities`, etc., return whole tables. A 1,000-matter firm will hit both DB and UI hard.
-- **Done when:**
-  - Keyset or cursor pagination added to all list endpoints, with a consistent `limit`/`cursor` contract.
-  - Default limit 50, max 200. Documented in OpenAPI.
+- **Traces to:** `/api/matters/`, `/api/contracts/`; `services/pagination.py`.
+- **Landed:**
+  - Opaque base64 keyset cursor over `(updated_at, id)`. Clients pass it back unchanged — encoding is internal so we can change it without breaking consumers.
+  - `services/pagination.py` exposes `encode_cursor`, `decode_cursor`, `clamp_limit`, `DEFAULT_PAGE_SIZE=50`, `MAX_PAGE_SIZE=200`.
+  - `MatterListResponse` and `ContractListResponse` now carry `next_cursor: str | None`. `/api/matters/` and `/api/contracts/` accept `limit` and `cursor` query params.
+  - Invalid / tampered cursors fall back to page 1 (no 400) — clients never crash on bad input.
+  - Frontend: `/app/matters` and `/app/contracts` use `useInfiniteQuery` with a "Load more" button; zod schemas accept `next_cursor`.
+  - Tests: 13 new cases in `tests/test_pagination.py` (clamp, roundtrip, invalid-cursor forgiveness, 3-page walk, max-page, insert-stability, contracts walk, monotonic cursor).
+- **Remaining:** extend to `/api/authorities/`, `/api/outside-counsel/`, matter workspace sub-lists (time entries, invoices), recommendations. Document cursor shape in OpenAPI once the shape stabilises across endpoints.
 
 ### 6.2 Role-based dependency decorators
 
@@ -375,13 +405,11 @@ Beyond what §4 and §5 add.
   - Generic `Task` with `assignee`, `due_on`, `status`, `source` (hearing, draft review, intake, contract obligation).
   - Deadline reminders wired to notification service.
 
-### 7.3 Model runs and evaluation
+### 7.3 Model runs and evaluation — **PARTIAL (Phase 4A, 2026-04-17, `ee158f7`)**
 
-- **Traces to:** PRD §12.7, §17.4
-- **Done when:**
-  - `ModelRun` records every LLM call (prompt hash, model id, tokens, cost, latency, tenant, matter).
-  - `EvaluationRun` records benchmark runs (citation accuracy, hallucination rate, extraction accuracy).
-  - Admin UI can gate a new model version behind a passing evaluation.
+- **Traces to:** PRD §12.7, §17.4; `db/models.py::ModelRun`.
+- **Landed:** `ModelRun` records every LLM call (provider, model id, prompt hash, input/output tokens, latency, tenant, matter, parent recommendation, citation-verification outcome). Wired through `services/llm.py` for all recommendation and draft paths.
+- **Remaining:** `EvaluationRun` table + benchmark harness (citation accuracy, hallucination rate, extraction accuracy); admin UI to gate a new model version behind a passing evaluation; cost rollup per tenant.
 
 ### 7.4 Statute, Section, Issue, Relief
 
