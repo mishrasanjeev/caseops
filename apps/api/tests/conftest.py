@@ -31,8 +31,13 @@ def client(
     monkeypatch.setenv("CASEOPS_PINE_LABS_API_KEY", "pine-api-key")
     monkeypatch.setenv("CASEOPS_PINE_LABS_API_SECRET", "pine-api-secret")
     monkeypatch.setenv("CASEOPS_PINE_LABS_WEBHOOK_SECRET", "pine-webhook-secret")
+    monkeypatch.setenv("CASEOPS_AUTH_RATE_LIMIT_ENABLED", "false")
     get_settings.cache_clear()
     clear_engine_cache()
+
+    from caseops_api.core.rate_limit import limiter
+
+    limiter.reset()
 
     app = create_application()
     with TestClient(app) as test_client:
@@ -40,5 +45,6 @@ def client(
 
     get_settings.cache_clear()
     clear_engine_cache()
+    limiter.reset()
     if database_path.exists():
         os.remove(database_path)

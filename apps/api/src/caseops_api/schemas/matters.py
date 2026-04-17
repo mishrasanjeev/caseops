@@ -6,6 +6,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from caseops_api.schemas.billing import InvoiceRecord, TimeEntryRecord
+from caseops_api.schemas.document_processing import DocumentProcessingJobRecord
 
 MatterStatusLiteral = Literal["intake", "active", "on_hold", "closed"]
 MatterForumLevelLiteral = Literal[
@@ -16,6 +17,8 @@ MatterForumLevelLiteral = Literal[
     "arbitration",
     "advisory",
 ]
+MatterTaskStatusLiteral = Literal["todo", "in_progress", "blocked", "completed"]
+MatterTaskPriorityLiteral = Literal["low", "medium", "high", "urgent"]
 
 
 class MatterCreateRequest(BaseModel):
@@ -97,6 +100,41 @@ class MatterNoteRecord(BaseModel):
     created_at: datetime
 
 
+class MatterTaskCreateRequest(BaseModel):
+    title: str = Field(min_length=2, max_length=255)
+    description: str | None = Field(default=None, max_length=4000)
+    owner_membership_id: str | None = None
+    due_on: date | None = None
+    status: MatterTaskStatusLiteral = "todo"
+    priority: MatterTaskPriorityLiteral = "medium"
+
+
+class MatterTaskUpdateRequest(BaseModel):
+    title: str | None = Field(default=None, min_length=2, max_length=255)
+    description: str | None = Field(default=None, max_length=4000)
+    owner_membership_id: str | None = None
+    due_on: date | None = None
+    status: MatterTaskStatusLiteral | None = None
+    priority: MatterTaskPriorityLiteral | None = None
+
+
+class MatterTaskRecord(BaseModel):
+    id: str
+    matter_id: str
+    created_by_membership_id: str | None
+    created_by_name: str | None
+    owner_membership_id: str | None
+    owner_name: str | None
+    title: str
+    description: str | None
+    due_on: date | None
+    status: MatterTaskStatusLiteral
+    priority: MatterTaskPriorityLiteral
+    completed_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
 class MatterHearingCreateRequest(BaseModel):
     hearing_on: date
     forum_name: str = Field(min_length=2, max_length=255)
@@ -129,6 +167,101 @@ class MatterActivityRecord(BaseModel):
     created_at: datetime
 
 
+class MatterCauseListSyncItem(BaseModel):
+    listing_date: date
+    forum_name: str = Field(min_length=2, max_length=255)
+    bench_name: str | None = Field(default=None, min_length=2, max_length=255)
+    courtroom: str | None = Field(default=None, min_length=1, max_length=120)
+    item_number: str | None = Field(default=None, min_length=1, max_length=64)
+    stage: str | None = Field(default=None, min_length=2, max_length=255)
+    notes: str | None = Field(default=None, max_length=4000)
+    source_reference: str | None = Field(default=None, max_length=500)
+
+
+class MatterCourtOrderSyncItem(BaseModel):
+    order_date: date
+    title: str = Field(min_length=2, max_length=255)
+    summary: str = Field(min_length=2, max_length=6000)
+    order_text: str | None = Field(default=None, max_length=12000)
+    source_reference: str | None = Field(default=None, max_length=500)
+
+
+class MatterCourtSyncImportRequest(BaseModel):
+    source: str = Field(min_length=2, max_length=120)
+    summary: str | None = Field(default=None, max_length=4000)
+    cause_list_entries: list[MatterCauseListSyncItem] = Field(default_factory=list, max_length=10)
+    orders: list[MatterCourtOrderSyncItem] = Field(default_factory=list, max_length=10)
+
+
+class MatterCauseListEntryRecord(BaseModel):
+    id: str
+    matter_id: str
+    sync_run_id: str | None
+    listing_date: date
+    forum_name: str
+    bench_name: str | None
+    courtroom: str | None
+    item_number: str | None
+    stage: str | None
+    notes: str | None
+    source: str
+    source_reference: str | None
+    synced_at: datetime
+    created_at: datetime
+
+
+class MatterCourtOrderRecord(BaseModel):
+    id: str
+    matter_id: str
+    sync_run_id: str | None
+    order_date: date
+    title: str
+    summary: str
+    order_text: str | None
+    source: str
+    source_reference: str | None
+    synced_at: datetime
+    created_at: datetime
+
+
+class MatterCourtSyncRunRecord(BaseModel):
+    id: str
+    matter_id: str
+    triggered_by_membership_id: str | None
+    triggered_by_name: str | None
+    source: str
+    status: Literal["completed", "failed"]
+    summary: str | None
+    imported_cause_list_count: int
+    imported_order_count: int
+    started_at: datetime
+    completed_at: datetime
+
+
+class MatterCourtSyncPullRequest(BaseModel):
+    source: str = Field(min_length=2, max_length=120)
+    source_reference: str | None = Field(default=None, max_length=500)
+
+
+class MatterCourtSyncJobRecord(BaseModel):
+    id: str
+    matter_id: str
+    requested_by_membership_id: str | None
+    requested_by_name: str | None
+    sync_run_id: str | None
+    source: str
+    source_reference: str | None
+    adapter_name: str | None
+    status: Literal["queued", "processing", "completed", "failed"]
+    imported_cause_list_count: int
+    imported_order_count: int
+    error_message: str | None
+    queued_at: datetime
+    started_at: datetime | None
+    completed_at: datetime | None
+    updated_at: datetime
+
+
 class MatterAttachmentRecord(BaseModel):
     id: str
     matter_id: str
@@ -138,6 +271,11 @@ class MatterAttachmentRecord(BaseModel):
     content_type: str | None
     size_bytes: int
     sha256_hex: str
+    processing_status: Literal["pending", "indexed", "needs_ocr", "failed"]
+    extracted_char_count: int
+    extraction_error: str | None
+    processed_at: datetime | None
+    latest_job: DocumentProcessingJobRecord | None
     created_at: datetime
 
 
@@ -145,6 +283,11 @@ class MatterWorkspaceResponse(BaseModel):
     matter: MatterRecord
     assignee: MatterWorkspaceMembership | None
     available_assignees: list[MatterWorkspaceMembership]
+    tasks: list[MatterTaskRecord]
+    cause_list_entries: list[MatterCauseListEntryRecord]
+    court_orders: list[MatterCourtOrderRecord]
+    court_sync_runs: list[MatterCourtSyncRunRecord]
+    court_sync_jobs: list[MatterCourtSyncJobRecord]
     attachments: list[MatterAttachmentRecord]
     time_entries: list[TimeEntryRecord]
     invoices: list[InvoiceRecord]

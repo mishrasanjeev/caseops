@@ -22,7 +22,7 @@ This document turns the PRD into the first implementation architecture for `case
 
 ### Initial Platform
 
-- `Cloud Run` for stateless web, API, and worker services
+- `Cloud Run` for stateless web and API services, plus document-worker jobs
 - `Cloud SQL for PostgreSQL` as the primary system of record
 - `GCS` for document storage, exports, and backups
 - `Secret Manager` for runtime secrets
@@ -66,14 +66,22 @@ caseops/
 
 ### Future Dedicated Services
 
-These are intentionally not split out yet, but the architecture expects them:
+These are intentionally lightweight at the moment, but the architecture expects them:
 
 - workflow service using `Temporal`
 - agent trust integration through `Grantex`
-- ingestion workers
+- document worker service for OCR, parsing, and reindex jobs
 - search and retrieval service
 - recommendation service
 - billing and payment webhook service
+
+### Current Worker Shape
+
+- attachment uploads enqueue `document_processing_jobs`
+- a dedicated worker can drain queued jobs independently of API traffic
+- stale jobs can be recovered and requeued
+- scheduled maintenance can enqueue retries for `needs_ocr` or `failed` files and reindex older indexed files
+- this maps cleanly to `Cloud Run jobs`, a worker service on `Cloud Run`, or later `Temporal` activities
 
 ## AI Architecture
 
@@ -104,6 +112,14 @@ These are intentionally not split out yet, but the architecture expects them:
 - `PostgreSQL + pgvector`: transactional domain data and early vector storage
 - `GCS`: documents and generated artifacts
 - `Valkey`: cache and ephemeral coordination
+
+### Document Storage Strategy
+
+- founder mode uses the `local` storage backend with a shared Docker volume between API and worker containers
+- cloud mode uses the `gcs` storage backend
+- attachment records keep a backend-neutral `storage_key`
+- runtime consumers resolve that key either directly from local disk or through a cached `GCS` materialization path under `/tmp`
+- this keeps download, OCR, review, and retrieval code stable across environments
 
 ### Later Additions
 
@@ -136,10 +152,19 @@ The initial compose stack exists for local use:
 
 - web
 - api
+- worker
 - postgres with `pgvector`
 - valkey
 
 This keeps the local topology close enough to the cloud architecture without introducing full infrastructure complexity.
+
+## Cloud Worker Shape
+
+- `infra/cloudrun/api-service.yaml` deploys the HTTP API on `Cloud Run`
+- `infra/cloudrun/document-worker-job.yaml` deploys the document processor as a `Cloud Run Job`
+- the worker job runs `caseops-document-worker --once`
+- `Cloud Scheduler` can invoke that job on a short cadence so queued OCR and reindex work drains without needing a permanently running non-HTTP service
+- both API and worker use the same API image and the same `GCS` document backend
 
 ## Next Build Priorities
 

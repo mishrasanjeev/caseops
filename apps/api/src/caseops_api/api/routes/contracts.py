@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, UploadFile
 from fastapi.responses import FileResponse
 
 from caseops_api.api.dependencies import DbSession, get_current_context
@@ -30,8 +30,10 @@ from caseops_api.services.contracts import (
     get_contract_attachment_download,
     get_contract_workspace,
     list_contracts,
+    request_contract_attachment_processing,
     update_contract,
 )
+from caseops_api.services.document_jobs import run_document_processing_job
 from caseops_api.services.identity import SessionContext
 
 router = APIRouter()
@@ -156,10 +158,11 @@ async def post_current_company_contract_playbook_rule(
 async def post_current_company_contract_attachment(
     contract_id: str,
     file: Annotated[UploadFile, File(...)],
+    background_tasks: BackgroundTasks,
     context: CurrentContext,
     session: DbSession,
 ) -> ContractAttachmentRecord:
-    return create_contract_attachment(
+    attachment, job_id = create_contract_attachment(
         session,
         context=context,
         contract_id=contract_id,
@@ -167,6 +170,54 @@ async def post_current_company_contract_attachment(
         content_type=file.content_type,
         stream=file.file,
     )
+    background_tasks.add_task(run_document_processing_job, job_id)
+    return attachment
+
+
+@router.post(
+    "/{contract_id}/attachments/{attachment_id}/retry",
+    response_model=ContractAttachmentRecord,
+    summary="Retry contract attachment processing",
+)
+async def retry_current_company_contract_attachment_processing(
+    contract_id: str,
+    attachment_id: str,
+    background_tasks: BackgroundTasks,
+    context: CurrentContext,
+    session: DbSession,
+) -> ContractAttachmentRecord:
+    attachment, job_id = request_contract_attachment_processing(
+        session,
+        context=context,
+        contract_id=contract_id,
+        attachment_id=attachment_id,
+        action="retry",
+    )
+    background_tasks.add_task(run_document_processing_job, job_id)
+    return attachment
+
+
+@router.post(
+    "/{contract_id}/attachments/{attachment_id}/reindex",
+    response_model=ContractAttachmentRecord,
+    summary="Reindex a contract attachment",
+)
+async def reindex_current_company_contract_attachment(
+    contract_id: str,
+    attachment_id: str,
+    background_tasks: BackgroundTasks,
+    context: CurrentContext,
+    session: DbSession,
+) -> ContractAttachmentRecord:
+    attachment, job_id = request_contract_attachment_processing(
+        session,
+        context=context,
+        contract_id=contract_id,
+        attachment_id=attachment_id,
+        action="reindex",
+    )
+    background_tasks.add_task(run_document_processing_job, job_id)
+    return attachment
 
 
 @router.get(

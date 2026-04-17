@@ -10,10 +10,18 @@ from caseops_api.schemas.ai import (
     ContractReviewResponse,
     MatterBriefGenerateRequest,
     MatterBriefResponse,
+    MatterDocumentReviewGenerateRequest,
+    MatterDocumentReviewResponse,
+    MatterDocumentSearchRequest,
+    MatterDocumentSearchResponse,
 )
 from caseops_api.services.briefing import generate_matter_brief
 from caseops_api.services.contract_review import generate_contract_review
 from caseops_api.services.identity import SessionContext
+from caseops_api.services.matter_review import (
+    generate_matter_document_review,
+    search_matter_documents,
+)
 
 router = APIRouter()
 CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
@@ -31,6 +39,44 @@ async def generate_current_company_matter_brief(
     session: DbSession,
 ) -> MatterBriefResponse:
     return generate_matter_brief(
+        session,
+        context=context,
+        matter_id=matter_id,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/matters/{matter_id}/documents/review",
+    response_model=MatterDocumentReviewResponse,
+    summary="Generate a structured matter document review from uploaded files",
+)
+async def generate_current_company_matter_document_review(
+    matter_id: str,
+    payload: MatterDocumentReviewGenerateRequest,
+    context: CurrentContext,
+    session: DbSession,
+) -> MatterDocumentReviewResponse:
+    return generate_matter_document_review(
+        session,
+        context=context,
+        matter_id=matter_id,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/matters/{matter_id}/search",
+    response_model=MatterDocumentSearchResponse,
+    summary="Search uploaded matter documents for relevant snippets",
+)
+async def search_current_company_matter_documents(
+    matter_id: str,
+    payload: MatterDocumentSearchRequest,
+    context: CurrentContext,
+    session: DbSession,
+) -> MatterDocumentSearchResponse:
+    return search_matter_documents(
         session,
         context=context,
         matter_id=matter_id,

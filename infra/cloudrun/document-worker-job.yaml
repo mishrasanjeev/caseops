@@ -1,0 +1,48 @@
+apiVersion: run.googleapis.com/v1
+kind: Job
+metadata:
+  name: caseops-document-worker
+spec:
+  template:
+    metadata:
+      annotations:
+        run.googleapis.com/cloudsql-instances: "__PROJECT_ID__:__REGION__:__CLOUD_SQL_INSTANCE__"
+        run.googleapis.com/execution-environment: gen2
+    spec:
+      template:
+        spec:
+          taskCount: 1
+          maxRetries: 0
+          timeoutSeconds: 1800
+          serviceAccountName: "__SERVICE_ACCOUNT__"
+          containers:
+            - image: "__API_IMAGE__"
+              command:
+                - "uv"
+                - "run"
+                - "caseops-document-worker"
+                - "--once"
+                - "--skip-migrations"
+              env:
+                - name: CASEOPS_ENV
+                  value: "cloud"
+                - name: CASEOPS_AUTO_MIGRATE
+                  value: "false"
+                - name: CASEOPS_DATABASE_URL
+                  value: "__DATABASE_URL__"
+                - name: CASEOPS_DOCUMENT_STORAGE_BACKEND
+                  value: "gcs"
+                - name: CASEOPS_DOCUMENT_STORAGE_GCS_BUCKET
+                  value: "__GCS_BUCKET__"
+                - name: CASEOPS_DOCUMENT_STORAGE_GCS_PREFIX
+                  value: "documents"
+                - name: CASEOPS_DOCUMENT_STORAGE_CACHE_PATH
+                  value: "/tmp/caseops-document-cache"
+                - name: CASEOPS_GCP_PROJECT_ID
+                  value: "__PROJECT_ID__"
+                - name: CASEOPS_TESSERACT_COMMAND
+                  value: "/usr/bin/tesseract"
+              resources:
+                limits:
+                  cpu: "1"
+                  memory: "2Gi"

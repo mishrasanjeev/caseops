@@ -131,3 +131,4 @@ class PaymentWebhookAckResponse(BaseModel):
     accepted: bool
     provider: str
     provider_order_id: str | None
+    already_processed: bool = False

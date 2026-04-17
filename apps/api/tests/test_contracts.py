@@ -273,6 +273,10 @@ def test_contract_attachment_upload_and_download_are_available_in_workspace(
     assert upload_response.status_code == 200
     attachment = upload_response.json()
     assert attachment["original_filename"] == "msa.txt"
+    assert attachment["processing_status"] == "pending"
+    assert attachment["extracted_char_count"] == 0
+    assert attachment["latest_job"]["action"] == "initial_index"
+    assert attachment["latest_job"]["status"] == "queued"
 
     workspace_response = client.get(
         f"/api/contracts/{contract_id}/workspace",
@@ -282,8 +286,14 @@ def test_contract_attachment_upload_and_download_are_available_in_workspace(
     workspace = workspace_response.json()
     assert len(workspace["attachments"]) == 1
     assert workspace["attachments"][0]["id"] == attachment["id"]
+    assert workspace["attachments"][0]["processing_status"] == "indexed"
+    assert workspace["attachments"][0]["latest_job"]["status"] == "completed"
     assert any(
         event["event_type"] == "contract_attachment_added" for event in workspace["activity"]
+    )
+    assert any(
+        event["event_type"] == "contract_attachment_processed"
+        for event in workspace["activity"]
     )
 
     download_response = client.get(
@@ -338,6 +348,197 @@ def test_cross_tenant_user_cannot_download_another_company_contract_attachment(
     )
 
     assert forbidden_download.status_code == 404
+
+
+def test_contract_pdf_attachment_is_marked_as_needing_ocr(
+    client: TestClient,
+) -> None:
+    bootstrap_payload = bootstrap_company(client)
+    token = str(bootstrap_payload["access_token"])
+
+    contract_response = client.post(
+        "/api/contracts/",
+        headers=auth_headers(token),
+        json={
+            "title": "Signed vendor amendment",
+            "contract_code": "CTR-2026-202A",
+            "contract_type": "Vendor",
+            "status": "executed",
+        },
+    )
+    contract_id = contract_response.json()["id"]
+
+    upload_response = client.post(
+        f"/api/contracts/{contract_id}/attachments",
+        headers=auth_headers(token),
+        files={"file": ("signed-amendment.pdf", b"%PDF fake bytes", "application/pdf")},
+    )
+
+    assert upload_response.status_code == 200
+    attachment = upload_response.json()
+    assert attachment["processing_status"] == "pending"
+    assert attachment["extracted_char_count"] == 0
+    assert attachment["latest_job"]["status"] == "queued"
+
+    workspace_response = client.get(
+        f"/api/contracts/{contract_id}/workspace",
+        headers=auth_headers(token),
+    )
+    workspace_attachment = workspace_response.json()["attachments"][0]
+    assert workspace_attachment["processing_status"] == "needs_ocr"
+    assert "OCR" in workspace_attachment["extraction_error"]
+    assert workspace_attachment["latest_job"]["status"] == "failed"
+
+
+def test_contract_image_attachment_can_be_indexed_when_ocr_is_available(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "caseops_api.services.document_processing._resolve_tesseract_command",
+        lambda: "tesseract",
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.document_processing._extract_image_text",
+        lambda path: "Signed amendment confirms pricing schedule and termination notice.",
+    )
+
+    bootstrap_payload = bootstrap_company(client)
+    token = str(bootstrap_payload["access_token"])
+
+    contract_response = client.post(
+        "/api/contracts/",
+        headers=auth_headers(token),
+        json={
+            "title": "Signed pricing exhibit",
+            "contract_code": "CTR-2026-IMG-001",
+            "contract_type": "Pricing Exhibit",
+            "status": "executed",
+        },
+    )
+    contract_id = contract_response.json()["id"]
+
+    upload_response = client.post(
+        f"/api/contracts/{contract_id}/attachments",
+        headers=auth_headers(token),
+        files={"file": ("signed.png", b"fake-image-bytes", "image/png")},
+    )
+
+    assert upload_response.status_code == 200
+    attachment = upload_response.json()
+    assert attachment["processing_status"] == "pending"
+    assert attachment["latest_job"]["status"] == "queued"
+
+    review_response = client.post(
+        f"/api/ai/contracts/{contract_id}/reviews/generate",
+        headers=auth_headers(token),
+        json={"review_type": "intake_review"},
+    )
+
+    assert review_response.status_code == 200
+    assert review_response.json()["source_attachments"] == ["signed.png"]
+
+
+def test_contract_scanned_pdf_attachment_can_be_indexed_when_ocr_returns_text(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "caseops_api.services.document_processing._extract_pdf_text",
+        lambda path: "",
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.document_processing._extract_scanned_pdf_text",
+        lambda path: (
+            "Executed amendment updates the pricing schedule and requires 45 days notice "
+            "for termination."
+        ),
+    )
+
+    bootstrap_payload = bootstrap_company(client)
+    token = str(bootstrap_payload["access_token"])
+
+    contract_response = client.post(
+        "/api/contracts/",
+        headers=auth_headers(token),
+        json={
+            "title": "Scanned amendment pack",
+            "contract_code": "CTR-2026-SCAN-001",
+            "contract_type": "Amendment",
+            "status": "executed",
+        },
+    )
+    contract_id = contract_response.json()["id"]
+
+    upload_response = client.post(
+        f"/api/contracts/{contract_id}/attachments",
+        headers=auth_headers(token),
+        files={"file": ("scanned-amendment.pdf", b"%PDF scanned bytes", "application/pdf")},
+    )
+
+    assert upload_response.status_code == 200
+    attachment = upload_response.json()
+    assert attachment["processing_status"] == "pending"
+    assert attachment["latest_job"]["status"] == "queued"
+
+    review_response = client.post(
+        f"/api/ai/contracts/{contract_id}/reviews/generate",
+        headers=auth_headers(token),
+        json={"review_type": "intake_review"},
+    )
+
+    assert review_response.status_code == 200
+    assert review_response.json()["source_attachments"] == ["scanned-amendment.pdf"]
+
+
+def test_owner_can_reindex_contract_attachment(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    bootstrap_payload = bootstrap_company(client)
+    token = str(bootstrap_payload["access_token"])
+
+    contract_response = client.post(
+        "/api/contracts/",
+        headers=auth_headers(token),
+        json={
+            "title": "Contract reindex control",
+            "contract_code": "CTR-2026-REINDEX-001",
+            "contract_type": "MSA",
+            "status": "under_review",
+        },
+    )
+    contract_id = contract_response.json()["id"]
+
+    upload_response = client.post(
+        f"/api/contracts/{contract_id}/attachments",
+        headers=auth_headers(token),
+        files={"file": ("reindex.txt", b"Termination clause baseline.", "text/plain")},
+    )
+    attachment_id = upload_response.json()["id"]
+
+    monkeypatch.setattr(
+        "caseops_api.services.document_processing._load_text",
+        lambda path, suffix: "Termination clause baseline with refreshed fallback language.",
+    )
+
+    reindex_response = client.post(
+        f"/api/contracts/{contract_id}/attachments/{attachment_id}/reindex",
+        headers=auth_headers(token),
+    )
+
+    assert reindex_response.status_code == 200
+    attachment = reindex_response.json()
+    assert attachment["latest_job"]["action"] == "reindex"
+    assert attachment["latest_job"]["status"] == "queued"
+
+    workspace_response = client.get(
+        f"/api/contracts/{contract_id}/workspace",
+        headers=auth_headers(token),
+    )
+    workspace_attachment = workspace_response.json()["attachments"][0]
+    assert workspace_attachment["processing_status"] == "indexed"
+    assert workspace_attachment["latest_job"]["status"] == "completed"
 
 
 def test_ai_contract_review_uses_uploaded_contract_text_and_playbook_hits(
@@ -407,7 +608,7 @@ def test_ai_contract_review_uses_uploaded_contract_text_and_playbook_hits(
 
     assert review_response.status_code == 200
     payload = review_response.json()
-    assert payload["provider"] == "caseops-contract-heuristic-v1"
+    assert payload["provider"] == "caseops-contract-review-retrieval-v1"
     assert payload["headline"].startswith("Contract review")
     assert any("Termination" in item for item in payload["key_clauses"])
     assert any("24 hours" in item for item in payload["extracted_obligations"])

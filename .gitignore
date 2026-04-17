@@ -5,6 +5,9 @@
 !.env.local.example
 .idea/
 .vscode/
+.claude/
+.tmp/
+tmp-*.html
 *.log
 *.pid
 *.seed
@@ -19,6 +22,9 @@ build/
 *.tsbuildinfo
 .next/
 node_modules/
+.e2e/
+playwright-report/
+test-results/
 __pycache__/
 .pytest_cache/
 .ruff_cache/

@@ -14,8 +14,17 @@ dependencies = [
   "email-validator==2.3.0",
   "psycopg[binary]==3.3.3",
   "PyJWT==2.12.1",
-  "python-multipart==0.0.20"
+  "python-multipart==0.0.20",
+  "pdfminer.six==20260107",
+  "pypdfium2==5.7.0",
+  "Pillow==12.2.0",
+  "google-cloud-storage==3.10.1",
+  "slowapi>=0.1.9",
 ]
+
+[project.scripts]
+caseops-document-worker = "caseops_api.workers.document_processor:main"
+caseops-populate-authorities = "caseops_api.scripts.populate_authorities:main"
 
 [dependency-groups]
 dev = [

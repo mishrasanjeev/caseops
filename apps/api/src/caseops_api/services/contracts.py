@@ -14,7 +14,10 @@ from caseops_api.db.models import (
     ContractClause,
     ContractObligation,
     ContractPlaybookRule,
+    DocumentProcessingAction,
+    DocumentProcessingTargetType,
     Matter,
+    MembershipRole,
 )
 from caseops_api.schemas.contracts import (
     ContractActivityRecord,
@@ -33,6 +36,11 @@ from caseops_api.schemas.contracts import (
     ContractUpdateRequest,
     ContractWorkspaceMembership,
     ContractWorkspaceResponse,
+)
+from caseops_api.schemas.document_processing import DocumentProcessingJobRecord
+from caseops_api.services.document_jobs import (
+    enqueue_processing_job,
+    load_latest_processing_jobs,
 )
 from caseops_api.services.document_storage import (
     persist_contract_attachment,
@@ -144,6 +152,14 @@ def _activity_record(activity: ContractActivity) -> ContractActivityRecord:
 
 
 def _attachment_record(attachment: ContractAttachment) -> ContractAttachmentRecord:
+    return _attachment_record_with_job(attachment)
+
+
+def _attachment_record_with_job(
+    attachment: ContractAttachment,
+    *,
+    latest_job: DocumentProcessingJobRecord | None = None,
+) -> ContractAttachmentRecord:
     return ContractAttachmentRecord(
         id=attachment.id,
         contract_id=attachment.contract_id,
@@ -157,6 +173,11 @@ def _attachment_record(attachment: ContractAttachment) -> ContractAttachmentReco
         content_type=attachment.content_type,
         size_bytes=attachment.size_bytes,
         sha256_hex=attachment.sha256_hex,
+        processing_status=attachment.processing_status,
+        extracted_char_count=attachment.extracted_char_count,
+        extraction_error=attachment.extraction_error,
+        processed_at=attachment.processed_at,
+        latest_job=latest_job,
         created_at=attachment.created_at,
     )
 
@@ -179,6 +200,28 @@ def _append_activity(
             detail=detail,
         )
     )
+
+
+def _raise_processing_permission_error() -> None:
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Only owners and admins can retry or reindex contract attachments.",
+    )
+
+
+def _attachment_record_map(
+    session: Session,
+    attachments: list[ContractAttachment],
+) -> list[ContractAttachmentRecord]:
+    latest_jobs = load_latest_processing_jobs(
+        session,
+        target_type=DocumentProcessingTargetType.CONTRACT_ATTACHMENT,
+        attachment_ids=[attachment.id for attachment in attachments],
+    )
+    return [
+        _attachment_record_with_job(attachment, latest_job=latest_jobs.get(attachment.id))
+        for attachment in attachments
+    ]
 
 
 def _get_company_membership(
@@ -231,6 +274,7 @@ def _get_contract_model(session: Session, *, context: SessionContext, contract_i
             selectinload(Contract.attachments)
             .joinedload(ContractAttachment.uploaded_by_membership)
             .joinedload(CompanyMembership.user),
+            selectinload(Contract.attachments).selectinload(ContractAttachment.chunks),
             selectinload(Contract.obligations)
             .joinedload(ContractObligation.owner_membership)
             .joinedload(CompanyMembership.user),
@@ -246,6 +290,36 @@ def _get_contract_model(session: Session, *, context: SessionContext, contract_i
     if not contract:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found.")
     return contract
+
+
+def _get_contract_attachment_model(
+    session: Session,
+    *,
+    context: SessionContext,
+    contract_id: str,
+    attachment_id: str,
+) -> ContractAttachment:
+    attachment = session.scalar(
+        select(ContractAttachment)
+        .options(
+            joinedload(ContractAttachment.uploaded_by_membership).joinedload(
+                CompanyMembership.user
+            ),
+            selectinload(ContractAttachment.chunks),
+        )
+        .join(Contract, Contract.id == ContractAttachment.contract_id)
+        .where(
+            ContractAttachment.id == attachment_id,
+            ContractAttachment.contract_id == contract_id,
+            Contract.company_id == context.company.id,
+        )
+    )
+    if not attachment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Contract attachment not found.",
+        )
+    return attachment
 
 
 def _build_playbook_hits(contract: Contract) -> list[ContractPlaybookHitRecord]:
@@ -510,7 +584,7 @@ def get_contract_workspace(
         ),
         owner=_membership_summary(contract.owner_membership) if contract.owner_membership else None,
         available_owners=available_owners,
-        attachments=[_attachment_record(attachment) for attachment in contract.attachments],
+        attachments=_attachment_record_map(session, contract.attachments),
         clauses=[_clause_record(clause) for clause in contract.clauses],
         obligations=[_obligation_record(obligation) for obligation in contract.obligations],
         playbook_rules=[_playbook_rule_record(rule) for rule in contract.playbook_rules],
@@ -663,7 +737,7 @@ def create_contract_attachment(
     filename: str,
     content_type: str | None,
     stream: BinaryIO,
-) -> ContractAttachmentRecord:
+) -> tuple[ContractAttachmentRecord, str]:
     contract = _get_contract_model(session, context=context, contract_id=contract_id)
     attachment = ContractAttachment(
         contract_id=contract.id,
@@ -688,6 +762,14 @@ def create_contract_attachment(
         attachment.storage_key = stored.storage_key
         attachment.size_bytes = stored.size_bytes
         attachment.sha256_hex = stored.sha256_hex
+        job = enqueue_processing_job(
+            session,
+            company_id=context.company.id,
+            requested_by_membership_id=context.membership.id,
+            target_type=DocumentProcessingTargetType.CONTRACT_ATTACHMENT,
+            attachment_id=attachment.id,
+            action=DocumentProcessingAction.INITIAL_INDEX,
+        )
         session.add(attachment)
         _append_activity(
             session,
@@ -695,7 +777,10 @@ def create_contract_attachment(
             actor_membership_id=context.membership.id,
             event_type="contract_attachment_added",
             title="Contract document uploaded",
-            detail=f"{attachment.original_filename} uploaded to the contract workspace.",
+            detail=(
+                f"{attachment.original_filename} uploaded to the contract workspace "
+                "and queued for processing."
+            ),
         )
         session.commit()
     except Exception:
@@ -712,7 +797,81 @@ def create_contract_attachment(
         .where(ContractAttachment.id == attachment.id)
     )
     assert refreshed_attachment is not None
-    return _attachment_record(refreshed_attachment)
+    latest_jobs = load_latest_processing_jobs(
+        session,
+        target_type=DocumentProcessingTargetType.CONTRACT_ATTACHMENT,
+        attachment_ids=[refreshed_attachment.id],
+    )
+    return (
+        _attachment_record_with_job(
+            refreshed_attachment,
+            latest_job=latest_jobs.get(refreshed_attachment.id),
+        ),
+        job.id,
+    )
+
+
+def request_contract_attachment_processing(
+    session: Session,
+    *,
+    context: SessionContext,
+    contract_id: str,
+    attachment_id: str,
+    action: str,
+) -> tuple[ContractAttachmentRecord, str]:
+    if context.membership.role not in {MembershipRole.OWNER, MembershipRole.ADMIN}:
+        _raise_processing_permission_error()
+
+    attachment = _get_contract_attachment_model(
+        session,
+        context=context,
+        contract_id=contract_id,
+        attachment_id=attachment_id,
+    )
+    job = enqueue_processing_job(
+        session,
+        company_id=context.company.id,
+        requested_by_membership_id=context.membership.id,
+        target_type=DocumentProcessingTargetType.CONTRACT_ATTACHMENT,
+        attachment_id=attachment.id,
+        action=action,
+    )
+    session.add(attachment)
+    _append_activity(
+        session,
+        contract_id=attachment.contract_id,
+        actor_membership_id=context.membership.id,
+        event_type=(
+            "contract_attachment_retry_requested"
+            if action == DocumentProcessingAction.RETRY
+            else "contract_attachment_reindex_requested"
+        ),
+        title=(
+            "Contract attachment retry requested"
+            if action == DocumentProcessingAction.RETRY
+            else "Contract attachment reindex requested"
+        ),
+        detail=f"{attachment.original_filename} queued for {action.replace('_', ' ')}.",
+    )
+    session.commit()
+    refreshed_attachment = _get_contract_attachment_model(
+        session,
+        context=context,
+        contract_id=contract_id,
+        attachment_id=attachment.id,
+    )
+    latest_jobs = load_latest_processing_jobs(
+        session,
+        target_type=DocumentProcessingTargetType.CONTRACT_ATTACHMENT,
+        attachment_ids=[refreshed_attachment.id],
+    )
+    return (
+        _attachment_record_with_job(
+            refreshed_attachment,
+            latest_job=latest_jobs.get(refreshed_attachment.id),
+        ),
+        job.id,
+    )
 
 
 def get_contract_attachment_download(

@@ -32,4 +32,8 @@ def get_current_context(
             detail=str(exc),
         ) from exc
 
-    return get_session_context(session, claims["membership_id"])
+    return get_session_context(
+        session,
+        claims["membership_id"],
+        token_issued_at=int(claims["issued_at"]),
+    )

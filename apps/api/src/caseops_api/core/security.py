@@ -53,7 +53,7 @@ def decode_access_token(token: str) -> dict[str, str]:
     except InvalidTokenError as exc:
         raise TokenValidationError("Invalid bearer token.") from exc
 
-    required_claims = {"sub", "company_id", "membership_id", "role"}
+    required_claims = {"sub", "company_id", "membership_id", "role", "iat"}
     if not required_claims.issubset(payload):
         raise TokenValidationError("Bearer token is missing required claims.")
 
@@ -62,4 +62,5 @@ def decode_access_token(token: str) -> dict[str, str]:
         "company_id": str(payload["company_id"]),
         "membership_id": str(payload["membership_id"]),
         "role": str(payload["role"]),
+        "issued_at": str(payload["iat"]),
     }

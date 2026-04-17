@@ -82,14 +82,58 @@ def _extract_amount_minor(payload: dict[str, object]) -> int:
     return 0
 
 
+class WebhookSecretNotConfigured(RuntimeError):
+    """Raised when the Pine Labs webhook secret has not been configured."""
+
+
 def verify_pine_labs_signature(*, raw_body: bytes, signature: str | None) -> bool:
     secret = get_settings().pine_labs_webhook_secret
     if not secret:
-        return True
+        raise WebhookSecretNotConfigured(
+            "Pine Labs webhook secret is not configured; refusing to accept webhooks.",
+        )
     if not signature:
         return False
     expected = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected, signature.strip())
+
+
+SENSITIVE_PAYLOAD_KEYS = frozenset(
+    {
+        "card_number",
+        "card_cvv",
+        "cvv",
+        "cvv2",
+        "upi_vpa",
+        "vpa",
+        "customer_email",
+        "customer_phone",
+        "phone",
+        "personal_id",
+        "pan",
+        "aadhaar",
+        "aadhar",
+        "otp",
+        "cvc",
+    },
+)
+REDACTION_MASK = "[redacted]"
+
+
+def redact_provider_payload(payload: dict[str, object]) -> dict[str, object]:
+    def _redact(value: object) -> object:
+        if isinstance(value, dict):
+            return {
+                key: (REDACTION_MASK if key.lower() in SENSITIVE_PAYLOAD_KEYS else _redact(inner))
+                for key, inner in value.items()
+            }
+        if isinstance(value, list):
+            return [_redact(item) for item in value]
+        return value
+
+    redacted = _redact(payload)
+    assert isinstance(redacted, dict)
+    return redacted
 
 
 class PineLabsGatewayClient:

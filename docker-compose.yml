@@ -22,10 +22,35 @@ services:
       CASEOPS_API_VERSION: 0.1.0
       CASEOPS_API_DOCS_ENABLED: "true"
       CASEOPS_PUBLIC_APP_URL: http://localhost:3000
+      CASEOPS_DATABASE_URL: postgresql+psycopg://caseops:caseops@postgres:5432/caseops
       CASEOPS_AUTH_SECRET: change-me-change-me-change-me-2026
+      CASEOPS_DOCUMENT_STORAGE_BACKEND: local
+      CASEOPS_DOCUMENT_STORAGE_PATH: /app/storage/documents
+      CASEOPS_DOCUMENT_STORAGE_CACHE_PATH: /app/storage/document-cache
+      CASEOPS_TESSERACT_COMMAND: /usr/bin/tesseract
     depends_on:
       - postgres
       - valkey
+    volumes:
+      - document_data:/app/storage
+
+  worker:
+    build:
+      context: ./apps/api
+    command: ["uv", "run", "caseops-document-worker"]
+    environment:
+      CASEOPS_ENV: local
+      CASEOPS_DATABASE_URL: postgresql+psycopg://caseops:caseops@postgres:5432/caseops
+      CASEOPS_AUTH_SECRET: change-me-change-me-change-me-2026
+      CASEOPS_DOCUMENT_STORAGE_BACKEND: local
+      CASEOPS_DOCUMENT_STORAGE_PATH: /app/storage/documents
+      CASEOPS_DOCUMENT_STORAGE_CACHE_PATH: /app/storage/document-cache
+      CASEOPS_TESSERACT_COMMAND: /usr/bin/tesseract
+    depends_on:
+      - postgres
+      - valkey
+    volumes:
+      - document_data:/app/storage
 
   postgres:
     image: pgvector/pgvector:pg17
@@ -45,3 +70,4 @@ services:
 
 volumes:
   postgres_data:
+  document_data:

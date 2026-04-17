@@ -5,6 +5,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from caseops_api.schemas.document_processing import DocumentProcessingJobRecord
+
 ContractStatusLiteral = Literal[
     "draft",
     "under_review",
@@ -110,6 +112,11 @@ class ContractAttachmentRecord(BaseModel):
     content_type: str | None
     size_bytes: int
     sha256_hex: str
+    processing_status: Literal["pending", "indexed", "needs_ocr", "failed"]
+    extracted_char_count: int
+    extraction_error: str | None
+    processed_at: datetime | None
+    latest_job: DocumentProcessingJobRecord | None
     created_at: datetime
 
 

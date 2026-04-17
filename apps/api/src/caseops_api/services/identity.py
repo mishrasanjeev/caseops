@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
+from caseops_api.core.password_policy import WeakPasswordError, enforce_password_policy
 from caseops_api.core.security import create_access_token, hash_password, verify_password
 from caseops_api.db.models import Company, CompanyMembership, CompanyType, MembershipRole, User
 from caseops_api.schemas.auth import AuthContextResponse, AuthSessionResponse
@@ -67,10 +69,18 @@ def build_auth_context(context: SessionContext) -> AuthContextResponse:
     )
 
 
+def _require_policy_compliant_password(password: str) -> None:
+    try:
+        enforce_password_policy(password)
+    except WeakPasswordError as exc:
+        _raise_bad_request(str(exc))
+
+
 def register_company_owner(
     session: Session,
     payload: BootstrapCompanyRequest,
 ) -> AuthSessionResponse:
+    _require_policy_compliant_password(payload.owner_password)
     normalized_slug = payload.company_slug.lower().strip()
     existing_company = session.scalar(select(Company).where(Company.slug == normalized_slug))
     if existing_company:
@@ -147,7 +157,12 @@ def authenticate_user(
     )
 
 
-def get_session_context(session: Session, membership_id: str) -> SessionContext:
+def get_session_context(
+    session: Session,
+    membership_id: str,
+    *,
+    token_issued_at: int | None = None,
+) -> SessionContext:
     membership = session.scalar(
         select(CompanyMembership)
         .options(joinedload(CompanyMembership.company), joinedload(CompanyMembership.user))
@@ -163,7 +178,37 @@ def get_session_context(session: Session, membership_id: str) -> SessionContext:
     ):
         _raise_forbidden("The current session is no longer active.")
 
+    if token_issued_at is not None and membership.sessions_valid_after is not None:
+        valid_after = membership.sessions_valid_after
+        if valid_after.tzinfo is None:
+            valid_after = valid_after.replace(tzinfo=UTC)
+        if token_issued_at < int(valid_after.timestamp()):
+            _raise_unauthorized("This session has been revoked. Please sign in again.")
+
     return SessionContext(company=membership.company, user=membership.user, membership=membership)
+
+
+def _revoke_membership_sessions(
+    session: Session,
+    *,
+    membership: CompanyMembership,
+    commit: bool = False,
+) -> None:
+    membership.sessions_valid_after = datetime.now(UTC)
+    session.add(membership)
+    if commit:
+        session.commit()
+
+
+def revoke_user_sessions(session: Session, *, user_id: str) -> None:
+    memberships = list(
+        session.scalars(
+            select(CompanyMembership).where(CompanyMembership.user_id == user_id)
+        )
+    )
+    for membership in memberships:
+        _revoke_membership_sessions(session, membership=membership)
+    session.commit()
 
 
 def list_company_users(session: Session, context: SessionContext) -> CompanyUsersResponse:
@@ -233,6 +278,8 @@ def create_company_user(
     if context.membership.role == MembershipRole.ADMIN and payload.role != MembershipRole.MEMBER:
         _raise_forbidden("Admins can only create members.")
 
+    _require_policy_compliant_password(payload.password)
+
     existing_user = session.scalar(select(User).where(User.email == payload.email.lower()))
     if existing_user:
         _raise_conflict("An account with this email already exists.")
@@ -298,6 +345,8 @@ def update_company_user(
     if payload.is_active is not None:
         membership.is_active = payload.is_active
         membership.user.is_active = payload.is_active
+        if payload.is_active is False:
+            membership.sessions_valid_after = datetime.now(UTC)
 
     session.add(membership)
     session.commit()

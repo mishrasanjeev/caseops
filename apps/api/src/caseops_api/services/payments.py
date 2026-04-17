@@ -27,7 +27,9 @@ from caseops_api.services.matters import _append_activity
 from caseops_api.services.pine_labs import (
     PineLabsGatewayClient,
     PineLabsPaymentStatusResult,
+    WebhookSecretNotConfigured,
     dump_provider_payload,
+    redact_provider_payload,
     verify_pine_labs_signature,
 )
 
@@ -183,7 +185,9 @@ def create_invoice_payment_link(
     attempt.provider_order_id = gateway_result.provider_order_id
     attempt.payment_url = gateway_result.payment_url
     attempt.provider_reference = gateway_result.provider_reference
-    attempt.provider_payload_json = dump_provider_payload(gateway_result.raw_payload)
+    attempt.provider_payload_json = dump_provider_payload(
+        redact_provider_payload(gateway_result.raw_payload),
+    )
     attempt.status = gateway_result.status
     invoice.pine_labs_payment_url = gateway_result.payment_url
     invoice.pine_labs_order_id = gateway_result.provider_order_id or attempt.merchant_order_id
@@ -287,7 +291,9 @@ def _apply_payment_result(
     attempt.provider_reference = result.provider_reference
     attempt.amount_received_minor = max(attempt.amount_received_minor, result.amount_received_minor)
     attempt.status = result.status
-    attempt.provider_payload_json = dump_provider_payload(result.raw_payload)
+    attempt.provider_payload_json = dump_provider_payload(
+        redact_provider_payload(result.raw_payload),
+    )
     attempt.last_webhook_at = datetime.now(UTC)
 
     if result.status in {
@@ -319,6 +325,38 @@ def _apply_payment_result(
     )
 
 
+def _extract_provider_event_id(payload: dict[str, object]) -> str | None:
+    for key in ("event_id", "webhook_event_id", "id", "notification_id", "reference_id"):
+        value = payload.get(key)
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return None
+
+
+def _load_attempt_with_company(
+    session: Session,
+    *,
+    provider_order_id: str | None,
+) -> MatterInvoicePaymentAttempt | None:
+    if not provider_order_id:
+        return None
+    return session.scalar(
+        select(MatterInvoicePaymentAttempt)
+        .options(
+            joinedload(MatterInvoicePaymentAttempt.invoice)
+            .joinedload(MatterInvoice.matter)
+            .joinedload(Matter.company),
+        )
+        .where(
+            (MatterInvoicePaymentAttempt.provider_order_id == provider_order_id)
+            | (MatterInvoicePaymentAttempt.merchant_order_id == provider_order_id)
+        )
+    )
+
+
 async def handle_pine_labs_webhook(
     session: Session,
     *,
@@ -326,7 +364,14 @@ async def handle_pine_labs_webhook(
 ) -> PaymentWebhookAckResponse:
     raw_body = await request.body()
     signature = request.headers.get(get_settings().pine_labs_webhook_signature_header)
-    if not verify_pine_labs_signature(raw_body=raw_body, signature=signature):
+    try:
+        signature_valid = verify_pine_labs_signature(raw_body=raw_body, signature=signature)
+    except WebhookSecretNotConfigured as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    if not signature_valid:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid Pine Labs webhook signature.",
@@ -342,26 +387,37 @@ async def handle_pine_labs_webhook(
 
     gateway_client = _get_gateway_client()
     result = gateway_client.parse_webhook_payload(payload)
+    provider_event_id = _extract_provider_event_id(payload)
+
+    if provider_event_id:
+        existing_event = session.scalar(
+            select(PaymentWebhookEvent).where(
+                PaymentWebhookEvent.provider == "pine_labs",
+                PaymentWebhookEvent.provider_event_id == provider_event_id,
+            )
+        )
+        if existing_event:
+            return PaymentWebhookAckResponse(
+                accepted=True,
+                provider="pine_labs",
+                provider_order_id=result.provider_order_id,
+                already_processed=True,
+            )
+
     event = PaymentWebhookEvent(
         provider="pine_labs",
+        provider_event_id=provider_event_id,
         provider_order_id=result.provider_order_id,
         event_type=str(payload.get("event_type", "payment_status")),
         signature=signature,
-        payload_json=dump_provider_payload(payload),
+        payload_json=dump_provider_payload(redact_provider_payload(payload)),
         processing_status="received",
     )
     session.add(event)
 
-    attempt = session.scalar(
-        select(MatterInvoicePaymentAttempt)
-        .options(
-            joinedload(MatterInvoicePaymentAttempt.invoice).joinedload(MatterInvoice.line_items),
-            joinedload(MatterInvoicePaymentAttempt.invoice),
-        )
-        .where(
-            (MatterInvoicePaymentAttempt.provider_order_id == result.provider_order_id)
-            | (MatterInvoicePaymentAttempt.merchant_order_id == result.provider_order_id)
-        )
+    attempt = _load_attempt_with_company(
+        session,
+        provider_order_id=result.provider_order_id,
     )
     if not attempt:
         event.processing_status = "ignored"
@@ -371,6 +427,17 @@ async def handle_pine_labs_webhook(
             accepted=True,
             provider="pine_labs",
             provider_order_id=result.provider_order_id,
+        )
+
+    merchant_order_id = attempt.merchant_order_id or ""
+    company_slug = attempt.invoice.matter.company.slug if attempt.invoice else ""
+    if not merchant_order_id.startswith(f"{company_slug}-"):
+        event.processing_status = "cross_tenant_rejected"
+        session.add(event)
+        session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Webhook tenant does not match the invoice tenant.",
         )
 
     invoice = session.scalar(

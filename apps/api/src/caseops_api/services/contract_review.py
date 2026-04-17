@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import re
 from datetime import UTC, datetime
-from pathlib import Path
 
 from caseops_api.schemas.ai import ContractReviewGenerateRequest, ContractReviewResponse
 from caseops_api.services.contracts import _get_contract_model, get_contract_workspace
-from caseops_api.services.document_storage import resolve_storage_path
 from caseops_api.services.identity import SessionContext
+from caseops_api.services.retrieval import RetrievalCandidate, rank_candidates
 
 CLAUSE_PATTERNS: list[tuple[str, tuple[str, ...]]] = [
     ("termination", ("terminate", "termination", "notice period")),
@@ -25,42 +24,50 @@ OBLIGATION_PATTERN = re.compile(
 )
 
 
-def _read_attachment_text(storage_key: str, content_type: str | None) -> str:
-    path = resolve_storage_path(storage_key)
-    suffix = Path(storage_key).suffix.lower()
-    if content_type and content_type.startswith("text/"):
-        return path.read_text(encoding="utf-8", errors="ignore")
-    if suffix in {".txt", ".md", ".csv", ".json"}:
-        return path.read_text(encoding="utf-8", errors="ignore")
-    return ""
+def _contract_retrieval_candidates(contract_model) -> list[RetrievalCandidate]:
+    candidates: list[RetrievalCandidate] = []
+    for attachment in contract_model.attachments:
+        if attachment.chunks:
+            for chunk in attachment.chunks:
+                candidates.append(
+                    RetrievalCandidate(
+                        attachment_id=attachment.id,
+                        attachment_name=attachment.original_filename,
+                        content=chunk.content,
+                    )
+                )
+            continue
+        if attachment.extracted_text:
+            candidates.append(
+                RetrievalCandidate(
+                    attachment_id=attachment.id,
+                    attachment_name=attachment.original_filename,
+                    content=attachment.extracted_text,
+                )
+            )
+    return candidates
 
 
-def _normalize_chunks(text: str) -> list[str]:
-    paragraphs = [chunk.strip() for chunk in re.split(r"\n\s*\n+", text) if chunk.strip()]
-    if paragraphs:
-        return paragraphs
-    return [chunk.strip() for chunk in re.split(r"(?<=[.!?])\s+", text) if chunk.strip()]
-
-
-def _extract_clause_summaries(chunks: list[str]) -> list[str]:
+def _extract_clause_summaries(candidates: list[RetrievalCandidate]) -> list[str]:
     clause_hits: list[str] = []
-    seen_types: set[str] = set()
     for clause_type, keywords in CLAUSE_PATTERNS:
-        for chunk in chunks:
-            lowered = chunk.lower()
-            if any(keyword in lowered for keyword in keywords):
-                if clause_type in seen_types:
-                    break
-                preview = chunk[:220].strip()
-                clause_hits.append(f"{clause_type.title()}: {preview}")
-                seen_types.add(clause_type)
-                break
+        query = " ".join((clause_type, *keywords))
+        ranked = rank_candidates(query=query, candidates=candidates, limit=1)
+        if not ranked:
+            continue
+        clause_hits.append(f"{clause_type.title()}: {ranked[0].snippet}")
     return clause_hits
 
 
-def _extract_obligations(text: str) -> list[str]:
+def _extract_obligations(candidates: list[RetrievalCandidate]) -> list[str]:
+    ranked = rank_candidates(
+        query="obligation shall must notice within days payment security breach",
+        candidates=candidates,
+        limit=5,
+    )
     obligations: list[str] = []
-    for match in OBLIGATION_PATTERN.finditer(text):
+    combined_text = "\n".join(result.content for result in ranked)
+    for match in OBLIGATION_PATTERN.finditer(combined_text):
         sentence = " ".join(match.group("sentence").split())
         if sentence and sentence not in obligations:
             obligations.append(sentence[:220])
@@ -79,20 +86,17 @@ def generate_contract_review(
     workspace = get_contract_workspace(session, context=context, contract_id=contract_id)
     contract_model = _get_contract_model(session, context=context, contract_id=contract_id)
 
-    source_texts: list[str] = []
     source_attachments: list[str] = []
     for attachment in contract_model.attachments:
-        extracted = _read_attachment_text(attachment.storage_key, attachment.content_type)
-        if extracted:
-            source_texts.append(extracted)
+        if attachment.extracted_text:
             source_attachments.append(attachment.original_filename)
 
-    if not source_texts:
+    if not source_attachments:
         source_attachments = [attachment.original_filename for attachment in workspace.attachments]
-    combined_text = "\n\n".join(source_texts).strip()
-    chunks = _normalize_chunks(combined_text) if combined_text else []
-    key_clauses = _extract_clause_summaries(chunks) if chunks else []
-    extracted_obligations = _extract_obligations(combined_text) if combined_text else []
+
+    retrieval_candidates = _contract_retrieval_candidates(contract_model)
+    key_clauses = _extract_clause_summaries(retrieval_candidates)
+    extracted_obligations = _extract_obligations(retrieval_candidates)
 
     risks: list[str] = []
     if not workspace.attachments:
@@ -111,7 +115,7 @@ def generate_contract_review(
         risks.append("No explicit operational obligations were extracted from the uploaded text.")
 
     recommended_actions = [
-        "Review flagged and missing playbook hits before sending the next redline.",
+        "Review the top-ranked clause snippets before sending the next redline.",
         (
             "Confirm renewal, termination, and confidentiality fallback positions "
             "with the business owner."
@@ -135,15 +139,15 @@ def generate_contract_review(
     if workspace.linked_matter:
         summary_parts.append(f"linked to matter {workspace.linked_matter.matter_code}")
     summary = ", ".join(summary_parts) + "."
-    if combined_text:
-        summary += " Review output was generated from uploaded contract text."
+    if retrieval_candidates:
+        summary += " Review output was generated from ranked contract snippets and uploaded text."
     else:
         summary += " Review output is based on workspace metadata and playbook state only."
 
     return ContractReviewResponse(
         contract_id=workspace.contract.id,
         review_type=payload.review_type,
-        provider="caseops-contract-heuristic-v1",
+        provider="caseops-contract-review-retrieval-v1",
         generated_at=datetime.now(UTC),
         headline=f"Contract review for {workspace.contract.contract_code}",
         summary=summary,

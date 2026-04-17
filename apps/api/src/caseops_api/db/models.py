@@ -47,6 +47,32 @@ class MatterHearingStatus(StrEnum):
     ADJOURNED = "adjourned"
 
 
+class MatterTaskStatus(StrEnum):
+    TODO = "todo"
+    IN_PROGRESS = "in_progress"
+    BLOCKED = "blocked"
+    COMPLETED = "completed"
+
+
+class MatterTaskPriority(StrEnum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    URGENT = "urgent"
+
+
+class MatterCourtSyncStatus(StrEnum):
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class MatterCourtSyncJobStatus(StrEnum):
+    QUEUED = "queued"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
 class InvoiceStatus(StrEnum):
     DRAFT = "draft"
     ISSUED = "issued"
@@ -64,6 +90,31 @@ class PaymentAttemptStatus(StrEnum):
     CANCELLED = "cancelled"
     EXPIRED = "expired"
     UNKNOWN = "unknown"
+
+
+class DocumentProcessingStatus(StrEnum):
+    PENDING = "pending"
+    INDEXED = "indexed"
+    NEEDS_OCR = "needs_ocr"
+    FAILED = "failed"
+
+
+class DocumentProcessingTargetType(StrEnum):
+    MATTER_ATTACHMENT = "matter_attachment"
+    CONTRACT_ATTACHMENT = "contract_attachment"
+
+
+class DocumentProcessingAction(StrEnum):
+    INITIAL_INDEX = "initial_index"
+    RETRY = "retry"
+    REINDEX = "reindex"
+
+
+class DocumentProcessingJobStatus(StrEnum):
+    QUEUED = "queued"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
 
 
 class ContractStatus(StrEnum):
@@ -100,6 +151,39 @@ class ContractPlaybookSeverity(StrEnum):
     HIGH = "high"
 
 
+class OutsideCounselPanelStatus(StrEnum):
+    ACTIVE = "active"
+    PREFERRED = "preferred"
+    INACTIVE = "inactive"
+
+
+class OutsideCounselAssignmentStatus(StrEnum):
+    PROPOSED = "proposed"
+    APPROVED = "approved"
+    ACTIVE = "active"
+    CLOSED = "closed"
+
+
+class OutsideCounselSpendStatus(StrEnum):
+    SUBMITTED = "submitted"
+    APPROVED = "approved"
+    PARTIALLY_APPROVED = "partially_approved"
+    DISPUTED = "disputed"
+    PAID = "paid"
+
+
+class AuthorityDocumentType(StrEnum):
+    JUDGMENT = "judgment"
+    ORDER = "order"
+    PRACTICE_DIRECTION = "practice_direction"
+    NOTICE = "notice"
+
+
+class AuthorityIngestionStatus(StrEnum):
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
 class Company(Base):
     __tablename__ = "companies"
 
@@ -131,6 +215,26 @@ class Company(Base):
         cascade="all, delete-orphan",
     )
     contracts: Mapped[list[Contract]] = relationship(
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
+    outside_counsel_profiles: Mapped[list[OutsideCounsel]] = relationship(
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
+    outside_counsel_assignments: Mapped[list[MatterOutsideCounselAssignment]] = relationship(
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
+    outside_counsel_spend_records: Mapped[list[OutsideCounselSpendRecord]] = relationship(
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
+    court_sync_jobs: Mapped[list[MatterCourtSyncJob]] = relationship(
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
+    document_processing_jobs: Mapped[list[DocumentProcessingJob]] = relationship(
         back_populates="company",
         cascade="all, delete-orphan",
     )
@@ -173,6 +277,10 @@ class CompanyMembership(Base):
     )
     role: Mapped[str] = mapped_column(String(20), nullable=False)
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
+    sessions_valid_after: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
@@ -185,8 +293,24 @@ class CompanyMembership(Base):
         back_populates="assignee_membership",
         foreign_keys="Matter.assignee_membership_id",
     )
+    created_tasks: Mapped[list[MatterTask]] = relationship(
+        back_populates="created_by_membership",
+        foreign_keys="MatterTask.created_by_membership_id",
+    )
+    owned_tasks: Mapped[list[MatterTask]] = relationship(
+        back_populates="owner_membership",
+        foreign_keys="MatterTask.owner_membership_id",
+    )
     authored_notes: Mapped[list[MatterNote]] = relationship(back_populates="author_membership")
     activity_events: Mapped[list[MatterActivity]] = relationship(back_populates="actor_membership")
+    court_sync_runs: Mapped[list[MatterCourtSyncRun]] = relationship(
+        back_populates="triggered_by_membership",
+        foreign_keys="MatterCourtSyncRun.triggered_by_membership_id",
+    )
+    requested_court_sync_jobs: Mapped[list[MatterCourtSyncJob]] = relationship(
+        back_populates="requested_by_membership",
+        foreign_keys="MatterCourtSyncJob.requested_by_membership_id",
+    )
     uploaded_attachments: Mapped[list[MatterAttachment]] = relationship(
         back_populates="uploaded_by_membership"
     )
@@ -222,6 +346,22 @@ class CompanyMembership(Base):
     contract_activity_events: Mapped[list[ContractActivity]] = relationship(
         back_populates="actor_membership",
         foreign_keys="ContractActivity.actor_membership_id",
+    )
+    requested_document_processing_jobs: Mapped[list[DocumentProcessingJob]] = relationship(
+        back_populates="requested_by_membership",
+        foreign_keys="DocumentProcessingJob.requested_by_membership_id",
+    )
+    created_outside_counsel_assignments: Mapped[
+        list[MatterOutsideCounselAssignment]
+    ] = relationship(
+        back_populates="assigned_by_membership",
+        foreign_keys="MatterOutsideCounselAssignment.assigned_by_membership_id",
+    )
+    recorded_outside_counsel_spend_records: Mapped[
+        list[OutsideCounselSpendRecord]
+    ] = relationship(
+        back_populates="recorded_by_membership",
+        foreign_keys="OutsideCounselSpendRecord.recorded_by_membership_id",
     )
 
 
@@ -269,6 +409,10 @@ class Matter(Base):
         back_populates="assigned_matters",
         foreign_keys=[assignee_membership_id],
     )
+    tasks: Mapped[list[MatterTask]] = relationship(
+        back_populates="matter",
+        cascade="all, delete-orphan",
+    )
     notes: Mapped[list[MatterNote]] = relationship(
         back_populates="matter",
         cascade="all, delete-orphan",
@@ -281,6 +425,26 @@ class Matter(Base):
         back_populates="matter",
         cascade="all, delete-orphan",
         order_by="desc(MatterActivity.created_at)",
+    )
+    cause_list_entries: Mapped[list[MatterCauseListEntry]] = relationship(
+        back_populates="matter",
+        cascade="all, delete-orphan",
+        order_by="desc(MatterCauseListEntry.listing_date), desc(MatterCauseListEntry.created_at)",
+    )
+    court_orders: Mapped[list[MatterCourtOrder]] = relationship(
+        back_populates="matter",
+        cascade="all, delete-orphan",
+        order_by="desc(MatterCourtOrder.order_date), desc(MatterCourtOrder.created_at)",
+    )
+    court_sync_runs: Mapped[list[MatterCourtSyncRun]] = relationship(
+        back_populates="matter",
+        cascade="all, delete-orphan",
+        order_by="desc(MatterCourtSyncRun.started_at)",
+    )
+    court_sync_jobs: Mapped[list[MatterCourtSyncJob]] = relationship(
+        back_populates="matter",
+        cascade="all, delete-orphan",
+        order_by="desc(MatterCourtSyncJob.queued_at)",
     )
     attachments: Mapped[list[MatterAttachment]] = relationship(
         back_populates="matter",
@@ -299,6 +463,16 @@ class Matter(Base):
     )
     linked_contracts: Mapped[list[Contract]] = relationship(
         back_populates="linked_matter",
+    )
+    outside_counsel_assignments: Mapped[list[MatterOutsideCounselAssignment]] = relationship(
+        back_populates="matter",
+        cascade="all, delete-orphan",
+        order_by="desc(MatterOutsideCounselAssignment.updated_at)",
+    )
+    outside_counsel_spend_records: Mapped[list[OutsideCounselSpendRecord]] = relationship(
+        back_populates="matter",
+        cascade="all, delete-orphan",
+        order_by="desc(OutsideCounselSpendRecord.updated_at)",
     )
 
 
@@ -325,6 +499,62 @@ class MatterNote(Base):
 
     matter: Mapped[Matter] = relationship(back_populates="notes")
     author_membership: Mapped[CompanyMembership] = relationship(back_populates="authored_notes")
+
+
+class MatterTask(Base):
+    __tablename__ = "matter_tasks"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    owner_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    due_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=MatterTaskStatus.TODO,
+    )
+    priority: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=MatterTaskPriority.MEDIUM,
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    matter: Mapped[Matter] = relationship(back_populates="tasks")
+    created_by_membership: Mapped[CompanyMembership | None] = relationship(
+        back_populates="created_tasks",
+        foreign_keys=[created_by_membership_id],
+    )
+    owner_membership: Mapped[CompanyMembership | None] = relationship(
+        back_populates="owned_tasks",
+        foreign_keys=[owner_membership_id],
+    )
 
 
 class MatterHearing(Base):
@@ -384,6 +614,185 @@ class MatterActivity(Base):
     )
 
 
+class MatterCauseListEntry(Base):
+    __tablename__ = "matter_cause_list_entries"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    sync_run_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matter_court_sync_runs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    listing_date: Mapped[date] = mapped_column(Date, nullable=False)
+    forum_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    bench_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    courtroom: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    item_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    stage: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source: Mapped[str] = mapped_column(String(120), nullable=False)
+    source_reference: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    synced_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+
+    matter: Mapped[Matter] = relationship(back_populates="cause_list_entries")
+    sync_run: Mapped[MatterCourtSyncRun | None] = relationship(
+        back_populates="cause_list_entries"
+    )
+
+
+class MatterCourtOrder(Base):
+    __tablename__ = "matter_court_orders"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    sync_run_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matter_court_sync_runs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    order_date: Mapped[date] = mapped_column(Date, nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    order_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source: Mapped[str] = mapped_column(String(120), nullable=False)
+    source_reference: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    synced_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+
+    matter: Mapped[Matter] = relationship(back_populates="court_orders")
+    sync_run: Mapped[MatterCourtSyncRun | None] = relationship(back_populates="court_orders")
+
+
+class MatterCourtSyncRun(Base):
+    __tablename__ = "matter_court_sync_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    triggered_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    source: Mapped[str] = mapped_column(String(120), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=MatterCourtSyncStatus.COMPLETED,
+    )
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    imported_cause_list_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    imported_order_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    completed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+
+    matter: Mapped[Matter] = relationship(back_populates="court_sync_runs")
+    triggered_by_membership: Mapped[CompanyMembership | None] = relationship(
+        back_populates="court_sync_runs",
+        foreign_keys=[triggered_by_membership_id],
+    )
+    cause_list_entries: Mapped[list[MatterCauseListEntry]] = relationship(
+        back_populates="sync_run",
+    )
+    court_orders: Mapped[list[MatterCourtOrder]] = relationship(back_populates="sync_run")
+    jobs: Mapped[list[MatterCourtSyncJob]] = relationship(back_populates="sync_run")
+
+
+class MatterCourtSyncJob(Base):
+    __tablename__ = "matter_court_sync_jobs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    requested_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    sync_run_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matter_court_sync_runs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    source: Mapped[str] = mapped_column(String(120), nullable=False)
+    source_reference: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    adapter_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=MatterCourtSyncJobStatus.QUEUED,
+    )
+    imported_cause_list_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    imported_order_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    queued_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship(back_populates="court_sync_jobs")
+    matter: Mapped[Matter] = relationship(back_populates="court_sync_jobs")
+    requested_by_membership: Mapped[CompanyMembership | None] = relationship(
+        back_populates="requested_court_sync_jobs",
+        foreign_keys=[requested_by_membership_id],
+    )
+    sync_run: Mapped[MatterCourtSyncRun | None] = relationship(back_populates="jobs")
+
+
 class MatterAttachment(Base):
     __tablename__ = "matter_attachments"
 
@@ -403,6 +812,15 @@ class MatterAttachment(Base):
     content_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     sha256_hex: Mapped[str] = mapped_column(String(64), nullable=False)
+    processing_status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=DocumentProcessingStatus.PENDING,
+    )
+    extracted_char_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    extraction_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    extracted_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
@@ -413,6 +831,35 @@ class MatterAttachment(Base):
     uploaded_by_membership: Mapped[CompanyMembership | None] = relationship(
         back_populates="uploaded_attachments"
     )
+    chunks: Mapped[list[MatterAttachmentChunk]] = relationship(
+        back_populates="attachment",
+        cascade="all, delete-orphan",
+        order_by="MatterAttachmentChunk.chunk_index.asc()",
+    )
+
+
+class MatterAttachmentChunk(Base):
+    __tablename__ = "matter_attachment_chunks"
+    __table_args__ = (
+        UniqueConstraint("attachment_id", "chunk_index", name="uq_matter_attachment_chunk_index"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    attachment_id: Mapped[str] = mapped_column(
+        ForeignKey("matter_attachments.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    token_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+
+    attachment: Mapped[MatterAttachment] = relationship(back_populates="chunks")
 
 
 class MatterTimeEntry(Base):
@@ -600,6 +1047,186 @@ class MatterInvoicePaymentAttempt(Base):
     invoice: Mapped[MatterInvoice] = relationship(back_populates="payment_attempts")
     initiated_by_membership: Mapped[CompanyMembership | None] = relationship(
         back_populates="initiated_payment_attempts"
+    )
+
+
+class OutsideCounsel(Base):
+    __tablename__ = "outside_counsel"
+    __table_args__ = (UniqueConstraint("company_id", "name", name="uq_outside_counsel_name"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    primary_contact_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    primary_contact_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    primary_contact_phone: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    firm_city: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    jurisdictions_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    practice_areas_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    panel_status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=OutsideCounselPanelStatus.ACTIVE,
+    )
+    internal_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship(back_populates="outside_counsel_profiles")
+    assignments: Mapped[list[MatterOutsideCounselAssignment]] = relationship(
+        back_populates="counsel",
+        cascade="all, delete-orphan",
+        order_by="desc(MatterOutsideCounselAssignment.updated_at)",
+    )
+    spend_records: Mapped[list[OutsideCounselSpendRecord]] = relationship(
+        back_populates="counsel",
+        cascade="all, delete-orphan",
+        order_by="desc(OutsideCounselSpendRecord.updated_at)",
+    )
+
+
+class MatterOutsideCounselAssignment(Base):
+    __tablename__ = "matter_outside_counsel_assignments"
+    __table_args__ = (
+        UniqueConstraint(
+            "matter_id",
+            "counsel_id",
+            name="uq_matter_outside_counsel_assignment",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    counsel_id: Mapped[str] = mapped_column(
+        ForeignKey("outside_counsel.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    assigned_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    role_summary: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    budget_amount_minor: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    currency: Mapped[str] = mapped_column(String(8), default="INR", nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=OutsideCounselAssignmentStatus.APPROVED,
+    )
+    internal_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship(back_populates="outside_counsel_assignments")
+    matter: Mapped[Matter] = relationship(back_populates="outside_counsel_assignments")
+    counsel: Mapped[OutsideCounsel] = relationship(back_populates="assignments")
+    assigned_by_membership: Mapped[CompanyMembership | None] = relationship(
+        back_populates="created_outside_counsel_assignments",
+        foreign_keys=[assigned_by_membership_id],
+    )
+    spend_records: Mapped[list[OutsideCounselSpendRecord]] = relationship(
+        back_populates="assignment"
+    )
+
+
+class OutsideCounselSpendRecord(Base):
+    __tablename__ = "outside_counsel_spend_records"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    counsel_id: Mapped[str] = mapped_column(
+        ForeignKey("outside_counsel.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    assignment_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matter_outside_counsel_assignments.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    recorded_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    invoice_reference: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    stage_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    description: Mapped[str] = mapped_column(String(500), nullable=False)
+    currency: Mapped[str] = mapped_column(String(8), default="INR", nullable=False)
+    amount_minor: Mapped[int] = mapped_column(Integer, nullable=False)
+    approved_amount_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=OutsideCounselSpendStatus.SUBMITTED,
+    )
+    billed_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    due_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    paid_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship(back_populates="outside_counsel_spend_records")
+    matter: Mapped[Matter] = relationship(back_populates="outside_counsel_spend_records")
+    counsel: Mapped[OutsideCounsel] = relationship(back_populates="spend_records")
+    assignment: Mapped[MatterOutsideCounselAssignment | None] = relationship(
+        back_populates="spend_records"
+    )
+    recorded_by_membership: Mapped[CompanyMembership | None] = relationship(
+        back_populates="recorded_outside_counsel_spend_records",
+        foreign_keys=[recorded_by_membership_id],
     )
 
 
@@ -846,6 +1473,15 @@ class ContractAttachment(Base):
     content_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     sha256_hex: Mapped[str] = mapped_column(String(64), nullable=False)
+    processing_status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=DocumentProcessingStatus.PENDING,
+    )
+    extracted_char_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    extraction_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    extracted_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
@@ -857,13 +1493,257 @@ class ContractAttachment(Base):
         back_populates="uploaded_contract_attachments",
         foreign_keys=[uploaded_by_membership_id],
     )
+    chunks: Mapped[list[ContractAttachmentChunk]] = relationship(
+        back_populates="attachment",
+        cascade="all, delete-orphan",
+        order_by="ContractAttachmentChunk.chunk_index.asc()",
+    )
+
+
+class ContractAttachmentChunk(Base):
+    __tablename__ = "contract_attachment_chunks"
+    __table_args__ = (
+        UniqueConstraint(
+            "attachment_id",
+            "chunk_index",
+            name="uq_contract_attachment_chunk_index",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    attachment_id: Mapped[str] = mapped_column(
+        ForeignKey("contract_attachments.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    token_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+
+    attachment: Mapped[ContractAttachment] = relationship(back_populates="chunks")
+
+
+class DocumentProcessingJob(Base):
+    __tablename__ = "document_processing_jobs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    requested_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    target_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    attachment_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    action: Mapped[str] = mapped_column(String(24), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=DocumentProcessingJobStatus.QUEUED,
+    )
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    processed_char_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    queued_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship(back_populates="document_processing_jobs")
+    requested_by_membership: Mapped[CompanyMembership | None] = relationship(
+        back_populates="requested_document_processing_jobs",
+        foreign_keys=[requested_by_membership_id],
+    )
+
+
+class AuthorityDocument(Base):
+    __tablename__ = "authority_documents"
+    __table_args__ = (
+        UniqueConstraint("canonical_key", name="uq_authority_document_canonical_key"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    source: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    adapter_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    court_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    forum_level: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    document_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    case_reference: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    bench_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    neutral_citation: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    decision_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    canonical_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_reference: Mapped[str | None] = mapped_column(String(500), nullable=True, index=True)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    document_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    extracted_char_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    ingested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    chunks: Mapped[list[AuthorityDocumentChunk]] = relationship(
+        back_populates="authority_document",
+        cascade="all, delete-orphan",
+        order_by="AuthorityDocumentChunk.chunk_index.asc()",
+    )
+    outgoing_citations: Mapped[list[AuthorityCitation]] = relationship(
+        "AuthorityCitation",
+        back_populates="source_authority_document",
+        cascade="all, delete-orphan",
+        foreign_keys="AuthorityCitation.source_authority_document_id",
+        order_by="AuthorityCitation.created_at.asc()",
+    )
+    incoming_citations: Mapped[list[AuthorityCitation]] = relationship(
+        "AuthorityCitation",
+        back_populates="cited_authority_document",
+        foreign_keys="AuthorityCitation.cited_authority_document_id",
+    )
+
+
+class AuthorityDocumentChunk(Base):
+    __tablename__ = "authority_document_chunks"
+    __table_args__ = (
+        UniqueConstraint(
+            "authority_document_id",
+            "chunk_index",
+            name="uq_authority_document_chunk_index",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    authority_document_id: Mapped[str] = mapped_column(
+        ForeignKey("authority_documents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    token_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+
+    authority_document: Mapped[AuthorityDocument] = relationship(back_populates="chunks")
+
+
+class AuthorityCitation(Base):
+    __tablename__ = "authority_citations"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_authority_document_id",
+            "normalized_reference",
+            name="uq_authority_citation_reference",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    source_authority_document_id: Mapped[str] = mapped_column(
+        ForeignKey("authority_documents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    cited_authority_document_id: Mapped[str | None] = mapped_column(
+        ForeignKey("authority_documents.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    citation_text: Mapped[str] = mapped_column(String(255), nullable=False)
+    normalized_reference: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+
+    source_authority_document: Mapped[AuthorityDocument] = relationship(
+        back_populates="outgoing_citations",
+        foreign_keys=[source_authority_document_id],
+    )
+    cited_authority_document: Mapped[AuthorityDocument | None] = relationship(
+        back_populates="incoming_citations",
+        foreign_keys=[cited_authority_document_id],
+    )
+
+
+class AuthorityIngestionRun(Base):
+    __tablename__ = "authority_ingestion_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    requested_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    source: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    adapter_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=AuthorityIngestionStatus.COMPLETED,
+    )
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    imported_document_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    completed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+
+    requested_by_membership: Mapped[CompanyMembership | None] = relationship(
+        foreign_keys=[requested_by_membership_id]
+    )
 
 
 class PaymentWebhookEvent(Base):
     __tablename__ = "payment_webhook_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "provider", "provider_event_id", name="uq_payment_webhook_event_idempotency"
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     provider: Mapped[str] = mapped_column(String(40), nullable=False)
+    provider_event_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     provider_order_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     event_type: Mapped[str | None] = mapped_column(String(120), nullable=True)
     signature: Mapped[str | None] = mapped_column(String(500), nullable=True)

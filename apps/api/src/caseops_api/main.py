@@ -1,9 +1,12 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from slowapi.middleware import SlowAPIMiddleware
 
 from caseops_api.api.router import api_router
+from caseops_api.core.rate_limit import RateLimitExceeded, configure_limiter
 from caseops_api.core.settings import get_settings
 from caseops_api.db.migrations import run_migrations
 
@@ -26,6 +29,9 @@ def create_application() -> FastAPI:
         openapi_url="/openapi.json" if settings.api_docs_enabled else None,
         lifespan=lifespan,
     )
+    limiter = configure_limiter()
+    application.state.limiter = limiter
+    application.add_middleware(SlowAPIMiddleware)
     application.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
@@ -33,6 +39,16 @@ def create_application() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @application.exception_handler(RateLimitExceeded)
+    async def _rate_limit_handler(
+        _request: Request, exc: RateLimitExceeded
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=429,
+            content={"detail": f"Rate limit exceeded: {exc.detail}"},
+        )
+
     application.include_router(api_router, prefix="/api")
     return application
 

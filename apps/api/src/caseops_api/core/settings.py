@@ -1,7 +1,11 @@
 from functools import lru_cache
 
-from pydantic import AnyHttpUrl, Field
+from pydantic import AnyHttpUrl, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+PLACEHOLDER_AUTH_SECRET = "change-me-change-me-change-me-2026"
+NON_LOCAL_ENVS = {"staging", "production", "prod"}
+LOCAL_POSTGRES_DATABASE_URL = "postgresql+psycopg://caseops:caseops@127.0.0.1:5432/caseops"
 
 
 class Settings(BaseSettings):
@@ -18,13 +22,27 @@ class Settings(BaseSettings):
     api_port: int = Field(default=8000)
     api_docs_enabled: bool = Field(default=True)
     public_app_url: AnyHttpUrl = Field(default="http://localhost:3000")
-    database_url: str = Field(default="sqlite+pysqlite:///./caseops.db")
-    auth_secret: str = Field(default="change-me-change-me-change-me-2026", min_length=32)
+    database_url: str = Field(default=LOCAL_POSTGRES_DATABASE_URL)
+    auth_secret: str = Field(default=PLACEHOLDER_AUTH_SECRET, min_length=32)
     access_token_ttl_minutes: int = Field(default=120)
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
     auto_migrate: bool = Field(default=True)
+    document_storage_backend: str = Field(default="local")
     document_storage_path: str = Field(default="./storage/documents")
+    document_storage_cache_path: str = Field(default="./storage/document-cache")
+    document_storage_gcs_bucket: str | None = Field(default=None)
+    document_storage_gcs_prefix: str = Field(default="documents")
+    gcp_project_id: str | None = Field(default=None)
     max_attachment_size_bytes: int = Field(default=25 * 1024 * 1024)
+    tesseract_command: str | None = Field(default=None)
+    document_worker_poll_interval_seconds: int = Field(default=10, ge=1)
+    document_worker_batch_size: int = Field(default=5, ge=1)
+    document_processing_stale_after_minutes: int = Field(default=15, ge=1)
+    document_retry_after_hours: int = Field(default=6, ge=0)
+    document_reindex_after_hours: int = Field(default=168, ge=0)
+    document_reprocessing_batch_size: int = Field(default=10, ge=1)
+    court_sync_worker_batch_size: int = Field(default=3, ge=1)
+    court_sync_stale_after_minutes: int = Field(default=15, ge=1)
     pine_labs_api_base_url: str | None = Field(default=None)
     pine_labs_payment_link_path: str | None = Field(default=None)
     pine_labs_payment_status_path: str | None = Field(default=None)
@@ -34,6 +52,19 @@ class Settings(BaseSettings):
     pine_labs_webhook_secret: str | None = Field(default=None)
     pine_labs_webhook_signature_header: str = Field(default="X-PineLabs-Signature")
     pine_labs_request_timeout_seconds: int = Field(default=30)
+
+    auth_rate_limit_login_per_minute: int = Field(default=20, ge=1)
+    auth_rate_limit_bootstrap_per_hour: int = Field(default=10, ge=1)
+    auth_rate_limit_enabled: bool = Field(default=True)
+
+    @model_validator(mode="after")
+    def _reject_placeholder_secret_outside_local(self) -> "Settings":
+        if self.env.lower() in NON_LOCAL_ENVS and self.auth_secret == PLACEHOLDER_AUTH_SECRET:
+            raise ValueError(
+                "CASEOPS_AUTH_SECRET must be set to a non-placeholder value when "
+                f"CASEOPS_ENV={self.env!r}.",
+            )
+        return self
 
 
 @lru_cache
