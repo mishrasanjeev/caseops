@@ -298,8 +298,10 @@ def persist_judgment(
         session.add(chunk)
         chunk_rows.append(chunk)
 
-    # Best-effort pgvector sync. SQLite tests skip this block.
+    # Best-effort pgvector sync. SQLite tests skip this block. Flush first so
+    # the chunk rows actually exist when the UPDATE runs.
     if _postgres_backend(session):
+        session.flush()
         _apply_pgvector_batch(session, chunks=chunk_rows, vectors=embed_result.vectors)
     return document, chunk_rows
 

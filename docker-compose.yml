@@ -54,8 +54,11 @@ services:
 
   postgres:
     image: pgvector/pgvector:pg17
+    # Published on 15432 on the host because workstations often have native
+    # Postgres services on 5432/5433. Inside the docker network the port
+    # stays at 5432 so the api/worker containers continue to work.
     ports:
-      - "5432:5432"
+      - "15432:5432"
     environment:
       POSTGRES_DB: caseops
       POSTGRES_USER: caseops

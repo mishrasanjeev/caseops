@@ -69,7 +69,12 @@ def upgrade() -> None:
         sa.Column("assumptions_json", sa.Text(), nullable=False, server_default="[]"),
         sa.Column("missing_facts_json", sa.Text(), nullable=False, server_default="[]"),
         sa.Column("confidence", sa.String(length=16), nullable=False, server_default="low"),
-        sa.Column("review_required", sa.Boolean(), nullable=False, server_default=sa.text("1")),
+        sa.Column(
+            "review_required",
+            sa.Boolean(),
+            nullable=False,
+            server_default=sa.true(),
+        ),
         sa.Column("status", sa.String(length=24), nullable=False, server_default="proposed"),
         sa.Column("next_action", sa.Text(), nullable=True),
         sa.Column("model_run_id", sa.String(length=36), nullable=True),
