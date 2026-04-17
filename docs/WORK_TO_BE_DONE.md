@@ -269,7 +269,7 @@ Without this, the PRD's central promise does not exist.
   - Extend embedding columns onto `matter_attachment_chunk` as well (currently only authorities carry vectors).
   - Full 10-year ingestion for the 5 target HCs + SC (operator task — ~500 GB egress, 50-150 GPU-hours; out of session scope).
 
-### 4.3 Drafting Studio — **BACKEND DONE (Phase 14a, 2026-04-17); UI + export deferred to Phase 14b**
+### 4.3 Drafting Studio — **DONE (Phase 14a backend + 14b UI/DOCX, 2026-04-17)**
 
 - **Traces to:** PRD §9.5, §10.3; Alembic `20260417_0005`; `services/drafting.py`; `schemas/drafts.py`.
 - **Landed (14a):**
@@ -279,11 +279,17 @@ Without this, the PRD's central promise does not exist.
   - `MockProvider` extended with `_mock_draft_response` so the full pipeline exercises offline (deterministic body, cites whatever authorities were retrieved, flags "missing authorities" in summary when none).
   - API routes: `POST /matters/{id}/drafts`, `GET /matters/{id}/drafts`, `GET /matters/{id}/drafts/{id}`, `POST /drafts/{id}/generate | submit | request-changes | approve | finalize`. All tenant-scoped via `SessionContext`.
   - Tests: `tests/test_drafting_studio.py` (7 cases — create, generate, full state-machine walk, approve fail-closed without citations, approve succeeds after seeding + regenerating, finalized locks further transitions, tenant isolation, revision history). Full API suite: **175 passed**.
-- **Remaining for Phase 14b:**
-  - Frontend `/app/matters/[id]/drafts` editor with version diff, approve/reject, and regenerate UX.
-  - DOCX export via `python-docx`, PDF export via `weasyprint` (or equivalent), preserving citation anchors.
-  - Template selection (`template_key` accepted in the generate schema already, unused in v1).
-  - Inline citation anchors in the rendered body — today citations are stored as a list alongside the body; the UI can overlay anchors without schema changes.
+- **Landed in Phase 14b (2026-04-17):**
+  - DOCX export via `python-docx`: `GET /api/matters/{id}/drafts/{id}/export.docx` streams a Word doc with title, matter meta, paragraphed body, citations list, and a "review required" footer when applicable. Two pytest cases cover the happy path (valid ZIP magic + non-trivial size) and the 404 on unknown draft id.
+  - Frontend editor at `/app/matters/[id]/drafts` (list + `New draft` dialog) and `/app/matters/[id]/drafts/[draftId]` (detail). The detail page shows the current version body, a citations panel with verified-count copy, a review-history timeline, and a state-aware action bar — only the buttons legal at the current status render (Submit, Request changes, Approve, Finalize, Regenerate). DOCX download button present whenever a version exists.
+  - `Drafts` tab added to `MatterCockpitNav` between Documents and Hearings.
+  - Zod schemas + typed endpoint functions for all 7 draft APIs in `apps/web/lib/api/{schemas,endpoints}.ts`.
+  - Playwright spec `tests/e2e/drafting.spec.ts` exercises the full journey (create matter → open cockpit → drafts tab → new draft dialog → generate → submit → request-changes → download-button-present). App e2e suite: 22/22 green.
+- **Remaining (v2 / future polish):**
+  - PDF export via `weasyprint` (or browser `Print to PDF` short term).
+  - Template selection — `template_key` is wired in the schemas but not yet surfaced in the UI or the mock.
+  - Version diff UI — today the detail page shows the current version only; a `Compare revisions` drawer would let reviewers see what changed.
+  - Inline citation anchors that link each `[neutral cite]` in the body to the citation panel.
 
 ### 4.4 Recommendation engine — **DONE v1 (Phase 4A, 2026-04-17, `ee158f7`)**
 

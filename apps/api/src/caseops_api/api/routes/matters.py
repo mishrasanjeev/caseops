@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 from caseops_api.api.dependencies import DbSession, get_current_context
 from caseops_api.schemas.billing import (
@@ -54,6 +54,7 @@ from caseops_api.services.drafting import (
     get_draft,
     list_drafts,
     load_draft_record,
+    render_version_docx,
     transition_draft,
 )
 from caseops_api.services.hearing_packs import (
@@ -637,3 +638,30 @@ async def post_current_company_matter_draft_finalize(
         notes=payload.notes,
     )
     return DraftRecord.model_validate(load_draft_record(draft))
+
+
+@router.get(
+    "/{matter_id}/drafts/{draft_id}/export.docx",
+    summary="Download the current (or a specific) draft version as DOCX",
+)
+async def get_current_company_matter_draft_docx(
+    matter_id: str,
+    draft_id: str,
+    context: CurrentContext,
+    session: DbSession,
+    version_id: str | None = None,
+) -> Response:
+    body, filename = render_version_docx(
+        session,
+        context=context,
+        matter_id=matter_id,
+        draft_id=draft_id,
+        version_id=version_id,
+    )
+    return Response(
+        content=body,
+        media_type=(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        ),
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

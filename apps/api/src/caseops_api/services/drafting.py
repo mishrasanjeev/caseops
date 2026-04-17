@@ -31,6 +31,7 @@ drafting JSON so the full pipeline is exercisable offline.
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import logging
 from datetime import UTC, datetime
@@ -510,6 +511,84 @@ def transition_draft(
     session.commit()
     session.refresh(draft)
     return draft
+
+
+def render_version_docx(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+    draft_id: str,
+    version_id: str | None = None,
+) -> tuple[bytes, str]:
+    """Return (docx_bytes, suggested_filename). Falls back to the
+    draft's current version when version_id is not supplied."""
+    matter = _load_matter(session, context, matter_id)
+    draft = _load_draft(session, matter, draft_id)
+    target_id = version_id or draft.current_version_id
+    if not target_id or not draft.versions:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Draft has no version to export. Generate one first.",
+        )
+    version = next((v for v in draft.versions if v.id == target_id), None)
+    if version is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Draft version not found.",
+        )
+
+    # Import inline to avoid pulling python-docx into the process when
+    # the export route is never hit (keeps cold start slim).
+    from docx import Document  # type: ignore
+    from docx.shared import Pt
+
+    doc = Document()
+    title = doc.add_heading(draft.title, level=1)
+    for run in title.runs:
+        run.font.size = Pt(18)
+
+    meta = doc.add_paragraph()
+    meta.add_run(f"Matter: {matter.title} ({matter.matter_code}) · ")
+    meta.add_run(f"Draft type: {draft.draft_type} · ")
+    meta.add_run(f"Revision {version.revision} · ")
+    meta.add_run(f"Status: {draft.status}")
+    meta.runs[-1].italic = True
+
+    doc.add_paragraph()  # spacer
+
+    # Body — split on blank lines to produce readable paragraphs.
+    for block in version.body.split("\n\n"):
+        block = block.strip()
+        if not block:
+            continue
+        para = doc.add_paragraph()
+        for line_idx, line in enumerate(block.split("\n")):
+            if line_idx:
+                para.add_run().add_break()
+            para.add_run(line)
+
+    try:
+        citations = json.loads(version.citations_json) if version.citations_json else []
+    except json.JSONDecodeError:
+        citations = []
+    if citations:
+        doc.add_heading("Authorities cited", level=2)
+        for c in citations:
+            doc.add_paragraph(c, style="List Bullet")
+
+    if draft.review_required:
+        doc.add_paragraph(
+            "Review required — this draft has not been approved by a partner.",
+        ).runs[-1].italic = True
+
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    safe_title = "".join(
+        ch if ch.isalnum() or ch in ("-", "_") else "-" for ch in draft.title
+    ).strip("-")[:60] or "draft"
+    filename = f"{safe_title}-r{version.revision}.docx"
+    return buffer.getvalue(), filename
 
 
 def load_draft_record(draft: Draft) -> dict:

@@ -288,6 +288,39 @@ def test_drafts_list_is_tenant_scoped(client: TestClient) -> None:
     assert cross.status_code == 404
 
 
+def test_docx_export_returns_a_word_document(client: TestClient) -> None:
+    token = str(bootstrap_company(client)["access_token"])
+    matter_id = _create_matter(client, token, "DS-DOCX")
+    _seed_authority(neutral_citation="2024 SCC OnLine SC 777")
+    draft = _create_draft(client, token, matter_id)
+    _generate(client, token, matter_id, draft["id"])
+
+    resp = client.get(
+        f"/api/matters/{matter_id}/drafts/{draft['id']}/export.docx",
+        headers=auth_headers(token),
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.headers["content-type"].startswith(
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+    disposition = resp.headers["content-disposition"]
+    assert "attachment" in disposition
+    assert ".docx" in disposition
+    # A valid DOCX is a ZIP archive — it starts with "PK\x03\x04".
+    assert resp.content[:4] == b"PK\x03\x04"
+    assert len(resp.content) > 2000  # sanity — a real .docx has meaningful bulk
+
+
+def test_docx_export_404_on_unknown_draft(client: TestClient) -> None:
+    token = str(bootstrap_company(client)["access_token"])
+    matter_id = _create_matter(client, token, "DS-DOCX-NF")
+    resp = client.get(
+        f"/api/matters/{matter_id}/drafts/00000000-0000-0000-0000-000000000000/export.docx",
+        headers=auth_headers(token),
+    )
+    assert resp.status_code == 404
+
+
 def test_generate_increments_revision_and_keeps_history(client: TestClient) -> None:
     token = str(bootstrap_company(client)["access_token"])
     matter_id = _create_matter(client, token, "DS-006")

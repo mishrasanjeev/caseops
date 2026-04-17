@@ -239,10 +239,17 @@ draft (empty) ──generate──▶ draft (v1)
   without citations, approve after regeneration, finalized locks
   transitions, tenant isolation, revision history).
 
-**Still shipping in Phase 14b** (next session):
-`/app/matters/[id]/drafts` editor with version diff and reviewer
-approve/reject, DOCX export via `python-docx`, PDF export via
-`weasyprint`, and template selection.
+**Frontend (Phase 14b).** `/app/matters/[id]/drafts` lists drafts and a
+dialog creates new ones; `/app/matters/[id]/drafts/[draftId]` shows the
+current version body, a citations panel with verified-count copy, a
+review-history timeline, and a state-aware action bar that only renders
+the legal next transitions. A `Download DOCX` button streams a Word
+doc directly from `/api/matters/{id}/drafts/{id}/export.docx`. The full
+state machine is covered by `tests/e2e/drafting.spec.ts`.
+
+**Still on the roadmap:** PDF export via `weasyprint`, template
+selection, a `Compare revisions` drawer for version diff, and inline
+citation anchors wired from the body into the citations panel.
 
 ---
 

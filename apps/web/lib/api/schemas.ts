@@ -251,6 +251,72 @@ export type HearingPackItemKind = z.infer<typeof hearingPackItemKind>;
 export type HearingPackItem = z.infer<typeof hearingPackItem>;
 export type HearingPack = z.infer<typeof hearingPack>;
 
+export const draftStatus = z.enum([
+  "draft",
+  "in_review",
+  "changes_requested",
+  "approved",
+  "finalized",
+]);
+export const draftType = z.enum(["brief", "notice", "reply", "memo", "other"]);
+export const draftReviewAction = z.enum([
+  "submit",
+  "request_changes",
+  "approve",
+  "finalize",
+]);
+
+export const draftVersion = z.object({
+  id: z.string(),
+  draft_id: z.string(),
+  revision: z.number().int(),
+  body: z.string(),
+  citations: z.array(z.string()),
+  verified_citation_count: z.number().int(),
+  summary: z.string().nullable(),
+  generated_by_membership_id: z.string().nullable(),
+  model_run_id: z.string().nullable(),
+  created_at: z.string(),
+});
+
+export const draftReview = z.object({
+  id: z.string(),
+  draft_id: z.string(),
+  version_id: z.string().nullable(),
+  actor_membership_id: z.string().nullable(),
+  action: draftReviewAction,
+  notes: z.string().nullable(),
+  created_at: z.string(),
+});
+
+export const draft = z.object({
+  id: z.string(),
+  matter_id: z.string(),
+  created_by_membership_id: z.string().nullable(),
+  title: z.string(),
+  draft_type: draftType,
+  status: draftStatus,
+  review_required: z.boolean(),
+  current_version_id: z.string().nullable(),
+  versions: z.array(draftVersion),
+  reviews: z.array(draftReview),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const draftList = z.object({
+  drafts: z.array(draft),
+  next_cursor: z.string().nullable().optional(),
+});
+
+export type DraftStatus = z.infer<typeof draftStatus>;
+export type DraftType = z.infer<typeof draftType>;
+export type DraftReviewAction = z.infer<typeof draftReviewAction>;
+export type DraftVersion = z.infer<typeof draftVersion>;
+export type DraftReview = z.infer<typeof draftReview>;
+export type Draft = z.infer<typeof draft>;
+export type DraftList = z.infer<typeof draftList>;
+
 export type Contract = z.infer<typeof contract>;
 export type ContractsList = z.infer<typeof contractsList>;
 export type OutsideCounsel = z.infer<typeof outsideCounsel>;

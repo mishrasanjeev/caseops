@@ -1,9 +1,13 @@
 import { apiRequest } from "./client";
+import { API_BASE_URL } from "./config";
 import {
   type AuthContext,
   type AuthSession,
   type ContractsList,
   type DecisionKind,
+  type Draft,
+  type DraftList,
+  type DraftType,
   type HearingPack,
   type Matter,
   type MattersList,
@@ -14,6 +18,8 @@ import {
   authContext,
   authSession,
   contractsList,
+  draft,
+  draftList,
   hearingPack,
   matter,
   mattersList,
@@ -169,6 +175,85 @@ export async function completeHearing(input: {
       },
     },
   );
+}
+
+export async function listDrafts(matterId: string): Promise<DraftList> {
+  const data = await apiRequest<unknown>(`/api/matters/${matterId}/drafts`);
+  return draftList.parse(data);
+}
+
+export async function fetchDraft(input: {
+  matterId: string;
+  draftId: string;
+}): Promise<Draft> {
+  const data = await apiRequest<unknown>(
+    `/api/matters/${input.matterId}/drafts/${input.draftId}`,
+  );
+  return draft.parse(data);
+}
+
+export async function createDraft(input: {
+  matterId: string;
+  title: string;
+  draftType: DraftType;
+}): Promise<Draft> {
+  const data = await apiRequest<unknown>(
+    `/api/matters/${input.matterId}/drafts`,
+    {
+      method: "POST",
+      body: { title: input.title, draft_type: input.draftType },
+    },
+  );
+  return draft.parse(data);
+}
+
+export async function generateDraftVersion(input: {
+  matterId: string;
+  draftId: string;
+  focusNote?: string | null;
+}): Promise<Draft> {
+  const data = await apiRequest<unknown>(
+    `/api/matters/${input.matterId}/drafts/${input.draftId}/generate`,
+    {
+      method: "POST",
+      body: { focus_note: input.focusNote ?? null, template_key: null },
+    },
+  );
+  return draft.parse(data);
+}
+
+type Transition = "submit" | "request-changes" | "approve" | "finalize";
+
+async function transitionDraft(
+  matterId: string,
+  draftId: string,
+  action: Transition,
+  notes?: string,
+): Promise<Draft> {
+  const data = await apiRequest<unknown>(
+    `/api/matters/${matterId}/drafts/${draftId}/${action}`,
+    {
+      method: "POST",
+      body: { notes: notes ?? null },
+    },
+  );
+  return draft.parse(data);
+}
+
+export const submitDraft = (matterId: string, draftId: string, notes?: string) =>
+  transitionDraft(matterId, draftId, "submit", notes);
+export const requestDraftChanges = (
+  matterId: string,
+  draftId: string,
+  notes?: string,
+) => transitionDraft(matterId, draftId, "request-changes", notes);
+export const approveDraft = (matterId: string, draftId: string, notes?: string) =>
+  transitionDraft(matterId, draftId, "approve", notes);
+export const finalizeDraft = (matterId: string, draftId: string, notes?: string) =>
+  transitionDraft(matterId, draftId, "finalize", notes);
+
+export function draftDocxUrl(matterId: string, draftId: string): string {
+  return `${API_BASE_URL}/api/matters/${matterId}/drafts/${draftId}/export.docx`;
 }
 
 export async function createMatter(input: {

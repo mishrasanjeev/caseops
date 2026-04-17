@@ -24,6 +24,7 @@ export default defineConfig({
     /a11y\.spec\.ts/,
     /query-states\.spec\.ts/,
     /personas\.spec\.ts/,
+    /drafting\.spec\.ts/,
   ],
   fullyParallel: false,
   workers: 1,
