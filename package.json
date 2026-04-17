@@ -7,11 +7,19 @@
     "apps/web"
   ],
   "scripts": {
+    "dev:infra": "docker compose up postgres valkey",
     "dev:api": "uv --directory apps/api run uvicorn caseops_api.main:app --reload --app-dir src",
     "dev:web": "npm run dev --workspace @caseops/web",
     "test:api": "uv --directory apps/api run pytest",
     "lint:api": "uv --directory apps/api run ruff check src tests",
     "build:web": "npm run build --workspace @caseops/web",
-    "typecheck:web": "npm run typecheck --workspace @caseops/web"
+    "typecheck:web": "npm run typecheck --workspace @caseops/web",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:marketing": "playwright test --config playwright.marketing.config.ts",
+    "test:e2e:app": "playwright test --config playwright.app.config.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.59.1"
   }
 }
