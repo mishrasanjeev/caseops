@@ -122,9 +122,11 @@ export function NewMatterDialog() {
           noValidate
         >
           <Field label="Title" error={form.formState.errors.title?.message} className="md:col-span-2">
-            {(id) => (
+            {({ fieldId, errorId, invalid }) => (
               <Input
-                id={id}
+                id={fieldId}
+                aria-invalid={invalid || undefined}
+                aria-describedby={errorId}
                 placeholder="State v. Rao — Bail Appeal"
                 autoFocus
                 {...form.register("title")}
@@ -132,44 +134,56 @@ export function NewMatterDialog() {
             )}
           </Field>
           <Field label="Matter code" error={form.formState.errors.matter_code?.message}>
-            {(id) => (
-              <Input id={id} placeholder="BLR-2026-001" {...form.register("matter_code")} />
+            {({ fieldId, errorId, invalid }) => (
+              <Input
+                id={fieldId}
+                aria-invalid={invalid || undefined}
+                aria-describedby={errorId}
+                placeholder="BLR-2026-001"
+                {...form.register("matter_code")}
+              />
             )}
           </Field>
           <Field label="Practice area" error={form.formState.errors.practice_area?.message}>
-            {(id) => (
+            {({ fieldId, errorId, invalid }) => (
               <Input
-                id={id}
+                id={fieldId}
+                aria-invalid={invalid || undefined}
+                aria-describedby={errorId}
                 placeholder="Criminal / Commercial"
                 {...form.register("practice_area")}
               />
             )}
           </Field>
           <Field label="Client name" error={form.formState.errors.client_name?.message}>
-            {(id) => (
+            {({ fieldId, errorId, invalid }) => (
               <Input
-                id={id}
+                id={fieldId}
+                aria-invalid={invalid || undefined}
+                aria-describedby={errorId}
                 placeholder="Rao Family Office"
                 {...form.register("client_name")}
               />
             )}
           </Field>
           <Field label="Opposing party" error={form.formState.errors.opposing_party?.message}>
-            {(id) => (
+            {({ fieldId, errorId, invalid }) => (
               <Input
-                id={id}
+                id={fieldId}
+                aria-invalid={invalid || undefined}
+                aria-describedby={errorId}
                 placeholder="State of Karnataka"
                 {...form.register("opposing_party")}
               />
             )}
           </Field>
           <Field label="Forum">
-            {(id) => (
+            {({ fieldId }) => (
               <Select
                 value={form.watch("forum_level")}
                 onValueChange={(v) => form.setValue("forum_level", v as FormValues["forum_level"])}
               >
-                <SelectTrigger id={id}>
+                <SelectTrigger id={fieldId}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -183,12 +197,12 @@ export function NewMatterDialog() {
             )}
           </Field>
           <Field label="Status">
-            {(id) => (
+            {({ fieldId }) => (
               <Select
                 value={form.watch("status")}
                 onValueChange={(v) => form.setValue("status", v as FormValues["status"])}
               >
-                <SelectTrigger id={id}>
+                <SelectTrigger id={fieldId}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -206,9 +220,11 @@ export function NewMatterDialog() {
             error={form.formState.errors.description?.message}
             className="md:col-span-2"
           >
-            {(id) => (
+            {({ fieldId, errorId, invalid }) => (
               <Textarea
-                id={id}
+                id={fieldId}
+                aria-invalid={invalid || undefined}
+                aria-describedby={errorId}
                 rows={3}
                 placeholder="One-paragraph summary that an associate could brief a partner from."
                 {...form.register("description")}
@@ -250,17 +266,26 @@ function Field({
 }: {
   label: string;
   error?: string;
-  children: (fieldId: string) => React.ReactNode;
+  children: (state: {
+    fieldId: string;
+    errorId: string | undefined;
+    invalid: boolean;
+  }) => React.ReactNode;
   className?: string;
 }) {
   const generated = useId();
   const fieldId = `field-${generated}`;
+  const errorId = error ? `${fieldId}-error` : undefined;
   return (
     <div className={`flex flex-col gap-1.5 ${className ?? ""}`}>
       <Label htmlFor={fieldId}>{label}</Label>
-      {children(fieldId)}
+      {children({ fieldId, errorId, invalid: Boolean(error) })}
       {error ? (
-        <p className="text-xs text-[var(--color-danger-500,#c53030)]" role="alert">
+        <p
+          id={errorId}
+          className="text-xs text-[var(--color-danger-500,#c53030)]"
+          role="alert"
+        >
           {error}
         </p>
       ) : null}

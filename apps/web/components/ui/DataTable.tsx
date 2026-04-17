@@ -135,22 +135,40 @@ export function DataTable<TData, TValue>({
                 </td>
               </tr>
             ) : (
-              table.getRowModel().rows.map((row) => (
-                <tr
-                  key={row.id}
-                  onClick={onRowClick ? () => onRowClick(row.original) : undefined}
-                  className={cn(
-                    "border-b border-[var(--color-line-2)] last:border-0 transition-colors",
-                    onRowClick && "cursor-pointer hover:bg-[var(--color-bg-2)]",
-                  )}
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="px-4 py-3 text-[var(--color-ink-2)]">
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
-                  ))}
-                </tr>
-              ))
+              table.getRowModel().rows.map((row) => {
+                const activate = onRowClick
+                  ? () => onRowClick(row.original)
+                  : undefined;
+                return (
+                  <tr
+                    key={row.id}
+                    onClick={activate}
+                    onKeyDown={
+                      activate
+                        ? (event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              activate();
+                            }
+                          }
+                        : undefined
+                    }
+                    role={activate ? "button" : undefined}
+                    tabIndex={activate ? 0 : undefined}
+                    className={cn(
+                      "border-b border-[var(--color-line-2)] last:border-0 transition-colors",
+                      activate &&
+                        "cursor-pointer hover:bg-[var(--color-bg-2)] focus-visible:bg-[var(--color-bg-2)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--color-brand-500)]",
+                    )}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <td key={cell.id} className="px-4 py-3 text-[var(--color-ink-2)]">
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
@@ -163,6 +181,7 @@ export function DataTable<TData, TValue>({
         <div className="flex items-center gap-1.5">
           <button
             type="button"
+            aria-label="Previous page"
             className="rounded-md border border-[var(--color-line)] bg-white px-2.5 py-1 disabled:opacity-50"
             onClick={() => table.previousPage()}
             disabled={!table.getCanPreviousPage()}
@@ -171,6 +190,7 @@ export function DataTable<TData, TValue>({
           </button>
           <button
             type="button"
+            aria-label="Next page"
             className="rounded-md border border-[var(--color-line)] bg-white px-2.5 py-1 disabled:opacity-50"
             onClick={() => table.nextPage()}
             disabled={!table.getCanNextPage()}

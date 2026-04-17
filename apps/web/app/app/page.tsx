@@ -78,7 +78,7 @@ export default function DashboardPage() {
         <Card className="lg:col-span-3">
           <CardHeader className="flex-row items-start justify-between gap-4">
             <div>
-              <CardTitle>Upcoming hearings</CardTitle>
+              <CardTitle as="h2">Upcoming hearings</CardTitle>
               <CardDescription>
                 Matters with a scheduled hearing, sorted by date.
               </CardDescription>
@@ -114,7 +114,7 @@ export default function DashboardPage() {
 
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Recently opened</CardTitle>
+            <CardTitle as="h2">Recently opened</CardTitle>
             <CardDescription>Your last five matters.</CardDescription>
           </CardHeader>
           <CardContent>

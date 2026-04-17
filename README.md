@@ -187,6 +187,36 @@ Security, tenant-leakage, agent, and AI-safety tests are tracked in
 
 ---
 
+## Accessibility
+
+CaseOps targets **WCAG 2.1 AA** on the marketing surface, sign-in, and the
+authenticated app spine. The house rules:
+
+- Every route has exactly one `<h1>`; heading levels never skip.
+- Global `:focus-visible` ring on every interactive element; every
+  authenticated and public page carries a skip-link to `#main`.
+- Form inputs pair with `<Label htmlFor>`, surface errors via
+  `role="alert"` + `aria-describedby`, and set `aria-invalid` on the
+  failing field so assistive tech announces the validation state.
+- Tables with clickable rows expose `role="button"`, `tabIndex=0`, and
+  Enter/Space handlers so they are operable without a mouse.
+- Colour tokens are audited against 4.5:1 contrast; text and muted
+  surfaces are verified in CI by `@axe-core/playwright`.
+
+The automated gate lives in `tests/e2e/a11y.spec.ts` — zero
+`serious`/`critical` axe violations on `/`, `/sign-in`, `/app`,
+`/app/matters`, and `/app/contracts`. Run it with:
+
+```
+npm run test:e2e:app
+```
+
+Findings beyond the automated gate (keyboard-navigation walk-throughs,
+screen-reader spot checks) are tracked in
+[`docs/WORK_TO_BE_DONE.md`](./docs/WORK_TO_BE_DONE.md) §3.7.
+
+---
+
 ## Legal corpus ingestion (Indian HC + SC)
 
 CaseOps ships a streaming ingester for the two public Indian judgment

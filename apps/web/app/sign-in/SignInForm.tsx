@@ -74,7 +74,9 @@ export function SignInForm() {
       <section className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-6 pb-16">
         <Card>
           <CardHeader>
-            <CardTitle>Sign in to your workspace</CardTitle>
+            <CardTitle as="h1" className="text-lg">
+              Sign in to your workspace
+            </CardTitle>
             <CardDescription>
               Use your CaseOps credentials. You can find your company slug on the workspace URL or
               your invite email.
@@ -92,12 +94,16 @@ export function SignInForm() {
                 label="Company slug"
                 error={form.formState.errors.companySlug?.message}
               >
-                <Input
-                  id="company-slug"
-                  autoComplete="organization"
-                  placeholder="aster-legal"
-                  {...form.register("companySlug")}
-                />
+                {({ invalid, describedBy }) => (
+                  <Input
+                    id="company-slug"
+                    autoComplete="organization"
+                    placeholder="aster-legal"
+                    aria-invalid={invalid || undefined}
+                    aria-describedby={describedBy}
+                    {...form.register("companySlug")}
+                  />
+                )}
               </FieldGroup>
 
               <FieldGroup
@@ -105,13 +111,17 @@ export function SignInForm() {
                 label="Work email"
                 error={form.formState.errors.email?.message}
               >
-                <Input
-                  id="email"
-                  type="email"
-                  autoComplete="email"
-                  placeholder="you@firm.in"
-                  {...form.register("email")}
-                />
+                {({ invalid, describedBy }) => (
+                  <Input
+                    id="email"
+                    type="email"
+                    autoComplete="email"
+                    placeholder="you@firm.in"
+                    aria-invalid={invalid || undefined}
+                    aria-describedby={describedBy}
+                    {...form.register("email")}
+                  />
+                )}
               </FieldGroup>
 
               <FieldGroup
@@ -119,12 +129,16 @@ export function SignInForm() {
                 label="Password"
                 error={form.formState.errors.password?.message}
               >
-                <Input
-                  id="password"
-                  type="password"
-                  autoComplete="current-password"
-                  {...form.register("password")}
-                />
+                {({ invalid, describedBy }) => (
+                  <Input
+                    id="password"
+                    type="password"
+                    autoComplete="current-password"
+                    aria-invalid={invalid || undefined}
+                    aria-describedby={describedBy}
+                    {...form.register("password")}
+                  />
+                )}
               </FieldGroup>
 
               <Button
@@ -166,14 +180,19 @@ function FieldGroup({
   id: string;
   label: string;
   error?: string;
-  children: React.ReactNode;
+  children: (state: { invalid: boolean; describedBy: string | undefined }) => React.ReactNode;
 }) {
+  const errorId = error ? `${id}-error` : undefined;
   return (
     <div className="flex flex-col gap-1.5">
       <Label htmlFor={id}>{label}</Label>
-      {children}
+      {children({ invalid: Boolean(error), describedBy: errorId })}
       {error ? (
-        <p className="text-xs text-[var(--color-danger-500,#c53030)]" role="alert">
+        <p
+          id={errorId}
+          className="text-xs text-[var(--color-danger-500,#c53030)]"
+          role="alert"
+        >
           {error}
         </p>
       ) : null}

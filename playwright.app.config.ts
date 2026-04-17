@@ -18,7 +18,7 @@ const webBaseUrl = process.env.CASEOPS_WEB_BASE_URL ?? "http://127.0.0.1:3100";
 
 export default defineConfig({
   testDir: path.join("tests", "e2e"),
-  testMatch: [/marketing\.spec\.ts/, /app-spine\.spec\.ts/],
+  testMatch: [/marketing\.spec\.ts/, /app-spine\.spec\.ts/, /a11y\.spec\.ts/],
   fullyParallel: false,
   workers: 1,
   timeout: 120_000,

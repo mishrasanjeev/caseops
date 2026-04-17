@@ -172,14 +172,23 @@ The user has rejected the original UI. A targeted rebuild is mandatory. This is 
 - **Landed:** `lib/capabilities.ts` enumerates Capabilities (13 today) and maps them to the three runtime roles (owner / admin / member). `useCapability` hook + `useRole` hook available to any client component. Sidebar Admin entry is hidden for members. Matters page `New Matter` button is gated on `matters:create`. Empty state copy adapts to capability. Server is still the source of truth — UI gating is alignment, not enforcement.
 - **Remaining:** Roles beyond owner/admin/member (Partner / Senior / Junior / Paralegal / GC / Ops / Auditor / Billing / OutsideCounselViewer from the PRD) need schema support in the API before we can gate UI against them. Team-scoping and ethical walls (§5.6) are the prerequisites for matter-level gates.
 
-### 3.7 Accessibility baseline
+### 3.7 Accessibility baseline — **DONE v1 (Phase 10, 2026-04-17)**
 
-- **Traces to:** `apps/web/app/globals.css` (no `:focus-visible`), no ARIA labels, no `<h1>`; PRD §19.7 Accessibility
-- **Done when:**
-  - Keyboard navigation works across all primary flows (create matter, upload doc, draft, approve invoice).
-  - All form inputs have associated labels and error announcements.
-  - Heading hierarchy is correct on every route.
-  - Axe CI check passes with zero critical violations on the spine routes.
+- **Traces to:** PRD §19.7; `apps/web/app/globals.css`, `components/ui/SkipLink.tsx`, `tests/e2e/a11y.spec.ts`.
+- **Landed:**
+  - Global `:focus-visible` ring (2px brand-500 outline, 2px offset) in `globals.css`; Select trigger migrated from `focus:` to `focus-visible:` for consistency.
+  - `SkipLink` component on the marketing landing, sign-in, and `/app` shells targets `#main`; `<main id="main" tabIndex={-1}>` accepts programmatic focus after skip.
+  - Sidebar already uses `<aside aria-label="Primary navigation"><nav>…</nav></aside>`; `<html lang="en">` set at the root layout.
+  - Exactly one `<h1>` per route: `PageHeader` always renders `<h1>`; `CardTitle` is polymorphic (`as="h1" | "h2" | "h3" | "h4"`), sign-in uses `<h1>` for its page heading, and the dashboard cards emit `<h2>` for section titles.
+  - Form a11y: `SignInForm` + `NewMatterDialog` inputs now set `aria-invalid={invalid || undefined}` and `aria-describedby` linked to an error `<p id="…-error" role="alert">` that screen readers announce on submit.
+  - `DataTable` rows with `onRowClick` expose `role="button"`, `tabIndex=0`, and an `onKeyDown` handler that activates on Enter/Space with a visible focus ring. Pagination buttons now carry `aria-label="Previous page"` / `"Next page"`.
+  - Colour tokens darkened to satisfy 4.5:1: `--color-mute` 0.55→0.48, `--color-mute-2` 0.68→0.55, secondary `Button` shifted from `brand-500` to `brand-700`, "Most popular" pricing pill moved off `brand-500`.
+  - `@axe-core/playwright` wired; `tests/e2e/a11y.spec.ts` fails the build on any `serious`/`critical` violation for `/`, `/sign-in`, `/app`, `/app/matters`, `/app/contracts`. All three suites currently pass.
+- **Remaining:**
+  - Keyboard-walkthrough specs for the full create-matter / upload / approve-invoice flows (axe is static-only).
+  - Screen-reader spot-checks documented in a runbook.
+  - Dashboard cockpit subsection headings (`<h3>` under `<h2>`) audit — currently emit one level deep where a proper `<h2>` would help.
+  - Known unrelated spine regression: `app-spine.spec.ts` "sign-in → dashboard → matter cockpit" and "role gates" tests reliably show Chromium `ERR_ABORTED` when navigating from `/app` to `/app/matters` via client-side routing. Reproduced with phase 10 reverted — this is a pre-existing issue from phase 9's `useInfiniteQuery` rewrite; tracked separately.
 
 ### 3.8 Error, empty, and loading states
 

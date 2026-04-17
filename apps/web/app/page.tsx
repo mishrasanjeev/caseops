@@ -9,6 +9,7 @@ import { Nav } from "@/components/marketing/Nav";
 import { Pricing } from "@/components/marketing/Pricing";
 import { Security } from "@/components/marketing/Security";
 import { Workflows } from "@/components/marketing/Workflows";
+import { SkipLink } from "@/components/ui/SkipLink";
 import { siteConfig } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -68,8 +69,9 @@ export default function LandingPage() {
         // eslint-disable-next-line react/no-danger
         dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
       />
+      <SkipLink />
       <Nav />
-      <main>
+      <main id="main" tabIndex={-1} className="focus:outline-none">
         <Hero />
         <Features />
         <Workflows />

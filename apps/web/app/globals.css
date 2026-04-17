@@ -40,8 +40,12 @@
   --color-ink: oklch(0.22 0.024 265);
   --color-ink-2: oklch(0.30 0.022 265);
   --color-ink-3: oklch(0.40 0.018 265);
-  --color-mute: oklch(0.55 0.014 265);
-  --color-mute-2: oklch(0.68 0.010 265);
+  /* Darkened to satisfy WCAG 2.1 AA 4.5:1 contrast against the default
+   * --color-bg. --color-mute is the workhorse muted body colour;
+   * --color-mute-2 is for eyebrow labels and tertiary meta. Both are
+   * verified against axe-core in tests/e2e/a11y.spec.ts. */
+  --color-mute: oklch(0.48 0.016 265);
+  --color-mute-2: oklch(0.55 0.014 265);
   --color-line: oklch(0.93 0.006 265);
   --color-line-2: oklch(0.96 0.004 265);
   --color-bg: oklch(0.985 0.003 265);
@@ -124,6 +128,27 @@
     outline: 2px solid var(--color-brand-500);
     outline-offset: 2px;
     border-radius: var(--radius-xs);
+  }
+
+  /* Skip-link: hidden off-screen until keyboard-focused, then anchored
+   * top-left so the first Tab on any page lands here and jumps the
+   * keyboard user past the sidebar. */
+  .skip-link {
+    position: absolute;
+    top: 0.5rem;
+    left: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--color-ink);
+    color: var(--color-surface);
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    z-index: 100;
+    transform: translateY(-150%);
+    transition: transform 120ms ease;
+  }
+  .skip-link:focus-visible {
+    transform: translateY(0);
+    outline-offset: 3px;
   }
 
   /* Respect user motion preferences across the app. */
