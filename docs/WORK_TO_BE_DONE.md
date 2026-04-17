@@ -190,11 +190,21 @@ The user has rejected the original UI. A targeted rebuild is mandatory. This is 
   - Dashboard cockpit subsection headings (`<h3>` under `<h2>`) audit — currently emit one level deep where a proper `<h2>` would help.
   - Known unrelated spine regression: `app-spine.spec.ts` "sign-in → dashboard → matter cockpit" and "role gates" tests reliably show Chromium `ERR_ABORTED` when navigating from `/app` to `/app/matters` via client-side routing. Reproduced with phase 10 reverted — this is a pre-existing issue from phase 9's `useInfiniteQuery` rewrite; tracked separately.
 
-### 3.8 Error, empty, and loading states
+### 3.8 Error, empty, and loading states — **DONE v1 (Phase 11, 2026-04-17)**
 
-- **Traces to:** `apps/web/app/page.tsx:1226-1247` (errors swallowed silently)
-- **Done when:**
-  - Every query has defined loading, empty, and error presentation. Errors surface recovery actions.
+- **Traces to:** PRD §19; `components/ui/QueryErrorState.tsx`, `components/app/OfflineBanner.tsx`, `app/app/error.tsx`, `app/app/loading.tsx`, `app/app/matters/[id]/not-found.tsx`, `app/not-found.tsx`, `lib/api/config.ts`, `tests/e2e/query-states.spec.ts`.
+- **Landed:**
+  - New `QueryErrorState` component: branded EmptyState + "Try again" button wired to react-query's `refetch()`; escalates to "Workspace is offline" copy + icon when the error is a `NetworkError`; supports an optional `secondaryAction` slot for dead-end paths (404, forbidden) where a retry makes no sense.
+  - All list error states now use it with `onRetry` from the query: `/app/matters`, `/app/contracts`, `/app/outside-counsel`, the `/app` dashboard, the matter cockpit layout, and the matter recommendations page (previously silently printed "Loading recommendations…" on error).
+  - Segment-level Next.js boundaries: `app/app/error.tsx` (reset + support mailto + digest), `app/app/loading.tsx` (skeleton), `app/not-found.tsx`, `app/app/matters/[id]/not-found.tsx`.
+  - Matter cockpit layout now distinguishes 404 (API `ApiError.status === 404`) from other errors — 404 hides the retry button and shows "Back to matter portfolio" instead.
+  - New `NetworkError` class in `lib/api/config.ts` + `isNetworkError()` helper; `apiRequest` wraps `fetch()` in try/catch and throws `NetworkError` for DNS/offline/CORS failures (previously raw `TypeError` leaked through).
+  - `OfflineBanner` subscribes to the react-query cache and `navigator.onLine` / `online` / `offline` events; shows a calm amber stripe above the Topbar the moment either a network-flavoured error is unresolved OR the browser is offline, and auto-hides on recovery. Mounted in `app/app/layout.tsx`.
+  - Tests: new `tests/e2e/query-states.spec.ts` stubs `/api/matters` to 500, `/api/contracts` to 503, asserts the UI surfaces the error copy + retry, clicks through, and asserts recovery — plus a 404 matter id test that asserts the branded not-found renders with the "Back to matter portfolio" link. All 3 pass. Full app suite: 16/18 green; the 2 failures are the pre-existing phase-9 spine regression already tracked in §3.7.
+- **Remaining:**
+  - Component-level tests for error copy (deferred to §3.9 Frontend tests).
+  - Error-context enrichment: ship the Next `error.digest` to a Sentry-equivalent once OTEL lands (§8.1).
+  - Persist in-flight toast notifications across the offline-banner transition so a dismissed success toast doesn't hide the banner arrival.
 
 ### 3.10 Impeccable design refresh — **DONE (Phase 5, 2026-04-17)**
 

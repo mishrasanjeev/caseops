@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
+import { OfflineBanner } from "@/components/app/OfflineBanner";
 import { RequireAuth } from "@/components/app/RequireAuth";
 import { Sidebar } from "@/components/app/Sidebar";
 import { Topbar } from "@/components/app/Topbar";
@@ -21,6 +22,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         <div className="flex min-h-screen bg-[var(--color-bg)]">
           <Sidebar />
           <div className="flex min-h-screen flex-1 flex-col">
+            <OfflineBanner />
             <Topbar />
             <main
               id="main"

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { listMatters } from "@/lib/api/endpoints";
@@ -73,6 +74,14 @@ export default function DashboardPage() {
           hint="Retrieval upgrade in §4.2"
         />
       </section>
+
+      {mattersQuery.isError ? (
+        <QueryErrorState
+          title="Could not load your portfolio"
+          error={mattersQuery.error}
+          onRetry={mattersQuery.refetch}
+        />
+      ) : null}
 
       <section className="grid gap-5 lg:grid-cols-5">
         <Card className="lg:col-span-3">

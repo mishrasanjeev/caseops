@@ -1,6 +1,6 @@
 import { getStoredToken } from "@/lib/session";
 
-import { API_BASE_URL, ApiError } from "./config";
+import { API_BASE_URL, ApiError, NetworkError } from "./config";
 
 export type ApiRequestInit = {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -60,12 +60,26 @@ export async function apiRequest<TResponse>(
       : JSON.stringify(body)
     : undefined;
 
-  const response = await fetch(resolveUrl(path), {
-    method,
-    headers: requestHeaders,
-    body: serializedBody,
-    signal,
-  });
+  let response: Response;
+  try {
+    response = await fetch(resolveUrl(path), {
+      method,
+      headers: requestHeaders,
+      body: serializedBody,
+      signal,
+    });
+  } catch (err) {
+    // fetch throws TypeError for DNS / offline / CORS preflight failure.
+    // AbortError also reaches here but is re-thrown untouched so callers
+    // can distinguish a user-initiated cancellation.
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw err;
+    }
+    throw new NetworkError(
+      "Could not reach the workspace API. Check your connection and try again.",
+      err,
+    );
+  }
 
   const contentType = response.headers.get("content-type") ?? "";
   let parsed: unknown = null;

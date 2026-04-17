@@ -187,6 +187,42 @@ Security, tenant-leakage, agent, and AI-safety tests are tracked in
 
 ---
 
+## Resilience (loading, empty, error)
+
+Every data surface in the workspace has a defined loading, empty, and
+error presentation — no blank frames, no silent failures, no raw
+Chromium `ERR_*` pages on a transient API blip. The contract:
+
+- **Loading** — always a branded skeleton or inline spinner, never a
+  blank frame. Route-level Suspense falls back to `/app/loading.tsx`.
+- **Empty** — `EmptyState` with an icon, a one-line explanation, and
+  (when the user has permission) an action that creates the first
+  record.
+- **Error** — `QueryErrorState` surfaces the API's `detail` message and
+  a "Try again" button wired to react-query's `refetch()`. If the error
+  is a `NetworkError` (DNS, CORS, or API host unreachable) the copy
+  shifts to "Workspace is offline" and an understated amber
+  `OfflineBanner` appears at the top of the shell; it auto-hides the
+  moment any query succeeds again.
+- **404** — `/app/matters/[id]/not-found.tsx` plus an in-layout
+  fallback render a branded "Matter not found" with a "Back to matter
+  portfolio" out, instead of Next's default 404.
+- **Unhandled exceptions** — `/app/error.tsx` catches anything the
+  boundary didn't, with a `reset()` action, a back-to-workspace link,
+  and a stable digest for support.
+
+The automated gate for this contract lives in
+`tests/e2e/query-states.spec.ts` — stubs `/api/matters` to 500 and
+`/api/contracts` to 503, asserts the retry surfaces correctly, clicks
+"Try again", and asserts the workspace recovers. It also exercises the
+404 path. Run with:
+
+```
+npm run test:e2e:app
+```
+
+---
+
 ## Accessibility
 
 CaseOps targets **WCAG 2.1 AA** on the marketing surface, sign-in, and the

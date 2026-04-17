@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { DataTable } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { listContracts } from "@/lib/api/endpoints";
@@ -47,6 +48,7 @@ export default function ContractsPage() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
+    refetch,
   } = useInfiniteQuery({
     queryKey: ["contracts", "list"],
     queryFn: ({ pageParam }) =>
@@ -147,12 +149,10 @@ export default function ContractsPage() {
           <Skeleton className="h-48 w-full" />
         </div>
       ) : isError ? (
-        <EmptyState
-          icon={Scale}
+        <QueryErrorState
           title="Could not load contracts"
-          description={
-            error instanceof Error ? error.message : "Check the API connection and try again."
-          }
+          error={error}
+          onRetry={refetch}
         />
       ) : contracts.length === 0 ? (
         <EmptyState

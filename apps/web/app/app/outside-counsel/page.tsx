@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { DataTable } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { fetchOutsideCounselWorkspace } from "@/lib/api/endpoints";
@@ -24,7 +25,7 @@ function formatMoney(minor: number, currency: string): string {
 }
 
 export default function OutsideCounselPage() {
-  const { data, isPending, isError, error } = useQuery({
+  const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ["outside-counsel", "workspace"],
     queryFn: () => fetchOutsideCounselWorkspace(),
   });
@@ -137,12 +138,10 @@ export default function OutsideCounselPage() {
           <Skeleton className="h-48 w-full" />
         </div>
       ) : isError ? (
-        <EmptyState
-          icon={Users}
+        <QueryErrorState
           title="Could not load counsel"
-          description={
-            error instanceof Error ? error.message : "Check the API connection and try again."
-          }
+          error={error}
+          onRetry={refetch}
         />
       ) : profiles.length === 0 ? (
         <EmptyState

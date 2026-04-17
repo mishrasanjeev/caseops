@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { DataTable } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { listMatters } from "@/lib/api/endpoints";
@@ -49,6 +50,7 @@ export default function MattersPage() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
+    refetch,
   } = useInfiniteQuery({
     queryKey: ["matters", "list"],
     queryFn: ({ pageParam }) =>
@@ -129,12 +131,10 @@ export default function MattersPage() {
           <Skeleton className="h-48 w-full" />
         </div>
       ) : isError ? (
-        <EmptyState
-          icon={Briefcase}
+        <QueryErrorState
           title="Could not load matters"
-          description={
-            error instanceof Error ? error.message : "Check your connection and try again."
-          }
+          error={error}
+          onRetry={refetch}
         />
       ) : matters.length === 0 ? (
         <EmptyState

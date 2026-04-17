@@ -1,18 +1,20 @@
 "use client";
 
-import { Loader2, Triangle } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useParams } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { MatterCockpitNav } from "@/components/app/MatterCockpitNav";
 import { MatterHeader } from "@/components/app/MatterHeader";
-import { EmptyState } from "@/components/ui/EmptyState";
+import { Button } from "@/components/ui/Button";
+import { QueryErrorState } from "@/components/ui/QueryErrorState";
+import { ApiError } from "@/lib/api/config";
 import { useMatterWorkspace } from "@/lib/use-matter-workspace";
 
 export default function MatterCockpitLayout({ children }: { children: ReactNode }) {
   const params = useParams<{ id: string }>();
   const matterId = params.id;
-  const { data, isPending, isError, error } = useMatterWorkspace(matterId);
+  const { data, isPending, isError, error, refetch } = useMatterWorkspace(matterId);
 
   if (isPending) {
     return (
@@ -22,14 +24,22 @@ export default function MatterCockpitLayout({ children }: { children: ReactNode 
     );
   }
   if (isError || !data) {
+    // 404 = no such matter / not authorized; retrying won't help, so we
+    // offer the "back to portfolio" out instead of a retry button.
+    const notFound = error instanceof ApiError && error.status === 404;
     return (
-      <EmptyState
-        icon={Triangle}
-        title="Could not load this matter"
-        description={
-          error instanceof Error
-            ? error.message
-            : "The matter may no longer exist, or you don't have access."
+      <QueryErrorState
+        title={notFound ? "Matter not found" : "Could not load this matter"}
+        error={
+          notFound
+            ? new Error("The matter may no longer exist, or you don't have access to it.")
+            : error
+        }
+        onRetry={notFound ? undefined : refetch}
+        secondaryAction={
+          <Button href="/app/matters" variant={notFound ? "primary" : "outline"}>
+            Back to matter portfolio
+          </Button>
         }
       />
     );

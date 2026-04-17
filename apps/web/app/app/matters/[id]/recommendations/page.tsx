@@ -24,6 +24,7 @@ import {
   CardTitle,
 } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ApiError } from "@/lib/api/config";
 import {
@@ -163,6 +164,12 @@ export default function MatterRecommendationsPage() {
         <CardContent className="py-5 text-sm text-[var(--color-mute)]">
           {query.isPending ? (
             "Loading recommendations…"
+          ) : query.isError ? (
+            <QueryErrorState
+              title="Could not load recommendations"
+              error={query.error}
+              onRetry={query.refetch}
+            />
           ) : recommendations.length === 0 ? (
             <EmptyState
               icon={ClipboardCheck}
