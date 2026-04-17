@@ -130,7 +130,17 @@ test.describe("App spine", () => {
     await page.waitForURL(/\/billing$/);
     await expect(page.getByText("Total billed")).toBeVisible();
 
-    await page.getByRole("link", { name: "Audit", exact: true }).click();
+    const cockpitTabs = page.getByRole("navigation", { name: /Matter cockpit tabs/i });
+    await cockpitTabs
+      .getByRole("link", { name: "Recommendations", exact: true })
+      .click();
+    await page.waitForURL(/\/matters\/[0-9a-f-]+\/recommendations$/);
+    await expect(
+      page.getByRole("heading", { name: "Recommendations", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText(/No recommendations yet/i)).toBeVisible();
+
+    await cockpitTabs.getByRole("link", { name: "Audit", exact: true }).click();
     await page.waitForURL(/\/audit$/);
     await expect(page.getByRole("heading", { name: "Audit trail" })).toBeVisible();
 

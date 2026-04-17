@@ -1754,3 +1754,136 @@ class PaymentWebhookEvent(Base):
         default=utcnow,
         nullable=False,
     )
+
+
+class ModelRun(Base):
+    """Auditable record of every LLM / embedding call made on behalf of a tenant."""
+
+    __tablename__ = "model_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str | None] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    matter_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matters.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    actor_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    purpose: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(String(40), nullable=False)
+    model: Mapped[str] = mapped_column(String(120), nullable=False)
+    prompt_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    prompt_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    completion_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    latency_ms: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    status: Mapped[str] = mapped_column(String(24), default="ok", nullable=False)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+
+
+class Recommendation(Base):
+    """Explainable decision-support output for a matter (PRD §11, §23.1)."""
+
+    __tablename__ = "recommendations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(400), nullable=False)
+    rationale: Mapped[str] = mapped_column(Text, nullable=False)
+    primary_option_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    assumptions_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    missing_facts_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    confidence: Mapped[str] = mapped_column(String(16), nullable=False, default="low")
+    review_required: Mapped[bool] = mapped_column(default=True, nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="proposed")
+    next_action: Mapped[str | None] = mapped_column(Text, nullable=True)
+    model_run_id: Mapped[str | None] = mapped_column(
+        ForeignKey("model_runs.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+
+    options: Mapped[list[RecommendationOption]] = relationship(
+        back_populates="recommendation",
+        cascade="all, delete-orphan",
+        order_by="RecommendationOption.rank",
+    )
+    decisions: Mapped[list[RecommendationDecision]] = relationship(
+        back_populates="recommendation",
+        cascade="all, delete-orphan",
+        order_by="RecommendationDecision.created_at",
+    )
+
+
+class RecommendationOption(Base):
+    __tablename__ = "recommendation_options"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    recommendation_id: Mapped[str] = mapped_column(
+        ForeignKey("recommendations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    rank: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    label: Mapped[str] = mapped_column(String(400), nullable=False)
+    rationale: Mapped[str] = mapped_column(Text, nullable=False)
+    confidence: Mapped[str] = mapped_column(String(16), nullable=False, default="low")
+    supporting_citations_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    risk_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    recommendation: Mapped[Recommendation] = relationship(back_populates="options")
+
+
+class RecommendationDecision(Base):
+    __tablename__ = "recommendation_decisions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    recommendation_id: Mapped[str] = mapped_column(
+        ForeignKey("recommendations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    actor_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    decision: Mapped[str] = mapped_column(String(24), nullable=False)  # accepted|rejected|edited
+    selected_option_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+
+    recommendation: Mapped[Recommendation] = relationship(back_populates="decisions")

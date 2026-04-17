@@ -1,15 +1,15 @@
-﻿# CaseOps
+# CaseOps
 
 **The matter-native legal operating system for Indian law firms and corporate legal teams.**
 
 CaseOps unifies matter management, legal research, AI-assisted drafting, hearing preparation,
 contract workflows, outside-counsel management, and billing into one citation-grounded
-workspace â€” with tenant isolation, scoped agent grants, and audit by default.
+workspace — with tenant isolation, scoped agent grants, and audit by default.
 
-> This repository is the founder-stage monorepo. It is **pre-alpha**: the backend foundation
-> (matters, documents, contracts, billing, authority ingestion) works; the AI core (drafting,
-> recommendations, agents) and a proper frontend are in active rebuild. See
-> [`docs/WORK_TO_BE_DONE.md`](./docs/WORK_TO_BE_DONE.md) for the current plan.
+> Founder-stage monorepo. **Pre-alpha.** The backend foundation (matters, documents,
+> contracts, billing, authority ingestion) is working and hardened; the AI core is actively
+> landing. See [`docs/WORK_TO_BE_DONE.md`](./docs/WORK_TO_BE_DONE.md) for current status and
+> priority.
 
 ---
 
@@ -17,11 +17,11 @@ workspace â€” with tenant isolation, scoped agent grants, and audit by defa
 
 | Surface | Status | Where |
 | --- | --- | --- |
-| Marketing site | Live (Phase 1) | `apps/web/app/page.tsx` |
-| App shell + Matter Cockpit | Live (Phase 3) | `apps/web/app/app/` |
-| Sign in | Live | `apps/web/app/sign-in/` |
-| Legacy workspace | Preserved at `/legacy` until rebuild completes | `apps/web/app/legacy/` |
-| API (auth, matters, contracts, documents, billing, authorities) | Founder-stage, hardened in Phase 2 | `apps/api/` |
+| Marketing site (`/`) | Live | `apps/web/app/page.tsx` |
+| Sign in (`/sign-in`) | Live | `apps/web/app/sign-in/` |
+| App shell + Matter Cockpit (`/app`) | Live | `apps/web/app/app/` |
+| Legacy founder console (`/legacy`) | Preserved during rebuild | `apps/web/app/legacy/` |
+| API (auth, matters, contracts, documents, billing, authorities, recommendations) | Founder-stage, security-hardened | `apps/api/` |
 | Document worker | Founder-stage | `apps/api/src/caseops_api/workers/` |
 | PRD | Stable | [`docs/PRD.md`](./docs/PRD.md) |
 | Architecture | Stable | [`docs/architecture.md`](./docs/architecture.md) |
@@ -33,29 +33,35 @@ workspace â€” with tenant isolation, scoped agent grants, and audit by defa
 
 ```
 caseops/
-â”œâ”€â”€ apps/
-â”‚   â”œâ”€â”€ api/            FastAPI backend, Alembic migrations, document worker
-â”‚   â””â”€â”€ web/            Next.js 16 + React 19 + Tailwind v4 frontend
-â”œâ”€â”€ docs/               PRD, architecture, work plan
-â”œâ”€â”€ infra/              Cloud Run manifests and deploy helpers
-â”œâ”€â”€ tests/              Playwright end-to-end tests
-â””â”€â”€ docker-compose.yml  Local multi-service dev stack
+├── apps/
+│   ├── api/            FastAPI backend, Alembic migrations, document worker
+│   └── web/            Next.js 16 + React 19 + Tailwind v4 frontend
+├── docs/               PRD, architecture, work plan
+├── infra/              Cloud Run manifests and deploy helpers
+├── tests/              Playwright end-to-end tests
+└── docker-compose.yml  Local multi-service dev stack
 ```
 
 ---
 
 ## Technology
 
-- **Web** â€” Next.js 16, React 19, TypeScript 6, Tailwind CSS v4, `lucide-react`
-- **API** â€” Python 3.13, FastAPI, Pydantic, SQLAlchemy 2, Alembic
-- **Data** â€” PostgreSQL 17 with `pgvector`, Valkey cache, GCS (or local FS) for documents
-- **Worker** â€” custom polling worker (to be replaced with Temporal â€” see work plan Â§5.1)
-- **Payments** â€” Pine Labs integration (HMAC webhook verification)
-- **Deployment** â€” Cloud Run + Cloud SQL + GCS for founder stage; GKE path preserved
-- **Tests** â€” pytest (unit), Playwright (e2e)
+- **Web** — Next.js 16, React 19, TypeScript 6, Tailwind CSS v4, Radix primitives, TanStack
+  Query + Table, React Hook Form + Zod, Sonner toasts, Lucide icons.
+- **API** — Python 3.13, FastAPI, Pydantic, SQLAlchemy 2, Alembic, slowapi rate limiter.
+- **AI** — `LLMProvider` abstraction with Mock / Anthropic / Google Gemini backends; pluggable
+  embeddings provider. Gemini hosted for founder stage; architecture preserves a swap to
+  self-hosted Gemma 4 for enterprise tenants that need private inference.
+- **Data** — PostgreSQL 17 with `pgvector`, Valkey cache, GCS (or local FS) for documents.
+- **Workflow** — custom polling worker today; Temporal is the declared target (work plan §5.1).
+- **Payments** — Pine Labs integration with HMAC webhook verification, idempotency, and
+  cross-tenant guards.
+- **Deployment** — Cloud Run + Cloud SQL + GCS for founder stage; GKE + private networking +
+  dedicated inference preserved as the enterprise path.
+- **Tests** — pytest (unit + integration), Playwright (marketing + app spine + legacy).
 
-Dependency policy: latest stable production-ready versions only; no betas, no intentional pins
-to older majors without a documented blocker. See [`CLAUDE.md`](./CLAUDE.md).
+Dependency policy: latest stable production-ready versions only; no betas, no intentional
+pins to older majors without a documented blocker. See [`CLAUDE.md`](./CLAUDE.md).
 
 ---
 
@@ -65,7 +71,7 @@ to older majors without a documented blocker. See [`CLAUDE.md`](./CLAUDE.md).
 
 - Node.js 22+ and npm 10+
 - Python 3.13 and [`uv`](https://github.com/astral-sh/uv)
-- Docker (for Postgres + Valkey locally) or a live Postgres 17 + `pgvector`
+- Docker (for Postgres 17 + `pgvector` and Valkey)
 
 ### 1) Install dependencies
 
@@ -79,7 +85,7 @@ cd apps/api && uv sync && cd ../..
 
 ### 2) Run the stack locally
 
-Option A â€” full Docker stack (recommended):
+Option A — full Docker stack (recommended):
 
 ```bash
 docker compose up --build
@@ -87,21 +93,22 @@ docker compose up --build
 
 Starts `web` (port 3000), `api` (port 8000), `worker`, `postgres` (5432), `valkey` (6379).
 
-CaseOps local runtime is Postgres-first. SQLite is only a legacy/test fallback and should not be used for local seeded corpora or normal app development.
+CaseOps local runtime is Postgres-first. SQLite is only a test fallback and should not be
+used for seeded corpora or normal development.
 
-Option B â€” run pieces directly:
+Option B — run pieces directly:
 
 ```bash
-# Terminal 0 - infra only
+# Terminal 0 — infra only (Postgres + Valkey)
 npm run dev:infra
 
-# Terminal 1 - API
+# Terminal 1 — API
 npm run dev:api
 
-# Terminal 2 â€” Web
+# Terminal 2 — Web
 npm run dev:web
 
-# Terminal 3 â€” worker (optional, for document OCR/indexing)
+# Terminal 3 — document worker (optional)
 cd apps/api && uv run caseops-document-worker
 ```
 
@@ -122,13 +129,13 @@ Run from the repo root.
 | Script | What it does |
 | --- | --- |
 | `npm run dev:infra` | Start local Postgres 17 + pgvector and Valkey via Docker Compose |
-| `npm run dev:web` | Start the Next.js dev server (Turbopack) |
 | `npm run dev:api` | Start FastAPI with reload |
+| `npm run dev:web` | Start the Next.js dev server (Turbopack) |
 | `npm run build:web` | Production build of the web app |
 | `npm run typecheck:web` | `tsc --noEmit` on the web app |
 | `npm run test:api` | pytest suite for the API |
 | `npm run lint:api` | ruff lint on the API |
-| `npm run test:e2e` | Legacy Playwright e2e (requires live API + worker + DB) |
+| `npm run test:e2e` | Full legacy Playwright e2e (requires live API + worker + DB) |
 | `npm run test:e2e:headed` | Same, in headed mode |
 | `npm run test:e2e:marketing` | Marketing suite against a production web build |
 | `npm run test:e2e:app` | App shell + matter cockpit suite against a production build |
@@ -137,7 +144,7 @@ Run from the repo root.
 
 ## Environment
 
-Create `apps/web/.env.local` from the example:
+Create `apps/web/.env.local`:
 
 ```
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
@@ -146,24 +153,37 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000/app
 ```
 
 For the API, copy `apps/api/.env.example` and set at minimum `CASEOPS_AUTH_SECRET`,
-`CASEOPS_DATABASE_URL`, `CASEOPS_PUBLIC_APP_URL`, and (optional) Pine Labs credentials.
+`CASEOPS_DATABASE_URL`, `CASEOPS_PUBLIC_APP_URL`, Pine Labs credentials (optional), and
+LLM provider settings (optional — defaults to the mock provider):
 
-> **Security note.** The default `CASEOPS_AUTH_SECRET` shipped in settings is a placeholder.
-> Never deploy without setting your own. See `docs/WORK_TO_BE_DONE.md` Â§2.2.
+```
+CASEOPS_LLM_PROVIDER=mock         # mock | anthropic | gemini
+CASEOPS_LLM_MODEL=claude-opus-4-7 # or gemini-2.5-pro, etc.
+CASEOPS_LLM_API_KEY=              # required for anthropic / gemini
+```
+
+> **Security note.** The default `CASEOPS_AUTH_SECRET` is a placeholder and is rejected at
+> startup whenever `CASEOPS_ENV` is `staging`, `production`, or `prod`. See
+> [`docs/WORK_TO_BE_DONE.md`](./docs/WORK_TO_BE_DONE.md) §2.2.
 
 ---
 
 ## Testing
 
-- **API unit tests** â€” `npm run test:api`. Covers auth, company, matters, contracts, documents,
-  authorities, outside counsel.
-- **End-to-end** â€” `npm run test:e2e` starts real API + Web + worker and drives the browser
-  through founder-mode flows.
-- **Live integrations** â€” gated behind `CASEOPS_E2E_ENABLE_LIVE_SOURCES=1` and
+- **API unit + integration** — `npm run test:api`. Covers auth, company, matters,
+  contracts, documents, authorities, outside counsel, payments, plus the Phase 2 security
+  surface (password policy, webhook hardening, rate limiting, session revocation, tenant
+  isolation) and Phase 4 AI surface (LLM provider, citations, recommendations).
+- **Marketing** — `npm run test:e2e:marketing` runs against a production web build,
+  exercises the landing page, SEO surface, OG image, sitemap/robots, and demo-request API.
+- **App spine** — `npm run test:e2e:app` runs against a production build + live API;
+  covers sign-in, dashboard, matter creation, cockpit tabs, roadmap stubs, sign-out.
+- **Legacy e2e** — `npm run test:e2e` drives the founder-mode console end-to-end.
+- **Live integrations** — gated behind `CASEOPS_E2E_ENABLE_LIVE_SOURCES=1` and
   `CASEOPS_E2E_ENABLE_PINE_LABS=1`.
 
 Security, tenant-leakage, agent, and AI-safety tests are tracked in
-[`docs/WORK_TO_BE_DONE.md`](./docs/WORK_TO_BE_DONE.md) Â§11.
+[`docs/WORK_TO_BE_DONE.md`](./docs/WORK_TO_BE_DONE.md) §11.
 
 ---
 
@@ -193,7 +213,7 @@ required IAM.
 
 ## Product principles
 
-CaseOps is built on a few non-negotiable rules. Read in full in [`CLAUDE.md`](./CLAUDE.md).
+CaseOps follows a few non-negotiable rules. Read in full in [`CLAUDE.md`](./CLAUDE.md).
 
 - Matter-native, not chatbot. Every workflow lives on a matter graph.
 - Citation-grounded AI. No substantive answer without a source.
@@ -213,4 +233,4 @@ abstractions, and include verification (tests or concrete checks).
 
 ## License
 
-Â© CaseOps. All rights reserved.
+© CaseOps. All rights reserved.

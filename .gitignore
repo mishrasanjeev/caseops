@@ -5,7 +5,13 @@
 !.env.local.example
 .idea/
 .vscode/
-.claude/
+# Ignore Claude Code's local state but keep vendored skills in .claude/skills/.
+.claude/projects/
+.claude/todos/
+.claude/statsig/
+.claude/shell-snapshots/
+.claude/sessions/
+.claude/settings.local.json
 .tmp/
 tmp-*.html
 *.log

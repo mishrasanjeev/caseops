@@ -91,15 +91,25 @@ These rules are the default coding behavior for all implementation work in this 
 
 ### Frontend
 
+- **Before any frontend work**, read `.impeccable.md` (the CaseOps design
+  context) and `.claude/skills/impeccable/SKILL.md` (the vendored
+  `impeccable` skill, Apache-2.0, © Paul Bakaus 2025). The skill's
+  heuristics are the house style for typography, colour (OKLCH only),
+  spacing, and interaction. This rule is mandatory, not advisory.
 - Prefer straightforward screens and workflows over UI cleverness.
-- Optimize for dense, professional workflows used by lawyers and legal ops teams.
+- Optimize for dense, professional workflows used by lawyers and legal
+  ops teams. The product sits next to Bloomberg Terminal and Linear in
+  tone — never next to a consumer SaaS landing page.
 - Keep important actions obvious:
   - research
   - drafting
   - hearing prep
   - recommendations
   - approvals
-- Do not introduce ornamental complexity.
+- Do not introduce ornamental complexity. No glassmorphism, no neon
+  gradients, no emoji in UI, no "AI" purple-to-pink gradients.
+- When in doubt, run the `audit` or `critique` references inside the
+  impeccable skill against the target surface before shipping.
 
 ---
 

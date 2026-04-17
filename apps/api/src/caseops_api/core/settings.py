@@ -57,6 +57,13 @@ class Settings(BaseSettings):
     auth_rate_limit_bootstrap_per_hour: int = Field(default=10, ge=1)
     auth_rate_limit_enabled: bool = Field(default=True)
 
+    llm_provider: str = Field(default="mock")
+    llm_model: str = Field(default="caseops-mock-1")
+    llm_api_key: str | None = Field(default=None)
+    llm_max_output_tokens: int = Field(default=2048, ge=256)
+    llm_temperature: float = Field(default=0.1, ge=0.0, le=2.0)
+    recommendation_review_required_default: bool = Field(default=True)
+
     @model_validator(mode="after")
     def _reject_placeholder_secret_outside_local(self) -> "Settings":
         if self.env.lower() in NON_LOCAL_ENVS and self.auth_secret == PLACEHOLDER_AUTH_SECRET:

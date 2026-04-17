@@ -2,12 +2,18 @@ import { apiRequest } from "./client";
 import {
   type AuthContext,
   type AuthSession,
+  type DecisionKind,
   type Matter,
   type MattersList,
+  type Recommendation,
+  type RecommendationList,
+  type RecommendationType,
   authContext,
   authSession,
   matter,
   mattersList,
+  recommendation,
+  recommendationList,
 } from "./schemas";
 
 export async function signIn(input: {
@@ -44,6 +50,45 @@ export async function fetchMatter(matterId: string): Promise<Matter> {
 
 export async function fetchMatterWorkspace(matterId: string): Promise<unknown> {
   return apiRequest<unknown>(`/api/matters/${matterId}/workspace`);
+}
+
+export async function listRecommendations(matterId: string): Promise<RecommendationList> {
+  const data = await apiRequest<unknown>(`/api/matters/${matterId}/recommendations`);
+  return recommendationList.parse(data);
+}
+
+export async function generateRecommendation(input: {
+  matterId: string;
+  type: RecommendationType;
+}): Promise<Recommendation> {
+  const data = await apiRequest<unknown>(
+    `/api/matters/${input.matterId}/recommendations`,
+    {
+      method: "POST",
+      body: { type: input.type },
+    },
+  );
+  return recommendation.parse(data);
+}
+
+export async function recordRecommendationDecision(input: {
+  recommendationId: string;
+  decision: DecisionKind;
+  selectedOptionIndex?: number | null;
+  notes?: string | null;
+}): Promise<Recommendation> {
+  const data = await apiRequest<unknown>(
+    `/api/recommendations/${input.recommendationId}/decisions`,
+    {
+      method: "POST",
+      body: {
+        decision: input.decision,
+        selected_option_index: input.selectedOptionIndex ?? null,
+        notes: input.notes ?? null,
+      },
+    },
+  );
+  return recommendation.parse(data);
 }
 
 export async function createMatter(input: {
