@@ -201,6 +201,51 @@ Security, tenant-leakage, agent, and AI-safety tests are tracked in
 
 ---
 
+## Drafting studio (backend)
+
+The drafting studio turns a matter into a citation-grounded document
+through a strict state machine:
+
+```
+draft (empty) ──generate──▶ draft (v1)
+                               │
+                            submit
+                               ▼
+                           in_review ──request_changes──▶ changes_requested
+                               │                                  │
+                               │                          regenerate/submit
+                               ▼                                  ▼
+                           approved ──────────────────────────▶ in_review
+                               │
+                           finalize
+                               ▼
+                           finalized (terminal)
+```
+
+- **Schema** — `drafts`, `draft_versions`, `draft_reviews`
+  (Alembic `20260417_0005`). Each version stores its body and the list
+  of citations that survived the verifier; each review row captures
+  who moved the draft and when.
+- **Approve gate** — `approve` fails closed with 422 when the current
+  version has zero verified citations. PRD §17.4: no external-facing
+  AI answer without sources.
+- **Finalized is terminal** — further generation / submit / approve /
+  finalize all return 409 on a finalized draft.
+- **Backend** — `services/drafting.py`; routes under
+  `/api/matters/{id}/drafts/*`; `MockProvider` emits a deterministic
+  draft JSON so CI runs the full pipeline offline.
+- **Tests** — `apps/api/tests/test_drafting_studio.py` (7 cases —
+  create, generate, full state-machine walk, approve fail-closed
+  without citations, approve after regeneration, finalized locks
+  transitions, tenant isolation, revision history).
+
+**Still shipping in Phase 14b** (next session):
+`/app/matters/[id]/drafts` editor with version diff and reviewer
+approve/reject, DOCX export via `python-docx`, PDF export via
+`weasyprint`, and template selection.
+
+---
+
 ## Hearing prep
 
 CaseOps drafts a citation-grounded **hearing pack** for every scheduled

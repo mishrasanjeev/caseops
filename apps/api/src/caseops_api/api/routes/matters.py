@@ -12,6 +12,13 @@ from caseops_api.schemas.billing import (
     TimeEntryCreateRequest,
     TimeEntryRecord,
 )
+from caseops_api.schemas.drafts import (
+    DraftCreateRequest,
+    DraftGenerateRequest,
+    DraftListResponse,
+    DraftRecord,
+    DraftReviewRequest,
+)
 from caseops_api.schemas.hearing_packs import (
     HearingPackGenerateRequest,
     HearingPackRecord,
@@ -41,6 +48,14 @@ from caseops_api.services.court_sync_jobs import (
     run_matter_court_sync_job,
 )
 from caseops_api.services.document_jobs import run_document_processing_job
+from caseops_api.services.drafting import (
+    create_draft,
+    generate_draft_version,
+    get_draft,
+    list_drafts,
+    load_draft_record,
+    transition_draft,
+)
 from caseops_api.services.hearing_packs import (
     generate_hearing_pack,
     get_latest_hearing_pack,
@@ -454,3 +469,171 @@ async def post_current_company_hearing_pack_review(
         pack_id=pack_id,
     )
     return HearingPackRecord.model_validate(pack)
+
+
+@router.post(
+    "/{matter_id}/drafts",
+    response_model=DraftRecord,
+    summary="Create a new draft shell on a matter",
+)
+async def post_current_company_matter_draft(
+    matter_id: str,
+    payload: DraftCreateRequest,
+    context: CurrentContext,
+    session: DbSession,
+) -> DraftRecord:
+    draft = create_draft(
+        session,
+        context=context,
+        matter_id=matter_id,
+        title=payload.title,
+        draft_type=payload.draft_type,
+    )
+    return DraftRecord.model_validate(load_draft_record(draft))
+
+
+@router.get(
+    "/{matter_id}/drafts",
+    response_model=DraftListResponse,
+    summary="List drafts for this matter",
+)
+async def get_current_company_matter_drafts(
+    matter_id: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> DraftListResponse:
+    drafts = list_drafts(session, context=context, matter_id=matter_id)
+    records = [DraftRecord.model_validate(load_draft_record(d)) for d in drafts]
+    return DraftListResponse(drafts=records, next_cursor=None)
+
+
+@router.get(
+    "/{matter_id}/drafts/{draft_id}",
+    response_model=DraftRecord,
+    summary="Get a specific draft with its version and review history",
+)
+async def get_current_company_matter_draft(
+    matter_id: str,
+    draft_id: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> DraftRecord:
+    draft = get_draft(
+        session, context=context, matter_id=matter_id, draft_id=draft_id
+    )
+    return DraftRecord.model_validate(load_draft_record(draft))
+
+
+@router.post(
+    "/{matter_id}/drafts/{draft_id}/generate",
+    response_model=DraftRecord,
+    summary="Generate a new draft version using the LLM",
+)
+async def post_current_company_matter_draft_generate(
+    matter_id: str,
+    draft_id: str,
+    payload: DraftGenerateRequest,
+    context: CurrentContext,
+    session: DbSession,
+) -> DraftRecord:
+    draft = generate_draft_version(
+        session,
+        context=context,
+        matter_id=matter_id,
+        draft_id=draft_id,
+        focus_note=payload.focus_note,
+        template_key=payload.template_key,
+    )
+    return DraftRecord.model_validate(load_draft_record(draft))
+
+
+@router.post(
+    "/{matter_id}/drafts/{draft_id}/submit",
+    response_model=DraftRecord,
+    summary="Submit a draft for partner review",
+)
+async def post_current_company_matter_draft_submit(
+    matter_id: str,
+    draft_id: str,
+    payload: DraftReviewRequest,
+    context: CurrentContext,
+    session: DbSession,
+) -> DraftRecord:
+    draft = transition_draft(
+        session,
+        context=context,
+        matter_id=matter_id,
+        draft_id=draft_id,
+        action="submit",
+        notes=payload.notes,
+    )
+    return DraftRecord.model_validate(load_draft_record(draft))
+
+
+@router.post(
+    "/{matter_id}/drafts/{draft_id}/request-changes",
+    response_model=DraftRecord,
+    summary="Reviewer requests changes on the draft",
+)
+async def post_current_company_matter_draft_request_changes(
+    matter_id: str,
+    draft_id: str,
+    payload: DraftReviewRequest,
+    context: CurrentContext,
+    session: DbSession,
+) -> DraftRecord:
+    draft = transition_draft(
+        session,
+        context=context,
+        matter_id=matter_id,
+        draft_id=draft_id,
+        action="request_changes",
+        notes=payload.notes,
+    )
+    return DraftRecord.model_validate(load_draft_record(draft))
+
+
+@router.post(
+    "/{matter_id}/drafts/{draft_id}/approve",
+    response_model=DraftRecord,
+    summary="Approve an in-review draft (fails closed without verified citations)",
+)
+async def post_current_company_matter_draft_approve(
+    matter_id: str,
+    draft_id: str,
+    payload: DraftReviewRequest,
+    context: CurrentContext,
+    session: DbSession,
+) -> DraftRecord:
+    draft = transition_draft(
+        session,
+        context=context,
+        matter_id=matter_id,
+        draft_id=draft_id,
+        action="approve",
+        notes=payload.notes,
+    )
+    return DraftRecord.model_validate(load_draft_record(draft))
+
+
+@router.post(
+    "/{matter_id}/drafts/{draft_id}/finalize",
+    response_model=DraftRecord,
+    summary="Finalize an approved draft (terminal state)",
+)
+async def post_current_company_matter_draft_finalize(
+    matter_id: str,
+    draft_id: str,
+    payload: DraftReviewRequest,
+    context: CurrentContext,
+    session: DbSession,
+) -> DraftRecord:
+    draft = transition_draft(
+        session,
+        context=context,
+        matter_id=matter_id,
+        draft_id=draft_id,
+        action="finalize",
+        notes=payload.notes,
+    )
+    return DraftRecord.model_validate(load_draft_record(draft))

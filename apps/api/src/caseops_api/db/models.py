@@ -1991,3 +1991,136 @@ class HearingPackItem(Base):
     )
 
     pack: Mapped[HearingPack] = relationship(back_populates="items")
+
+
+class DraftStatus(StrEnum):
+    DRAFT = "draft"
+    IN_REVIEW = "in_review"
+    CHANGES_REQUESTED = "changes_requested"
+    APPROVED = "approved"
+    FINALIZED = "finalized"
+
+
+class DraftType(StrEnum):
+    BRIEF = "brief"
+    NOTICE = "notice"
+    REPLY = "reply"
+    MEMO = "memo"
+    OTHER = "other"
+
+
+class DraftReviewAction(StrEnum):
+    SUBMIT = "submit"
+    REQUEST_CHANGES = "request_changes"
+    APPROVE = "approve"
+    FINALIZE = "finalize"
+
+
+class Draft(Base):
+    """A long-lived legal document draft. The matter is the tenant
+    boundary; versions roll forward; status advances through a strict
+    state machine enforced by the service layer."""
+
+    __tablename__ = "drafts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    draft_type: Mapped[str] = mapped_column(String(40), nullable=False, default=DraftType.BRIEF)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default=DraftStatus.DRAFT)
+    review_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    current_version_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    versions: Mapped[list[DraftVersion]] = relationship(
+        back_populates="draft",
+        cascade="all, delete-orphan",
+        order_by="DraftVersion.revision",
+    )
+    reviews: Mapped[list[DraftReview]] = relationship(
+        back_populates="draft",
+        cascade="all, delete-orphan",
+        order_by="DraftReview.created_at",
+    )
+
+
+class DraftVersion(Base):
+    __tablename__ = "draft_versions"
+    __table_args__ = (
+        UniqueConstraint("draft_id", "revision", name="uq_draft_versions_revision"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    draft_id: Mapped[str] = mapped_column(
+        ForeignKey("drafts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    generated_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    model_run_id: Mapped[str | None] = mapped_column(
+        ForeignKey("model_runs.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    # Stored as JSON text on both Postgres and SQLite so the model
+    # doesn't diverge between test and prod engines.
+    citations_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    verified_citation_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+
+    draft: Mapped[Draft] = relationship(back_populates="versions")
+
+
+class DraftReview(Base):
+    __tablename__ = "draft_reviews"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    draft_id: Mapped[str] = mapped_column(
+        ForeignKey("drafts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    version_id: Mapped[str | None] = mapped_column(
+        ForeignKey("draft_versions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    actor_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    action: Mapped[str] = mapped_column(String(24), nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+
+    draft: Mapped[Draft] = relationship(back_populates="reviews")

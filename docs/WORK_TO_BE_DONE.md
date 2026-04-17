@@ -269,17 +269,21 @@ Without this, the PRD's central promise does not exist.
   - Extend embedding columns onto `matter_attachment_chunk` as well (currently only authorities carry vectors).
   - Full 10-year ingestion for the 5 target HCs + SC (operator task — ~500 GB egress, 50-150 GPU-hours; out of session scope).
 
-### 4.3 Drafting Studio
+### 4.3 Drafting Studio — **BACKEND DONE (Phase 14a, 2026-04-17); UI + export deferred to Phase 14b**
 
-- **Traces to:** PRD §9.5, §10.3; no draft tables today
-- **Problem:** Core PRD feature absent.
-- **Done when:**
-  - Schema: `Draft`, `DraftVersion`, `DraftReview` tables with cascading and audit fields.
-  - API: `/matters/{id}/drafts` CRUD; submit-for-review, request-changes, approve, finalize state machine.
-  - Service: `services/drafting.py` assembles prompt from matter context + retrieved authorities + selected template; invokes LLM; returns draft with inline citation anchors.
-  - Export: DOCX and PDF export (use `python-docx` and `weasyprint` or similar).
-  - Frontend: `/matters/[id]/drafts` editor with version diff, reviewer approve/reject.
-  - Safety: every draft carries a `draft` status until explicit approval (PRD §9.5 acceptance criterion).
+- **Traces to:** PRD §9.5, §10.3; Alembic `20260417_0005`; `services/drafting.py`; `schemas/drafts.py`.
+- **Landed (14a):**
+  - Schema: `Draft`, `DraftVersion`, `DraftReview` tables with full FK cascades. `Draft.status` enum (`draft | in_review | changes_requested | approved | finalized`), `DraftVersion.revision` unique per draft, `DraftVersion.citations_json` for portable citation storage, `DraftReview.action` audit row for every transition.
+  - Service `services/drafting.py` assembles matter context + top-K retrieved authorities (via `search_authority_catalog`) + draft metadata into a structured prompt; invokes the LLM provider; validates the JSON response as `_LLMDraftResponse`; runs citations through `verify_citations`; persists only surviving identifiers.
+  - State machine enforced in the service: `submit` from {draft, changes_requested} → in_review; `request_changes` from in_review → changes_requested; `approve` from in_review → approved **only** if the current version has `verified_citation_count > 0` (fails closed with 422 otherwise — PRD §17.4 "no approve without sources"); `finalize` from approved → finalized (terminal). Finalized drafts refuse further generation or transitions (409).
+  - `MockProvider` extended with `_mock_draft_response` so the full pipeline exercises offline (deterministic body, cites whatever authorities were retrieved, flags "missing authorities" in summary when none).
+  - API routes: `POST /matters/{id}/drafts`, `GET /matters/{id}/drafts`, `GET /matters/{id}/drafts/{id}`, `POST /drafts/{id}/generate | submit | request-changes | approve | finalize`. All tenant-scoped via `SessionContext`.
+  - Tests: `tests/test_drafting_studio.py` (7 cases — create, generate, full state-machine walk, approve fail-closed without citations, approve succeeds after seeding + regenerating, finalized locks further transitions, tenant isolation, revision history). Full API suite: **175 passed**.
+- **Remaining for Phase 14b:**
+  - Frontend `/app/matters/[id]/drafts` editor with version diff, approve/reject, and regenerate UX.
+  - DOCX export via `python-docx`, PDF export via `weasyprint` (or equivalent), preserving citation anchors.
+  - Template selection (`template_key` accepted in the generate schema already, unused in v1).
+  - Inline citation anchors in the rendered body — today citations are stored as a list alongside the body; the UI can overlay anchors without schema changes.
 
 ### 4.4 Recommendation engine — **DONE v1 (Phase 4A, 2026-04-17, `ee158f7`)**
 

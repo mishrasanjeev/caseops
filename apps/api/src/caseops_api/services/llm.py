@@ -108,6 +108,8 @@ class MockProvider:
         lowered = joined.lower()
         if "hearing pack" in lowered or "hearing_pack" in lowered:
             text = _mock_hearing_pack_response(joined)
+        elif "drafting a legal document" in lowered or "draft title:" in lowered:
+            text = _mock_draft_response(joined)
         elif "respond with json" in lowered:
             text = _mock_structured_response(joined)
         else:
@@ -255,6 +257,60 @@ def _mock_hearing_pack_response(prompt: str) -> str:
                 "rank": 7,
             },
         ],
+    }
+    return json.dumps(payload, separators=(",", ":"))
+
+
+def _mock_draft_response(prompt: str) -> str:
+    """Deterministic legal-draft emitter for offline tests.
+
+    Emits a short but structurally-complete document body plus the
+    citations it was given. When no authorities were retrieved the
+    draft flags it in the summary rather than inventing sources.
+    """
+    title = _extract_between(prompt, "Draft title:", "\n") or "Draft"
+    matter = _extract_between(prompt, "Matter:", "\n") or "the matter"
+    authorities = _extract_citations(prompt)
+    cite_list = authorities[:5]
+    cite_sentences = "\n".join(
+        f"The Hon'ble Court's ruling in [{c}] applies to the facts here."
+        for c in cite_list
+    )
+    body_lines = [
+        f"Brief in {title.strip()}",
+        "",
+        f"1. This brief concerns {matter.strip()}.",
+        "2. The facts, authorities, and reliefs are set out below.",
+        "",
+        "FACTS",
+        (
+            "The parties and the operative dates are as recorded on the "
+            "matter record. Prior directions of the bench have been complied "
+            "with save to the extent noted below."
+        ),
+        "",
+        "SUBMISSIONS",
+        cite_sentences
+        or (
+            "The submissions rest on first principles; no binding authority "
+            "has been cited because none was retrieved for this draft."
+        ),
+        "",
+        "PRAYER",
+        "It is respectfully prayed that the relief sought be granted.",
+    ]
+    payload: dict[str, Any] = {
+        "body": "\n".join(body_lines),
+        "citations": cite_list,
+        "summary": (
+            f"Draft generated for {title.strip()}; "
+            f"{len(cite_list)} authorities cited."
+            if cite_list
+            else (
+                f"Draft generated for {title.strip()}; NO authorities cited — "
+                "partner review should supply grounding before approval."
+            )
+        ),
     }
     return json.dumps(payload, separators=(",", ":"))
 
