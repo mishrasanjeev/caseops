@@ -27,6 +27,10 @@ dependencies = [
 embeddings = [
   "fastembed>=0.4.0",
 ]
+ocr = [
+  "rapidocr>=3.4.0",
+  "pytesseract>=0.3.13",
+]
 
 [project.scripts]
 caseops-document-worker = "caseops_api.workers.document_processor:main"

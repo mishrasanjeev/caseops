@@ -357,10 +357,29 @@ def search_authority_catalog(
     court_name: str | None = None,
     document_type: str | None = None,
 ) -> list[AuthoritySearchResult]:
-    stmt = select(AuthorityDocument).order_by(
-        AuthorityDocument.decision_date.desc(),
-        AuthorityDocument.updated_at.desc(),
+    # Fast path: when running on Postgres + we have embeddings in the column
+    # AND we can build a query vector, ask pgvector to pick top-K chunks via
+    # the HNSW index, then load only those documents. At any real corpus
+    # scale this is dramatically faster than the 300-row scan below.
+    pg_document_ids = _pg_prefilter_document_ids(
+        session,
+        query=query,
+        forum_level=forum_level,
+        court_name=court_name,
+        document_type=document_type,
+        limit=max(limit * 6, 30),
     )
+
+    stmt = select(AuthorityDocument)
+    if pg_document_ids is not None:
+        if not pg_document_ids:
+            return []
+        stmt = stmt.where(AuthorityDocument.id.in_(pg_document_ids))
+    else:
+        stmt = stmt.order_by(
+            AuthorityDocument.decision_date.desc(),
+            AuthorityDocument.updated_at.desc(),
+        )
     if forum_level:
         stmt = stmt.where(AuthorityDocument.forum_level == forum_level)
     if court_name:
@@ -368,7 +387,9 @@ def search_authority_catalog(
     if document_type:
         stmt = stmt.where(AuthorityDocument.document_type == document_type)
 
-    documents = list(session.scalars(stmt.limit(300)))
+    if pg_document_ids is None:
+        stmt = stmt.limit(300)
+    documents = list(session.scalars(stmt))
     query_ref_tokens = set(_extract_case_references(query))
     normalized_query = _normalize_case_reference(query)
     if normalized_query:
@@ -506,6 +527,105 @@ def search_authorities(
             document_type=payload.document_type,
         ),
     )
+
+
+def _pg_prefilter_document_ids(
+    session: Session,
+    *,
+    query: str,
+    forum_level: str | None,
+    court_name: str | None,
+    document_type: str | None,
+    limit: int,
+) -> list[str] | None:
+    """Return a list of document ids ordered by pgvector cosine distance.
+
+    Returns ``None`` when the fast path is not applicable:
+
+    - connection is not Postgres (e.g., SQLite in tests),
+    - embeddings backend is not configured / build_provider raises,
+    - no chunk in the filter scope carries an ``embedding_vector`` yet.
+
+    The HNSW index on ``authority_document_chunks.embedding_vector`` drives
+    the sort so this stays fast at 10M+ chunks.
+    """
+    try:
+        if session.bind is None or session.bind.dialect.name != "postgresql":
+            return None
+    except Exception:
+        return None
+    if not query.strip():
+        return None
+
+    # Do at least one chunk actually have a vector in-scope? If not there is
+    # nothing for HNSW to rank, so skip the fast path.
+    from sqlalchemy import and_, text
+
+    try:
+        probe = session.execute(
+            text(
+                "SELECT 1 FROM authority_document_chunks c "
+                "JOIN authority_documents d ON d.id = c.authority_document_id "
+                "WHERE c.embedding_vector IS NOT NULL "
+                "AND (cast(:forum as text) IS NULL OR d.forum_level = :forum) "
+                "AND (cast(:court as text) IS NULL OR d.court_name = :court) "
+                "AND (cast(:dtype as text) IS NULL OR d.document_type = :dtype) "
+                "LIMIT 1"
+            ),
+            {
+                "forum": forum_level,
+                "court": court_name,
+                "dtype": document_type,
+            },
+        ).first()
+    except Exception:
+        session.rollback()
+        return None
+    if probe is None:
+        return None
+    _ = and_  # silence unused-import on some linters
+
+    try:
+        provider = build_provider()
+    except EmbeddingProviderError:
+        return None
+    try:
+        result = provider.embed([query])
+    except Exception:
+        return None
+    if not result.vectors:
+        return None
+
+    vector = result.vectors[0]
+    vec_literal = "[" + ",".join(f"{v:.6f}" for v in vector) + "]"
+    try:
+        rows = session.execute(
+            text(
+                "WITH candidates AS ("
+                " SELECT c.authority_document_id AS id, "
+                "        MIN(c.embedding_vector <=> cast(:q as vector)) AS distance"
+                " FROM authority_document_chunks c "
+                " JOIN authority_documents d ON d.id = c.authority_document_id "
+                " WHERE c.embedding_vector IS NOT NULL "
+                " AND (cast(:forum as text) IS NULL OR d.forum_level = :forum) "
+                " AND (cast(:court as text) IS NULL OR d.court_name = :court) "
+                " AND (cast(:dtype as text) IS NULL OR d.document_type = :dtype) "
+                " GROUP BY c.authority_document_id"
+                ") "
+                "SELECT id FROM candidates ORDER BY distance LIMIT :limit"
+            ),
+            {
+                "q": vec_literal,
+                "forum": forum_level,
+                "court": court_name,
+                "dtype": document_type,
+                "limit": limit,
+            },
+        ).all()
+    except Exception:
+        session.rollback()
+        return None
+    return [row.id for row in rows]
 
 
 def _decode_embedding(raw: str | None) -> list[float] | None:

@@ -1,18 +1,21 @@
 """CLI: ingest public court judgments into the authority corpus.
 
-Usage examples:
+Usage examples::
 
-    # Local directory (after `aws s3 cp ... ./2010/`)
-    uv run caseops-ingest-corpus \
-        --court hc --year 2010 --path ./2010 --limit 20
+    # Pre-downloaded directory (after `aws s3 cp ... ./2010/`)
+    uv run caseops-ingest-corpus --court hc --year 2010 --path ./2010 --limit 20
 
-    # Stream directly from the public S3 bucket (boto3 unsigned):
+    # Stream directly from the public S3 bucket (boto3, unsigned).
     uv run caseops-ingest-corpus --court hc --year 2010 --from-s3 --limit 20
 
-    # Supreme Court tarballs:
+    # Supreme Court tarballs for a single year.
     uv run caseops-ingest-corpus --court sc --year 1995 --from-s3 --limit 2
 
-Flags:
+    # Multi-year streaming: a list or a range.
+    uv run caseops-ingest-corpus --court hc --years 2010,2011,2012 --from-s3 --limit 500
+    uv run caseops-ingest-corpus --court hc --years 2010-2014 --from-s3 --limit 500
+
+Flags::
 
     --keep              do not delete downloaded PDFs after ingestion
     --batch-size N      PDFs per S3 batch (default from settings)
@@ -38,7 +41,17 @@ from caseops_api.services.corpus_ingest import (
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="caseops-ingest-corpus")
     parser.add_argument("--court", required=True, choices=["hc", "sc"])
-    parser.add_argument("--year", required=True, type=int)
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--year", type=int, help="Single year (e.g., 2010).")
+    group.add_argument(
+        "--years",
+        type=str,
+        help=(
+            "Multiple years as a comma list ('2010,2011,2012') or a closed "
+            "range ('2010-2014'). Processed in order; --limit applies per "
+            "year."
+        ),
+    )
     parser.add_argument(
         "--path",
         type=Path,
@@ -53,7 +66,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--limit",
         type=int,
         default=None,
-        help="Stop after N files (helpful for trial runs).",
+        help="Stop after N files per year (helpful for trial runs).",
     )
     parser.add_argument(
         "--batch-size",
@@ -82,6 +95,24 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _parse_years(value: str | None, single: int | None) -> list[int]:
+    if single is not None:
+        return [single]
+    if not value:
+        return []
+    parts = value.replace(" ", "")
+    years: list[int] = []
+    for token in parts.split(","):
+        if not token:
+            continue
+        if "-" in token:
+            start, end = token.split("-", 1)
+            years.extend(range(int(start), int(end) + 1))
+        else:
+            years.append(int(token))
+    return years
+
+
 def _print_summary(summary: IngestionSummary, *, header: str) -> None:
     print(header)
     print(f"  total_files      : {summary.total_files}")
@@ -94,57 +125,91 @@ def _print_summary(summary: IngestionSummary, *, header: str) -> None:
         print(f"  first error      : {summary.errors[0]}")
 
 
+def _accumulate(total: IngestionSummary, add: IngestionSummary) -> IngestionSummary:
+    total.total_files += add.total_files
+    total.processed_files += add.processed_files
+    total.skipped_files += add.skipped_files
+    total.failed_files += add.failed_files
+    total.inserted_documents += add.inserted_documents
+    total.inserted_chunks += add.inserted_chunks
+    total.errors.extend(add.errors)
+    return total
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
-    logging.basicConfig(level=logging.INFO if args.verbose else logging.WARNING)
+    logging.basicConfig(
+        level=logging.INFO if args.verbose else logging.WARNING,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
 
     if not args.from_s3 and args.path is None:
         print(
-            "error: provide --path <dir> for local ingestion or --from-s3 for streaming",
+            "error: provide --path <dir> for local ingestion or --from-s3 "
+            "for streaming",
             file=sys.stderr,
         )
         return 2
 
+    years = _parse_years(args.years, args.year)
+    if not years:
+        print("error: provide --year N or --years 2010-2014 / 2010,2011,2012", file=sys.stderr)
+        return 2
+
     factory = get_session_factory()
+    overall = IngestionSummary()
+    failed_any = False
+
     with factory() as session:
-        if args.from_s3:
-            if args.court == "hc":
-                summary = ingest_hc_from_s3(
-                    session,
-                    year=args.year,
-                    limit=args.limit,
-                    batch_size=args.batch_size,
-                    max_workdir_mb=args.max_workdir_mb,
-                    temp_root=args.temp_root,
+        for year in years:
+            print(f"=== {args.court}/year={year} ===")
+            if args.from_s3:
+                if args.court == "hc":
+                    summary = ingest_hc_from_s3(
+                        session,
+                        year=year,
+                        limit=args.limit,
+                        batch_size=args.batch_size,
+                        max_workdir_mb=args.max_workdir_mb,
+                        temp_root=args.temp_root,
+                    )
+                else:
+                    summary = ingest_sc_from_s3(
+                        session,
+                        year=year,
+                        limit=args.limit,
+                        max_workdir_mb=args.max_workdir_mb,
+                        temp_root=args.temp_root,
+                    )
+                _print_summary(
+                    summary,
+                    header=f"Ingested {args.court}/year={year} from S3",
                 )
             else:
-                summary = ingest_sc_from_s3(
+                forum_level = "high_court" if args.court == "hc" else "supreme_court"
+                summary = ingest_local_directory(
                     session,
-                    year=args.year,
+                    directory=args.path,
+                    court=args.court,
+                    forum_level=forum_level,
+                    year=year,
                     limit=args.limit,
-                    max_workdir_mb=args.max_workdir_mb,
-                    temp_root=args.temp_root,
+                    delete_after=not args.keep,
                 )
-            _print_summary(
-                summary,
-                header=f"Ingested {args.court}/year={args.year} from S3",
-            )
-        else:
-            forum_level = "high_court" if args.court == "hc" else "supreme_court"
-            summary = ingest_local_directory(
-                session,
-                directory=args.path,
-                court=args.court,
-                forum_level=forum_level,
-                year=args.year,
-                limit=args.limit,
-                delete_after=not args.keep,
-            )
-            _print_summary(
-                summary,
-                header=f"Ingested {args.court}/year={args.year} from {args.path}",
-            )
-    return 0 if not summary.failed_files else 1
+                _print_summary(
+                    summary,
+                    header=f"Ingested {args.court}/year={year} from {args.path}",
+                )
+            if summary.failed_files:
+                failed_any = True
+            _accumulate(overall, summary)
+
+    if len(years) > 1:
+        _print_summary(
+            overall,
+            header=f"=== overall {args.court}, years={years[0]}-{years[-1]} ===",
+        )
+    return 1 if failed_any else 0
 
 
 if __name__ == "__main__":

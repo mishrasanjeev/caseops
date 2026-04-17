@@ -72,6 +72,13 @@ class Settings(BaseSettings):
     corpus_ingest_batch_size: int = Field(default=25, ge=1, le=500)
     corpus_ingest_max_workdir_mb: int = Field(default=500, ge=32, le=20000)
     corpus_ingest_temp_root: str | None = Field(default=None)
+    # OCR fallback for scanned judgment PDFs. Defaults to rapidocr (pure
+    # Python, ONNX, no native binary). Set to `none` to disable.
+    ocr_provider: str = Field(default="rapidocr")
+    ocr_min_chars_before_fallback: int = Field(default=600, ge=0)
+    ocr_render_dpi: int = Field(default=220, ge=72, le=600)
+    ocr_max_pages: int = Field(default=40, ge=1, le=1000)
+    ocr_languages: str = Field(default="eng")
 
     @model_validator(mode="after")
     def _reject_placeholder_secret_outside_local(self) -> "Settings":

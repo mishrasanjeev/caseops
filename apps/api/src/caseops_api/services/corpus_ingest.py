@@ -127,15 +127,32 @@ def parse_judgment_pdf(
 ) -> ParsedJudgment | None:
     """Extract text + basic metadata from a judgment PDF.
 
-    Returns ``None`` if the PDF is unreadable or empty.
+    Falls back to OCR (see ``services/ocr.py``) when pdfminer's output is
+    too sparse — typical for scanned HC filings. Returns ``None`` when both
+    paths yield no meaningful text.
     """
+    text = ""
     try:
         text = _extract_pdf_text(path)
     except Exception as exc:
         logger.warning("Could not extract text from %s: %s", path.name, exc)
-        return None
+
+    from caseops_api.services.ocr import ocr_pdf, should_fallback_to_ocr
+
+    ocr_note: str | None = None
+    if should_fallback_to_ocr(text):
+        ocr_result = ocr_pdf(path)
+        if ocr_result and ocr_result.text.strip():
+            text = ocr_result.text
+            ocr_note = (
+                f"ocr:{ocr_result.provider} "
+                f"pages={ocr_result.pages_processed}/{ocr_result.pages_total}"
+            )
+            if ocr_result.truncated:
+                ocr_note += " truncated"
+
     if not text.strip():
-        logger.warning("No text extracted from %s", path.name)
+        logger.warning("No text extracted from %s (even after OCR)", path.name)
         return None
 
     cleaned = _normalize_whitespace(text)
@@ -145,6 +162,8 @@ def parse_judgment_pdf(
     canonical_key = _canonical_key_for(path, court, year)
     court_name = _court_display_name(court)
     summary = _short_summary(cleaned)
+    if ocr_note:
+        summary = f"[{ocr_note}] {summary}"
 
     return ParsedJudgment(
         title=title,
@@ -515,9 +534,17 @@ def ingest_hc_from_s3(
     overall = IngestionSummary()
     overall.total_files = len(keys)
 
-    for batch_start in range(0, len(keys), batch_size):
+    total_batches = max(1, (len(keys) + batch_size - 1) // batch_size)
+    for batch_idx, batch_start in enumerate(range(0, len(keys), batch_size), start=1):
         batch = keys[batch_start : batch_start + batch_size]
         workdir = Path(tempfile.mkdtemp(prefix="caseops-hc-", dir=str(root)))
+        logger.info(
+            "[hc/%s] batch %d/%d — %d keys staged",
+            year,
+            batch_idx,
+            total_batches,
+            len(batch),
+        )
         try:
             for key in batch:
                 if _dir_size_mb(workdir) > max_workdir_mb:
@@ -550,6 +577,19 @@ def ingest_hc_from_s3(
             overall.inserted_documents += batch_summary.inserted_documents
             overall.inserted_chunks += batch_summary.inserted_chunks
             overall.errors.extend(batch_summary.errors)
+            logger.info(
+                "[hc/%s] batch %d/%d done — processed=%d inserted=%d "
+                "skipped=%d failed=%d (totals: processed=%d inserted=%d)",
+                year,
+                batch_idx,
+                total_batches,
+                batch_summary.processed_files,
+                batch_summary.inserted_documents,
+                batch_summary.skipped_files,
+                batch_summary.failed_files,
+                overall.processed_files,
+                overall.inserted_documents,
+            )
         finally:
             shutil.rmtree(workdir, ignore_errors=True)
 
