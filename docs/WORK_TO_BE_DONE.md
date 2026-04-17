@@ -188,7 +188,7 @@ The user has rejected the original UI. A targeted rebuild is mandatory. This is 
   - Keyboard-walkthrough specs for the full create-matter / upload / approve-invoice flows (axe is static-only).
   - Screen-reader spot-checks documented in a runbook.
   - Dashboard cockpit subsection headings (`<h3>` under `<h2>`) audit — currently emit one level deep where a proper `<h2>` would help.
-  - Known unrelated spine regression: `app-spine.spec.ts` "sign-in → dashboard → matter cockpit" and "role gates" tests reliably show Chromium `ERR_ABORTED` when navigating from `/app` to `/app/matters` via client-side routing. Reproduced with phase 10 reverted — this is a pre-existing issue from phase 9's `useInfiniteQuery` rewrite; tracked separately.
+  - ~~Known unrelated spine regression — fixed in phase 12 (queryKey collision between dashboard `useQuery` and matters `useInfiniteQuery`). Full app Playwright suite is 21/21 green as of phase 12.~~
 
 ### 3.8 Error, empty, and loading states — **DONE v1 (Phase 11, 2026-04-17)**
 
@@ -212,11 +212,21 @@ The user has rejected the original UI. A targeted rebuild is mandatory. This is 
 - **Verification:** `npm run typecheck:web` + `npm run build:web` clean; `npm run test:e2e:app` 10/10 passed.
 - **Deferred:** `--space-*` 4-pt semantic tokens and a dark theme remain follow-ups (separate workstreams).
 
-### 3.9 Frontend tests
+### 3.9 Frontend tests — **DONE v1 (Phase 12, 2026-04-17)**
 
-- **Done when:**
-  - Component tests for critical forms (matter intake, contract upload, invoice approval, user invite).
-  - Playwright spec per persona home (law firm, GC, solo) replaces the single giant `auth-admin.spec.ts`.
+- **Traces to:** PRD §19; `apps/web/vitest.config.ts`, `apps/web/vitest.setup.ts`, `tests/e2e/personas.spec.ts`.
+- **Landed:**
+  - Vitest + React Testing Library + jsdom harness wired via `apps/web/vitest.config.ts`; `npm run test:web` + `npm run test:watch`.
+  - Component tests green (14 assertions across 4 suites):
+    - `QueryErrorState` — retry flow, NetworkError copy, secondaryAction slot, no-op when onRetry is absent (5 cases).
+    - `SignInForm` — zod validation with aria-invalid + aria-describedby correctly linked, happy-path submit, API error toast (4 cases).
+    - `NewMatterDialog` — validation, uppercase + trim on matter_code, submit success (2 cases).
+    - `DataTable` — filter input, Enter/Space keyboard activation, labelled pagination buttons (3 cases).
+  - Persona Playwright spec (`tests/e2e/personas.spec.ts`) exercises sign-in → dashboard → create first matter for law-firm owner, corporate GC (`company_type=corporate_legal`), and solo — the PRD §8.3 personas. All three green.
+  - **Root-caused + fixed the phase-9 spine regression** flagged in §3.7 Remaining: the dashboard's `useQuery(["matters", "list"])` and the matters page's `useInfiniteQuery(["matters", "list"])` shared a key, so react-query tried to reconcile a `MattersList` with an `InfiniteData<MattersList>` on client nav, which crashed the transition (Chromium ERR_ABORTED). Moved the dashboard to `["matters", "dashboard-overview"]`. App-spine suite: 5/5 green, full app Playwright run: **21/21 green**.
+- **Remaining:**
+  - Component tests for invoice approval and user invite flows once those dialogs land.
+  - Vitest runs aren't yet wired into CI (§8.4 CI/CD follow-up).
 
 ---
 

@@ -17,9 +17,15 @@ import { useSession } from "@/lib/use-session";
 
 export default function DashboardPage() {
   const session = useSession();
+  // The dashboard wants a single flat list for its stat cards; the
+  // /app/matters page wants pagination. If both share ["matters",
+  // "list"] react-query tries to reconcile a plain `MattersList` with
+  // an `InfiniteData<MattersList>` when you navigate between them,
+  // which throws ERR_ABORTED on the client-side transition. Keep the
+  // dashboard on its own key.
   const mattersQuery = useQuery({
-    queryKey: ["matters", "list"],
-    queryFn: () => listMatters(),
+    queryKey: ["matters", "dashboard-overview"],
+    queryFn: () => listMatters({ limit: 50 }),
     enabled: session.status === "authenticated",
   });
 

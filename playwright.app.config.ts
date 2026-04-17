@@ -23,6 +23,7 @@ export default defineConfig({
     /app-spine\.spec\.ts/,
     /a11y\.spec\.ts/,
     /query-states\.spec\.ts/,
+    /personas\.spec\.ts/,
   ],
   fullyParallel: false,
   workers: 1,

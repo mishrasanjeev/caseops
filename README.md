@@ -185,6 +185,20 @@ CASEOPS_LLM_API_KEY=              # required for anthropic / gemini
 Security, tenant-leakage, agent, and AI-safety tests are tracked in
 [`docs/WORK_TO_BE_DONE.md`](./docs/WORK_TO_BE_DONE.md) §11.
 
+### Frontend component tests
+
+- `npm run test:web` runs Vitest + React Testing Library + jsdom against
+  `apps/web`. Fast (single-digit seconds), no browser.
+- Covers the forms most visible to users on day one:
+  - `QueryErrorState` — retry flow, offline copy, secondary actions.
+  - `SignInForm` — zod validation with aria-invalid/aria-describedby
+    wiring, happy-path submit, API error toasts.
+  - `NewMatterDialog` — validation, trim + uppercase on matter_code,
+    submit success.
+  - `DataTable` — filter input, Enter/Space keyboard activation on
+    clickable rows, labelled pagination buttons.
+- `npm run test:watch` for local TDD.
+
 ---
 
 ## Resilience (loading, empty, error)

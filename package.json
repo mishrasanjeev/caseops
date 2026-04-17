@@ -14,6 +14,7 @@
     "lint:api": "uv --directory apps/api run ruff check src tests",
     "build:web": "npm run build --workspace @caseops/web",
     "typecheck:web": "npm run typecheck --workspace @caseops/web",
+    "test:web": "npm run test --workspace @caseops/web",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:marketing": "playwright test --config playwright.marketing.config.ts",
