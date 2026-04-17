@@ -59,13 +59,13 @@ export default function MatterBillingPage() {
               description="Issue invoices from the legacy console. Pine Labs collection links are enabled."
             />
           ) : (
-            <table className="w-full text-sm">
+            <table className="w-full text-sm tabular">
               <thead>
                 <tr className="border-b border-[var(--color-line)] bg-[var(--color-bg)] text-xs uppercase tracking-[0.06em] text-[var(--color-mute)]">
                   <th className="px-4 py-2.5 text-left font-semibold">Invoice</th>
                   <th className="px-4 py-2.5 text-left font-semibold">Issued</th>
-                  <th className="px-4 py-2.5 text-left font-semibold">Total</th>
-                  <th className="px-4 py-2.5 text-left font-semibold">Balance</th>
+                  <th className="px-4 py-2.5 text-right font-semibold">Total</th>
+                  <th className="px-4 py-2.5 text-right font-semibold">Balance</th>
                   <th className="px-4 py-2.5 text-left font-semibold">Status</th>
                 </tr>
               </thead>
@@ -81,10 +81,10 @@ export default function MatterBillingPage() {
                     <td className="px-4 py-3 text-xs text-[var(--color-mute)]">
                       {inv.issued_on ?? "—"}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 text-right">
                       {formatMoney(inv.total_amount_minor, inv.currency)}
                     </td>
-                    <td className="px-4 py-3 text-[var(--color-ink-2)]">
+                    <td className="px-4 py-3 text-right text-[var(--color-ink-2)]">
                       {formatMoney(inv.balance_due_minor, inv.currency)}
                     </td>
                     <td className="px-4 py-3">
@@ -158,7 +158,7 @@ function KpiCard({
           <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-mute-2)]">
             {label}
           </div>
-          <div className="text-xl font-semibold tracking-tight text-[var(--color-ink)]">
+          <div className="tabular text-xl font-semibold tracking-tight text-[var(--color-ink)]">
             {value}
           </div>
         </div>

@@ -230,7 +230,7 @@ function RecommendationCard({
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-5 py-5">
-        <p className="whitespace-pre-line text-sm leading-relaxed text-[var(--color-ink-2)]">
+        <p className="text-prose-wide whitespace-pre-line text-sm leading-relaxed text-[var(--color-ink-2)]">
           {rec.rationale}
         </p>
 

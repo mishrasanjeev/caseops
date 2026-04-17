@@ -61,7 +61,7 @@ export default function MatterOverviewPage() {
         </CardHeader>
         <CardContent>
           {data.matter.description ? (
-            <p className="whitespace-pre-line text-sm leading-relaxed text-[var(--color-ink-2)]">
+            <p className="text-prose-wide whitespace-pre-line text-sm leading-relaxed text-[var(--color-ink-2)]">
               {data.matter.description}
             </p>
           ) : (

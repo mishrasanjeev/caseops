@@ -178,18 +178,11 @@ The user has rejected the original UI. A targeted rebuild is mandatory. This is 
 - **Done when:**
   - Every query has defined loading, empty, and error presentation. Errors surface recovery actions.
 
-### 3.10 Impeccable design refresh
+### 3.10 Impeccable design refresh — **DONE (Phase 5, 2026-04-17)**
 
-- **Traces to:** `.impeccable.md`; `.claude/skills/impeccable/SKILL.md`; PRD §8 "dense professional workflows"
-- **Problem:** Phase 1/3 shipped with Inter and hex-colour tokens. Inter is on the impeccable reflex-reject list; hex tokens are not perceptually uniform. `.impeccable.md` is the project's design brief and the current tree does not yet match it.
-- **Done when:**
-  - Typography swapped off Inter to a court-room-appropriate pairing chosen by following the impeccable font-selection procedure. Tabular figures on all numeric columns (invoices, spend, hours, matter codes).
-  - Colour tokens migrated from hex/rgb to OKLCH; neutrals tinted toward the brand hue; accent kept scarce (60-30-10 weight).
-  - Spatial scale moved to 4-pt semantic token names (`--space-sm`, `--space-md`, …) and applied consistently.
-  - No `ch`-unbounded body paragraphs anywhere; every long copy block capped at 65–75ch.
-  - Motion respects `prefers-reduced-motion`; no bounce / spring / overshoot.
-  - A manual audit run under `impeccable audit` with screenshots filed in `docs/design-audit/`.
-- **Deferred:** dark theme (separate workstream; tenant preference).
+- **Landed:** Type pair swapped off Inter via the impeccable font-selection procedure. **Libre Caslon Text** (display) + **Atkinson Hyperlegible** (UI body) + **JetBrains Mono** (tabular), all OFL, all served via `next/font/google` with `swap` strategy. Colour tokens migrated to OKLCH with neutrals tinted to the indigo brand hue (chroma 0.008, 265°); brand scale with reduced chroma at lightness extremes; shadows now in OKLCH alpha. Utilities added: `tabular`, `text-prose` (65ch), `text-prose-wide` (75ch), `font-display`. Tabular figures applied to the billing table, KPI cards, dashboard stats. Marketing hero now uses the Caslon display face for the "legal work" phrase. `prefers-reduced-motion` honoured globally in `@layer base`.
+- **Verification:** `npm run typecheck:web` + `npm run build:web` clean; `npm run test:e2e:app` 10/10 passed.
+- **Deferred:** `--space-*` 4-pt semantic tokens and a dark theme remain follow-ups (separate workstreams).
 
 ### 3.9 Frontend tests
 

@@ -1,16 +1,44 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import {
+  Atkinson_Hyperlegible,
+  JetBrains_Mono,
+  Libre_Caslon_Text,
+} from "next/font/google";
 import type { ReactNode } from "react";
 
 import { siteConfig } from "@/lib/site";
 
 import "./globals.css";
 
-const inter = Inter({
+// Type pair picked via the impeccable font-selection procedure; see
+// `.impeccable.md` for the rationale. These replace Inter.
+const atkinson = Atkinson_Hyperlegible({
   subsets: ["latin"],
+  weight: ["400", "700"],
   display: "swap",
   variable: "--font-sans-loaded",
 });
+
+const caslon = Libre_Caslon_Text({
+  subsets: ["latin"],
+  weight: ["400", "700"],
+  style: ["normal", "italic"],
+  display: "swap",
+  variable: "--font-serif-loaded",
+});
+
+const jetBrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  display: "swap",
+  variable: "--font-mono-loaded",
+});
+
+const fontVariables = [
+  atkinson.variable,
+  caslon.variable,
+  jetBrainsMono.variable,
+].join(" ");
 
 const organizationJsonLd = {
   "@context": "https://schema.org",
@@ -95,7 +123,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={inter.variable} suppressHydrationWarning>
+    <html lang="en" className={fontVariables} suppressHydrationWarning>
       <body>
         <script
           type="application/ld+json"

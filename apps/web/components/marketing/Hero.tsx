@@ -25,8 +25,9 @@ export function Hero() {
           India-first legal OS, now in early access
         </Badge>
 
-        <h1 className="max-w-4xl text-balance text-4xl font-semibold leading-[1.05] tracking-tight text-[var(--color-ink)] md:text-6xl">
-          The operating system for <span className="text-[var(--color-brand-600)]">legal work</span>.
+        <h1 className="font-display max-w-4xl text-balance text-4xl font-normal leading-[1.05] tracking-tight text-[var(--color-ink)] md:text-6xl">
+          The operating system for{" "}
+          <em className="font-display italic text-[var(--color-brand-700)]">legal work</em>.
         </h1>
 
         <p className="mt-6 max-w-2xl text-pretty text-lg leading-relaxed text-[var(--color-mute)] md:text-xl">

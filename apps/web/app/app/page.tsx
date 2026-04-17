@@ -181,7 +181,7 @@ function StatCard({
           <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--color-mute-2)]">
             {label}
           </div>
-          <div className="text-2xl font-semibold tracking-tight text-[var(--color-ink)]">{value}</div>
+          <div className="tabular text-2xl font-semibold tracking-tight text-[var(--color-ink)]">{value}</div>
           <div className="text-xs text-[var(--color-mute)]">{hint}</div>
         </div>
       </CardContent>
