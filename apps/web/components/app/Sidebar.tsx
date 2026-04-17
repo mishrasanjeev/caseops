@@ -19,6 +19,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { Logo } from "@/components/marketing/Logo";
+import { type Capability, useRole } from "@/lib/capabilities";
 import { cn } from "@/lib/cn";
 
 type NavItem = {
@@ -27,6 +28,7 @@ type NavItem = {
   icon: LucideIcon;
   section: "work" | "intel" | "admin";
   placeholder?: boolean;
+  requiresCapability?: Capability;
 };
 
 const NAV: NavItem[] = [
@@ -59,14 +61,12 @@ const NAV: NavItem[] = [
     label: "Contracts",
     icon: Scale,
     section: "work",
-    placeholder: true,
   },
   {
     href: "/app/outside-counsel",
     label: "Outside Counsel",
     icon: Users,
     section: "work",
-    placeholder: true,
   },
   {
     href: "/app/portfolio",
@@ -75,7 +75,14 @@ const NAV: NavItem[] = [
     section: "intel",
     placeholder: true,
   },
-  { href: "/app/admin", label: "Admin", icon: Wrench, section: "admin", placeholder: true },
+  {
+    href: "/app/admin",
+    label: "Admin",
+    icon: Wrench,
+    section: "admin",
+    placeholder: true,
+    requiresCapability: "workspace:admin",
+  },
 ];
 
 const SECTION_LABEL: Record<NavItem["section"], string> = {
@@ -86,11 +93,24 @@ const SECTION_LABEL: Record<NavItem["section"], string> = {
 
 export function Sidebar() {
   const pathname = usePathname();
-  const grouped = Object.entries(SECTION_LABEL).map(([key, label]) => ({
-    key: key as NavItem["section"],
-    label,
-    items: NAV.filter((n) => n.section === key),
-  }));
+  const role = useRole();
+  const visible = NAV.filter((item) => {
+    if (!item.requiresCapability) return true;
+    if (!role) return false;
+    // Inline the owner/admin check to avoid importing the capability map
+    // twice; matches lib/capabilities.ts.
+    if (item.requiresCapability === "workspace:admin") {
+      return role === "owner" || role === "admin";
+    }
+    return true;
+  });
+  const grouped = Object.entries(SECTION_LABEL)
+    .map(([key, label]) => ({
+      key: key as NavItem["section"],
+      label,
+      items: visible.filter((n) => n.section === key),
+    }))
+    .filter((group) => group.items.length > 0);
 
   return (
     <aside

@@ -130,3 +130,87 @@ export type RecommendationDecision = z.infer<typeof recommendationDecision>;
 export type RecommendationList = z.infer<typeof recommendationList>;
 export type RecommendationType = z.infer<typeof recommendationType>;
 export type DecisionKind = z.infer<typeof decisionKind>;
+
+export const contractStatus = z.enum([
+  "draft",
+  "in_review",
+  "executed",
+  "expired",
+  "terminated",
+  "archived",
+]);
+
+export const contract = z.object({
+  id: z.string(),
+  company_id: z.string(),
+  linked_matter_id: z.string().nullable(),
+  owner_membership_id: z.string().nullable(),
+  title: z.string(),
+  contract_code: z.string(),
+  counterparty_name: z.string().nullable(),
+  contract_type: z.string(),
+  status: contractStatus,
+  jurisdiction: z.string().nullable(),
+  effective_on: z.string().nullable(),
+  expires_on: z.string().nullable(),
+  renewal_on: z.string().nullable(),
+  auto_renewal: z.boolean(),
+  currency: z.string(),
+  total_value_minor: z.number().int().nullable(),
+  summary: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const contractsList = z.object({
+  company_id: z.string(),
+  contracts: z.array(contract),
+});
+
+export const panelStatus = z.enum([
+  "preferred",
+  "approved",
+  "trial",
+  "inactive",
+  "blocked",
+]);
+
+export const outsideCounsel = z.object({
+  id: z.string(),
+  company_id: z.string(),
+  name: z.string(),
+  primary_contact_name: z.string().nullable(),
+  primary_contact_email: z.string().nullable(),
+  primary_contact_phone: z.string().nullable(),
+  firm_city: z.string().nullable(),
+  jurisdictions: z.array(z.string()),
+  practice_areas: z.array(z.string()),
+  panel_status: panelStatus,
+  internal_notes: z.string().nullable(),
+  total_matters_count: z.number().int(),
+  active_matters_count: z.number().int(),
+  total_spend_minor: z.number().int(),
+  approved_spend_minor: z.number().int(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const outsideCounselPortfolioSummary = z.object({
+  profile_count: z.number().int().optional(),
+  active_assignment_count: z.number().int().optional(),
+  total_spend_minor: z.number().int().optional(),
+  approved_spend_minor: z.number().int().optional(),
+  currency: z.string().default("INR"),
+  outstanding_invoice_minor: z.number().int().optional(),
+  profitability_signal_minor: z.number().int().optional(),
+}).passthrough();
+
+export const outsideCounselWorkspace = z.object({
+  summary: outsideCounselPortfolioSummary,
+  profiles: z.array(outsideCounsel),
+}).passthrough();
+
+export type Contract = z.infer<typeof contract>;
+export type ContractsList = z.infer<typeof contractsList>;
+export type OutsideCounsel = z.infer<typeof outsideCounsel>;
+export type OutsideCounselWorkspace = z.infer<typeof outsideCounselWorkspace>;

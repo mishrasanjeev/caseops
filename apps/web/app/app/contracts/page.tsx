@@ -1,22 +1,162 @@
-import { Scale } from "lucide-react";
+"use client";
 
-import { RoadmapStub } from "@/components/app/RoadmapStub";
+import { useQuery } from "@tanstack/react-query";
+import type { ColumnDef } from "@tanstack/react-table";
+import { Scale } from "lucide-react";
+import { useMemo } from "react";
+
+import { Button } from "@/components/ui/Button";
+import { DataTable } from "@/components/ui/DataTable";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { listContracts } from "@/lib/api/endpoints";
+import type { Contract } from "@/lib/api/schemas";
+
+function formatDate(value: string | null | undefined): string {
+  if (!value) return "—";
+  try {
+    return new Date(value).toLocaleDateString(undefined, {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  } catch {
+    return value;
+  }
+}
+
+function formatMoney(minor: number | null, currency: string): string {
+  if (minor === null || minor === undefined) return "—";
+  return new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 0,
+  }).format(minor / 100);
+}
 
 export default function ContractsPage() {
+  const { data, isPending, isError, error } = useQuery({
+    queryKey: ["contracts", "list"],
+    queryFn: () => listContracts(),
+  });
+
+  const columns = useMemo<ColumnDef<Contract>[]>(
+    () => [
+      {
+        accessorKey: "contract_code",
+        header: "Code",
+        cell: (ctx) => (
+          <span className="tabular font-mono text-xs text-[var(--color-ink-2)]">
+            {ctx.getValue<string>()}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "title",
+        header: "Contract",
+        cell: (ctx) => (
+          <div className="flex flex-col">
+            <span className="font-medium text-[var(--color-ink)]">
+              {ctx.getValue<string>()}
+            </span>
+            {ctx.row.original.counterparty_name ? (
+              <span className="text-xs text-[var(--color-mute)]">
+                with {ctx.row.original.counterparty_name}
+              </span>
+            ) : null}
+          </div>
+        ),
+      },
+      {
+        accessorKey: "contract_type",
+        header: "Type",
+        cell: (ctx) => (
+          <span className="text-xs text-[var(--color-mute)]">
+            {ctx.getValue<string>()}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "effective_on",
+        header: "Effective",
+        cell: (ctx) => (
+          <span className="tabular">{formatDate(ctx.getValue<string | null>())}</span>
+        ),
+      },
+      {
+        accessorKey: "expires_on",
+        header: "Expires",
+        cell: (ctx) => (
+          <span className="tabular">{formatDate(ctx.getValue<string | null>())}</span>
+        ),
+      },
+      {
+        accessorKey: "total_value_minor",
+        header: "Value",
+        cell: (ctx) => (
+          <span className="tabular">
+            {formatMoney(ctx.getValue<number | null>(), ctx.row.original.currency)}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "status",
+        header: "Status",
+        cell: (ctx) => <StatusBadge status={ctx.getValue<string>()} />,
+      },
+    ],
+    [],
+  );
+
+  const contracts = data?.contracts ?? [];
+
   return (
-    <RoadmapStub
-      icon={Scale}
-      eyebrow="Contracts"
-      title="Contract repository & playbooks"
-      description="Clause extraction, playbook comparison, obligation tracking, and redlines with full version lineage."
-      prdSection="§9.8, §10.7"
-      workDocSection="§3.1 /contracts · §9.2 clause extraction"
-      bullets={[
-        "Upload, parse, and normalize clauses with Docling-backed extraction.",
-        "Playbook rules with pass/warn/fail plus suggested fallback language.",
-        "Obligation tracker with owner, trigger, and due-date reminders.",
-        "Live today in the legacy console — fully rebuilt here with the new design system.",
-      ]}
-    />
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        eyebrow="Contracts"
+        title="Contract repository"
+        description="Every contract under your workspace. Full redline workspace rebuilt here lands with §9.2; use the legacy console for authoring until then."
+        actions={
+          <Button href="/legacy" variant="outline">
+            Open legacy contracts
+          </Button>
+        }
+      />
+
+      {isPending ? (
+        <div className="flex flex-col gap-3">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-48 w-full" />
+        </div>
+      ) : isError ? (
+        <EmptyState
+          icon={Scale}
+          title="Could not load contracts"
+          description={
+            error instanceof Error ? error.message : "Check the API connection and try again."
+          }
+        />
+      ) : contracts.length === 0 ? (
+        <EmptyState
+          icon={Scale}
+          title="No contracts yet"
+          description="Create your first contract from the legacy console while the rebuilt contract workspace is in progress."
+          action={
+            <Button href="/legacy" variant="outline">
+              Open legacy console
+            </Button>
+          }
+        />
+      ) : (
+        <DataTable
+          data={contracts}
+          columns={columns}
+          filterPlaceholder="Search contracts, codes, counterparties…"
+          getRowId={(c) => c.id}
+        />
+      )}
+    </div>
   );
 }

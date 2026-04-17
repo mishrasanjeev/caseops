@@ -147,21 +147,15 @@ The user has rejected the original UI. A targeted rebuild is mandatory. This is 
 - **Landed:** `/app/matters/[id]/layout.tsx` fetches `/api/matters/{id}/workspace` once; nested routes for Overview, Documents, Hearings, Billing, Audit all read the same cache. Header shows parties, status, practice area, court, next hearing, matter code. Overview: summary, latest court order, open tasks, upcoming hearings, recent activity, recent notes. Audit tab renders the full activity timeline. Hearings tab renders cause-list imports, orders, and scheduled hearings. Billing tab computes totals (billed, collected, balance, billable minutes) and lists invoices + recent time entries. Empty states on every tab; all driven by real API data. Renders correctly for matters with zero data and for loaded matters.
 - **Deferred:** Drafts, Research, Recommendations tabs — blocked on their respective backends (§4.3, §4.2, §4.4).
 
-### 3.5 Tables everywhere that today are timeline-cards
+### 3.5 Tables everywhere that today are timeline-cards — **PARTIAL (Phase 6, 2026-04-17)**
 
-- **Traces to:** `apps/web/app/page.tsx:4761-4934` (counsel), `3478+` (billing), `3780+` (matters); PRD §10 "dense, professional workflows"
-- **Problem:** Lists are static vertical cards. No sort, filter, column config, row selection, bulk actions, pagination.
-- **Done when:**
-  - `DataTable` component (TanStack Table) reused across Matters, Invoices, Contracts, Outside Counsel, Recommendations, Hearings, Authorities.
-  - Server-side pagination and filtering on all list endpoints (see §6 for API work).
+- **Landed:** `/app/contracts` and `/app/outside-counsel` are now real pages backed by `/api/contracts/` and `/api/outside-counsel/workspace`. Both use the `DataTable` primitive with sort / filter / pagination. Counsel page carries four KPI cards (profiles, active assignments, approved spend, total spend). Typed via zod in `lib/api/schemas.ts` and wired through the cached TanStack Query layer.
+- **Remaining:** Invoices table in the Matter Cockpit billing tab (already right-aligned + tabular after Phase 5 but not routed through `DataTable` — acceptable at per-matter scale), authorities portfolio, portfolio-wide hearings. Server-side pagination is still client-side today.
 
-### 3.6 Role-aware UI
+### 3.6 Role-aware UI — **PARTIAL (Phase 6, 2026-04-17)**
 
-- **Traces to:** `apps/web/app/page.tsx:1033-1037` (single role check)
-- **Problem:** Partner, associate, paralegal see identical forms.
-- **Done when:**
-  - Role-capability map (Owner / Admin / Partner / Senior / Junior / Paralegal / GC / Ops / Auditor / Billing / OutsideCounselViewer) drives navigation and action visibility.
-  - Admin routes hidden for non-admins server-side (not just UI-hidden).
+- **Landed:** `lib/capabilities.ts` enumerates Capabilities (13 today) and maps them to the three runtime roles (owner / admin / member). `useCapability` hook + `useRole` hook available to any client component. Sidebar Admin entry is hidden for members. Matters page `New Matter` button is gated on `matters:create`. Empty state copy adapts to capability. Server is still the source of truth — UI gating is alignment, not enforcement.
+- **Remaining:** Roles beyond owner/admin/member (Partner / Senior / Junior / Paralegal / GC / Ops / Auditor / Billing / OutsideCounselViewer from the PRD) need schema support in the API before we can gate UI against them. Team-scoping and ethical walls (§5.6) are the prerequisites for matter-level gates.
 
 ### 3.7 Accessibility baseline
 

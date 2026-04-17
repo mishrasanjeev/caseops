@@ -14,6 +14,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { listMatters } from "@/lib/api/endpoints";
 import type { Matter } from "@/lib/api/schemas";
+import { useCapability } from "@/lib/capabilities";
 
 const FORUMS: Record<string, string> = {
   lower_court: "Lower",
@@ -94,6 +95,7 @@ export default function MattersPage() {
   );
 
   const matters = data?.matters ?? [];
+  const canCreateMatter = useCapability("matters:create");
 
   return (
     <div className="flex flex-col gap-6">
@@ -101,7 +103,7 @@ export default function MattersPage() {
         eyebrow="Matters"
         title="Matter portfolio"
         description="Every matter in your workspace. Click a row to open the cockpit."
-        actions={<NewMatterDialog />}
+        actions={canCreateMatter ? <NewMatterDialog /> : null}
       />
 
       {isPending ? (
@@ -121,8 +123,12 @@ export default function MattersPage() {
         <EmptyState
           icon={Briefcase}
           title="No matters yet"
-          description="Create your first matter to start tracking hearings, drafts, and billing."
-          action={<NewMatterDialog />}
+          description={
+            canCreateMatter
+              ? "Create your first matter to start tracking hearings, drafts, and billing."
+              : "No matters are assigned to you yet. Ask an admin to add you to a matter."
+          }
+          action={canCreateMatter ? <NewMatterDialog /> : null}
         />
       ) : (
         <DataTable

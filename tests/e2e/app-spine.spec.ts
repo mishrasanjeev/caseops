@@ -200,13 +200,109 @@ test.describe("App spine", () => {
       { label: "Drafting", heading: /Drafting Studio/ },
       { label: "Recommendations", heading: /Explainable recommendations/ },
       { label: "Contracts", heading: /Contract repository/ },
-      { label: "Outside Counsel", heading: /Outside counsel/ },
+      { label: "Outside Counsel", heading: /Outside counsel & spend/ },
       { label: "Portfolio", heading: /Firm-wide portfolio/ },
       { label: "Admin", heading: /Admin & governance/ },
     ];
     for (const stub of stubs) {
       await page.getByRole("link", { name: stub.label, exact: true }).click();
       await expect(page.getByRole("heading", { name: stub.heading })).toBeVisible();
+    }
+  });
+
+  test("real /app/contracts and /app/outside-counsel lists render", async ({ page }) => {
+    const slug = uniqueSlug("lists");
+    const input: BootstrapInput = {
+      slug,
+      name: `${slug} Firm`,
+      ownerEmail: `owner@${slug}.in`,
+      ownerName: "Lists Owner",
+    };
+    const api = await request.newContext();
+    try {
+      await bootstrapViaApi(api, input);
+    } finally {
+      await api.dispose();
+    }
+
+    await page.goto("/sign-in");
+    await page.locator("#company-slug").fill(input.slug);
+    await page.locator("#email").fill(input.ownerEmail);
+    await page.locator("#password").fill(PASSWORD);
+    await page.getByRole("button", { name: /^Sign in$/ }).click();
+    await page.waitForURL("**/app");
+
+    await page.getByRole("link", { name: "Contracts", exact: true }).click();
+    await page.waitForURL(/\/app\/contracts$/);
+    await expect(
+      page.getByRole("heading", { name: /Contract repository/ }),
+    ).toBeVisible();
+    await expect(page.getByText(/No contracts yet/i)).toBeVisible();
+
+    await page
+      .getByRole("link", { name: "Outside Counsel", exact: true })
+      .click();
+    await page.waitForURL(/\/app\/outside-counsel$/);
+    await expect(
+      page.getByRole("heading", { name: /Outside counsel & spend/ }),
+    ).toBeVisible();
+    await expect(page.getByText(/No counsel on panel yet/i)).toBeVisible();
+    await expect(page.getByText("Counsel profiles")).toBeVisible();
+  });
+
+  test("role gates: member role hides the Admin sidebar item", async ({ page }) => {
+    const slug = uniqueSlug("roles");
+    const input: BootstrapInput = {
+      slug,
+      name: `${slug} Firm`,
+      ownerEmail: `owner@${slug}.in`,
+      ownerName: "Roles Owner",
+    };
+    const api = await request.newContext();
+    try {
+      await bootstrapViaApi(api, input);
+      // Owner signs in to create a member, via the API.
+      const login = await api.post(`${apiBaseUrl}/api/auth/login`, {
+        data: {
+          email: input.ownerEmail,
+          password: PASSWORD,
+          company_slug: input.slug,
+        },
+      });
+      expect(login.status()).toBe(200);
+      const ownerToken = (await login.json()).access_token as string;
+
+      const memberPassword = "MemberPass123!";
+      const create = await api.post(`${apiBaseUrl}/api/companies/current/users`, {
+        headers: { Authorization: `Bearer ${ownerToken}` },
+        data: {
+          full_name: "Member Person",
+          email: `member@${slug}.in`,
+          password: memberPassword,
+          role: "member",
+        },
+      });
+      expect(create.status()).toBe(200);
+
+      await page.goto("/sign-in");
+      await page.locator("#company-slug").fill(input.slug);
+      await page.locator("#email").fill(`member@${slug}.in`);
+      await page.locator("#password").fill(memberPassword);
+      await page.getByRole("button", { name: /^Sign in$/ }).click();
+      await page.waitForURL("**/app");
+      await expect(
+        page.getByRole("link", { name: "Home", exact: true }),
+      ).toBeVisible();
+      // Members never see the Admin entry in the sidebar.
+      await expect(
+        page.getByRole("link", { name: "Admin", exact: true }),
+      ).toHaveCount(0);
+      // But they DO see Matters + can attempt to create (capability allows it).
+      await page.getByRole("link", { name: "Matters", exact: true }).click();
+      await page.waitForURL("**/app/matters");
+      await expect(page.getByTestId("new-matter-trigger").first()).toBeVisible();
+    } finally {
+      await api.dispose();
     }
   });
 });

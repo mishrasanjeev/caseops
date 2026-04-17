@@ -2,16 +2,20 @@ import { apiRequest } from "./client";
 import {
   type AuthContext,
   type AuthSession,
+  type ContractsList,
   type DecisionKind,
   type Matter,
   type MattersList,
+  type OutsideCounselWorkspace,
   type Recommendation,
   type RecommendationList,
   type RecommendationType,
   authContext,
   authSession,
+  contractsList,
   matter,
   mattersList,
+  outsideCounselWorkspace,
   recommendation,
   recommendationList,
 } from "./schemas";
@@ -89,6 +93,16 @@ export async function recordRecommendationDecision(input: {
     },
   );
   return recommendation.parse(data);
+}
+
+export async function listContracts(): Promise<ContractsList> {
+  const data = await apiRequest<unknown>("/api/contracts/");
+  return contractsList.parse(data);
+}
+
+export async function fetchOutsideCounselWorkspace(): Promise<OutsideCounselWorkspace> {
+  const data = await apiRequest<unknown>("/api/outside-counsel/workspace");
+  return outsideCounselWorkspace.parse(data);
 }
 
 export async function createMatter(input: {
