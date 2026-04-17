@@ -1,10 +1,10 @@
 # CaseOps — Work To Be Done
 
 **Author:** Engineering review
-**Date:** 2026-04-16
-**Scope:** Gap analysis between `docs/PRD.md` v1.0.0 and the current codebase (`main` branch, commits through `ee894c0`).
-**Status:** For founder review and sprint planning.
-**Instructions for readers:** Every item below traces to either (a) a specific PRD section, (b) a concrete file:line reference in the repo, or (c) a security/correctness bug that blocks production. Do not expand scope beyond these.
+**Date:** 2026-04-16 (originating); last refreshed 2026-04-17 after Phase 14b.
+**Scope:** Gap analysis between `docs/PRD.md` v1.0.0 and the current codebase (`main` branch, commits through `113719b`).
+**Status:** For founder review and sprint planning. All P0 items are closed; remaining P1–P3 items are sequenced in §15.
+**Instructions for readers:** Every item below traces to either (a) a specific PRD section, (b) a concrete file:line or Alembic revision, or (c) a security/correctness bug that blocks production. Do not expand scope beyond these. `§1.1` has the phase-by-phase commit ladder; `§1.2` has the corpus-ingestion state.
 
 ---
 
@@ -51,8 +51,56 @@ This document enumerates the work needed to close these gaps, in priority order,
 | Phase 7 | `4359c30` | RAG foundation: pgvector + HNSW, EmbeddingProvider, streaming S3 corpus ingest with disk cap | §4.2 (partial) |
 | Phase 8 | `1913a11` | OCR fallback (RapidOCR), native pgvector `<=>` retrieval, multi-year CLI, chunk-flush fix | §4.2 (extended) |
 | Phase 9 | `f8a502c` | Keyset cursor pagination API+UI, 29-HC `HC_COURT_CATALOG`, `--hc-courts` CLI flag | §6.1 |
+| Phase 10 | `d502939` | Accessibility baseline: `:focus-visible`, skip-link, heading hierarchy, form aria-invalid/describedby, DataTable keyboard activation, colour contrast, `@axe-core/playwright` gate | §3.7 |
+| Phase 11 | `2a2a781` | Loading / empty / error resilience: `QueryErrorState`, `OfflineBanner`, `NetworkError` class, segment `error.tsx` + `loading.tsx`, `not-found.tsx`, branded 404 for matters | §3.8 |
+| Phase 12 | `3c66491` | Frontend component tests: Vitest + RTL harness, 14 component-test cases; persona Playwright spec (law-firm / GC / solo); root-caused and fixed the queryKey-collision spine regression | §3.9 |
+| Phase 13 | `14c2370` | Hearing pack workflow: `hearing_packs`/`hearing_pack_items` schema, LLM-assembled pack with 7 item kinds, review state + DOCX-ready surface, PATCH hearing outcome auto-creates follow-up task | §4.5 |
+| Phase 14a | `3fc98b9` | Drafting studio backend: `drafts`/`draft_versions`/`draft_reviews` schema, full state machine with fail-closed approve gate, citations verifier hook, review audit trail | §4.3 (backend) |
+| Phase 14b | `113719b` | Drafting studio UI + DOCX export: list + detail editor, state-aware action bar, citations panel, review history, DOCX stream via `python-docx`, Drafts tab in cockpit | §4.3 (UI + export) |
 
-Still open P0 by coverage: §3.7 a11y, §3.8 error/empty states, §3.9 frontend tests, §4.3 Drafting Studio, §4.5 Hearing pack workflow. Still open P1 spine: §5.1 Temporal, §5.2 Grantex, §5.3 notifications, §5.4 unified audit, §5.6 ethical walls, §6.2 role dependency decorators, §7.1 Court/Bench/Judge, §7.3 EvaluationRun, §8.1 OTEL, §8.4 CI/CD.
+**All P0 items closed.** Open P1 spine: §5.1 Temporal, §5.2 Grantex, §5.3 notifications, §5.4 unified audit, §5.6 ethical walls, §5.7 teams, §6.2 role dependency decorators, §6.3 input validation, §6.4 RFC 7807 errors, §6.5 OpenAPI quality, §7.1 Court/Bench/Judge, §7.2 generic Task, §7.3 EvaluationRun, §7.4 Statute/Section, §7.5 consistency sweep, §8.1 OTEL, §8.2 structured logs, §8.3 backups, §8.4 CI/CD, §8.5 secret management, §9.1 broader parsers, §9.2 structural extraction, §9.3 virus scanning. P2: §10 admin console, §11 test coverage expansion, §12 court integrations.
+
+### 1.2 Authority corpus — vector embedding status
+
+All ingested judgments have had every chunk embedded with **`BAAI/bge-small-en-v1.5`** padded to 1024 dimensions; every row is stored in Postgres `pgvector` with an HNSW cosine index. The same column accepts Voyage `voyage-3-law` and Gemini `text-embedding-005` without a schema change — a model swap is a re-embedding, not a re-ingestion (matter text is already persisted).
+
+**Completed as of 2026-04-17** — 914 documents, 20,375 chunks, all embedded:
+
+| Jurisdiction | Court | Years ingested | Documents |
+| --- | --- | --- | --- |
+| Supreme Court | Supreme Court of India | 1929–2023 (sparse; bulk in 2014 and 2023) | 854 |
+| High Court | Delhi High Court | 2023 (sample) | 8 |
+| High Court | Bombay High Court | 2023 (sample) | 8 |
+| High Court | Karnataka High Court | 2023 (sample) | 8 |
+| High Court | Madras High Court | 2023 (sample) | 8 |
+| High Court | Telangana High Court | 2022–2023 (sample) | 8 |
+| High Court | Patna High Court (labelled `High Court of India` pre-catalog) | 2010 | 20 |
+
+SC coverage by year (selection): 1995 ×3, 1996 ×5, 1998 ×8, 2004 ×10, 2006 ×13, 2009 ×11, 2011 ×12, 2013 ×10, **2014 ×53**, 2016 ×13, 2018 ×15, 2019 ×15, 2021 ×15, 2022 ×29, **2023 ×484**. 1929–1994 rows are anchored-in archival samples, not full coverage.
+
+**Planned Phase 15 — full 10-year corpus for the target jurisdictions** (tracked under §4.2 "Remaining"):
+
+| Jurisdiction | Court | Target window | Estimated documents |
+| --- | --- | --- | --- |
+| Supreme Court | Supreme Court of India | 2015–2024 | ~35,000 |
+| High Court | Delhi High Court | 2015–2024 | ~120,000 |
+| High Court | Bombay High Court | 2015–2024 | ~90,000 |
+| High Court | Karnataka High Court | 2015–2024 | ~80,000 |
+| High Court | Madras High Court | 2015–2024 | ~110,000 |
+| High Court | Telangana High Court | 2015–2024 | ~40,000 |
+
+Estimated total: ~475,000 documents / ~10 M chunks at current chunk size. Operator-run; not a session-sized task — budget ~500 GB S3 egress and 50–150 GPU-hours on a consumer GPU (or ~12 hours on FastEmbed-CPU per 10 k docs for the smallest model). CLI is already in place: `caseops-ingest-corpus --from-s3 --court hc --year 2015 --year 2016 ... --hc-courts delhi,bombay,karnataka,madras,telangana`, and `--court sc --year 2015 --year ...` for the SC tarballs. Disk is streamed through a soft cap of `CASEOPS_CORPUS_INGEST_MAX_WORKDIR_MB` (default 500 MB).
+
+**Quality tiers** (in descending retrieval quality, ascending cost):
+
+1. **Voyage `voyage-3-law`** — legal-specific, strongest retrieval. Paid API. Re-embed once (~$300–500 on the planned full corpus).
+2. **Google `gemini-embedding-001` / `text-embedding-005`** — strong general, pairs cleanly with Gemini LLMs. Free tier + paid.
+3. **`BAAI/bge-large-en-v1.5`** — free, local, better than current baseline. ~900 MB model.
+4. **`BAAI/bge-small-en-v1.5`** *(current)* — free, local, fast. Good enough for dev + demos.
+
+A model swap is a one-shot `UPDATE … SET embedding_* = NULL` + re-embed pass. The corpus text stays put.
+
+Phase 15 sub-tasks appear under §4.2 "Remaining" below.
 
 ---
 
@@ -262,12 +310,22 @@ Without this, the PRD's central promise does not exist.
   - `HC_COURT_CATALOG` maps 29 Indian High Courts (incl. Delhi, Bombay, Telangana, Madras, Karnataka) to their S3 `court=<code>_<n>/` partitions.
   - `--hc-courts delhi,bombay,telangana,madras,karnataka` CLI flag + `resolve_hc_courts` validator for targeted jurisdictional ingestion.
   - Sample ingestion verified: 5 HCs × 2023 = 40 judgments / 188 chunks / all embedded.
-- **Remaining:**
-  - Cross-encoder reranker over the top-50 candidates for another quality step.
-  - Per-tenant overlay schema (`AuthorityAnnotation` + link table) for tenant comments on shared judgments.
-  - Integration test against a live Postgres + fastembed / voyage / gemini — the current suite covers only the mock provider.
-  - Extend embedding columns onto `matter_attachment_chunk` as well (currently only authorities carry vectors).
-  - Full 10-year ingestion for the 5 target HCs + SC (operator task — ~500 GB egress, 50-150 GPU-hours; out of session scope).
+- **Remaining — Phase 15 full corpus ingestion (operator-run):**
+  - Supreme Court 2015–2024 via the yearly `english.tar` bundles (~35 k docs).
+  - Delhi, Bombay, Karnataka, Madras, Telangana HCs 2015–2024 via the `court=<code>_<n>/` partitions (~440 k docs across the five).
+  - Rerun the ingester under `CASEOPS_EMBEDDING_PROVIDER=fastembed` (or voyage/gemini once the budget is approved).
+  - Verify HNSW recall on a fixed 50-query legal-eval set after full ingestion; record p95 retrieval latency.
+  - Commit a per-court ingestion log (`docs/runbooks/corpus-ingest.md`) with the exact CLI invocations and the resulting `authority_documents` counts.
+- **Remaining — model swap procedure (one-time when the team picks a production embedding model):**
+  - SQL: `UPDATE authority_document_chunks SET embedding_vector=NULL, embedding_json=NULL, embedding_model=NULL, embedded_at=NULL;` (text and chunking survive).
+  - Re-run the ingester with `--reembed` flag (new; one-off script that iterates chunks `WHERE embedding IS NULL` in batches).
+  - Run a blind A/B on a fixed query set to quantify the upgrade. Ship only if recall@10 improves by ≥ 10 pp or legal-NDCG improves measurably.
+- **Remaining — quality & governance layers:**
+  - Cross-encoder reranker over the top-50 candidates (BGE-reranker-large or Jina-reranker).
+  - Per-tenant overlay schema (`AuthorityAnnotation` + link table) so firms can pin notes and flags on shared judgments without mutating the public corpus.
+  - Integration tests against a live Postgres + `fastembed` / `voyage` / `gemini` — current suite covers only the mock provider.
+  - Extend embedding columns onto `matter_attachment_chunk` so tenant documents can be retrieved semantically alongside public authorities (with tenant filter).
+  - Query-side hybrid scoring tune: today 60/40 vector/lexical, unvalidated. Measure and adjust on a real eval set once the full corpus lands.
 
 ### 4.3 Drafting Studio — **DONE (Phase 14a backend + 14b UI/DOCX, 2026-04-17)**
 
@@ -372,10 +430,11 @@ Without this, the PRD's central promise does not exist.
   - Every write path in `services/` emits an audit event via a shared helper.
   - `/admin/audit/export` endpoint returns tenant-scoped audit data (JSONL, time-bounded).
 
-### 5.5 Token revocation + session management
+### 5.5 Token revocation + session management — **DONE v1 (Phase 2, §2.3)**
 
-- **Traces to:** §2.3 above
-- **Done when:** refresh-token rotation with short-lived access tokens; `revoked_tokens` table or `sessions_valid_after` on membership; logout endpoint revokes refresh token.
+- **Traces to:** §2.3 above.
+- **Landed:** `sessions_valid_after` column on `company_memberships`; JWTs carry `iat` and `get_session_context` rejects pre-cutoff tokens. Suspension bumps the cutoff to now.
+- **Remaining (v2):** explicit refresh-token rotation with short-lived access tokens and a `POST /api/auth/logout` that revokes the refresh token — deferred behind the auth-service workstream.
 
 ### 5.6 Ethical walls and matter-level ACL
 
@@ -670,23 +729,36 @@ These are explicitly deferred by PRD §20.5.
 
 ## 15. Suggested sequencing
 
-The items above do not need to ship together. A plausible order, given founder-stage constraints:
+Sprints A–F (security, frontend spine, AI core, drafting v1) all **shipped** — see §1.1 phase ladder (phases 2–14b). The remaining plan:
 
-**Sprint A (2 weeks) — security hardening only.** §2.1 through §2.8. Do not touch features. Ship a patch release.
+**Sprint G — Phase 15 full corpus ingestion (1–2 weeks, operator-driven).**
+§4.2 "Phase 15 full corpus ingestion" sub-list. Delhi / Bombay / Karnataka / Madras / Telangana HCs + Supreme Court, 2015–2024. Runs on a workstation or a Cloud Run Job; doesn't block application work. Output: a complete recall@10 benchmark on a fixed legal-eval set before the first paying customer.
 
-**Sprint B–C (4 weeks) — frontend spine.** §3.1, §3.2, §3.3, §3.4 (Matter Cockpit), §3.5 DataTable. Retire the 5,965-line `page.tsx`.
+**Sprint H — governance and auditability (3–4 weeks).**
+§5.4 unified `AuditEvent` (foundation), §5.6 ethical walls + matter-level ACL, §10.3 AI policy controls, §10.4 audit export. Pre-requisite for any enterprise pilot. Landing §5.4 first unblocks §10.4 without rework.
 
-**Sprint D–E (4 weeks) — AI core v1.** §4.1 LLM, §4.2 RAG, §4.4 Recommendation (forum + authority types only), §4.6 citation verification. Unblock the PRD's headline promise.
+**Sprint I — workflow + agents (4–5 weeks).**
+§5.1 Temporal (retires the custom polling worker), §5.2 Grantex agent identity (needs §5.4 audit trail), §5.3 notification service (Temporal activity). Landing §5.1 first lets §5.3 use Temporal retries from day one.
 
-**Sprint F (2 weeks) — drafting v1.** §4.3 basic draft generation + version history + DOCX export.
+**Sprint J — API hygiene + data model hardening (2 weeks).**
+§6.2 `require_role` / `require_capability` decorators + lint sweep, §6.3 input-validation pass (MIME whitelist, magic-byte verification), §6.4 RFC 7807 problem-details, §7.1 Court/Bench/Judge master tables, §7.5 consistency sweep.
 
-**Sprint G–H (4 weeks) — governance and agents.** §5.2 Grantex (or equivalent), §5.4 AuditEvent, §5.6 ethical walls, §10.3 AI policy. Pre-requisite for any enterprise pilot.
+**Sprint K — observability (2 weeks).**
+§8.1 OpenTelemetry instrumentation, §8.2 structured logging with tenant context, §8.3 backup + restore drill, §8.4 GitHub Actions CI/CD, §8.5 secret rotation runbook. §8.4 makes every subsequent phase cheaper.
 
-**Sprint I (2 weeks) — observability.** §8.1 OTEL, §8.2 logging, §8.4 CI/CD.
+**Sprint L — document intelligence depth (2–3 weeks).**
+§9.1 Docling + Tika + PaddleOCR, §9.2 structural extraction (LLM clause segmenter replaces the contract-review heuristics), §9.3 virus scanning.
 
-**Sprint J onward — Temporal, SSO, Admin console, broader court integrations, full test matrix.**
+**Sprint M — admin console + SSO (3–4 weeks).**
+§10.1 company / tenant management UI, §10.2 OIDC + SAML SSO, §10.5 plan entitlements, §6.5 OpenAPI quality + generated TS client (consumed by the admin console).
 
-Re-order as founder priorities dictate. The critical insight is that **Sprint A is a prerequisite for any external traffic** and **Sprint B-E are prerequisites for a believable product demo**.
+**Sprint N — test matrix + AI safety benchmarks (2 weeks).**
+§11.2 authorisation matrix parametrised tests, §11.3 agent-grant tests (blocked on §5.2), §11.4 AI-safety benchmarks (citation accuracy, hallucination under low context, prompt injection, data-exfiltration red-team), §11.5 payment tests, §11.6 UAT coverage per PRD §19.8.
+
+**Sprint O onward — broader court integrations and jurisdiction rollout.**
+§12.1 Tamil Nadu + Gujarat adapters, §12.2 connector health UI, §12.3 email + calendar ingest.
+
+Re-order as founder priorities dictate. The critical insight today: **Sprint H (audit + ethical walls)** is the single biggest blocker for an enterprise pilot, and **Sprint G (full corpus)** is the single biggest retrieval-quality lift.
 
 ---
 
@@ -717,8 +789,25 @@ Items whose resolution changes the plan:
 
 ## 18. Definition of "done" for this document
 
-This work plan is complete when, for every P0 and P1 item, either:
+**P0 — closed.** Every P0 item under §2, §3, and §4 has a commit SHA
+annotated in the header or the body of its entry and a passing test
+suite. The phase ladder at §1.1 is the canonical record.
 
-- a PR has landed that satisfies the "Done when" criteria, and
-- the item is crossed out with the commit SHA, or
-- the founder has explicitly deferred it and this doc is updated to reflect the new priority.
+**P1 — in progress.** Sequenced in §15 Sprints G–N. Each item is
+"done" when:
+
+- a PR has landed that satisfies the "Done when" criteria;
+- the item is annotated with the commit SHA and a status badge in this
+  document;
+- tests land alongside (pytest, vitest, and/or Playwright, per the
+  surface);
+- the `§1.1 Shipped-phase ladder` is extended with the new phase.
+
+**P2 / P3** items ship opportunistically — each only becomes a blocker
+when a pilot customer, enterprise prospect, or open incident makes it
+one. Founder may defer any P2 / P3 item indefinitely.
+
+**Corpus ingestion (§4.2 Phase 15)** is "done" for the founder-stage
+demo when Delhi + Bombay + Supreme Court 2020–2024 are fully embedded;
+full 10-year × 5-HC + SC is "done" for first paying customer
+onboarding. Either threshold is recorded in `docs/runbooks/corpus-ingest.md`.
