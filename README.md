@@ -187,6 +187,76 @@ Security, tenant-leakage, agent, and AI-safety tests are tracked in
 
 ---
 
+## Legal corpus ingestion (Indian HC + SC)
+
+CaseOps ships a streaming ingester for the two public Indian judgment
+buckets. Run it against local data (after `aws s3 cp`), or let the CLI
+stream directly from S3 with a workstation-safe disk cap.
+
+Prerequisites:
+
+- Docker Postgres + pgvector up: `docker compose up postgres -d`
+- API deps synced: `cd apps/api && uv sync`
+- Embeddings backend of choice configured (defaults to a mock provider
+  so the pipeline is runnable offline):
+
+```
+# Local, free, CPU, ~250 MB model download
+cd apps/api && uv sync --extra embeddings
+export CASEOPS_EMBEDDING_PROVIDER=fastembed
+export CASEOPS_EMBEDDING_MODEL=BAAI/bge-base-en-v1.5
+
+# Or Voyage AI (paid, legal-tuned)
+export CASEOPS_EMBEDDING_PROVIDER=voyage
+export CASEOPS_EMBEDDING_MODEL=voyage-3-law
+export CASEOPS_EMBEDDING_API_KEY=<your-key>
+
+# Or Google Gemini (paired with the Gemini LLM provider)
+export CASEOPS_EMBEDDING_PROVIDER=gemini
+export CASEOPS_EMBEDDING_MODEL=text-embedding-005
+export CASEOPS_EMBEDDING_API_KEY=<your-key>
+```
+
+Streaming ingest directly from S3 (no AWS CLI required; boto3 unsigned):
+
+```
+# High Court, year 2010, cap 20 PDFs for a trial run
+uv run caseops-ingest-corpus --court hc --year 2010 --from-s3 --limit 20
+
+# Supreme Court tarballs, year 1995
+uv run caseops-ingest-corpus --court sc --year 1995 --from-s3 --limit 2
+```
+
+The streamer downloads a batch (default 25 PDFs), ingests and deletes
+each file as it goes, then removes the batch directory. Respects a
+soft cap on disk usage (`CASEOPS_CORPUS_INGEST_MAX_WORKDIR_MB`,
+default 500 MB).
+
+Ingesting a pre-downloaded directory:
+
+```
+# After: aws s3 cp s3://indian-high-court-judgments/data/pdf/year=2010/ ./2010/ ...
+uv run caseops-ingest-corpus --court hc --year 2010 --path ./2010 --limit 200
+```
+
+Each run deduplicates by a canonical key derived from the filename,
+court, year, and file size — rerunning is idempotent.
+
+Quality tiers (what's real, what's honest):
+
+- **Mock embeddings**: pipeline works end-to-end offline. Retrieval still
+  benefits from the existing TF-IDF signal, but semantic retrieval is a
+  hash approximation. Fine for CI and "does it run?" checks.
+- **fastembed (BGE-base)**: first real semantic retrieval. Suitable for
+  internal use and demos.
+- **Voyage `voyage-3-law` or Gemini `text-embedding-005`**: production-grade
+  for a hosted founder-stage deployment.
+- **Next quality lifts (not yet shipped):** cross-encoder reranker on the
+  top-50, legal-specific fine-tuning, per-jurisdiction filters. Tracked
+  in `docs/WORK_TO_BE_DONE.md` §4.2 residuals.
+
+---
+
 ## Deployment
 
 Cloud Run assets live in [`infra/cloudrun/`](./infra/cloudrun/). The helper script is

@@ -20,11 +20,18 @@ dependencies = [
   "Pillow==12.2.0",
   "google-cloud-storage==3.10.1",
   "slowapi>=0.1.9",
+  "boto3>=1.35.0",
+]
+
+[project.optional-dependencies]
+embeddings = [
+  "fastembed>=0.4.0",
 ]
 
 [project.scripts]
 caseops-document-worker = "caseops_api.workers.document_processor:main"
 caseops-populate-authorities = "caseops_api.scripts.populate_authorities:main"
+caseops-ingest-corpus = "caseops_api.scripts.ingest_corpus:main"
 
 [dependency-groups]
 dev = [

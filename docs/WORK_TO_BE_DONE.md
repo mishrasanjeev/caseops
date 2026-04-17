@@ -200,15 +200,21 @@ Without this, the PRD's central promise does not exist.
   - Token usage and latency captured per call and written to `ModelRun` (see §7.3).
   - Prompt templates version-controlled in `apps/api/src/caseops_api/prompts/`.
 
-### 4.2 Proper RAG
+### 4.2 Proper RAG — **PARTIAL (Phase 7, 2026-04-17)**
 
-- **Traces to:** `docker-compose.yml:56` (pgvector installed but unused); `services/retrieval.py:53-289` (TF-IDF + hardcoded synonyms)
-- **Problem:** No embeddings, no ANN index.
-- **Done when:**
-  - `authority_document_chunk` and `matter_attachment_chunk` gain an `embedding` vector column and HNSW/IVFFLAT index.
-  - Embedding generation is a worker job with backfill support.
-  - `services/retrieval.py` combines hybrid lexical + vector scoring; tenant/matter scoping enforced in SQL (not in application code only).
-  - Per-tenant namespacing decision recorded: authority corpus shared vs. tenant-private (PRD §13.2).
+- **Landed:**
+  - Alembic `20260417_0003` enables pgvector on Postgres and adds `embedding_vector vector(1024)` on `authority_document_chunks` with a cosine HNSW index. SQLite tests fall back to a JSON column so the pipeline has a uniform shape.
+  - `services/embeddings.py` — provider Protocol + Mock (default, deterministic, offline) + FastEmbed (local, Apache-2.0, ~250 MB) + Voyage (`voyage-3-law`) + Gemini (`text-embedding-005`) adapters behind runtime imports. `CASEOPS_EMBEDDING_PROVIDER` / `MODEL` / `API_KEY` / `DIMENSIONS` config.
+  - `services/corpus_ingest.py` + `caseops-ingest-corpus` CLI stream the public Indian HC and SC buckets (boto3 unsigned). Downloads a batch, ingests, deletes each PDF after its chunks land, enforces a soft disk cap (`CASEOPS_CORPUS_INGEST_MAX_WORKDIR_MB`, default 500 MB). Canonical-key dedup lets re-runs skip already-indexed documents.
+  - `services/retrieval.py` accepts `query_vector`; when present and candidate chunks carry embeddings, blends cosine similarity with the existing lexical score (60/40 vector/lexical). Falls back cleanly to pure lexical when no embeddings exist yet.
+  - `docker-compose.yml` Postgres runs `CREATE EXTENSION vector` on first boot via `infra/postgres/init/00-extensions.sql` and gains a healthcheck.
+  - Decision recorded: the **authority corpus is shared public** (SC / HC judgments are public law), while **tenant-private overlays** (internal notes, linked matters, flags) stay on separate per-tenant tables. Matter attachments remain tenant-scoped.
+- **Remaining:**
+  - Use pgvector's native `<=>` cosine operator in the SQL query instead of computing cosine in Python — only then does the HNSW index actually drive retrieval.
+  - Cross-encoder reranker over the top-50 candidates for another quality step.
+  - Per-tenant overlay schema (`AuthorityAnnotation` + link table) for tenant comments on shared judgments.
+  - Integration test against a live Postgres + fastembed / voyage / gemini — the Phase 7 suite covers only the mock provider.
+  - Extend embedding columns onto `matter_attachment_chunk` as well (currently only authorities carry vectors).
 
 ### 4.3 Drafting Studio
 

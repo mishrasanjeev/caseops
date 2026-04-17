@@ -1651,6 +1651,17 @@ class AuthorityDocumentChunk(Base):
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     token_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Embedding is stored per-chunk. On Postgres this column is migrated to
+    # pgvector's `vector(N)` type and queried with cosine distance; on
+    # SQLite (tests only) it stays as a JSON-encoded array so retrieval
+    # code has a uniform shape.
+    embedding_model: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    embedding_dimensions: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    embedding_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    embedded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,

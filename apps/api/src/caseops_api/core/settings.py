@@ -64,6 +64,15 @@ class Settings(BaseSettings):
     llm_temperature: float = Field(default=0.1, ge=0.0, le=2.0)
     recommendation_review_required_default: bool = Field(default=True)
 
+    embedding_provider: str = Field(default="mock")
+    embedding_model: str = Field(default="caseops-mock-embed")
+    embedding_api_key: str | None = Field(default=None)
+    embedding_dimensions: int = Field(default=1024, ge=64, le=4096)
+    # Streaming corpus ingestion caps — keep workstation disk safe.
+    corpus_ingest_batch_size: int = Field(default=25, ge=1, le=500)
+    corpus_ingest_max_workdir_mb: int = Field(default=500, ge=32, le=20000)
+    corpus_ingest_temp_root: str | None = Field(default=None)
+
     @model_validator(mode="after")
     def _reject_placeholder_secret_outside_local(self) -> "Settings":
         if self.env.lower() in NON_LOCAL_ENVS and self.auth_secret == PLACEHOLDER_AUTH_SECRET:

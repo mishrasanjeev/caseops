@@ -55,6 +55,10 @@ class RetrievalCandidate:
     attachment_id: str
     attachment_name: str
     content: str
+    # Optional per-chunk embedding. When present, and when the caller passes
+    # a query vector, the hybrid scorer blends cosine similarity with the
+    # existing lexical score.
+    embedding: list[float] | None = None
 
 
 @dataclass(slots=True)
@@ -65,6 +69,14 @@ class RetrievalResult:
     snippet: str
     score: int
     matched_terms: list[str]
+
+
+# Hybrid scoring weight: alpha is the weight on the lexical score. A value
+# of 0.4 means vector similarity is the bigger signal when available, which
+# matches how legal retrieval usually works (semantic matches carry the
+# authority, keyword hits prove the link).
+HYBRID_LEXICAL_WEIGHT = 0.4
+HYBRID_VECTOR_WEIGHT = 1.0 - HYBRID_LEXICAL_WEIGHT
 
 
 @dataclass(slots=True)
@@ -85,6 +97,7 @@ def rank_candidates(
     query: str,
     candidates: list[RetrievalCandidate],
     limit: int,
+    query_vector: list[float] | None = None,
 ) -> list[RetrievalResult]:
     normalized_query = _normalize_text(query)
     query_tokens = [token for token in _tokenize(normalized_query) if token not in STOPWORDS]
@@ -138,7 +151,7 @@ def rank_candidates(
         coverage = len(query_stems & candidate.unique_stems) / max(len(query_stems), 1)
         trigram_similarity = _dice_similarity(query_trigrams, candidate.trigrams)
 
-        score = (
+        lexical_score = (
             (idf_score * 24)
             + (exact_overlap * 22)
             + (semantic_overlap * 11)
@@ -147,6 +160,20 @@ def rank_candidates(
             + (coverage * 30)
             + (trigram_similarity * 18)
         )
+
+        # Hybrid blend: cosine similarity is mapped into the same rough scale
+        # as the lexical score (max ~250) so the blend is meaningful.
+        vector_component = 0.0
+        if query_vector is not None and candidate.candidate.embedding is not None:
+            vector_component = _cosine(query_vector, candidate.candidate.embedding) * 240
+
+        if vector_component > 0:
+            score = (HYBRID_LEXICAL_WEIGHT * lexical_score) + (
+                HYBRID_VECTOR_WEIGHT * vector_component
+            )
+        else:
+            score = lexical_score
+
         if score <= 0:
             continue
 
@@ -254,6 +281,22 @@ def _dice_similarity(left: set[str], right: set[str]) -> float:
         return 0.0
     intersection = len(left & right)
     return (2 * intersection) / (len(left) + len(right))
+
+
+def _cosine(a: list[float], b: list[float]) -> float:
+    if not a or not b:
+        return 0.0
+    size = min(len(a), len(b))
+    dot = 0.0
+    norm_a = 0.0
+    norm_b = 0.0
+    for i in range(size):
+        dot += a[i] * b[i]
+        norm_a += a[i] * a[i]
+        norm_b += b[i] * b[i]
+    if norm_a == 0.0 or norm_b == 0.0:
+        return 0.0
+    return dot / (math.sqrt(norm_a) * math.sqrt(norm_b))
 
 
 def _best_snippet(content: str, *, query_tokens: list[str], semantic_terms: list[str]) -> str:

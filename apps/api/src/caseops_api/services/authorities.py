@@ -38,6 +38,7 @@ from caseops_api.services.court_sync_sources import (
     _normalize_case_reference,
 )
 from caseops_api.services.document_processing import _chunk_text
+from caseops_api.services.embeddings import EmbeddingProviderError, build_provider
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.retrieval import RetrievalCandidate, rank_candidates
 
@@ -394,6 +395,7 @@ def search_authority_catalog(
                             ]
                             if part
                         ),
+                        embedding=_decode_embedding(chunk.embedding_json),
                     )
                 )
                 candidate_to_document[candidate_id] = document
@@ -419,7 +421,13 @@ def search_authority_catalog(
         )
         candidate_to_document[candidate_id] = document
 
-    ranked = rank_candidates(query=query, candidates=candidates, limit=max(limit * 5, limit))
+    query_vector = _embed_query(query, candidates=candidates)
+    ranked = rank_candidates(
+        query=query,
+        candidates=candidates,
+        limit=max(limit * 5, limit),
+        query_vector=query_vector,
+    )
     best_by_document: dict[str, AuthoritySearchResult] = {}
 
     for result in ranked:
@@ -498,3 +506,41 @@ def search_authorities(
             document_type=payload.document_type,
         ),
     )
+
+
+def _decode_embedding(raw: str | None) -> list[float] | None:
+    if not raw:
+        return None
+    try:
+        import json
+
+        values = json.loads(raw)
+        if not isinstance(values, list):
+            return None
+        return [float(v) for v in values]
+    except (ValueError, TypeError):
+        return None
+
+
+def _embed_query(
+    query: str, *, candidates: list[RetrievalCandidate]
+) -> list[float] | None:
+    """Return a query embedding only when at least one candidate has one.
+
+    This keeps the happy path free of embedding cost when the corpus is
+    lexical-only (no ingestion has run yet).
+    """
+    has_any_embedding = any(c.embedding is not None for c in candidates)
+    if not has_any_embedding or not query.strip():
+        return None
+    try:
+        provider = build_provider()
+    except EmbeddingProviderError:
+        return None
+    try:
+        result = provider.embed([query])
+    except Exception:
+        return None
+    if not result.vectors:
+        return None
+    return result.vectors[0]

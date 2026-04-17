@@ -62,6 +62,13 @@ services:
       POSTGRES_PASSWORD: caseops
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      # CREATE EXTENSION vector runs once on fresh volumes.
+      - ./infra/postgres/init/00-extensions.sql:/docker-entrypoint-initdb.d/00-extensions.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U caseops -d caseops"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   valkey:
     image: valkey/valkey:8.1
