@@ -59,6 +59,69 @@ SC_BUCKET = "indian-supreme-court-judgments"
 # Reasonable cap per-chunk so embedding calls do not hit provider limits.
 MAX_CHUNK_CHARS = 2400
 
+# The S3 bucket partitions each year's PDFs by ``court=<code>_<rank>/``.
+# Codes discovered by listing ``data/pdf/year=2020/``. `display` is the
+# value we store on AuthorityDocument.court_name so retrieval can filter
+# without depending on the opaque S3 code.
+HC_COURT_CATALOG: dict[str, dict[str, str]] = {
+    "delhi":      {"code": "7_26",  "display": "Delhi High Court"},
+    "bombay":     {"code": "27_1",  "display": "Bombay High Court"},
+    "mumbai":     {"code": "27_1",  "display": "Bombay High Court"},  # alias
+    "telangana":  {"code": "36_29", "display": "Telangana High Court"},
+    "madras":     {"code": "33_10", "display": "Madras High Court"},
+    "chennai":    {"code": "33_10", "display": "Madras High Court"},  # alias
+    "karnataka":  {"code": "29_3",  "display": "Karnataka High Court"},
+    "bangalore":  {"code": "29_3",  "display": "Karnataka High Court"},  # alias
+    # The next batch maps the remaining codes we decoded; additions are
+    # cheap so future sessions can extend without schema changes.
+    "patna":      {"code": "10_8",  "display": "Patna High Court"},
+    "calcutta":   {"code": "19_16", "display": "Calcutta High Court"},
+    "kolkata":    {"code": "19_16", "display": "Calcutta High Court"},  # alias
+    "allahabad":  {"code": "9_13",  "display": "Allahabad High Court"},
+    "gujarat":    {"code": "24_17", "display": "Gujarat High Court"},
+    "kerala":     {"code": "32_4",  "display": "Kerala High Court"},
+    "punjab":     {"code": "3_22",  "display": "Punjab and Haryana High Court"},
+    "rajasthan":  {"code": "8_9",   "display": "Rajasthan High Court"},
+    "madhya-pradesh": {"code": "23_23", "display": "Madhya Pradesh High Court"},
+    "jharkhand":  {"code": "20_7",  "display": "Jharkhand High Court"},
+    "andhra-pradesh": {"code": "28_2", "display": "Andhra Pradesh High Court"},
+    "tripura":    {"code": "16_20", "display": "Tripura High Court"},
+    "meghalaya":  {"code": "17_21", "display": "Meghalaya High Court"},
+    "manipur":    {"code": "14_25", "display": "Manipur High Court"},
+    "sikkim":     {"code": "11_24", "display": "Sikkim High Court"},
+    "uttarakhand": {"code": "5_15", "display": "Uttarakhand High Court"},
+    "chhattisgarh": {"code": "22_18", "display": "Chhattisgarh High Court"},
+    "himachal":   {"code": "21_11", "display": "Himachal Pradesh High Court"},
+    "jammu-kashmir": {"code": "1_12", "display": "Jammu & Kashmir High Court"},
+    "orissa":     {"code": "18_6",  "display": "Orissa High Court"},
+    "odisha":     {"code": "18_6",  "display": "Orissa High Court"},  # alias
+}
+
+
+def resolve_hc_courts(names: list[str] | None) -> list[tuple[str, str]]:
+    """Resolve human names to ``[(code, display)]``.
+
+    Raises ValueError on unknown names so the CLI can surface a clear
+    error instead of silently ingesting the wrong court.
+    """
+    if not names:
+        return []
+    resolved: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for raw in names:
+        key = raw.strip().lower().replace("_", "-")
+        if key not in HC_COURT_CATALOG:
+            valid = ", ".join(sorted(HC_COURT_CATALOG.keys()))
+            raise ValueError(
+                f"Unknown HC court {raw!r}. Valid names: {valid}"
+            )
+        meta = HC_COURT_CATALOG[key]
+        code = meta["code"]
+        if code not in seen:
+            resolved.append((code, meta["display"]))
+            seen.add(code)
+    return resolved
+
 
 @dataclass
 class IngestionSummary:
@@ -124,6 +187,7 @@ def parse_judgment_pdf(
     forum_level: str,
     year: int,
     source_reference: str | None = None,
+    court_display: str | None = None,
 ) -> ParsedJudgment | None:
     """Extract text + basic metadata from a judgment PDF.
 
@@ -160,7 +224,7 @@ def parse_judgment_pdf(
     case_reference = _guess_case_reference(path.stem)
     decision_date = _guess_decision_date(cleaned, default_year=year)
     canonical_key = _canonical_key_for(path, court, year)
-    court_name = _court_display_name(court)
+    court_name = court_display or _court_display_name(court)
     summary = _short_summary(cleaned)
     if ocr_note:
         summary = f"[{ocr_note}] {summary}"
@@ -373,6 +437,7 @@ def ingest_local_directory(
     embedding_provider: EmbeddingProvider | None = None,
     limit: int | None = None,
     delete_after: bool = False,
+    court_display: str | None = None,
 ) -> IngestionSummary:
     """Walk ``directory`` for PDFs and ingest them one at a time.
 
@@ -404,7 +469,11 @@ def ingest_local_directory(
     for path in pdfs:
         try:
             parsed = parse_judgment_pdf(
-                path, court=court, forum_level=forum_level, year=year
+                path,
+                court=court,
+                forum_level=forum_level,
+                year=year,
+                court_display=court_display,
             )
             if parsed is None:
                 summary.failed_files += 1
@@ -511,8 +580,14 @@ def ingest_hc_from_s3(
     max_workdir_mb: int | None = None,
     temp_root: Path | None = None,
     embedding_provider: EmbeddingProvider | None = None,
+    hc_courts: list[tuple[str, str]] | None = None,
 ) -> IngestionSummary:
     """Stream High Court judgments for a given year from S3.
+
+    When ``hc_courts`` is provided (``[(s3_code, display_name), …]``) the
+    stream is constrained to those courts; otherwise all HCs in the year
+    are in scope. Each court gets its own set of batches so the progress
+    logs tell you where you are.
 
     Downloads one batch at a time, ingests, and deletes the batch before
     moving on. Respects a workstation disk cap so we never hold more than
@@ -526,72 +601,98 @@ def ingest_hc_from_s3(
     embedder = embedding_provider or build_provider()
 
     client = _open_s3_client()
-    prefix = f"data/pdf/year={year}/"
-    keys = list(
-        _iter_s3_keys(client, bucket=HC_BUCKET, prefix=prefix, suffix=".pdf", limit=limit)
-    )
+    scopes: list[tuple[str, str | None, str | None]]
+    if hc_courts:
+        scopes = [
+            (f"data/pdf/year={year}/court={code}/", code, display)
+            for code, display in hc_courts
+        ]
+    else:
+        scopes = [(f"data/pdf/year={year}/", None, None)]
 
     overall = IngestionSummary()
-    overall.total_files = len(keys)
 
-    total_batches = max(1, (len(keys) + batch_size - 1) // batch_size)
-    for batch_idx, batch_start in enumerate(range(0, len(keys), batch_size), start=1):
-        batch = keys[batch_start : batch_start + batch_size]
-        workdir = Path(tempfile.mkdtemp(prefix="caseops-hc-", dir=str(root)))
-        logger.info(
-            "[hc/%s] batch %d/%d — %d keys staged",
-            year,
-            batch_idx,
-            total_batches,
-            len(batch),
-        )
-        try:
-            for key in batch:
-                if _dir_size_mb(workdir) > max_workdir_mb:
-                    logger.warning(
-                        "Workdir reached %.1f MB (cap %d MB); flushing early",
-                        _dir_size_mb(workdir),
-                        max_workdir_mb,
-                    )
-                    break
-                local_path = workdir / Path(key).name
-                try:
-                    client.download_file(HC_BUCKET, key, str(local_path))
-                except Exception as exc:
-                    overall.failed_files += 1
-                    overall.errors.append(f"s3:{key}: {exc}")
-                    continue
-
-            batch_summary = ingest_local_directory(
-                session,
-                directory=workdir,
-                court="hc",
-                forum_level="high_court",
-                year=year,
-                embedding_provider=embedder,
-                delete_after=True,
+    for scope_prefix, scope_code, scope_display in scopes:
+        keys = list(
+            _iter_s3_keys(
+                client,
+                bucket=HC_BUCKET,
+                prefix=scope_prefix,
+                suffix=".pdf",
+                limit=limit,
             )
-            overall.processed_files += batch_summary.processed_files
-            overall.skipped_files += batch_summary.skipped_files
-            overall.failed_files += batch_summary.failed_files
-            overall.inserted_documents += batch_summary.inserted_documents
-            overall.inserted_chunks += batch_summary.inserted_chunks
-            overall.errors.extend(batch_summary.errors)
+        )
+        overall.total_files += len(keys)
+        court_label = scope_display or "all-courts"
+        if not keys:
+            logger.info("[hc/%s %s] nothing to ingest (empty prefix)", year, court_label)
+            continue
+
+        total_batches = max(1, (len(keys) + batch_size - 1) // batch_size)
+        for batch_idx, batch_start in enumerate(
+            range(0, len(keys), batch_size), start=1
+        ):
+            batch = keys[batch_start : batch_start + batch_size]
+            workdir = Path(tempfile.mkdtemp(prefix="caseops-hc-", dir=str(root)))
             logger.info(
-                "[hc/%s] batch %d/%d done — processed=%d inserted=%d "
-                "skipped=%d failed=%d (totals: processed=%d inserted=%d)",
+                "[hc/%s %s] batch %d/%d — %d keys staged",
                 year,
+                court_label,
                 batch_idx,
                 total_batches,
-                batch_summary.processed_files,
-                batch_summary.inserted_documents,
-                batch_summary.skipped_files,
-                batch_summary.failed_files,
-                overall.processed_files,
-                overall.inserted_documents,
+                len(batch),
             )
-        finally:
-            shutil.rmtree(workdir, ignore_errors=True)
+            try:
+                for key in batch:
+                    if _dir_size_mb(workdir) > max_workdir_mb:
+                        logger.warning(
+                            "Workdir reached %.1f MB (cap %d MB); flushing early",
+                            _dir_size_mb(workdir),
+                            max_workdir_mb,
+                        )
+                        break
+                    local_path = workdir / Path(key).name
+                    try:
+                        client.download_file(HC_BUCKET, key, str(local_path))
+                    except Exception as exc:
+                        overall.failed_files += 1
+                        overall.errors.append(f"s3:{key}: {exc}")
+                        continue
+
+                batch_summary = ingest_local_directory(
+                    session,
+                    directory=workdir,
+                    court="hc",
+                    forum_level="high_court",
+                    year=year,
+                    embedding_provider=embedder,
+                    delete_after=True,
+                    court_display=scope_display,
+                )
+                overall.processed_files += batch_summary.processed_files
+                overall.skipped_files += batch_summary.skipped_files
+                overall.failed_files += batch_summary.failed_files
+                overall.inserted_documents += batch_summary.inserted_documents
+                overall.inserted_chunks += batch_summary.inserted_chunks
+                overall.errors.extend(batch_summary.errors)
+                logger.info(
+                    "[hc/%s %s] batch %d/%d done — processed=%d inserted=%d "
+                    "skipped=%d failed=%d (totals: processed=%d inserted=%d)",
+                    year,
+                    court_label,
+                    batch_idx,
+                    total_batches,
+                    batch_summary.processed_files,
+                    batch_summary.inserted_documents,
+                    batch_summary.skipped_files,
+                    batch_summary.failed_files,
+                    overall.processed_files,
+                    overall.inserted_documents,
+                )
+            finally:
+                shutil.rmtree(workdir, ignore_errors=True)
+        # scope code is informational; keep lint quiet in case it is unused
+        _ = scope_code
 
     return overall
 

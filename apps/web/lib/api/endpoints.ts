@@ -42,8 +42,14 @@ export async function fetchAuthContext(token?: string | null): Promise<AuthConte
   return authContext.parse(data);
 }
 
-export async function listMatters(): Promise<MattersList> {
-  const data = await apiRequest<unknown>("/api/matters/");
+export async function listMatters(
+  params?: { limit?: number; cursor?: string | null },
+): Promise<MattersList> {
+  const qs = new URLSearchParams();
+  if (params?.limit) qs.set("limit", String(params.limit));
+  if (params?.cursor) qs.set("cursor", params.cursor);
+  const path = qs.toString() ? `/api/matters/?${qs.toString()}` : "/api/matters/";
+  const data = await apiRequest<unknown>(path);
   return mattersList.parse(data);
 }
 
@@ -95,8 +101,14 @@ export async function recordRecommendationDecision(input: {
   return recommendation.parse(data);
 }
 
-export async function listContracts(): Promise<ContractsList> {
-  const data = await apiRequest<unknown>("/api/contracts/");
+export async function listContracts(
+  params?: { limit?: number; cursor?: string | null },
+): Promise<ContractsList> {
+  const qs = new URLSearchParams();
+  if (params?.limit) qs.set("limit", String(params.limit));
+  if (params?.cursor) qs.set("cursor", params.cursor);
+  const path = qs.toString() ? `/api/contracts/?${qs.toString()}` : "/api/contracts/";
+  const data = await apiRequest<unknown>(path);
   return contractsList.parse(data);
 }
 

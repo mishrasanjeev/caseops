@@ -565,17 +565,51 @@ def create_matter(
     return _matter_record(matter)
 
 
-def list_matters(session: Session, *, context: SessionContext) -> MatterListResponse:
-    matters = list(
-        session.scalars(
-            select(Matter)
-            .where(Matter.company_id == context.company.id)
-            .order_by(Matter.updated_at.desc())
+def list_matters(
+    session: Session,
+    *,
+    context: SessionContext,
+    limit: int | None = None,
+    cursor: str | None = None,
+) -> MatterListResponse:
+    from sqlalchemy import and_, or_
+
+    from caseops_api.services.pagination import (
+        clamp_limit,
+        decode_cursor,
+        encode_cursor,
+    )
+
+    page_size = clamp_limit(limit)
+    decoded = decode_cursor(cursor)
+
+    stmt = (
+        select(Matter)
+        .where(Matter.company_id == context.company.id)
+        .order_by(Matter.updated_at.desc(), Matter.id.desc())
+    )
+    if decoded is not None:
+        stmt = stmt.where(
+            or_(
+                Matter.updated_at < decoded.updated_at,
+                and_(
+                    Matter.updated_at == decoded.updated_at,
+                    Matter.id < decoded.id,
+                ),
+            )
         )
+
+    rows = list(session.scalars(stmt.limit(page_size + 1)))
+    has_more = len(rows) > page_size
+    if has_more:
+        rows = rows[:page_size]
+    next_cursor = (
+        encode_cursor(rows[-1].updated_at, rows[-1].id) if has_more and rows else None
     )
     return MatterListResponse(
         company_id=context.company.id,
-        matters=[_matter_record(matter) for matter in matters],
+        matters=[_matter_record(matter) for matter in rows],
+        next_cursor=next_cursor,
     )
 
 

@@ -31,10 +31,12 @@ from pathlib import Path
 
 from caseops_api.db.session import get_session_factory
 from caseops_api.services.corpus_ingest import (
+    HC_COURT_CATALOG,
     IngestionSummary,
     ingest_hc_from_s3,
     ingest_local_directory,
     ingest_sc_from_s3,
+    resolve_hc_courts,
 )
 
 
@@ -90,6 +92,17 @@ def _build_parser() -> argparse.ArgumentParser:
         "--keep",
         action="store_true",
         help="Do not delete downloaded PDFs after ingestion.",
+    )
+    parser.add_argument(
+        "--hc-courts",
+        type=str,
+        default=None,
+        help=(
+            "Comma-separated High Court names to scope to (only applies with "
+            "--court hc --from-s3). "
+            "Examples: 'delhi', 'delhi,bombay,madras,telangana,karnataka'. "
+            f"Valid names: {', '.join(sorted(HC_COURT_CATALOG.keys()))}."
+        ),
     )
     parser.add_argument("--verbose", "-v", action="store_true")
     return parser
@@ -160,6 +173,21 @@ def main(argv: list[str] | None = None) -> int:
     overall = IngestionSummary()
     failed_any = False
 
+    hc_courts: list[tuple[str, str]] | None = None
+    if args.hc_courts:
+        try:
+            hc_courts = resolve_hc_courts(
+                [name.strip() for name in args.hc_courts.split(",") if name.strip()]
+            )
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        if args.court != "hc" or not args.from_s3:
+            print(
+                "note: --hc-courts is only honoured with --court hc --from-s3",
+                file=sys.stderr,
+            )
+
     with factory() as session:
         for year in years:
             print(f"=== {args.court}/year={year} ===")
@@ -172,6 +200,7 @@ def main(argv: list[str] | None = None) -> int:
                         batch_size=args.batch_size,
                         max_workdir_mb=args.max_workdir_mb,
                         temp_root=args.temp_root,
+                        hc_courts=hc_courts,
                     )
                 else:
                     summary = ingest_sc_from_s3(

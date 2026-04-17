@@ -84,6 +84,7 @@ class ContractRecord(BaseModel):
 class ContractListResponse(BaseModel):
     company_id: str
     contracts: list[ContractRecord]
+    next_cursor: str | None = None
 
 
 class ContractWorkspaceMembership(BaseModel):

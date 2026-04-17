@@ -48,8 +48,10 @@ CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
 async def current_company_contracts(
     context: CurrentContext,
     session: DbSession,
+    limit: int | None = None,
+    cursor: str | None = None,
 ) -> ContractListResponse:
-    return list_contracts(session, context=context)
+    return list_contracts(session, context=context, limit=limit, cursor=cursor)
 
 
 @router.post("/", response_model=ContractRecord, summary="Create a contract in the current company")

@@ -1,12 +1,13 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Briefcase } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo } from "react";
 
 import { NewMatterDialog } from "@/components/app/NewMatterDialog";
+import { Button } from "@/components/ui/Button";
 import { DataTable } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -15,6 +16,8 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { listMatters } from "@/lib/api/endpoints";
 import type { Matter } from "@/lib/api/schemas";
 import { useCapability } from "@/lib/capabilities";
+
+const PAGE_SIZE = 50;
 
 const FORUMS: Record<string, string> = {
   lower_court: "Lower",
@@ -38,9 +41,20 @@ function formatDate(value: string | null | undefined): string {
 
 export default function MattersPage() {
   const router = useRouter();
-  const { data, isPending, isError, error } = useQuery({
+  const {
+    data,
+    isPending,
+    isError,
+    error,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
     queryKey: ["matters", "list"],
-    queryFn: () => listMatters(),
+    queryFn: ({ pageParam }) =>
+      listMatters({ limit: PAGE_SIZE, cursor: pageParam ?? null }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
   });
 
   const columns = useMemo<ColumnDef<Matter>[]>(
@@ -94,7 +108,10 @@ export default function MattersPage() {
     [],
   );
 
-  const matters = data?.matters ?? [];
+  const matters = useMemo(
+    () => data?.pages.flatMap((page) => page.matters) ?? [],
+    [data],
+  );
   const canCreateMatter = useCapability("matters:create");
 
   return (
@@ -131,13 +148,26 @@ export default function MattersPage() {
           action={canCreateMatter ? <NewMatterDialog /> : null}
         />
       ) : (
-        <DataTable
-          data={matters}
-          columns={columns}
-          filterPlaceholder="Search matters, codes, clients…"
-          onRowClick={(m) => router.push(`/app/matters/${m.id}`)}
-          getRowId={(m) => m.id}
-        />
+        <>
+          <DataTable
+            data={matters}
+            columns={columns}
+            filterPlaceholder="Search matters, codes, clients…"
+            onRowClick={(m) => router.push(`/app/matters/${m.id}`)}
+            getRowId={(m) => m.id}
+          />
+          {hasNextPage ? (
+            <div className="flex justify-center">
+              <Button
+                variant="outline"
+                onClick={() => fetchNextPage()}
+                disabled={isFetchingNextPage}
+              >
+                {isFetchingNextPage ? "Loading…" : "Load more"}
+              </Button>
+            </div>
+          ) : null}
+        </>
       )}
     </div>
   );

@@ -484,17 +484,51 @@ def create_contract(
     return _contract_record(contract)
 
 
-def list_contracts(session: Session, *, context: SessionContext) -> ContractListResponse:
-    contracts = list(
-        session.scalars(
-            select(Contract)
-            .where(Contract.company_id == context.company.id)
-            .order_by(Contract.updated_at.desc())
+def list_contracts(
+    session: Session,
+    *,
+    context: SessionContext,
+    limit: int | None = None,
+    cursor: str | None = None,
+) -> ContractListResponse:
+    from sqlalchemy import and_, or_
+
+    from caseops_api.services.pagination import (
+        clamp_limit,
+        decode_cursor,
+        encode_cursor,
+    )
+
+    page_size = clamp_limit(limit)
+    decoded = decode_cursor(cursor)
+
+    stmt = (
+        select(Contract)
+        .where(Contract.company_id == context.company.id)
+        .order_by(Contract.updated_at.desc(), Contract.id.desc())
+    )
+    if decoded is not None:
+        stmt = stmt.where(
+            or_(
+                Contract.updated_at < decoded.updated_at,
+                and_(
+                    Contract.updated_at == decoded.updated_at,
+                    Contract.id < decoded.id,
+                ),
+            )
         )
+
+    rows = list(session.scalars(stmt.limit(page_size + 1)))
+    has_more = len(rows) > page_size
+    if has_more:
+        rows = rows[:page_size]
+    next_cursor = (
+        encode_cursor(rows[-1].updated_at, rows[-1].id) if has_more and rows else None
     )
     return ContractListResponse(
         company_id=context.company.id,
-        contracts=[_contract_record(contract) for contract in contracts],
+        contracts=[_contract_record(contract) for contract in rows],
+        next_cursor=next_cursor,
     )
 
 

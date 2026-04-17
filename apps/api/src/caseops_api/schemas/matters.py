@@ -75,6 +75,11 @@ class MatterRecord(BaseModel):
 class MatterListResponse(BaseModel):
     company_id: str
     matters: list[MatterRecord]
+    # Opaque cursor to fetch the next page. Null when there is no next
+    # page. Clients pass it back unchanged in `cursor=` on subsequent
+    # calls. Keeping it opaque means we can change the encoding later
+    # without breaking clients.
+    next_cursor: str | None = None
 
 
 class MatterWorkspaceMembership(BaseModel):

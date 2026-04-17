@@ -61,6 +61,7 @@ export const matter = z.object({
 
 export const mattersList = z.object({
   matters: z.array(matter),
+  next_cursor: z.string().nullable().optional(),
 });
 
 export type CompanySummary = z.infer<typeof companySummary>;
@@ -165,6 +166,7 @@ export const contract = z.object({
 export const contractsList = z.object({
   company_id: z.string(),
   contracts: z.array(contract),
+  next_cursor: z.string().nullable().optional(),
 });
 
 export const panelStatus = z.enum([

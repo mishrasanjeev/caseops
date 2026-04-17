@@ -63,8 +63,10 @@ CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
 async def current_company_matters(
     context: CurrentContext,
     session: DbSession,
+    limit: int | None = None,
+    cursor: str | None = None,
 ) -> MatterListResponse:
-    return list_matters(session, context=context)
+    return list_matters(session, context=context, limit=limit, cursor=cursor)
 
 
 @router.post("/", response_model=MatterRecord, summary="Create a matter in the current company")
