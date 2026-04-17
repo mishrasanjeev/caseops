@@ -105,8 +105,10 @@ class MockProvider:
     ) -> LLMCompletion:
         started = time.perf_counter()
         joined = "\n".join(m.content for m in messages)
-        is_structured = "respond with json" in joined.lower()
-        if is_structured:
+        lowered = joined.lower()
+        if "hearing pack" in lowered or "hearing_pack" in lowered:
+            text = _mock_hearing_pack_response(joined)
+        elif "respond with json" in lowered:
             text = _mock_structured_response(joined)
         else:
             text = _mock_plain_response(joined)
@@ -189,6 +191,70 @@ def _mock_structured_response(prompt: str) -> str:
         ],
         "confidence": "medium" if primary else "low",
         "next_action": "Partner review before any external share.",
+    }
+    return json.dumps(payload, separators=(",", ":"))
+
+
+def _mock_hearing_pack_response(prompt: str) -> str:
+    """Deterministic hearing pack emitter for offline tests.
+
+    Mirrors `_LLMPackResponse` in services/hearing_packs.py — the two must
+    stay in sync. Item types are drawn from the allowed enum so the
+    normaliser does not drop them.
+    """
+    title = _extract_between(prompt, "Matter:", "\n") or "Unknown matter"
+    hearing_on = _extract_between(prompt, "Upcoming hearing:", "—") or "the next hearing"
+    payload: dict[str, Any] = {
+        "summary": (
+            f"Hearing pack for {title.strip()}. The bench is expected to "
+            f"take up the matter on {hearing_on.strip()}. Review below "
+            "before court; every item requires partner sign-off."
+        ),
+        "items": [
+            {
+                "item_type": "chronology",
+                "title": "Matter chronology",
+                "body": "Key filings, hearings, and orders in the matter to date.",
+                "rank": 1,
+            },
+            {
+                "item_type": "last_order",
+                "title": "Last order summary",
+                "body": "One-paragraph summary of the most recent order on the matter.",
+                "rank": 2,
+            },
+            {
+                "item_type": "pending_compliance",
+                "title": "Pending compliance",
+                "body": "Outstanding directions from the bench still to be complied with.",
+                "rank": 3,
+            },
+            {
+                "item_type": "issue",
+                "title": "Live legal issues",
+                "body": "Issues the court is likely to frame and hear on this date.",
+                "rank": 4,
+            },
+            {
+                "item_type": "opposition_point",
+                "title": "Anticipated opposition",
+                "body": "The arguments the opposing party is likely to press.",
+                "rank": 5,
+            },
+            {
+                "item_type": "authority_card",
+                "title": "Supporting authority",
+                "body": "The strongest precedent supporting the matter's primary relief.",
+                "rank": 6,
+                "source_ref": "MOCK-AUTH-1",
+            },
+            {
+                "item_type": "oral_point",
+                "title": "Oral submission notes",
+                "body": "Two bullet points the lawyer should raise in court.",
+                "rank": 7,
+            },
+        ],
     }
     return json.dumps(payload, separators=(",", ":"))
 

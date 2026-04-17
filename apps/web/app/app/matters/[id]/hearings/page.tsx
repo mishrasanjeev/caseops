@@ -3,6 +3,7 @@
 import { Calendar, Gavel, ScrollText } from "lucide-react";
 import { useParams } from "next/navigation";
 
+import { HearingPackDialog } from "@/components/app/HearingPackDialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -40,7 +41,7 @@ export default function MatterHearingsPage() {
             <EmptyState
               icon={Gavel}
               title="No hearings yet"
-              description="Add a hearing from the legacy console; a richer scheduler lands in §4.5."
+              description="Schedule a hearing to unlock the hearing pack workflow — CaseOps drafts a brief from the matter facts for every listed date."
             />
           ) : (
             <ul className="flex flex-col gap-3">
@@ -61,6 +62,9 @@ export default function MatterHearingsPage() {
                         {h.outcome_notes}
                       </p>
                     ) : null}
+                    <div className="mt-3">
+                      <HearingPackDialog matterId={params.id} hearingId={h.id} />
+                    </div>
                   </div>
                   <StatusBadge status={h.status ?? "pending"} />
                 </li>

@@ -854,6 +854,79 @@ def update_matter_task(
     return _task_record(refreshed_task)
 
 
+def update_matter_hearing(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+    hearing_id: str,
+    payload,  # schemas.matters.MatterHearingUpdateRequest — quoted to avoid a circular import
+) -> MatterHearingRecord:
+    """Update a hearing entry. Transition to status='completed' with an
+    outcome_note auto-creates a follow-up task so the PRD §9.6
+    post-hearing loop survives a distracted user. Other status changes
+    are recorded as activity but do not create tasks."""
+    matter = _get_matter_model(session, context=context, matter_id=matter_id)
+    hearing = session.scalar(
+        select(MatterHearing).where(
+            MatterHearing.id == hearing_id, MatterHearing.matter_id == matter.id
+        )
+    )
+    if hearing is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Hearing not found."
+        )
+
+    prior_status = hearing.status
+    if payload.status is not None:
+        hearing.status = payload.status
+    if payload.outcome_note is not None:
+        hearing.outcome_note = payload.outcome_note.strip() or None
+    if payload.hearing_on is not None:
+        hearing.hearing_on = payload.hearing_on
+        matter.next_hearing_on = payload.hearing_on
+    session.add(hearing)
+    session.flush()
+
+    completed = (
+        payload.status == "completed"
+        and prior_status != "completed"
+    )
+    if completed and (payload.create_follow_up is None or payload.create_follow_up):
+        from datetime import timedelta
+
+        due = hearing.hearing_on + timedelta(days=3)
+        outcome_detail = hearing.outcome_note or "Post-hearing follow-up"
+        follow_up = MatterTask(
+            matter_id=matter.id,
+            created_by_membership_id=context.membership.id,
+            owner_membership_id=matter.assignee_membership_id,
+            title=f"Post-hearing follow-up — {hearing.purpose}",
+            description=outcome_detail,
+            due_on=due,
+            status="todo",
+            priority="high",
+        )
+        session.add(follow_up)
+        session.flush()
+
+    _append_activity(
+        session,
+        matter_id=matter.id,
+        actor_membership_id=context.membership.id,
+        event_type="hearing_updated" if not completed else "hearing_completed",
+        title=(
+            f"Hearing marked completed — {hearing.purpose}"
+            if completed
+            else f"Hearing updated — {hearing.purpose}"
+        ),
+        detail=hearing.outcome_note,
+    )
+    session.commit()
+    session.refresh(hearing)
+    return _hearing_record(hearing)
+
+
 def create_matter_hearing(
     session: Session,
     *,

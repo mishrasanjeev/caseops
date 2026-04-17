@@ -149,6 +149,18 @@ class MatterHearingCreateRequest(BaseModel):
     outcome_note: str | None = Field(default=None, max_length=4000)
 
 
+class MatterHearingUpdateRequest(BaseModel):
+    status: Literal["scheduled", "completed", "adjourned"] | None = None
+    outcome_note: str | None = Field(default=None, max_length=4000)
+    hearing_on: date | None = None
+    # When set, the caller is explicitly asking the server to schedule
+    # the default follow-up task generated on completion. Defaults to
+    # True so a vanilla `status: completed` always produces a task —
+    # surprising the lawyer with a missing task is worse than a
+    # surprising extra one.
+    create_follow_up: bool | None = None
+
+
 class MatterHearingRecord(BaseModel):
     id: str
     matter_id: str

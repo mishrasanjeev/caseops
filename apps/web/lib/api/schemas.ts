@@ -212,6 +212,45 @@ export const outsideCounselWorkspace = z.object({
   profiles: z.array(outsideCounsel),
 }).passthrough();
 
+export const hearingPackItemKind = z.enum([
+  "chronology",
+  "last_order",
+  "pending_compliance",
+  "issue",
+  "opposition_point",
+  "authority_card",
+  "oral_point",
+]);
+
+export const hearingPackItem = z.object({
+  id: z.string(),
+  item_type: hearingPackItemKind,
+  title: z.string(),
+  body: z.string(),
+  rank: z.number().int(),
+  source_ref: z.string().nullable(),
+  created_at: z.string(),
+});
+
+export const hearingPack = z.object({
+  id: z.string(),
+  matter_id: z.string(),
+  hearing_id: z.string().nullable(),
+  generated_by_membership_id: z.string().nullable(),
+  reviewed_by_membership_id: z.string().nullable(),
+  model_run_id: z.string().nullable(),
+  status: z.enum(["draft", "reviewed"]),
+  summary: z.string(),
+  review_required: z.boolean(),
+  generated_at: z.string(),
+  reviewed_at: z.string().nullable(),
+  items: z.array(hearingPackItem),
+});
+
+export type HearingPackItemKind = z.infer<typeof hearingPackItemKind>;
+export type HearingPackItem = z.infer<typeof hearingPackItem>;
+export type HearingPack = z.infer<typeof hearingPack>;
+
 export type Contract = z.infer<typeof contract>;
 export type ContractsList = z.infer<typeof contractsList>;
 export type OutsideCounsel = z.infer<typeof outsideCounsel>;

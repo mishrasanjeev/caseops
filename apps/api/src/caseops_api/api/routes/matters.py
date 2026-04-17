@@ -12,6 +12,10 @@ from caseops_api.schemas.billing import (
     TimeEntryCreateRequest,
     TimeEntryRecord,
 )
+from caseops_api.schemas.hearing_packs import (
+    HearingPackGenerateRequest,
+    HearingPackRecord,
+)
 from caseops_api.schemas.matters import (
     MatterAttachmentRecord,
     MatterCourtSyncImportRequest,
@@ -21,6 +25,7 @@ from caseops_api.schemas.matters import (
     MatterCreateRequest,
     MatterHearingCreateRequest,
     MatterHearingRecord,
+    MatterHearingUpdateRequest,
     MatterListResponse,
     MatterNoteCreateRequest,
     MatterNoteRecord,
@@ -36,6 +41,11 @@ from caseops_api.services.court_sync_jobs import (
     run_matter_court_sync_job,
 )
 from caseops_api.services.document_jobs import run_document_processing_job
+from caseops_api.services.hearing_packs import (
+    generate_hearing_pack,
+    get_latest_hearing_pack,
+    mark_hearing_pack_reviewed,
+)
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.matters import (
     create_matter,
@@ -52,6 +62,7 @@ from caseops_api.services.matters import (
     list_matters,
     request_matter_attachment_processing,
     update_matter,
+    update_matter_hearing,
     update_matter_task,
 )
 
@@ -185,6 +196,27 @@ async def post_current_company_matter_hearing(
     session: DbSession,
 ) -> MatterHearingRecord:
     return create_matter_hearing(session, context=context, matter_id=matter_id, payload=payload)
+
+
+@router.patch(
+    "/{matter_id}/hearings/{hearing_id}",
+    response_model=MatterHearingRecord,
+    summary="Update a hearing entry (status, outcome, reschedule)",
+)
+async def patch_current_company_matter_hearing(
+    matter_id: str,
+    hearing_id: str,
+    payload: MatterHearingUpdateRequest,
+    context: CurrentContext,
+    session: DbSession,
+) -> MatterHearingRecord:
+    return update_matter_hearing(
+        session,
+        context=context,
+        matter_id=matter_id,
+        hearing_id=hearing_id,
+        payload=payload,
+    )
 
 
 @router.post(
@@ -335,3 +367,90 @@ async def download_current_company_matter_attachment(
         media_type=attachment.content_type or "application/octet-stream",
         filename=attachment.original_filename,
     )
+
+
+@router.post(
+    "/{matter_id}/hearings/{hearing_id}/pack",
+    response_model=HearingPackRecord,
+    summary="Generate a hearing pack for this hearing",
+)
+async def post_current_company_matter_hearing_pack(
+    matter_id: str,
+    hearing_id: str,
+    payload: HearingPackGenerateRequest,
+    context: CurrentContext,
+    session: DbSession,
+) -> HearingPackRecord:
+    # `payload` is accepted for future hooks (focus_note, etc.) but is not
+    # used yet; keeping the POST body non-empty gives us room to grow.
+    _ = payload
+    pack = generate_hearing_pack(
+        session,
+        context=context,
+        matter_id=matter_id,
+        hearing_id=hearing_id,
+    )
+    return HearingPackRecord.model_validate(pack)
+
+
+@router.post(
+    "/{matter_id}/pack",
+    response_model=HearingPackRecord,
+    summary="Generate a hearing pack for the matter's next hearing",
+)
+async def post_current_company_matter_pack(
+    matter_id: str,
+    payload: HearingPackGenerateRequest,
+    context: CurrentContext,
+    session: DbSession,
+) -> HearingPackRecord:
+    _ = payload
+    pack = generate_hearing_pack(
+        session,
+        context=context,
+        matter_id=matter_id,
+        hearing_id=None,
+    )
+    return HearingPackRecord.model_validate(pack)
+
+
+@router.get(
+    "/{matter_id}/hearings/{hearing_id}/pack",
+    response_model=HearingPackRecord | None,
+    summary="Fetch the latest generated pack for this hearing",
+)
+async def get_current_company_matter_hearing_pack(
+    matter_id: str,
+    hearing_id: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> HearingPackRecord | None:
+    pack = get_latest_hearing_pack(
+        session,
+        context=context,
+        matter_id=matter_id,
+        hearing_id=hearing_id,
+    )
+    if pack is None:
+        return None
+    return HearingPackRecord.model_validate(pack)
+
+
+@router.post(
+    "/{matter_id}/hearing-packs/{pack_id}/review",
+    response_model=HearingPackRecord,
+    summary="Mark a hearing pack as reviewed by the current user",
+)
+async def post_current_company_hearing_pack_review(
+    matter_id: str,
+    pack_id: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> HearingPackRecord:
+    pack = mark_hearing_pack_reviewed(
+        session,
+        context=context,
+        matter_id=matter_id,
+        pack_id=pack_id,
+    )
+    return HearingPackRecord.model_validate(pack)

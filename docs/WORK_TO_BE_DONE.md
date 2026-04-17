@@ -293,14 +293,21 @@ Without this, the PRD's central promise does not exist.
   - Routes: `POST /api/matters/{id}/recommendations`, `GET /api/matters/{id}/recommendations`, `POST /api/recommendations/{id}/decisions`.
 - **Remaining (v2):** remedy / next-best-action / outside-counsel recommendation types; per-tenant rule overrides.
 
-### 4.5 Hearing preparation — full workflow
+### 4.5 Hearing preparation — full workflow — **DONE v1 (Phase 13, 2026-04-17)**
 
-- **Traces to:** `services/briefing.py` (today: read-only summary); PRD §9.6, §10.4
-- **Problem:** Generates text blocks; does not generate a hearing pack.
-- **Done when:**
-  - Schema: `HearingPack`, `HearingPackItem` (chronology item, last-order summary, pending-compliance item, issue, opposition point, authority card, oral point).
-  - Auto-generation on `MatterHearing` creation or within N days of `next_hearing_on`.
-  - Post-hearing: outcome capture → auto-creates follow-up tasks and proposes next-hearing date.
+- **Traces to:** PRD §9.6, §10.4; Alembic `20260417_0004`; `services/hearing_packs.py`, `components/app/HearingPackDialog.tsx`.
+- **Landed:**
+  - Schema: `HearingPack` + `HearingPackItem` with the seven PRD item kinds (chronology, last_order, pending_compliance, issue, opposition_point, authority_card, oral_point). Tenant-scoped via `matter_id`; every pack carries `review_required=True` until a membership reviews it.
+  - Service `generate_hearing_pack` loads matter metadata, the five most recent court orders + cause-list entries, open tasks, recent activity, assembles a structured prompt, calls the existing `LLMProvider`, validates the JSON against a `_LLMPackResponse` pydantic schema, drops unknown item kinds, persists items in rank order, and writes a `ModelRun` row for audit.
+  - `MockProvider` extended with a `_mock_hearing_pack_response` branch so the full pack shape is assertable offline — kept deterministic for pytest and CI.
+  - API: `POST /api/matters/{id}/hearings/{hearing_id}/pack` (generate), `GET` (fetch latest), `POST /api/matters/{id}/hearing-packs/{pack_id}/review` (flip to reviewed + clear `review_required`). Plus a matter-level `POST /api/matters/{id}/pack` for ad-hoc packs not bound to a specific hearing.
+  - Post-hearing outcome: new `PATCH /api/matters/{id}/hearings/{hearing_id}` accepts status + outcome_note + reschedule. On the `scheduled → completed` transition a `MatterTask` is auto-created (title `Post-hearing follow-up — {purpose}`, description = outcome, due = hearing + 3 days, priority high), assigned to the matter owner. `create_follow_up=false` in the body opts out.
+  - Frontend: every scheduled hearing on `/app/matters/[id]/hearings` now carries a `HearingPackDialog` button that generates, views (grouped by item type with review-required badge), and marks reviewed — React Query cache keyed per hearing so regenerate/review stay live.
+  - Tests: `apps/api/tests/test_hearing_packs.py` (6 cases): generation persists items + marks review_required, round-trip, review flips status, completion auto-creates follow-up task, opt-out skips the task, cross-tenant access returns 404.
+- **Remaining:**
+  - Auto-trigger when a hearing is scheduled more than N days out (the PRD timer); today the pack is generated on demand from the UI. Cheap extension once Temporal lands (§5.1).
+  - Cite matching into authorities via pgvector retrieval (currently the `authority_card` items carry placeholder source_ref in the mock path). Hook into `services/authorities.search_authority_catalog` in a follow-up.
+  - Export to DOCX / PDF so the pack can be handed to counsel offline — overlap with §4.3 Drafting Studio export plumbing.
 
 ### 4.6 Citation verification and refusal logic — **DONE v1 (Phase 4A, 2026-04-17, `ee158f7`)**
 

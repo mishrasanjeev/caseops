@@ -4,7 +4,16 @@ from datetime import UTC, date, datetime
 from enum import StrEnum
 from uuid import uuid4
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from caseops_api.db.base import Base
@@ -1898,3 +1907,87 @@ class RecommendationDecision(Base):
     )
 
     recommendation: Mapped[Recommendation] = relationship(back_populates="decisions")
+
+
+class HearingPackStatus(StrEnum):
+    DRAFT = "draft"
+    REVIEWED = "reviewed"
+
+
+class HearingPackItemKind(StrEnum):
+    CHRONOLOGY = "chronology"
+    LAST_ORDER = "last_order"
+    PENDING_COMPLIANCE = "pending_compliance"
+    ISSUE = "issue"
+    OPPOSITION_POINT = "opposition_point"
+    AUTHORITY_CARD = "authority_card"
+    ORAL_POINT = "oral_point"
+
+
+class HearingPack(Base):
+    """Assembled hearing brief. Always tenant-scoped via matter_id and
+    always review_required until a partner reviews it (PRD §17.4)."""
+
+    __tablename__ = "hearing_packs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    hearing_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matter_hearings.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    generated_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    reviewed_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    model_run_id: Mapped[str | None] = mapped_column(
+        ForeignKey("model_runs.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default=HearingPackStatus.DRAFT)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    review_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    generated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    items: Mapped[list[HearingPackItem]] = relationship(
+        back_populates="pack",
+        cascade="all, delete-orphan",
+        order_by="HearingPackItem.rank",
+    )
+
+
+class HearingPackItem(Base):
+    __tablename__ = "hearing_pack_items"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    pack_id: Mapped[str] = mapped_column(
+        ForeignKey("hearing_packs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    item_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    rank: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    source_ref: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+
+    pack: Mapped[HearingPack] = relationship(back_populates="items")

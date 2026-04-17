@@ -201,6 +201,31 @@ Security, tenant-leakage, agent, and AI-safety tests are tracked in
 
 ---
 
+## Hearing prep
+
+CaseOps drafts a citation-grounded **hearing pack** for every scheduled
+hearing. Each pack groups matter facts into the PRD §9.6 sections —
+chronology, last order, pending compliance, issues, opposition points,
+authority cards, and oral points — and is always created as
+`review_required` until a partner signs off. A `PATCH` to the hearing
+with `status=completed` automatically spawns a follow-up task
+(`Post-hearing follow-up — {purpose}`) on the matter's owner.
+
+- Backend: `apps/api/src/caseops_api/services/hearing_packs.py`
+- Schema + migration: `alembic/versions/20260417_0004_hearing_packs.py`
+- UI: `components/app/HearingPackDialog.tsx`, surfaced on
+  `/app/matters/[id]/hearings`
+- Tests: `apps/api/tests/test_hearing_packs.py` (6 cases — generation,
+  round-trip, review, post-hearing follow-up task, opt-out,
+  cross-tenant isolation)
+
+The hearing pack runs through the same `LLMProvider` abstraction as
+recommendations. Locally, `CASEOPS_LLM_PROVIDER=mock` (the default)
+yields a deterministic pack that exercises all seven item kinds —
+enough to test the full UI and route surface offline.
+
+---
+
 ## Resilience (loading, empty, error)
 
 Every data surface in the workspace has a defined loading, empty, and

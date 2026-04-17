@@ -4,6 +4,7 @@ import {
   type AuthSession,
   type ContractsList,
   type DecisionKind,
+  type HearingPack,
   type Matter,
   type MattersList,
   type OutsideCounselWorkspace,
@@ -13,6 +14,7 @@ import {
   authContext,
   authSession,
   contractsList,
+  hearingPack,
   matter,
   mattersList,
   outsideCounselWorkspace,
@@ -115,6 +117,58 @@ export async function listContracts(
 export async function fetchOutsideCounselWorkspace(): Promise<OutsideCounselWorkspace> {
   const data = await apiRequest<unknown>("/api/outside-counsel/workspace");
   return outsideCounselWorkspace.parse(data);
+}
+
+export async function generateHearingPack(input: {
+  matterId: string;
+  hearingId: string;
+}): Promise<HearingPack> {
+  const data = await apiRequest<unknown>(
+    `/api/matters/${input.matterId}/hearings/${input.hearingId}/pack`,
+    { method: "POST", body: {} },
+  );
+  return hearingPack.parse(data);
+}
+
+export async function fetchHearingPack(input: {
+  matterId: string;
+  hearingId: string;
+}): Promise<HearingPack | null> {
+  const data = await apiRequest<unknown>(
+    `/api/matters/${input.matterId}/hearings/${input.hearingId}/pack`,
+  );
+  if (data === null) return null;
+  return hearingPack.parse(data);
+}
+
+export async function reviewHearingPack(input: {
+  matterId: string;
+  packId: string;
+}): Promise<HearingPack> {
+  const data = await apiRequest<unknown>(
+    `/api/matters/${input.matterId}/hearing-packs/${input.packId}/review`,
+    { method: "POST", body: {} },
+  );
+  return hearingPack.parse(data);
+}
+
+export async function completeHearing(input: {
+  matterId: string;
+  hearingId: string;
+  outcomeNote?: string;
+  createFollowUp?: boolean;
+}): Promise<unknown> {
+  return apiRequest<unknown>(
+    `/api/matters/${input.matterId}/hearings/${input.hearingId}`,
+    {
+      method: "PATCH",
+      body: {
+        status: "completed",
+        outcome_note: input.outcomeNote ?? null,
+        create_follow_up: input.createFollowUp ?? null,
+      },
+    },
+  );
 }
 
 export async function createMatter(input: {
