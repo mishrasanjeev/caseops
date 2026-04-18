@@ -57,7 +57,6 @@ from caseops_api.services.llm import (
     PURPOSE_RECOMMENDATIONS,
     build_provider,
     generate_structured,
-    max_tokens_for_purpose,
 )
 
 logger = logging.getLogger(__name__)
@@ -408,7 +407,12 @@ def extract_clauses(
             messages=messages,
             context=call_context,
             temperature=0.0,
-            max_tokens=max_tokens_for_purpose(PURPOSE_METADATA_EXTRACT),
+            # A full MSA can carry 20-30 clauses × ~200 output tokens
+            # each; the default 2K ceiling truncates the JSON mid-array
+            # and generate_structured rejects the malformed payload.
+            # 8K is comfortable headroom for the hard 30-clause cap we
+            # set in the prompt.
+            max_tokens=8192,
         )
     except LLMResponseFormatError:
         logger.exception("Clause extraction returned malformed JSON")
@@ -532,7 +536,7 @@ def extract_obligations(
             messages=messages,
             context=call_context,
             temperature=0.0,
-            max_tokens=max_tokens_for_purpose(PURPOSE_METADATA_EXTRACT),
+            max_tokens=8192,
         )
     except LLMResponseFormatError:
         logger.exception("Obligation extraction returned malformed JSON")
@@ -686,7 +690,9 @@ def compare_playbook(
             messages=messages,
             context=call_context,
             temperature=0.1,
-            max_tokens=max_tokens_for_purpose(PURPOSE_RECOMMENDATIONS),
+            # Each rule → ~80 output tokens; 15-rule default playbook
+            # plus firm overrides can push past the default ceiling.
+            max_tokens=8192,
         )
     except LLMResponseFormatError:
         logger.exception("Playbook comparison returned malformed JSON")
