@@ -125,6 +125,18 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="With --reembed, re-embed every chunk regardless of existing model.",
     )
+    parser.add_argument(
+        "--min-chars",
+        type=int,
+        default=0,
+        help=(
+            "Drop judgments whose extracted text is shorter than this, "
+            "before chunking / embedding. 4000 chars is roughly 2 pages "
+            "of reasoned text — a good floor to skip 1-page stay / "
+            "adjournment / listing orders that add retrieval noise and "
+            "burn embedding credit. Default 0 (no filter)."
+        ),
+    )
     parser.add_argument("--verbose", "-v", action="store_true")
     return parser
 
@@ -247,6 +259,7 @@ def main(argv: list[str] | None = None) -> int:
                         max_workdir_mb=args.max_workdir_mb,
                         temp_root=args.temp_root,
                         hc_courts=hc_courts,
+                        min_chars=args.min_chars,
                     )
                 else:
                     summary = ingest_sc_from_s3(
@@ -255,6 +268,7 @@ def main(argv: list[str] | None = None) -> int:
                         limit=args.limit,
                         max_workdir_mb=args.max_workdir_mb,
                         temp_root=args.temp_root,
+                        min_chars=args.min_chars,
                     )
                 _print_summary(
                     summary,
@@ -270,6 +284,7 @@ def main(argv: list[str] | None = None) -> int:
                     year=year,
                     limit=args.limit,
                     delete_after=not args.keep,
+                    min_chars=args.min_chars,
                 )
                 _print_summary(
                     summary,

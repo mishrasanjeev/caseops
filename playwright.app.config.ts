@@ -25,6 +25,7 @@ export default defineConfig({
     /query-states\.spec\.ts/,
     /personas\.spec\.ts/,
     /drafting\.spec\.ts/,
+    /bootstrap-and-upload\.spec\.ts/,
   ],
   fullyParallel: false,
   workers: 1,

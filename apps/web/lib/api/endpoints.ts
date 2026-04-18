@@ -45,6 +45,29 @@ export async function signIn(input: {
   return authSession.parse(data);
 }
 
+export async function bootstrapCompany(input: {
+  companyName: string;
+  companySlug: string;
+  companyType: "law_firm" | "corporate_legal" | "solo";
+  ownerFullName: string;
+  ownerEmail: string;
+  ownerPassword: string;
+}): Promise<AuthSession> {
+  const data = await apiRequest<unknown>("/api/bootstrap/company", {
+    method: "POST",
+    body: {
+      company_name: input.companyName,
+      company_slug: input.companySlug,
+      company_type: input.companyType,
+      owner_full_name: input.ownerFullName,
+      owner_email: input.ownerEmail,
+      owner_password: input.ownerPassword,
+    },
+    token: null,
+  });
+  return authSession.parse(data);
+}
+
 export async function fetchAuthContext(token?: string | null): Promise<AuthContext> {
   const data = await apiRequest<unknown>("/api/auth/me", { token });
   return authContext.parse(data);
@@ -254,6 +277,58 @@ export const finalizeDraft = (matterId: string, draftId: string, notes?: string)
 
 export function draftDocxUrl(matterId: string, draftId: string): string {
   return `${API_BASE_URL}/api/matters/${matterId}/drafts/${draftId}/export.docx`;
+}
+
+export type MatterAttachmentProcessingStatus =
+  | "pending"
+  | "indexed"
+  | "needs_ocr"
+  | "failed";
+
+export type MatterAttachmentRecord = {
+  id: string;
+  matter_id: string;
+  original_filename: string;
+  content_type: string | null;
+  size_bytes: number;
+  processing_status: MatterAttachmentProcessingStatus;
+  extraction_error: string | null;
+  created_at: string;
+};
+
+export async function uploadMatterAttachment(input: {
+  matterId: string;
+  file: File;
+}): Promise<MatterAttachmentRecord> {
+  const body = new FormData();
+  body.append("file", input.file);
+  const data = await apiRequest<unknown>(
+    `/api/matters/${input.matterId}/attachments`,
+    { method: "POST", body },
+  );
+  return data as MatterAttachmentRecord;
+}
+
+export async function retryMatterAttachment(input: {
+  matterId: string;
+  attachmentId: string;
+}): Promise<MatterAttachmentRecord> {
+  const data = await apiRequest<unknown>(
+    `/api/matters/${input.matterId}/attachments/${input.attachmentId}/retry`,
+    { method: "POST", body: {} },
+  );
+  return data as MatterAttachmentRecord;
+}
+
+export async function reindexMatterAttachment(input: {
+  matterId: string;
+  attachmentId: string;
+}): Promise<MatterAttachmentRecord> {
+  const data = await apiRequest<unknown>(
+    `/api/matters/${input.matterId}/attachments/${input.attachmentId}/reindex`,
+    { method: "POST", body: {} },
+  );
+  return data as MatterAttachmentRecord;
 }
 
 export async function createMatter(input: {

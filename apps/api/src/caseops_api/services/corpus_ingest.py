@@ -458,12 +458,19 @@ def ingest_local_directory(
     limit: int | None = None,
     delete_after: bool = False,
     court_display: str | None = None,
+    min_chars: int = 0,
 ) -> IngestionSummary:
     """Walk ``directory`` for PDFs and ingest them one at a time.
 
     If ``delete_after`` is True, each PDF is unlinked from disk after its
     chunks are persisted. Use this when working against a downloaded batch
     that should not linger on the workstation.
+
+    ``min_chars`` skips documents whose extracted text is below the
+    threshold. Use this to drop 1-page stay orders, adjournment notes,
+    and other procedural filings that otherwise pollute retrieval and
+    burn embedding credit. A reasoned judgment is typically ≥ 4,000
+    chars (~2 pages of extracted text). Default 0 keeps legacy behaviour.
     """
     embedder = embedding_provider or build_provider()
     summary = IngestionSummary()
@@ -497,6 +504,14 @@ def ingest_local_directory(
             )
             if parsed is None:
                 summary.failed_files += 1
+                continue
+            if min_chars > 0 and len(parsed.document_text) < min_chars:
+                # Short procedural orders add retrieval noise and cost
+                # Voyage credits for no precedent-weight gain. Skip before
+                # we chunk/embed, but record so the summary is honest.
+                summary.skipped_files += 1
+                if delete_after:
+                    path.unlink(missing_ok=True)
                 continue
             if _already_indexed(session, parsed.canonical_key):
                 summary.skipped_files += 1
@@ -601,6 +616,7 @@ def ingest_hc_from_s3(
     temp_root: Path | None = None,
     embedding_provider: EmbeddingProvider | None = None,
     hc_courts: list[tuple[str, str]] | None = None,
+    min_chars: int = 0,
 ) -> IngestionSummary:
     """Stream High Court judgments for a given year from S3.
 
@@ -688,6 +704,7 @@ def ingest_hc_from_s3(
                     embedding_provider=embedder,
                     delete_after=True,
                     court_display=scope_display,
+                    min_chars=min_chars,
                 )
                 overall.processed_files += batch_summary.processed_files
                 overall.skipped_files += batch_summary.skipped_files
@@ -725,6 +742,7 @@ def ingest_sc_from_s3(
     temp_root: Path | None = None,
     embedding_provider: EmbeddingProvider | None = None,
     max_workdir_mb: int | None = None,
+    min_chars: int = 0,
 ) -> IngestionSummary:
     """Stream Supreme Court tarballs for a year, extract + ingest + delete."""
     settings = get_settings()
@@ -771,6 +789,7 @@ def ingest_sc_from_s3(
                 year=year,
                 embedding_provider=embedder,
                 delete_after=True,
+                min_chars=min_chars,
             )
             overall.processed_files += batch_summary.processed_files
             overall.skipped_files += batch_summary.skipped_files

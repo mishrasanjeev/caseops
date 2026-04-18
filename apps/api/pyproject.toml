@@ -24,6 +24,7 @@ dependencies = [
   "python-docx>=1.1.2",
   "google-genai>=1.73.1",
   "anthropic>=0.96.0",
+  "voyageai>=0.3.7",
 ]
 
 [project.optional-dependencies]

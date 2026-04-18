@@ -31,6 +31,10 @@ function unique(prefix: string): string {
 }
 
 test.describe("Drafting studio (§4.3)", () => {
+  // Opus 4.7 generation is the slow step in this flow; give the whole
+  // test a generous window so we never fail on raw model latency.
+  test.setTimeout(300_000);
+
   test("create draft, generate, submit, request changes, regenerate, approve, finalize", async ({
     page,
   }) => {
@@ -88,11 +92,14 @@ test.describe("Drafting studio (§4.3)", () => {
       page.getByRole("heading", { name: "E2E reply brief" }),
     ).toBeVisible();
 
-    // Generate the first version.
+    // Generate the first version. Drafting now routes to Opus 4.7 which,
+    // at 8k max output tokens, comfortably runs 30-60s. Bump the window
+    // so the test tracks the production reality instead of the legacy
+    // Haiku cadence.
     await page.getByTestId("draft-generate").click();
     await expect(
       page.getByText(/Generated /).first(),
-    ).toBeVisible({ timeout: 20_000 });
+    ).toBeVisible({ timeout: 120_000 });
 
     // Submit for review.
     await page.getByTestId("draft-submit").click();

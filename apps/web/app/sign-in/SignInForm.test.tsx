@@ -115,6 +115,22 @@ describe("SignInForm", () => {
     expect(toastSuccess).toHaveBeenCalled();
   });
 
+  it("switches to the New workspace tab and shows the bootstrap form", async () => {
+    const user = userEvent.setup();
+    render(withClient(<SignInForm />));
+
+    // The sign-in tab is active by default; switching tabs should surface
+    // the bootstrap fields which don't exist in the sign-in form.
+    await user.click(screen.getByRole("tab", { name: /New workspace/i }));
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: /Create your CaseOps workspace/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/Firm \/ organisation name/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Your full name/i)).toBeInTheDocument();
+    expect(screen.getByTestId("new-workspace-submit")).toBeInTheDocument();
+  });
+
   it("surfaces an API error as a toast without storing a session", async () => {
     const user = userEvent.setup();
     const { ApiError } = await import("@/lib/api/config");

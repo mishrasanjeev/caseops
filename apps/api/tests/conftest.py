@@ -35,6 +35,15 @@ def client(
     monkeypatch.setenv("CASEOPS_LLM_PROVIDER", "mock")
     monkeypatch.setenv("CASEOPS_LLM_MODEL", "caseops-mock-1")
     monkeypatch.delenv("CASEOPS_LLM_API_KEY", raising=False)
+    # Force the deterministic mock embedding provider. Without this the
+    # suite inherits .env (typically fastembed), which makes tests depend
+    # on model weights being cached on disk and leaks latency into unit
+    # runs. The mock provider is normalised and dimension-faithful.
+    monkeypatch.setenv("CASEOPS_EMBEDDING_PROVIDER", "mock")
+    monkeypatch.setenv("CASEOPS_EMBEDDING_MODEL", "caseops-mock-embed")
+    # Empty string (not delenv) so pydantic-settings does not fall back
+    # to a real Voyage key sitting in apps/api/.env.
+    monkeypatch.setenv("CASEOPS_EMBEDDING_API_KEY", "")
     get_settings.cache_clear()
     clear_engine_cache()
 

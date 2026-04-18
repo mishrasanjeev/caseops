@@ -11,8 +11,10 @@ Design notes:
   fastembed bundles ONNX runtime and auto-downloads `BAAI/bge-base-en-v1.5`
   (~250 MB) on first use, producing 768-dim embeddings. We pad to 1024 so
   the vector column accepts either provider without a migration.
-- ``VoyageProvider`` targets ``voyage-3-law`` (1024-dim, purpose-built for
-  legal text). Best-in-class quality but requires a paid API key.
+- ``VoyageProvider`` targets ``voyage-4-large`` (1024-dim by default, 32K
+  context, natively multilingual — handles English case-law plus Hindi /
+  Tamil / Bengali pleadings without a provider split). Best-in-class
+  quality but requires a paid API key.
 - ``GeminiProvider`` targets ``text-embedding-005`` (768-dim), padded to
   1024. Sensible pair with the Gemini LLM provider.
 
@@ -50,7 +52,12 @@ class EmbeddingProvider(Protocol):
     model: str
     dimensions: int
 
-    def embed(self, texts: list[str]) -> EmbeddingResult: ...
+    def embed(
+        self,
+        texts: list[str],
+        *,
+        input_type: str = "document",
+    ) -> EmbeddingResult: ...
 
 
 # ---------------------------------------------------------------------------
@@ -114,7 +121,12 @@ class MockProvider:
         self.model = model
         self.dimensions = dimensions
 
-    def embed(self, texts: list[str]) -> EmbeddingResult:
+    def embed(
+        self,
+        texts: list[str],
+        *,
+        input_type: str = "document",  # noqa: ARG002 — kept for Protocol parity
+    ) -> EmbeddingResult:
         vectors: list[list[float]] = []
         for text in texts:
             vectors.append(_l2_normalize(_mock_vector(text, self.dimensions)))
@@ -187,7 +199,12 @@ class FastEmbedProvider:
         self.model = model
         self.dimensions = dimensions
 
-    def embed(self, texts: list[str]) -> EmbeddingResult:
+    def embed(
+        self,
+        texts: list[str],
+        *,
+        input_type: str = "document",  # noqa: ARG002 — kept for Protocol parity
+    ) -> EmbeddingResult:
         if not texts:
             return EmbeddingResult(
                 vectors=[], provider=self.name, model=self.model, dimensions=self.dimensions
@@ -204,14 +221,22 @@ class FastEmbedProvider:
 
 
 class VoyageProvider:
-    """Voyage AI provider (paid, ``voyage-3-law`` is our legal default)."""
+    """Voyage AI provider (paid, ``voyage-4-large`` is our default).
+
+    ``voyage-4-large`` is a 32K-context, natively multilingual retrieval
+    model that outperforms domain-tuned legacy models (``voyage-law-2``)
+    on English legal corpora while also handling Hindi / Tamil / Bengali
+    pleadings without a split-provider setup. Flexible output dims
+    (256 / 512 / 1024 / 2048) are supported via Voyage's MRL; we default
+    to 1024 to match the pgvector column width.
+    """
 
     name = "voyage"
 
     def __init__(
         self,
         *,
-        model: str = "voyage-3-law",
+        model: str = "voyage-4-large",
         api_key: str,
         dimensions: int = 1024,
     ) -> None:
@@ -226,13 +251,30 @@ class VoyageProvider:
         self.model = model
         self.dimensions = dimensions
 
-    def embed(self, texts: list[str]) -> EmbeddingResult:
+    def embed(
+        self,
+        texts: list[str],
+        *,
+        input_type: str = "document",
+    ) -> EmbeddingResult:
+        """Embed a batch of texts.
+
+        ``input_type`` controls the Voyage asymmetric-retrieval signal:
+        pass ``"query"`` when embedding a search query and ``"document"``
+        (default) for corpus chunks. Using the wrong type costs a
+        noticeable chunk of top-k recall on voyage-4 / voyage-law-2.
+        """
         if not texts:
             return EmbeddingResult(
                 vectors=[], provider=self.name, model=self.model, dimensions=self.dimensions
             )
         try:
-            result = self._client.embed(texts, model=self.model, input_type="document")
+            result = self._client.embed(
+                texts,
+                model=self.model,
+                input_type=input_type,
+                output_dimension=self.dimensions,
+            )
         except Exception as exc:
             raise EmbeddingProviderError(f"Voyage embed failed: {exc}") from exc
         vectors = [_pad([float(x) for x in v], self.dimensions) for v in result.embeddings]
@@ -268,7 +310,12 @@ class GeminiProvider:
         self.model = model
         self.dimensions = dimensions
 
-    def embed(self, texts: list[str]) -> EmbeddingResult:
+    def embed(
+        self,
+        texts: list[str],
+        *,
+        input_type: str = "document",  # noqa: ARG002 — kept for Protocol parity
+    ) -> EmbeddingResult:
         if not texts:
             return EmbeddingResult(
                 vectors=[], provider=self.name, model=self.model, dimensions=self.dimensions
@@ -311,7 +358,7 @@ def build_provider() -> EmbeddingProvider:
         )
     if provider_name == "voyage":
         return VoyageProvider(
-            model=settings.embedding_model or "voyage-3-law",
+            model=settings.embedding_model or "voyage-4-large",
             api_key=settings.embedding_api_key,
             dimensions=settings.embedding_dimensions,
         )

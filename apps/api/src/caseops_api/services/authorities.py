@@ -590,7 +590,7 @@ def _pg_prefilter_document_ids(
     except EmbeddingProviderError:
         return None
     try:
-        result = provider.embed([query])
+        result = provider.embed([query], input_type="query")
     except Exception:
         return None
     if not result.vectors:
@@ -658,7 +658,7 @@ def _embed_query(
     except EmbeddingProviderError:
         return None
     try:
-        result = provider.embed([query])
+        result = provider.embed([query], input_type="query")
     except Exception:
         return None
     if not result.vectors:

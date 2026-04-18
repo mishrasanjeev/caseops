@@ -71,7 +71,10 @@ def test_build_provider_defaults_to_mock(monkeypatch: pytest.MonkeyPatch) -> Non
 
 def test_build_provider_requires_key_for_voyage(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("CASEOPS_EMBEDDING_PROVIDER", "voyage")
-    monkeypatch.delenv("CASEOPS_EMBEDDING_API_KEY", raising=False)
+    # Must set to empty string, not delete — pydantic-settings falls back
+    # to the `.env` file when the OS env is missing the key, so delenv
+    # alone will pick up a real key if the dev has one in .env.
+    monkeypatch.setenv("CASEOPS_EMBEDDING_API_KEY", "")
     get_settings.cache_clear()
     with pytest.raises(EmbeddingProviderError):
         build_provider()

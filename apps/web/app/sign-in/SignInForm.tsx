@@ -5,6 +5,7 @@ import { useMutation } from "@tanstack/react-query";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -14,9 +15,12 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { signIn } from "@/lib/api/endpoints";
 import { ApiError } from "@/lib/api/config";
 import { storeSession } from "@/lib/session";
+
+import { NewWorkspaceForm } from "./NewWorkspaceForm";
 
 const schema = z.object({
   companySlug: z
@@ -34,6 +38,8 @@ export function SignInForm() {
   const router = useRouter();
   const params = useSearchParams();
   const nextPath = params.get("next") ?? "/app";
+  const initialTab = params.get("tab") === "new" ? "new" : "signin";
+  const [tab, setTab] = useState<"signin" | "new">(initialTab);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -75,95 +81,107 @@ export function SignInForm() {
         <Card>
           <CardHeader>
             <CardTitle as="h1" className="text-lg">
-              Sign in to your workspace
+              {tab === "new" ? "Create your CaseOps workspace" : "Sign in to your workspace"}
             </CardTitle>
             <CardDescription>
-              Use your CaseOps credentials. You can find your company slug on the workspace URL or
-              your invite email.
+              {tab === "new"
+                ? "Set up a workspace for your firm. You'll be the owner and can invite the rest of the team afterwards."
+                : "Use your CaseOps credentials. You can find your company slug on the workspace URL or your invite email."}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form
-              className="flex flex-col gap-4"
-              onSubmit={form.handleSubmit((values) => mutation.mutate(values))}
-              noValidate
-              aria-label="Sign in"
+            <Tabs
+              value={tab}
+              onValueChange={(next) => setTab(next as "signin" | "new")}
+              className="w-full"
             >
-              <FieldGroup
-                id="company-slug"
-                label="Company slug"
-                error={form.formState.errors.companySlug?.message}
-              >
-                {({ invalid, describedBy }) => (
-                  <Input
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="signin">Sign in</TabsTrigger>
+                <TabsTrigger value="new" data-testid="tab-new-workspace">
+                  New workspace
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="signin">
+                <form
+                  className="flex flex-col gap-4"
+                  onSubmit={form.handleSubmit((values) => mutation.mutate(values))}
+                  noValidate
+                  aria-label="Sign in"
+                >
+                  <FieldGroup
                     id="company-slug"
-                    autoComplete="organization"
-                    placeholder="aster-legal"
-                    aria-invalid={invalid || undefined}
-                    aria-describedby={describedBy}
-                    {...form.register("companySlug")}
-                  />
-                )}
-              </FieldGroup>
+                    label="Company slug"
+                    error={form.formState.errors.companySlug?.message}
+                  >
+                    {({ invalid, describedBy }) => (
+                      <Input
+                        id="company-slug"
+                        autoComplete="organization"
+                        placeholder="aster-legal"
+                        aria-invalid={invalid || undefined}
+                        aria-describedby={describedBy}
+                        {...form.register("companySlug")}
+                      />
+                    )}
+                  </FieldGroup>
 
-              <FieldGroup
-                id="email"
-                label="Work email"
-                error={form.formState.errors.email?.message}
-              >
-                {({ invalid, describedBy }) => (
-                  <Input
+                  <FieldGroup
                     id="email"
-                    type="email"
-                    autoComplete="email"
-                    placeholder="you@firm.in"
-                    aria-invalid={invalid || undefined}
-                    aria-describedby={describedBy}
-                    {...form.register("email")}
-                  />
-                )}
-              </FieldGroup>
+                    label="Work email"
+                    error={form.formState.errors.email?.message}
+                  >
+                    {({ invalid, describedBy }) => (
+                      <Input
+                        id="email"
+                        type="email"
+                        autoComplete="email"
+                        placeholder="you@firm.in"
+                        aria-invalid={invalid || undefined}
+                        aria-describedby={describedBy}
+                        {...form.register("email")}
+                      />
+                    )}
+                  </FieldGroup>
 
-              <FieldGroup
-                id="password"
-                label="Password"
-                error={form.formState.errors.password?.message}
-              >
-                {({ invalid, describedBy }) => (
-                  <Input
+                  <FieldGroup
                     id="password"
-                    type="password"
-                    autoComplete="current-password"
-                    aria-invalid={invalid || undefined}
-                    aria-describedby={describedBy}
-                    {...form.register("password")}
-                  />
-                )}
-              </FieldGroup>
+                    label="Password"
+                    error={form.formState.errors.password?.message}
+                  >
+                    {({ invalid, describedBy }) => (
+                      <Input
+                        id="password"
+                        type="password"
+                        autoComplete="current-password"
+                        aria-invalid={invalid || undefined}
+                        aria-describedby={describedBy}
+                        {...form.register("password")}
+                      />
+                    )}
+                  </FieldGroup>
 
-              <Button
-                type="submit"
-                size="lg"
-                disabled={mutation.isPending}
-                className="mt-2 w-full"
-              >
-                {mutation.isPending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" /> Signing in…
-                  </>
-                ) : (
-                  "Sign in"
-                )}
-              </Button>
-            </form>
+                  <Button
+                    type="submit"
+                    size="lg"
+                    disabled={mutation.isPending}
+                    className="mt-2 w-full"
+                  >
+                    {mutation.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" /> Signing in…
+                      </>
+                    ) : (
+                      "Sign in"
+                    )}
+                  </Button>
+                </form>
+              </TabsContent>
 
-            <p className="mt-6 text-xs text-[var(--color-mute-2)]">
-              New firm?{" "}
-              <Link className="font-medium text-[var(--color-brand-700)]" href="/legacy">
-                Bootstrap a workspace
-              </Link>{" "}
-              in the legacy console — the new onboarding wizard is on the roadmap.
-            </p>
+              <TabsContent value="new">
+                <NewWorkspaceForm />
+              </TabsContent>
+            </Tabs>
           </CardContent>
         </Card>
       </section>
