@@ -10,7 +10,6 @@ export default function HearingsPage() {
       title="Portfolio-wide hearings"
       description="Every hearing across every matter — sorted, filtered, and ready for prep."
       prdSection="§9.6, §10.4"
-      workDocSection="§3.1 /hearings · §4.5 hearing-pack engine"
       bullets={[
         "Cause-list sync from eCourts and High-Court portals with retry and status.",
         "Hearing pack generator: chronology, last order, pending compliance, oral points.",

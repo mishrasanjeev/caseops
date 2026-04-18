@@ -32,6 +32,26 @@ def test_company_bootstrap_creates_owner_session(client: TestClient) -> None:
     assert payload["user"]["email"] == "owner@asterlegal.in"
 
 
+def test_bootstrap_accepts_solo_company_type(client: TestClient) -> None:
+    """PRD §4.1.C / §8.3 calls for solo practitioners as a first-class
+    persona. Bootstrapping a solo tenant must succeed without having to
+    misrepresent the firm as a law_firm just to get through validation."""
+    response = client.post(
+        "/api/bootstrap/company",
+        json={
+            "company_name": "Ravi Solo Practice",
+            "company_slug": "ravi-solo",
+            "company_type": "solo",
+            "owner_full_name": "Ravi Solo",
+            "owner_email": "ravi@ravisolo.in",
+            "owner_password": "SoloPass1234!",
+        },
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["company"]["company_type"] == "solo"
+
+
 def test_duplicate_company_slug_is_rejected(client: TestClient) -> None:
     bootstrap_company(client)
 

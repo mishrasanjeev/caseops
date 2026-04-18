@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, HttpUrl
 
-CompanyTypeLiteral = Literal["law_firm", "corporate_legal"]
+CompanyTypeLiteral = Literal["law_firm", "corporate_legal", "solo"]
 MembershipRoleLiteral = Literal["owner", "admin", "member"]
 
 

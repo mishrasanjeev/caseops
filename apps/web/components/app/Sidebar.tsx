@@ -140,8 +140,7 @@ export function Sidebar() {
             Early access
           </div>
           <p className="mt-1 text-xs leading-relaxed text-[var(--color-mute)]">
-            Features marked <em>preview</em> are on the roadmap in{" "}
-            <code className="rounded bg-white px-1 py-0.5 text-[10px]">WORK_TO_BE_DONE.md</code>.
+            Items marked <em>preview</em> are next up on the roadmap.
           </p>
         </div>
       </nav>

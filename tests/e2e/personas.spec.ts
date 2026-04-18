@@ -15,7 +15,7 @@ const PASSWORD = "PersonaPass123!";
 type Persona = {
   slug: string;
   companyName: string;
-  companyType: "law_firm" | "corporate_legal";
+  companyType: "law_firm" | "corporate_legal" | "solo";
   ownerName: string;
   matterTitle: string;
   matterCode: string;
@@ -115,7 +115,7 @@ test.describe("Personas (PRD §8.3)", () => {
   test("solo practitioner can sign in and create a first matter", async ({ page }) => {
     const persona = makePersona({
       companyName: `Solo ${Math.random().toString(36).slice(2, 5)}`,
-      companyType: "law_firm",
+      companyType: "solo",
       ownerName: "Ravi Solo",
       matterTitle: "Notice reply — Consumer",
     });

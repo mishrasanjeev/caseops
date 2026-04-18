@@ -37,7 +37,7 @@ const features = [
   {
     icon: Sparkles,
     title: "Explainable Recommendations",
-    body: "Forum, remedy, authority, next-best action and counsel — with rationale, assumptions, missing facts, and confidence.",
+    body: "Forum and supporting-authority recommendations today, with rationale, assumptions, missing facts, and confidence on every option.",
   },
   {
     icon: Scale,

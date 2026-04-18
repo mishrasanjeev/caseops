@@ -26,6 +26,7 @@ def utcnow() -> datetime:
 class CompanyType(StrEnum):
     LAW_FIRM = "law_firm"
     CORPORATE_LEGAL = "corporate_legal"
+    SOLO = "solo"
 
 
 class MembershipRole(StrEnum):

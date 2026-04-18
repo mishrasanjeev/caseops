@@ -68,7 +68,7 @@ export default function MatterOverviewPage() {
             <EmptyState
               icon={ClipboardList}
               title="No summary yet"
-              description="Add a short description to this matter from the legacy console for now — a rich matter editor is on the roadmap."
+              description="Add a short description when the matter editor ships. For now, use the intake form."
             />
           )}
         </CardContent>
@@ -119,7 +119,7 @@ export default function MatterOverviewPage() {
             <EmptyState
               icon={ListTodo}
               title="No open tasks"
-              description="Tasks land in the new cockpit once the rewrite of the Tasks surface ships (§5.3)."
+              description="Tasks you raise from hearings, documents, or intake will appear here."
             />
           ) : (
             <ul className="flex flex-col gap-3">
@@ -155,7 +155,7 @@ export default function MatterOverviewPage() {
             <EmptyState
               icon={Gavel}
               title="No hearings scheduled"
-              description="Hearings added in the legacy console will appear here."
+              description="Listings imported from court feeds or added manually will appear here."
             />
           ) : (
             <ul className="flex flex-col gap-3">

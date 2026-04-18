@@ -133,10 +133,10 @@ export default function ContractsPage() {
       <PageHeader
         eyebrow="Contracts"
         title="Contract repository"
-        description="Every contract under your workspace. Full redline workspace rebuilt here lands with §9.2; use the legacy console for authoring until then."
+        description="Every contract under your workspace. A full redline surface is in progress; use the classic authoring workspace in the meantime."
         actions={
           <Button href="/legacy" variant="outline">
-            Open legacy contracts
+            Open classic contracts
           </Button>
         }
       />
@@ -156,10 +156,10 @@ export default function ContractsPage() {
         <EmptyState
           icon={Scale}
           title="No contracts yet"
-          description="Create your first contract from the legacy console while the rebuilt contract workspace is in progress."
+          description="Create your first contract in the classic authoring workspace while the rebuilt redline UI lands."
           action={
             <Button href="/legacy" variant="outline">
-              Open legacy console
+              Open classic workspace
             </Button>
           }
         />

@@ -10,7 +10,6 @@ export default function DraftingPage() {
       title="Drafting Studio"
       description="AI-assisted first drafts from matter context and your templates — with inline citations, version history, and reviewer approval."
       prdSection="§9.5, §10.3"
-      workDocSection="§4.3 Drafting Studio · §5.4 Audit"
       bullets={[
         "Template picker keyed to matter type and forum.",
         "Draft generation grounded in the matter graph and retrieval.",

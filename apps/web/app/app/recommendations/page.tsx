@@ -8,14 +8,13 @@ export default function RecommendationsPage() {
       icon={Sparkles}
       eyebrow="Recommendations"
       title="Explainable recommendations"
-      description="Forum, remedy, authority, next-best action, and counsel picks — with rationale, assumptions, missing facts, and confidence."
+      description="Forum and supporting-authority recommendations today, with rationale, assumptions, missing facts, and confidence on every option. Remedy, next-best-action, and counsel picks are on the roadmap."
       prdSection="§11 full pipeline"
-      workDocSection="§4.4 Recommendation engine"
       bullets={[
-        "Schema locked to PRD §23.1: options, rationale, citations, assumptions, missing facts, confidence, review_required.",
-        "No recommendation without at least one supporting authority.",
-        "User accept / reject / edit captured as structured HITL feedback.",
-        "Outside-counsel picks ranked from tenant-private performance history.",
+        "Today: forum and authority recommendations shipped from Matter Cockpit.",
+        "Schema aligned to PRD §23.1 — options, rationale, citations, assumptions, missing facts, confidence, review_required.",
+        "No recommendation persisted without at least one verified authority.",
+        "Coming next: remedy, next-best-action, and outside-counsel picks from tenant-private performance history.",
       ]}
     />
   );

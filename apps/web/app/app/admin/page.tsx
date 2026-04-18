@@ -205,9 +205,8 @@ export default function AdminPage() {
         icon={Wrench}
         eyebrow="Coming soon"
         title="More admin controls on the way"
-        description="User directory + ethical walls UI, SSO, tenant AI policy, and plan management — per the post-Sprint-H roadmap."
+        description="User directory + ethical walls UI, SSO, tenant AI policy, and plan management are next."
         prdSection="§10.9"
-        workDocSection="§10.1 admin · §10.2 SSO · §10.3 AI policy · §10.5 plan entitlements"
         bullets={[
           "User directory with team-based scoping; ethical walls are wired on the API today and will surface here next.",
           "OIDC / SAML with JIT provisioning and role mapping.",

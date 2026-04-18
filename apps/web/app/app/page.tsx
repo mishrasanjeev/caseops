@@ -66,19 +66,19 @@ export default function DashboardPage() {
           icon={Gavel}
           label="Hearings this week"
           value="—"
-          hint="Cause-list sync lands with §12.1"
+          hint="Cause-list sync coming soon"
         />
         <StatCard
           icon={Sparkles}
           label="Recommendations"
           value="—"
-          hint="Engine ships in Phase 4"
+          hint="Generate from a matter to see options"
         />
         <StatCard
           icon={LibraryBig}
           label="Authorities indexed"
           value="—"
-          hint="Retrieval upgrade in §4.2"
+          hint="Retrieval depth grows as the corpus expands"
         />
       </section>
 

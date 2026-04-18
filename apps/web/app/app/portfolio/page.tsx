@@ -10,7 +10,6 @@ export default function PortfolioPage() {
       title="Firm-wide portfolio view"
       description="A single board for partners and GCs — matters at risk, deadlines, realization, and hearings."
       prdSection="§8.2 Portfolio / Board View"
-      workDocSection="§3.1 /portfolio"
       bullets={[
         "Board mode with swimlanes by stage, practice area, or assignee.",
         "Heatmap for upcoming deadlines and hearings in the next 14 days.",
