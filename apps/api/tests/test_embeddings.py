@@ -86,3 +86,50 @@ def test_build_provider_rejects_unknown(monkeypatch: pytest.MonkeyPatch) -> None
     get_settings.cache_clear()
     with pytest.raises(EmbeddingProviderError):
         build_provider()
+
+
+def test_voyage_provider_splits_oversized_batches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VoyageProvider groups texts so no single request exceeds the
+    120K-token server ceiling. We stub the voyageai client to avoid the
+    network call but verify the batching decision."""
+    from caseops_api.services.embeddings import VoyageProvider
+
+    class _StubVoyageClient:
+        def __init__(self) -> None:
+            self.batches: list[int] = []
+
+        def tokenize(self, texts, model):  # noqa: ARG002
+            # Pretend every 1 char == 1 token so tests control sizes.
+            return [list(range(len(t))) for t in texts]
+
+        def embed(self, texts, model, input_type, output_dimension):  # noqa: ARG002
+            self.batches.append(sum(len(t) for t in texts))
+
+            class _Result:
+                pass
+
+            r = _Result()
+            r.embeddings = [[0.1] * output_dimension for _ in texts]
+            return r
+
+    stub = _StubVoyageClient()
+
+    # Monkeypatch voyageai.Client so VoyageProvider picks up our stub.
+    import voyageai
+
+    monkeypatch.setattr(voyageai, "Client", lambda api_key: stub)
+
+    provider = VoyageProvider(
+        model="voyage-4-large",
+        api_key="dummy",
+        dimensions=1024,
+    )
+    # Each text is 40K "tokens" (chars == tokens in the stub). Four of
+    # them = 160K total — must split into at least two sub-batches.
+    texts = ["a" * 40_000 for _ in range(4)]
+    result = provider.embed(texts)
+    assert len(result.vectors) == 4
+    assert len(stub.batches) >= 2, stub.batches
+    assert all(b <= provider._MAX_BATCH_TOKENS for b in stub.batches), stub.batches

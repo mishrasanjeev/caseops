@@ -280,26 +280,35 @@ class VoyageProvider:
                 vectors=[], provider=self.name, model=self.model, dimensions=self.dimensions
             )
 
-        # Count tokens per text once (Voyage uses the model's own
-        # tokenizer, downloaded on first use from HF).
+        # Count tokens per text using voyage's own tokenizer (loaded
+        # from HF on first use). `tokenize` returns one token-list per
+        # input; we take len() of each. `count_tokens` is intentionally
+        # NOT used here: it returns an int total for the whole batch,
+        # which if divided evenly understates outlier chunks — exactly
+        # the case where we need per-text sizing to avoid overshooting
+        # Voyage's 120K-token request ceiling.
+        per_text_tokens: list[int] | None = None
         try:
-            per_text = self._client.count_tokens(texts, model=self.model)
+            tokenised = self._client.tokenize(texts, model=self.model)
+            # SDK returns a list of per-text token lists; be defensive
+            # about future shape changes by falling back if it isn't.
+            if isinstance(tokenised, list) and all(
+                hasattr(item, "__len__") for item in tokenised
+            ):
+                per_text_tokens = [len(item) for item in tokenised]
         except Exception:
-            # Fallback char estimate: ~4 chars/token for English legal
-            # text. Conservative since long docs tend to tokenize finer.
-            per_text = None
+            per_text_tokens = None
 
         groups: list[list[int]] = []
         current: list[int] = []
         current_tokens = 0
         for idx, t in enumerate(texts):
-            if per_text is not None and isinstance(per_text, list):
-                t_tokens = int(per_text[idx])
-            elif per_text is not None and isinstance(per_text, int):
-                # Some SDK versions return a scalar for the whole list;
-                # divide evenly as a last resort.
-                t_tokens = per_text // max(1, len(texts))
+            if per_text_tokens is not None:
+                t_tokens = per_text_tokens[idx]
             else:
+                # Char-count heuristic: ~4 chars/token for English legal
+                # text, conservative so we err on the side of smaller
+                # batches rather than hitting the server ceiling.
                 t_tokens = max(1, len(t) // 4)
             # If a single text somehow still exceeds the ceiling (voyage-4
             # has a 32K context anyway; the SDK truncates), place it alone.

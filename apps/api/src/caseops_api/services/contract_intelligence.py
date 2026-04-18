@@ -398,8 +398,7 @@ def extract_clauses(
     messages = _clause_extraction_messages(text)
     call_context = LLMCallContext(
         purpose=PURPOSE_METADATA_EXTRACT,
-        company_id=context.company.id,
-        user_id=context.user.id if context.user else None,
+        tenant_id=context.company.id,
         matter_id=None,
     )
     try:
@@ -523,8 +522,7 @@ def extract_obligations(
     messages = _obligation_extraction_messages(text, contract)
     call_context = LLMCallContext(
         purpose=PURPOSE_METADATA_EXTRACT,
-        company_id=context.company.id,
-        user_id=context.user.id if context.user else None,
+        tenant_id=context.company.id,
         matter_id=None,
     )
     try:
@@ -678,8 +676,7 @@ def compare_playbook(
     messages = _playbook_messages(rules, clauses)
     call_context = LLMCallContext(
         purpose=PURPOSE_RECOMMENDATIONS,
-        company_id=context.company.id,
-        user_id=context.user.id if context.user else None,
+        tenant_id=context.company.id,
         matter_id=None,
     )
     try:
