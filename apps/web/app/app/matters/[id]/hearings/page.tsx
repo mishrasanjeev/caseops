@@ -7,21 +7,18 @@ import { HearingPackDialog } from "@/components/app/HearingPackDialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { formatLegalDate } from "@/lib/dates";
 import { useMatterWorkspace } from "@/lib/use-matter-workspace";
 
 function formatDateTime(value: string | null | undefined): string {
-  if (!value) return "—";
-  try {
-    return new Date(value).toLocaleString(undefined, {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return value;
-  }
+  // scheduled_for is a SQL Date — no time component is meaningful.
+  // Render as a calendar day in the local zone without the spurious
+  // "12:00 AM" that toLocaleString would otherwise attach.
+  return formatLegalDate(value, {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 export default function MatterHearingsPage() {

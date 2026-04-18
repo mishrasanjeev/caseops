@@ -20,10 +20,20 @@ import { API_BASE_URL } from "@/lib/api/config";
 import { getStoredToken } from "@/lib/session";
 import { useCapability } from "@/lib/capabilities";
 
-function toIsoOrNull(local: string): string | null {
+function sinceIsoOrNull(local: string): string | null {
   if (!local) return null;
-  // <input type="date"> gives YYYY-MM-DD; expand to the start of that UTC day.
+  // "Since" is inclusive from the start of that calendar day.
   return `${local}T00:00:00Z`;
+}
+
+function untilIsoOrNull(local: string): string | null {
+  if (!local) return null;
+  // "Until" from <input type="date"> is a day, and users mean "to the
+  // end of that day" — not "to the start". Snapping to 00:00:00Z
+  // truncated the whole day the user selected, silently dropping
+  // rows. Snap to 23:59:59Z of the picked day instead so the export
+  // actually includes events on the until-date.
+  return `${local}T23:59:59Z`;
 }
 
 export default function AdminPage() {
@@ -44,8 +54,8 @@ export default function AdminPage() {
     setBusy(true);
     try {
       const params = new URLSearchParams();
-      const sinceIso = toIsoOrNull(since);
-      const untilIso = toIsoOrNull(until);
+      const sinceIso = sinceIsoOrNull(since);
+      const untilIso = untilIsoOrNull(until);
       if (sinceIso) params.set("since", sinceIso);
       if (untilIso) params.set("until", untilIso);
       if (action.trim()) params.set("action", action.trim());
@@ -104,7 +114,7 @@ export default function AdminPage() {
               creation, draft state transitions, hearing-pack review,
               access denials, and the export itself. Choose JSONL for
               machine analysis or CSV for spreadsheets. Defaults to the
-              last 30 days. Admin or owner only.
+              last 30 days. Workspace owner only.
             </CardDescription>
           </div>
           <Shield className="h-5 w-5 text-[var(--color-brand-700)]" aria-hidden />

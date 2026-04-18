@@ -17,6 +17,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { listMatters } from "@/lib/api/endpoints";
 import type { Matter } from "@/lib/api/schemas";
 import { useCapability } from "@/lib/capabilities";
+import { formatLegalDate } from "@/lib/dates";
 
 const PAGE_SIZE = 50;
 
@@ -28,16 +29,13 @@ const FORUMS: Record<string, string> = {
 };
 
 function formatDate(value: string | null | undefined): string {
-  if (!value) return "—";
-  try {
-    return new Date(value).toLocaleDateString(undefined, {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  } catch {
-    return value;
-  }
+  // Legal calendar dates (next_hearing_on etc.) are SQL Date values
+  // and must never shift across timezones. See lib/dates.ts.
+  return formatLegalDate(value, {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 export default function MattersPage() {

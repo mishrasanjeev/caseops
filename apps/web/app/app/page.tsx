@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { listMatters } from "@/lib/api/endpoints";
 import type { Matter } from "@/lib/api/schemas";
+import { formatLegalDate } from "@/lib/dates";
 import { useSession } from "@/lib/use-session";
 
 export default function DashboardPage() {
@@ -205,13 +206,11 @@ function StatCard({
 }
 
 function MatterRow({ matter }: { matter: Matter }) {
-  const hearingDate = matter.next_hearing_on
-    ? new Date(matter.next_hearing_on).toLocaleDateString(undefined, {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      })
-    : "—";
+  const hearingDate = formatLegalDate(matter.next_hearing_on, {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
   return (
     <Link
       href={`/app/matters/${matter.id}`}

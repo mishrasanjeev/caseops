@@ -23,6 +23,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/Card";
+import { DraftFindings, parseDraftSummary } from "@/components/app/DraftFindings";
 import { Button } from "@/components/ui/Button";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -277,6 +278,31 @@ function DraftBody({
           ) : null}
         </div>
       </header>
+
+      {(() => {
+        const parsed = parseDraftSummary(currentVersion?.summary);
+        if (!parsed.findings.length && !parsed.prose) return null;
+        return (
+          <Card data-testid="draft-review-findings">
+            <CardHeader>
+              <CardTitle as="h2">Review notes</CardTitle>
+              <CardDescription>
+                {parsed.findings.length > 0
+                  ? "Validator findings the reviewing partner must resolve before approval."
+                  : "Model-generated summary of this version."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              {parsed.prose ? (
+                <p className="text-sm leading-relaxed text-[var(--color-ink-2)]">
+                  {parsed.prose}
+                </p>
+              ) : null}
+              <DraftFindings findings={parsed.findings} />
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       <div className="grid gap-5 lg:grid-cols-3">
         <Card className="lg:col-span-2">

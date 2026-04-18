@@ -6,6 +6,7 @@ import Link from "next/link";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { cn } from "@/lib/cn";
 import type { WorkspaceMatter } from "@/lib/api/workspace-types";
+import { formatLegalDate } from "@/lib/dates";
 
 const FORUM_LABEL: Record<string, string> = {
   lower_court: "Lower court",
@@ -15,16 +16,13 @@ const FORUM_LABEL: Record<string, string> = {
 };
 
 function formatDate(value: string | null | undefined): string {
-  if (!value) return "—";
-  try {
-    return new Date(value).toLocaleDateString(undefined, {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  } catch {
-    return value;
-  }
+  // next_hearing_on is a SQL Date — parse local to avoid the off-by-
+  // one that new Date("YYYY-MM-DD") triggers in UTC-negative zones.
+  return formatLegalDate(value, {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 export function MatterHeader({ matter }: { matter: WorkspaceMatter }) {

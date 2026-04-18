@@ -14,20 +14,18 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { listContracts } from "@/lib/api/endpoints";
 import type { Contract } from "@/lib/api/schemas";
+import { formatLegalDate } from "@/lib/dates";
 
 const PAGE_SIZE = 50;
 
 function formatDate(value: string | null | undefined): string {
-  if (!value) return "—";
-  try {
-    return new Date(value).toLocaleDateString(undefined, {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  } catch {
-    return value;
-  }
+  // Contract effective_on / expires_on are SQL Date values —
+  // render in local calendar to prevent off-by-one in US timezones.
+  return formatLegalDate(value, {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 function formatMoney(minor: number | null, currency: string): string {
