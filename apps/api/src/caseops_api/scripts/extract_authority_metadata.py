@@ -31,9 +31,9 @@ import re
 import sys
 import threading
 import time
+from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime
-from typing import Iterable
 
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import or_, select
@@ -44,10 +44,8 @@ from caseops_api.services.llm import (
     LLMMessage,
     LLMProvider,
     LLMProviderError,
-    LLMResponseFormatError,
     build_provider,
 )
-
 
 logger = logging.getLogger("extract_authority_metadata")
 
@@ -75,18 +73,18 @@ SYSTEM = (
 USER_RULES = (
     'Extract the following fields and return JSON:\n'
     '{\n'
-    '  "neutral_citation": string | null,  // e.g. "2023:DHC:8921" or "(2022) 10 SCC 51"\n'
-    '  "case_reference":   string | null,  // e.g. "ITA No.7/2023", "CRL.M.C. 1234/2024", "Civil Appeal No. 5678 of 2019"\n'
+    '  "neutral_citation": string | null,  // e.g. "2023:DHC:8921" or "(2022) 10 SCC 51"\n'  # noqa: E501
+    '  "case_reference":   string | null,  // e.g. "ITA No.7/2023", "CRL.M.C. 1234/2024"\n'  # noqa: E501
     '  "bench":            string[],       // judge names without titles; up to 8\n'
-    f'  "parties":          string[],       // up to {MAX_PARTIES} party names, appellant/petitioner first, respondent second\n'
-    '  "decision_date":    string | null   // ISO YYYY-MM-DD; judgment or order date\n'
+    f'  "parties":          string[],       // up to {MAX_PARTIES} names, petitioner first\n'  # noqa: E501
+    '  "decision_date":    string | null   // ISO YYYY-MM-DD; judgment or order date\n'  # noqa: E501
     '}\n\n'
     'Rules:\n'
-    '- neutral_citation is the court-issued stamp (e.g. 2024:DHC:NNNN or 2023 INSC NNN). Return null if not present.\n'
+    '- neutral_citation is the court stamp (e.g. 2024:DHC:NNNN or 2023 INSC NNN); null if not present.\n'  # noqa: E501
     '- case_reference is the internal case number (ITA, CRL.M.C., W.P.(C), SLP, etc.).\n'
     '- bench: only the judges who authored or concurred. Omit counsel.\n'
     '- parties: the core entity names, not addresses or epithets like "Petitioner".\n'
-    '- decision_date is the pronouncement date. Prefer explicit dates over "Signing Date" footers.\n'
+    '- decision_date is the pronouncement date. Prefer explicit dates over "Signing Date" footers.\n'  # noqa: E501
     '- Do not include advocates, clerks, or court staff.\n'
 )
 
@@ -327,7 +325,10 @@ def main(argv: Iterable[str] | None = None) -> int:
         "--only-missing",
         choices=["citation", "any"],
         default="any",
-        help="Filter target rows: only those missing the citation field, or any of citation/case_ref.",
+        help=(
+            "Filter target rows: only those missing the citation field, "
+            "or any of citation/case_ref."
+        ),
     )
     args = parser.parse_args(list(argv) if argv is not None else None)
     return run(

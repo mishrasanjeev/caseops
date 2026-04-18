@@ -23,9 +23,8 @@ target the three failure modes observed on the bail-application probe
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
-
 
 Severity = str  # "info" | "warning" | "blocker"
 
@@ -38,8 +37,13 @@ class DraftFinding:
 
 
 _BAIL_TERMS = re.compile(r"\b(bail|anticipatory bail|default bail)\b", re.I)
-_BNS_SECTION = re.compile(r"\b(Section\s+(\d+)|s\.\s*(\d+))\b.{0,60}?Bharatiya\s+Nyaya\s+Sanhita", re.I)
-_BNSS_SECTION = re.compile(r"\b(Section\s+(\d+)|s\.\s*(\d+))\b.{0,60}?Bharatiya\s+Nagarik\s+Suraksha", re.I)
+_BNS_SECTION = re.compile(
+    r"\b(Section\s+(\d+)|s\.\s*(\d+))\b.{0,60}?Bharatiya\s+Nyaya\s+Sanhita", re.I
+)
+_BNSS_SECTION = re.compile(
+    r"\b(Section\s+(\d+)|s\.\s*(\d+))\b.{0,60}?Bharatiya\s+Nagarik\s+Suraksha",
+    re.I,
+)
 _UUID_RE = re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.I)
 _BRACKET_ANCHOR = re.compile(r"\[([^\]\n]{2,120})\]")
 # A bracketed string counts as a citation anchor only if it LOOKS like

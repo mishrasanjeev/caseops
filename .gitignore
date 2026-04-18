@@ -13,7 +13,11 @@
 .claude/sessions/
 .claude/settings.local.json
 .tmp/
+tmp/
 tmp-*.html
+# Local document-storage root — grows at runtime with tenant uploads
+# and export artifacts. GCS bucket path in prod; never in git.
+apps/api/storage/
 *.log
 *.pid
 *.seed

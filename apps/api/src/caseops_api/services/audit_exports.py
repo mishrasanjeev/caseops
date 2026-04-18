@@ -25,10 +25,10 @@ import csv
 import io
 import json
 import logging
-import os
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import BinaryIO, Iterator, Literal
+from typing import Literal
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -46,7 +46,6 @@ from caseops_api.services.document_storage import (
     resolve_storage_path,
 )
 from caseops_api.services.identity import SessionContext
-
 
 logger = logging.getLogger(__name__)
 

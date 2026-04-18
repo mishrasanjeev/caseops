@@ -6,7 +6,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-
 AuditExportFormat = Literal["jsonl", "csv"]
 AuditExportJobStatusLiteral = Literal["pending", "running", "completed", "failed"]
 

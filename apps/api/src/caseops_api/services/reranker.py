@@ -31,15 +31,15 @@ import json
 import logging
 import os
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable, Protocol
+from typing import Protocol
 
 from caseops_api.services.llm import (
     LLMMessage,
     LLMProvider,
     LLMResponseFormatError,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -180,10 +180,10 @@ class LLMReranker:
             f"Query: {query.strip()}\n\n"
             f"Candidates (indexed {0}..{len(candidates) - 1}):\n"
             + "\n\n".join(numbered)
-            + f"\n\nReturn a JSON object of the form "
-            f'{{"order": [i1, i2, ...]}} listing candidate indices '
-            f"in relevance-descending order. Include every index exactly "
-            f"once. Do not return prose."
+            + "\n\nReturn a JSON object of the form "
+            '{"order": [i1, i2, ...]} listing candidate indices '
+            "in relevance-descending order. Include every index exactly "
+            "once. Do not return prose."
         )
 
         try:

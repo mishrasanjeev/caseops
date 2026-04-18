@@ -21,7 +21,6 @@ import importlib.util
 import re
 from pathlib import Path
 
-
 _VERSIONS_DIR = Path(__file__).resolve().parents[1] / "alembic" / "versions"
 _REV_RE = re.compile(r"^revision\s*[:=]", re.M)
 _DOWN_RE = re.compile(r"^down_revision\s*[:=]", re.M)

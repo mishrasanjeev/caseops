@@ -21,7 +21,6 @@ from caseops_api.db.models import (
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.identity import SessionContext
 
-
 _KIND_VALUES: set[str] = {k.value for k in AuthorityAnnotationKind}
 
 

@@ -145,7 +145,10 @@ class AuthorityAnnotationCreateRequest(BaseModel):
                 {
                     "kind": "note",
                     "title": "Useful for triple-test framing",
-                    "body": "The ratio at paragraphs 17–21 is the cleanest summary of BNSS s.483 requirements we have seen.",
+                    "body": (
+                        "The ratio at paragraphs 17-21 is the cleanest summary "
+                        "of BNSS s.483 requirements we have seen."
+                    ),
                 }
             ]
         }

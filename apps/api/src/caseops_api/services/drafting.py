@@ -471,7 +471,6 @@ def _retrieve_for_draft(
         for doc in docs
     ]
     ranked = reranker.rerank(base_query or "legal research", cands, top_k=final_top_k)
-    ranked_ids = {c.identifier for c in ranked}
     # Preserve reranker-determined order.
     by_id = {doc.id: doc for doc in docs}
     return [by_id[c.identifier] for c in ranked if c.identifier in by_id][:final_top_k]
