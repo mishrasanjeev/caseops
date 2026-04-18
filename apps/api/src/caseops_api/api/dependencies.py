@@ -7,6 +7,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from caseops_api.core.observability import set_tenant_context
 from caseops_api.core.security import TokenValidationError, decode_access_token
 from caseops_api.db.models import MembershipRole
 from caseops_api.db.session import get_db_session
@@ -34,11 +35,20 @@ def get_current_context(
             detail=str(exc),
         ) from exc
 
-    return get_session_context(
+    context = get_session_context(
         session,
         claims["membership_id"],
         token_issued_at=int(claims["issued_at"]),
     )
+    # Plant tenant identifiers into the request's logging context so
+    # every downstream log line (services, worker background tasks
+    # spawned within the request, DB query logs) auto-inherits them.
+    set_tenant_context(
+        tenant_id=context.company.id,
+        user_id=context.user.id if context.user is not None else None,
+        membership_id=context.membership.id,
+    )
+    return context
 
 
 # ---------------------------------------------------------------------------

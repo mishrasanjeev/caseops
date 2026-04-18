@@ -99,6 +99,15 @@ class Settings(BaseSettings):
     ocr_max_pages: int = Field(default=40, ge=1, le=1000)
     ocr_languages: str = Field(default="eng")
 
+    # Observability. JSON logging is the default; text mode is for
+    # local dev. OTel is opt-in because the exporter + instrumentations
+    # need a live collector to be useful.
+    log_format: str = Field(default="json")
+    log_level: str = Field(default="INFO")
+    otel_enabled: bool = Field(default=False)
+    otel_endpoint: str = Field(default="http://localhost:4318/v1/traces")
+    otel_service_name: str = Field(default="caseops-api")
+
     @model_validator(mode="after")
     def _reject_placeholder_secret_outside_local(self) -> "Settings":
         if self.env.lower() in NON_LOCAL_ENVS and self.auth_secret == PLACEHOLDER_AUTH_SECRET:
