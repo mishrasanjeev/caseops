@@ -3,8 +3,10 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Scale } from "lucide-react";
+import Link from "next/link";
 import { useMemo } from "react";
 
+import { NewContractDialog } from "@/components/app/NewContractDialog";
 import { Button } from "@/components/ui/Button";
 import { DataTable } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -14,6 +16,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { listContracts } from "@/lib/api/endpoints";
 import type { Contract } from "@/lib/api/schemas";
+import { useCapability } from "@/lib/capabilities";
 import { formatLegalDate } from "@/lib/dates";
 
 const PAGE_SIZE = 50;
@@ -54,6 +57,7 @@ export default function ContractsPage() {
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
   });
+  const canCreateContract = useCapability("contracts:create");
 
   const columns = useMemo<ColumnDef<Contract>[]>(
     () => [
@@ -61,9 +65,12 @@ export default function ContractsPage() {
         accessorKey: "contract_code",
         header: "Code",
         cell: (ctx) => (
-          <span className="tabular font-mono text-xs text-[var(--color-ink-2)]">
+          <Link
+            href={`/app/contracts/${ctx.row.original.id}`}
+            className="tabular font-mono text-xs font-medium text-[var(--color-brand-700)] hover:underline"
+          >
             {ctx.getValue<string>()}
-          </span>
+          </Link>
         ),
       },
       {
@@ -71,9 +78,12 @@ export default function ContractsPage() {
         header: "Contract",
         cell: (ctx) => (
           <div className="flex flex-col">
-            <span className="font-medium text-[var(--color-ink)]">
+            <Link
+              href={`/app/contracts/${ctx.row.original.id}`}
+              className="font-medium text-[var(--color-ink)] hover:underline"
+            >
               {ctx.getValue<string>()}
-            </span>
+            </Link>
             {ctx.row.original.counterparty_name ? (
               <span className="text-xs text-[var(--color-mute)]">
                 with {ctx.row.original.counterparty_name}
@@ -133,12 +143,8 @@ export default function ContractsPage() {
       <PageHeader
         eyebrow="Contracts"
         title="Contract repository"
-        description="Every contract under your workspace. A full redline surface is in progress; use the classic authoring workspace in the meantime."
-        actions={
-          <Button href="/legacy" variant="outline">
-            Open classic contracts
-          </Button>
-        }
+        description="Every contract under your workspace. Open one to extract clauses, run the playbook comparison, and view counterparty redlines."
+        actions={canCreateContract ? <NewContractDialog /> : null}
       />
 
       {isPending ? (
@@ -156,12 +162,12 @@ export default function ContractsPage() {
         <EmptyState
           icon={Scale}
           title="No contracts yet"
-          description="Create your first contract in the classic authoring workspace while the rebuilt redline UI lands."
-          action={
-            <Button href="/legacy" variant="outline">
-              Open classic workspace
-            </Button>
+          description={
+            canCreateContract
+              ? "Create your first contract. You can upload the draft, extract clauses and obligations, and run the playbook comparison from the detail page."
+              : "Ask a team member with contract-create access to add the first contract."
           }
+          action={canCreateContract ? <NewContractDialog /> : undefined}
         />
       ) : (
         <>

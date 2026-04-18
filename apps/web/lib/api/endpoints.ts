@@ -634,6 +634,146 @@ export async function createMatterTimeEntry(input: {
   return data as MatterTimeEntryRecord;
 }
 
+// --- Sprint 5 BG-011: contract intelligence + redline ---
+
+export type ContractIntelligenceSummary = {
+  contract_id: string;
+  inserted: number;
+  removed: number;
+  provider: string;
+  model: string;
+};
+
+export async function fetchContractWorkspace(contractId: string): Promise<unknown> {
+  return apiRequest<unknown>(`/api/contracts/${contractId}/workspace`);
+}
+
+export async function createContract(input: {
+  title: string;
+  contractCode: string;
+  contractType: string;
+  counterpartyName?: string | null;
+  status?: "draft" | "in_review" | "executed" | "expired" | "terminated" | "renewed";
+  effectiveOn?: string | null;
+  expiresOn?: string | null;
+  renewalOn?: string | null;
+  governingLaw?: string | null;
+  currency?: string;
+  totalValueMinor?: number | null;
+  summary?: string | null;
+  matterId?: string | null;
+}): Promise<unknown> {
+  return apiRequest<unknown>("/api/contracts/", {
+    method: "POST",
+    body: {
+      title: input.title,
+      contract_code: input.contractCode,
+      contract_type: input.contractType,
+      counterparty_name: input.counterpartyName ?? null,
+      status: input.status ?? "draft",
+      effective_on: input.effectiveOn ?? null,
+      expires_on: input.expiresOn ?? null,
+      renewal_on: input.renewalOn ?? null,
+      governing_law: input.governingLaw ?? null,
+      currency: input.currency ?? "INR",
+      total_value_minor: input.totalValueMinor ?? null,
+      summary: input.summary ?? null,
+      matter_id: input.matterId ?? null,
+    },
+  });
+}
+
+export async function uploadContractAttachment(input: {
+  contractId: string;
+  file: File;
+}): Promise<unknown> {
+  const body = new FormData();
+  body.append("file", input.file);
+  return apiRequest<unknown>(`/api/contracts/${input.contractId}/attachments`, {
+    method: "POST",
+    body,
+  });
+}
+
+export async function extractContractClauses(input: {
+  contractId: string;
+}): Promise<ContractIntelligenceSummary> {
+  return apiRequest<ContractIntelligenceSummary>(
+    `/api/ai/contracts/${input.contractId}/clauses/extract`,
+    { method: "POST", body: {} },
+  );
+}
+
+export async function extractContractObligations(input: {
+  contractId: string;
+}): Promise<ContractIntelligenceSummary> {
+  return apiRequest<ContractIntelligenceSummary>(
+    `/api/ai/contracts/${input.contractId}/obligations/extract`,
+    { method: "POST", body: {} },
+  );
+}
+
+export async function installDefaultPlaybook(input: {
+  contractId: string;
+}): Promise<{ contract_id: string; installed: number }> {
+  return apiRequest(
+    `/api/ai/contracts/${input.contractId}/playbook/install-default`,
+    { method: "POST", body: {} },
+  );
+}
+
+export type PlaybookFinding = {
+  rule_id: string;
+  rule_name: string;
+  clause_type: string;
+  severity: "low" | "medium" | "high";
+  status: "matched" | "missing" | "deviation";
+  found_clause_id: string | null;
+  summary: string;
+};
+
+export async function comparePlaybook(input: {
+  contractId: string;
+}): Promise<{
+  contract_id: string;
+  findings: PlaybookFinding[];
+  provider: string;
+  model: string;
+}> {
+  return apiRequest(
+    `/api/ai/contracts/${input.contractId}/playbook/compare`,
+    { method: "POST", body: {} },
+  );
+}
+
+export type ContractRedlineChange = {
+  index: number;
+  kind: "insertion" | "deletion" | "formatting";
+  author: string | null;
+  timestamp: string | null;
+  text: string;
+  paragraph_index: number;
+  context_before: string;
+  context_after: string;
+};
+
+export async function fetchContractAttachmentRedline(input: {
+  contractId: string;
+  attachmentId: string;
+}): Promise<{
+  attachment_id: string;
+  attachment_name: string;
+  paragraph_count: number;
+  insertion_count: number;
+  deletion_count: number;
+  author_counts: Record<string, number>;
+  changes: ContractRedlineChange[];
+}> {
+  return apiRequest(
+    `/api/contracts/${input.contractId}/attachments/${input.attachmentId}/redline`,
+  );
+}
+
 export async function createMatter(input: {
   title: string;
   matter_code: string;
