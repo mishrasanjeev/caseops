@@ -23,7 +23,10 @@ from caseops_api.schemas.contracts import (
     ContractRecord,
     ContractUpdateRequest,
     ContractWorkspaceResponse,
+    RedlineChangeRecord,
+    RedlineParseResponse,
 )
+from caseops_api.services.contract_redline import parse_redline_docx
 from caseops_api.services.contracts import (
     create_contract,
     create_contract_attachment,
@@ -255,4 +258,50 @@ async def download_current_company_contract_attachment(
         path=storage_path,
         media_type=attachment.content_type or "application/octet-stream",
         filename=attachment.original_filename,
+    )
+
+
+@router.get(
+    "/{contract_id}/attachments/{attachment_id}/redline",
+    response_model=RedlineParseResponse,
+    summary="Parse tracked changes out of a counterparty-redlined DOCX",
+)
+async def parse_contract_attachment_redline(
+    contract_id: str,
+    attachment_id: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> RedlineParseResponse:
+    # Reuse the download path for tenant-scoped fetch + auth; the
+    # parser is a pure function over the bytes returned here.
+    attachment, storage_path = get_contract_attachment_download(
+        session,
+        context=context,
+        contract_id=contract_id,
+        attachment_id=attachment_id,
+    )
+    result = parse_redline_docx(
+        source=storage_path,
+        attachment_name=attachment.original_filename,
+    )
+    return RedlineParseResponse(
+        attachment_id=attachment.id,
+        attachment_name=result.attachment_name,
+        paragraph_count=result.paragraph_count,
+        insertion_count=result.insertion_count,
+        deletion_count=result.deletion_count,
+        author_counts=result.author_counts,
+        changes=[
+            RedlineChangeRecord(
+                index=change.index,
+                kind=change.kind,
+                author=change.author,
+                timestamp=change.timestamp,
+                text=change.text,
+                paragraph_index=change.paragraph_index,
+                context_before=change.context_before,
+                context_after=change.context_after,
+            )
+            for change in result.changes
+        ],
     )

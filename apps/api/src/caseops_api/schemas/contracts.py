@@ -224,3 +224,65 @@ class ContractWorkspaceResponse(BaseModel):
     playbook_rules: list[ContractPlaybookRuleRecord]
     playbook_hits: list[ContractPlaybookHitRecord]
     activity: list[ContractActivityRecord]
+
+
+# --- Sprint 5 BG-011: contract intelligence responses ------------------
+
+
+class ClauseExtractionResponse(BaseModel):
+    contract_id: str
+    inserted: int
+    removed: int
+    provider: str
+    model: str
+
+
+class ObligationExtractionResponse(BaseModel):
+    contract_id: str
+    inserted: int
+    removed: int
+    provider: str
+    model: str
+
+
+class PlaybookInstallResponse(BaseModel):
+    contract_id: str
+    installed: int
+
+
+class PlaybookComparisonFindingRecord(BaseModel):
+    rule_id: str
+    rule_name: str
+    clause_type: str
+    severity: str
+    status: str
+    found_clause_id: str | None = None
+    summary: str
+
+
+class PlaybookComparisonResponse(BaseModel):
+    contract_id: str
+    findings: list[PlaybookComparisonFindingRecord]
+    provider: str
+    model: str
+
+
+class RedlineChangeRecord(BaseModel):
+    index: int
+    kind: str
+    author: str | None
+    timestamp: str | None
+    text: str
+    paragraph_index: int
+    context_before: str
+    context_after: str
+
+
+class RedlineParseResponse(BaseModel):
+    attachment_id: str
+    attachment_name: str
+    paragraph_count: int
+    insertion_count: int
+    deletion_count: int
+    author_counts: dict[str, int]
+    changes: list[RedlineChangeRecord]
