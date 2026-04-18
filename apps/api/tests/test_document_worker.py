@@ -118,7 +118,7 @@ def test_scheduled_reprocessing_retry_can_be_drained_by_worker(
     upload_response = client.post(
         f"/api/matters/{matter_id}/attachments",
         headers=auth_headers(token),
-        files={"file": ("scheduled.pdf", b"%PDF fake bytes", "application/pdf")},
+        files={"file": ("scheduled.pdf", b"%PDF-1.4 fake bytes", "application/pdf")},
     )
     attachment_id = upload_response.json()["id"]
 
@@ -236,7 +236,7 @@ def test_live_court_sync_jobs_can_be_recovered_and_drained(
     monkeypatch.setattr(
         "caseops_api.services.court_sync_sources._fetch_bytes",
         lambda url: (
-            b"%PDF fake bytes",
+            b"%PDF-1.4 fake bytes",
             "https://delhihighcourt.nic.in/files/2026-04/cause-list/advance.pdf",
         ),
     )

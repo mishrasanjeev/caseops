@@ -371,7 +371,7 @@ def test_contract_pdf_attachment_is_marked_as_needing_ocr(
     upload_response = client.post(
         f"/api/contracts/{contract_id}/attachments",
         headers=auth_headers(token),
-        files={"file": ("signed-amendment.pdf", b"%PDF fake bytes", "application/pdf")},
+        files={"file": ("signed-amendment.pdf", b"%PDF-1.4 fake bytes", "application/pdf")},
     )
 
     assert upload_response.status_code == 200
@@ -421,7 +421,13 @@ def test_contract_image_attachment_can_be_indexed_when_ocr_is_available(
     upload_response = client.post(
         f"/api/contracts/{contract_id}/attachments",
         headers=auth_headers(token),
-        files={"file": ("signed.png", b"fake-image-bytes", "image/png")},
+        files={
+            "file": (
+                "signed.png",
+                b"\x89PNG\r\n\x1a\nfake-image-bytes",
+                "image/png",
+            )
+        },
     )
 
     assert upload_response.status_code == 200
@@ -473,7 +479,7 @@ def test_contract_scanned_pdf_attachment_can_be_indexed_when_ocr_returns_text(
     upload_response = client.post(
         f"/api/contracts/{contract_id}/attachments",
         headers=auth_headers(token),
-        files={"file": ("scanned-amendment.pdf", b"%PDF scanned bytes", "application/pdf")},
+        files={"file": ("scanned-amendment.pdf", b"%PDF-1.4 scanned bytes", "application/pdf")},
     )
 
     assert upload_response.status_code == 200

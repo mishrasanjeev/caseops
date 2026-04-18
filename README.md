@@ -253,6 +253,27 @@ citation anchors wired from the body into the citations panel.
 
 ---
 
+## Upload hardening
+
+Every attachment upload is validated before it touches disk:
+
+1. **Extension whitelist** — `.pdf`, `.docx`, `.doc`, `.txt`, `.png`,
+   `.jpg`, `.jpeg`. Anything else rejected with 400.
+2. **Declared content-type coherence** — a `.pdf` claiming
+   `image/png` is refused (a sloppy client is rarer than a
+   malicious one, but both fail here).
+3. **Magic-byte check** — the first 16 bytes must match the expected
+   signature (`%PDF-` for PDFs, `PK\x03\x04` for DOCX,
+   `\x89PNG` for PNGs, `\xd0\xcf\x11\xe0` for legacy `.doc`, etc.).
+   A renamed `malware.pdf` that's actually a Windows PE (starts with
+   `MZ`) fails here.
+
+Logic in `services/file_security.verify_upload`; cursor resets to 0
+on success so the downstream persister reads the full body. Virus
+scanning is §9.3 — a future Temporal activity, not shipped today.
+
+---
+
 ## Error shape (RFC 7807)
 
 Every non-2xx response is `application/problem+json`:

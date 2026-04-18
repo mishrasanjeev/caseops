@@ -393,7 +393,7 @@ def test_owner_can_queue_live_court_sync_pull(client: TestClient, monkeypatch) -
     monkeypatch.setattr(
         "caseops_api.services.court_sync_sources._fetch_bytes",
         lambda url: (
-            b"%PDF fake bytes",
+            b"%PDF-1.4 fake bytes",
             "https://delhihighcourt.nic.in/files/2026-04/cause-list/advance.pdf",
         ),
     )
@@ -475,7 +475,7 @@ def test_owner_can_pull_bombay_high_court_live_orders(client: TestClient, monkey
     monkeypatch.setattr(
         "caseops_api.services.court_sync_sources._fetch_bytes",
         lambda url: (
-            b"%PDF fake bytes",
+            b"%PDF-1.4 fake bytes",
             "https://www.bombayhighcourt.nic.in/generatenewauth.php?bhcpar=12345/2026",
         ),
     )
@@ -573,7 +573,7 @@ def test_owner_can_pull_hyderabad_high_court_live_cause_list(
     monkeypatch.setattr(
         "caseops_api.services.court_sync_sources._fetch_bytes",
         lambda url: (
-            b"%PDF fake bytes",
+            b"%PDF-1.4 fake bytes",
             "https://tshc.gov.in/documents/NORMAL_COURT11.pdf",
         ),
     )
@@ -668,7 +668,7 @@ def test_owner_can_pull_karnataka_high_court_live_cause_list(
     )
     monkeypatch.setattr(
         "caseops_api.services.court_sync_sources._fetch_bytes",
-        lambda url: (b"%PDF fake bytes", url),
+        lambda url: (b"%PDF-1.4 fake bytes", url),
     )
     monkeypatch.setattr(
         "caseops_api.services.court_sync_sources._extract_pdf_text_from_bytes",
@@ -1002,7 +1002,7 @@ def test_pdf_attachment_can_be_indexed_when_pdf_extractor_returns_text(
     upload_response = client.post(
         f"/api/matters/{matter_id}/attachments",
         headers=auth_headers(token),
-        files={"file": ("appeal.pdf", b"%PDF fake bytes", "application/pdf")},
+        files={"file": ("appeal.pdf", b"%PDF-1.4 fake bytes", "application/pdf")},
     )
 
     assert upload_response.status_code == 200
@@ -1055,7 +1055,7 @@ def test_scanned_pdf_attachment_can_be_indexed_when_ocr_returns_text(
     upload_response = client.post(
         f"/api/matters/{matter_id}/attachments",
         headers=auth_headers(token),
-        files={"file": ("scanned-bundle.pdf", b"%PDF scanned bytes", "application/pdf")},
+        files={"file": ("scanned-bundle.pdf", b"%PDF-1.4 scanned bytes", "application/pdf")},
     )
 
     assert upload_response.status_code == 200
@@ -1105,7 +1105,7 @@ def test_owner_can_retry_matter_attachment_processing_when_ocr_becomes_available
     upload_response = client.post(
         f"/api/matters/{matter_id}/attachments",
         headers=auth_headers(token),
-        files={"file": ("retry-scan.pdf", b"%PDF scanned bytes", "application/pdf")},
+        files={"file": ("retry-scan.pdf", b"%PDF-1.4 scanned bytes", "application/pdf")},
     )
     attachment_id = upload_response.json()["id"]
 

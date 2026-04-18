@@ -773,6 +773,10 @@ def create_contract_attachment(
     stream: BinaryIO,
 ) -> tuple[ContractAttachmentRecord, str]:
     contract = _get_contract_model(session, context=context, contract_id=contract_id)
+    # §6.3: reject uploads that lie about themselves before disk write.
+    from caseops_api.services.file_security import verify_upload
+
+    verify_upload(filename=filename, content_type=content_type, stream=stream)
     attachment = ContractAttachment(
         contract_id=contract.id,
         uploaded_by_membership_id=context.membership.id,

@@ -1119,6 +1119,12 @@ def create_matter_attachment(
     stream: BinaryIO,
 ) -> tuple[MatterAttachmentRecord, str]:
     matter = _get_matter_model(session, context=context, matter_id=matter_id)
+    # §6.3: refuse obviously-wrong uploads before they touch disk.
+    # Checks extension whitelist, content-type coherence, and magic
+    # bytes; leaves the stream cursor at 0 on success.
+    from caseops_api.services.file_security import verify_upload
+
+    verify_upload(filename=filename, content_type=content_type, stream=stream)
     attachment = MatterAttachment(
         matter_id=matter.id,
         uploaded_by_membership_id=context.membership.id,
