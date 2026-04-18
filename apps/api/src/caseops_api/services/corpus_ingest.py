@@ -312,6 +312,11 @@ def _short_summary(text: str, *, max_chars: int = 600) -> str:
 
 
 def _normalize_whitespace(text: str) -> str:
+    # Strip NUL bytes first — some scanned / corrupted PDFs emit them
+    # during pdfminer extraction or OCR, and PostgreSQL `text` columns
+    # reject any string containing 0x00. Letting a NUL through crashes
+    # the whole judgment insert mid-transaction; scrub at the source.
+    text = text.replace("\x00", "")
     return re.sub(r"[\t\x0b\x0c\r]+", " ", text).strip()
 
 
