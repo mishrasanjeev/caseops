@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const companyType = z.enum(["law_firm", "corporate_legal"]);
+export const companyType = z.enum(["law_firm", "corporate_legal", "solo"]);
 
 export const companySummary = z.object({
   id: z.string(),

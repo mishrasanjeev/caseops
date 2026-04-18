@@ -1486,7 +1486,7 @@ export interface components {
         /**
          * AuthorityAnnotationCreateRequest
          * @example {
-         *       "body": "The ratio at paragraphs 17–21 is the cleanest summary of BNSS s.483 requirements we have seen.",
+         *       "body": "The ratio at paragraphs 17-21 is the cleanest summary of BNSS s.483 requirements we have seen.",
          *       "kind": "note",
          *       "title": "Useful for triple-test framing"
          *     }
@@ -1775,7 +1775,7 @@ export interface components {
              * Company Type
              * @enum {string}
              */
-            company_type: "law_firm" | "corporate_legal";
+            company_type: "law_firm" | "corporate_legal" | "solo";
             /** Owner Full Name */
             owner_full_name: string;
             /**
@@ -1798,7 +1798,7 @@ export interface components {
              * Company Type
              * @enum {string}
              */
-            company_type: "law_firm" | "corporate_legal";
+            company_type: "law_firm" | "corporate_legal" | "solo";
             /** Tenant Key */
             tenant_key: string;
             /** Primary Contact Email */
