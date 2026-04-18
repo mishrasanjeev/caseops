@@ -188,6 +188,155 @@ def test_generate_recommendation_refuses_when_no_verified_citations(
     assert any(run.status == "rejected_no_verified_citations" for run in runs)
 
 
+def test_shared_citation_credits_every_option_that_cites_it(
+    client: TestClient, monkeypatch
+) -> None:
+    """When two options cite the same authority, both must retain that
+    citation after verification. The earlier bug collapsed
+    citation_to_option into dict[str, int], so only the last option
+    using a citation got credit — the earlier option looked unsupported."""
+    import json as _json
+
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    _seed_relevant_authority()  # seeds neutral_citation "Mock Corp v. State (2020)"
+
+    class _SharedCitationProvider:
+        name = "mock"
+        model = "mock-shared-cite"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            payload = {
+                "title": "Two routes to the same relief",
+                "options": [
+                    {
+                        "label": "File writ petition",
+                        "rationale": "Patent illegality supports relief.",
+                        "confidence": "high",
+                        "supporting_citations": ["Ssangyong Engg v. NHAI (2019)"],
+                        "risk_notes": None,
+                    },
+                    {
+                        "label": "Seek review instead",
+                        "rationale": "The same ratio supports review jurisdiction.",
+                        "confidence": "medium",
+                        "supporting_citations": ["Ssangyong Engg v. NHAI (2019)"],
+                        "risk_notes": None,
+                    },
+                ],
+                "primary_recommendation_label": "File writ petition",
+                "rationale": "Either route works.",
+                "assumptions": [],
+                "missing_facts": [],
+                "confidence": "high",
+                "next_action": None,
+            }
+            return LLMCompletion(
+                text=_json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=10,
+                completion_tokens=20,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda: _SharedCitationProvider(),
+    )
+
+    token, _, matter_id = _setup_matter(client)
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "authority"},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    options = body["options"]
+    assert len(options) == 2
+    # Both options cited the same authority and both should retain it.
+    for idx, opt in enumerate(options):
+        assert opt["supporting_citations"] == ["Ssangyong Engg v. NHAI (2019)"], (
+            f"Option {idx} lost its shared citation — attribution bug regression."
+        )
+
+
+def test_generate_recommendation_refuses_when_retrieval_is_empty(
+    client: TestClient, monkeypatch
+) -> None:
+    """Guardrail: refuse when retrieval returns zero authorities — even if
+    the model returns a confident-looking recommendation. PRD §6.1 / §17.4
+    require citation-grounded output; "no retrieval at all" is a weaker
+    foundation than "retrieval that failed verification", not a stronger one."""
+    import json as _json
+
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    # Deliberately DO NOT call _seed_relevant_authority() — retrieval
+    # will return [] for this matter.
+
+    class _ConfidentNoRetrievalProvider:
+        name = "mock"
+        model = "mock-no-retrieval"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            payload = {
+                "title": "Proceed with writ petition",
+                "options": [
+                    {
+                        "label": "File writ under Article 226",
+                        "rationale": "The petitioner has a clear cause of action.",
+                        "confidence": "high",
+                        "supporting_citations": ["Some Case v. State (2020)"],
+                        "risk_notes": None,
+                    }
+                ],
+                "primary_recommendation_label": "File writ under Article 226",
+                "rationale": "Proceed.",
+                "assumptions": [],
+                "missing_facts": [],
+                "confidence": "high",
+                "next_action": None,
+            }
+            return LLMCompletion(
+                text=_json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=10,
+                completion_tokens=20,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda: _ConfidentNoRetrievalProvider(),
+    )
+
+    token, _, matter_id = _setup_matter(client)
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "authority"},
+    )
+    assert response.status_code == 422, response.text
+    detail = response.json()["detail"].lower()
+    assert "refusing" in detail or "refuse" in detail
+
+    # No Recommendation row should have been persisted.
+    factory = get_session_factory()
+    with factory() as session:
+        recs = list(session.scalars(select(Recommendation)))
+    assert not recs, (
+        f"Empty-retrieval path persisted {len(recs)} recommendation(s); "
+        "fail-open regression."
+    )
+    # ModelRun captures the refusal for audit.
+    with factory() as session:
+        runs = list(session.scalars(select(ModelRun)))
+    assert any(run.status == "rejected_no_verified_citations" for run in runs)
+
+
 def test_recommendation_list_is_tenant_scoped(client: TestClient) -> None:
     # Company A creates a recommendation; Company B must not see it.
     token_a, _, matter_id_a = _setup_matter(client)

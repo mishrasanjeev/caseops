@@ -260,22 +260,31 @@ def _filter_and_verify_options(
         for a in retrieved
     ]
     # Flatten all citations across options for one verification pass.
+    # A single citation can appear under multiple options — the
+    # attribution mapping must therefore be one-to-many, else the last
+    # option to cite it silently wins and earlier options appear
+    # unsupported even though they claimed the same authority.
     claims: list[Claim] = []
-    citation_to_option: dict[str, int] = {}
+    citation_to_options: dict[str, list[int]] = {}
     for idx, option in enumerate(options):
         for citation in option.supporting_citations:
             claims.append(
                 Claim(citation=citation, proposition=option.rationale[:400])
             )
-            citation_to_option[citation] = idx
+            citation_to_options.setdefault(citation, []).append(idx)
     report = verify_citations(claims, sources)
-    # Keep only citations that verified.
+    # Keep only citations that verified, preserving per-option order by
+    # re-walking the original option citations and filtering.
+    verified_citations = {
+        check.claim.citation for check in report.checks if check.verified
+    }
     per_option_verified: dict[int, list[str]] = {i: [] for i in range(len(options))}
-    for check in report.checks:
-        if check.verified:
-            idx = citation_to_option.get(check.claim.citation)
-            if idx is not None:
-                per_option_verified[idx].append(check.claim.citation)
+    for idx, option in enumerate(options):
+        seen: set[str] = set()
+        for citation in option.supporting_citations:
+            if citation in verified_citations and citation not in seen:
+                per_option_verified[idx].append(citation)
+                seen.add(citation)
     cleaned: list[_LLMOption] = []
     for idx, option in enumerate(options):
         cleaned.append(
@@ -343,8 +352,24 @@ def generate_recommendation(
     total_verified_citations = sum(
         len(opt.supporting_citations) for opt in cleaned_options
     )
-    if total_verified_citations == 0 and retrieved:
-        # Record the attempt but refuse to present unverifiable output.
+    # PRD §6.1 / §17.4: legal recommendations must be citation-grounded
+    # or refused. Two fail paths reach zero verified citations — either
+    # retrieval was empty (no authorities in scope) or retrieval hit
+    # candidates the model ignored / fabricated. Both cases fail closed.
+    if total_verified_citations == 0:
+        if retrieved:
+            error_msg = "All citations failed verification."
+            detail = (
+                "The model did not produce any verifiable citations. "
+                "Refusing to surface this recommendation."
+            )
+        else:
+            error_msg = "Retrieval returned no authorities."
+            detail = (
+                "No authorities were retrieved for this matter. Refusing to "
+                "surface an ungrounded recommendation; widen the matter "
+                "description or expand the corpus before retrying."
+            )
         run = _write_model_run(
             session,
             context=context,
@@ -353,16 +378,12 @@ def generate_recommendation(
             completion=completion,
             prompt_hash=prompt_hash,
             status_label="rejected_no_verified_citations",
-            error="All citations failed verification.",
+            error=error_msg,
         )
         session.commit()
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=(
-                "The model did not produce any verifiable citations. "
-                "Refusing to surface this recommendation. "
-                f"model_run_id={run.id}"
-            ),
+            detail=f"{detail} model_run_id={run.id}",
         )
 
     confidence = _cap_confidence(parsed.confidence, total_verified_citations)
