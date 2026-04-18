@@ -251,6 +251,13 @@ class VoyageProvider:
         self.model = model
         self.dimensions = dimensions
 
+    # Voyage caps each /embed request at 120K tokens and 128 items.
+    # We pack greedily below the server ceiling so callers can pass any
+    # length list (a full judgment's 60 chunks × 8K tokens easily blows
+    # the limit) without the ingest pipeline caring.
+    _MAX_BATCH_TOKENS = 100_000
+    _MAX_BATCH_ITEMS = 128
+
     def embed(
         self,
         texts: list[str],
@@ -263,24 +270,77 @@ class VoyageProvider:
         pass ``"query"`` when embedding a search query and ``"document"``
         (default) for corpus chunks. Using the wrong type costs a
         noticeable chunk of top-k recall on voyage-4 / voyage-law-2.
+
+        Automatically splits the input into sub-batches that fit under
+        Voyage's per-request ceilings (120K tokens / 128 items). Large
+        judgments that chunk into 60+ pieces are transparently handled.
         """
         if not texts:
             return EmbeddingResult(
                 vectors=[], provider=self.name, model=self.model, dimensions=self.dimensions
             )
+
+        # Count tokens per text once (Voyage uses the model's own
+        # tokenizer, downloaded on first use from HF).
         try:
-            result = self._client.embed(
-                texts,
-                model=self.model,
-                input_type=input_type,
-                output_dimension=self.dimensions,
+            per_text = self._client.count_tokens(texts, model=self.model)
+        except Exception:
+            # Fallback char estimate: ~4 chars/token for English legal
+            # text. Conservative since long docs tend to tokenize finer.
+            per_text = None
+
+        groups: list[list[int]] = []
+        current: list[int] = []
+        current_tokens = 0
+        for idx, t in enumerate(texts):
+            if per_text is not None and isinstance(per_text, list):
+                t_tokens = int(per_text[idx])
+            elif per_text is not None and isinstance(per_text, int):
+                # Some SDK versions return a scalar for the whole list;
+                # divide evenly as a last resort.
+                t_tokens = per_text // max(1, len(texts))
+            else:
+                t_tokens = max(1, len(t) // 4)
+            # If a single text somehow still exceeds the ceiling (voyage-4
+            # has a 32K context anyway; the SDK truncates), place it alone.
+            if t_tokens >= self._MAX_BATCH_TOKENS:
+                if current:
+                    groups.append(current)
+                groups.append([idx])
+                current = []
+                current_tokens = 0
+                continue
+            would_exceed = (
+                current_tokens + t_tokens > self._MAX_BATCH_TOKENS
+                or len(current) >= self._MAX_BATCH_ITEMS
             )
-        except Exception as exc:
-            raise EmbeddingProviderError(f"Voyage embed failed: {exc}") from exc
-        vectors = [_pad([float(x) for x in v], self.dimensions) for v in result.embeddings]
-        vectors = [_l2_normalize(v) for v in vectors]
+            if would_exceed and current:
+                groups.append(current)
+                current = []
+                current_tokens = 0
+            current.append(idx)
+            current_tokens += t_tokens
+        if current:
+            groups.append(current)
+
+        all_vectors: list[list[float]] = [None] * len(texts)  # type: ignore[list-item]
+        for group in groups:
+            batch_texts = [texts[i] for i in group]
+            try:
+                result = self._client.embed(
+                    batch_texts,
+                    model=self.model,
+                    input_type=input_type,
+                    output_dimension=self.dimensions,
+                )
+            except Exception as exc:
+                raise EmbeddingProviderError(f"Voyage embed failed: {exc}") from exc
+            for pos, raw in zip(group, result.embeddings, strict=False):
+                padded = _pad([float(x) for x in raw], self.dimensions)
+                all_vectors[pos] = _l2_normalize(padded)
+
         return EmbeddingResult(
-            vectors=vectors,
+            vectors=all_vectors,
             provider=self.name,
             model=self.model,
             dimensions=self.dimensions,
