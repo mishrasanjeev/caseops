@@ -168,8 +168,8 @@ test.describe("App spine", () => {
     void browser; // parameter kept to request independent context fixtures
   });
 
-  test("roadmap stubs for unbuilt sections load without errors", async ({ page }) => {
-    const slug = uniqueSlug("stubs");
+  test("every top-level nav destination renders a real page", async ({ page }) => {
+    const slug = uniqueSlug("nav");
     const input: BootstrapInput = {
       slug,
       name: `${slug} Firm`,
@@ -194,14 +194,16 @@ test.describe("App spine", () => {
       page.getByRole("link", { name: "Home", exact: true }),
     ).toBeVisible();
 
+    // Sprint 8a — every top-level nav destination is a real page now.
+    // These headings assert the new surfaces exist (not RoadmapStubs).
     const stubs = [
-      { label: "Hearings", heading: /Portfolio-wide hearings/ },
+      { label: "Hearings", heading: /Hearings across your portfolio/ },
       { label: "Research", heading: /Grounded legal research/ },
-      { label: "Drafting", heading: /Drafting Studio/ },
-      { label: "Recommendations", heading: /Explainable recommendations/ },
+      { label: "Drafting", heading: /Drafting studio/ },
+      { label: "Recommendations", heading: /^Recommendations$/ },
       { label: "Contracts", heading: /Contract repository/ },
       { label: "Outside Counsel", heading: /Outside counsel & spend/ },
-      { label: "Portfolio", heading: /Firm-wide portfolio/ },
+      { label: "Portfolio", heading: /Portfolio health/ },
       { label: "Admin", heading: /Admin & governance/ },
     ];
     for (const stub of stubs) {
