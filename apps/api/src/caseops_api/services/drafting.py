@@ -424,14 +424,28 @@ def _retrieve_for_draft(
     session: Session,
     matter: Matter,
     focus_note: str | None,
-    per_query_limit: int = 3,
-    total_limit: int = 8,
+    per_query_limit: int = 5,
+    overfetch_limit: int = 16,
+    final_top_k: int = 5,
 ) -> list[AuthorityDocument]:
-    """Run multi-query retrieval and dedup by document id, preserving the
-    order in which each document first appeared."""
+    """Run multi-query retrieval, dedup, then rerank down to ``final_top_k``.
+
+    Pipeline: first-stage hybrid retrieval over-fetches `overfetch_limit`
+    candidates across the seed query packs; the reranker (mock by
+    default, LLM-judge when ``CASEOPS_RERANK_ENABLED=true``) scores
+    them against the matter context and returns the top K.
+    """
+    from caseops_api.services.reranker import (
+        RerankerCandidate,
+        build_reranker,
+    )
+
+    queries = _retrieval_queries(matter, focus_note)
+    base_query = queries[0] if queries else ""
+
     seen: dict[str, AuthorityDocument] = {}
-    for query in _retrieval_queries(matter, focus_note):
-        if not query or len(seen) >= total_limit:
+    for query in queries:
+        if not query or len(seen) >= overfetch_limit:
             continue
         hits = search_authority_catalog(session, query=query, limit=per_query_limit)
         for hit in hits:
@@ -440,9 +454,27 @@ def _retrieve_for_draft(
             doc = session.get(AuthorityDocument, hit.authority_document_id)
             if doc is not None:
                 seen[hit.authority_document_id] = doc
-                if len(seen) >= total_limit:
+                if len(seen) >= overfetch_limit:
                     break
-    return list(seen.values())
+
+    docs = list(seen.values())
+    if len(docs) <= final_top_k:
+        return docs
+
+    reranker = build_reranker()
+    cands = [
+        RerankerCandidate(
+            identifier=doc.id,
+            title=doc.title or "",
+            text=(doc.summary or "")[:500],
+        )
+        for doc in docs
+    ]
+    ranked = reranker.rerank(base_query or "legal research", cands, top_k=final_top_k)
+    ranked_ids = {c.identifier for c in ranked}
+    # Preserve reranker-determined order.
+    by_id = {doc.id: doc for doc in docs}
+    return [by_id[c.identifier] for c in ranked if c.identifier in by_id][:final_top_k]
 
 
 def _augment_summary_with_findings(
