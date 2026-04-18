@@ -5,7 +5,12 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-RecommendationTypeLiteral = Literal["forum", "authority"]
+# Sprint 9 BG-023: four recommendation kinds land here. Each drives a
+# distinct retrieval query + prompt framing in the service layer; the
+# output schema is shared so the UI renders all four identically.
+RecommendationTypeLiteral = Literal[
+    "forum", "authority", "remedy", "next_best_action"
+]
 ConfidenceLiteral = Literal["low", "medium", "high"]
 DecisionLiteral = Literal["accepted", "rejected", "edited", "deferred"]
 StatusLiteral = Literal[

@@ -64,7 +64,7 @@ from caseops_api.services.llm import (
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_TYPES = {"forum", "authority"}
+SUPPORTED_TYPES = {"forum", "authority", "remedy", "next_best_action"}
 CONFIDENCE_LEVELS = ("low", "medium", "high")
 
 
@@ -149,19 +149,48 @@ def _gather_authorities(
     return picked
 
 
+_TYPE_FRAMING: dict[str, str] = {
+    "forum": (
+        "Recommend which forum (court, bench, jurisdiction) the client "
+        "should pursue. Each option is a specific forum with the "
+        "procedural or strategic reason it fits."
+    ),
+    "authority": (
+        "Recommend which authorities (judgments, statutes) best support "
+        "the client's position. Each option is a specific authority or "
+        "small cluster of authorities with the legal proposition they "
+        "establish."
+    ),
+    "remedy": (
+        "Recommend which reliefs the client can credibly seek. Each "
+        "option is a distinct remedy (injunction, declaration, damages "
+        "quantum, specific performance, rescission, costs) with the "
+        "legal basis for claiming it on these facts."
+    ),
+    "next_best_action": (
+        "Recommend the immediate next procedural step on this matter. "
+        "Each option is a concrete action — file an application, serve "
+        "notice, seek interlocutory relief, settle, wait for a specific "
+        "listing — with why it is the highest-leverage move right now."
+    ),
+}
+
+
 def _build_prompt(
     *,
     rec_type: str,
     matter: Matter,
     authorities: list[RetrievedAuthority],
 ) -> list[LLMMessage]:
+    framing = _TYPE_FRAMING.get(rec_type, _TYPE_FRAMING["authority"])
     system = (
         "You are CaseOps, a legal operations assistant for Indian law firms and "
         "corporate legal teams. You must respond only with JSON matching the "
         "schema described by the user. Every option must cite at least one "
         "supporting authority from the provided list. If no authority in the "
         "list supports the option, say so in missing_facts and reduce "
-        "confidence; do not invent citations."
+        "confidence; do not invent citations.\n\n"
+        f"TASK: {framing}"
     )
     authority_block = "\n".join(
         f"- CITATION: {a.identifier}\n  EXCERPT: {a.text[:600]}"
@@ -474,8 +503,22 @@ def _build_retrieval_query(matter: Matter, rec_type: str) -> str:
         parts.append(matter.practice_area)
     if matter.description:
         parts.append(matter.description[:400])
+    # Sprint 9 BG-023: per-type query expansion so retrieval pulls the
+    # authorities most useful for each recommendation kind. Forum asks
+    # "which bench", remedy asks "what reliefs are available", and
+    # next_best_action asks "what procedural step unblocks this".
     if rec_type == "forum":
-        parts.append("jurisdiction forum choice of court")
+        parts.append("jurisdiction forum choice of court bench")
+    elif rec_type == "remedy":
+        parts.append(
+            "relief reliefs remedy damages injunction specific performance "
+            "quantum compensation costs"
+        )
+    elif rec_type == "next_best_action":
+        parts.append(
+            "procedural step next hearing filing deadline notice "
+            "interlocutory application adjournment"
+        )
     return " ".join(p for p in parts if p)
 
 

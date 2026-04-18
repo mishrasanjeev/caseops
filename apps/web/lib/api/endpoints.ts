@@ -634,6 +634,58 @@ export async function createMatterTimeEntry(input: {
   return data as MatterTimeEntryRecord;
 }
 
+// --- Sprint 9 BG-024: court intelligence ---
+
+export type CourtRecord = {
+  id: string;
+  name: string;
+  short_name: string;
+  forum_level: string;
+  jurisdiction: string | null;
+  seat_city: string | null;
+  hc_catalog_key: string | null;
+  is_active: boolean;
+  created_at: string;
+};
+
+export type JudgeRecord = {
+  id: string;
+  court_id: string;
+  full_name: string;
+  honorific: string | null;
+  current_position: string | null;
+  is_active: boolean;
+};
+
+export type CourtAuthorityStub = {
+  id: string;
+  title: string;
+  decision_date: string | null;
+  case_reference: string | null;
+  neutral_citation: string | null;
+};
+
+export type CourtProfile = {
+  court: CourtRecord;
+  judges: JudgeRecord[];
+  portfolio_matter_count: number;
+  authority_document_count: number;
+  recent_authorities: CourtAuthorityStub[];
+};
+
+export async function listCourts(params?: {
+  forumLevel?: string;
+}): Promise<{ courts: CourtRecord[] }> {
+  const qs = new URLSearchParams();
+  if (params?.forumLevel) qs.set("forum_level", params.forumLevel);
+  const path = qs.toString() ? `/api/courts/?${qs.toString()}` : "/api/courts/";
+  return apiRequest(path);
+}
+
+export async function fetchCourtProfile(courtId: string): Promise<CourtProfile> {
+  return apiRequest(`/api/courts/${courtId}`);
+}
+
 // --- Sprint 8c BG-026: teams + team scoping ---
 
 export type TeamKind = "team" | "department" | "practice_area";

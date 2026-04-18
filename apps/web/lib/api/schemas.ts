@@ -73,7 +73,14 @@ export type Matter = z.infer<typeof matter>;
 export type MattersList = z.infer<typeof mattersList>;
 
 export const confidence = z.enum(["low", "medium", "high"]);
-export const recommendationType = z.enum(["forum", "authority"]);
+// Sprint 9 BG-023 — four recommendation types. Keep the union in
+// lockstep with the backend's RecommendationTypeLiteral.
+export const recommendationType = z.enum([
+  "forum",
+  "authority",
+  "remedy",
+  "next_best_action",
+]);
 export const recommendationStatus = z.enum([
   "proposed",
   "accepted",

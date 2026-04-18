@@ -42,6 +42,8 @@ import { cn } from "@/lib/cn";
 const TYPE_LABEL: Record<RecommendationType, string> = {
   forum: "Forum",
   authority: "Authority",
+  remedy: "Remedy",
+  next_best_action: "Next-best action",
 };
 
 const CONFIDENCE_TONE: Record<string, string> = {
@@ -129,36 +131,38 @@ export default function MatterRecommendationsPage() {
             </CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button
+            <GenerateButton
+              type="authority"
+              label="Authority"
+              pendingType={pendingType}
+              disabled={generateMutation.isPending}
               onClick={() => generateMutation.mutate("authority")}
+              testId="generate-authority-recommendation"
+              variant="primary"
+            />
+            <GenerateButton
+              type="forum"
+              label="Forum"
+              pendingType={pendingType}
               disabled={generateMutation.isPending}
-              data-testid="generate-authority-recommendation"
-            >
-              {pendingType === "authority" ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" /> Generating…
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-4 w-4" /> Authority
-                </>
-              )}
-            </Button>
-            <Button
-              variant="outline"
               onClick={() => generateMutation.mutate("forum")}
+            />
+            <GenerateButton
+              type="remedy"
+              label="Remedy"
+              pendingType={pendingType}
               disabled={generateMutation.isPending}
-            >
-              {pendingType === "forum" ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" /> Generating…
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-4 w-4" /> Forum
-                </>
-              )}
-            </Button>
+              onClick={() => generateMutation.mutate("remedy")}
+              testId="generate-remedy-recommendation"
+            />
+            <GenerateButton
+              type="next_best_action"
+              label="Next-best action"
+              pendingType={pendingType}
+              disabled={generateMutation.isPending}
+              onClick={() => generateMutation.mutate("next_best_action")}
+              testId="generate-nba-recommendation"
+            />
           </div>
         </CardHeader>
         <CardContent className="py-5 text-sm text-[var(--color-mute)]">
@@ -371,6 +375,44 @@ function ConfidenceBadge({ confidence }: { confidence: string }) {
     >
       {confidence} confidence
     </span>
+  );
+}
+
+function GenerateButton({
+  type,
+  label,
+  pendingType,
+  disabled,
+  onClick,
+  testId,
+  variant,
+}: {
+  type: RecommendationType;
+  label: string;
+  pendingType: RecommendationType | null;
+  disabled: boolean;
+  onClick: () => void;
+  testId?: string;
+  variant?: "primary" | "outline";
+}) {
+  const isThisPending = pendingType === type;
+  return (
+    <Button
+      variant={variant ?? "outline"}
+      onClick={onClick}
+      disabled={disabled}
+      data-testid={testId}
+    >
+      {isThisPending ? (
+        <>
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Generating…
+        </>
+      ) : (
+        <>
+          <Sparkles className="h-4 w-4" aria-hidden /> {label}
+        </>
+      )}
+    </Button>
   );
 }
 

@@ -59,6 +59,7 @@ const NAV: NavItem[] = [
     section: "work",
   },
   { href: "/app/portfolio", label: "Portfolio", icon: PanelsTopLeft, section: "intel" },
+  { href: "/app/courts", label: "Courts", icon: Gavel, section: "intel" },
   {
     href: "/app/admin",
     label: "Admin",
