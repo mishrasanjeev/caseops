@@ -1,12 +1,40 @@
 "use client";
 
-import { Banknote, Clock, Receipt } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  Banknote,
+  Clock,
+  ExternalLink,
+  Loader2,
+  Receipt,
+  RefreshCw,
+} from "lucide-react";
 import { useParams } from "next/navigation";
+import { useMemo, useState } from "react";
+import { toast } from "sonner";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
+import { NewInvoiceDialog } from "@/components/app/NewInvoiceDialog";
+import { NewTimeEntryDialog } from "@/components/app/NewTimeEntryDialog";
+import { Button } from "@/components/ui/Button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { ApiError } from "@/lib/api/config";
+import {
+  createInvoicePaymentLink,
+  syncInvoicePaymentLink,
+} from "@/lib/api/endpoints";
+import { useCapability } from "@/lib/capabilities";
 import { useMatterWorkspace } from "@/lib/use-matter-workspace";
+import type { WorkspaceInvoice, WorkspaceTimeEntry } from "@/lib/api/workspace-types";
 
 function formatMoney(minor: number, currency = "INR"): string {
   return new Intl.NumberFormat(undefined, {
@@ -16,9 +44,75 @@ function formatMoney(minor: number, currency = "INR"): string {
   }).format(minor / 100);
 }
 
+function canIssuePaymentLink(inv: WorkspaceInvoice): boolean {
+  if (inv.status === "void" || inv.status === "paid") return false;
+  return inv.balance_due_minor > 0;
+}
+
 export default function MatterBillingPage() {
   const params = useParams<{ id: string }>();
-  const { data } = useMatterWorkspace(params.id);
+  const matterId = params.id;
+  const { data } = useMatterWorkspace(matterId);
+  const queryClient = useQueryClient();
+  const canIssueInvoice = useCapability("invoices:issue");
+  const canSendPaymentLink = useCapability("invoices:send_payment_link");
+  const canWriteTimeEntry = useCapability("time_entries:write");
+
+  const [pendingPaymentInvoiceId, setPendingPaymentInvoiceId] = useState<string | null>(
+    null,
+  );
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [billableOnly, setBillableOnly] = useState(false);
+
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["matters", matterId, "workspace"] });
+
+  const paymentLinkMutation = useMutation({
+    mutationFn: (invoiceId: string) =>
+      createInvoicePaymentLink({ matterId, invoiceId }),
+    onMutate: (invoiceId) => setPendingPaymentInvoiceId(invoiceId),
+    onSuccess: async (record) => {
+      await invalidate();
+      if (record?.pine_labs_payment_url) {
+        toast.success("Payment link ready — opening in a new tab.");
+        window.open(record.pine_labs_payment_url, "_blank", "noopener,noreferrer");
+      } else {
+        toast.success("Payment link request accepted.");
+      }
+    },
+    onError: (err) => {
+      toast.error(
+        err instanceof ApiError ? err.detail : "Could not issue a payment link.",
+      );
+    },
+    onSettled: () => setPendingPaymentInvoiceId(null),
+  });
+
+  const syncPaymentMutation = useMutation({
+    mutationFn: (invoiceId: string) =>
+      syncInvoicePaymentLink({ matterId, invoiceId }),
+    onMutate: (invoiceId) => setPendingPaymentInvoiceId(invoiceId),
+    onSuccess: async () => {
+      await invalidate();
+      toast.success("Payment status refreshed.");
+    },
+    onError: (err) => {
+      toast.error(err instanceof ApiError ? err.detail : "Could not sync payment.");
+    },
+    onSettled: () => setPendingPaymentInvoiceId(null),
+  });
+
+  const filteredTimeEntries = useMemo(() => {
+    if (!data) return [] as WorkspaceTimeEntry[];
+    return data.time_entries.filter((entry) => {
+      if (billableOnly && !entry.billable) return false;
+      if (fromDate && entry.work_date < fromDate) return false;
+      if (toDate && entry.work_date > toDate) return false;
+      return true;
+    });
+  }, [data, fromDate, toDate, billableOnly]);
+
   if (!data) return null;
 
   const totalBilled = data.invoices.reduce(
@@ -47,16 +141,23 @@ export default function MatterBillingPage() {
       </section>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Invoices</CardTitle>
-          <CardDescription>Every invoice on this matter.</CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+          <div>
+            <CardTitle>Invoices</CardTitle>
+            <CardDescription>Every invoice on this matter.</CardDescription>
+          </div>
+          {canIssueInvoice ? <NewInvoiceDialog matterId={matterId} /> : null}
         </CardHeader>
         <CardContent>
           {data.invoices.length === 0 ? (
             <EmptyState
               icon={Receipt}
               title="No invoices yet"
-              description="Issue invoices from the legacy console. Pine Labs collection links are enabled."
+              description={
+                canIssueInvoice
+                  ? "Issue the first invoice on this matter. Uninvoiced billable time rolls in by default."
+                  : "Ask a team member with billing permissions to issue the first invoice."
+              }
             />
           ) : (
             <table className="w-full text-sm tabular">
@@ -67,31 +168,77 @@ export default function MatterBillingPage() {
                   <th className="px-4 py-2.5 text-right font-semibold">Total</th>
                   <th className="px-4 py-2.5 text-right font-semibold">Balance</th>
                   <th className="px-4 py-2.5 text-left font-semibold">Status</th>
+                  {canSendPaymentLink ? (
+                    <th className="px-4 py-2.5 text-right font-semibold">Payments</th>
+                  ) : null}
                 </tr>
               </thead>
               <tbody>
-                {data.invoices.map((inv) => (
-                  <tr
-                    key={inv.id}
-                    className="border-b border-[var(--color-line-2)] last:border-0"
-                  >
-                    <td className="px-4 py-3 font-medium text-[var(--color-ink)]">
-                      {inv.invoice_number}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-[var(--color-mute)]">
-                      {inv.issued_on ?? "—"}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {formatMoney(inv.total_amount_minor, inv.currency)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-[var(--color-ink-2)]">
-                      {formatMoney(inv.balance_due_minor, inv.currency)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={inv.status} />
-                    </td>
-                  </tr>
-                ))}
+                {data.invoices.map((inv) => {
+                  const isPending = pendingPaymentInvoiceId === inv.id;
+                  return (
+                    <tr
+                      key={inv.id}
+                      className="border-b border-[var(--color-line-2)] last:border-0"
+                    >
+                      <td className="px-4 py-3 font-medium text-[var(--color-ink)]">
+                        {inv.invoice_number}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-[var(--color-mute)]">
+                        {inv.issued_on ?? "—"}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {formatMoney(inv.total_amount_minor, inv.currency)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-[var(--color-ink-2)]">
+                        {formatMoney(inv.balance_due_minor, inv.currency)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <StatusBadge status={inv.status} />
+                      </td>
+                      {canSendPaymentLink ? (
+                        <td className="px-4 py-3 text-right">
+                          <div className="inline-flex items-center gap-2">
+                            {canIssuePaymentLink(inv) ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                disabled={isPending}
+                                onClick={() => paymentLinkMutation.mutate(inv.id)}
+                                data-testid={`invoice-payment-link-${inv.id}`}
+                              >
+                                {isPending && paymentLinkMutation.isPending ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                                ) : (
+                                  <ExternalLink className="h-4 w-4" aria-hidden />
+                                )}
+                                Pay link
+                              </Button>
+                            ) : null}
+                            {inv.balance_due_minor > 0 && inv.status !== "void" ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                disabled={isPending}
+                                onClick={() => syncPaymentMutation.mutate(inv.id)}
+                                data-testid={`invoice-payment-sync-${inv.id}`}
+                              >
+                                {isPending && syncPaymentMutation.isPending ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                                ) : (
+                                  <RefreshCw className="h-4 w-4" aria-hidden />
+                                )}
+                                Sync
+                              </Button>
+                            ) : null}
+                          </div>
+                        </td>
+                      ) : null}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -99,20 +246,63 @@ export default function MatterBillingPage() {
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Recent time entries</CardTitle>
-          <CardDescription>Last 20 entries across the team.</CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+          <div>
+            <CardTitle>Time entries</CardTitle>
+            <CardDescription>
+              {filteredTimeEntries.length === data.time_entries.length
+                ? `${data.time_entries.length} total`
+                : `${filteredTimeEntries.length} of ${data.time_entries.length} shown`}
+            </CardDescription>
+          </div>
+          {canWriteTimeEntry ? <NewTimeEntryDialog matterId={matterId} /> : null}
         </CardHeader>
-        <CardContent>
-          {data.time_entries.length === 0 ? (
+        <CardContent className="flex flex-col gap-4">
+          <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="time-from">From</Label>
+              <Input
+                id="time-from"
+                type="date"
+                value={fromDate}
+                onChange={(event) => setFromDate(event.target.value)}
+                data-testid="time-filter-from"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="time-to">To</Label>
+              <Input
+                id="time-to"
+                type="date"
+                value={toDate}
+                onChange={(event) => setToDate(event.target.value)}
+                data-testid="time-filter-to"
+              />
+            </div>
+            <label className="flex items-center gap-2 pb-2 text-sm text-[var(--color-ink-2)]">
+              <input
+                type="checkbox"
+                checked={billableOnly}
+                onChange={(event) => setBillableOnly(event.target.checked)}
+                data-testid="time-filter-billable"
+              />
+              <span>Billable only</span>
+            </label>
+          </div>
+
+          {filteredTimeEntries.length === 0 ? (
             <EmptyState
               icon={Clock}
               title="No time logged"
-              description="Log time from the legacy console; a rewritten timekeeper lands with billing workstream (§5.3)."
+              description={
+                canWriteTimeEntry
+                  ? "Log the first entry. Billable time rolls into the next invoice automatically."
+                  : "Ask a team member with time-entry permission to log work here."
+              }
             />
           ) : (
             <ul className="divide-y divide-[var(--color-line-2)]">
-              {data.time_entries.slice(0, 20).map((entry) => (
+              {filteredTimeEntries.map((entry) => (
                 <li
                   key={entry.id}
                   className="flex items-start justify-between gap-4 py-3"

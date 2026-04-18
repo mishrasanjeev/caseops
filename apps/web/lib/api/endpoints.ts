@@ -331,6 +331,148 @@ export async function reindexMatterAttachment(input: {
   return data as MatterAttachmentRecord;
 }
 
+// --- Billing: invoices + time entries + Pine Labs payment links ---
+// The backend gates these on invoices:issue, invoices:send_payment_link,
+// and time_entries:write respectively. The UI's useCapability guards
+// mirror that; the server remains the source of truth.
+
+export type InvoiceStatus =
+  | "draft"
+  | "issued"
+  | "partially_paid"
+  | "paid"
+  | "void";
+
+export type MatterInvoiceRecord = {
+  id: string;
+  matter_id: string;
+  invoice_number: string;
+  status: InvoiceStatus;
+  currency: string;
+  subtotal_amount_minor: number;
+  tax_amount_minor: number;
+  total_amount_minor: number;
+  amount_received_minor: number;
+  balance_due_minor: number;
+  issued_on: string;
+  due_on: string | null;
+  client_name: string | null;
+  notes: string | null;
+  pine_labs_payment_url: string | null;
+  pine_labs_order_id: string | null;
+  created_at: string;
+};
+
+export type MatterTimeEntryRecord = {
+  id: string;
+  matter_id: string;
+  author_membership_id: string | null;
+  author_name: string | null;
+  work_date: string;
+  description: string;
+  duration_minutes: number;
+  billable: boolean;
+  rate_currency: string;
+  rate_amount_minor: number | null;
+  total_amount_minor: number;
+  is_invoiced: boolean;
+  created_at: string;
+};
+
+export async function createMatterInvoice(input: {
+  matterId: string;
+  invoiceNumber: string;
+  issuedOn: string;
+  dueOn?: string | null;
+  clientName?: string | null;
+  status?: InvoiceStatus;
+  taxAmountMinor?: number;
+  notes?: string | null;
+  includeUninvoicedTimeEntries?: boolean;
+  manualItems?: Array<{ description: string; amount_minor: number }>;
+}): Promise<MatterInvoiceRecord> {
+  const data = await apiRequest<unknown>(
+    `/api/matters/${input.matterId}/invoices`,
+    {
+      method: "POST",
+      body: {
+        invoice_number: input.invoiceNumber,
+        issued_on: input.issuedOn,
+        due_on: input.dueOn ?? null,
+        client_name: input.clientName ?? null,
+        status: input.status ?? "draft",
+        tax_amount_minor: input.taxAmountMinor ?? 0,
+        notes: input.notes ?? null,
+        include_uninvoiced_time_entries: input.includeUninvoicedTimeEntries ?? true,
+        manual_items: input.manualItems ?? [],
+      },
+    },
+  );
+  return data as MatterInvoiceRecord;
+}
+
+export async function createInvoicePaymentLink(input: {
+  matterId: string;
+  invoiceId: string;
+  customerName?: string | null;
+  customerEmail?: string | null;
+  customerPhone?: string | null;
+  description?: string | null;
+  amountMinor?: number | null;
+}): Promise<MatterInvoiceRecord> {
+  const data = await apiRequest<unknown>(
+    `/api/matters/${input.matterId}/invoices/${input.invoiceId}/pine-labs/link`,
+    {
+      method: "POST",
+      body: {
+        customer_name: input.customerName ?? null,
+        customer_email: input.customerEmail ?? null,
+        customer_phone: input.customerPhone ?? null,
+        description: input.description ?? null,
+        amount_minor: input.amountMinor ?? null,
+      },
+    },
+  );
+  return data as MatterInvoiceRecord;
+}
+
+export async function syncInvoicePaymentLink(input: {
+  matterId: string;
+  invoiceId: string;
+}): Promise<MatterInvoiceRecord> {
+  const data = await apiRequest<unknown>(
+    `/api/matters/${input.matterId}/invoices/${input.invoiceId}/pine-labs/sync`,
+    { method: "POST", body: {} },
+  );
+  return data as MatterInvoiceRecord;
+}
+
+export async function createMatterTimeEntry(input: {
+  matterId: string;
+  workDate: string;
+  description: string;
+  durationMinutes: number;
+  billable?: boolean;
+  rateCurrency?: string;
+  rateAmountMinor?: number | null;
+}): Promise<MatterTimeEntryRecord> {
+  const data = await apiRequest<unknown>(
+    `/api/matters/${input.matterId}/time-entries`,
+    {
+      method: "POST",
+      body: {
+        work_date: input.workDate,
+        description: input.description,
+        duration_minutes: input.durationMinutes,
+        billable: input.billable ?? true,
+        rate_currency: input.rateCurrency ?? "INR",
+        rate_amount_minor: input.rateAmountMinor ?? null,
+      },
+    },
+  );
+  return data as MatterTimeEntryRecord;
+}
+
 export async function createMatter(input: {
   title: string;
   matter_code: string;
