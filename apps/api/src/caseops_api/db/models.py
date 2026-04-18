@@ -874,6 +874,13 @@ class MatterAttachmentChunk(Base):
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     token_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    embedding_model: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    embedding_dimensions: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    embedding_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    embedded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
@@ -2363,3 +2370,63 @@ class Judge(Base):
         onupdate=utcnow,
         nullable=False,
     )
+
+
+class EvaluationRun(Base):
+    """One invocation of a named evaluation suite against one model
+    configuration. Aggregate counts land here; per-case detail lives
+    in ``evaluation_cases``."""
+
+    __tablename__ = "evaluation_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    suite_name: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(String(40), nullable=False)
+    model: Mapped[str] = mapped_column(String(120), nullable=False)
+    git_sha: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    case_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    pass_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    fail_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    metrics_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+    cases: Mapped[list[EvaluationCase]] = relationship(
+        back_populates="run",
+        cascade="all, delete-orphan",
+        order_by="EvaluationCase.created_at.asc()",
+    )
+
+
+class EvaluationCase(Base):
+    __tablename__ = "evaluation_cases"
+    __table_args__ = (
+        UniqueConstraint("run_id", "case_key", name="uq_eval_case_key_per_run"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    run_id: Mapped[str] = mapped_column(
+        ForeignKey("evaluation_runs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    case_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False)
+    blocker_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    warning_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    findings_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    body_chars: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    verified_citation_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+    run: Mapped[EvaluationRun] = relationship(back_populates="cases")

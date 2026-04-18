@@ -21,6 +21,7 @@ from caseops_api.db.models import (
 from caseops_api.db.session import get_session_factory
 from caseops_api.schemas.document_processing import DocumentProcessingJobRecord
 from caseops_api.services.document_processing import (
+    embed_matter_attachment_chunks,
     index_contract_attachment,
     index_matter_attachment,
 )
@@ -417,6 +418,11 @@ def _process_matter_attachment_job(session: Session, job: DocumentProcessingJob)
     attachment.chunks.clear()
     session.flush()
     index_matter_attachment(attachment)
+    # Flush new chunks before embedding so they carry ids the pgvector
+    # UPDATE can target. Best-effort: a provider failure leaves the
+    # chunks indexed-but-unembedded so lexical retrieval still works.
+    session.flush()
+    embed_matter_attachment_chunks(session, attachment)
     job.processed_char_count = attachment.extracted_char_count
     job.error_message = attachment.extraction_error
     job.completed_at = utcnow()

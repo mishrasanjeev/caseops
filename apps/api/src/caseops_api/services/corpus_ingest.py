@@ -422,6 +422,26 @@ def _apply_pgvector_batch(
         )
 
 
+def _apply_pgvector_batch_for_matter(
+    session: Session,
+    *,
+    chunks: list,  # list[MatterAttachmentChunk] — untyped to avoid circular import
+    vectors: list[list[float]],
+) -> None:
+    """Populate pgvector for matter_attachment_chunks on Postgres."""
+    from sqlalchemy import text
+
+    for chunk, vector in zip(chunks, vectors, strict=False):
+        session.execute(
+            text(
+                "UPDATE matter_attachment_chunks "
+                "SET embedding_vector = :vec "
+                "WHERE id = :id"
+            ),
+            {"vec": vector, "id": chunk.id},
+        )
+
+
 # ---------------------------------------------------------------------------
 # Ingestion orchestration
 # ---------------------------------------------------------------------------

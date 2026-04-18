@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import shutil
 import subprocess
@@ -10,6 +11,7 @@ from pathlib import Path
 
 import pypdfium2 as pdfium
 from pdfminer.high_level import extract_text as pdf_extract_text
+from sqlalchemy.orm import Session
 
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
@@ -21,6 +23,8 @@ from caseops_api.db.models import (
     utcnow,
 )
 from caseops_api.services.document_storage import resolve_storage_path
+
+logger = logging.getLogger(__name__)
 
 TEXT_SUFFIXES = {".txt", ".md", ".csv", ".json", ".log", ".yaml", ".yml", ".xml", ".html", ".htm"}
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"}
@@ -270,6 +274,64 @@ def index_matter_attachment(attachment: MatterAttachment) -> None:
         )
         for index, chunk in enumerate(parsed.chunks)
     ]
+
+
+def embed_matter_attachment_chunks(
+    session: Session, attachment: MatterAttachment
+) -> int:
+    """Populate embedding_* columns on the attachment's chunks.
+
+    Best-effort: if the embedding provider fails, the chunks remain
+    indexed (so lexical retrieval still works) and this function
+    returns 0. Returns the number of chunks embedded.
+    """
+    if not attachment.chunks:
+        return 0
+    try:
+        from caseops_api.services.embeddings import (
+            EmbeddingProviderError,
+            build_provider,
+        )
+    except ImportError:
+        return 0
+
+    try:
+        provider = build_provider()
+    except EmbeddingProviderError:
+        logger.warning(
+            "embedding provider unavailable; matter attachment %s "
+            "will be lexical-only", attachment.id,
+        )
+        return 0
+
+    try:
+        result = provider.embed([chunk.content for chunk in attachment.chunks])
+    except EmbeddingProviderError as exc:
+        logger.warning(
+            "embedding call failed for matter attachment %s: %s",
+            attachment.id, exc,
+        )
+        return 0
+
+    now = utcnow()
+    from caseops_api.services.corpus_ingest import (
+        _apply_pgvector_batch_for_matter,
+        _encode_vector,
+        _postgres_backend,
+    )
+
+    for chunk, vector in zip(attachment.chunks, result.vectors, strict=False):
+        chunk.embedding_model = result.model
+        chunk.embedding_dimensions = result.dimensions
+        chunk.embedding_json = _encode_vector(vector)
+        chunk.embedded_at = now
+
+    if _postgres_backend(session):
+        session.flush()
+        _apply_pgvector_batch_for_matter(
+            session, chunks=list(attachment.chunks), vectors=result.vectors
+        )
+    return len(attachment.chunks)
 
 
 def index_contract_attachment(attachment: ContractAttachment) -> None:
