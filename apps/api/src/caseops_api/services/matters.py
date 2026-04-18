@@ -661,6 +661,30 @@ def update_matter(
                 membership_id=assignee_membership_id,
             )
             matter.assignee_membership_id = assignee.id
+
+    # Sprint 8c: validate team membership lives in this company before
+    # letting the setattr loop below accept it (otherwise a rogue
+    # `team_id` from tenant A could land on tenant B's matter via a
+    # raw foreign-key write).
+    if "team_id" in updates:
+        team_id = updates.pop("team_id")
+        if team_id is None:
+            matter.team_id = None
+        else:
+            from caseops_api.db.models import Team
+
+            belongs = session.scalar(
+                select(Team.id)
+                .where(Team.id == team_id)
+                .where(Team.company_id == context.company.id)
+            )
+            if belongs is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Team does not belong to this company.",
+                )
+            matter.team_id = team_id
+
     for field_name, value in updates.items():
         setattr(matter, field_name, value)
 

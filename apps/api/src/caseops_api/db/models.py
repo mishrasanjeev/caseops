@@ -238,6 +238,13 @@ class Company(Base):
     website_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     practice_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
+    # Sprint 8c: when true, matter visibility for non-owners is gated
+    # on team membership (plus existing ethical-wall + grant rules).
+    # Default false means teams are metadata-only; flipping this on is
+    # a deliberate governance decision per-tenant.
+    team_scoping_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
@@ -441,6 +448,15 @@ class Matter(Base):
     court_id: Mapped[str | None] = mapped_column(
         ForeignKey("courts.id", ondelete="SET NULL"),
         nullable=True,
+    )
+    # Sprint 8c: optional team ownership. When the tenant has
+    # team_scoping_enabled=True, visibility for non-owners is gated on
+    # team membership. Null means firm-wide (visible to every member
+    # with matter access); always null on legacy rows.
+    team_id: Mapped[str | None] = mapped_column(
+        ForeignKey("teams.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -2757,3 +2773,78 @@ class MatterIntakeRequest(Base):
     linked_matter: Mapped["Matter | None"] = relationship(
         foreign_keys=[linked_matter_id]
     )
+
+
+# ---------------------------------------------------------------------------
+# Sprint 8c BG-026: teams / departments / practice areas
+# A "team" is just a named group of memberships inside one company. The
+# `kind` field lets firms label a group as "team", "department", or
+# "practice_area" for UI purposes; the model treats all three the same.
+# ---------------------------------------------------------------------------
+
+
+class TeamKind(StrEnum):
+    TEAM = "team"
+    DEPARTMENT = "department"
+    PRACTICE_AREA = "practice_area"
+
+
+class Team(Base):
+    __tablename__ = "teams"
+    __table_args__ = (
+        UniqueConstraint("company_id", "slug", name="uq_team_company_slug"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    slug: Mapped[str] = mapped_column(String(80), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    kind: Mapped[str] = mapped_column(
+        String(24), nullable=False, default=TeamKind.TEAM
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
+    )
+
+    memberships: Mapped[list["TeamMembership"]] = relationship(
+        back_populates="team",
+        cascade="all, delete-orphan",
+    )
+
+
+class TeamMembership(Base):
+    __tablename__ = "team_memberships"
+    __table_args__ = (
+        UniqueConstraint(
+            "team_id", "membership_id", name="uq_team_membership"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    team_id: Mapped[str] = mapped_column(
+        ForeignKey("teams.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    membership_id: Mapped[str] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    is_lead: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+    team: Mapped[Team] = relationship(back_populates="memberships")
+    membership: Mapped["CompanyMembership"] = relationship()

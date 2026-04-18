@@ -634,6 +634,110 @@ export async function createMatterTimeEntry(input: {
   return data as MatterTimeEntryRecord;
 }
 
+// --- Sprint 8c BG-026: teams + team scoping ---
+
+export type TeamKind = "team" | "department" | "practice_area";
+
+export type TeamMember = {
+  id: string;
+  team_id: string;
+  membership_id: string;
+  member_name: string;
+  member_email: string;
+  is_lead: boolean;
+  created_at: string;
+};
+
+export type Team = {
+  id: string;
+  company_id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  kind: TeamKind;
+  is_active: boolean;
+  member_count: number;
+  members: TeamMember[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type TeamListResult = {
+  teams: Team[];
+  team_scoping_enabled: boolean;
+};
+
+export async function listTeams(): Promise<TeamListResult> {
+  return apiRequest("/api/teams/");
+}
+
+export async function createTeam(input: {
+  name: string;
+  slug: string;
+  description?: string | null;
+  kind?: TeamKind;
+}): Promise<Team> {
+  return apiRequest("/api/teams/", {
+    method: "POST",
+    body: {
+      name: input.name,
+      slug: input.slug,
+      description: input.description ?? null,
+      kind: input.kind ?? "team",
+    },
+  });
+}
+
+export async function updateTeam(input: {
+  teamId: string;
+  name?: string;
+  description?: string | null;
+  kind?: TeamKind;
+  is_active?: boolean;
+}): Promise<Team> {
+  return apiRequest(`/api/teams/${input.teamId}`, {
+    method: "PATCH",
+    body: {
+      name: input.name,
+      description: input.description,
+      kind: input.kind,
+      is_active: input.is_active,
+    },
+  });
+}
+
+export async function deleteTeam(teamId: string): Promise<void> {
+  await apiRequest(`/api/teams/${teamId}`, { method: "DELETE" });
+}
+
+export async function addTeamMember(input: {
+  teamId: string;
+  membershipId: string;
+  isLead?: boolean;
+}): Promise<Team> {
+  return apiRequest(`/api/teams/${input.teamId}/members`, {
+    method: "POST",
+    body: { membership_id: input.membershipId, is_lead: input.isLead ?? false },
+  });
+}
+
+export async function removeTeamMember(input: {
+  teamId: string;
+  membershipId: string;
+}): Promise<Team> {
+  return apiRequest(
+    `/api/teams/${input.teamId}/members/${input.membershipId}`,
+    { method: "DELETE" },
+  );
+}
+
+export async function setTeamScoping(enabled: boolean): Promise<{ enabled: boolean }> {
+  return apiRequest("/api/teams/scoping", {
+    method: "PUT",
+    body: { enabled },
+  });
+}
+
 // --- Sprint 8b BG-025: GC intake queue ---
 
 export type IntakeStatus =

@@ -80,7 +80,9 @@ export type Capability =
   // intake (Sprint 8b BG-025)
   | "intake:submit"
   | "intake:triage"
-  | "intake:promote";
+  | "intake:promote"
+  // teams (Sprint 8c BG-026)
+  | "teams:manage";
 
 // Baseline caps for a fee-earner (owner / admin / partner / member).
 // Paralegals inherit most of these but lose a small, explicit set.
@@ -134,6 +136,7 @@ const GOVERNANCE: Capability[] = [
   "company:manage_users",
   "workspace:admin",
   "matter_access:manage",
+  "teams:manage",
 ];
 
 // Owner-only caps.

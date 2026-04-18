@@ -34,10 +34,12 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql import Select
 
 from caseops_api.db.models import (
+    Company,
     EthicalWall,
     Matter,
     MatterAccessGrant,
     MembershipRole,
+    TeamMembership,
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.identity import SessionContext
@@ -123,6 +125,13 @@ def assert_access(
     )
 
 
+def _team_scoping_enabled(session: Session, company_id: str) -> bool:
+    flag = session.scalar(
+        select(Company.team_scoping_enabled).where(Company.id == company_id)
+    )
+    return bool(flag)
+
+
 def visible_matters_filter(
     session: Session,
     *,
@@ -137,6 +146,11 @@ def visible_matters_filter(
             Matter.company_id == context.company.id,
             visible_matters_filter(session, context=context),
         )
+
+    Sprint 8c: when the tenant has ``team_scoping_enabled = True``,
+    non-owners additionally need to see the matter via its team
+    (matter.team_id IS NULL -> firm-wide -> still visible; otherwise
+    the member must belong to that team).
     """
     membership_id = context.membership.id
 
@@ -157,7 +171,7 @@ def visible_matters_filter(
             MatterAccessGrant.membership_id == membership_id,
         )
     )
-    return and_(
+    base = and_(
         # Not walled.
         ~exists(wall),
         # Either unrestricted, OR the membership is the matter's
@@ -168,6 +182,29 @@ def visible_matters_filter(
             exists(grant),
         ),
     )
+
+    if not _team_scoping_enabled(session, context.company.id):
+        return base
+
+    team_membership = (
+        select(TeamMembership.id).where(
+            TeamMembership.team_id == Matter.team_id,
+            TeamMembership.membership_id == membership_id,
+        )
+    )
+    team_gate = or_(
+        # Firm-wide matters (no team) stay visible even when scoping
+        # is on — this keeps historical data accessible.
+        Matter.team_id.is_(None),
+        # Or the membership belongs to the matter's team.
+        exists(team_membership),
+        # Explicit grants bypass team scoping (the point of a grant
+        # is cross-team loan-in).
+        exists(grant),
+        # Assignees always see their own matter.
+        Matter.assignee_membership_id == membership_id,
+    )
+    return and_(base, team_gate)
 
 
 def attach_visible_matters_filter(

@@ -153,6 +153,11 @@ CAPABILITY_ROLES: dict[str, frozenset[MembershipRole]] = {
     "intake:submit": _ALL_AUTHENTICATED,
     "intake:triage": _STAFF,
     "intake:promote": _STAFF,
+    # --- teams (Sprint 8c BG-026) ---
+    # Create/edit teams + toggle team_scoping is governance work;
+    # everyone authenticated can read who's on what team so staffing
+    # and assignment flows don't need a separate gate.
+    "teams:manage": _OWNER_ADMIN,
 }
 
 

@@ -71,6 +71,9 @@ class MatterUpdateRequest(BaseModel):
     description: str | None = Field(default=None, max_length=4000)
     next_hearing_on: date | None = None
     is_active: bool | None = None
+    # Sprint 8c: optional team assignment. Pass null to detach; omit
+    # the field to leave unchanged.
+    team_id: str | None = None
 
 
 class MatterRecord(BaseModel):
@@ -120,6 +123,7 @@ class MatterRecord(BaseModel):
     description: str | None
     next_hearing_on: date | None
     is_active: bool
+    team_id: str | None = None
     created_at: datetime
     updated_at: datetime
 

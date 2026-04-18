@@ -1,6 +1,7 @@
 "use client";
 
-import { Download, Shield, Wrench } from "lucide-react";
+import { Download, Shield, Users as UsersIcon, Wrench } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -39,6 +40,7 @@ function untilIsoOrNull(local: string): string | null {
 export default function AdminPage() {
   const canAdmin = useCapability("workspace:admin");
   const canAudit = useCapability("audit:export");
+  const canTeamsManage = useCapability("teams:manage");
   const [since, setSince] = useState("");
   const [until, setUntil] = useState("");
   const [action, setAction] = useState("");
@@ -103,6 +105,16 @@ export default function AdminPage() {
         eyebrow="Workspace"
         title="Admin & governance"
         description="Audit trail export is live. Tenant profile, SSO, AI policy, and plan management follow in §10.1–§10.3."
+        actions={
+          canTeamsManage ? (
+            <Link
+              href="/app/admin/teams"
+              className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-line)] bg-white px-3 py-1.5 text-sm font-medium text-[var(--color-ink-2)] hover:bg-[var(--color-bg-2)]"
+            >
+              <UsersIcon className="h-4 w-4" aria-hidden /> Manage teams
+            </Link>
+          ) : null
+        }
       />
 
       <Card>
