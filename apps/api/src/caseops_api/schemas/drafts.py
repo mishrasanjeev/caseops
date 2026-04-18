@@ -30,6 +30,24 @@ class DraftGenerateRequest(BaseModel):
     template_key: str | None = Field(default=None, max_length=120)
     focus_note: str | None = Field(default=None, max_length=4000)
 
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "focus_note": (
+                        "Draft a regular bail application under BNSS s.483 "
+                        "(earlier CrPC s.439) before the Delhi High Court. "
+                        "Cover: cause-title; memo of parties; brief facts; "
+                        "triple-test grounds (flight risk, tampering, "
+                        "repetition); parity with co-accused already on "
+                        "bail; period of custody; applicant's undertakings; "
+                        "prayer; verification."
+                    )
+                }
+            ]
+        }
+    }
+
 
 class DraftReviewRequest(BaseModel):
     notes: str | None = Field(default=None, max_length=4000)

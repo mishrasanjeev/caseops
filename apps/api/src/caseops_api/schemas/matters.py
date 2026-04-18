@@ -34,6 +34,29 @@ class MatterCreateRequest(BaseModel):
     description: str | None = Field(default=None, max_length=4000)
     next_hearing_on: date | None = None
 
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "title": "Bail application — Rahul Verma",
+                    "matter_code": "CR-2026-014",
+                    "client_name": "Rahul Verma",
+                    "opposing_party": "State of NCT of Delhi",
+                    "status": "intake",
+                    "practice_area": "criminal",
+                    "forum_level": "high_court",
+                    "court_name": "Delhi High Court",
+                    "description": (
+                        "FIR No. 145/2025, P.S. Connaught Place — "
+                        "BNS ss.318/319/336/340. Seeking regular bail "
+                        "under BNSS s.483."
+                    ),
+                    "next_hearing_on": "2026-05-02",
+                }
+            ]
+        }
+    }
+
 
 class MatterUpdateRequest(BaseModel):
     title: str | None = Field(default=None, min_length=3, max_length=255)
@@ -51,7 +74,36 @@ class MatterUpdateRequest(BaseModel):
 
 
 class MatterRecord(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra={
+            "examples": [
+                {
+                    "id": "018f0abc-1234-5678-9abc-def012345678",
+                    "company_id": "018f0000-0000-0000-0000-000000000001",
+                    "assignee_membership_id": None,
+                    "title": "Bail application — Rahul Verma",
+                    "matter_code": "CR-2026-014",
+                    "client_name": "Rahul Verma",
+                    "opposing_party": "State of NCT of Delhi",
+                    "status": "intake",
+                    "practice_area": "criminal",
+                    "forum_level": "high_court",
+                    "court_name": "Delhi High Court",
+                    "judge_name": None,
+                    "description": (
+                        "FIR No. 145/2025, P.S. Connaught Place — "
+                        "BNS ss.318/319/336/340. Seeking regular bail "
+                        "under BNSS s.483."
+                    ),
+                    "next_hearing_on": "2026-05-02",
+                    "is_active": True,
+                    "created_at": "2026-04-18T05:00:00Z",
+                    "updated_at": "2026-04-18T05:00:00Z",
+                }
+            ]
+        },
+    )
 
     id: str
     company_id: str

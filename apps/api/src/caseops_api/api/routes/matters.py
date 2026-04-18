@@ -112,7 +112,19 @@ async def current_company_matters(
     return list_matters(session, context=context, limit=limit, cursor=cursor)
 
 
-@router.post("/", response_model=MatterRecord, summary="Create a matter in the current company")
+@router.post(
+    "/",
+    response_model=MatterRecord,
+    summary="Create a matter in the current company",
+    description=(
+        "Creates a tenant-scoped matter record — the primary unit of "
+        "work in CaseOps. `matter_code` is unique per company and "
+        "stable (appears on filings and invoices). `practice_area` "
+        "drives retrieval seed-query selection during drafting. "
+        "Ethical walls / matter ACLs are applied to every subsequent "
+        "access — the creator is implicitly granted."
+    ),
+)
 async def create_current_company_matter(
     payload: MatterCreateRequest,
     context: CurrentContext,
@@ -545,6 +557,17 @@ async def get_current_company_matter_draft(
     "/{matter_id}/drafts/{draft_id}/generate",
     response_model=DraftRecord,
     summary="Generate a new draft version using the LLM",
+    description=(
+        "Retrieves relevant authorities via multi-query hybrid search, "
+        "(optionally) reranks them with a cross-encoder, and asks the "
+        "configured LLM provider to emit a structured "
+        "`{body, citations, summary}` JSON payload. The body is "
+        "validated against the citation verifier; only authorities the "
+        "tenant actually holds survive. Post-generation validators "
+        "(statute confusion, UUID leakage, citation coverage) append "
+        "findings to the summary so the reviewing partner sees them. "
+        "Finalized drafts refuse regeneration with 409."
+    ),
 )
 async def post_current_company_matter_draft_generate(
     matter_id: str,
