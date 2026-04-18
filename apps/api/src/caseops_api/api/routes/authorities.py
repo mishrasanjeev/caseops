@@ -127,6 +127,13 @@ async def get_authority_annotations(
     "/documents/{authority_id}/annotations",
     response_model=AuthorityAnnotationRecord,
     summary="Create a tenant-private annotation on an authority document",
+    description=(
+        "Attach a note, flag, or tag to a shared authority document. "
+        "The authority corpus stays global; the annotation is visible "
+        "only to the calling tenant. `(kind, title)` must be unique "
+        "per (tenant, authority) — re-posting the same pair returns "
+        "409. Each mutation is audited as `authority_annotation.created`."
+    ),
     status_code=status.HTTP_201_CREATED,
     tags=["authorities"],
 )

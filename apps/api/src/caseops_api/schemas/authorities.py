@@ -110,6 +110,25 @@ class AuthorityAnnotationRecord(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "id": "018f1234-dead-beef-cafe-0123456789ab",
+                    "company_id": "018f0000-0000-0000-0000-000000000001",
+                    "authority_document_id": "d4ad579f-9b50-49bf-af02-755f14326c55",
+                    "created_by_membership_id": "018f1111-2222-3333-4444-555555555555",
+                    "kind": "flag",
+                    "title": "Parity precedent for bail",
+                    "body": "Cite alongside the triple-test paragraph in every bail brief.",
+                    "is_archived": False,
+                    "created_at": "2026-04-18T13:00:00Z",
+                    "updated_at": "2026-04-18T13:00:00Z",
+                }
+            ]
+        }
+    }
+
 
 class AuthorityAnnotationListResponse(BaseModel):
     annotations: list[AuthorityAnnotationRecord]
@@ -119,6 +138,18 @@ class AuthorityAnnotationCreateRequest(BaseModel):
     kind: AuthorityAnnotationKindLiteral
     title: str = Field(min_length=1, max_length=255)
     body: str | None = Field(default=None, max_length=8000)
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "kind": "note",
+                    "title": "Useful for triple-test framing",
+                    "body": "The ratio at paragraphs 17–21 is the cleanest summary of BNSS s.483 requirements we have seen.",
+                }
+            ]
+        }
+    }
 
 
 class AuthorityAnnotationUpdateRequest(BaseModel):

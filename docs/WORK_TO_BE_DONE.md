@@ -502,11 +502,12 @@ Without this, the PRD's central promise does not exist.
 - **Landed:** `register_problem_handlers(application)` installs handlers for `HTTPException` and `RequestValidationError`; every error body is `application/problem+json` with `{type, title, status, detail, instance}` and the original validation breakdown preserved under `errors` for machine readers. Type-slug map covers the most-common operations (matter_not_found, draft_invalid_transition, verified_citations_required, ethical_wall_not_found, rate_limited, etc.). Frontend `ApiError.problemType` is populated automatically; the drafting detail page renders a precise recovery message on the `verified_citations_required` 422. Backward-compatible: every existing test that reads `response.json()["detail"]` still passes.
 - **Remaining:** extend the type-slug map as new error messages land; generate a TS union of all slugs from the Python map for compile-time safety on the frontend.
 
-### 6.5 OpenAPI quality — **PARTIAL (Phase 18, 2026-04-18)**
+### 6.5 OpenAPI quality — **PARTIAL (Phase 18 + Phase 19, 2026-04-18)**
 
-- **Traces to:** `tests/test_openapi_quality.py`.
-- **Landed:** a lint-style pytest that walks the live `application.openapi()` output and asserts every `/api/...` route has a non-empty `summary`, at least one `tag`, at least one documented response code, and a media type on the acceptable whitelist (JSON / problem+json / docx / pdf / ndjson / octet-stream). Every current route passes; any new route that forgets metadata now fails CI instead of shipping silently.
-- **Remaining:** full TS client generation from `openapi.json` (so `apps/web/lib/api/endpoints.ts` can retire), response examples on each route, per-endpoint prose descriptions for the Swagger UI.
+- **Traces to:** `tests/test_openapi_quality.py`; `apps/web/package.json`.
+- **Landed (Phase 18):** a lint-style pytest that walks the live `application.openapi()` output and asserts every `/api/...` route has a non-empty `summary`, at least one `tag`, at least one documented response code, and a media type on the acceptable whitelist (JSON / problem+json / docx / pdf / ndjson / octet-stream). Every current route passes; any new route that forgets metadata now fails CI instead of shipping silently.
+- **Landed (Phase 19):** `openapi-typescript` added as a devDependency plus an `npm run gen:api-types` script that pulls the live `openapi.json` and emits `apps/web/lib/api/openapi-types.ts`. This is opt-in for now — `endpoints.ts` remains the manually-maintained source of truth, and the generated file is intended to be wired into new code first (so diffs are reviewable one route at a time). Response-example + prose-description patterns demonstrated on the AuthorityAnnotation routes (`AuthorityAnnotationRecord.model_config["json_schema_extra"]["examples"]` and the `description=` kwarg on `POST /api/authorities/documents/{id}/annotations`).
+- **Remaining:** roll the example + description pattern across the remaining spine routes (matters, drafts, hearings, audit export), and retire `apps/web/lib/api/endpoints.ts` in favour of the generated types on a route-by-route basis (start with routes whose shape is stable).
 
 ---
 
