@@ -34,12 +34,25 @@ ocr = [
   "rapidocr>=3.4.0",
   "pytesseract>=0.3.13",
 ]
+# Observability. All opt-in via CASEOPS_OTEL_ENABLED; the skeleton in
+# core/observability.py degrades gracefully when these are absent so
+# local + CI stay fast. Cloud Run / staging builds install via
+# `pip install .[observability]` in the Dockerfile.
+observability = [
+  "opentelemetry-api>=1.29.0",
+  "opentelemetry-sdk>=1.29.0",
+  "opentelemetry-exporter-otlp-proto-http>=1.29.0",
+  "opentelemetry-instrumentation-fastapi>=0.50b0",
+  "opentelemetry-instrumentation-sqlalchemy>=0.50b0",
+  "opentelemetry-instrumentation-httpx>=0.50b0",
+]
 
 [project.scripts]
 caseops-document-worker = "caseops_api.workers.document_processor:main"
 caseops-populate-authorities = "caseops_api.scripts.populate_authorities:main"
 caseops-ingest-corpus = "caseops_api.scripts.ingest_corpus:main"
 caseops-extract-authority-metadata = "caseops_api.scripts.extract_authority_metadata:main"
+caseops-eval-drafting = "caseops_api.scripts.eval_drafting:main"
 
 [dependency-groups]
 dev = [

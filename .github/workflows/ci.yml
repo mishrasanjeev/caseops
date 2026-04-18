@@ -113,3 +113,93 @@ jobs:
             playwright-report/
             test-results/
           retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # Staging deploy skeleton (Sprint 14 / BG-044).
+  #
+  # Guarded on the GCP_WORKLOAD_IDENTITY_PROVIDER secret so forks and
+  # contributors without GCP credentials never trigger a deploy. Runs
+  # on `main` only, after api + web + e2e all pass. Builds a container
+  # image, pushes to Artifact Registry, runs Alembic against the
+  # staging Cloud SQL instance, then deploys to Cloud Run with
+  # observability on.
+  #
+  # When GCP credentials land, the secrets required are:
+  #   GCP_PROJECT_ID
+  #   GCP_REGION
+  #   GCP_WORKLOAD_IDENTITY_PROVIDER
+  #   GCP_DEPLOY_SA (service account email with run.admin + artifactregistry.writer + cloudsql.client)
+  #   CASEOPS_DATABASE_URL (staging)
+  #   CASEOPS_AUTH_SECRET (staging, ≥ 32 bytes)
+  # until then the job is a visible no-op so the workflow shape is
+  # reviewable in PRs.
+  deploy-staging:
+    name: Cloud Run deploy (staging)
+    runs-on: ubuntu-latest
+    needs: [api, web, e2e]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    timeout-minutes: 25
+    steps:
+      - name: Gate on GCP credentials
+        id: credgate
+        run: |
+          if [ -z "${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}" ]; then
+            echo "GCP_WORKLOAD_IDENTITY_PROVIDER not set — deploy is a visible no-op."
+            echo "deploy=skip" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploy=run" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.credgate.outputs.deploy == 'run'
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP via Workload Identity
+        if: steps.credgate.outputs.deploy == 'run'
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SA }}
+
+      - name: Set up gcloud
+        if: steps.credgate.outputs.deploy == 'run'
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Configure Docker for Artifact Registry
+        if: steps.credgate.outputs.deploy == 'run'
+        run: gcloud auth configure-docker ${{ secrets.GCP_REGION }}-docker.pkg.dev
+
+      - name: Build + push container image
+        if: steps.credgate.outputs.deploy == 'run'
+        working-directory: apps/api
+        env:
+          IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/caseops/caseops-api:${{ github.sha }}
+        run: |
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+
+      - name: Run Alembic migrations against staging
+        if: steps.credgate.outputs.deploy == 'run'
+        env:
+          CASEOPS_DATABASE_URL: ${{ secrets.CASEOPS_DATABASE_URL_STAGING }}
+        working-directory: apps/api
+        run: |
+          pipx install uv
+          uv sync
+          uv run alembic upgrade head
+
+      - name: Deploy to Cloud Run (staging)
+        if: steps.credgate.outputs.deploy == 'run'
+        env:
+          IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/caseops/caseops-api:${{ github.sha }}
+        run: |
+          gcloud run deploy caseops-api-staging \
+            --image "$IMAGE" \
+            --region "${{ secrets.GCP_REGION }}" \
+            --platform managed \
+            --service-account "${{ secrets.GCP_DEPLOY_SA }}" \
+            --set-env-vars CASEOPS_ENV=staging,CASEOPS_OTEL_ENABLED=true,CASEOPS_LOG_FORMAT=json \
+            --set-secrets CASEOPS_AUTH_SECRET=caseops-auth-secret:latest,CASEOPS_LLM_API_KEY=caseops-llm-api-key:latest \
+            --no-allow-unauthenticated

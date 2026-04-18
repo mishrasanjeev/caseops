@@ -2549,3 +2549,115 @@ class AuthorityAnnotation(Base):
         default=utcnow,
         onupdate=utcnow,
     )
+
+
+class MatterDeadlineStatus(StrEnum):
+    OPEN = "open"
+    DONE = "done"
+    CANCELLED = "cancelled"
+    MISSED = "missed"
+
+
+class MatterDeadline(Base):
+    """Generic deadline on a matter (Sprint 13 partial / BG-041).
+
+    Hearings, drafts, contracts, intake, and post-hearing follow-ups
+    all write to this single table so "what is due this week for
+    tenant X" is one query, not four joined ones.
+    """
+
+    __tablename__ = "matter_deadlines"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    source: Mapped[str] = mapped_column(String(32), nullable=False)
+    kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    due_on: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default=MatterDeadlineStatus.OPEN
+    )
+    assignee_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    source_ref_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    source_ref_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        onupdate=utcnow,
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
+class TenantAIPolicy(Base):
+    """Per-tenant AI policy (Sprint 15 partial / BG-046 schema).
+
+    One row per company; the LLM provider factory reads
+    ``allowed_models_*`` to refuse a request that violates the policy
+    before any call is billed. Enforcement of token_budget and
+    external_share_requires_approval will wire into the drafting +
+    export pipelines in a follow-on.
+    """
+
+    __tablename__ = "tenant_ai_policies"
+    __table_args__ = (
+        UniqueConstraint("company_id", name="uq_tenant_ai_policy_company"),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    allowed_models_drafting_json: Mapped[str] = mapped_column(
+        Text, nullable=False, default="[]"
+    )
+    allowed_models_recommendations_json: Mapped[str] = mapped_column(
+        Text, nullable=False, default="[]"
+    )
+    allowed_models_hearing_pack_json: Mapped[str] = mapped_column(
+        Text, nullable=False, default="[]"
+    )
+    max_tokens_per_session: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=16384
+    )
+    monthly_token_budget: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    external_share_requires_approval: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
+    training_opt_in: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        onupdate=utcnow,
+    )
