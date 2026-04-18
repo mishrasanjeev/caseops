@@ -67,6 +67,12 @@ export default defineConfig({
         ...process.env,
         ...e2eEnv,
         NEXT_PUBLIC_API_BASE_URL: apiBaseUrl,
+        // Tests assert the canonical URL + OG tags on the prod domain;
+        // force the prod site URL so a local `.env.local` that points
+        // NEXT_PUBLIC_SITE_URL at localhost doesn't leak into the
+        // marketing spec.
+        NEXT_PUBLIC_SITE_URL: "https://caseops.ai",
+        NEXT_PUBLIC_APP_URL: "https://caseops.ai/app",
       },
       url: webBaseUrl,
       timeout: 120_000,

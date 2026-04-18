@@ -57,6 +57,7 @@ This document enumerates the work needed to close these gaps, in priority order,
 | Phase 13 | `14c2370` | Hearing pack workflow: `hearing_packs`/`hearing_pack_items` schema, LLM-assembled pack with 7 item kinds, review state + DOCX-ready surface, PATCH hearing outcome auto-creates follow-up task | §4.5 |
 | Phase 14a | `3fc98b9` | Drafting studio backend: `drafts`/`draft_versions`/`draft_reviews` schema, full state machine with fail-closed approve gate, citations verifier hook, review audit trail | §4.3 (backend) |
 | Phase 14b | `113719b` | Drafting studio UI + DOCX export: list + detail editor, state-aware action bar, citations panel, review history, DOCX stream via `python-docx`, Drafts tab in cockpit | §4.3 (UI + export) |
+| Phase 15 | *this session* | Tiny wins (`/icon.png` 404 fix, GitHub Actions CI workflow), Sprint G tooling (`caseops-ingest-corpus --reembed` with keyset pagination + runbook), Sprint H foundation (`audit_events` schema, `services/audit.record_audit` helper wired into matter create, draft create + generate + state transitions, hearing pack generate + review, hearing outcome capture, `GET /api/admin/audit/export` streaming JSONL export that audits itself) | §5.4, §5.5 (extended), §10.4, §8.4 (partial), §4.2 tooling |
 
 **All P0 items closed.** Open P1 spine: §5.1 Temporal, §5.2 Grantex, §5.3 notifications, §5.4 unified audit, §5.6 ethical walls, §5.7 teams, §6.2 role dependency decorators, §6.3 input validation, §6.4 RFC 7807 errors, §6.5 OpenAPI quality, §7.1 Court/Bench/Judge, §7.2 generic Task, §7.3 EvaluationRun, §7.4 Statute/Section, §7.5 consistency sweep, §8.1 OTEL, §8.2 structured logs, §8.3 backups, §8.4 CI/CD, §8.5 secret management, §9.1 broader parsers, §9.2 structural extraction, §9.3 virus scanning. P2: §10 admin console, §11 test coverage expansion, §12 court integrations.
 
@@ -420,11 +421,15 @@ Without this, the PRD's central promise does not exist.
   - Delivery is a Temporal activity with retry.
   - Per-tenant sender domain config and DKIM/SPF documented.
 
-### 5.4 Unified audit service
+### 5.4 Unified audit service — **DONE v1 (Phase 15, 2026-04-18)**
 
-- **Traces to:** PRD §15.4, §17.2; today audit is scattered across `MatterActivity`, `ContractActivity`, `MatterInvoicePaymentAttempt`
-- **Problem:** No system-wide trail. Company profile edits, user suspensions, authority ingests, admin policy changes are not audited.
-- **Done when:**
+- **Traces to:** PRD §15.4, §17.2; Alembic `20260418_0001`; `services/audit.py`; `routes/admin.py`.
+- **Landed:**
+  - `audit_events` table with `(company_id, created_at)` and `(company_id, action)` indexes. Write-once by convention — only `services/audit.record_audit` inserts, nothing in the app ever UPDATEs or DELETEs.
+  - Helper `record_audit(session, ...)` + `record_from_context(session, context, ...)` that captures actor type / membership / action / target / matter / metadata JSON / request id / result.
+  - Wired into the P0 surfaces that mattered first: `matter.created`, `draft.created`, `draft.version_generated`, `draft.submit` / `request_changes` / `approve` / `finalize`, `hearing_pack.generated`, `hearing_pack.reviewed`, `hearing.completed` / `hearing.updated`.
+  - Tests: `tests/test_audit_events.py` (5 cases — matter create emits one row, draft state machine emits one row per transition in linear order, admin-only gate, JSONL stream + export-records-itself, cross-tenant isolation).
+- **Original "done when" checklist (still applicable):**
   - `AuditEvent` table with: `actor_type` (human|agent|system), `actor_id`, `tenant_id`, `matter_id?`, `action`, `target_type`, `target_id`, `result`, `metadata`, `approval_chain?`, `timestamp`.
   - Write-once constraint (no UPDATE/DELETE from application code; optional append-only enforced via DB role).
   - Every write path in `services/` emits an audit event via a shared helper.
@@ -554,13 +559,11 @@ Beyond what §4 and §5 add.
   - GCS versioning enabled on document buckets; lifecycle policy for soft-deleted objects.
   - Tenant-scoped export job produces a signed archive; tested end-to-end.
 
-### 8.4 CI/CD
+### 8.4 CI/CD — **PARTIAL (Phase 15, 2026-04-18)**
 
-- **Traces to:** `infra/` has Cloud Run manifests, no GitHub Actions today
-- **Done when:**
-  - GitHub Actions pipeline: lint (ruff, eslint, tsc), test (pytest, playwright), build images, push to Artifact Registry, deploy to staging Cloud Run.
-  - Required status checks on PRs; `main` protected.
-  - Alembic migration check fails PR if `revision` is missing or out-of-order.
+- **Traces to:** `.github/workflows/ci.yml`.
+- **Landed:** three-job GitHub Actions workflow (`api` — ruff + pytest; `web` — typecheck + vitest + next build; `e2e` — Playwright app suite) that runs on every push/PR to `main`. `e2e` depends on the other two so a broken build fails fast. Concurrency cancels superseded runs. Artifacts uploaded on Playwright failure.
+- **Remaining:** image build + push to Artifact Registry, staging Cloud Run deploy job, `main` branch protection rule, Alembic migration-order lint (checks every new `down_revision` chains to the latest existing revision).
 
 ### 8.5 Secret management
 
@@ -616,10 +619,11 @@ Beyond what §4 and §5 add.
   - Enforcement middleware refuses calls that violate tenant policy.
   - Prompt and tool-call audit is queryable by admins.
 
-### 10.4 Audit export
+### 10.4 Audit export — **DONE v1 (Phase 15, 2026-04-18)**
 
-- **Traces to:** §5.4, PRD §17.3
-- **Done when:** Admins can export JSONL/CSV of `AuditEvent` filtered by time window; download is itself audited.
+- **Traces to:** §5.4 above; `routes/admin.py::export_audit_trail`.
+- **Landed:** `GET /api/admin/audit/export?since=&until=&action=&limit=` streams JSONL scoped to the caller's tenant. Admin-or-owner gated. Defaults to the last 30 days to prevent accidental whole-history downloads. The export itself writes an `audit.exported` row into the very same table.
+- **Remaining:** UI button on `/app/admin`, CSV format toggle (`?format=csv`), server-side background export for tenants with millions of rows.
 
 ### 10.5 Plan entitlements
 

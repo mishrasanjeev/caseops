@@ -53,6 +53,7 @@ from caseops_api.db.models import (
     Matter,
     ModelRun,
 )
+from caseops_api.services.audit import record_from_context
 from caseops_api.services.authorities import search_authority_catalog
 from caseops_api.services.citations import (
     Claim,
@@ -132,6 +133,16 @@ def create_draft(
         review_required=True,
     )
     session.add(draft)
+    session.flush()
+    record_from_context(
+        session,
+        context,
+        action="draft.created",
+        target_type="draft",
+        target_id=draft.id,
+        matter_id=matter.id,
+        metadata={"title": draft.title, "draft_type": draft.draft_type},
+    )
     session.commit()
     session.refresh(draft)
     return draft
@@ -389,6 +400,19 @@ def generate_draft_version(
     draft.review_required = True
     draft.updated_at = datetime.now(UTC)
     session.flush()
+    record_from_context(
+        session,
+        context,
+        action="draft.version_generated",
+        target_type="draft",
+        target_id=draft.id,
+        matter_id=matter.id,
+        metadata={
+            "revision": version.revision,
+            "verified_citation_count": version.verified_citation_count,
+            "cited_count": len(surviving),
+        },
+    )
     session.commit()
     session.refresh(draft)
     return draft
@@ -508,6 +532,19 @@ def transition_draft(
     )
     draft.updated_at = datetime.now(UTC)
     session.flush()
+    record_from_context(
+        session,
+        context,
+        action=f"draft.{action}",
+        target_type="draft",
+        target_id=draft.id,
+        matter_id=matter.id,
+        metadata={
+            "status_after": draft.status,
+            "version_id": current.id,
+            "notes_len": len(notes) if notes else 0,
+        },
+    )
     session.commit()
     session.refresh(draft)
     return draft

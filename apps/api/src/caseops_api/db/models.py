@@ -2124,3 +2124,58 @@ class DraftReview(Base):
     )
 
     draft: Mapped[Draft] = relationship(back_populates="reviews")
+
+
+class AuditActorType(StrEnum):
+    HUMAN = "human"
+    AGENT = "agent"
+    SERVICE = "service"
+    SYSTEM = "system"
+
+
+class AuditResult(StrEnum):
+    SUCCESS = "success"
+    DENIED = "denied"
+    FAILED = "failed"
+
+
+class AuditEvent(Base):
+    """Append-only tenant audit trail (PRD §15.4, §17.2).
+
+    The application NEVER updates or deletes rows in this table. Cloud SQL
+    / Postgres can add a role-level restriction on top, but at the code
+    level the invariant holds via discipline: only `services/audit.py`
+    writes here, and it only INSERTs.
+    """
+
+    __tablename__ = "audit_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    actor_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    actor_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    actor_label: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    matter_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matters.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    action: Mapped[str] = mapped_column(String(80), nullable=False)
+    target_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    target_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    result: Mapped[str] = mapped_column(String(24), nullable=False, default=AuditResult.SUCCESS)
+    metadata_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    request_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )

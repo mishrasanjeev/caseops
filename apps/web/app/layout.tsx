@@ -45,7 +45,7 @@ const organizationJsonLd = {
   "@type": "Organization",
   name: siteConfig.name,
   url: siteConfig.url,
-  logo: `${siteConfig.url}/icon.png`,
+  logo: `${siteConfig.url}/icon`,
   email: siteConfig.contact.email,
   sameAs: [],
 };
@@ -107,9 +107,9 @@ export const metadata: Metadata = {
     description: siteConfig.description,
     creator: siteConfig.twitter,
   },
-  icons: {
-    icon: [{ url: "/icon.png", type: "image/png" }],
-  },
+  // icons removed — app/icon.tsx is a Next file-based icon convention and
+  // is auto-served at /icon (PNG). Declaring it here as /icon.png creates
+  // a broken link: Next emits /icon, not /icon.png.
 };
 
 export const viewport: Viewport = {

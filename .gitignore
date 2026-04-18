@@ -31,6 +31,7 @@ node_modules/
 .e2e/
 playwright-report/
 test-results/
+e2e-screenshots/
 __pycache__/
 .pytest_cache/
 .ruff_cache/

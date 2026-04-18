@@ -781,10 +781,101 @@ __all__ = [
     "HC_BUCKET",
     "IngestionSummary",
     "ParsedJudgment",
+    "ReembedSummary",
     "SC_BUCKET",
     "ingest_hc_from_s3",
     "ingest_local_directory",
     "ingest_sc_from_s3",
     "parse_judgment_pdf",
     "persist_judgment",
+    "reembed_corpus",
 ]
+
+
+@dataclass
+class ReembedSummary:
+    """Counters returned by `reembed_corpus` so the CLI can print a tidy summary."""
+
+    scanned_chunks: int = 0
+    reembedded_chunks: int = 0
+    skipped_chunks: int = 0
+    failed_chunks: int = 0
+    errors: list[str] = field(default_factory=list)
+
+
+def reembed_corpus(
+    session: Session,
+    *,
+    embedding_provider: EmbeddingProvider | None = None,
+    batch_size: int = 64,
+    target_model: str | None = None,
+    force: bool = False,
+    limit: int | None = None,
+) -> ReembedSummary:
+    """Recompute vector embeddings for previously-chunked authorities.
+
+    Text stays put — this is the model-swap path from `docs/runbooks/
+    corpus-ingest.md`. By default we only touch chunks whose
+    ``embedding_model`` does not match the target (or is NULL), so
+    re-running with the same model is a no-op. Pass ``force=True`` to
+    recompute every row regardless.
+
+    Returns counters, not rows, so the CLI can print a summary without
+    loading the whole table.
+    """
+    provider = embedding_provider or build_provider()
+    target = target_model or provider.model
+    summary = ReembedSummary()
+    is_pg = _postgres_backend(session)
+
+    # Keyset-paginate by chunk id. If we paged with offset/limit the
+    # UPDATEs inside the loop would rewrite rows out of the WHERE
+    # predicate and the offset cursor would silently skip work (a bug
+    # we hit the first time). Keyset on a stable id is immune to that.
+    last_id: str | None = None
+    while True:
+        page_stmt = (
+            select(AuthorityDocumentChunk)
+            .order_by(AuthorityDocumentChunk.id)
+            .limit(batch_size)
+        )
+        if not force:
+            page_stmt = page_stmt.where(
+                (AuthorityDocumentChunk.embedding_model.is_(None))
+                | (AuthorityDocumentChunk.embedding_model != target)
+            )
+        if last_id is not None:
+            page_stmt = page_stmt.where(AuthorityDocumentChunk.id > last_id)
+
+        if limit is not None:
+            remaining = limit - summary.scanned_chunks
+            if remaining <= 0:
+                break
+            page_stmt = page_stmt.limit(min(batch_size, remaining))
+
+        chunks = list(session.scalars(page_stmt))
+        if not chunks:
+            break
+        last_id = chunks[-1].id
+        summary.scanned_chunks += len(chunks)
+        try:
+            embed_result = provider.embed([c.content for c in chunks])
+        except Exception as exc:  # pragma: no cover — provider-level failure path
+            summary.failed_chunks += len(chunks)
+            summary.errors.append(f"embed batch failed: {exc!r}")
+            continue
+
+        for chunk, vector in zip(chunks, embed_result.vectors, strict=False):
+            chunk.embedding_model = embed_result.model
+            chunk.embedding_dimensions = embed_result.dimensions
+            chunk.embedding_json = _encode_vector(vector)
+            chunk.embedded_at = datetime.now(UTC)
+            session.add(chunk)
+            summary.reembedded_chunks += 1
+
+        session.flush()
+        if is_pg:
+            _apply_pgvector_batch(session, chunks=chunks, vectors=embed_result.vectors)
+        session.commit()
+
+    return summary

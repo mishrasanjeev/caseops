@@ -253,6 +253,57 @@ citation anchors wired from the body into the citations panel.
 
 ---
 
+## Audit trail
+
+Every tenant-affecting write lands a row in `audit_events` via
+`services/audit.record_audit` — append-only by convention, indexed by
+`(company_id, created_at)` and `(company_id, action)`. Wired into
+matter create, draft state transitions (create / generate / submit /
+request-changes / approve / finalize), hearing-pack generate +
+review, and hearing outcome capture.
+
+Admins can stream the trail as JSONL:
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+     "http://127.0.0.1:8000/api/admin/audit/export?since=2026-04-01" \
+     -o audit.jsonl
+```
+
+Defaults to the last 30 days. Optional filters: `since=`, `until=`
+(ISO-8601), `action=` (e.g. `draft.approve`), `limit=`. Downloads are
+themselves audited (`audit.exported` row with row_count in metadata).
+
+Tests: `apps/api/tests/test_audit_events.py` — 5 cases covering
+row emission, state-machine linearity, admin-only gate, JSONL
+streaming + self-audit, cross-tenant isolation.
+
+---
+
+## Corpus ingestion
+
+Run `caseops-ingest-corpus` to pull Supreme Court and Indian High
+Court judgments into the authority corpus. Full CLI usage and the
+**model-swap procedure** (swap embedding provider without
+re-ingesting text) are in
+[`docs/runbooks/corpus-ingest.md`](./docs/runbooks/corpus-ingest.md).
+
+Quick reference:
+
+```bash
+# Ingest — streaming from public S3
+uv run caseops-ingest-corpus --court sc --years 2020-2024 --from-s3 -v
+uv run caseops-ingest-corpus --court hc --years 2020-2024 --from-s3 \
+  --hc-courts delhi,bombay,karnataka,madras,telangana -v
+
+# Re-embed — after changing CASEOPS_EMBEDDING_PROVIDER / MODEL
+export CASEOPS_EMBEDDING_PROVIDER=voyage
+export CASEOPS_EMBEDDING_MODEL=voyage-3-law
+uv run caseops-ingest-corpus --reembed -v
+```
+
+---
+
 ## Hearing prep
 
 CaseOps drafts a citation-grounded **hearing pack** for every scheduled

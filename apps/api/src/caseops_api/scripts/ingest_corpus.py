@@ -36,13 +36,19 @@ from caseops_api.services.corpus_ingest import (
     ingest_hc_from_s3,
     ingest_local_directory,
     ingest_sc_from_s3,
+    reembed_corpus,
     resolve_hc_courts,
 )
 
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="caseops-ingest-corpus")
-    parser.add_argument("--court", required=True, choices=["hc", "sc"])
+    parser.add_argument(
+        "--court",
+        required=False,
+        choices=["hc", "sc"],
+        help="Required for ingestion; ignored for --reembed.",
+    )
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--year", type=int, help="Single year (e.g., 2010).")
     group.add_argument(
@@ -104,6 +110,21 @@ def _build_parser() -> argparse.ArgumentParser:
             f"Valid names: {', '.join(sorted(HC_COURT_CATALOG.keys()))}."
         ),
     )
+    parser.add_argument(
+        "--reembed",
+        action="store_true",
+        help=(
+            "Recompute vector embeddings for previously-chunked chunks. "
+            "Use after switching CASEOPS_EMBEDDING_PROVIDER / MODEL. "
+            "Scans chunks whose embedding_model != the new target; "
+            "combine with --force to re-embed every chunk."
+        ),
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="With --reembed, re-embed every chunk regardless of existing model.",
+    )
     parser.add_argument("--verbose", "-v", action="store_true")
     return parser
 
@@ -155,6 +176,31 @@ def main(argv: list[str] | None = None) -> int:
         level=logging.INFO if args.verbose else logging.WARNING,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+
+    # --reembed is a standalone mode that doesn't need a court / year /
+    # source. Handle it before the ingestion branch so we don't demand
+    # flags we won't use.
+    if args.reembed:
+        factory = get_session_factory()
+        with factory() as session:
+            summary = reembed_corpus(
+                session,
+                batch_size=args.batch_size or 64,
+                force=args.force,
+                limit=args.limit,
+            )
+        print("=== re-embed summary ===")
+        print(f"  scanned_chunks    : {summary.scanned_chunks}")
+        print(f"  reembedded_chunks : {summary.reembedded_chunks}")
+        print(f"  skipped_chunks    : {summary.skipped_chunks}")
+        print(f"  failed_chunks     : {summary.failed_chunks}")
+        if summary.errors:
+            print(f"  first error       : {summary.errors[0]}")
+        return 1 if summary.failed_chunks else 0
+
+    if not args.court:
+        print("error: --court is required (hc|sc) for ingestion", file=sys.stderr)
+        return 2
 
     if not args.from_s3 and args.path is None:
         print(

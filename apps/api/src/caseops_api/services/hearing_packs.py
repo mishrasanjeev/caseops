@@ -39,6 +39,7 @@ from caseops_api.db.models import (
     MatterTask,
     ModelRun,
 )
+from caseops_api.services.audit import record_from_context
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.llm import (
     LLMCallContext,
@@ -340,6 +341,18 @@ def generate_hearing_pack(
                 source_ref=item.source_ref,
             )
         )
+    record_from_context(
+        session,
+        context,
+        action="hearing_pack.generated",
+        target_type="hearing_pack",
+        target_id=pack.id,
+        matter_id=matter.id,
+        metadata={
+            "hearing_id": hearing.id if hearing else None,
+            "item_count": len(items),
+        },
+    )
     session.commit()
     session.refresh(pack)
     return pack
@@ -386,6 +399,15 @@ def mark_hearing_pack_reviewed(
     pack.review_required = False
     pack.reviewed_at = datetime.now(UTC)
     pack.reviewed_by_membership_id = context.membership.id
+    session.flush()
+    record_from_context(
+        session,
+        context,
+        action="hearing_pack.reviewed",
+        target_type="hearing_pack",
+        target_id=pack.id,
+        matter_id=matter.id,
+    )
     session.commit()
     session.refresh(pack)
     return pack

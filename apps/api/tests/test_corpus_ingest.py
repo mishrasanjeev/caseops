@@ -18,6 +18,7 @@ from caseops_api.services.corpus_ingest import (
     ingest_local_directory,
     parse_judgment_pdf,
     persist_judgment,
+    reembed_corpus,
 )
 from caseops_api.services.embeddings import MockProvider
 
@@ -260,3 +261,105 @@ def test_parse_judgment_pdf_returns_none_on_blank_file(tmp_path: Path) -> None:
     pdf.write_bytes(b"%PDF-1.4\n%%EOF\n")
     parsed = parse_judgment_pdf(pdf, court="hc", forum_level="high_court", year=2024)
     assert parsed is None
+
+
+def _seed_two_chunks(
+    session, *, model: str = "bge-small-v1.5"
+) -> tuple[str, str]:
+    """Insert a single document with two chunks already embedded by
+    `model`. Returns (doc_id, second_chunk_id) for assertions."""
+    from datetime import UTC, date, datetime
+
+    from caseops_api.db.models import (
+        AuthorityDocument,
+        AuthorityDocumentChunk,
+        AuthorityDocumentType,
+    )
+
+    doc = AuthorityDocument(
+        source="seed-tests",
+        adapter_name="seed",
+        court_name="Supreme Court of India",
+        forum_level="supreme_court",
+        document_type=AuthorityDocumentType.JUDGMENT,
+        title="Reembed seed",
+        case_reference=None,
+        bench_name=None,
+        neutral_citation="REEMBED-1",
+        decision_date=date(2024, 1, 1),
+        canonical_key=f"reembed-seed::{model}",
+        source_reference=None,
+        summary="Placeholder summary",
+        document_text=None,
+        ingested_at=datetime.now(UTC),
+    )
+    session.add(doc)
+    session.flush()
+    chunk_a = AuthorityDocumentChunk(
+        authority_document_id=doc.id,
+        chunk_index=0,
+        content="First chunk — says the award is opposed to public policy.",
+        token_count=10,
+        embedding_model=model,
+        embedding_dimensions=128,
+        embedding_json='[0.0, 0.1]',
+        embedded_at=datetime.now(UTC),
+    )
+    chunk_b = AuthorityDocumentChunk(
+        authority_document_id=doc.id,
+        chunk_index=1,
+        content="Second chunk — cites precedent and concludes on Section 34.",
+        token_count=10,
+        embedding_model=model,
+        embedding_dimensions=128,
+        embedding_json='[0.2, 0.3]',
+        embedded_at=datetime.now(UTC),
+    )
+    session.add(chunk_a)
+    session.add(chunk_b)
+    session.commit()
+    return doc.id, chunk_b.id
+
+
+def test_reembed_swaps_every_chunk_and_is_idempotent(client: TestClient) -> None:
+    factory = get_session_factory()
+    with factory() as session:
+        _seed_two_chunks(session, model="bge-small-v1.5")
+
+    # First pass swaps all chunks to the mock model.
+    provider = MockProvider(dimensions=64)
+    with factory() as session:
+        summary = reembed_corpus(session, embedding_provider=provider)
+    assert summary.scanned_chunks == 2
+    assert summary.reembedded_chunks == 2
+    assert summary.failed_chunks == 0
+
+    with factory() as session:
+        models = {
+            row.embedding_model
+            for row in session.scalars(select(AuthorityDocumentChunk))
+        }
+    assert models == {provider.model}
+
+    # Second pass with the same provider is a no-op — the predicate
+    # already matches; nothing to touch.
+    with factory() as session:
+        again = reembed_corpus(session, embedding_provider=provider)
+    assert again.scanned_chunks == 0
+    assert again.reembedded_chunks == 0
+
+
+def test_reembed_force_touches_already_correct_chunks(client: TestClient) -> None:
+    factory = get_session_factory()
+    with factory() as session:
+        _seed_two_chunks(session, model="bge-small-v1.5")
+
+    provider = MockProvider(dimensions=64)
+    with factory() as session:
+        reembed_corpus(session, embedding_provider=provider)
+    # After the first pass, everyone is on the mock model. With force,
+    # a rerun should still rewrite every row.
+    with factory() as session:
+        forced = reembed_corpus(session, embedding_provider=provider, force=True)
+    assert forced.scanned_chunks == 2
+    assert forced.reembedded_chunks == 2

@@ -60,6 +60,7 @@ from caseops_api.schemas.matters import (
     MatterWorkspaceMembership,
     MatterWorkspaceResponse,
 )
+from caseops_api.services.audit import record_from_context
 from caseops_api.services.document_jobs import (
     enqueue_processing_job,
     load_latest_processing_jobs,
@@ -560,6 +561,19 @@ def create_matter(
         title="Matter created",
         detail=f"{matter.matter_code} created as {matter.status}.",
     )
+    record_from_context(
+        session,
+        context,
+        action="matter.created",
+        target_type="matter",
+        target_id=matter.id,
+        matter_id=matter.id,
+        metadata={
+            "matter_code": matter.matter_code,
+            "status": matter.status,
+            "forum_level": matter.forum_level,
+        },
+    )
     session.commit()
     session.refresh(matter)
     return _matter_record(matter)
@@ -921,6 +935,19 @@ def update_matter_hearing(
             else f"Hearing updated — {hearing.purpose}"
         ),
         detail=hearing.outcome_note,
+    )
+    record_from_context(
+        session,
+        context,
+        action="hearing.completed" if completed else "hearing.updated",
+        target_type="hearing",
+        target_id=hearing.id,
+        matter_id=matter.id,
+        metadata={
+            "prior_status": prior_status,
+            "status": hearing.status,
+            "has_outcome_note": bool(hearing.outcome_note),
+        },
     )
     session.commit()
     session.refresh(hearing)
