@@ -134,13 +134,43 @@ class TestBuildReranker:
         monkeypatch.delenv("CASEOPS_RERANK_ENABLED", raising=False)
         assert isinstance(build_reranker(), MockReranker)
 
-    def test_enabled_uses_llm_when_provider_supplied(
+    def test_enabled_with_llm_backend_uses_llm(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("CASEOPS_RERANK_ENABLED", "true")
+        monkeypatch.setenv("CASEOPS_RERANK_BACKEND", "llm")
         stub: LLMProvider = _StubLLM(text='{"order":[]}')
         reranker = build_reranker(provider=stub)
         assert isinstance(reranker, LLMReranker)
+
+    def test_unknown_backend_falls_back_to_mock(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("CASEOPS_RERANK_ENABLED", "true")
+        monkeypatch.setenv("CASEOPS_RERANK_BACKEND", "does-not-exist")
+        assert isinstance(build_reranker(), MockReranker)
+
+
+@pytest.mark.skipif(
+    not __import__("os").environ.get("CASEOPS_RERANK_RUN_NATIVE"),
+    reason="Set CASEOPS_RERANK_RUN_NATIVE=1 to exercise the 130MB fastembed model",
+)
+class TestFastembedRerankerIntegration:
+    def test_reorders_bail_cases_above_tax_cases(self) -> None:
+        from caseops_api.services.reranker import FastembedReranker
+
+        reranker = FastembedReranker()
+        cands = [
+            _cand(0, "Income tax appeal", "assessment year 2018 transfer pricing"),
+            _cand(1, "Bail application", "applicant seeks regular bail triple test"),
+            _cand(2, "Writ for land acquisition", "collector notification 2017"),
+            _cand(3, "Bail in economic offence", "parity with co-accused granted"),
+        ]
+        out = reranker.rerank(
+            "bail triple test parity co-accused", cands, top_k=2
+        )
+        # The two bail cases should outrank the tax + land matters.
+        assert {c.identifier for c in out} == {"id-1", "id-3"}
 
 
 class TestCandidatesAdapter:

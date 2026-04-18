@@ -83,6 +83,63 @@ class MockReranker:
         return candidates[: max(0, top_k)]
 
 
+class FastembedReranker:
+    """Native cross-encoder reranker via ``fastembed``.
+
+    Defaults to ``jinaai/jina-reranker-v1-tiny-en`` — a 130 MB ONNX
+    model that scores query/document pairs directly and runs on CPU.
+    The first call downloads the model; subsequent calls are warm.
+
+    Fastembed exposes ``TextCrossEncoder`` which yields a float score
+    per (query, doc) pair. We sort descending and clamp to ``top_k``.
+    """
+
+    name = "fastembed"
+
+    def __init__(
+        self,
+        *,
+        model: str = "jinaai/jina-reranker-v1-tiny-en",
+        cache_dir: str | None = None,
+    ) -> None:
+        try:
+            from fastembed.rerank.cross_encoder import TextCrossEncoder
+        except ImportError as exc:  # pragma: no cover — dep is always present
+            raise RuntimeError(
+                "The 'fastembed' package is required for FastembedReranker."
+            ) from exc
+        self._encoder = TextCrossEncoder(
+            model_name=model,
+            cache_dir=cache_dir,
+        )
+        self.model = model
+
+    def rerank(
+        self,
+        query: str,
+        candidates: list[RerankerCandidate],
+        *,
+        top_k: int,
+    ) -> list[RerankerCandidate]:
+        if not candidates:
+            return []
+        if top_k <= 0:
+            return []
+        if len(candidates) <= 1:
+            return candidates[:top_k]
+        documents = [
+            (c.title + "\n" + c.text)[:1500] for c in candidates
+        ]
+        try:
+            scores = list(self._encoder.rerank(query, documents))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("fastembed reranker failed, falling back: %s", exc)
+            return candidates[:top_k]
+        scored = list(zip(candidates, scores, strict=False))
+        scored.sort(key=lambda pair: float(pair[1]), reverse=True)
+        return [cand for cand, _ in scored[:top_k]]
+
+
 class LLMReranker:
     """Uses an ``LLMProvider`` to score candidates in one batch call."""
 
@@ -206,25 +263,53 @@ def _parse_order(text: str, *, expected: int) -> list[int]:
 def build_reranker(provider: LLMProvider | None = None) -> RerankerProvider:
     """Pick the reranker that matches the environment.
 
-    ``CASEOPS_RERANK_ENABLED=true`` (default false) turns on the
-    LLM-judge reranker using the configured ``LLMProvider``. When
-    disabled, or when the provider cannot be built, the mock
-    reranker is returned.
+    ``CASEOPS_RERANK_ENABLED=true`` (default false) turns reranking on.
+    ``CASEOPS_RERANK_BACKEND`` picks the implementation:
+
+    - ``mock`` (default when disabled) — no-op, preserves input order.
+    - ``fastembed`` (default when enabled) — native cross-encoder via
+      fastembed; CPU-only, ~130 MB model, one-call-per-rerank.
+    - ``llm`` — LLM-as-judge; sends all candidates in one prompt to
+      the configured ``LLMProvider``. Useful when you already pay for
+      the LLM and want to avoid shipping another model in the image.
+
+    ``CASEOPS_RERANK_MODEL`` overrides the fastembed model name.
+
+    Any construction failure falls back silently to ``MockReranker``
+    so retrieval never breaks on reranker misconfiguration.
     """
     enabled = os.environ.get("CASEOPS_RERANK_ENABLED", "").strip().lower()
     if enabled not in {"1", "true", "yes", "on"}:
         return MockReranker()
-    if provider is None:
+
+    backend = os.environ.get("CASEOPS_RERANK_BACKEND", "fastembed").strip().lower()
+
+    if backend in {"llm", "llm-judge"}:
+        if provider is None:
+            try:
+                from caseops_api.services.llm import build_provider
+                provider = build_provider()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "LLM reranker unavailable; falling back to mock: %s", exc
+                )
+                return MockReranker()
+        return LLMReranker(provider)
+
+    if backend in {"fastembed", "native", "cross-encoder"}:
+        model = os.environ.get(
+            "CASEOPS_RERANK_MODEL", "jinaai/jina-reranker-v1-tiny-en"
+        )
         try:
-            from caseops_api.services.llm import build_provider
-            provider = build_provider()
+            return FastembedReranker(model=model)
         except Exception as exc:  # noqa: BLE001
             logger.warning(
-                "reranker enabled but LLM provider unavailable; "
-                "falling back to mock: %s", exc,
+                "fastembed reranker unavailable; falling back to mock: %s", exc
             )
             return MockReranker()
-    return LLMReranker(provider)
+
+    logger.warning("unknown CASEOPS_RERANK_BACKEND=%s; using mock", backend)
+    return MockReranker()
 
 
 def candidates_from_iterable(
@@ -247,6 +332,7 @@ def candidates_from_iterable(
 
 
 __all__ = [
+    "FastembedReranker",
     "LLMReranker",
     "MockReranker",
     "RerankerCandidate",
