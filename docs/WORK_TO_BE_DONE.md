@@ -57,7 +57,8 @@ This document enumerates the work needed to close these gaps, in priority order,
 | Phase 13 | `14c2370` | Hearing pack workflow: `hearing_packs`/`hearing_pack_items` schema, LLM-assembled pack with 7 item kinds, review state + DOCX-ready surface, PATCH hearing outcome auto-creates follow-up task | §4.5 |
 | Phase 14a | `3fc98b9` | Drafting studio backend: `drafts`/`draft_versions`/`draft_reviews` schema, full state machine with fail-closed approve gate, citations verifier hook, review audit trail | §4.3 (backend) |
 | Phase 14b | `113719b` | Drafting studio UI + DOCX export: list + detail editor, state-aware action bar, citations panel, review history, DOCX stream via `python-docx`, Drafts tab in cockpit | §4.3 (UI + export) |
-| Phase 15 | *this session* | Tiny wins (`/icon.png` 404 fix, GitHub Actions CI workflow), Sprint G tooling (`caseops-ingest-corpus --reembed` with keyset pagination + runbook), Sprint H foundation (`audit_events` schema, `services/audit.record_audit` helper wired into matter create, draft create + generate + state transitions, hearing pack generate + review, hearing outcome capture, `GET /api/admin/audit/export` streaming JSONL export that audits itself) | §5.4, §5.5 (extended), §10.4, §8.4 (partial), §4.2 tooling |
+| Phase 15 | `1df67c1` | Tiny wins (`/icon.png` 404 fix, GitHub Actions CI workflow), Sprint G tooling (`caseops-ingest-corpus --reembed` with keyset pagination + runbook), Sprint H foundation (`audit_events` schema, `services/audit.record_audit` helper wired into matter create, draft create + generate + state transitions, hearing pack generate + review, hearing outcome capture, `GET /api/admin/audit/export` streaming JSONL export that audits itself) | §5.4, §5.5 (extended), §10.4, §8.4 (partial), §4.2 tooling |
+| Phase 16 | *this session* | Sprint H completion: matter-level ACL (`matter_access_grants` + `ethical_walls` + `matters.restricted_access`), `services/matter_access` with can_access / assert_access / visible_matters_filter, enforcement threaded through matter / drafting / hearing-pack / recommendation `_load_matter` call sites, CRUD API for grants and walls (owner/admin only, each mutation audited), owner-bypass on self-walls, audit-export UI on `/app/admin` with date pickers + action filter | §5.6, §10.4 (UI) |
 
 **All P0 items closed.** Open P1 spine: §5.1 Temporal, §5.2 Grantex, §5.3 notifications, §5.4 unified audit, §5.6 ethical walls, §5.7 teams, §6.2 role dependency decorators, §6.3 input validation, §6.4 RFC 7807 errors, §6.5 OpenAPI quality, §7.1 Court/Bench/Judge, §7.2 generic Task, §7.3 EvaluationRun, §7.4 Statute/Section, §7.5 consistency sweep, §8.1 OTEL, §8.2 structured logs, §8.3 backups, §8.4 CI/CD, §8.5 secret management, §9.1 broader parsers, §9.2 structural extraction, §9.3 virus scanning. P2: §10 admin console, §11 test coverage expansion, §12 court integrations.
 
@@ -441,13 +442,21 @@ Without this, the PRD's central promise does not exist.
 - **Landed:** `sessions_valid_after` column on `company_memberships`; JWTs carry `iat` and `get_session_context` rejects pre-cutoff tokens. Suspension bumps the cutoff to now.
 - **Remaining (v2):** explicit refresh-token rotation with short-lived access tokens and a `POST /api/auth/logout` that revokes the refresh token — deferred behind the auth-service workstream.
 
-### 5.6 Ethical walls and matter-level ACL
+### 5.6 Ethical walls and matter-level ACL — **DONE v1 (Phase 16, 2026-04-18)**
 
-- **Traces to:** PRD §13.4; today only `assignee_membership_id` exists
-- **Done when:**
-  - Schema: `MatterAccessGrant` (matter_id, principal_type user|team, principal_id, access_level) and `EthicalWall` (matter_id, excluded_principal_type, excluded_principal_id, reason).
-  - All matter queries filter by explicit access grants, not just company_id.
-  - Tests: user with broad role denied on walled matter; ethical-wall violation logged and blocked.
+- **Traces to:** PRD §13.4; Alembic `20260418_0002`; `services/matter_access.py`; `routes/matters.py` (access CRUD).
+- **Landed:**
+  - `matters.restricted_access` boolean (default false — existing matters keep current "all company members see" behaviour). `matter_access_grants` opens a restricted matter to a membership; `ethical_walls` blocks a membership regardless of grants.
+  - `services/matter_access` exposes `can_access`, `assert_access` (raises 404 and commits an `access_denied` audit row on denial — deliberately commits before raising so the compliance trail survives the request-scope rollback), and `visible_matters_filter` (a SQLAlchemy clause the matter list composes in).
+  - Enforcement threaded through every `_load_matter` / `_get_matter_model` in `services/matters.py`, `services/drafting.py`, `services/hearing_packs.py`, `services/recommendations.py`. Matter list view composes the filter clause.
+  - Decision rule: owners bypass walls on their own firm; the matter's assignee bypasses walls on their own matter; walls beat grants; restricted_access=false means company-member default.
+  - CRUD: `GET /matters/{id}/access` (panel), `POST /matters/{id}/access/restricted`, `POST/DELETE /matters/{id}/access/grants/{id}`, `POST/DELETE /matters/{id}/access/walls/{id}`. Every mutation audits and is owner/admin-only.
+  - UI: audit-export form (date pickers + action filter + Download button) on `/app/admin`, gated on `audit:export` capability.
+  - Tests: `tests/test_ethical_walls.py` (6 cases — unrestricted default visibility, restricted hides non-granted members, wall beats grant, owner bypass, member denied CRUD, cross-tenant 404). Full API suite: 190 passed.
+- **Remaining:**
+  - Team-scoped grants once §5.7 Teams lands (principal_type=team, principal_id=team_id).
+  - UI for managing grants + walls on the matter cockpit (the endpoints are ready; the page still needs the surface — pairs with §10.1 admin console).
+  - Finer `access_level` values beyond `member` (read-only viewer, billing-only, etc.) — keep behind the existing enum so adding them doesn't migrate.
 
 ### 5.7 Teams
 
@@ -619,11 +628,11 @@ Beyond what §4 and §5 add.
   - Enforcement middleware refuses calls that violate tenant policy.
   - Prompt and tool-call audit is queryable by admins.
 
-### 10.4 Audit export — **DONE v1 (Phase 15, 2026-04-18)**
+### 10.4 Audit export — **DONE v1 (Phase 15 API + Phase 16 UI, 2026-04-18)**
 
-- **Traces to:** §5.4 above; `routes/admin.py::export_audit_trail`.
-- **Landed:** `GET /api/admin/audit/export?since=&until=&action=&limit=` streams JSONL scoped to the caller's tenant. Admin-or-owner gated. Defaults to the last 30 days to prevent accidental whole-history downloads. The export itself writes an `audit.exported` row into the very same table.
-- **Remaining:** UI button on `/app/admin`, CSV format toggle (`?format=csv`), server-side background export for tenants with millions of rows.
+- **Traces to:** §5.4 above; `routes/admin.py::export_audit_trail`; `apps/web/app/app/admin/page.tsx`.
+- **Landed:** `GET /api/admin/audit/export?since=&until=&action=&limit=` streams JSONL scoped to the caller's tenant. Admin-or-owner gated. Defaults to the last 30 days. The export itself writes an `audit.exported` row into the very same table. `/app/admin` has the form — date pickers + action filter + Download — gated on the `audit:export` capability.
+- **Remaining:** CSV format toggle (`?format=csv`), background export job for tenants with millions of rows (Temporal — §5.1).
 
 ### 10.5 Plan entitlements
 

@@ -71,6 +71,7 @@ from caseops_api.services.llm import (
     build_provider,
     generate_structured,
 )
+from caseops_api.services.matter_access import assert_access
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +94,7 @@ def _load_matter(session: Session, context: SessionContext, matter_id: str) -> M
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Matter not found."
         )
+    assert_access(session, context=context, matter=matter)
     return matter
 
 

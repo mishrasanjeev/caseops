@@ -401,6 +401,11 @@ class Matter(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     next_hearing_on: Mapped[date | None] = mapped_column(Date, nullable=True)
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
+    # PRD §13.4 / §5.6: when True, only explicit matter_access_grants
+    # open the matter; when False (default) every company member with
+    # the company-level role can see it. Ethical walls always apply
+    # regardless of this flag.
+    restricted_access: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
@@ -2174,6 +2179,90 @@ class AuditEvent(Base):
     request_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
     ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
     user_agent: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+
+
+class MatterAccessLevel(StrEnum):
+    # Single-level v1: if the grant exists, the membership gets full
+    # access to the matter. Finer gradation (read-only, billing-only,
+    # etc.) can land behind this enum without a migration.
+    MEMBER = "member"
+
+
+class MatterAccessGrant(Base):
+    """Explicit per-user grant on a matter. Only consulted when the
+    matter has `restricted_access=True`; otherwise company role rules
+    the decision."""
+
+    __tablename__ = "matter_access_grants"
+    __table_args__ = (
+        UniqueConstraint(
+            "matter_id", "membership_id", name="uq_matter_access_grants_matter_membership"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    membership_id: Mapped[str] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    access_level: Mapped[str] = mapped_column(
+        String(24), nullable=False, default=MatterAccessLevel.MEMBER
+    )
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    granted_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+
+
+class EthicalWall(Base):
+    """Exclusion list. An `excluded_membership_id` row blocks that
+    membership from accessing the matter even if they have a grant
+    or (in unrestricted mode) would see it by default.
+
+    The matter's own assignee and company owners bypass walls in the
+    enforcement helper — a firm shouldn't accidentally lock its own
+    partners out of a matter they own."""
+
+    __tablename__ = "ethical_walls"
+    __table_args__ = (
+        UniqueConstraint(
+            "matter_id", "excluded_membership_id", name="uq_ethical_walls_matter_excluded"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    excluded_membership_id: Mapped[str] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,

@@ -224,6 +224,8 @@ def _write_model_run(
 
 
 def _load_matter(session: Session, *, context: SessionContext, matter_id: str) -> Matter:
+    from caseops_api.services.matter_access import assert_access
+
     matter = session.scalar(
         select(Matter).where(
             Matter.id == matter_id, Matter.company_id == context.company.id
@@ -234,6 +236,7 @@ def _load_matter(session: Session, *, context: SessionContext, matter_id: str) -
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Matter not found.",
         )
+    assert_access(session, context=context, matter=matter)
     return matter
 
 

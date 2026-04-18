@@ -253,6 +253,40 @@ citation anchors wired from the body into the citations panel.
 
 ---
 
+## Ethical walls and matter-level ACL
+
+Matters default to **"every company member sees them"**. Flip
+`matters.restricted_access=true` on a sensitive matter and only
+memberships listed in `matter_access_grants` open it. Layer on top:
+**ethical walls** — rows in `ethical_walls` block a specific
+membership regardless of grants, so a conflict-walled associate can't
+see a matter even if the partner forgot to revoke their grant.
+
+Rule order (top wins):
+
+1. Company owner → always allowed (can't be locked out of their own firm).
+2. Matter's own assignee → always allowed (the responsible lawyer can't be walled from their matter).
+3. Ethical wall matches → **denied and audited** (`access_denied`).
+4. Matter not restricted → allowed.
+5. Explicit grant exists → allowed.
+6. Otherwise → denied and audited.
+
+Endpoints for admins / owners:
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/matters/{id}/access` | Panel: restricted flag + grants + walls. |
+| `POST` | `/api/matters/{id}/access/restricted` | Toggle `{ "restricted": true \| false }`. |
+| `POST` | `/api/matters/{id}/access/grants` | `{ membership_id, access_level?, reason? }`. |
+| `DELETE` | `/api/matters/{id}/access/grants/{grant_id}` | Revoke a grant. |
+| `POST` | `/api/matters/{id}/access/walls` | `{ excluded_membership_id, reason? }`. |
+| `DELETE` | `/api/matters/{id}/access/walls/{wall_id}` | Remove a wall. |
+
+Every mutation is audited; every denied access is audited. Tests:
+`apps/api/tests/test_ethical_walls.py` (6 cases).
+
+---
+
 ## Audit trail
 
 Every tenant-affecting write lands a row in `audit_events` via

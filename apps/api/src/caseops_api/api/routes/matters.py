@@ -23,6 +23,14 @@ from caseops_api.schemas.hearing_packs import (
     HearingPackGenerateRequest,
     HearingPackRecord,
 )
+from caseops_api.schemas.matter_access import (
+    EthicalWallCreateRequest,
+    EthicalWallRecord,
+    MatterAccessGrantCreateRequest,
+    MatterAccessGrantRecord,
+    MatterAccessPanelResponse,
+    MatterRestrictedAccessRequest,
+)
 from caseops_api.schemas.matters import (
     MatterAttachmentRecord,
     MatterCourtSyncImportRequest,
@@ -63,6 +71,14 @@ from caseops_api.services.hearing_packs import (
     mark_hearing_pack_reviewed,
 )
 from caseops_api.services.identity import SessionContext
+from caseops_api.services.matter_access import (
+    add_access_grant,
+    add_ethical_wall,
+    list_access_panel,
+    remove_access_grant,
+    remove_ethical_wall,
+    set_restricted_access,
+)
 from caseops_api.services.matters import (
     create_matter,
     create_matter_attachment,
@@ -664,4 +680,125 @@ async def get_current_company_matter_draft_docx(
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         ),
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get(
+    "/{matter_id}/access",
+    response_model=MatterAccessPanelResponse,
+    summary="List access grants + ethical walls on the matter (admin/owner)",
+)
+async def get_current_company_matter_access(
+    matter_id: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> MatterAccessPanelResponse:
+    matter, grants, walls = list_access_panel(
+        session, context=context, matter_id=matter_id
+    )
+    return MatterAccessPanelResponse(
+        matter_id=matter.id,
+        restricted_access=matter.restricted_access,
+        grants=[MatterAccessGrantRecord.model_validate(g) for g in grants],
+        walls=[EthicalWallRecord.model_validate(w) for w in walls],
+    )
+
+
+@router.post(
+    "/{matter_id}/access/restricted",
+    summary="Toggle restricted_access on the matter (admin/owner)",
+)
+async def post_current_company_matter_restricted(
+    matter_id: str,
+    payload: MatterRestrictedAccessRequest,
+    context: CurrentContext,
+    session: DbSession,
+) -> dict[str, object]:
+    matter = set_restricted_access(
+        session,
+        context=context,
+        matter_id=matter_id,
+        restricted=payload.restricted,
+    )
+    return {"matter_id": matter.id, "restricted_access": matter.restricted_access}
+
+
+@router.post(
+    "/{matter_id}/access/grants",
+    response_model=MatterAccessGrantRecord,
+    summary="Add a matter access grant (admin/owner)",
+)
+async def post_current_company_matter_grant(
+    matter_id: str,
+    payload: MatterAccessGrantCreateRequest,
+    context: CurrentContext,
+    session: DbSession,
+) -> MatterAccessGrantRecord:
+    grant = add_access_grant(
+        session,
+        context=context,
+        matter_id=matter_id,
+        membership_id=payload.membership_id,
+        access_level=payload.access_level,
+        reason=payload.reason,
+    )
+    return MatterAccessGrantRecord.model_validate(grant)
+
+
+@router.delete(
+    "/{matter_id}/access/grants/{grant_id}",
+    status_code=204,
+    summary="Remove a matter access grant (admin/owner)",
+)
+async def delete_current_company_matter_grant(
+    matter_id: str,
+    grant_id: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> None:
+    remove_access_grant(
+        session,
+        context=context,
+        matter_id=matter_id,
+        grant_id=grant_id,
+    )
+
+
+@router.post(
+    "/{matter_id}/access/walls",
+    response_model=EthicalWallRecord,
+    summary="Add an ethical wall (admin/owner)",
+)
+async def post_current_company_matter_wall(
+    matter_id: str,
+    payload: EthicalWallCreateRequest,
+    context: CurrentContext,
+    session: DbSession,
+) -> EthicalWallRecord:
+    wall = add_ethical_wall(
+        session,
+        context=context,
+        matter_id=matter_id,
+        excluded_membership_id=payload.excluded_membership_id,
+        reason=payload.reason,
+    )
+    return EthicalWallRecord.model_validate(wall)
+
+
+@router.delete(
+    "/{matter_id}/access/walls/{wall_id}",
+    status_code=204,
+    summary="Remove an ethical wall (admin/owner)",
+)
+async def delete_current_company_matter_wall(
+    matter_id: str,
+    wall_id: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> None:
+    remove_ethical_wall(
+        session,
+        context=context,
+        matter_id=matter_id,
+        wall_id=wall_id,
     )

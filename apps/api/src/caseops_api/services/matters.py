@@ -71,6 +71,10 @@ from caseops_api.services.document_storage import (
     sanitize_filename,
 )
 from caseops_api.services.identity import SessionContext
+from caseops_api.services.matter_access import (
+    assert_access,
+    visible_matters_filter,
+)
 
 
 def _matter_record(matter: Matter) -> MatterRecord:
@@ -491,6 +495,7 @@ def _get_matter_model(session: Session, *, context: SessionContext, matter_id: s
     )
     if not matter:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Matter not found.")
+    assert_access(session, context=context, matter=matter)
     return matter
 
 
@@ -599,7 +604,10 @@ def list_matters(
 
     stmt = (
         select(Matter)
-        .where(Matter.company_id == context.company.id)
+        .where(
+            Matter.company_id == context.company.id,
+            visible_matters_filter(session, context=context),
+        )
         .order_by(Matter.updated_at.desc(), Matter.id.desc())
     )
     if decoded is not None:
