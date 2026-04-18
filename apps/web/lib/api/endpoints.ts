@@ -634,6 +634,125 @@ export async function createMatterTimeEntry(input: {
   return data as MatterTimeEntryRecord;
 }
 
+// --- Sprint 8b BG-025: GC intake queue ---
+
+export type IntakeStatus =
+  | "new"
+  | "triaging"
+  | "in_progress"
+  | "completed"
+  | "rejected";
+
+export type IntakePriority = "low" | "medium" | "high" | "urgent";
+
+export type IntakeCategory =
+  | "contract_review"
+  | "policy_question"
+  | "litigation_support"
+  | "compliance"
+  | "employment"
+  | "ip_trademark"
+  | "m_and_a"
+  | "regulatory"
+  | "other";
+
+export type IntakeRequest = {
+  id: string;
+  company_id: string;
+  submitted_by_membership_id: string | null;
+  submitted_by_name: string | null;
+  assigned_to_membership_id: string | null;
+  assigned_to_name: string | null;
+  linked_matter_id: string | null;
+  linked_matter_code: string | null;
+  title: string;
+  category: string;
+  priority: IntakePriority;
+  status: IntakeStatus;
+  requester_name: string;
+  requester_email: string | null;
+  business_unit: string | null;
+  description: string;
+  desired_by: string | null;
+  triage_notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export async function listIntakeRequests(params?: {
+  status?: IntakeStatus | null;
+  assignedToMe?: boolean;
+}): Promise<{ requests: IntakeRequest[] }> {
+  const qs = new URLSearchParams();
+  if (params?.status) qs.set("status", params.status);
+  if (params?.assignedToMe) qs.set("assigned_to_me", "true");
+  const path = qs.toString()
+    ? `/api/intake/requests?${qs.toString()}`
+    : "/api/intake/requests";
+  return apiRequest(path);
+}
+
+export async function createIntakeRequest(input: {
+  title: string;
+  category: IntakeCategory;
+  priority: IntakePriority;
+  requesterName: string;
+  requesterEmail?: string | null;
+  businessUnit?: string | null;
+  description: string;
+  desiredBy?: string | null;
+}): Promise<IntakeRequest> {
+  return apiRequest("/api/intake/requests", {
+    method: "POST",
+    body: {
+      title: input.title,
+      category: input.category,
+      priority: input.priority,
+      requester_name: input.requesterName,
+      requester_email: input.requesterEmail ?? null,
+      business_unit: input.businessUnit ?? null,
+      description: input.description,
+      desired_by: input.desiredBy ?? null,
+    },
+  });
+}
+
+export async function updateIntakeRequest(input: {
+  requestId: string;
+  status?: IntakeStatus;
+  priority?: IntakePriority;
+  assignedToMembershipId?: string | null;
+  triageNotes?: string | null;
+}): Promise<IntakeRequest> {
+  return apiRequest(`/api/intake/requests/${input.requestId}`, {
+    method: "PATCH",
+    body: {
+      status: input.status,
+      priority: input.priority,
+      assigned_to_membership_id: input.assignedToMembershipId,
+      triage_notes: input.triageNotes,
+    },
+  });
+}
+
+export async function promoteIntakeRequest(input: {
+  requestId: string;
+  matterCode: string;
+  matterTitle?: string | null;
+  practiceArea?: string | null;
+  forumLevel?: "lower_court" | "high_court" | "supreme_court" | "tribunal";
+}): Promise<IntakeRequest> {
+  return apiRequest(`/api/intake/requests/${input.requestId}/promote`, {
+    method: "POST",
+    body: {
+      matter_code: input.matterCode,
+      matter_title: input.matterTitle ?? null,
+      practice_area: input.practiceArea ?? null,
+      forum_level: input.forumLevel ?? "high_court",
+    },
+  });
+}
+
 // --- Sprint 7 BG-020 / BG-021: research + corpus stats ---
 
 export type AuthorityForumLevel =

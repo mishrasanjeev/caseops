@@ -67,61 +67,92 @@ def get_current_context(
 # apps/web/lib/capabilities.ts — the TS table is the client-side UX
 # gate; this table is the server's source of truth. Any drift is a
 # bug; the test sweep asserts the two stay in lock-step.
-_ALL_ROLES = frozenset(
-    {MembershipRole.OWNER, MembershipRole.ADMIN, MembershipRole.MEMBER}
+#
+# Sprint 8b widened the role taxonomy to six: owner, admin, partner,
+# member, paralegal, viewer. The named groups below capture the most
+# common coverage buckets; individual capabilities compose them.
+#
+#   - owner       → everything
+#   - admin       → everything except OWNER_ONLY (void invoices, audit export)
+#   - partner     → senior fee-earner; STAFF minus workspace/IAM
+#   - member      → general fee-earner (former default)
+#   - paralegal   → member minus finance, finalize-approvals, and ops commands
+#   - viewer      → read-only; only read-oriented caps
+
+_OWNER = MembershipRole.OWNER
+_ADMIN = MembershipRole.ADMIN
+_PARTNER = MembershipRole.PARTNER
+_MEMBER = MembershipRole.MEMBER
+_PARALEGAL = MembershipRole.PARALEGAL
+_VIEWER = MembershipRole.VIEWER
+
+_ALL_FEE_EARNERS = frozenset({_OWNER, _ADMIN, _PARTNER, _MEMBER, _PARALEGAL})
+_STAFF = frozenset({_OWNER, _ADMIN, _PARTNER})
+_OWNER_ADMIN = frozenset({_OWNER, _ADMIN})
+_OWNER_ONLY = frozenset({_OWNER})
+_ALL_AUTHENTICATED = frozenset(
+    {_OWNER, _ADMIN, _PARTNER, _MEMBER, _PARALEGAL, _VIEWER}
 )
-_STAFF = frozenset({MembershipRole.OWNER, MembershipRole.ADMIN})
-_OWNER_ONLY = frozenset({MembershipRole.OWNER})
+# Legacy alias — preserved so any existing references keep resolving;
+# new capabilities should pick from _ALL_FEE_EARNERS / _STAFF / etc.
+_ALL_ROLES = _ALL_FEE_EARNERS
 
 
 CAPABILITY_ROLES: dict[str, frozenset[MembershipRole]] = {
     # --- matter and workspace core ---
-    "matters:create": _ALL_ROLES,
-    "matters:edit": _ALL_ROLES,
+    "matters:create": frozenset({_OWNER, _ADMIN, _PARTNER, _MEMBER}),
+    "matters:edit": _ALL_FEE_EARNERS,  # paralegals can edit matter metadata
     "matters:archive": _STAFF,
-    "matters:write": _ALL_ROLES,  # catch-all: per-matter authenticated write
-    # --- money ---
+    "matters:write": _ALL_FEE_EARNERS,
+    # --- money --- paralegals + viewers stay out of finance
     "invoices:issue": _STAFF,
     "invoices:send_payment_link": _STAFF,
     "invoices:void": _OWNER_ONLY,
     "payments:sync": _STAFF,
-    "time_entries:write": _ALL_ROLES,
-    # --- company / IAM ---
-    "company:manage_profile": _STAFF,
-    "company:manage_users": _STAFF,
+    "time_entries:write": _ALL_FEE_EARNERS,
+    # --- company / IAM --- workspace admin stays narrow
+    "company:manage_profile": _OWNER_ADMIN,
+    "company:manage_users": _OWNER_ADMIN,
     # --- documents + processing ---
-    "documents:upload": _ALL_ROLES,
+    "documents:upload": _ALL_FEE_EARNERS,
     "documents:manage": _STAFF,
     # --- contracts ---
-    "contracts:create": _ALL_ROLES,
-    "contracts:edit": _ALL_ROLES,
+    "contracts:create": frozenset({_OWNER, _ADMIN, _PARTNER, _MEMBER}),
+    "contracts:edit": _ALL_FEE_EARNERS,
     "contracts:delete": _STAFF,
     "contracts:manage_rules": _STAFF,
     # --- outside counsel ---
     "outside_counsel:manage": _STAFF,
-    "outside_counsel:recommend": _ALL_ROLES,
-    # --- drafting ---
-    "drafts:create": _ALL_ROLES,
-    "drafts:generate": _ALL_ROLES,
+    "outside_counsel:recommend": _ALL_FEE_EARNERS,
+    # --- drafting --- paralegals can draft but not review/finalize
+    "drafts:create": frozenset({_OWNER, _ADMIN, _PARTNER, _MEMBER, _PARALEGAL}),
+    "drafts:generate": frozenset({_OWNER, _ADMIN, _PARTNER, _MEMBER, _PARALEGAL}),
     "drafts:review": _STAFF,
     "drafts:finalize": _STAFF,
     # --- hearing packs ---
-    "hearing_packs:generate": _ALL_ROLES,
+    "hearing_packs:generate": _ALL_FEE_EARNERS,
     "hearing_packs:review": _STAFF,
-    # --- court sync ---
+    # --- court sync --- ops action, not for paralegals
     "court_sync:run": _STAFF,
     # --- recommendations + AI ---
-    "recommendations:generate": _ALL_ROLES,
-    "recommendations:decide": _ALL_ROLES,
-    "ai:generate": _ALL_ROLES,
-    # --- authority corpus + tenant overlay ---
-    "authorities:search": _ALL_ROLES,
+    "recommendations:generate": frozenset({_OWNER, _ADMIN, _PARTNER, _MEMBER}),
+    "recommendations:decide": _STAFF,
+    "ai:generate": frozenset({_OWNER, _ADMIN, _PARTNER, _MEMBER, _PARALEGAL}),
+    # --- authority corpus + tenant overlay --- viewer can read-search only
+    "authorities:search": _ALL_AUTHENTICATED,
     "authorities:ingest": _STAFF,
-    "authorities:annotate": _ALL_ROLES,
+    "authorities:annotate": _ALL_FEE_EARNERS,
     # --- governance ---
-    "workspace:admin": _STAFF,
+    "workspace:admin": _OWNER_ADMIN,
     "audit:export": _OWNER_ONLY,
-    "matter_access:manage": _STAFF,
+    "matter_access:manage": _OWNER_ADMIN,
+    # --- intake (Sprint 8b BG-025) ---
+    # Submit: anyone authenticated so a business-unit manager with
+    # only a viewer role can still file a request. Triage + assign:
+    # staff (owner/admin/partner). Promote to matter: staff.
+    "intake:submit": _ALL_AUTHENTICATED,
+    "intake:triage": _STAFF,
+    "intake:promote": _STAFF,
 }
 
 

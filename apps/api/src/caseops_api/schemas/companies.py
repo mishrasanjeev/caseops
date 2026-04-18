@@ -6,7 +6,13 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, HttpUrl
 
 CompanyTypeLiteral = Literal["law_firm", "corporate_legal", "solo"]
-MembershipRoleLiteral = Literal["owner", "admin", "member"]
+MembershipRoleLiteral = Literal[
+    "owner", "admin", "partner", "member", "paralegal", "viewer"
+]
+# Admins can create or update any role below owner. Owners are the
+# root of trust and are created only by the bootstrap flow; demoting
+# the last owner is blocked by the companies service.
+AssignableRoleLiteral = Literal["admin", "partner", "member", "paralegal", "viewer"]
 
 
 class BootstrapCompanyRequest(BaseModel):
@@ -22,11 +28,11 @@ class CompanyUserCreateRequest(BaseModel):
     full_name: str = Field(min_length=2, max_length=255)
     email: EmailStr
     password: str = Field(min_length=12, max_length=128)
-    role: Literal["admin", "member"] = "member"
+    role: AssignableRoleLiteral = "member"
 
 
 class CompanyUserUpdateRequest(BaseModel):
-    role: Literal["admin", "member"] | None = None
+    role: AssignableRoleLiteral | None = None
     is_active: bool | None = None
 
 

@@ -5,6 +5,7 @@ import {
   ChevronsRight,
   FileSignature,
   Gavel,
+  Inbox,
   LayoutDashboard,
   LibraryBig,
   ListTodo,
@@ -19,7 +20,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { Logo } from "@/components/marketing/Logo";
-import { type Capability, useRole } from "@/lib/capabilities";
+import { type Capability, can, useRole } from "@/lib/capabilities";
 import { cn } from "@/lib/cn";
 
 type NavItem = {
@@ -34,6 +35,13 @@ type NavItem = {
 const NAV: NavItem[] = [
   { href: "/app", label: "Home", icon: LayoutDashboard, section: "work" },
   { href: "/app/matters", label: "Matters", icon: Briefcase, section: "work" },
+  {
+    href: "/app/intake",
+    label: "Intake",
+    icon: Inbox,
+    section: "work",
+    requiresCapability: "intake:submit",
+  },
   { href: "/app/hearings", label: "Hearings", icon: Gavel, section: "work" },
   { href: "/app/research", label: "Research", icon: LibraryBig, section: "intel" },
   { href: "/app/drafting", label: "Drafting", icon: FileSignature, section: "intel" },
@@ -71,13 +79,7 @@ export function Sidebar() {
   const role = useRole();
   const visible = NAV.filter((item) => {
     if (!item.requiresCapability) return true;
-    if (!role) return false;
-    // Inline the owner/admin check to avoid importing the capability map
-    // twice; matches lib/capabilities.ts.
-    if (item.requiresCapability === "workspace:admin") {
-      return role === "owner" || role === "admin";
-    }
-    return true;
+    return can(role, item.requiresCapability);
   });
   const grouped = Object.entries(SECTION_LABEL)
     .map(([key, label]) => ({

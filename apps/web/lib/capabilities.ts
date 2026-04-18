@@ -2,8 +2,17 @@
 
 import { useSession } from "@/lib/use-session";
 
-/** Role IDs come from the API's `MembershipRole` enum. */
-export type Role = "owner" | "admin" | "member";
+/** Role IDs come from the API's `MembershipRole` enum. Sprint 8b
+ * widened this taxonomy from 3 to 6; the capability rows below match
+ * apps/api/src/caseops_api/api/dependencies.py CAPABILITY_ROLES.
+ */
+export type Role =
+  | "owner"
+  | "admin"
+  | "partner"
+  | "member"
+  | "paralegal"
+  | "viewer";
 
 /**
  * Capabilities are a finite, enumerated set. Anything rendered in the app
@@ -67,34 +76,44 @@ export type Capability =
   // governance
   | "workspace:admin"
   | "audit:export"
-  | "matter_access:manage";
+  | "matter_access:manage"
+  // intake (Sprint 8b BG-025)
+  | "intake:submit"
+  | "intake:triage"
+  | "intake:promote";
 
-const ALL_ROLES: Capability[] = [
-  "matters:create",
+// Baseline caps for a fee-earner (owner / admin / partner / member).
+// Paralegals inherit most of these but lose a small, explicit set.
+const FEE_EARNER: Capability[] = [
   "matters:edit",
   "matters:write",
   "time_entries:write",
   "documents:upload",
-  "contracts:create",
   "contracts:edit",
   "outside_counsel:recommend",
-  "drafts:create",
-  "drafts:generate",
   "hearing_packs:generate",
-  "recommendations:generate",
-  "recommendations:decide",
   "ai:generate",
   "authorities:search",
   "authorities:annotate",
 ];
 
+// Creator caps — paralegals can NOT create matters/contracts or run
+// recommendations end-to-end.
+const CREATOR_ONLY: Capability[] = [
+  "matters:create",
+  "contracts:create",
+  "recommendations:generate",
+];
+
+// Drafter caps — paralegals CAN draft but not finalize.
+const DRAFTER: Capability[] = ["drafts:create", "drafts:generate"];
+
+// Ops-lead caps — owner / admin / partner only.
 const STAFF: Capability[] = [
   "matters:archive",
   "invoices:issue",
   "invoices:send_payment_link",
   "payments:sync",
-  "company:manage_profile",
-  "company:manage_users",
   "documents:manage",
   "contracts:delete",
   "contracts:manage_rules",
@@ -104,29 +123,74 @@ const STAFF: Capability[] = [
   "hearing_packs:review",
   "court_sync:run",
   "authorities:ingest",
+  "recommendations:decide",
+  "intake:triage",
+  "intake:promote",
+];
+
+// Governance caps — owner / admin only.
+const GOVERNANCE: Capability[] = [
+  "company:manage_profile",
+  "company:manage_users",
   "workspace:admin",
   "matter_access:manage",
 ];
 
+// Owner-only caps.
 const OWNER_ONLY: Capability[] = ["invoices:void", "audit:export"];
 
-const OWNER_CAPS: ReadonlySet<Capability> = new Set<Capability>([
-  ...ALL_ROLES,
+const VIEWER_CAPS: ReadonlySet<Capability> = new Set<Capability>([
+  "authorities:search",
+  "intake:submit",
+]);
+
+const PARALEGAL_CAPS: ReadonlySet<Capability> = new Set<Capability>([
+  ...FEE_EARNER,
+  ...DRAFTER,
+  "intake:submit",
+]);
+
+const MEMBER_CAPS: ReadonlySet<Capability> = new Set<Capability>([
+  ...FEE_EARNER,
+  ...CREATOR_ONLY,
+  ...DRAFTER,
+  "intake:submit",
+]);
+
+const PARTNER_CAPS: ReadonlySet<Capability> = new Set<Capability>([
+  ...FEE_EARNER,
+  ...CREATOR_ONLY,
+  ...DRAFTER,
   ...STAFF,
-  ...OWNER_ONLY,
+  "intake:submit",
 ]);
 
 const ADMIN_CAPS: ReadonlySet<Capability> = new Set<Capability>([
-  ...ALL_ROLES,
+  ...FEE_EARNER,
+  ...CREATOR_ONLY,
+  ...DRAFTER,
   ...STAFF,
+  ...GOVERNANCE,
+  "intake:submit",
 ]);
 
-const MEMBER_CAPS: ReadonlySet<Capability> = new Set<Capability>(ALL_ROLES);
+const OWNER_CAPS: ReadonlySet<Capability> = new Set<Capability>([
+  ...FEE_EARNER,
+  ...CREATOR_ONLY,
+  ...DRAFTER,
+  ...STAFF,
+  ...GOVERNANCE,
+  ...OWNER_ONLY,
+  "intake:submit",
+]);
 
 const TABLE: Record<Role, ReadonlySet<Capability>> = {
   owner: OWNER_CAPS,
   admin: ADMIN_CAPS,
+  partner: PARTNER_CAPS,
   member: MEMBER_CAPS,
+  paralegal: PARALEGAL_CAPS,
+  viewer: VIEWER_CAPS,
 };
 
 export function can(role: Role | null | undefined, capability: Capability): boolean {

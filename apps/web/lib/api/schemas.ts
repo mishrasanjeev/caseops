@@ -22,7 +22,7 @@ export const userSummary = z.object({
 
 export const membershipSummary = z.object({
   id: z.string(),
-  role: z.enum(["owner", "admin", "member"]),
+  role: z.enum(["owner", "admin", "partner", "member", "paralegal", "viewer"]),
   is_active: z.boolean(),
   created_at: z.string(),
 });

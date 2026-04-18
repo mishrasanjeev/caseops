@@ -10,6 +10,7 @@ from caseops_api.api.routes import (
     contracts,
     courts,
     health,
+    intake,
     matters,
     meta,
     outside_counsel,
@@ -36,3 +37,4 @@ api_router.include_router(ai.router, prefix="/ai", tags=["ai"])
 api_router.include_router(recommendations.router, tags=["recommendations"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
 api_router.include_router(courts.router, prefix="/courts", tags=["courts"])
+api_router.include_router(intake.router, prefix="/intake", tags=["intake"])

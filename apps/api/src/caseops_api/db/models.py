@@ -30,9 +30,37 @@ class CompanyType(StrEnum):
 
 
 class MembershipRole(StrEnum):
+    # Sprint 8b: three roles added (partner / paralegal / viewer) to
+    # let firms map real-world responsibilities without either
+    # over-provisioning (everyone is admin) or under-provisioning
+    # (everyone is member with no read-only option). Capability mapping
+    # lives in api/dependencies.CAPABILITY_ROLES; the frontend mirror
+    # is in apps/web/lib/capabilities.ts.
     OWNER = "owner"
     ADMIN = "admin"
+    PARTNER = "partner"
     MEMBER = "member"
+    PARALEGAL = "paralegal"
+    VIEWER = "viewer"
+
+
+class MatterIntakeStatus(StrEnum):
+    # GC intake queue (BG-025). Status machine:
+    #   new -> triaging -> in_progress -> (completed | rejected)
+    # triaging is the legal team reviewing; in_progress means work is
+    # scoped (often as a matter); completed / rejected are terminal.
+    NEW = "new"
+    TRIAGING = "triaging"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    REJECTED = "rejected"
+
+
+class MatterIntakePriority(StrEnum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    URGENT = "urgent"
 
 
 class MatterStatus(StrEnum):
@@ -2660,4 +2688,72 @@ class TenantAIPolicy(Base):
         nullable=False,
         default=utcnow,
         onupdate=utcnow,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Sprint 8b BG-025: GC intake queue
+# Inbound legal requests from business units, tracked before they become
+# matters. Lives in its own table so the intake→matter lifecycle stays
+# explicit; promote_intake_to_matter() creates a Matter and links back.
+# ---------------------------------------------------------------------------
+
+
+class MatterIntakeRequest(Base):
+    __tablename__ = "matter_intake_requests"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    submitted_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    assigned_to_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    linked_matter_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matters.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    category: Mapped[str] = mapped_column(String(80), nullable=False)
+    priority: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=MatterIntakePriority.MEDIUM
+    )
+    status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default=MatterIntakeStatus.NEW, index=True
+    )
+
+    requester_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    requester_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    business_unit: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    desired_by: Mapped[date | None] = mapped_column(Date, nullable=True)
+    triage_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
+    )
+
+    company: Mapped["Company"] = relationship()
+    submitted_by: Mapped["CompanyMembership | None"] = relationship(
+        foreign_keys=[submitted_by_membership_id]
+    )
+    assigned_to: Mapped["CompanyMembership | None"] = relationship(
+        foreign_keys=[assigned_to_membership_id]
+    )
+    linked_matter: Mapped["Matter | None"] = relationship(
+        foreign_keys=[linked_matter_id]
     )
