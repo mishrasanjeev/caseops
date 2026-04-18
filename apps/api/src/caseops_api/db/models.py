@@ -406,6 +406,13 @@ class Matter(Base):
     # the company-level role can see it. Ethical walls always apply
     # regardless of this flag.
     restricted_access: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # PRD §7.1: nullable FK to the master Court table. `court_name`
+    # stays as the freeform fallback for courts we haven't catalogued
+    # yet, so old matters keep working without a data backfill.
+    court_id: Mapped[str | None] = mapped_column(
+        ForeignKey("courts.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
@@ -2266,5 +2273,93 @@ class EthicalWall(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
+        nullable=False,
+    )
+
+
+class Court(Base):
+    """Master record for a court. FK target for `Matter.court_id`. The
+    freeform `Matter.court_name` column stays as a fallback for courts
+    we haven't catalogued — migrations do not backfill `court_id`, so
+    old rows keep working."""
+
+    __tablename__ = "courts"
+    __table_args__ = (UniqueConstraint("name", name="uq_courts_name"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    short_name: Mapped[str] = mapped_column(String(80), nullable=False)
+    forum_level: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    jurisdiction: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    seat_city: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    # The key used by the corpus ingester's HC_COURT_CATALOG, so we
+    # can join court rows to S3-partitioned authorities.
+    hc_catalog_key: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+
+class Bench(Base):
+    __tablename__ = "benches"
+    __table_args__ = (UniqueConstraint("court_id", "name", name="uq_benches_court_name"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    court_id: Mapped[str] = mapped_column(
+        ForeignKey("courts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    seat_city: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+
+class Judge(Base):
+    """Judge master record. PRD §10.6 is adamant that we do NOT build
+    favorability scoring on top of this — use it for profile pages,
+    citation trends, cause-list dedup, and recommendation context only."""
+
+    __tablename__ = "judges"
+    __table_args__ = (UniqueConstraint("court_id", "full_name", name="uq_judges_court_name"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    court_id: Mapped[str] = mapped_column(
+        ForeignKey("courts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    full_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    honorific: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    current_position: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
         nullable=False,
     )

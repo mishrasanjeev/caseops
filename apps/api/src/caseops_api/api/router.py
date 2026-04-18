@@ -8,6 +8,7 @@ from caseops_api.api.routes import (
     bootstrap,
     companies,
     contracts,
+    courts,
     health,
     matters,
     meta,
@@ -34,3 +35,4 @@ api_router.include_router(authorities.router, prefix="/authorities", tags=["auth
 api_router.include_router(ai.router, prefix="/ai", tags=["ai"])
 api_router.include_router(recommendations.router, tags=["recommendations"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
+api_router.include_router(courts.router, prefix="/courts", tags=["courts"])

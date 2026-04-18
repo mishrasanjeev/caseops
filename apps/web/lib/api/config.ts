@@ -4,13 +4,23 @@ export const API_BASE_URL =
 export class ApiError extends Error {
   status: number;
   detail: string;
+  /** RFC 7807 `type` — a machine-readable discriminator the UI can
+   * switch on to render richer copy without memorising detail strings.
+   * Falls back to a URL for unspecified errors. */
+  problemType: string | null;
   data: unknown;
 
-  constructor(status: number, detail: string, data: unknown) {
+  constructor(
+    status: number,
+    detail: string,
+    data: unknown,
+    problemType: string | null = null,
+  ) {
     super(detail);
     this.name = "ApiError";
     this.status = status;
     this.detail = detail;
+    this.problemType = problemType;
     this.data = data;
   }
 }

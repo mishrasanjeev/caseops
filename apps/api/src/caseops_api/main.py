@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 from slowapi.middleware import SlowAPIMiddleware
 
 from caseops_api.api.router import api_router
+from caseops_api.core.problem_details import problem_json, register_problem_handlers
 from caseops_api.core.rate_limit import RateLimitExceeded, configure_limiter
 from caseops_api.core.settings import get_settings
 from caseops_api.db.migrations import run_migrations
@@ -42,12 +43,18 @@ def create_application() -> FastAPI:
 
     @application.exception_handler(RateLimitExceeded)
     async def _rate_limit_handler(
-        _request: Request, exc: RateLimitExceeded
+        request: Request, exc: RateLimitExceeded
     ) -> JSONResponse:
-        return JSONResponse(
-            status_code=429,
-            content={"detail": f"Rate limit exceeded: {exc.detail}"},
+        return problem_json(
+            429,
+            detail=f"Rate limit exceeded: {exc.detail}",
+            request=request,
         )
+
+    # RFC 7807 — HTTPException + RequestValidationError get reshaped
+    # into application/problem+json with a stable `type` slug so the
+    # frontend can render context-aware recovery copy.
+    register_problem_handlers(application)
 
     application.include_router(api_router, prefix="/api")
     return application

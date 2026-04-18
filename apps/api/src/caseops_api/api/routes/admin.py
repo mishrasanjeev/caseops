@@ -13,25 +13,18 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 
-from caseops_api.api.dependencies import DbSession, get_current_context
-from caseops_api.db.models import AuditEvent, MembershipRole
+from caseops_api.api.dependencies import (
+    DbSession,
+    require_capability,
+)
+from caseops_api.db.models import AuditEvent
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.identity import SessionContext
 
 router = APIRouter()
-CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
-
-
-def _require_admin(context: SessionContext) -> None:
-    """workspace:admin maps to owner or admin roles in capabilities.ts.
-    Keep the server-side check inline here so a later refactor to the
-    capability table doesn't silently open the endpoint up."""
-    role = context.membership.role
-    if role not in (MembershipRole.OWNER, MembershipRole.ADMIN):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Audit export requires admin or owner role.",
-        )
+# Capability gate: the dependency itself rejects with 403 before the
+# handler runs, so the handler receives an already-authorised context.
+AuditExporter = Annotated[SessionContext, Depends(require_capability("audit:export"))]
 
 
 def _parse_iso(value: str | None, *, field: str) -> datetime | None:
@@ -52,15 +45,13 @@ def _parse_iso(value: str | None, *, field: str) -> datetime | None:
     response_class=StreamingResponse,
 )
 def export_audit_trail(
-    context: CurrentContext,
+    context: AuditExporter,
     session: DbSession,
     since: str | None = None,
     until: str | None = None,
     action: str | None = None,
     limit: int | None = None,
 ) -> StreamingResponse:
-    _require_admin(context)
-
     since_dt = _parse_iso(since, field="since")
     until_dt = _parse_iso(until, field="until")
     if since_dt is None and until_dt is None:

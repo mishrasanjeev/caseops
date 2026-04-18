@@ -253,6 +253,58 @@ citation anchors wired from the body into the citations panel.
 
 ---
 
+## Error shape (RFC 7807)
+
+Every non-2xx response is `application/problem+json`:
+
+```json
+{
+  "type": "verified_citations_required",
+  "title": "Unprocessable content",
+  "status": 422,
+  "detail": "Cannot approve a draft with zero verified citations…",
+  "instance": "/api/matters/.../drafts/.../approve"
+}
+```
+
+`type` is a stable machine-readable slug — the frontend switches on
+it to render precise recovery copy. Validation errors keep the raw
+pydantic breakdown under `errors`. Unknown errors fall back to
+`https://httpstatuses.com/<code>`.
+
+---
+
+## Role and capability gates
+
+FastAPI dependencies in `api/dependencies.py`:
+
+```python
+from caseops_api.api.dependencies import require_capability
+
+@router.get("/admin/audit/export", ...)
+def export(
+    context: Annotated[SessionContext, Depends(require_capability("audit:export"))],
+    ...,
+):
+    ...
+```
+
+The server-side `CAPABILITY_ROLES` table mirrors
+`apps/web/lib/capabilities.ts` — the TS table gates the UX; the
+Python table is the enforcement source of truth.
+
+---
+
+## Court / Bench / Judge registry
+
+`GET /api/courts/` lists the seeded 7 courts (SC + 5 target HCs +
+Patna). `GET /api/courts/{id}/judges` lists judges tied to a court.
+Matter records carry an optional `court_id` FK alongside the freeform
+`court_name`, so old matters keep working and new ones can resolve to
+a canonical court without a UI migration.
+
+---
+
 ## Ethical walls and matter-level ACL
 
 Matters default to **"every company member sees them"**. Flip

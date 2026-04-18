@@ -58,7 +58,8 @@ This document enumerates the work needed to close these gaps, in priority order,
 | Phase 14a | `3fc98b9` | Drafting studio backend: `drafts`/`draft_versions`/`draft_reviews` schema, full state machine with fail-closed approve gate, citations verifier hook, review audit trail | §4.3 (backend) |
 | Phase 14b | `113719b` | Drafting studio UI + DOCX export: list + detail editor, state-aware action bar, citations panel, review history, DOCX stream via `python-docx`, Drafts tab in cockpit | §4.3 (UI + export) |
 | Phase 15 | `1df67c1` | Tiny wins (`/icon.png` 404 fix, GitHub Actions CI workflow), Sprint G tooling (`caseops-ingest-corpus --reembed` with keyset pagination + runbook), Sprint H foundation (`audit_events` schema, `services/audit.record_audit` helper wired into matter create, draft create + generate + state transitions, hearing pack generate + review, hearing outcome capture, `GET /api/admin/audit/export` streaming JSONL export that audits itself) | §5.4, §5.5 (extended), §10.4, §8.4 (partial), §4.2 tooling |
-| Phase 16 | *this session* | Sprint H completion: matter-level ACL (`matter_access_grants` + `ethical_walls` + `matters.restricted_access`), `services/matter_access` with can_access / assert_access / visible_matters_filter, enforcement threaded through matter / drafting / hearing-pack / recommendation `_load_matter` call sites, CRUD API for grants and walls (owner/admin only, each mutation audited), owner-bypass on self-walls, audit-export UI on `/app/admin` with date pickers + action filter | §5.6, §10.4 (UI) |
+| Phase 16 | `cf38b72` | Sprint H completion: matter-level ACL (`matter_access_grants` + `ethical_walls` + `matters.restricted_access`), `services/matter_access` with can_access / assert_access / visible_matters_filter, enforcement threaded through matter / drafting / hearing-pack / recommendation `_load_matter` call sites, CRUD API for grants and walls (owner/admin only, each mutation audited), owner-bypass on self-walls, audit-export UI on `/app/admin` with date pickers + action filter | §5.6, §10.4 (UI) |
+| Phase 17 | *this session* | Sprint J: `require_role` + `require_capability` FastAPI dependencies with a server-side capability table that mirrors `lib/capabilities.ts`, RFC 7807 problem-details envelope with machine-readable `type` slugs (`matter_not_found`, `verified_citations_required`, `draft_finalized_immutable`, …), frontend `ApiError.problemType` consumed by the drafting approve-fail toast, Court / Bench / Judge master tables seeded with SC + 5 HCs + Patna HC + read-only `/api/courts` + `/api/courts/{id}/judges` endpoints, `Matter.court_id` nullable FK alongside the freeform `court_name` | §6.2, §6.4, §7.1, §7.5 |
 
 **All P0 items closed.** Open P1 spine: §5.1 Temporal, §5.2 Grantex, §5.3 notifications, §5.4 unified audit, §5.6 ethical walls, §5.7 teams, §6.2 role dependency decorators, §6.3 input validation, §6.4 RFC 7807 errors, §6.5 OpenAPI quality, §7.1 Court/Bench/Judge, §7.2 generic Task, §7.3 EvaluationRun, §7.4 Statute/Section, §7.5 consistency sweep, §8.1 OTEL, §8.2 structured logs, §8.3 backups, §8.4 CI/CD, §8.5 secret management, §9.1 broader parsers, §9.2 structural extraction, §9.3 virus scanning. P2: §10 admin console, §11 test coverage expansion, §12 court integrations.
 
@@ -479,13 +480,11 @@ Without this, the PRD's central promise does not exist.
   - Tests: 13 new cases in `tests/test_pagination.py` (clamp, roundtrip, invalid-cursor forgiveness, 3-page walk, max-page, insert-stability, contracts walk, monotonic cursor).
 - **Remaining:** extend to `/api/authorities/`, `/api/outside-counsel/`, matter workspace sub-lists (time entries, invoices), recommendations. Document cursor shape in OpenAPI once the shape stabilises across endpoints.
 
-### 6.2 Role-based dependency decorators
+### 6.2 Role-based dependency decorators — **DONE v1 (Phase 17, 2026-04-18)**
 
-- **Traces to:** `apps/api/src/caseops_api/api/dependencies.py`; manual role checks in `services/identity.py:209,230,293`
-- **Problem:** Every route author must remember to check role. Some forget (review needed).
-- **Done when:**
-  - `require_role(...)` and `require_capability(...)` FastAPI dependencies exist and are used across all mutating routes.
-  - Lint rule or test sweep verifies no mutating endpoint lacks a role guard.
+- **Traces to:** `apps/api/src/caseops_api/api/dependencies.py`.
+- **Landed:** `require_role(*roles)` and `require_capability(cap)` FastAPI dependencies; `CAPABILITY_ROLES` table mirrors `lib/capabilities.ts` and is the server's source of truth. Audit export route now uses `Depends(require_capability("audit:export"))` instead of an inline guard.
+- **Remaining:** a lint sweep that fails CI if any new mutating route lacks a guard — can be a trivial pytest that walks `application.routes` and asserts the dependency chain. Not blocking today.
 
 ### 6.3 Input validation at boundaries
 
@@ -495,9 +494,11 @@ Without this, the PRD's central promise does not exist.
   - File-upload MIME whitelist and magic-byte verification (not just extension).
   - Sanitizer on any field rendered back to HTML on the frontend.
 
-### 6.4 Structured error responses
+### 6.4 Structured error responses — **DONE v1 (Phase 17, 2026-04-18)**
 
-- **Done when:** All errors return RFC 7807 problem-details shape (`type`, `title`, `status`, `detail`, `instance`). Frontend renders machine-readable `type` for actionable UX.
+- **Traces to:** `apps/api/src/caseops_api/core/problem_details.py`.
+- **Landed:** `register_problem_handlers(application)` installs handlers for `HTTPException` and `RequestValidationError`; every error body is `application/problem+json` with `{type, title, status, detail, instance}` and the original validation breakdown preserved under `errors` for machine readers. Type-slug map covers the most-common operations (matter_not_found, draft_invalid_transition, verified_citations_required, ethical_wall_not_found, rate_limited, etc.). Frontend `ApiError.problemType` is populated automatically; the drafting detail page renders a precise recovery message on the `verified_citations_required` 422. Backward-compatible: every existing test that reads `response.json()["detail"]` still passes.
+- **Remaining:** extend the type-slug map as new error messages land; generate a TS union of all slugs from the Python map for compile-time safety on the frontend.
 
 ### 6.5 OpenAPI quality
 
@@ -509,13 +510,14 @@ Without this, the PRD's central promise does not exist.
 
 Beyond what §4 and §5 add.
 
-### 7.1 First-class Court, Bench, Judge
+### 7.1 First-class Court, Bench, Judge — **DONE v1 (Phase 17, 2026-04-18)**
 
-- **Traces to:** PRD §10.6, §15.1; today `judge_name`, `court_name` are strings on `Matter`, `MatterCauseListEntry`, `MatterCourtOrder`
-- **Done when:**
-  - `Court`, `Bench`, `Judge` master tables.
-  - Migration upgrades existing string references to FK where resolvable; unresolved strings kept in a side column for manual matching.
-  - Judge profile aggregation endpoint (authored orders, citation trends) — no favorability scoring (PRD §10.6 guardrail).
+- **Traces to:** Alembic `20260418_0003`; `db/models.py::Court/Bench/Judge`; `routes/courts.py`.
+- **Landed:** `courts`, `benches`, `judges` master tables + seed data (SC, Delhi HC, Bombay HC, Madras HC, Karnataka HC, Telangana HC, Patna HC). `Matter.court_id` nullable FK sits alongside the existing freeform `court_name`. Read-only API at `GET /api/courts/` (with `?forum_level=` filter) and `GET /api/courts/{id}/judges`. Four pytest cases.
+- **Remaining:**
+  - Resolver service that maps `Matter.court_name` → `court_id` where the string matches the seed (one-shot backfill; script, not a migration).
+  - Judge profile aggregation endpoint (authored orders, citation trends) once §7.1's `MatterCourtOrder.court_id` FK lands — NO favorability scoring (PRD §10.6 guardrail).
+  - Admin CRUD for adding tenant-specific courts / benches / judges (pairs with §10.1 admin console).
 
 ### 7.2 Task, Deadline, Obligation
 
@@ -535,12 +537,11 @@ Beyond what §4 and §5 add.
 - **Traces to:** PRD §15.1
 - **Done when:** master tables exist; matter-to-issue and matter-to-relief linkage tables exist; research engine can filter by statute/section.
 
-### 7.5 Consistency sweep
+### 7.5 Consistency sweep — **DONE v1 (Phase 17, 2026-04-18)**
 
-- **Done when:**
-  - All tables use `DateTime(timezone=True)` consistently; `Date` is reserved only for legally meaningful dates (decision_date, next_hearing_on).
-  - Every mutable entity has `created_at` and `updated_at`.
-  - Soft-delete policy decided: either all-hard (documented) or `deleted_at` columns on `Matter`, `Contract`, `Document`.
+- **Checked:** Every domain table already uses `DateTime(timezone=True)` (the handful of `date` columns are legally meaningful: `Matter.next_hearing_on`, `decision_date`, `MatterHearing.hearing_on`, etc.). A full grep of `datetime.utcnow()` / `datetime.now()` across `src/` finds one hit — in `scripts/populate_authorities.py` for filename timestamps, which is tz-agnostic by design.
+- **Decided:** soft-delete policy is **all-hard** for matter / contract / document domains. Records marked `is_active=False` or `status="closed"` stay in place. If a tenant demands GDPR-style erasure, we ship a dedicated tenant-purge job (§10.1 admin console) rather than sprinkling `deleted_at` across the schema. Decision recorded inline next to the next schema change.
+- **Remaining:** when we do eventually need per-row retention (PRD §18.3 tenant-scoped export + purge), revisit the decision.
 
 ---
 

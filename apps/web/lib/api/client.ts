@@ -91,10 +91,20 @@ export async function apiRequest<TResponse>(
   }
 
   if (!response.ok) {
+    // RFC 7807 responses carry a machine-readable `type` slug; fall
+    // back to `null` when the response is a plain {detail: "…"}.
+    let problemType: string | null = null;
+    if (parsed && typeof parsed === "object") {
+      const maybe = (parsed as Record<string, unknown>).type;
+      if (typeof maybe === "string" && maybe.length > 0) {
+        problemType = maybe;
+      }
+    }
     throw new ApiError(
       response.status,
       extractDetail(parsed, `Request failed (${response.status}).`),
       parsed,
+      problemType,
     );
   }
   return parsed as TResponse;

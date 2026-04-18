@@ -90,9 +90,17 @@ export default function MatterDraftDetailPage() {
   const approve = useMutation({
     mutationFn: () => approveDraft(matterId, draftId),
     onSuccess: makeSuccess("Draft approved"),
-    onError: makeError(
-      "Could not approve — regenerate with grounded citations if citations are unverified.",
-    ),
+    onError: (err) => {
+      // RFC 7807 `type` lets us render a precise recovery message for
+      // the fail-closed approve gate.
+      if (err instanceof ApiError && err.problemType === "verified_citations_required") {
+        toast.error(
+          "Approve blocked — the current version has zero verified citations. Regenerate with grounded authorities first.",
+        );
+        return;
+      }
+      makeError("Could not approve the draft.")(err);
+    },
   });
   const finalize = useMutation({
     mutationFn: () => finalizeDraft(matterId, draftId),
