@@ -11,7 +11,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { listMatters } from "@/lib/api/endpoints";
+import { fetchAuthorityCorpusStats, listMatters } from "@/lib/api/endpoints";
 import type { Matter } from "@/lib/api/schemas";
 import { formatLegalDate } from "@/lib/dates";
 import { useSession } from "@/lib/use-session";
@@ -29,6 +29,12 @@ export default function DashboardPage() {
     queryFn: () => listMatters({ limit: 50 }),
     enabled: session.status === "authenticated",
   });
+  const corpusStatsQuery = useQuery({
+    queryKey: ["authorities", "stats"],
+    queryFn: () => fetchAuthorityCorpusStats(),
+    enabled: session.status === "authenticated",
+    staleTime: 5 * 60 * 1000,
+  });
 
   const matters = mattersQuery.data?.matters ?? [];
   const activeCount = matters.filter((m) => m.status === "active").length;
@@ -39,6 +45,18 @@ export default function DashboardPage() {
   const recent = [...matters]
     .sort((a, b) => b.created_at.localeCompare(a.created_at))
     .slice(0, 5);
+
+  // Hearings-this-week tile: count matters whose next_hearing_on falls
+  // in the next 7 calendar days. Backed by the portfolio we already
+  // fetched — no extra API call.
+  const today = new Date();
+  const weekOut = new Date();
+  weekOut.setDate(weekOut.getDate() + 7);
+  const hearingsThisWeek = matters.filter((m) => {
+    if (!m.next_hearing_on) return false;
+    const d = new Date(m.next_hearing_on);
+    return d >= new Date(today.toDateString()) && d <= weekOut;
+  }).length;
 
   const userFirstName = session.context?.user.full_name.split(" ")[0] ?? "there";
 
@@ -65,20 +83,40 @@ export default function DashboardPage() {
         <StatCard
           icon={Gavel}
           label="Hearings this week"
-          value="—"
-          hint="Cause-list sync coming soon"
+          value={mattersQuery.isPending ? "—" : String(hearingsThisWeek)}
+          hint={
+            mattersQuery.isPending
+              ? "Loading"
+              : hearingsThisWeek > 0
+                ? "Across your open matters"
+                : "Nothing scheduled in the next 7 days"
+          }
         />
         <StatCard
           icon={Sparkles}
-          label="Recommendations"
-          value="—"
-          hint="Generate from a matter to see options"
+          label="Matters in intake"
+          value={
+            mattersQuery.isPending
+              ? "—"
+              : String(matters.filter((m) => m.status === "intake").length)
+          }
+          hint="Awaiting kickoff"
         />
         <StatCard
           icon={LibraryBig}
           label="Authorities indexed"
-          value="—"
-          hint="Retrieval depth grows as the corpus expands"
+          value={
+            corpusStatsQuery.isPending
+              ? "—"
+              : corpusStatsQuery.data
+                ? corpusStatsQuery.data.document_count.toLocaleString()
+                : "—"
+          }
+          hint={
+            corpusStatsQuery.data
+              ? `${corpusStatsQuery.data.embedded_chunk_count.toLocaleString()} chunks embedded`
+              : "Retrieval depth grows as the corpus expands"
+          }
         />
       </section>
 

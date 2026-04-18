@@ -17,6 +17,7 @@ from caseops_api.db.models import (
     MembershipRole,
 )
 from caseops_api.schemas.authorities import (
+    AuthorityCorpusStats,
     AuthorityDocumentListResponse,
     AuthorityDocumentRecord,
     AuthorityIngestionRequest,
@@ -345,6 +346,50 @@ def list_recent_authority_documents(
     )
     return AuthorityDocumentListResponse(
         documents=[_authority_record(document) for document in documents]
+    )
+
+
+def get_authority_corpus_stats(
+    session: Session, *, context: SessionContext
+) -> AuthorityCorpusStats:
+    """Aggregate counters for the global authority corpus.
+
+    Drives the dashboard "Authorities indexed" tile and the research
+    surface's "we're searching N docs" banner. Corpus is global (not
+    tenant-scoped), so we don't filter by company — context is accepted
+    for auth + audit consistency with the sibling endpoints.
+    """
+    from sqlalchemy import func
+
+    del context
+    doc_count = (
+        session.scalar(select(func.count()).select_from(AuthorityDocument)) or 0
+    )
+    chunk_count = (
+        session.scalar(select(func.count()).select_from(AuthorityDocumentChunk)) or 0
+    )
+    embedded_count = (
+        session.scalar(
+            select(func.count())
+            .select_from(AuthorityDocumentChunk)
+            .where(AuthorityDocumentChunk.embedding_model.is_not(None))
+        )
+        or 0
+    )
+    last_ingested = session.scalar(
+        select(func.max(AuthorityDocument.ingested_at))
+    )
+    forum_rows = session.execute(
+        select(AuthorityDocument.forum_level, func.count())
+        .group_by(AuthorityDocument.forum_level)
+    ).all()
+    forum_counts = {str(forum): int(count) for forum, count in forum_rows if forum}
+    return AuthorityCorpusStats(
+        document_count=int(doc_count),
+        chunk_count=int(chunk_count),
+        embedded_chunk_count=int(embedded_count),
+        forum_counts=forum_counts,
+        last_ingested_at=last_ingested,
     )
 
 

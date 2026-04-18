@@ -14,6 +14,7 @@ from caseops_api.schemas.authorities import (
     AuthorityAnnotationListResponse,
     AuthorityAnnotationRecord,
     AuthorityAnnotationUpdateRequest,
+    AuthorityCorpusStats,
     AuthorityDocumentListResponse,
     AuthorityIngestionRequest,
     AuthorityIngestionRunRecord,
@@ -22,6 +23,7 @@ from caseops_api.schemas.authorities import (
     AuthoritySourceListResponse,
 )
 from caseops_api.services.authorities import (
+    get_authority_corpus_stats,
     ingest_authority_source,
     list_authority_sources,
     list_recent_authority_documents,
@@ -77,6 +79,18 @@ async def get_recent_authority_documents(
     limit: Annotated[int, Query(ge=1, le=20)] = 12,
 ) -> AuthorityDocumentListResponse:
     return list_recent_authority_documents(session, context=context, limit=limit)
+
+
+@router.get(
+    "/stats",
+    response_model=AuthorityCorpusStats,
+    summary="Aggregate counters for the authority corpus",
+)
+async def get_authority_stats(
+    context: CurrentContext,
+    session: DbSession,
+) -> AuthorityCorpusStats:
+    return get_authority_corpus_stats(session, context=context)
 
 
 @router.post(

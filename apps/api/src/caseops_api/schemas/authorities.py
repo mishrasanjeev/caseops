@@ -95,6 +95,14 @@ class AuthoritySearchResponse(BaseModel):
     results: list[AuthoritySearchResult]
 
 
+class AuthorityCorpusStats(BaseModel):
+    document_count: int
+    chunk_count: int
+    embedded_chunk_count: int
+    forum_counts: dict[str, int]
+    last_ingested_at: datetime | None
+
+
 AuthorityAnnotationKindLiteral = Literal["note", "flag", "tag"]
 
 

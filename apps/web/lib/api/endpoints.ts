@@ -634,6 +634,88 @@ export async function createMatterTimeEntry(input: {
   return data as MatterTimeEntryRecord;
 }
 
+// --- Sprint 7 BG-020 / BG-021: research + corpus stats ---
+
+export type AuthorityForumLevel =
+  | "lower_court"
+  | "high_court"
+  | "supreme_court"
+  | "tribunal";
+
+export type AuthorityDocumentType = "judgment" | "order" | "statute" | "regulation" | "other";
+
+export type AuthoritySearchResult = {
+  authority_document_id: string;
+  title: string;
+  court_name: string;
+  forum_level: AuthorityForumLevel;
+  document_type: AuthorityDocumentType;
+  decision_date: string;
+  case_reference: string | null;
+  bench_name: string | null;
+  summary: string;
+  source: string;
+  source_reference: string | null;
+  snippet: string;
+  score: number;
+  matched_terms: string[];
+};
+
+export async function searchAuthorities(input: {
+  query: string;
+  limit?: number;
+  forumLevel?: AuthorityForumLevel | null;
+  courtName?: string | null;
+  documentType?: AuthorityDocumentType | null;
+}): Promise<{
+  query: string;
+  provider: string;
+  generated_at: string;
+  results: AuthoritySearchResult[];
+}> {
+  return apiRequest("/api/authorities/search", {
+    method: "POST",
+    body: {
+      query: input.query,
+      limit: input.limit ?? 8,
+      forum_level: input.forumLevel ?? null,
+      court_name: input.courtName ?? null,
+      document_type: input.documentType ?? null,
+    },
+  });
+}
+
+export type AuthorityCorpusStats = {
+  document_count: number;
+  chunk_count: number;
+  embedded_chunk_count: number;
+  forum_counts: Record<string, number>;
+  last_ingested_at: string | null;
+};
+
+export async function fetchAuthorityCorpusStats(): Promise<AuthorityCorpusStats> {
+  return apiRequest<AuthorityCorpusStats>("/api/authorities/stats");
+}
+
+export async function createAuthorityAnnotation(input: {
+  authorityId: string;
+  kind: "note" | "flag" | "tag";
+  title: string;
+  body?: string | null;
+}): Promise<unknown> {
+  return apiRequest(
+    `/api/authorities/documents/${input.authorityId}/annotations`,
+    {
+      method: "POST",
+      body: {
+        kind: input.kind,
+        title: input.title,
+        body: input.body ?? null,
+      },
+    },
+  );
+}
+
 // --- Sprint 5 BG-011: contract intelligence + redline ---
 
 export type ContractIntelligenceSummary = {
