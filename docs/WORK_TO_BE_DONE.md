@@ -39,7 +39,7 @@ However, three very large gaps exist between the PRD and the product:
 
 This document enumerates the work needed to close these gaps, in priority order, with acceptance criteria per item.
 
-### 1.1 Shipped-phase ladder (as of 2026-04-17)
+### 1.1 Shipped-phase ladder (as of 2026-04-18)
 
 | Phase | Commit | Scope | PRD sections closed |
 | --- | --- | --- | --- |
@@ -60,27 +60,30 @@ This document enumerates the work needed to close these gaps, in priority order,
 | Phase 15 | `1df67c1` | Tiny wins (`/icon.png` 404 fix, GitHub Actions CI workflow), Sprint G tooling (`caseops-ingest-corpus --reembed` with keyset pagination + runbook), Sprint H foundation (`audit_events` schema, `services/audit.record_audit` helper wired into matter create, draft create + generate + state transitions, hearing pack generate + review, hearing outcome capture, `GET /api/admin/audit/export` streaming JSONL export that audits itself) | §5.4, §5.5 (extended), §10.4, §8.4 (partial), §4.2 tooling |
 | Phase 16 | `cf38b72` | Sprint H completion: matter-level ACL (`matter_access_grants` + `ethical_walls` + `matters.restricted_access`), `services/matter_access` with can_access / assert_access / visible_matters_filter, enforcement threaded through matter / drafting / hearing-pack / recommendation `_load_matter` call sites, CRUD API for grants and walls (owner/admin only, each mutation audited), owner-bypass on self-walls, audit-export UI on `/app/admin` with date pickers + action filter | §5.6, §10.4 (UI) |
 | Phase 17 | `775242a` | Sprint J: `require_role` + `require_capability` FastAPI dependencies with a server-side capability table that mirrors `lib/capabilities.ts`, RFC 7807 problem-details envelope with machine-readable `type` slugs (`matter_not_found`, `verified_citations_required`, `draft_finalized_immutable`, …), frontend `ApiError.problemType` consumed by the drafting approve-fail toast, Court / Bench / Judge master tables seeded with SC + 5 HCs + Patna HC + read-only `/api/courts` + `/api/courts/{id}/judges` endpoints, `Matter.court_id` nullable FK alongside the freeform `court_name` | §6.2, §6.4, §7.1, §7.5 |
-| Phase 18 | *this session* | Sprint J wrap: `services/file_security.verify_upload` with extension whitelist + declared-content-type coherence + magic-byte signature check, wired into matter and contract attachment services, fixtures tightened to carry real PDF/PNG magic; OpenAPI completeness lint that walks `application.openapi()` and fails CI on any /api route without summary / tag / response | §6.3, §6.5 |
+| Phase 18 | `08d8c8e` | Sprint J wrap: `services/file_security.verify_upload` with extension whitelist + declared-content-type coherence + magic-byte signature check, wired into matter and contract attachment services, fixtures tightened to carry real PDF/PNG magic; OpenAPI completeness lint that walks `application.openapi()` and fails CI on any /api route without summary / tag / response | §6.3, §6.5 |
+| Phase 19 | *this session* | Thread A (bail draft quality): `caseops-extract-authority-metadata` CLI backfilled `neutral_citation` / `case_reference` / `bench_name` across 2 408 of 2 436 corpus rows; `services/drafting._build_messages` hardened with ABSOLUTE RULES (no invented facts → `[____]` placeholders; BNS vs BNSS statute guidance; authorities emitted by `neutral_citation` or `case_reference`, never UUID); `services/draft_validators` with `check_statute_confusion` / `check_uuid_leakage` / `check_citation_coverage`, findings appended to `DraftVersion.summary`; multi-query retrieval via `_retrieve_for_draft` with bail / anticipatory-bail / quashing seed packs; `_verify_version_citations` now matches `case_reference` too; `GET /api/admin/audit/export?format=csv` toggle; Alembic migration-order lint in `tests/test_migration_order.py`; `tests/conftest.py` forces `CASEOPS_LLM_PROVIDER=mock` so the suite never hits live Haiku | §4.2 (metadata), §4.3 (quality), §7.3 (model-run depth), §8.4 (lint), §10.4 (CSV) |
 
-**All P0 items closed. Sprint J complete.** Open P1 spine: §5.1 Temporal, §5.2 Grantex, §5.3 notifications, §5.4 unified audit, §5.6 ethical walls, §5.7 teams, §6.2 role dependency decorators, §6.3 input validation, §6.4 RFC 7807 errors, §6.5 OpenAPI quality, §7.1 Court/Bench/Judge, §7.2 generic Task, §7.3 EvaluationRun, §7.4 Statute/Section, §7.5 consistency sweep, §8.1 OTEL, §8.2 structured logs, §8.3 backups, §8.4 CI/CD, §8.5 secret management, §9.1 broader parsers, §9.2 structural extraction, §9.3 virus scanning. P2: §10 admin console, §11 test coverage expansion, §12 court integrations.
+**All P0 items closed. Sprints H and J complete (Phases 15–18).** Phase 19 extended the draft-quality loop and closed doc drift between the ladder and §2–§7. Remaining P1 spine: §5.1 Temporal, §5.2 Grantex, §5.3 notifications, §5.7 teams, §6.5 OpenAPI TS-client gen (lint already live), §7.2 generic Task/Deadline, §7.3 EvaluationRun harness (table still pending), §7.4 Statute/Section, §8.1 OTEL, §8.2 structured logs, §8.3 backups, §8.4 CI/CD image push + deploy, §8.5 secret management, §9.1 broader parsers, §9.2 structural extraction, §9.3 virus scanning. §4.2 remaining: cross-encoder reranker, per-tenant annotation overlay, matter-attachment embeddings, live-PG integration tests. P2: §10 admin console, §11 test coverage expansion, §12 court integrations.
 
 ### 1.2 Authority corpus — vector embedding status
 
 All ingested judgments have had every chunk embedded with **`BAAI/bge-small-en-v1.5`** padded to 1024 dimensions; every row is stored in Postgres `pgvector` with an HNSW cosine index. The same column accepts Voyage `voyage-3-law` and Gemini `text-embedding-005` without a schema change — a model swap is a re-embedding, not a re-ingestion (matter text is already persisted).
 
-**Completed as of 2026-04-17** — 914 documents, 20,375 chunks, all embedded:
+**Completed as of 2026-04-18** — 2 436 documents, 36 510 chunks, all embedded:
 
 | Jurisdiction | Court | Years ingested | Documents |
 | --- | --- | --- | --- |
-| Supreme Court | Supreme Court of India | 1929–2023 (sparse; bulk in 2014 and 2023) | 854 |
-| High Court | Delhi High Court | 2023 (sample) | 8 |
+| Supreme Court | Supreme Court of India | 1929–2024 (sparse pre-2014; bulk 2014, 2023, 2024) | 1 209 |
+| High Court | Delhi High Court | 1982–2025 (sparse pre-2022; bulk 2024) | 1 175 |
 | High Court | Bombay High Court | 2023 (sample) | 8 |
 | High Court | Karnataka High Court | 2023 (sample) | 8 |
 | High Court | Madras High Court | 2023 (sample) | 8 |
 | High Court | Telangana High Court | 2022–2023 (sample) | 8 |
 | High Court | Patna High Court (labelled `High Court of India` pre-catalog) | 2010 | 20 |
 
-SC coverage by year (selection): 1995 ×3, 1996 ×5, 1998 ×8, 2004 ×10, 2006 ×13, 2009 ×11, 2011 ×12, 2013 ×10, **2014 ×53**, 2016 ×13, 2018 ×15, 2019 ×15, 2021 ×15, 2022 ×29, **2023 ×484**. 1929–1994 rows are anchored-in archival samples, not full coverage.
+SC coverage by year (selection): 2014 ×53, 2016 ×13, 2018 ×15, 2019 ×15, 2021 ×15, 2022 ×29, **2023 ×484**, **2024 ×354**. 1929–1994 rows are archival samples. Delhi HC coverage: **2024 ×888**, 2025 ×174, 2023 ×34, pre-2023 sparse.
+
+**Structured metadata (Phase 19, 2026-04-18):** `caseops-extract-authority-metadata` CLI LLM-extracts `{neutral_citation, case_reference, bench_name, parties}` from `document_text`. Final coverage: **neutral_citation on 1 218 / 2 436 rows** (SC: 100 %; Delhi HC: ≈ 0 % because the HC only stamped neutral citations inconsistently before mid-2024), **case_reference on 2 413 / 2 436** (98.6 %), **bench_name on 2 404 / 2 436**. This unlocked inline citations in drafting (`[BAIL APPLN. 178/2024]`, `[2023:DHC:8921]`) instead of raw UUIDs.
 
 **Planned Phase 15 — full 10-year corpus for the target jurisdictions** (tracked under §4.2 "Remaining"):
 
@@ -487,13 +490,11 @@ Without this, the PRD's central promise does not exist.
 - **Landed:** `require_role(*roles)` and `require_capability(cap)` FastAPI dependencies; `CAPABILITY_ROLES` table mirrors `lib/capabilities.ts` and is the server's source of truth. Audit export route now uses `Depends(require_capability("audit:export"))` instead of an inline guard.
 - **Remaining:** a lint sweep that fails CI if any new mutating route lacks a guard — can be a trivial pytest that walks `application.routes` and asserts the dependency chain. Not blocking today.
 
-### 6.3 Input validation at boundaries
+### 6.3 Input validation at boundaries — **DONE v1 (Phase 18, 2026-04-18)**
 
-- **Traces to:** route files; Pydantic handles most, but free-text fields are unbounded
-- **Done when:**
-  - Max lengths on all string fields.
-  - File-upload MIME whitelist and magic-byte verification (not just extension).
-  - Sanitizer on any field rendered back to HTML on the frontend.
+- **Traces to:** `apps/api/src/caseops_api/services/file_security.py`.
+- **Landed:** `verify_upload` refuses malformed uploads before disk touch — extension whitelist, content-type coherence, magic-byte signature (≤ 16 bytes read). Wired into `services/matters.create_matter_attachment` and `services/contracts.create_contract_attachment`. Pydantic field constraints cap every persistent string field at 120–2 000 chars depending on semantics. Frontend has no `dangerouslySetInnerHTML` on user-controlled data — the only calls are hardcoded JSON-LD SEO blobs. Regex-based sanitizer is therefore unnecessary; React escapes by default.
+- **Remaining:** none for v1. If a future surface renders rich text, revisit.
 
 ### 6.4 Structured error responses — **DONE v1 (Phase 17, 2026-04-18)**
 
@@ -572,11 +573,11 @@ Beyond what §4 and §5 add.
   - GCS versioning enabled on document buckets; lifecycle policy for soft-deleted objects.
   - Tenant-scoped export job produces a signed archive; tested end-to-end.
 
-### 8.4 CI/CD — **PARTIAL (Phase 15, 2026-04-18)**
+### 8.4 CI/CD — **PARTIAL (Phase 15 + Phase 19 migration lint, 2026-04-18)**
 
-- **Traces to:** `.github/workflows/ci.yml`.
-- **Landed:** three-job GitHub Actions workflow (`api` — ruff + pytest; `web` — typecheck + vitest + next build; `e2e` — Playwright app suite) that runs on every push/PR to `main`. `e2e` depends on the other two so a broken build fails fast. Concurrency cancels superseded runs. Artifacts uploaded on Playwright failure.
-- **Remaining:** image build + push to Artifact Registry, staging Cloud Run deploy job, `main` branch protection rule, Alembic migration-order lint (checks every new `down_revision` chains to the latest existing revision).
+- **Traces to:** `.github/workflows/ci.yml`; `apps/api/tests/test_migration_order.py`.
+- **Landed:** three-job GitHub Actions workflow (`api` — ruff + pytest; `web` — typecheck + vitest + next build; `e2e` — Playwright app suite) that runs on every push/PR to `main`. `e2e` depends on the other two so a broken build fails fast. Concurrency cancels superseded runs. Artifacts uploaded on Playwright failure. Phase 19 added `tests/test_migration_order.py` — a four-case pytest that walks every `alembic/versions/*.py` and fails CI on: duplicate revision ids, dangling `down_revision` references, branched chains (same parent claimed by two migrations), or any state with more than one head.
+- **Remaining:** image build + push to Artifact Registry, staging Cloud Run deploy job, `main` branch protection rule.
 
 ### 8.5 Secret management
 
@@ -632,11 +633,11 @@ Beyond what §4 and §5 add.
   - Enforcement middleware refuses calls that violate tenant policy.
   - Prompt and tool-call audit is queryable by admins.
 
-### 10.4 Audit export — **DONE v1 (Phase 15 API + Phase 16 UI, 2026-04-18)**
+### 10.4 Audit export — **DONE v2 (Phase 15 API + Phase 16 UI + Phase 19 CSV, 2026-04-18)**
 
 - **Traces to:** §5.4 above; `routes/admin.py::export_audit_trail`; `apps/web/app/app/admin/page.tsx`.
-- **Landed:** `GET /api/admin/audit/export?since=&until=&action=&limit=` streams JSONL scoped to the caller's tenant. Admin-or-owner gated. Defaults to the last 30 days. The export itself writes an `audit.exported` row into the very same table. `/app/admin` has the form — date pickers + action filter + Download — gated on the `audit:export` capability.
-- **Remaining:** CSV format toggle (`?format=csv`), background export job for tenants with millions of rows (Temporal — §5.1).
+- **Landed:** `GET /api/admin/audit/export?since=&until=&action=&limit=&format=` streams JSONL (default) or CSV scoped to the caller's tenant. Admin-or-owner gated. Defaults to the last 30 days. The export itself writes an `audit.exported` row into the very same table. `/app/admin` has the form — date pickers + action filter + format toggle + Download — gated on the `audit:export` capability.
+- **Remaining:** background export job for tenants with millions of rows (Temporal — §5.1).
 
 ### 10.5 Plan entitlements
 
@@ -796,7 +797,7 @@ These items are PRD-scoped but should not be started yet:
 Items whose resolution changes the plan:
 
 1. **Authority corpus model.** Shared global corpus (current default, simpler) or per-tenant namespaces (PRD §13.2 implies). Decision affects §4.2 schema.
-2. **LLM provider.** Anthropic hosted, OpenAI hosted, or self-hosted open model (Gemma / gpt-oss-20b per PRD §3.5). Decision affects §4.1 and §10.3.
+2. ~~**LLM provider.**~~ **Resolved 2026-04-18:** Anthropic hosted, default model `claude-haiku-4-5-20251001`. Revisit before first enterprise deal if self-host becomes a contractual requirement (PRD §3.5).
 3. **SSO priority.** Is OIDC+SAML required for first paying customer, or deferrable?
 4. **Commercial packaging.** Per-seat / per-matter / hybrid (PRD §22.2 open). Affects §10.5 entitlements.
 5. **Grantex deployment.** Is there an existing Grantex service, or do we build a minimal internal equivalent?

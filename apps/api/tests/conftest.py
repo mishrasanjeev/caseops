@@ -32,6 +32,9 @@ def client(
     monkeypatch.setenv("CASEOPS_PINE_LABS_API_SECRET", "pine-api-secret")
     monkeypatch.setenv("CASEOPS_PINE_LABS_WEBHOOK_SECRET", "pine-webhook-secret")
     monkeypatch.setenv("CASEOPS_AUTH_RATE_LIMIT_ENABLED", "false")
+    monkeypatch.setenv("CASEOPS_LLM_PROVIDER", "mock")
+    monkeypatch.setenv("CASEOPS_LLM_MODEL", "caseops-mock-1")
+    monkeypatch.delenv("CASEOPS_LLM_API_KEY", raising=False)
     get_settings.cache_clear()
     clear_engine_cache()
 

@@ -32,6 +32,7 @@ export default function AdminPage() {
   const [since, setSince] = useState("");
   const [until, setUntil] = useState("");
   const [action, setAction] = useState("");
+  const [format, setFormat] = useState<"jsonl" | "csv">("jsonl");
   const [busy, setBusy] = useState(false);
 
   async function handleDownload() {
@@ -48,6 +49,7 @@ export default function AdminPage() {
       if (sinceIso) params.set("since", sinceIso);
       if (untilIso) params.set("until", untilIso);
       if (action.trim()) params.set("action", action.trim());
+      if (format !== "jsonl") params.set("format", format);
       const url =
         `${API_BASE_URL}/api/admin/audit/export` +
         (params.toString() ? `?${params.toString()}` : "");
@@ -68,7 +70,7 @@ export default function AdminPage() {
       const downloadName =
         resp.headers
           .get("content-disposition")
-          ?.match(/filename="([^"]+)"/)?.[1] ?? "audit-export.jsonl";
+          ?.match(/filename="([^"]+)"/)?.[1] ?? `audit-export.${format}`;
       const href = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = href;
@@ -98,10 +100,11 @@ export default function AdminPage() {
           <div>
             <CardTitle as="h2">Audit trail export</CardTitle>
             <CardDescription>
-              Streams every recorded action on this tenant as JSONL —
-              matter creation, draft state transitions, hearing-pack
-              review, access denials, and the export itself. Defaults to
-              the last 30 days. Admin or owner only.
+              Streams every recorded action on this tenant — matter
+              creation, draft state transitions, hearing-pack review,
+              access denials, and the export itself. Choose JSONL for
+              machine analysis or CSV for spreadsheets. Defaults to the
+              last 30 days. Admin or owner only.
             </CardDescription>
           </div>
           <Shield className="h-5 w-5 text-[var(--color-brand-700)]" aria-hidden />
@@ -138,7 +141,7 @@ export default function AdminPage() {
                   onChange={(e) => setUntil(e.target.value)}
                 />
               </div>
-              <div className="flex flex-col gap-1.5 md:col-span-2">
+              <div className="flex flex-col gap-1.5">
                 <Label htmlFor="audit-action">Action filter (optional)</Label>
                 <Input
                   id="audit-action"
@@ -147,6 +150,18 @@ export default function AdminPage() {
                   onChange={(e) => setAction(e.target.value)}
                 />
               </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="audit-format">Format</Label>
+                <select
+                  id="audit-format"
+                  className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm"
+                  value={format}
+                  onChange={(e) => setFormat(e.target.value as "jsonl" | "csv")}
+                >
+                  <option value="jsonl">JSONL (structured)</option>
+                  <option value="csv">CSV (spreadsheet)</option>
+                </select>
+              </div>
               <div className="md:col-span-4">
                 <Button
                   type="submit"
@@ -154,7 +169,9 @@ export default function AdminPage() {
                   data-testid="download-audit-export"
                 >
                   <Download className="h-4 w-4" aria-hidden />
-                  {busy ? "Downloading…" : "Download audit trail (JSONL)"}
+                  {busy
+                    ? "Downloading…"
+                    : `Download audit trail (${format.toUpperCase()})`}
                 </Button>
               </div>
             </form>

@@ -5,9 +5,11 @@ off this module under the `admin` tag.
 """
 from __future__ import annotations
 
+import csv
+import io
 import json
 from datetime import UTC, datetime, timedelta
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
@@ -39,9 +41,46 @@ def _parse_iso(value: str | None, *, field: str) -> datetime | None:
         ) from exc
 
 
+_AUDIT_COLUMNS = [
+    "id",
+    "created_at",
+    "company_id",
+    "actor_type",
+    "actor_membership_id",
+    "actor_label",
+    "matter_id",
+    "action",
+    "target_type",
+    "target_id",
+    "result",
+    "metadata",
+    "request_id",
+]
+
+
+def _event_row(event: AuditEvent) -> dict[str, object]:
+    return {
+        "id": event.id,
+        "created_at": event.created_at.isoformat(),
+        "company_id": event.company_id,
+        "actor_type": event.actor_type,
+        "actor_membership_id": event.actor_membership_id,
+        "actor_label": event.actor_label,
+        "matter_id": event.matter_id,
+        "action": event.action,
+        "target_type": event.target_type,
+        "target_id": event.target_id,
+        "result": event.result,
+        "metadata": (
+            json.loads(event.metadata_json) if event.metadata_json else None
+        ),
+        "request_id": event.request_id,
+    }
+
+
 @router.get(
     "/audit/export",
-    summary="Stream the tenant audit trail as JSONL",
+    summary="Stream the tenant audit trail as JSONL or CSV",
     response_class=StreamingResponse,
 )
 def export_audit_trail(
@@ -51,6 +90,7 @@ def export_audit_trail(
     until: str | None = None,
     action: str | None = None,
     limit: int | None = None,
+    format: Literal["jsonl", "csv"] = "jsonl",
 ) -> StreamingResponse:
     since_dt = _parse_iso(since, field="since")
     until_dt = _parse_iso(until, field="until")
@@ -88,34 +128,50 @@ def export_audit_trail(
             "until": until_dt.isoformat() if until_dt else None,
             "action_filter": action,
             "row_count": len(events),
+            "format": format,
         },
         commit=True,
     )
 
+    stamp = datetime.now(UTC).strftime("%Y%m%d")
+    filename_base = f"audit-{context.company.slug}-{stamp}"
+
+    if format == "csv":
+        def iter_csv():
+            buffer = io.StringIO()
+            writer = csv.DictWriter(buffer, fieldnames=_AUDIT_COLUMNS)
+            writer.writeheader()
+            yield buffer.getvalue().encode("utf-8")
+            for event in events:
+                buffer.seek(0)
+                buffer.truncate()
+                row = _event_row(event)
+                row["metadata"] = (
+                    json.dumps(row["metadata"], separators=(",", ":"))
+                    if row["metadata"] is not None
+                    else ""
+                )
+                writer.writerow(row)
+                yield buffer.getvalue().encode("utf-8")
+
+        return StreamingResponse(
+            iter_csv(),
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename_base}.csv"'
+            },
+        )
+
     def iter_jsonl():
         for event in events:
-            payload = {
-                "id": event.id,
-                "created_at": event.created_at.isoformat(),
-                "company_id": event.company_id,
-                "actor_type": event.actor_type,
-                "actor_membership_id": event.actor_membership_id,
-                "actor_label": event.actor_label,
-                "matter_id": event.matter_id,
-                "action": event.action,
-                "target_type": event.target_type,
-                "target_id": event.target_id,
-                "result": event.result,
-                "metadata": json.loads(event.metadata_json) if event.metadata_json else None,
-                "request_id": event.request_id,
-            }
-            yield (json.dumps(payload, separators=(",", ":")) + "\n").encode("utf-8")
+            yield (
+                json.dumps(_event_row(event), separators=(",", ":")) + "\n"
+            ).encode("utf-8")
 
-    filename = (
-        f"audit-{context.company.slug}-{datetime.now(UTC).strftime('%Y%m%d')}.jsonl"
-    )
     return StreamingResponse(
         iter_jsonl(),
         media_type="application/x-ndjson",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename_base}.jsonl"'
+        },
     )

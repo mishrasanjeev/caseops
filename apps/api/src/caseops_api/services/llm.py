@@ -374,14 +374,16 @@ class AnthropicProvider:
     ) -> LLMCompletion:
         system_prompt, chat = _split_system_and_chat(messages)
         started = time.perf_counter()
+        kwargs: dict = {
+            "model": self.model,
+            "messages": chat,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        if system_prompt:
+            kwargs["system"] = system_prompt
         try:
-            response = self._client.messages.create(
-                model=self.model,
-                system=system_prompt or None,
-                messages=chat,
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
+            response = self._client.messages.create(**kwargs)
         except Exception as exc:
             raise LLMProviderError(f"Anthropic call failed: {exc}") from exc
         elapsed_ms = max(1, int((time.perf_counter() - started) * 1000))

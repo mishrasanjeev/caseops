@@ -164,7 +164,7 @@ def test_build_provider_requires_api_key_for_real_providers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("CASEOPS_LLM_PROVIDER", "anthropic")
-    monkeypatch.delenv("CASEOPS_LLM_API_KEY", raising=False)
+    monkeypatch.setenv("CASEOPS_LLM_API_KEY", "")
     get_settings.cache_clear()
     with pytest.raises(LLMProviderError):
         build_provider()

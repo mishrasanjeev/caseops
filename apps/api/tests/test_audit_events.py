@@ -146,6 +146,33 @@ def test_audit_export_streams_jsonl_and_records_itself(client: TestClient) -> No
     assert json.loads(exports[0].metadata_json)["row_count"] >= 1
 
 
+def test_audit_export_supports_csv_format(client: TestClient) -> None:
+    boot = bootstrap_company(client)
+    token = str(boot["access_token"])
+    company_id = boot["company"]["id"]
+    _matter_id(client, token, "AUD-004")
+
+    resp = client.get(
+        "/api/admin/audit/export?format=csv",
+        headers=auth_headers(token),
+    )
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/csv")
+    assert ".csv" in resp.headers["content-disposition"]
+    text = resp.text
+    # Header row is present, with metadata column.
+    first_line = text.splitlines()[0]
+    assert first_line.startswith("id,created_at,company_id,")
+    assert ",metadata," in first_line
+    # At least one data row (matter.created) exists.
+    assert "matter.created" in text
+
+    events = _all_events(company_id)
+    exports = [e for e in events if e.action == "audit.exported"]
+    assert len(exports) == 1
+    assert json.loads(exports[0].metadata_json)["format"] == "csv"
+
+
 def test_audit_trail_is_tenant_scoped(client: TestClient) -> None:
     boot_a = bootstrap_company(client)
     token_a = str(boot_a["access_token"])

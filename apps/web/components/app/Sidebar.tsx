@@ -80,7 +80,6 @@ const NAV: NavItem[] = [
     label: "Admin",
     icon: Wrench,
     section: "admin",
-    placeholder: true,
     requiresCapability: "workspace:admin",
   },
 ];

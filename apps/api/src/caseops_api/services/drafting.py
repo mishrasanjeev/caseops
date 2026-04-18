@@ -34,6 +34,7 @@ import hashlib
 import io
 import json
 import logging
+import re
 from datetime import UTC, datetime
 from typing import Literal
 
@@ -60,6 +61,10 @@ from caseops_api.services.citations import (
     SourceDoc,
     VerificationReport,
     verify_citations,
+)
+from caseops_api.services.draft_validators import (
+    DraftFinding,
+    run_validators,
 )
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.llm import (
@@ -178,6 +183,25 @@ def get_draft(
     return _load_draft(session, matter, draft_id)
 
 
+_STATUTE_GUIDANCE = (
+    "Indian statute disambiguation — apply strictly:\n"
+    "- BNS (Bharatiya Nyaya Sanhita, 2023) is the substantive criminal code "
+    "(successor to the IPC). Its sections define offences.\n"
+    "- BNSS (Bharatiya Nagarik Suraksha Sanhita, 2023) is the procedural "
+    "criminal code (successor to the CrPC). Its sections govern procedure — "
+    "including bail, arrest, remand, investigation, and trial. "
+    "In particular: bail after arrest is BNSS s.483 (~ CrPC s.439); "
+    "anticipatory bail is BNSS s.482 (~ CrPC s.438); default bail is "
+    "BNSS s.187 (~ CrPC s.167(2)).\n"
+    "- BSA (Bharatiya Sakshya Adhiniyam, 2023) is the evidence code "
+    "(successor to the Indian Evidence Act).\n"
+    "Do NOT cite BNS for procedural provisions. Do NOT cite BNSS for "
+    "substantive offence definitions. If the focus note references a "
+    "section number, verify the statute against this list before writing "
+    "the section into the body."
+)
+
+
 def _build_messages(
     matter: Matter,
     draft: Draft,
@@ -186,17 +210,38 @@ def _build_messages(
 ) -> list[LLMMessage]:
     system = (
         "You are drafting a legal document for an Indian litigation "
-        "matter. Output strictly valid JSON. The `body` must be a "
-        "complete document, not an outline. Every substantive legal "
-        "claim should cite one of the provided authorities by its "
-        "identifier in square brackets — for example [2021 SCC OnLine "
-        "SC 123]. Do not invent authorities; only use those listed "
-        "below. Keep language formal, paragraphs short, and preserve "
-        "Indian-English conventions. Respond with JSON shaped as "
-        "{\"body\": string, \"citations\": string[], \"summary\": string?}."
+        "matter.\n\n"
+        "Output strictly valid JSON shaped as "
+        "{\"body\": string, \"citations\": string[], \"summary\": string?}. "
+        "No prose, no markdown fences.\n\n"
+        "ABSOLUTE RULES — VIOLATING ANY OF THESE FAILS THE DRAFT:\n"
+        "1. Do NOT invent facts. The only permissible facts are those "
+        "present in the MATTER RECORD block below and the FOCUS NOTE. "
+        "For any fact not explicitly supplied — FIR number, arrest date, "
+        "witness identity, address, age, family composition, amounts, "
+        "dates — write a square-bracket placeholder such as `[____]`, "
+        "`[date of arrest]`, `[FIR number]`, `[address]`. Placeholders "
+        "are expected and preferred; invented specifics are a defect.\n"
+        "2. Do NOT invent authorities. The ONLY citable authorities are "
+        "those in the AUTHORITIES block below. Cite each one inline in "
+        "the body the first time you rely on it, using the exact "
+        "identifier in square brackets — for example [2023:DHC:8921] or "
+        "[(2022) 10 SCC 51]. Every substantive legal proposition must be "
+        "anchored to at least one such citation. If no retrieved "
+        "authority supports a proposition, drop the proposition or flag "
+        "it in the summary; do not paper over it.\n"
+        "3. Get the statute right. Read the STATUTE GUIDANCE block "
+        "carefully; Bharatiya Nyaya Sanhita (BNS) and Bharatiya Nagarik "
+        "Suraksha Sanhita (BNSS) are distinct. Confusing them is a "
+        "disqualifying error.\n"
+        "4. Keep register formal and paragraphs short. Preserve "
+        "Indian-English conventions. The body must be a complete "
+        "document (cause-title, parties, facts, grounds, prayer, "
+        "verification as applicable to the draft type) — not an outline."
     )
 
-    parts: list[str] = []
+    parts: list[str] = [_STATUTE_GUIDANCE, ""]
+    parts.append("=== MATTER RECORD (only source of facts) ===")
     parts.append(f"Matter: {matter.title} ({matter.matter_code})")
     parts.append(f"Practice area: {matter.practice_area}")
     parts.append(f"Forum: {matter.forum_level}")
@@ -210,29 +255,57 @@ def _build_messages(
         parts.append(f"Opposing party: {matter.opposing_party}")
     if matter.description:
         parts.append(f"Background: {matter.description}")
+    parts.append(
+        "(Any fact not listed above must appear in the draft as a "
+        "bracketed placeholder — never as an invented specific.)"
+    )
+    parts.append("")
     parts.append(f"Draft title: {draft.title}")
     parts.append(f"Draft type: {draft.draft_type}")
     if focus_note:
         parts.append(f"Focus: {focus_note}")
+    parts.append("")
 
-    if retrieved:
-        parts.append("Retrieved authorities (cite by identifier):")
-        for doc in retrieved:
-            # Format used by the mock provider to pick up identifiers.
-            ident = doc.neutral_citation or doc.id
+    citable = [doc for doc in retrieved if (doc.neutral_citation or doc.case_reference)]
+    uncitable = [doc for doc in retrieved if not (doc.neutral_citation or doc.case_reference)]
+
+    if citable:
+        parts.append("=== AUTHORITIES (cite these — and ONLY these — inline) ===")
+        for doc in citable:
+            ident = doc.neutral_citation or doc.case_reference
             parts.append(f"- CITATION: {ident}")
+            if doc.title:
+                parts.append(f"  TITLE: {doc.title[:200]}")
             if doc.summary:
                 excerpt = doc.summary.strip().splitlines()[0][:300]
                 parts.append(f"  EXCERPT: {excerpt}")
+        if uncitable:
+            parts.append(
+                f"(Additional {len(uncitable)} retrieved document(s) lack a "
+                "reportable citation and are excluded from the citable set.)"
+            )
+    elif retrieved:
+        parts.append(
+            "=== AUTHORITIES ===\n"
+            "The retrieval hit relevant documents but none carry a "
+            "reportable citation (neutral citation or case reference). "
+            "Do not cite by UUID or internal id. Produce the draft with "
+            "bracketed `[citation needed]` anchors where authority "
+            "should appear, and flag this gap in the summary."
+        )
     else:
         parts.append(
+            "=== AUTHORITIES ===\n"
             "No authorities retrieved. Produce a draft that flags "
             "`missing authorities` in the summary rather than inventing "
-            "sources."
+            "sources. Use `[citation needed]` anchors where authority "
+            "should appear."
         )
 
+    parts.append("")
     parts.append(
-        "Respond with json. Emit the draft body and citations list."
+        "Respond with json. The citations array must list only identifiers "
+        "you actually cited inline in the body."
     )
 
     return [
@@ -280,6 +353,114 @@ def _write_model_run(
     return run
 
 
+_SUMMARY_MAX_LEN = 1200
+
+
+# Seed query packs keyed by a normalised practice signal. Each pack is
+# merged into retrieval (multi-query → union + dedup) so the draft has a
+# reasonable shot at inline-citing canonical precedents even when the
+# matter title is terse. Keep packs small (3–5 queries) to stay under
+# retrieval-cost limits.
+_RETRIEVAL_PACKS: dict[str, list[str]] = {
+    "bail": [
+        "triple test for bail flight risk tampering evidence repetition offence",
+        "parity co-accused bail granted identical footing",
+        "prolonged custody undertrial pretrial detention bail default",
+        "bail is the rule jail is the exception BNSS procedure",
+    ],
+    "anticipatory_bail": [
+        "anticipatory bail custodial interrogation BNSS Section 482",
+        "pre-arrest bail economic offence liberty",
+    ],
+    "quashing": [
+        "quashing FIR Section 482 CrPC inherent powers BNSS 528",
+        "abuse of process of court quashing proceedings",
+    ],
+}
+
+_BAIL_HINTS = re.compile(
+    r"\b(bail|BNSS\s*4[78]\d|CrPC\s*(438|439|167)|custody|undertrial)\b", re.I
+)
+_ANTICIPATORY_HINTS = re.compile(r"\banticipatory\s*bail\b|pre-arrest\s*bail", re.I)
+_QUASHING_HINTS = re.compile(r"\bquash(ing)?\b|\bFIR\s*quash", re.I)
+
+
+def _retrieval_queries(matter: Matter, focus_note: str | None) -> list[str]:
+    """Build a prioritised list of queries to run against the corpus.
+
+    The first entry is the "direct" matter query; subsequent entries
+    are seed queries drawn from practice-area-specific packs. The
+    drafting pipeline unions the retrieval results and de-duplicates by
+    document id, so an empty pack is harmless.
+    """
+    base_parts: list[str] = [matter.title or ""]
+    if matter.description:
+        base_parts.append(matter.description)
+    if focus_note:
+        base_parts.append(focus_note)
+    base = " ".join(p.strip() for p in base_parts if p and p.strip()).strip()
+    queries: list[str] = [base] if base else []
+
+    probe = " ".join([base, matter.practice_area or "", (matter.description or "")])
+    added: set[str] = set()
+
+    def _add(pack: str) -> None:
+        if pack in added:
+            return
+        queries.extend(_RETRIEVAL_PACKS.get(pack, []))
+        added.add(pack)
+
+    if _ANTICIPATORY_HINTS.search(probe):
+        _add("anticipatory_bail")
+    if _BAIL_HINTS.search(probe):
+        _add("bail")
+    if _QUASHING_HINTS.search(probe):
+        _add("quashing")
+
+    return queries
+
+
+def _retrieve_for_draft(
+    session: Session,
+    matter: Matter,
+    focus_note: str | None,
+    per_query_limit: int = 3,
+    total_limit: int = 8,
+) -> list[AuthorityDocument]:
+    """Run multi-query retrieval and dedup by document id, preserving the
+    order in which each document first appeared."""
+    seen: dict[str, AuthorityDocument] = {}
+    for query in _retrieval_queries(matter, focus_note):
+        if not query or len(seen) >= total_limit:
+            continue
+        hits = search_authority_catalog(session, query=query, limit=per_query_limit)
+        for hit in hits:
+            if hit.authority_document_id in seen:
+                continue
+            doc = session.get(AuthorityDocument, hit.authority_document_id)
+            if doc is not None:
+                seen[hit.authority_document_id] = doc
+                if len(seen) >= total_limit:
+                    break
+    return list(seen.values())
+
+
+def _augment_summary_with_findings(
+    base: str | None, findings: list[DraftFinding]
+) -> str | None:
+    if not findings:
+        return base
+    lines = [f"[{f.severity.upper()}] {f.code}: {f.message}" for f in findings]
+    suffix = "Review findings:\n" + "\n".join(lines)
+    if not base:
+        combined = suffix
+    else:
+        combined = f"{base}\n\n{suffix}"
+    if len(combined) > _SUMMARY_MAX_LEN:
+        combined = combined[: _SUMMARY_MAX_LEN - 3].rstrip() + "..."
+    return combined
+
+
 def _verify_version_citations(
     session: Session,
     citations: list[str],
@@ -293,6 +474,7 @@ def _verify_version_citations(
         session.scalars(
             select(AuthorityDocument).where(
                 (AuthorityDocument.neutral_citation.in_(unique))
+                | (AuthorityDocument.case_reference.in_(unique))
                 | (AuthorityDocument.id.in_(unique))
             )
         )
@@ -300,8 +482,10 @@ def _verify_version_citations(
     sources: list[SourceDoc] = []
     known: set[str] = set()
     for doc in docs:
-        identifier = doc.neutral_citation or doc.id
-        aliases = tuple({doc.id, doc.neutral_citation or doc.id})
+        identifier = doc.neutral_citation or doc.case_reference or doc.id
+        aliases = tuple(
+            filter(None, {doc.id, doc.neutral_citation, doc.case_reference})
+        )
         sources.append(
             SourceDoc(identifier=identifier, aliases=aliases, text=doc.summary or "")
         )
@@ -309,6 +493,8 @@ def _verify_version_citations(
         known.add(doc.id)
         if doc.neutral_citation:
             known.add(doc.neutral_citation)
+        if doc.case_reference:
+            known.add(doc.case_reference)
     claims = [Claim(citation=c) for c in unique]
     report: VerificationReport = verify_citations(claims, sources)
     surviving = [c for c in unique if c in known]
@@ -335,14 +521,7 @@ def generate_draft_version(
             detail="Finalized drafts cannot be regenerated.",
         )
 
-    retrieved_hits = search_authority_catalog(
-        session, query=f"{matter.title} {matter.description or ''}", limit=5
-    )
-    retrieved_docs: list[AuthorityDocument] = []
-    for hit in retrieved_hits:
-        doc = session.get(AuthorityDocument, hit.authority_document_id)
-        if doc is not None:
-            retrieved_docs.append(doc)
+    retrieved_docs = _retrieve_for_draft(session, matter, focus_note)
 
     messages = _build_messages(matter, draft, retrieved_docs, focus_note)
     prompt_hash = _prompt_hash(messages)
@@ -356,6 +535,7 @@ def generate_draft_version(
             schema=_LLMDraftResponse,
             messages=messages,
             context=llm_context,
+            max_tokens=8192,
         )
     except (LLMResponseFormatError, ValidationError) as exc:
         logger.warning("Draft LLM refused / malformed: %s", exc)
@@ -371,6 +551,14 @@ def generate_draft_version(
             draft.id,
             len(response.citations),
         )
+
+    findings = run_validators(response.body, surviving)
+    for f in findings:
+        logger.warning(
+            "Draft validation finding [%s:%s] on draft %s: %s",
+            f.severity, f.code, draft.id, f.message,
+        )
+    augmented_summary = _augment_summary_with_findings(response.summary, findings)
 
     model_run = _write_model_run(
         session,
@@ -392,7 +580,7 @@ def generate_draft_version(
         body=response.body,
         citations_json=json.dumps(surviving),
         verified_citation_count=verified_count,
-        summary=response.summary,
+        summary=augmented_summary,
     )
     session.add(version)
     session.flush()
