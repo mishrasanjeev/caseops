@@ -40,9 +40,7 @@ type FormValues = z.infer<typeof schema>;
 /**
  * In-app company bootstrap (BG-010). On success the API returns an
  * `AuthSession` identical to /login; we store it and push the owner
- * straight into the new workspace. The classic workspace previously
- * handled this flow via /legacy — that link is gone from the sign-in
- * page now.
+ * straight into the new workspace.
  */
 export function NewWorkspaceForm() {
   const router = useRouter();

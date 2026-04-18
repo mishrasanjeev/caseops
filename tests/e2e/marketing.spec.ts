@@ -121,12 +121,22 @@ test.describe("Marketing site", () => {
     await expect(page.getByText(/we'll be in touch within a working day/i)).toBeVisible();
   });
 
-  test("legacy app route is not indexed", async ({ page }) => {
+  test("legacy route redirects into the new app", async ({ page }) => {
+    // Sprint 6 parity proof: the old /legacy console is gone. Browsers
+    // landing on legacy bookmarks should resolve into the new cockpit,
+    // not 404.
     const response = await page.goto("/legacy");
     expect(response?.status()).toBe(200);
-    await expect(page.locator('meta[name="robots"]')).toHaveAttribute(
-      "content",
-      /noindex/i,
-    );
+    // Middleware redirects before the /app sign-in gate short-circuits,
+    // so we land on either /app or /sign-in depending on session state.
+    await expect(page).toHaveURL(/\/(app|sign-in)/);
+    expect(page.url()).not.toMatch(/\/legacy/);
+  });
+
+  test("legacy subpaths redirect into the new app", async ({ page }) => {
+    const response = await page.goto("/legacy/contracts");
+    expect(response?.status()).toBe(200);
+    await expect(page).toHaveURL(/\/(app|sign-in)/);
+    expect(page.url()).not.toMatch(/\/legacy/);
   });
 });
