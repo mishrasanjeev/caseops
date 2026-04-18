@@ -148,6 +148,167 @@ export async function fetchOutsideCounselWorkspace(): Promise<OutsideCounselWork
   return outsideCounselWorkspace.parse(data);
 }
 
+// --- Outside counsel mutations (BG-016) ---
+// Mirrors the backend's CAPABILITY_ROLES:
+//   outside_counsel:manage — create/edit profile, assign, record spend
+//   outside_counsel:recommend — fetch recommendations
+
+export type OutsideCounselPanelStatus =
+  | "active"
+  | "on_hold"
+  | "preferred"
+  | "archived";
+
+export type OutsideCounselAssignmentStatus =
+  | "proposed"
+  | "approved"
+  | "declined"
+  | "completed";
+
+export async function createOutsideCounselProfile(input: {
+  name: string;
+  primaryContactName?: string | null;
+  primaryContactEmail?: string | null;
+  primaryContactPhone?: string | null;
+  firmCity?: string | null;
+  jurisdictions?: string[];
+  practiceAreas?: string[];
+  panelStatus?: OutsideCounselPanelStatus;
+  internalNotes?: string | null;
+}): Promise<unknown> {
+  return apiRequest<unknown>("/api/outside-counsel/profiles", {
+    method: "POST",
+    body: {
+      name: input.name,
+      primary_contact_name: input.primaryContactName ?? null,
+      primary_contact_email: input.primaryContactEmail ?? null,
+      primary_contact_phone: input.primaryContactPhone ?? null,
+      firm_city: input.firmCity ?? null,
+      jurisdictions: input.jurisdictions ?? [],
+      practice_areas: input.practiceAreas ?? [],
+      panel_status: input.panelStatus ?? "active",
+      internal_notes: input.internalNotes ?? null,
+    },
+  });
+}
+
+export async function updateOutsideCounselProfile(input: {
+  counselId: string;
+  patch: {
+    name?: string;
+    primaryContactName?: string | null;
+    primaryContactEmail?: string | null;
+    primaryContactPhone?: string | null;
+    firmCity?: string | null;
+    jurisdictions?: string[] | null;
+    practiceAreas?: string[] | null;
+    panelStatus?: OutsideCounselPanelStatus;
+    internalNotes?: string | null;
+  };
+}): Promise<unknown> {
+  return apiRequest<unknown>(`/api/outside-counsel/profiles/${input.counselId}`, {
+    method: "PATCH",
+    body: {
+      name: input.patch.name,
+      primary_contact_name: input.patch.primaryContactName,
+      primary_contact_email: input.patch.primaryContactEmail,
+      primary_contact_phone: input.patch.primaryContactPhone,
+      firm_city: input.patch.firmCity,
+      jurisdictions: input.patch.jurisdictions,
+      practice_areas: input.patch.practiceAreas,
+      panel_status: input.patch.panelStatus,
+      internal_notes: input.patch.internalNotes,
+    },
+  });
+}
+
+export async function createOutsideCounselAssignment(input: {
+  matterId: string;
+  counselId: string;
+  roleSummary?: string | null;
+  budgetAmountMinor?: number | null;
+  currency?: string;
+  status?: OutsideCounselAssignmentStatus;
+  internalNotes?: string | null;
+}): Promise<unknown> {
+  return apiRequest<unknown>("/api/outside-counsel/assignments", {
+    method: "POST",
+    body: {
+      matter_id: input.matterId,
+      counsel_id: input.counselId,
+      role_summary: input.roleSummary ?? null,
+      budget_amount_minor: input.budgetAmountMinor ?? null,
+      currency: input.currency ?? "INR",
+      status: input.status ?? "approved",
+      internal_notes: input.internalNotes ?? null,
+    },
+  });
+}
+
+export async function createOutsideCounselSpendRecord(input: {
+  matterId: string;
+  counselId: string;
+  assignmentId?: string | null;
+  invoiceReference?: string | null;
+  stageLabel?: string | null;
+  description: string;
+  currency?: string;
+  amountMinor: number;
+  approvedAmountMinor?: number | null;
+  status?: "submitted" | "approved" | "paid" | "disputed";
+  billedOn?: string | null;
+  dueOn?: string | null;
+  paidOn?: string | null;
+  notes?: string | null;
+}): Promise<unknown> {
+  return apiRequest<unknown>("/api/outside-counsel/spend", {
+    method: "POST",
+    body: {
+      matter_id: input.matterId,
+      counsel_id: input.counselId,
+      assignment_id: input.assignmentId ?? null,
+      invoice_reference: input.invoiceReference ?? null,
+      stage_label: input.stageLabel ?? null,
+      description: input.description,
+      currency: input.currency ?? "INR",
+      amount_minor: input.amountMinor,
+      approved_amount_minor: input.approvedAmountMinor ?? null,
+      status: input.status ?? "submitted",
+      billed_on: input.billedOn ?? null,
+      due_on: input.dueOn ?? null,
+      paid_on: input.paidOn ?? null,
+      notes: input.notes ?? null,
+    },
+  });
+}
+
+// --- Court-sync (BG-012) ---
+// Backend endpoint: POST /api/matters/{id}/court-sync/pull (capability:
+// court_sync:run). Runs as a BackgroundTask; the response carries the
+// enqueued job state.
+
+export type MatterCourtSyncJob = {
+  id: string;
+  matter_id: string;
+  status: "pending" | "running" | "completed" | "failed";
+  started_at: string | null;
+  finished_at: string | null;
+  imported_cause_list_entries: number;
+  imported_court_orders: number;
+  error_message: string | null;
+  created_at: string;
+};
+
+export async function pullMatterCourtSync(input: {
+  matterId: string;
+}): Promise<MatterCourtSyncJob> {
+  const data = await apiRequest<unknown>(
+    `/api/matters/${input.matterId}/court-sync/pull`,
+    { method: "POST", body: {} },
+  );
+  return data as MatterCourtSyncJob;
+}
+
 export async function generateHearingPack(input: {
   matterId: string;
   hearingId: string;

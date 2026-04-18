@@ -5,7 +5,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Banknote, Briefcase, Users } from "lucide-react";
 import { useMemo } from "react";
 
-import { Button } from "@/components/ui/Button";
+import { NewCounselDialog } from "@/components/app/NewCounselDialog";
 import { Card, CardContent } from "@/components/ui/Card";
 import { DataTable } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -15,6 +15,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { fetchOutsideCounselWorkspace } from "@/lib/api/endpoints";
 import type { OutsideCounsel } from "@/lib/api/schemas";
+import { useCapability } from "@/lib/capabilities";
 
 function formatMoney(minor: number, currency: string): string {
   return new Intl.NumberFormat(undefined, {
@@ -29,6 +30,7 @@ export default function OutsideCounselPage() {
     queryKey: ["outside-counsel", "workspace"],
     queryFn: () => fetchOutsideCounselWorkspace(),
   });
+  const canManage = useCapability("outside_counsel:manage");
 
   const currency = data?.summary.currency ?? "INR";
   const profiles = data?.profiles ?? [];
@@ -101,12 +103,8 @@ export default function OutsideCounselPage() {
       <PageHeader
         eyebrow="Outside counsel"
         title="Outside counsel & spend"
-        description="Panel profiles, active assignments, and spend in one place. Use the legacy console for assigning counsel and logging spend until those flows are rebuilt here."
-        actions={
-          <Button href="/legacy" variant="outline">
-            Open legacy counsel
-          </Button>
-        }
+        description="Panel profiles, active assignments, and spend in one place."
+        actions={canManage ? <NewCounselDialog /> : null}
       />
 
       <section className="grid gap-4 md:grid-cols-4">
@@ -147,12 +145,12 @@ export default function OutsideCounselPage() {
         <EmptyState
           icon={Users}
           title="No counsel on panel yet"
-          description="Add outside counsel from the legacy console; a rebuilt assignment flow ships with §10.8."
-          action={
-            <Button href="/legacy" variant="outline">
-              Open legacy console
-            </Button>
+          description={
+            canManage
+              ? "Add the first outside counsel. You can log assignments and spend against them as they engage on matters."
+              : "A team member with outside-counsel management access can add counsel to the panel."
           }
+          action={canManage ? <NewCounselDialog /> : undefined}
         />
       ) : (
         <DataTable
