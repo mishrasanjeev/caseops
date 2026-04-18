@@ -93,3 +93,35 @@ class AuthoritySearchResponse(BaseModel):
     provider: str
     generated_at: datetime
     results: list[AuthoritySearchResult]
+
+
+AuthorityAnnotationKindLiteral = Literal["note", "flag", "tag"]
+
+
+class AuthorityAnnotationRecord(BaseModel):
+    id: str
+    company_id: str
+    authority_document_id: str
+    created_by_membership_id: str | None
+    kind: AuthorityAnnotationKindLiteral
+    title: str
+    body: str | None
+    is_archived: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class AuthorityAnnotationListResponse(BaseModel):
+    annotations: list[AuthorityAnnotationRecord]
+
+
+class AuthorityAnnotationCreateRequest(BaseModel):
+    kind: AuthorityAnnotationKindLiteral
+    title: str = Field(min_length=1, max_length=255)
+    body: str | None = Field(default=None, max_length=8000)
+
+
+class AuthorityAnnotationUpdateRequest(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    body: str | None = Field(default=None, max_length=8000)
+    is_archived: bool | None = None

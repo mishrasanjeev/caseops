@@ -2430,3 +2430,60 @@ class EvaluationCase(Base):
     )
 
     run: Mapped[EvaluationRun] = relationship(back_populates="cases")
+
+
+class AuthorityAnnotationKind(StrEnum):
+    NOTE = "note"
+    FLAG = "flag"
+    TAG = "tag"
+
+
+class AuthorityAnnotation(Base):
+    """Per-tenant overlay on a shared ``AuthorityDocument``.
+
+    The authority corpus itself is global (public law). Each firm can
+    attach their own notes, flags, and tags without mutating the
+    shared record. Every query MUST filter on ``company_id`` — the
+    service layer enforces this.
+    """
+
+    __tablename__ = "authority_annotations"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            "authority_document_id",
+            "kind",
+            "title",
+            name="uq_authority_annotation_scope",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    authority_document_id: Mapped[str] = mapped_column(
+        ForeignKey("authority_documents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    kind: Mapped[str] = mapped_column(String(24), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    body: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        onupdate=utcnow,
+    )
