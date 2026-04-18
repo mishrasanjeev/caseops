@@ -37,6 +37,7 @@ from caseops_api.schemas.outside_counsel import (
 from caseops_api.schemas.outside_counsel import (
     OutsideCounselSpendRecord as OutsideCounselSpendRecordResponse,
 )
+from caseops_api.services.audit import record_from_context
 from caseops_api.services.identity import SessionContext
 
 
@@ -426,6 +427,15 @@ def create_outside_counsel_profile(
         internal_notes=payload.internal_notes.strip() if payload.internal_notes else None,
     )
     session.add(counsel)
+    session.flush()
+    record_from_context(
+        session,
+        context,
+        action="outside_counsel.created",
+        target_type="outside_counsel",
+        target_id=counsel.id,
+        metadata={"name": counsel.name, "panel_status": counsel.panel_status},
+    )
     session.commit()
     session.refresh(counsel)
     return _serialize_counsel_record(counsel, assignments=[], spend_records=[])
@@ -634,6 +644,22 @@ def create_outside_counsel_spend_record(
             f"{counsel.name} spend recorded at {payload.amount_minor} "
             f"{spend_record.currency} minor units."
         ),
+    )
+    # Money event — goes into the unified audit trail alongside matter
+    # activity so compliance can see spend without joining two tables.
+    record_from_context(
+        session,
+        context,
+        action="outside_counsel.spend_recorded",
+        target_type="outside_counsel_spend",
+        target_id=spend_record.id,
+        matter_id=matter.id,
+        metadata={
+            "counsel_id": counsel.id,
+            "amount_minor": payload.amount_minor,
+            "currency": spend_record.currency,
+            "description": spend_record.description,
+        },
     )
     session.commit()
     refreshed = session.scalar(

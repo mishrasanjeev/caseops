@@ -439,6 +439,23 @@ def generate_recommendation(
             )
         )
     session.add(recommendation)
+    session.flush()
+    from caseops_api.services.audit import record_from_context
+
+    record_from_context(
+        session,
+        context,
+        action="recommendation.generated",
+        target_type="recommendation",
+        target_id=recommendation.id,
+        matter_id=matter.id,
+        metadata={
+            "type": rec_type,
+            "option_count": len(cleaned_options),
+            "verified_citations": total_verified_citations,
+            "confidence": confidence,
+        },
+    )
     session.commit()
     session.refresh(recommendation)
     # Eager-load options for the response.
@@ -544,6 +561,22 @@ def record_recommendation_decision(
         recommendation.status = "edited"
     else:
         recommendation.status = "deferred"
+    session.flush()
+    from caseops_api.services.audit import record_from_context
+
+    record_from_context(
+        session,
+        context,
+        action="recommendation.decided",
+        target_type="recommendation",
+        target_id=recommendation.id,
+        matter_id=recommendation.matter_id,
+        metadata={
+            "decision": decision,
+            "selected_option_index": selected_option_index,
+            "status": recommendation.status,
+        },
+    )
     session.commit()
     refreshed = session.scalar(
         select(Recommendation)

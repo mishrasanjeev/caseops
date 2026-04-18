@@ -22,6 +22,7 @@ from caseops_api.schemas.billing import (
     PaymentLinkCreateRequest,
     PaymentWebhookAckResponse,
 )
+from caseops_api.services.audit import record_from_context
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.matters import _append_activity
 from caseops_api.services.pine_labs import (
@@ -201,6 +202,21 @@ def create_invoice_payment_link(
         event_type="pine_labs_payment_link_created",
         title="Pine Labs payment link created",
         detail=f"{invoice.invoice_number} is ready for collection.",
+    )
+    session.flush()
+    record_from_context(
+        session,
+        context,
+        action="invoice.payment_link_issued",
+        target_type="invoice",
+        target_id=invoice.id,
+        matter_id=matter_id,
+        metadata={
+            "invoice_number": invoice.invoice_number,
+            "attempt_id": attempt.id,
+            "amount_minor": invoice.total_amount_minor,
+            "currency": invoice.currency,
+        },
     )
     session.commit()
     refreshed_attempt = session.scalar(

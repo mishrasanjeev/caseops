@@ -261,6 +261,20 @@ def update_company_profile(
         setattr(context.company, field_name, value)
 
     session.add(context.company)
+    session.flush()
+    # IAM-adjacent audit — company profile edits are material for
+    # compliance (primary contact email rotates the system-of-record
+    # for legal notices).
+    from caseops_api.services.audit import record_from_context
+
+    record_from_context(
+        session,
+        context,
+        action="company_profile.updated",
+        target_type="company",
+        target_id=context.company.id,
+        metadata={"fields": sorted(updates.keys())},
+    )
     session.commit()
     session.refresh(context.company)
     return CompanyProfileResponse.model_validate(context.company)
@@ -296,6 +310,20 @@ def create_company_user(
     membership.user = user
 
     session.add_all([user, membership])
+    session.flush()
+    from caseops_api.services.audit import record_from_context
+
+    record_from_context(
+        session,
+        context,
+        action="company_user.created",
+        target_type="company_membership",
+        target_id=membership.id,
+        metadata={
+            "email": user.email,
+            "role": membership.role,
+        },
+    )
     session.commit()
     session.refresh(user)
     session.refresh(membership)
@@ -349,6 +377,22 @@ def update_company_user(
             membership.sessions_valid_after = datetime.now(UTC)
 
     session.add(membership)
+    session.flush()
+    from caseops_api.services.audit import record_from_context
+
+    record_from_context(
+        session,
+        context,
+        action="company_user.updated",
+        target_type="company_membership",
+        target_id=membership.id,
+        metadata={
+            "target_user_email": membership.user.email,
+            "role": membership.role,
+            "is_active": membership.is_active,
+            "suspended_session": payload.is_active is False,
+        },
+    )
     session.commit()
     session.refresh(membership)
     session.refresh(membership.user)

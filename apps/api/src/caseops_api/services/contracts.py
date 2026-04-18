@@ -38,6 +38,7 @@ from caseops_api.schemas.contracts import (
     ContractWorkspaceResponse,
 )
 from caseops_api.schemas.document_processing import DocumentProcessingJobRecord
+from caseops_api.services.audit import record_from_context
 from caseops_api.services.document_jobs import (
     enqueue_processing_job,
     load_latest_processing_jobs,
@@ -479,6 +480,18 @@ def create_contract(
         title="Contract created",
         detail=f"{contract.contract_code} created as {contract.status}.",
     )
+    record_from_context(
+        session,
+        context,
+        action="contract.created",
+        target_type="contract",
+        target_id=contract.id,
+        metadata={
+            "contract_code": contract.contract_code,
+            "status": contract.status,
+            "linked_matter_id": contract.linked_matter_id,
+        },
+    )
     session.commit()
     session.refresh(contract)
     return _contract_record(contract)
@@ -583,6 +596,18 @@ def update_contract(
         event_type="contract_updated",
         title="Contract updated",
         detail=f"Status is now {contract.status}.",
+    )
+    record_from_context(
+        session,
+        context,
+        action="contract.updated",
+        target_type="contract",
+        target_id=contract.id,
+        metadata={
+            "contract_code": contract.contract_code,
+            "status": contract.status,
+            "fields": sorted(raw_updates.keys()),
+        },
     )
     session.commit()
     session.refresh(contract)
