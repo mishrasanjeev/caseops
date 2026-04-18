@@ -385,6 +385,18 @@ class AnthropicProvider:
         self.model = model
         self._prompt_cache = prompt_cache
 
+    # Model families that have deprecated the `temperature` parameter.
+    # Currently Opus 4.7 and its reasoning-model siblings. Add newer
+    # prefixes here as they ship; keeping the list explicit beats
+    # guessing from error strings at runtime.
+    _NO_TEMPERATURE_PREFIXES: tuple[str, ...] = (
+        "claude-opus-4-7",
+    )
+
+    def _model_rejects_temperature(self) -> bool:
+        name = (self.model or "").lower()
+        return any(name.startswith(p) for p in self._NO_TEMPERATURE_PREFIXES)
+
     def generate(
         self,
         messages: list[LLMMessage],
@@ -397,9 +409,15 @@ class AnthropicProvider:
         kwargs: dict = {
             "model": self.model,
             "messages": chat,
-            "temperature": temperature,
             "max_tokens": max_tokens,
         }
+        # Anthropic's reasoning models (Opus 4.7+) deprecated the
+        # `temperature` parameter. Including it surfaces a 400 at the
+        # wire, and the error message does not propagate cleanly into
+        # the structured-output path. Skip it for known-new models;
+        # keep it for Sonnet / Haiku where it still tunes output.
+        if not self._model_rejects_temperature():
+            kwargs["temperature"] = temperature
         if system_prompt:
             # Anthropic treats a list of system blocks with
             # cache_control="ephemeral" as a 5-minute cache hint.

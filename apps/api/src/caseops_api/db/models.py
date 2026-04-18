@@ -1824,7 +1824,11 @@ class ModelRun(Base):
     prompt_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     completion_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     latency_ms: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    status: Mapped[str] = mapped_column(String(24), default="ok", nullable=False)
+    # Widened to 64 because status labels like
+    # "rejected_no_verified_citations" don't fit in 24. Kept as
+    # VARCHAR rather than an enum because the taxonomy is still
+    # evolving and enum migrations on Postgres are painful.
+    status: Mapped[str] = mapped_column(String(64), default="ok", nullable=False)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
