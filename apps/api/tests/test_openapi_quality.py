@@ -18,7 +18,6 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 
-
 EXEMPT_PATHS: set[str] = {
     # Probe endpoints — trivially documented by their path.
     "/api/health",
