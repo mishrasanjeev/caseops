@@ -2763,14 +2763,14 @@ class MatterIntakeRequest(Base):
         DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
     )
 
-    company: Mapped["Company"] = relationship()
-    submitted_by: Mapped["CompanyMembership | None"] = relationship(
+    company: Mapped[Company] = relationship()
+    submitted_by: Mapped[CompanyMembership | None] = relationship(
         foreign_keys=[submitted_by_membership_id]
     )
-    assigned_to: Mapped["CompanyMembership | None"] = relationship(
+    assigned_to: Mapped[CompanyMembership | None] = relationship(
         foreign_keys=[assigned_to_membership_id]
     )
-    linked_matter: Mapped["Matter | None"] = relationship(
+    linked_matter: Mapped[Matter | None] = relationship(
         foreign_keys=[linked_matter_id]
     )
 
@@ -2816,7 +2816,7 @@ class Team(Base):
         DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
     )
 
-    memberships: Mapped[list["TeamMembership"]] = relationship(
+    memberships: Mapped[list[TeamMembership]] = relationship(
         back_populates="team",
         cascade="all, delete-orphan",
     )
@@ -2847,4 +2847,4 @@ class TeamMembership(Base):
     )
 
     team: Mapped[Team] = relationship(back_populates="memberships")
-    membership: Mapped["CompanyMembership"] = relationship()
+    membership: Mapped[CompanyMembership] = relationship()

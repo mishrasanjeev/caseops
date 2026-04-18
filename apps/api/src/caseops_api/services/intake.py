@@ -16,10 +16,9 @@ from sqlalchemy.orm import Session
 from caseops_api.db.models import (
     CompanyMembership,
     Matter,
-    MatterIntakePriority,
+    MatterForumLevel,
     MatterIntakeRequest,
     MatterIntakeStatus,
-    MatterForumLevel,
     MatterStatus,
     User,
 )

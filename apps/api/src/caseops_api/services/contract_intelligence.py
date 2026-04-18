@@ -39,22 +39,20 @@ from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
     Contract,
-    ContractAttachment,
     ContractClause,
     ContractClauseRiskLevel,
     ContractObligation,
     ContractObligationPriority,
     ContractObligationStatus,
     ContractPlaybookRule,
-    ContractPlaybookSeverity,
 )
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.llm import (
+    PURPOSE_METADATA_EXTRACT,
+    PURPOSE_RECOMMENDATIONS,
     LLMCallContext,
     LLMMessage,
     LLMResponseFormatError,
-    PURPOSE_METADATA_EXTRACT,
-    PURPOSE_RECOMMENDATIONS,
     build_provider,
     generate_structured,
 )
@@ -490,7 +488,10 @@ def _clause_extraction_messages(text: str) -> list[LLMMessage]:
 class _ExtractedObligation(BaseModel):
     title: str = Field(min_length=2, max_length=255)
     description: str = Field(default="", max_length=2000)
-    due_on_iso: str | None = Field(default=None, description="YYYY-MM-DD if an explicit date applies; else null.")
+    due_on_iso: str | None = Field(
+        default=None,
+        description="YYYY-MM-DD if an explicit date applies; else null.",
+    )
     priority: Literal["low", "medium", "high"] = "medium"
 
 
@@ -782,7 +783,11 @@ def _playbook_messages(
         for c in clauses
     ]
     rules_block = "\n".join(rule_lines) if rule_lines else "(no rules)"
-    clauses_block = "\n".join(clause_lines) if clause_lines else "(no extracted clauses — treat every rule as missing)"
+    clauses_block = (
+        "\n".join(clause_lines)
+        if clause_lines
+        else "(no extracted clauses — treat every rule as missing)"
+    )
 
     system = (
         "You compare a firm's playbook rules against clauses already "

@@ -4,17 +4,18 @@ The LLM-backed extract/compare paths exercise external API calls so we
 keep them out of the unit suite; the pure paths (playbook install,
 redline DOCX parsing) are exercised here.
 """
+# ruff: noqa: E501
+# The redline test inlines verbatim Word XML (OOXML is a single-line
+# format). Wrapping the lines breaks the DOCX parser, so we waive E501
+# for this one test file.
 from __future__ import annotations
 
 from io import BytesIO
 
-import pytest
 from fastapi.testclient import TestClient
 
-from caseops_api.db.session import get_session_factory
 from caseops_api.services.contract_intelligence import (
     DEFAULT_INDIAN_COMMERCIAL_PLAYBOOK,
-    install_default_playbook_rules,
 )
 from caseops_api.services.contract_redline import parse_redline_docx
 
@@ -140,7 +141,7 @@ def test_parse_redline_docx_recovers_insertions_and_deletions() -> None:
     # Build a tiny DOCX in-memory with tracked changes; python-docx has no
     # high-level API to author ins/del, so we write the XML by hand and
     # ship the minimal DOCX skeleton via zipfile.
-    from zipfile import ZipFile, ZIP_DEFLATED
+    from zipfile import ZIP_DEFLATED, ZipFile
 
     content_types = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
