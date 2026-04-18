@@ -27,6 +27,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from caseops_api.db.models import (
+    AuthorityDocument,
     HearingPack,
     HearingPackItem,
     HearingPackItemKind,
@@ -42,6 +43,7 @@ from caseops_api.db.models import (
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.llm import (
+    PURPOSE_HEARING_PACK,
     LLMCallContext,
     LLMCompletion,
     LLMMessage,
@@ -49,6 +51,7 @@ from caseops_api.services.llm import (
     LLMResponseFormatError,
     build_provider,
     generate_structured,
+    max_tokens_for_purpose,
 )
 from caseops_api.services.matter_access import assert_access
 
@@ -231,6 +234,61 @@ def _normalise_items(items: list[_LLMItem]) -> list[_LLMItem]:
     return filtered
 
 
+def _verify_authority_sources(
+    session: Session, items: list[_LLMItem]
+) -> list[_LLMItem]:
+    """PRD §6.1 / §17.4: citations in a hearing pack must be grounded.
+
+    The LLM emits ``authority_card`` items with a ``source_ref`` that
+    is supposed to identify a judgment in the corpus. The earlier
+    pipeline persisted these unverified — so a hallucinated citation
+    could land in the pack and mislead a reviewing partner. We now
+    check every ``authority_card`` against
+    ``authority_documents.{neutral_citation, case_reference, id}`` and
+    drop any item whose ``source_ref`` is unknown. Non-authority items
+    (chronology, last_order, pending_compliance, issue,
+    opposition_point, oral_point) are matter-derived and pass through.
+    """
+    cards = [item for item in items if item.item_type == "authority_card"]
+    needles = {(c.source_ref or "").strip() for c in cards}
+    needles.discard("")
+    if not needles:
+        return items
+
+    known: set[str] = set()
+    docs = session.scalars(
+        select(AuthorityDocument).where(
+            (AuthorityDocument.neutral_citation.in_(needles))
+            | (AuthorityDocument.case_reference.in_(needles))
+            | (AuthorityDocument.id.in_(needles))
+        )
+    )
+    for doc in docs:
+        if doc.neutral_citation:
+            known.add(doc.neutral_citation)
+        if doc.case_reference:
+            known.add(doc.case_reference)
+        known.add(doc.id)
+
+    out: list[_LLMItem] = []
+    dropped = 0
+    for item in items:
+        if item.item_type != "authority_card":
+            out.append(item)
+            continue
+        ref = (item.source_ref or "").strip()
+        if ref and ref in known:
+            out.append(item)
+        else:
+            dropped += 1
+    if dropped:
+        logger.info(
+            "hearing pack: dropped %d authority_card item(s) with "
+            "unverifiable source_ref", dropped,
+        )
+    return out
+
+
 def generate_hearing_pack(
     session: Session,
     *,
@@ -285,7 +343,7 @@ def generate_hearing_pack(
         list(recent_activity),
     )
     prompt_hash = _prompt_hash(messages)
-    llm = provider or build_provider()
+    llm = provider or build_provider(purpose=PURPOSE_HEARING_PACK)
     llm_context = LLMCallContext(
         tenant_id=context.company.id,
         matter_id=matter.id,
@@ -297,6 +355,7 @@ def generate_hearing_pack(
             schema=_LLMPackResponse,
             messages=messages,
             context=llm_context,
+            max_tokens=max_tokens_for_purpose(PURPOSE_HEARING_PACK),
         )
     except LLMResponseFormatError as exc:
         logger.warning("Hearing pack LLM refused / malformed: %s", exc)
@@ -314,6 +373,9 @@ def generate_hearing_pack(
     )
 
     items = _normalise_items(response.items)
+    # Fail closed on unverifiable authority citations — this is the
+    # gap earlier pipelines had (no validation against the corpus).
+    items = _verify_authority_sources(session, items)
     if not items:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

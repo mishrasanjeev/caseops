@@ -68,6 +68,7 @@ from caseops_api.services.draft_validators import (
 )
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.llm import (
+    PURPOSE_DRAFTING,
     LLMCallContext,
     LLMCompletion,
     LLMMessage,
@@ -75,6 +76,7 @@ from caseops_api.services.llm import (
     LLMResponseFormatError,
     build_provider,
     generate_structured,
+    max_tokens_for_purpose,
 )
 from caseops_api.services.matter_access import assert_access
 
@@ -556,7 +558,10 @@ def generate_draft_version(
 
     messages = _build_messages(matter, draft, retrieved_docs, focus_note)
     prompt_hash = _prompt_hash(messages)
-    llm = provider or build_provider()
+    # Drafting routes to the per-purpose drafting model (Opus-class
+    # when configured); metadata extraction and recommendations pick
+    # their own tier via build_provider(purpose=...).
+    llm = provider or build_provider(purpose=PURPOSE_DRAFTING)
     llm_context = LLMCallContext(
         tenant_id=context.company.id, matter_id=matter.id, purpose=PURPOSE
     )
@@ -566,7 +571,7 @@ def generate_draft_version(
             schema=_LLMDraftResponse,
             messages=messages,
             context=llm_context,
-            max_tokens=8192,
+            max_tokens=max_tokens_for_purpose(PURPOSE_DRAFTING),
         )
     except (LLMResponseFormatError, ValidationError) as exc:
         logger.warning("Draft LLM refused / malformed: %s", exc)
@@ -794,6 +799,24 @@ def render_version_docx(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Draft version not found.",
+        )
+
+    # PRD §6.1 / §17.4: a legal draft must be citation-grounded or
+    # refused. The `approve` transition already enforces this, but the
+    # DOCX export path used to be reachable without any verified
+    # citation — a reviewer could download a zero-citation brief and
+    # circulate it. Close the loop: export is gated unless at least one
+    # citation verified OR the draft has reached approved/finalized
+    # (the reviewer has accepted the gap on record).
+    gate_bypassed = draft.status in {DraftStatus.APPROVED, DraftStatus.FINALIZED}
+    if not gate_bypassed and (version.verified_citation_count or 0) <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "This draft version has zero verified citations. Export is "
+                "refused until at least one citation is verified OR the "
+                "reviewing partner explicitly approves the draft on record."
+            ),
         )
 
     # Import inline to avoid pulling python-docx into the process when

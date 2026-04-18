@@ -58,10 +58,29 @@ class Settings(BaseSettings):
     auth_rate_limit_enabled: bool = Field(default=True)
 
     llm_provider: str = Field(default="mock")
+    # Fallback model when a purpose-specific one is not set. Per-purpose
+    # routing (below) exists because legal drafting benefits from Opus
+    # while metadata extraction is fine on Haiku. Using one model for
+    # every call is either paying Opus prices for extraction or shipping
+    # Haiku-quality briefs.
     llm_model: str = Field(default="caseops-mock-1")
+    llm_model_drafting: str | None = Field(default=None)
+    llm_model_recommendations: str | None = Field(default=None)
+    llm_model_hearing_pack: str | None = Field(default=None)
+    llm_model_metadata_extract: str | None = Field(default=None)
+    llm_model_eval: str | None = Field(default=None)
     llm_api_key: str | None = Field(default=None)
     llm_max_output_tokens: int = Field(default=2048, ge=256)
+    # Drafting warrants a bigger ceiling — full bail applications /
+    # review memos can hit 8-12k output tokens. Recommendations are
+    # structured JSON and stay tight.
+    llm_max_output_tokens_drafting: int = Field(default=8192, ge=512)
+    llm_max_output_tokens_hearing_pack: int = Field(default=4096, ge=512)
     llm_temperature: float = Field(default=0.1, ge=0.0, le=2.0)
+    # Anthropic ephemeral prompt caching (5-min TTL) on the large
+    # system prompt. When true, repeated calls within 5 min share the
+    # cache block and pay ~10% of the full prompt cost.
+    llm_prompt_cache_enabled: bool = Field(default=True)
     recommendation_review_required_default: bool = Field(default=True)
 
     embedding_provider: str = Field(default="mock")

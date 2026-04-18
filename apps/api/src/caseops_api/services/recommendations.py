@@ -52,6 +52,7 @@ from caseops_api.services.citations import (
 )
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.llm import (
+    PURPOSE_RECOMMENDATIONS,
     LLMCallContext,
     LLMCompletion,
     LLMMessage,
@@ -100,6 +101,12 @@ def _gather_authorities(
     # on Supreme Court precedent. Only filter by forum when the matter is at
     # the Supreme Court itself — otherwise broaden the search.
     filter_forum = forum_level if forum_level == "supreme_court" else None
+    # Do NOT catch-and-swallow here. An embedding provider outage, a
+    # pgvector index corruption, or a DB timeout is a 503, not a
+    # legitimate empty retrieval. The earlier fail-open collapsed both
+    # signals into results=[] — which then paid the LLM to produce a
+    # confident refusal that masked the real outage. Propagate unknown
+    # failures so the caller sees a 503 and the LLM is never called.
     try:
         results = search_authority_catalog(
             session,
@@ -109,9 +116,15 @@ def _gather_authorities(
         )
     except HTTPException:
         raise
-    except Exception:
-        logger.exception("Authority search failed; continuing with empty retrieval.")
-        results = []
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Authority retrieval failed — refusing to proceed.")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "Authority retrieval is temporarily unavailable. "
+                "Recommendation generation is refused until retrieval recovers."
+            ),
+        ) from exc
 
     picked: list[RetrievedAuthority] = []
     for result in results[:limit]:
@@ -324,7 +337,7 @@ def generate_recommendation(
         forum_level=matter.forum_level,
     )
 
-    llm = provider or build_provider()
+    llm = provider or build_provider(purpose=PURPOSE_RECOMMENDATIONS)
     messages = _build_prompt(rec_type=rec_type, matter=matter, authorities=retrieved)
     prompt_hash = _prompt_hash(messages)
 

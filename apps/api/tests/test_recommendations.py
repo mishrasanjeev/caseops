@@ -169,7 +169,7 @@ def test_generate_recommendation_refuses_when_no_verified_citations(
 
     monkeypatch.setattr(
         "caseops_api.services.recommendations.build_provider",
-        lambda: _HallucinatingProvider(),
+        lambda *a, **kw: _HallucinatingProvider(),
     )
 
     token, _, matter_id = _setup_matter(client)
@@ -242,7 +242,7 @@ def test_shared_citation_credits_every_option_that_cites_it(
 
     monkeypatch.setattr(
         "caseops_api.services.recommendations.build_provider",
-        lambda: _SharedCitationProvider(),
+        lambda *a, **kw: _SharedCitationProvider(),
     )
 
     token, _, matter_id = _setup_matter(client)
@@ -310,7 +310,7 @@ def test_generate_recommendation_refuses_when_retrieval_is_empty(
 
     monkeypatch.setattr(
         "caseops_api.services.recommendations.build_provider",
-        lambda: _ConfidentNoRetrievalProvider(),
+        lambda *a, **kw: _ConfidentNoRetrievalProvider(),
     )
 
     token, _, matter_id = _setup_matter(client)

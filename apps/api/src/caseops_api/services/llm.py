@@ -350,11 +350,26 @@ def _extract_excerpts(text: str) -> list[str]:
 
 
 class AnthropicProvider:
-    """Thin adapter around the Anthropic SDK."""
+    """Thin adapter around the Anthropic SDK.
+
+    Supports Anthropic's ephemeral prompt caching (``cache_control``)
+    on the system block when ``prompt_cache`` is True. Large CaseOps
+    system prompts (drafting ABSOLUTE RULES + statute guidance) are
+    ~2-3 KB of static text; reusing the same system prompt within the
+    5-minute TTL drops input-token billing on that block to ~10 %.
+    """
 
     name = "anthropic"
 
-    def __init__(self, *, model: str, api_key: str) -> None:
+    def __init__(
+        self,
+        *,
+        model: str,
+        api_key: str,
+        prompt_cache: bool = True,
+        timeout_seconds: float = 60.0,
+        max_retries: int = 2,
+    ) -> None:
         try:
             import anthropic  # type: ignore[import-not-found]
         except ImportError as exc:
@@ -362,8 +377,13 @@ class AnthropicProvider:
                 "The 'anthropic' package is not installed. Run "
                 "'uv add anthropic' and set CASEOPS_LLM_PROVIDER=anthropic.",
             ) from exc
-        self._client = anthropic.Anthropic(api_key=api_key)
+        self._client = anthropic.Anthropic(
+            api_key=api_key,
+            timeout=timeout_seconds,
+            max_retries=max_retries,
+        )
         self.model = model
+        self._prompt_cache = prompt_cache
 
     def generate(
         self,
@@ -381,7 +401,21 @@ class AnthropicProvider:
             "max_tokens": max_tokens,
         }
         if system_prompt:
-            kwargs["system"] = system_prompt
+            # Anthropic treats a list of system blocks with
+            # cache_control="ephemeral" as a 5-minute cache hint.
+            # We only cache when the prompt is large enough to matter —
+            # under ~500 tokens the minimum billable unit outweighs the
+            # savings.
+            if self._prompt_cache and len(system_prompt) >= 2000:
+                kwargs["system"] = [
+                    {
+                        "type": "text",
+                        "text": system_prompt,
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ]
+            else:
+                kwargs["system"] = system_prompt
         try:
             response = self._client.messages.create(**kwargs)
         except Exception as exc:
@@ -474,29 +508,80 @@ def _messages_to_gemini(messages: list[LLMMessage]) -> list[dict[str, Any]]:
     return contents
 
 
-def build_provider() -> LLMProvider:
+# Purpose tags the drafting / recommendation / hearing-pack / eval
+# pipelines pass to build_provider so each workflow gets the model
+# best suited to it. Legal drafting wants Opus-class reasoning;
+# structured-output recommendations are fine on Sonnet; metadata
+# extraction at corpus scale stays on Haiku. A circular eval
+# (same-model judge and drafter) is worse than no eval, so the eval
+# purpose deliberately resolves to the strongest available model.
+Purpose = str
+PURPOSE_DRAFTING = "drafting"
+PURPOSE_RECOMMENDATIONS = "recommendations"
+PURPOSE_HEARING_PACK = "hearing_pack"
+PURPOSE_METADATA_EXTRACT = "metadata_extract"
+PURPOSE_EVAL = "eval"
+
+
+def _resolve_model_for_purpose(settings: object, purpose: str | None) -> str:
+    """Pick the configured model for ``purpose``; fall back to the
+    global ``llm_model`` when no per-purpose override is set.
+
+    Treats None and empty string the same so operators can clear a
+    per-purpose override with ``CASEOPS_LLM_MODEL_DRAFTING=""`` rather
+    than having to unset the env var entirely.
+    """
+    mapping = {
+        PURPOSE_DRAFTING: getattr(settings, "llm_model_drafting", None),
+        PURPOSE_RECOMMENDATIONS: getattr(settings, "llm_model_recommendations", None),
+        PURPOSE_HEARING_PACK: getattr(settings, "llm_model_hearing_pack", None),
+        PURPOSE_METADATA_EXTRACT: getattr(
+            settings, "llm_model_metadata_extract", None
+        ),
+        PURPOSE_EVAL: getattr(settings, "llm_model_eval", None),
+    }
+    override = mapping.get(purpose) if purpose else None
+    if override and str(override).strip():
+        return str(override).strip()
+    return getattr(settings, "llm_model", "") or "caseops-mock-1"
+
+
+def build_provider(purpose: str | None = None) -> LLMProvider:
     settings = get_settings()
     provider_name = settings.llm_provider.lower()
+    model = _resolve_model_for_purpose(settings, purpose)
     if provider_name in {"mock", "noop", "off"}:
-        return MockProvider(model=settings.llm_model or "caseops-mock-1")
+        return MockProvider(model=model)
     if not settings.llm_api_key:
         raise LLMProviderError(
             f"CASEOPS_LLM_API_KEY must be set when CASEOPS_LLM_PROVIDER={provider_name!r}.",
         )
     if provider_name == "anthropic":
         return AnthropicProvider(
-            model=settings.llm_model or "claude-opus-4-7",
+            model=model or "claude-opus-4-7",
             api_key=settings.llm_api_key,
+            prompt_cache=bool(getattr(settings, "llm_prompt_cache_enabled", True)),
         )
     if provider_name == "gemini":
         return GeminiProvider(
-            model=settings.llm_model or "gemini-2.5-pro",
+            model=model or "gemini-2.5-pro",
             api_key=settings.llm_api_key,
         )
     raise LLMProviderError(
         f"Unknown CASEOPS_LLM_PROVIDER value: {provider_name!r}. "
         "Use 'mock', 'anthropic', or 'gemini'.",
     )
+
+
+def max_tokens_for_purpose(purpose: str | None) -> int:
+    """Per-purpose output ceiling. Drafting needs headroom; structured
+    recommendations + metadata extraction do not."""
+    settings = get_settings()
+    if purpose == PURPOSE_DRAFTING:
+        return getattr(settings, "llm_max_output_tokens_drafting", 8192)
+    if purpose == PURPOSE_HEARING_PACK:
+        return getattr(settings, "llm_max_output_tokens_hearing_pack", 4096)
+    return settings.llm_max_output_tokens
 
 
 def generate_structured[T: BaseModel](
@@ -563,6 +648,13 @@ __all__ = [
     "LLMResponseFormatError",
     "MockProvider",
     "ModelRunWriter",
+    "PURPOSE_DRAFTING",
+    "PURPOSE_EVAL",
+    "PURPOSE_HEARING_PACK",
+    "PURPOSE_METADATA_EXTRACT",
+    "PURPOSE_RECOMMENDATIONS",
+    "Purpose",
     "build_provider",
     "generate_structured",
+    "max_tokens_for_purpose",
 ]

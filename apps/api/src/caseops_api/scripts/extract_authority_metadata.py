@@ -41,6 +41,7 @@ from sqlalchemy import or_, select
 from caseops_api.db.models import AuthorityDocument
 from caseops_api.db.session import get_session_factory
 from caseops_api.services.llm import (
+    PURPOSE_METADATA_EXTRACT,
     LLMMessage,
     LLMProvider,
     LLMProviderError,
@@ -276,7 +277,7 @@ def run(
     if total == 0:
         return 0
 
-    provider = build_provider()
+    provider = build_provider(purpose=PURPOSE_METADATA_EXTRACT)
     logger.info("provider: %s model=%s", provider.name, provider.model)
 
     with _stats_lock:
