@@ -4,7 +4,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
-from caseops_api.api.dependencies import DbSession, get_current_context
+from caseops_api.api.dependencies import (
+    DbSession,
+    get_current_context,
+    require_capability,
+)
 from caseops_api.schemas.outside_counsel import (
     OutsideCounselAssignmentCreateRequest,
     OutsideCounselAssignmentRecord,
@@ -29,6 +33,10 @@ from caseops_api.services.outside_counsel import (
 
 router = APIRouter()
 CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
+CounselManager = Annotated[SessionContext, Depends(require_capability('outside_counsel:manage'))]
+CounselRecommender = Annotated[
+    SessionContext, Depends(require_capability("outside_counsel:recommend"))
+]
 
 
 @router.get(
@@ -50,7 +58,7 @@ async def get_current_company_outside_counsel_workspace(
 )
 async def post_current_company_outside_counsel_profile(
     payload: OutsideCounselCreateRequest,
-    context: CurrentContext,
+    context: CounselManager,
     session: DbSession,
 ) -> OutsideCounselRecord:
     return create_outside_counsel_profile(session, context=context, payload=payload)
@@ -64,7 +72,7 @@ async def post_current_company_outside_counsel_profile(
 async def patch_current_company_outside_counsel_profile(
     counsel_id: str,
     payload: OutsideCounselUpdateRequest,
-    context: CurrentContext,
+    context: CounselManager,
     session: DbSession,
 ) -> OutsideCounselRecord:
     return update_outside_counsel_profile(
@@ -82,7 +90,7 @@ async def patch_current_company_outside_counsel_profile(
 )
 async def post_current_company_outside_counsel_assignment(
     payload: OutsideCounselAssignmentCreateRequest,
-    context: CurrentContext,
+    context: CounselManager,
     session: DbSession,
 ) -> OutsideCounselAssignmentRecord:
     return create_outside_counsel_assignment(session, context=context, payload=payload)
@@ -95,7 +103,7 @@ async def post_current_company_outside_counsel_assignment(
 )
 async def post_current_company_outside_counsel_spend_record(
     payload: OutsideCounselSpendRecordCreateRequest,
-    context: CurrentContext,
+    context: CounselManager,
     session: DbSession,
 ) -> OutsideCounselSpendRecord:
     return create_outside_counsel_spend_record(session, context=context, payload=payload)
@@ -108,7 +116,7 @@ async def post_current_company_outside_counsel_spend_record(
 )
 async def post_current_company_outside_counsel_recommendations(
     payload: OutsideCounselRecommendationRequest,
-    context: CurrentContext,
+    context: CounselRecommender,
     session: DbSession,
 ) -> OutsideCounselRecommendationResponse:
     return get_outside_counsel_recommendations(session, context=context, payload=payload)

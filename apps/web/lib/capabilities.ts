@@ -15,56 +15,113 @@ export type Role = "owner" | "admin" | "member";
  * `apps/api/src/caseops_api/services/*`. When the capability grid in the
  * API changes, update this map in the same PR.
  */
+// Mirror of apps/api/src/caseops_api/api/dependencies.py CAPABILITY_ROLES.
+// Keep these in sync — the backend is the source of truth, but a
+// drifted UI table shows actions the server will refuse. The Python
+// role-guard lint walks the live OpenAPI shape, so the API side is
+// policed automatically; this file is hand-maintained.
 export type Capability =
+  // matter + workspace
   | "matters:create"
+  | "matters:edit"
   | "matters:archive"
+  | "matters:write"
+  // money
   | "invoices:issue"
   | "invoices:send_payment_link"
   | "invoices:void"
+  | "payments:sync"
+  | "time_entries:write"
+  // company / IAM
   | "company:manage_profile"
   | "company:manage_users"
+  // documents
+  | "documents:upload"
+  | "documents:manage"
+  // contracts
   | "contracts:create"
+  | "contracts:edit"
   | "contracts:delete"
+  | "contracts:manage_rules"
+  // outside counsel
   | "outside_counsel:manage"
+  | "outside_counsel:recommend"
+  // drafting
+  | "drafts:create"
+  | "drafts:generate"
+  | "drafts:review"
+  | "drafts:finalize"
+  // hearing packs
+  | "hearing_packs:generate"
+  | "hearing_packs:review"
+  // court sync
+  | "court_sync:run"
+  // recommendations + AI
   | "recommendations:generate"
+  | "recommendations:decide"
+  | "ai:generate"
+  // authority corpus
+  | "authorities:search"
+  | "authorities:ingest"
+  | "authorities:annotate"
+  // governance
   | "workspace:admin"
-  | "audit:export";
+  | "audit:export"
+  | "matter_access:manage";
 
-const OWNER_CAPS: ReadonlySet<Capability> = new Set<Capability>([
+const ALL_ROLES: Capability[] = [
   "matters:create",
+  "matters:edit",
+  "matters:write",
+  "time_entries:write",
+  "documents:upload",
+  "contracts:create",
+  "contracts:edit",
+  "outside_counsel:recommend",
+  "drafts:create",
+  "drafts:generate",
+  "hearing_packs:generate",
+  "recommendations:generate",
+  "recommendations:decide",
+  "ai:generate",
+  "authorities:search",
+  "authorities:annotate",
+];
+
+const STAFF: Capability[] = [
   "matters:archive",
   "invoices:issue",
   "invoices:send_payment_link",
-  "invoices:void",
+  "payments:sync",
   "company:manage_profile",
   "company:manage_users",
-  "contracts:create",
+  "documents:manage",
   "contracts:delete",
+  "contracts:manage_rules",
   "outside_counsel:manage",
-  "recommendations:generate",
+  "drafts:review",
+  "drafts:finalize",
+  "hearing_packs:review",
+  "court_sync:run",
+  "authorities:ingest",
   "workspace:admin",
-  "audit:export",
+  "matter_access:manage",
+];
+
+const OWNER_ONLY: Capability[] = ["invoices:void", "audit:export"];
+
+const OWNER_CAPS: ReadonlySet<Capability> = new Set<Capability>([
+  ...ALL_ROLES,
+  ...STAFF,
+  ...OWNER_ONLY,
 ]);
 
 const ADMIN_CAPS: ReadonlySet<Capability> = new Set<Capability>([
-  "matters:create",
-  "matters:archive",
-  "invoices:issue",
-  "invoices:send_payment_link",
-  "company:manage_profile",
-  "company:manage_users",
-  "contracts:create",
-  "contracts:delete",
-  "outside_counsel:manage",
-  "recommendations:generate",
-  "workspace:admin",
+  ...ALL_ROLES,
+  ...STAFF,
 ]);
 
-const MEMBER_CAPS: ReadonlySet<Capability> = new Set<Capability>([
-  "matters:create",
-  "contracts:create",
-  "recommendations:generate",
-]);
+const MEMBER_CAPS: ReadonlySet<Capability> = new Set<Capability>(ALL_ROLES);
 
 const TABLE: Record<Role, ReadonlySet<Capability>> = {
   owner: OWNER_CAPS,

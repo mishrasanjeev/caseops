@@ -5,7 +5,11 @@ from typing import Annotated
 from fastapi import APIRouter, BackgroundTasks, Depends, File, UploadFile
 from fastapi.responses import FileResponse
 
-from caseops_api.api.dependencies import DbSession, get_current_context
+from caseops_api.api.dependencies import (
+    DbSession,
+    get_current_context,
+    require_capability,
+)
 from caseops_api.schemas.contracts import (
     ContractAttachmentRecord,
     ContractClauseCreateRequest,
@@ -38,6 +42,14 @@ from caseops_api.services.identity import SessionContext
 
 router = APIRouter()
 CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
+ContractCreator = Annotated[SessionContext, Depends(require_capability('contracts:create'))]
+ContractEditor = Annotated[SessionContext, Depends(require_capability('contracts:edit'))]
+ContractRuleManager = Annotated[
+    SessionContext, Depends(require_capability("contracts:manage_rules"))
+]
+DocumentUploader = Annotated[SessionContext, Depends(require_capability('documents:upload'))]
+DocumentManager = Annotated[SessionContext, Depends(require_capability('documents:manage'))]
+
 
 
 @router.get(
@@ -57,7 +69,7 @@ async def current_company_contracts(
 @router.post("/", response_model=ContractRecord, summary="Create a contract in the current company")
 async def create_current_company_contract(
     payload: ContractCreateRequest,
-    context: CurrentContext,
+    context: ContractCreator,
     session: DbSession,
 ) -> ContractRecord:
     return create_contract(session, context=context, payload=payload)
@@ -89,7 +101,7 @@ async def get_current_company_contract_workspace(
 async def patch_current_company_contract(
     contract_id: str,
     payload: ContractUpdateRequest,
-    context: CurrentContext,
+    context: ContractEditor,
     session: DbSession,
 ) -> ContractRecord:
     return update_contract(session, context=context, contract_id=contract_id, payload=payload)
@@ -103,7 +115,7 @@ async def patch_current_company_contract(
 async def post_current_company_contract_clause(
     contract_id: str,
     payload: ContractClauseCreateRequest,
-    context: CurrentContext,
+    context: ContractEditor,
     session: DbSession,
 ) -> ContractClauseRecord:
     return create_contract_clause(
@@ -122,7 +134,7 @@ async def post_current_company_contract_clause(
 async def post_current_company_contract_obligation(
     contract_id: str,
     payload: ContractObligationCreateRequest,
-    context: CurrentContext,
+    context: ContractEditor,
     session: DbSession,
 ) -> ContractObligationRecord:
     return create_contract_obligation(
@@ -141,7 +153,7 @@ async def post_current_company_contract_obligation(
 async def post_current_company_contract_playbook_rule(
     contract_id: str,
     payload: ContractPlaybookRuleCreateRequest,
-    context: CurrentContext,
+    context: ContractRuleManager,
     session: DbSession,
 ) -> ContractPlaybookRuleRecord:
     return create_contract_playbook_rule(
@@ -161,7 +173,7 @@ async def post_current_company_contract_attachment(
     contract_id: str,
     file: Annotated[UploadFile, File(...)],
     background_tasks: BackgroundTasks,
-    context: CurrentContext,
+    context: DocumentUploader,
     session: DbSession,
 ) -> ContractAttachmentRecord:
     attachment, job_id = create_contract_attachment(
@@ -185,7 +197,7 @@ async def retry_current_company_contract_attachment_processing(
     contract_id: str,
     attachment_id: str,
     background_tasks: BackgroundTasks,
-    context: CurrentContext,
+    context: DocumentManager,
     session: DbSession,
 ) -> ContractAttachmentRecord:
     attachment, job_id = request_contract_attachment_processing(
@@ -208,7 +220,7 @@ async def reindex_current_company_contract_attachment(
     contract_id: str,
     attachment_id: str,
     background_tasks: BackgroundTasks,
-    context: CurrentContext,
+    context: DocumentManager,
     session: DbSession,
 ) -> ContractAttachmentRecord:
     attachment, job_id = request_contract_attachment_processing(

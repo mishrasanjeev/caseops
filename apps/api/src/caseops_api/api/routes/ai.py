@@ -4,7 +4,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
-from caseops_api.api.dependencies import DbSession, get_current_context
+from caseops_api.api.dependencies import (
+    DbSession,
+    get_current_context,
+    require_capability,
+)
 from caseops_api.schemas.ai import (
     ContractReviewGenerateRequest,
     ContractReviewResponse,
@@ -25,6 +29,7 @@ from caseops_api.services.matter_review import (
 
 router = APIRouter()
 CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
+AIGenerator = Annotated[SessionContext, Depends(require_capability('ai:generate'))]
 
 
 @router.post(
@@ -35,7 +40,7 @@ CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
 async def generate_current_company_matter_brief(
     matter_id: str,
     payload: MatterBriefGenerateRequest,
-    context: CurrentContext,
+    context: AIGenerator,
     session: DbSession,
 ) -> MatterBriefResponse:
     return generate_matter_brief(
@@ -54,7 +59,7 @@ async def generate_current_company_matter_brief(
 async def generate_current_company_matter_document_review(
     matter_id: str,
     payload: MatterDocumentReviewGenerateRequest,
-    context: CurrentContext,
+    context: AIGenerator,
     session: DbSession,
 ) -> MatterDocumentReviewResponse:
     return generate_matter_document_review(
@@ -73,7 +78,7 @@ async def generate_current_company_matter_document_review(
 async def search_current_company_matter_documents(
     matter_id: str,
     payload: MatterDocumentSearchRequest,
-    context: CurrentContext,
+    context: AIGenerator,
     session: DbSession,
 ) -> MatterDocumentSearchResponse:
     return search_matter_documents(
@@ -92,7 +97,7 @@ async def search_current_company_matter_documents(
 async def generate_current_company_contract_review(
     contract_id: str,
     payload: ContractReviewGenerateRequest,
-    context: CurrentContext,
+    context: AIGenerator,
     session: DbSession,
 ) -> ContractReviewResponse:
     return generate_contract_review(

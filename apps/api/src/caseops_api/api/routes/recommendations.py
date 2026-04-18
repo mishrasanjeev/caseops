@@ -4,7 +4,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
-from caseops_api.api.dependencies import DbSession, get_current_context
+from caseops_api.api.dependencies import (
+    DbSession,
+    get_current_context,
+    require_capability,
+)
 from caseops_api.db.models import Recommendation
 from caseops_api.schemas.recommendations import (
     RecommendationDecisionRecord,
@@ -25,6 +29,12 @@ from caseops_api.services.recommendations import (
 
 router = APIRouter()
 CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
+RecommendationGenerator = Annotated[
+    SessionContext, Depends(require_capability("recommendations:generate"))
+]
+RecommendationDecider = Annotated[
+    SessionContext, Depends(require_capability("recommendations:decide"))
+]
 
 
 def _option_record(option) -> RecommendationOptionRecord:
@@ -97,7 +107,7 @@ async def list_recommendations(
 async def create_recommendation(
     matter_id: str,
     payload: RecommendationGenerateRequest,
-    context: CurrentContext,
+    context: RecommendationGenerator,
     session: DbSession,
 ) -> RecommendationRecord:
     recommendation = generate_recommendation(
@@ -117,7 +127,7 @@ async def create_recommendation(
 async def create_decision(
     recommendation_id: str,
     payload: RecommendationDecisionRequest,
-    context: CurrentContext,
+    context: RecommendationDecider,
     session: DbSession,
 ) -> RecommendationRecord:
     recommendation = record_recommendation_decision(

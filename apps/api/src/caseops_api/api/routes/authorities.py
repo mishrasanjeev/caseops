@@ -4,7 +4,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
 
-from caseops_api.api.dependencies import DbSession, get_current_context
+from caseops_api.api.dependencies import (
+    DbSession,
+    get_current_context,
+    require_capability,
+)
 from caseops_api.schemas.authorities import (
     AuthorityAnnotationCreateRequest,
     AuthorityAnnotationListResponse,
@@ -33,6 +37,9 @@ from caseops_api.services.identity import SessionContext
 
 router = APIRouter()
 CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
+AuthorityIngester = Annotated[SessionContext, Depends(require_capability('authorities:ingest'))]
+AuthoritySearcher = Annotated[SessionContext, Depends(require_capability('authorities:search'))]
+AuthorityAnnotator = Annotated[SessionContext, Depends(require_capability('authorities:annotate'))]
 
 
 @router.get(
@@ -53,7 +60,7 @@ async def get_authority_sources(
 )
 async def pull_authority_source(
     payload: AuthorityIngestionRequest,
-    context: CurrentContext,
+    context: AuthorityIngester,
     session: DbSession,
 ) -> AuthorityIngestionRunRecord:
     return ingest_authority_source(session, context=context, payload=payload)
@@ -79,7 +86,7 @@ async def get_recent_authority_documents(
 )
 async def post_authority_search(
     payload: AuthoritySearchRequest,
-    context: CurrentContext,
+    context: AuthoritySearcher,
     session: DbSession,
 ) -> AuthoritySearchResponse:
     return search_authorities(session, context=context, payload=payload)
@@ -140,7 +147,7 @@ async def get_authority_annotations(
 async def post_authority_annotation(
     authority_id: str,
     payload: AuthorityAnnotationCreateRequest,
-    context: CurrentContext,
+    context: AuthorityAnnotator,
     session: DbSession,
 ) -> AuthorityAnnotationRecord:
     annotation = create_annotation(
@@ -163,7 +170,7 @@ async def post_authority_annotation(
 async def patch_authority_annotation(
     annotation_id: str,
     payload: AuthorityAnnotationUpdateRequest,
-    context: CurrentContext,
+    context: AuthorityAnnotator,
     session: DbSession,
 ) -> AuthorityAnnotationRecord:
     annotation = update_annotation(
@@ -186,7 +193,7 @@ async def patch_authority_annotation(
 )
 async def delete_authority_annotation(
     annotation_id: str,
-    context: CurrentContext,
+    context: AuthorityAnnotator,
     session: DbSession,
 ) -> None:
     delete_annotation(session, context=context, annotation_id=annotation_id)

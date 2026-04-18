@@ -5,7 +5,11 @@ from typing import Annotated
 from fastapi import APIRouter, BackgroundTasks, Depends, File, UploadFile
 from fastapi.responses import FileResponse, Response
 
-from caseops_api.api.dependencies import DbSession, get_current_context
+from caseops_api.api.dependencies import (
+    DbSession,
+    get_current_context,
+    require_capability,
+)
 from caseops_api.schemas.billing import (
     InvoiceCreateRequest,
     InvoiceRecord,
@@ -101,6 +105,43 @@ from caseops_api.services.matters import (
 router = APIRouter()
 CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
 
+# Capability-gated aliases used below. MatterWrite is the
+# authenticated-tenant-with-any-role bar; the per-matter ACL in
+# services/matter_access is the real gate on who can see each matter.
+# Narrower capabilities are used where the action carries extra risk
+# (approving a draft, granting access, issuing an invoice).
+MatterCreator = Annotated[SessionContext, Depends(require_capability("matters:create"))]
+MatterWriter = Annotated[SessionContext, Depends(require_capability("matters:write"))]
+MatterEditor = Annotated[SessionContext, Depends(require_capability("matters:edit"))]
+DraftCreator = Annotated[SessionContext, Depends(require_capability("drafts:create"))]
+DraftGenerator = Annotated[SessionContext, Depends(require_capability("drafts:generate"))]
+DraftReviewer = Annotated[SessionContext, Depends(require_capability("drafts:review"))]
+DraftFinalizer = Annotated[SessionContext, Depends(require_capability("drafts:finalize"))]
+HearingPackGenerator = Annotated[
+    SessionContext, Depends(require_capability("hearing_packs:generate"))
+]
+HearingPackReviewer = Annotated[
+    SessionContext, Depends(require_capability("hearing_packs:review"))
+]
+CourtSyncRunner = Annotated[
+    SessionContext, Depends(require_capability("court_sync:run"))
+]
+InvoiceIssuer = Annotated[
+    SessionContext, Depends(require_capability("invoices:issue"))
+]
+TimeEntryWriter = Annotated[
+    SessionContext, Depends(require_capability("time_entries:write"))
+]
+DocumentUploader = Annotated[
+    SessionContext, Depends(require_capability("documents:upload"))
+]
+DocumentManager = Annotated[
+    SessionContext, Depends(require_capability("documents:manage"))
+]
+MatterAccessManager = Annotated[
+    SessionContext, Depends(require_capability("matter_access:manage"))
+]
+
 
 @router.get("/", response_model=MatterListResponse, summary="List matters for the current company")
 async def current_company_matters(
@@ -127,7 +168,7 @@ async def current_company_matters(
 )
 async def create_current_company_matter(
     payload: MatterCreateRequest,
-    context: CurrentContext,
+    context: MatterCreator,
     session: DbSession,
 ) -> MatterRecord:
     return create_matter(session, context=context, payload=payload)
@@ -159,7 +200,7 @@ async def get_current_company_matter_workspace(
 async def patch_current_company_matter(
     matter_id: str,
     payload: MatterUpdateRequest,
-    context: CurrentContext,
+    context: MatterEditor,
     session: DbSession,
 ) -> MatterRecord:
     return update_matter(session, context=context, matter_id=matter_id, payload=payload)
@@ -173,7 +214,7 @@ async def patch_current_company_matter(
 async def post_current_company_matter_note(
     matter_id: str,
     payload: MatterNoteCreateRequest,
-    context: CurrentContext,
+    context: MatterWriter,
     session: DbSession,
 ) -> MatterNoteRecord:
     return create_matter_note(session, context=context, matter_id=matter_id, payload=payload)
@@ -187,7 +228,7 @@ async def post_current_company_matter_note(
 async def post_current_company_matter_task(
     matter_id: str,
     payload: MatterTaskCreateRequest,
-    context: CurrentContext,
+    context: MatterWriter,
     session: DbSession,
 ) -> MatterTaskRecord:
     return create_matter_task(session, context=context, matter_id=matter_id, payload=payload)
@@ -202,7 +243,7 @@ async def patch_current_company_matter_task(
     matter_id: str,
     task_id: str,
     payload: MatterTaskUpdateRequest,
-    context: CurrentContext,
+    context: MatterWriter,
     session: DbSession,
 ) -> MatterTaskRecord:
     return update_matter_task(
@@ -222,7 +263,7 @@ async def patch_current_company_matter_task(
 async def post_current_company_matter_time_entry(
     matter_id: str,
     payload: TimeEntryCreateRequest,
-    context: CurrentContext,
+    context: TimeEntryWriter,
     session: DbSession,
 ) -> TimeEntryRecord:
     return create_time_entry(session, context=context, matter_id=matter_id, payload=payload)
@@ -236,7 +277,7 @@ async def post_current_company_matter_time_entry(
 async def post_current_company_matter_hearing(
     matter_id: str,
     payload: MatterHearingCreateRequest,
-    context: CurrentContext,
+    context: MatterWriter,
     session: DbSession,
 ) -> MatterHearingRecord:
     return create_matter_hearing(session, context=context, matter_id=matter_id, payload=payload)
@@ -251,7 +292,7 @@ async def patch_current_company_matter_hearing(
     matter_id: str,
     hearing_id: str,
     payload: MatterHearingUpdateRequest,
-    context: CurrentContext,
+    context: MatterWriter,
     session: DbSession,
 ) -> MatterHearingRecord:
     return update_matter_hearing(
@@ -271,7 +312,7 @@ async def patch_current_company_matter_hearing(
 async def import_current_company_matter_court_sync(
     matter_id: str,
     payload: MatterCourtSyncImportRequest,
-    context: CurrentContext,
+    context: CourtSyncRunner,
     session: DbSession,
 ) -> MatterCourtSyncRunRecord:
     return create_matter_court_sync_import(
@@ -291,7 +332,7 @@ async def pull_current_company_matter_court_sync(
     matter_id: str,
     payload: MatterCourtSyncPullRequest,
     background_tasks: BackgroundTasks,
-    context: CurrentContext,
+    context: CourtSyncRunner,
     session: DbSession,
 ) -> MatterCourtSyncJobRecord:
     job = create_matter_court_sync_job(
@@ -313,7 +354,7 @@ async def pull_current_company_matter_court_sync(
 async def post_current_company_matter_invoice(
     matter_id: str,
     payload: InvoiceCreateRequest,
-    context: CurrentContext,
+    context: InvoiceIssuer,
     session: DbSession,
 ) -> InvoiceRecord:
     return create_matter_invoice(session, context=context, matter_id=matter_id, payload=payload)
@@ -328,7 +369,7 @@ async def post_current_company_matter_attachment(
     matter_id: str,
     file: Annotated[UploadFile, File(...)],
     background_tasks: BackgroundTasks,
-    context: CurrentContext,
+    context: DocumentUploader,
     session: DbSession,
 ) -> MatterAttachmentRecord:
     attachment, job_id = create_matter_attachment(
@@ -352,7 +393,7 @@ async def retry_current_company_matter_attachment_processing(
     matter_id: str,
     attachment_id: str,
     background_tasks: BackgroundTasks,
-    context: CurrentContext,
+    context: DocumentManager,
     session: DbSession,
 ) -> MatterAttachmentRecord:
     attachment, job_id = request_matter_attachment_processing(
@@ -375,7 +416,7 @@ async def reindex_current_company_matter_attachment(
     matter_id: str,
     attachment_id: str,
     background_tasks: BackgroundTasks,
-    context: CurrentContext,
+    context: DocumentManager,
     session: DbSession,
 ) -> MatterAttachmentRecord:
     attachment, job_id = request_matter_attachment_processing(
@@ -422,7 +463,7 @@ async def post_current_company_matter_hearing_pack(
     matter_id: str,
     hearing_id: str,
     payload: HearingPackGenerateRequest,
-    context: CurrentContext,
+    context: HearingPackGenerator,
     session: DbSession,
 ) -> HearingPackRecord:
     # `payload` is accepted for future hooks (focus_note, etc.) but is not
@@ -445,7 +486,7 @@ async def post_current_company_matter_hearing_pack(
 async def post_current_company_matter_pack(
     matter_id: str,
     payload: HearingPackGenerateRequest,
-    context: CurrentContext,
+    context: HearingPackGenerator,
     session: DbSession,
 ) -> HearingPackRecord:
     _ = payload
@@ -488,7 +529,7 @@ async def get_current_company_matter_hearing_pack(
 async def post_current_company_hearing_pack_review(
     matter_id: str,
     pack_id: str,
-    context: CurrentContext,
+    context: HearingPackReviewer,
     session: DbSession,
 ) -> HearingPackRecord:
     pack = mark_hearing_pack_reviewed(
@@ -508,7 +549,7 @@ async def post_current_company_hearing_pack_review(
 async def post_current_company_matter_draft(
     matter_id: str,
     payload: DraftCreateRequest,
-    context: CurrentContext,
+    context: DraftCreator,
     session: DbSession,
 ) -> DraftRecord:
     draft = create_draft(
@@ -573,7 +614,7 @@ async def post_current_company_matter_draft_generate(
     matter_id: str,
     draft_id: str,
     payload: DraftGenerateRequest,
-    context: CurrentContext,
+    context: DraftGenerator,
     session: DbSession,
 ) -> DraftRecord:
     draft = generate_draft_version(
@@ -596,7 +637,7 @@ async def post_current_company_matter_draft_submit(
     matter_id: str,
     draft_id: str,
     payload: DraftReviewRequest,
-    context: CurrentContext,
+    context: DraftReviewer,
     session: DbSession,
 ) -> DraftRecord:
     draft = transition_draft(
@@ -619,7 +660,7 @@ async def post_current_company_matter_draft_request_changes(
     matter_id: str,
     draft_id: str,
     payload: DraftReviewRequest,
-    context: CurrentContext,
+    context: DraftReviewer,
     session: DbSession,
 ) -> DraftRecord:
     draft = transition_draft(
@@ -642,7 +683,7 @@ async def post_current_company_matter_draft_approve(
     matter_id: str,
     draft_id: str,
     payload: DraftReviewRequest,
-    context: CurrentContext,
+    context: DraftReviewer,
     session: DbSession,
 ) -> DraftRecord:
     draft = transition_draft(
@@ -665,7 +706,7 @@ async def post_current_company_matter_draft_finalize(
     matter_id: str,
     draft_id: str,
     payload: DraftReviewRequest,
-    context: CurrentContext,
+    context: DraftFinalizer,
     session: DbSession,
 ) -> DraftRecord:
     draft = transition_draft(
@@ -734,7 +775,7 @@ async def get_current_company_matter_access(
 async def post_current_company_matter_restricted(
     matter_id: str,
     payload: MatterRestrictedAccessRequest,
-    context: CurrentContext,
+    context: MatterAccessManager,
     session: DbSession,
 ) -> dict[str, object]:
     matter = set_restricted_access(
@@ -754,7 +795,7 @@ async def post_current_company_matter_restricted(
 async def post_current_company_matter_grant(
     matter_id: str,
     payload: MatterAccessGrantCreateRequest,
-    context: CurrentContext,
+    context: MatterAccessManager,
     session: DbSession,
 ) -> MatterAccessGrantRecord:
     grant = add_access_grant(
@@ -776,7 +817,7 @@ async def post_current_company_matter_grant(
 async def delete_current_company_matter_grant(
     matter_id: str,
     grant_id: str,
-    context: CurrentContext,
+    context: MatterAccessManager,
     session: DbSession,
 ) -> None:
     remove_access_grant(
@@ -795,7 +836,7 @@ async def delete_current_company_matter_grant(
 async def post_current_company_matter_wall(
     matter_id: str,
     payload: EthicalWallCreateRequest,
-    context: CurrentContext,
+    context: MatterAccessManager,
     session: DbSession,
 ) -> EthicalWallRecord:
     wall = add_ethical_wall(
@@ -816,7 +857,7 @@ async def post_current_company_matter_wall(
 async def delete_current_company_matter_wall(
     matter_id: str,
     wall_id: str,
-    context: CurrentContext,
+    context: MatterAccessManager,
     session: DbSession,
 ) -> None:
     remove_ethical_wall(

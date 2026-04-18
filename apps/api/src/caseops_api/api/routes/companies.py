@@ -4,7 +4,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
-from caseops_api.api.dependencies import DbSession, get_current_context
+from caseops_api.api.dependencies import (
+    DbSession,
+    get_current_context,
+    require_capability,
+)
 from caseops_api.schemas.auth import AuthContextResponse
 from caseops_api.schemas.companies import (
     CompanyProfileResponse,
@@ -26,6 +30,12 @@ from caseops_api.services.identity import (
 
 router = APIRouter()
 CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
+ProfileManager = Annotated[
+    SessionContext, Depends(require_capability("company:manage_profile"))
+]
+UserManager = Annotated[
+    SessionContext, Depends(require_capability("company:manage_users"))
+]
 
 
 @router.get(
@@ -53,7 +63,7 @@ async def current_company_profile(context: CurrentContext) -> CompanyProfileResp
 )
 async def patch_current_company_profile(
     payload: CompanyProfileUpdateRequest,
-    context: CurrentContext,
+    context: ProfileManager,
     session: DbSession,
 ) -> CompanyProfileResponse:
     return update_company_profile(session, context=context, payload=payload)
@@ -78,7 +88,7 @@ async def current_company_users(
 )
 async def create_current_company_user(
     payload: CompanyUserCreateRequest,
-    context: CurrentContext,
+    context: UserManager,
     session: DbSession,
 ) -> CompanyUserRecord:
     return create_company_user(session, context=context, payload=payload)
@@ -92,7 +102,7 @@ async def create_current_company_user(
 async def update_current_company_user(
     membership_id: str,
     payload: CompanyUserUpdateRequest,
-    context: CurrentContext,
+    context: UserManager,
     session: DbSession,
 ) -> CompanyUserRecord:
     return update_company_user(

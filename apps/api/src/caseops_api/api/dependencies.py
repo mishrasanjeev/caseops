@@ -57,35 +57,61 @@ def get_current_context(
 # apps/web/lib/capabilities.ts — the TS table is the client-side UX
 # gate; this table is the server's source of truth. Any drift is a
 # bug; the test sweep asserts the two stay in lock-step.
+_ALL_ROLES = frozenset(
+    {MembershipRole.OWNER, MembershipRole.ADMIN, MembershipRole.MEMBER}
+)
+_STAFF = frozenset({MembershipRole.OWNER, MembershipRole.ADMIN})
+_OWNER_ONLY = frozenset({MembershipRole.OWNER})
+
+
 CAPABILITY_ROLES: dict[str, frozenset[MembershipRole]] = {
-    "matters:create": frozenset(
-        {MembershipRole.OWNER, MembershipRole.ADMIN, MembershipRole.MEMBER}
-    ),
-    "matters:archive": frozenset({MembershipRole.OWNER, MembershipRole.ADMIN}),
-    "invoices:issue": frozenset({MembershipRole.OWNER, MembershipRole.ADMIN}),
-    "invoices:send_payment_link": frozenset(
-        {MembershipRole.OWNER, MembershipRole.ADMIN}
-    ),
-    "invoices:void": frozenset({MembershipRole.OWNER}),
-    "company:manage_profile": frozenset(
-        {MembershipRole.OWNER, MembershipRole.ADMIN}
-    ),
-    "company:manage_users": frozenset(
-        {MembershipRole.OWNER, MembershipRole.ADMIN}
-    ),
-    "contracts:create": frozenset(
-        {MembershipRole.OWNER, MembershipRole.ADMIN, MembershipRole.MEMBER}
-    ),
-    "contracts:delete": frozenset({MembershipRole.OWNER, MembershipRole.ADMIN}),
-    "outside_counsel:manage": frozenset(
-        {MembershipRole.OWNER, MembershipRole.ADMIN}
-    ),
-    "recommendations:generate": frozenset(
-        {MembershipRole.OWNER, MembershipRole.ADMIN, MembershipRole.MEMBER}
-    ),
-    "workspace:admin": frozenset({MembershipRole.OWNER, MembershipRole.ADMIN}),
-    "audit:export": frozenset({MembershipRole.OWNER}),
-    "matter_access:manage": frozenset({MembershipRole.OWNER, MembershipRole.ADMIN}),
+    # --- matter and workspace core ---
+    "matters:create": _ALL_ROLES,
+    "matters:edit": _ALL_ROLES,
+    "matters:archive": _STAFF,
+    "matters:write": _ALL_ROLES,  # catch-all: per-matter authenticated write
+    # --- money ---
+    "invoices:issue": _STAFF,
+    "invoices:send_payment_link": _STAFF,
+    "invoices:void": _OWNER_ONLY,
+    "payments:sync": _STAFF,
+    "time_entries:write": _ALL_ROLES,
+    # --- company / IAM ---
+    "company:manage_profile": _STAFF,
+    "company:manage_users": _STAFF,
+    # --- documents + processing ---
+    "documents:upload": _ALL_ROLES,
+    "documents:manage": _STAFF,
+    # --- contracts ---
+    "contracts:create": _ALL_ROLES,
+    "contracts:edit": _ALL_ROLES,
+    "contracts:delete": _STAFF,
+    "contracts:manage_rules": _STAFF,
+    # --- outside counsel ---
+    "outside_counsel:manage": _STAFF,
+    "outside_counsel:recommend": _ALL_ROLES,
+    # --- drafting ---
+    "drafts:create": _ALL_ROLES,
+    "drafts:generate": _ALL_ROLES,
+    "drafts:review": _STAFF,
+    "drafts:finalize": _STAFF,
+    # --- hearing packs ---
+    "hearing_packs:generate": _ALL_ROLES,
+    "hearing_packs:review": _STAFF,
+    # --- court sync ---
+    "court_sync:run": _STAFF,
+    # --- recommendations + AI ---
+    "recommendations:generate": _ALL_ROLES,
+    "recommendations:decide": _ALL_ROLES,
+    "ai:generate": _ALL_ROLES,
+    # --- authority corpus + tenant overlay ---
+    "authorities:search": _ALL_ROLES,
+    "authorities:ingest": _STAFF,
+    "authorities:annotate": _ALL_ROLES,
+    # --- governance ---
+    "workspace:admin": _STAFF,
+    "audit:export": _OWNER_ONLY,
+    "matter_access:manage": _STAFF,
 }
 
 

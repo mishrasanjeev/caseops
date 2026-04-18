@@ -4,7 +4,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
 
-from caseops_api.api.dependencies import DbSession, get_current_context
+from caseops_api.api.dependencies import (
+    DbSession,
+    get_current_context,
+    require_capability,
+)
 from caseops_api.schemas.billing import (
     InvoicePaymentAttemptRecord,
     PaymentLinkCreateRequest,
@@ -19,6 +23,10 @@ from caseops_api.services.payments import (
 
 router = APIRouter()
 CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
+PaymentLinkIssuer = Annotated[
+    SessionContext, Depends(require_capability("invoices:send_payment_link"))
+]
+PaymentSyncer = Annotated[SessionContext, Depends(require_capability('payments:sync'))]
 
 
 @router.post(
@@ -30,7 +38,7 @@ async def create_current_company_invoice_payment_link(
     matter_id: str,
     invoice_id: str,
     payload: PaymentLinkCreateRequest,
-    context: CurrentContext,
+    context: PaymentLinkIssuer,
     session: DbSession,
 ) -> InvoicePaymentAttemptRecord:
     return create_invoice_payment_link(
@@ -50,7 +58,7 @@ async def create_current_company_invoice_payment_link(
 async def sync_current_company_invoice_payment_link(
     matter_id: str,
     invoice_id: str,
-    context: CurrentContext,
+    context: PaymentSyncer,
     session: DbSession,
 ) -> InvoicePaymentAttemptRecord:
     return sync_invoice_payment_link(
