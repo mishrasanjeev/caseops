@@ -11,7 +11,7 @@ import json
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 
@@ -19,8 +19,20 @@ from caseops_api.api.dependencies import (
     DbSession,
     require_capability,
 )
-from caseops_api.db.models import AuditEvent
+from caseops_api.db.models import AuditEvent, AuditExportJob
+from caseops_api.schemas.audit import (
+    AuditExportAsyncRequest,
+    AuditExportJobListResponse,
+    AuditExportJobRecord,
+)
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.audit_exports import (
+    enqueue_export,
+    get_export_job,
+    list_export_jobs,
+    read_export_bytes,
+    run_export_job,
+)
 from caseops_api.services.identity import SessionContext
 
 router = APIRouter()
@@ -174,4 +186,121 @@ def export_audit_trail(
         headers={
             "Content-Disposition": f'attachment; filename="{filename_base}.jsonl"'
         },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Async export (§10.4)
+# ---------------------------------------------------------------------------
+
+
+def _job_record(job: AuditExportJob) -> AuditExportJobRecord:
+    return AuditExportJobRecord(
+        id=job.id,
+        company_id=job.company_id,
+        status=job.status,  # type: ignore[arg-type]
+        format=job.format,  # type: ignore[arg-type]
+        since=job.since,
+        until=job.until,
+        action_filter=job.action_filter,
+        row_limit=job.row_limit,
+        row_count=job.row_count,
+        size_bytes=job.size_bytes,
+        error=job.error,
+        created_at=job.created_at,
+        started_at=job.started_at,
+        completed_at=job.completed_at,
+        download_ready=bool(job.storage_key) and job.status == "completed",
+    )
+
+
+@router.post(
+    "/audit/export/async",
+    response_model=AuditExportJobRecord,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Enqueue an async audit-trail export job",
+    description=(
+        "Creates an `AuditExportJob` row and schedules the worker. "
+        "Respond with `202 Accepted` and the fresh job record. "
+        "Poll `GET /api/admin/audit/export/jobs/{id}` for status; "
+        "download with `GET /api/admin/audit/export/jobs/{id}/download` "
+        "once `download_ready=true`. Use this path for tenants with "
+        "millions of rows — the streaming sync endpoint stays the "
+        "default for small exports."
+    ),
+)
+def enqueue_audit_export(
+    payload: AuditExportAsyncRequest,
+    context: AuditExporter,
+    session: DbSession,
+    background_tasks: BackgroundTasks,
+) -> AuditExportJobRecord:
+    since_dt = payload.since
+    until_dt = payload.until
+    if since_dt is None and until_dt is None:
+        until_dt = datetime.now(UTC)
+        since_dt = until_dt - timedelta(days=30)
+    job = enqueue_export(
+        session,
+        context=context,
+        fmt=payload.format,
+        since=since_dt,
+        until=until_dt,
+        action_filter=payload.action,
+        row_limit=payload.row_limit,
+    )
+    # BackgroundTasks runs after the response is returned. A separate
+    # caseops-audit-exporter CLI (or Cloud Tasks / Temporal) can also
+    # drive run_export_job against the same row.
+    background_tasks.add_task(run_export_job, job.id)
+    return _job_record(job)
+
+
+@router.get(
+    "/audit/export/jobs",
+    response_model=AuditExportJobListResponse,
+    summary="List this tenant's audit-export jobs",
+)
+def list_audit_export_jobs(
+    context: AuditExporter,
+    session: DbSession,
+    limit: Annotated[int, Query(ge=1, le=200)] = 25,
+) -> AuditExportJobListResponse:
+    jobs = list_export_jobs(session, context=context, limit=limit)
+    return AuditExportJobListResponse(jobs=[_job_record(j) for j in jobs])
+
+
+@router.get(
+    "/audit/export/jobs/{job_id}",
+    response_model=AuditExportJobRecord,
+    summary="Get the status of an audit-export job",
+)
+def get_audit_export_job(
+    job_id: str,
+    context: AuditExporter,
+    session: DbSession,
+) -> AuditExportJobRecord:
+    job = get_export_job(session, context=context, job_id=job_id)
+    return _job_record(job)
+
+
+@router.get(
+    "/audit/export/jobs/{job_id}/download",
+    response_class=StreamingResponse,
+    summary="Stream the artifact of a completed audit-export job",
+)
+def download_audit_export_job(
+    job_id: str,
+    context: AuditExporter,
+    session: DbSession,
+) -> StreamingResponse:
+    job = get_export_job(session, context=context, job_id=job_id)
+    stream = read_export_bytes(job)
+    ext = (job.format or "jsonl").lower()
+    media = "text/csv" if ext == "csv" else "application/x-ndjson"
+    filename = f"audit-{job.id}.{ext}"
+    return StreamingResponse(
+        stream,
+        media_type=media,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

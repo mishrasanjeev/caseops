@@ -2432,6 +2432,63 @@ class EvaluationCase(Base):
     run: Mapped[EvaluationRun] = relationship(back_populates="cases")
 
 
+class AuditExportJobStatus(StrEnum):
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class AuditExportJob(Base):
+    """Background job row for async audit exports (§10.4).
+
+    The sync streaming endpoint still ships small exports inline. For
+    large tenants — millions of rows — the client POSTs to
+    ``/api/admin/audit/export/async`` which enqueues a job; a worker
+    writes the artifact to storage; the client polls ``jobs/{id}``
+    and downloads once ``status == completed``.
+    """
+
+    __tablename__ = "audit_export_jobs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    requested_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default=AuditExportJobStatus.PENDING
+    )
+    format: Mapped[str] = mapped_column(String(16), nullable=False, default="jsonl")
+    since: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    action_filter: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    row_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    storage_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    row_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
 class AuthorityAnnotationKind(StrEnum):
     NOTE = "note"
     FLAG = "flag"
