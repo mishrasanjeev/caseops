@@ -103,8 +103,11 @@ test.describe("M2 polish — password toggle, counsel recs, team picker, judge p
     await expect(page.getByText(/Suggested counsel/i)).toBeVisible({
       timeout: 15_000,
     });
+    // Empty-state heading is rendered as an h3; match the role+name
+    // precisely so we don't strict-mode-violate against the
+    // description paragraph next to it.
     await expect(
-      page.getByText(/No counsel suggestions yet|Add counsel to the panel/i),
+      page.getByRole("heading", { name: /No counsel suggestions yet/i }),
     ).toBeVisible();
   });
 
@@ -140,8 +143,11 @@ test.describe("M2 polish — password toggle, counsel recs, team picker, judge p
     await bootstrapWorkspace(page);
 
     await page.goto("/app/courts");
+    // /app/courts renders PageHeader with title="Court directory" and
+    // eyebrow="Courts". Match the title exactly — the eyebrow is a
+    // span, not a heading.
     await expect(
-      page.getByRole("heading", { name: /Courts|Court intelligence/i }),
+      page.getByRole("heading", { name: /Court directory/i }),
     ).toBeVisible({ timeout: 10_000 });
 
     // The seed catalog includes Supreme Court of India — click into it.
