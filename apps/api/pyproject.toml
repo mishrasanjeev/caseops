@@ -57,6 +57,7 @@ caseops-eval-drafting = "caseops_api.scripts.eval_drafting:main"
 caseops-eval-citations = "caseops_api.scripts.eval_citations:main"
 caseops-eval-workflows = "caseops_api.scripts.eval_workflows:main"
 caseops-eval-hnsw-recall = "caseops_api.scripts.eval_hnsw_recall:main"
+caseops-seed-demo = "caseops_api.scripts.seed_demo:main"
 caseops-backfill-corpus-quality = "caseops_api.scripts.backfill_corpus_quality:main"
 
 [dependency-groups]
