@@ -26,7 +26,7 @@ import logging
 from dataclasses import dataclass
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -45,6 +45,42 @@ from caseops_api.services.llm import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _coerce_str_list(v):  # noqa: ANN001 — pydantic validator signature
+    """Accept either a list or a single scalar; return a list of strs.
+
+    Sonnet sometimes emits ``"M/s X & Ors."`` (a bare string) where the
+    schema asks for ``list[str]`` because the model decides "there is
+    only one respondent so I don't need a list". We coerce instead of
+    rejecting — losing the doc to a list-vs-string nit costs more than
+    accepting a one-element list."""
+    if v is None or v == "":
+        return []
+    if isinstance(v, str):
+        return [v]
+    if isinstance(v, list):
+        return [str(x) for x in v if x is not None]
+    return [str(v)]
+
+
+def _coerce_int_list(v):  # noqa: ANN001
+    if v is None or v == "":
+        return []
+    if isinstance(v, int):
+        return [v]
+    if isinstance(v, list):
+        out: list[int] = []
+        for x in v:
+            try:
+                out.append(int(x))
+            except (TypeError, ValueError):
+                continue
+        return out
+    try:
+        return [int(v)]
+    except (TypeError, ValueError):
+        return []
 
 # Version stamp encodes extraction tier so we never downgrade a
 # Sonnet-annotated doc with a later Haiku pass:
@@ -127,10 +163,15 @@ class _Parties(BaseModel):
     appellant: str | None = Field(default=None, max_length=400)
     respondents: list[str] = Field(default_factory=list, max_length=30)
 
+    _coerce_respondents = field_validator("respondents", mode="before")(_coerce_str_list)
+
 
 class _Advocates(BaseModel):
     appellant_side: list[str] = Field(default_factory=list, max_length=30)
     respondent_side: list[str] = Field(default_factory=list, max_length=30)
+
+    _coerce_a = field_validator("appellant_side", mode="before")(_coerce_str_list)
+    _coerce_r = field_validator("respondent_side", mode="before")(_coerce_str_list)
 
 
 class _ChunkAnnotation(BaseModel):
@@ -145,6 +186,10 @@ class _ChunkAnnotation(BaseModel):
     outcome_tag: str | None = Field(default=None, max_length=240)
     related_chunk_indexes: list[int] = Field(default_factory=list, max_length=40)
 
+    _coerce_secs = field_validator("sections_cited", mode="before")(_coerce_str_list)
+    _coerce_auths = field_validator("authorities_cited", mode="before")(_coerce_str_list)
+    _coerce_rel = field_validator("related_chunk_indexes", mode="before")(_coerce_int_list)
+
 
 class _ExtractionPayload(BaseModel):
     """Shape we ask Haiku to emit. Field constraints stay permissive
@@ -157,6 +202,9 @@ class _ExtractionPayload(BaseModel):
     advocates: _Advocates = Field(default_factory=_Advocates)
     case_number: str | None = Field(default=None, max_length=480)
     sections_cited: list[str] = Field(default_factory=list, max_length=120)
+
+    _coerce_judges = field_validator("judges", mode="before")(_coerce_str_list)
+    _coerce_doc_secs = field_validator("sections_cited", mode="before")(_coerce_str_list)
     outcome: str | None = Field(default=None, max_length=240)
     chunks: list[_ChunkAnnotation] = Field(default_factory=list, max_length=600)
 
