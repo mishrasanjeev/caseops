@@ -434,7 +434,16 @@ def extract_and_persist_structured(
                 purpose="authority.structured_extraction",
             ),
             temperature=0.0,
-            max_tokens=8192,
+            # 16384 (vs the prior 8192) gives Sonnet headroom on the
+            # longest SC judgments. Empirically a handful of 100K+
+            # char docs were truncating mid-string at 8192, throwing
+            # JSONDecodeError("Unterminated string") and wasting the
+            # whole call. Sonnet 4.6 supports up to 64K output; 16K
+            # is a comfortable middle. Cost impact is small: the
+            # output cap is *bounded* by what the model emits, not
+            # always paid; only docs that previously truncated will
+            # spend more, and they're the ones we couldn't use before.
+            max_tokens=16384,
         )
     except LLMResponseFormatError:
         logger.exception("structured extraction returned malformed JSON for %s", document.id)
