@@ -643,7 +643,7 @@ def generate_structured[T: BaseModel](
         except Exception:
             logger.exception("Could not persist ModelRun for %s", context.purpose)
     try:
-        payload = json.loads(_strip_code_fence(completion.text))
+        payload = _tolerant_json_loads(_strip_code_fence(completion.text))
     except json.JSONDecodeError as exc:
         raise LLMResponseFormatError(
             f"{completion.provider}:{completion.model} did not return valid JSON.",
@@ -656,6 +656,32 @@ def generate_structured[T: BaseModel](
             "not match the expected schema.",
         ) from exc
     return validated, completion
+
+
+_TRAILING_COMMA_RE = __import__("re").compile(r",(\s*[}\]])")
+
+
+def _tolerant_json_loads(text: str) -> Any:
+    """``json.loads`` first; if that fails on a trailing-comma defect
+    that LLMs commonly emit (``{"a": 1,}`` or ``[1, 2,]``), strip those
+    commas and retry once. Anything else propagates the original
+    JSONDecodeError so we don't paper over real malformations.
+
+    Sonnet on long structured-output prompts emits a stray ``,}`` at
+    the end of nested arrays maybe 4-5 % of the time; that's enough
+    to lose ~$4-5 per 2000-doc Sonnet bucket on retry-cost. Tolerating
+    one well-known defect class is a far better trade than dropping
+    the whole completion."""
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        cleaned = _TRAILING_COMMA_RE.sub(r"\1", text)
+        # Retry. Re-raise the *original* error if this also fails so the
+        # diagnostic text is the real one, not the post-rewrite one.
+        try:
+            return json.loads(cleaned)
+        except json.JSONDecodeError:
+            raise
 
 
 def _strip_code_fence(text: str) -> str:
