@@ -54,8 +54,14 @@ export default defineConfig({
   ],
   webServer: [
     {
+      // Invoke uvicorn directly from the venv — bypasses `uv run`'s
+      // implicit sync step, which fails on Windows when another
+      // long-running process (the corpus backfill, see Sprint 11
+      // bucket scripts) holds a lock on a .venv/Scripts/*.exe.
       command:
-        "uv --directory apps/api run uvicorn caseops_api.main:app --host 127.0.0.1 --port 8000 --app-dir src",
+        process.platform === "win32"
+          ? "apps\\api\\.venv\\Scripts\\uvicorn.exe caseops_api.main:app --host 127.0.0.1 --port 8000 --app-dir apps/api/src"
+          : "apps/api/.venv/bin/uvicorn caseops_api.main:app --host 127.0.0.1 --port 8000 --app-dir apps/api/src",
       cwd: repoRoot,
       env: { ...process.env, ...e2eEnv },
       url: `${apiBaseUrl}/api/health`,

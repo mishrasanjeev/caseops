@@ -12,6 +12,7 @@
 .claude/shell-snapshots/
 .claude/sessions/
 .claude/settings.local.json
+.claude/scheduled_tasks.lock
 .tmp/
 tmp/
 tmp-*.html
@@ -38,6 +39,11 @@ test-results/
 e2e-screenshots/
 __pycache__/
 .pytest_cache/
+# pytest --basetemp output — a test run leaves 30+ synthetic
+# document fixtures here. Codex used this path on the 2026-04-19
+# audit; IDEs were flagging the 37 files as uncommitted changes.
+.pytest-tmp/
+apps/api/.pytest-tmp/
 .ruff_cache/
 .mypy_cache/
 .venv/
