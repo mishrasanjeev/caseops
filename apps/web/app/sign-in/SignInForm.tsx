@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { signIn } from "@/lib/api/endpoints";
 import { ApiError } from "@/lib/api/config";
@@ -150,9 +151,8 @@ export function SignInForm() {
                     error={form.formState.errors.password?.message}
                   >
                     {({ invalid, describedBy }) => (
-                      <Input
+                      <PasswordInput
                         id="password"
-                        type="password"
                         autoComplete="current-password"
                         aria-invalid={invalid || undefined}
                         aria-describedby={describedBy}
