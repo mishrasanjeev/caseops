@@ -60,7 +60,14 @@ export default defineConfig({
       env: { ...process.env, ...e2eEnv },
       url: `${apiBaseUrl}/api/health`,
       timeout: 120_000,
-      reuseExistingServer: !process.env.CI,
+      // Always start a fresh API for the e2e suite. Reusing an existing
+      // local dev server reuses ITS env (notably CASEOPS_CORS_ORIGINS),
+      // which silently breaks the prod-build browser flow on port 3100
+      // because the dev .env only allows :3000. Forcing fresh-start
+      // keeps the e2e CORS list authoritative; if port 8000 is already
+      // taken, Playwright errors loudly and the operator stops their
+      // local dev API first — both behaviours we want.
+      reuseExistingServer: false,
     },
     {
       command: "npx next start --hostname 127.0.0.1 --port 3100",

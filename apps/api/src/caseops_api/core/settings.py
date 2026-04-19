@@ -123,6 +123,35 @@ class Settings(BaseSettings):
             )
         return self
 
+    @model_validator(mode="after")
+    def _augment_local_cors_origins(self) -> "Settings":
+        """In non-prod envs, auto-allow common dev ports so the local
+        dev server, the Playwright e2e prod build (port 3100), and ad-
+        hoc probes (3500) all reach the API without CORS preflight
+        blocks. Production envs keep the strict configured list — a
+        stale dev port slipping into a deployed allow-list would be a
+        real security smell.
+
+        The bug this fixes: a Playwright run on http://127.0.0.1:3100
+        kept hitting CORS preflight failures because the dev .env
+        only listed :3000. Browser blocked POST /api/auth/login,
+        mutation onError fired, and the page never left /sign-in —
+        the exact symptom Codex reported on 2026-04-19."""
+        if self.env.lower() in NON_LOCAL_ENVS:
+            return self
+        DEV_PORTS = ("3000", "3100", "3500")
+        DEV_HOSTS = ("localhost", "127.0.0.1")
+        augmented: list[str] = list(self.cors_origins)
+        for host in DEV_HOSTS:
+            for port in DEV_PORTS:
+                candidate = f"http://{host}:{port}"
+                if candidate not in augmented:
+                    augmented.append(candidate)
+        # Pydantic-settings stores the list as immutable on the model;
+        # reassign via object.__setattr__ to bypass the freeze.
+        object.__setattr__(self, "cors_origins", augmented)
+        return self
+
 
 @lru_cache
 def get_settings() -> Settings:
