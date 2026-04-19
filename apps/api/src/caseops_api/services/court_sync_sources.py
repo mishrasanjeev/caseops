@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from html import unescape
 from io import BytesIO
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin
 
 import httpx
 from pdfminer.high_level import extract_text as pdf_extract_text
@@ -120,7 +120,17 @@ LAST_UPDATED_PATTERN = re.compile(
     r"Last Updated:\s*<strong>(?P<date>[^<]+)</strong>",
     re.IGNORECASE,
 )
-TLS_RETRY_HOSTS = {
+# Codex's 2026-04-19 cybersecurity review (finding #2) flagged the
+# previous behaviour of falling back to ``verify=False`` for these
+# hosts as an authenticated-data-trust bypass. A man-in-the-middle
+# could tamper with cause lists and orders flowing into matter
+# workspaces and downstream AI outputs. The list stays here as
+# documentation of which court endpoints have historically had broken
+# chains; we now FAIL CLOSED instead of silently trusting unverifiable
+# TLS. If a host genuinely needs a missing intermediate, the right fix
+# is to add the CA to the system trust store (or REQUESTS_CA_BUNDLE),
+# not to disable verification.
+TLS_RETRY_HOSTS_KNOWN_BROKEN_CHAIN = {
     "tshc.gov.in",
     "www.tshc.gov.in",
     "csis.tshc.gov.in",
@@ -209,39 +219,27 @@ def list_supported_court_sync_sources() -> list[str]:
     return sorted(ADAPTERS.keys())
 
 
-def _should_retry_without_tls_verification(url: str) -> bool:
-    host = (urlparse(url).hostname or "").lower()
-    return host in TLS_RETRY_HOSTS
-
-
 def _fetch_text(url: str) -> tuple[str, str]:
-    try:
-        with httpx.Client(timeout=30, follow_redirects=True) as client:
-            response = client.get(url, headers=BROWSER_HEADERS)
-            response.raise_for_status()
-            return response.text, str(response.url)
-    except httpx.ConnectError:
-        if not _should_retry_without_tls_verification(url):
-            raise
-        with httpx.Client(timeout=30, follow_redirects=True, verify=False) as client:
-            response = client.get(url, headers=BROWSER_HEADERS)
-            response.raise_for_status()
-            return response.text, str(response.url)
+    # TLS verification is mandatory. The earlier code retried with
+    # verify=False for `TLS_RETRY_HOSTS_KNOWN_BROKEN_CHAIN` on a
+    # ConnectError; that converted a connection problem into an
+    # authenticated-data-trust bypass — exactly the scenario the
+    # 2026-04-19 cybersecurity review flagged as high-risk. We now
+    # fail closed; operators with genuinely broken chains add the
+    # missing CA to REQUESTS_CA_BUNDLE / system trust.
+    with httpx.Client(timeout=30, follow_redirects=True) as client:
+        response = client.get(url, headers=BROWSER_HEADERS)
+        response.raise_for_status()
+        return response.text, str(response.url)
 
 
 def _fetch_bytes(url: str) -> tuple[bytes, str]:
-    try:
-        with httpx.Client(timeout=30, follow_redirects=True) as client:
-            response = client.get(url, headers=BROWSER_HEADERS)
-            response.raise_for_status()
-            return response.content, str(response.url)
-    except httpx.ConnectError:
-        if not _should_retry_without_tls_verification(url):
-            raise
-        with httpx.Client(timeout=30, follow_redirects=True, verify=False) as client:
-            response = client.get(url, headers=BROWSER_HEADERS)
-            response.raise_for_status()
-            return response.content, str(response.url)
+    # See _fetch_text — TLS verification is mandatory; no insecure
+    # retry path for any host.
+    with httpx.Client(timeout=30, follow_redirects=True) as client:
+        response = client.get(url, headers=BROWSER_HEADERS)
+        response.raise_for_status()
+        return response.content, str(response.url)
 
 
 def _extract_pdf_text_from_bytes(data: bytes) -> str:

@@ -30,9 +30,12 @@ def create_application() -> FastAPI:
     application = FastAPI(
         title=settings.api_name,
         version=settings.api_version,
-        docs_url="/docs" if settings.api_docs_enabled else None,
-        redoc_url="/redoc" if settings.api_docs_enabled else None,
-        openapi_url="/openapi.json" if settings.api_docs_enabled else None,
+        # effective_docs_enabled is env-aware: dev/local default ON,
+        # cloud/prod/unknown default OFF unless explicitly enabled.
+        # Closes Codex finding #9.
+        docs_url="/docs" if settings.effective_docs_enabled else None,
+        redoc_url="/redoc" if settings.effective_docs_enabled else None,
+        openapi_url="/openapi.json" if settings.effective_docs_enabled else None,
         lifespan=lifespan,
     )
     configure_tracing(application)

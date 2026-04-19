@@ -848,16 +848,57 @@ def ingest_sc_from_s3(
 
 
 def _safe_extract_tar(tf: tarfile.TarFile, dest: Path) -> None:
-    """Extract a tar safely, rejecting path-traversal and absolute names."""
+    """Extract a tar safely, rejecting path-traversal, absolute paths,
+    and link members.
+
+    The earlier implementation validated members in a loop and then
+    called ``tf.extractall(dest)`` on the *whole* archive, which kept
+    the link members in the extraction set. Worse, the traversal check
+    used ``str.startswith()`` on resolved paths, which mis-classifies
+    sibling-prefix attacks like ``C:\\extract`` vs ``C:\\extract-evil``
+    as safe. Codex's 2026-04-19 cybersecurity review flagged both.
+
+    Fixed implementation:
+
+    - Reject absolute member names and ``..`` segments before any
+      filesystem touch.
+    - Use ``Path.is_relative_to(resolved_root)`` for the path-containment
+      check — strict, not string-prefix.
+    - Skip link members (``islnk()``/``issym()``) and device members
+      entirely; we only extract regular files and directories.
+    - Extract members one at a time so we control exactly which ones
+      hit disk; never call ``extractall``.
+    """
     resolved_root = dest.resolve()
+    safe_members: list[tarfile.TarInfo] = []
     for member in tf.getmembers():
-        target = (dest / member.name).resolve()
-        if not str(target).startswith(str(resolved_root)):
-            raise RuntimeError(f"Unsafe path in tar: {member.name!r}")
-        if member.islnk() or member.issym():
-            # Refuse to extract links — common tar-bomb vector.
+        name = member.name
+        # Absolute paths bypass dest entirely.
+        if Path(name).is_absolute() or name.startswith("/") or name.startswith("\\"):
+            raise RuntimeError(f"Unsafe absolute path in tar: {name!r}")
+        # Defence-in-depth — even if resolution would normalise it, refuse
+        # explicit ``..`` so the rejection is loud and obvious.
+        parts = Path(name).parts
+        if any(part == ".." for part in parts):
+            raise RuntimeError(f"Path traversal in tar: {name!r}")
+        # Link / device members are common tar-bomb vectors. Always skip;
+        # we never need them for legal-corpus archives.
+        if member.islnk() or member.issym() or member.isdev() or member.isfifo():
             continue
-    tf.extractall(dest)
+        # Strict containment check via Path.is_relative_to. Sibling
+        # prefixes (``/extract`` vs ``/extract-evil``) fail this where
+        # str.startswith() would have accepted them.
+        target = (dest / name).resolve()
+        try:
+            target.relative_to(resolved_root)
+        except ValueError as exc:
+            raise RuntimeError(f"Unsafe path in tar: {name!r}") from exc
+        safe_members.append(member)
+    # Extract the filtered set explicitly, member-by-member. Never call
+    # extractall — that would re-include the rejected link/device
+    # members from the archive.
+    for member in safe_members:
+        tf.extract(member, dest)
 
 
 __all__ = [

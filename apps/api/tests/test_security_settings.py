@@ -13,7 +13,25 @@ def test_placeholder_auth_secret_allowed_in_local(monkeypatch: pytest.MonkeyPatc
     assert settings.auth_secret == PLACEHOLDER_AUTH_SECRET
 
 
-@pytest.mark.parametrize("env", ["staging", "production", "prod"])
+@pytest.mark.parametrize(
+    "env",
+    [
+        "staging",
+        "production",
+        "prod",
+        # Codex's 2026-04-19 cybersecurity review (finding #3):
+        # `cloud` is the value Cloud Run sets via
+        # infra/cloudrun/api-service.yaml; the previous allow-list
+        # treated it as local and skipped the placeholder-secret guard.
+        "cloud",
+        "gke",
+        # Strict allow-list: any unknown env defaults to non-local so
+        # security guards apply by default. Fail closed.
+        "ee-prod",
+        "uat",
+        "qa",
+    ],
+)
 def test_placeholder_auth_secret_rejected_in_non_local(
     monkeypatch: pytest.MonkeyPatch, env: str
 ) -> None:
@@ -65,6 +83,21 @@ def test_production_env_does_not_augment_cors_origins(
     can't widen the attack surface."""
     monkeypatch.setenv("CASEOPS_ENV", "production")
     monkeypatch.setenv("CASEOPS_AUTH_SECRET", "real-rotated-production-secret-32bytes+")
+    monkeypatch.setenv("CASEOPS_CORS_ORIGINS", '["https://app.caseops.ai"]')
+    settings = Settings()
+    assert settings.cors_origins == ["https://app.caseops.ai"]
+
+
+@pytest.mark.parametrize("env", ["cloud", "gke", "uat", "qa", "ee-prod"])
+def test_cloud_env_does_not_augment_cors_origins(
+    monkeypatch: pytest.MonkeyPatch, env: str
+) -> None:
+    """The Cloud Run / GKE / unknown env profiles must NOT receive the
+    dev-port augment (Codex 2026-04-19 finding #3). A misclassified
+    env that auto-allowed http://localhost:* in a deployed environment
+    would widen the CORS attack surface unnecessarily."""
+    monkeypatch.setenv("CASEOPS_ENV", env)
+    monkeypatch.setenv("CASEOPS_AUTH_SECRET", "real-rotated-secret-not-the-placeholder")
     monkeypatch.setenv("CASEOPS_CORS_ORIGINS", '["https://app.caseops.ai"]')
     settings = Settings()
     assert settings.cors_origins == ["https://app.caseops.ai"]

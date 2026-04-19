@@ -4,8 +4,26 @@ from pydantic import AnyHttpUrl, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PLACEHOLDER_AUTH_SECRET = "change-me-change-me-change-me-2026"
-NON_LOCAL_ENVS = {"staging", "production", "prod"}
+
+# Codex's 2026-04-19 cybersecurity review (finding #3) flagged that
+# Cloud Run's `CASEOPS_ENV=cloud` was treated as local because the
+# allow-list only enumerated staging/production/prod. That meant the
+# placeholder-auth-secret guard and CORS auto-augment didn't fire on
+# the actual deployed profile. Inverted to a strict local allow-list
+# so any unknown env (including "cloud", "gke", "ee-prod", etc.)
+# defaults to non-local — fail closed.
+LOCAL_ENVS = {"local", "dev", "test", "ci", "e2e"}
+# Kept for backwards-compatible imports; downstream code should
+# prefer the helper `is_non_local_env(env)` below.
+NON_LOCAL_ENVS = {"staging", "production", "prod", "cloud", "gke"}
 LOCAL_POSTGRES_DATABASE_URL = "postgresql+psycopg://caseops:caseops@127.0.0.1:5432/caseops"
+
+
+def is_non_local_env(env_value: str | None) -> bool:
+    """Strict allow-list of local/dev environments. Anything else —
+    including unknown names — is treated as non-local so security
+    guards (auth secret, strict CORS, docs gating) apply."""
+    return (env_value or "").strip().lower() not in LOCAL_ENVS
 
 
 class Settings(BaseSettings):
@@ -20,7 +38,14 @@ class Settings(BaseSettings):
     api_version: str = Field(default="0.1.0")
     api_host: str = Field(default="0.0.0.0")
     api_port: int = Field(default=8000)
-    api_docs_enabled: bool = Field(default=True)
+    # Codex's 2026-04-19 cybersecurity review (finding #9): docs were
+    # opt-out, which means an accidental cloud deploy with default
+    # CASEOPS_API_DOCS_ENABLED would expose /docs + /openapi.json
+    # publicly and increase reconnaissance value. The flag still
+    # exists, but the effective default is now env-aware (see
+    # `effective_docs_enabled`). Operators can still force-enable
+    # docs in prod by setting the env explicitly.
+    api_docs_enabled: bool | None = Field(default=None)
     public_app_url: AnyHttpUrl = Field(default="http://localhost:3000")
     database_url: str = Field(default=LOCAL_POSTGRES_DATABASE_URL)
     auth_secret: str = Field(default=PLACEHOLDER_AUTH_SECRET, min_length=32)
@@ -114,9 +139,22 @@ class Settings(BaseSettings):
     otel_endpoint: str = Field(default="http://localhost:4318/v1/traces")
     otel_service_name: str = Field(default="caseops-api")
 
+    @property
+    def effective_docs_enabled(self) -> bool:
+        """Resolve the docs flag with an env-aware default. Local/dev
+        get docs ON by default; non-local envs get docs OFF unless the
+        operator explicitly set ``CASEOPS_API_DOCS_ENABLED=true``.
+
+        This implements Codex's 2026-04-19 finding #9 fix: an
+        accidental cloud deploy without the flag set no longer
+        publishes /docs + /openapi.json."""
+        if self.api_docs_enabled is not None:
+            return bool(self.api_docs_enabled)
+        return not is_non_local_env(self.env)
+
     @model_validator(mode="after")
     def _reject_placeholder_secret_outside_local(self) -> "Settings":
-        if self.env.lower() in NON_LOCAL_ENVS and self.auth_secret == PLACEHOLDER_AUTH_SECRET:
+        if is_non_local_env(self.env) and self.auth_secret == PLACEHOLDER_AUTH_SECRET:
             raise ValueError(
                 "CASEOPS_AUTH_SECRET must be set to a non-placeholder value when "
                 f"CASEOPS_ENV={self.env!r}.",
@@ -137,7 +175,7 @@ class Settings(BaseSettings):
         only listed :3000. Browser blocked POST /api/auth/login,
         mutation onError fired, and the page never left /sign-in —
         the exact symptom Codex reported on 2026-04-19."""
-        if self.env.lower() in NON_LOCAL_ENVS:
+        if is_non_local_env(self.env):
             return self
         DEV_PORTS = ("3000", "3100", "3500")
         DEV_HOSTS = ("localhost", "127.0.0.1")
