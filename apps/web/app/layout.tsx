@@ -1,44 +1,30 @@
 import type { Metadata, Viewport } from "next";
-import {
-  Atkinson_Hyperlegible,
-  JetBrains_Mono,
-  Libre_Caslon_Text,
-} from "next/font/google";
 import type { ReactNode } from "react";
 
 import { siteConfig } from "@/lib/site";
 
+// Hermetic font loading via @fontsource — fonts are vendored as
+// npm-installed woff2 assets, not fetched from Google Fonts at
+// build time. Codex's 2026-04-19 E2E pass surfaced that
+// next/font/google made `npm run build:web` fail in any
+// network-restricted environment (CI sandbox, locked-down
+// enterprise build server, disaster recovery). The @fontsource
+// packages are SIL OFL-licensed and ship as part of the bundle,
+// so the build succeeds offline.
+//
+// The font CSS files declare @font-face with the same names the
+// fallback chain in globals.css points at ("Atkinson Hyperlegible",
+// "Libre Caslon Text", "JetBrains Mono"), so no other code changes
+// are needed.
+import "@fontsource/atkinson-hyperlegible/400.css";
+import "@fontsource/atkinson-hyperlegible/700.css";
+import "@fontsource/libre-caslon-text/400.css";
+import "@fontsource/libre-caslon-text/700.css";
+import "@fontsource/libre-caslon-text/400-italic.css";
+import "@fontsource/jetbrains-mono/400.css";
+import "@fontsource/jetbrains-mono/500.css";
+
 import "./globals.css";
-
-// Type pair picked via the impeccable font-selection procedure; see
-// `.impeccable.md` for the rationale. These replace Inter.
-const atkinson = Atkinson_Hyperlegible({
-  subsets: ["latin"],
-  weight: ["400", "700"],
-  display: "swap",
-  variable: "--font-sans-loaded",
-});
-
-const caslon = Libre_Caslon_Text({
-  subsets: ["latin"],
-  weight: ["400", "700"],
-  style: ["normal", "italic"],
-  display: "swap",
-  variable: "--font-serif-loaded",
-});
-
-const jetBrainsMono = JetBrains_Mono({
-  subsets: ["latin"],
-  weight: ["400", "500"],
-  display: "swap",
-  variable: "--font-mono-loaded",
-});
-
-const fontVariables = [
-  atkinson.variable,
-  caslon.variable,
-  jetBrainsMono.variable,
-].join(" ");
 
 const organizationJsonLd = {
   "@context": "https://schema.org",
@@ -123,7 +109,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={fontVariables} suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <body>
         <script
           type="application/ld+json"

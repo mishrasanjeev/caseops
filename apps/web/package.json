@@ -12,6 +12,9 @@
     "gen:api-types": "npx --yes openapi-typescript http://localhost:8000/api/openapi.json --output lib/api/openapi-types.ts"
   },
   "dependencies": {
+    "@fontsource/atkinson-hyperlegible": "^5.2.8",
+    "@fontsource/jetbrains-mono": "^5.2.8",
+    "@fontsource/libre-caslon-text": "^5.2.7",
     "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-avatar": "^1.1.11",
     "@radix-ui/react-dialog": "^1.1.15",

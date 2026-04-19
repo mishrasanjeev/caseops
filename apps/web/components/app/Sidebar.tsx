@@ -119,7 +119,7 @@ export function Sidebar() {
             Early access
           </div>
           <p className="mt-1 text-xs leading-relaxed text-[var(--color-mute)]">
-            Items marked <em>preview</em> are next up on the roadmap.
+            Pilot build. Tell us what we should ship next.
           </p>
         </div>
       </nav>
