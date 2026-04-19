@@ -1,0 +1,51 @@
+# Keep the build context lean. Without this, COPY pulls the dev
+# venv, pytest cache, local SQLite test DBs, and the node_modules
+# tree into every image build.
+
+# Version control
+.git/
+.gitignore
+.github/
+
+# Python build / cache
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/.pytest_cache/
+**/.ruff_cache/
+**/.mypy_cache/
+**/*.egg-info/
+**/.venv/
+**/venv/
+**/dist/
+**/build/
+
+# Frontend build / cache
+**/node_modules/
+**/.next/
+**/out/
+**/coverage/
+
+# Local data and runtime artifacts
+tmp/
+storage/
+**/storage/
+*.log
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Local env (must come from Secret Manager in prod, never baked in)
+.env
+.env.local
+**/.env
+**/.env.local
+
+# Claude session state
+.claude/
