@@ -566,6 +566,19 @@ def _resolve_model_for_purpose(settings: object, purpose: str | None) -> str:
 
 def build_provider(purpose: str | None = None) -> LLMProvider:
     settings = get_settings()
+    inner = _build_inner_provider(settings, purpose)
+    # Cassette wrapping is opt-in (off by default). Sprint 11 offline
+    # eval: capture once with credentials in `record` mode, replay
+    # forever in CI in `replay` mode.
+    from caseops_api.services.llm_cassette import maybe_wrap_with_cassette
+    return maybe_wrap_with_cassette(
+        inner,
+        mode=getattr(settings, "llm_cassette_mode", None),
+        path=getattr(settings, "llm_cassette_path", None),
+    )
+
+
+def _build_inner_provider(settings: object, purpose: str | None) -> LLMProvider:
     provider_name = settings.llm_provider.lower()
     model = _resolve_model_for_purpose(settings, purpose)
     if provider_name in {"mock", "noop", "off"}:

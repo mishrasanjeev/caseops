@@ -81,6 +81,12 @@ class Settings(BaseSettings):
     # system prompt. When true, repeated calls within 5 min share the
     # cache block and pay ~10% of the full prompt cost.
     llm_prompt_cache_enabled: bool = Field(default=True)
+    # LLM cassette — record real provider responses to a JSON file in
+    # "record" mode, replay them deterministically in "replay" mode,
+    # bypass entirely in "off" mode (default). Powers Sprint 11 offline
+    # eval runs: capture once with credentials, replay forever in CI.
+    llm_cassette_mode: str = Field(default="off")
+    llm_cassette_path: str | None = Field(default=None)
     recommendation_review_required_default: bool = Field(default=True)
 
     embedding_provider: str = Field(default="mock")
