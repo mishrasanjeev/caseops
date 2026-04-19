@@ -26,6 +26,7 @@ export default defineConfig({
     /personas\.spec\.ts/,
     /drafting\.spec\.ts/,
     /bootstrap-and-upload\.spec\.ts/,
+    /m2-polish\.spec\.ts/,
   ],
   fullyParallel: false,
   workers: 1,
