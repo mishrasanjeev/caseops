@@ -51,7 +51,8 @@ class AuthorityDocumentRecord(BaseModel):
     case_reference: str | None
     bench_name: str | None
     neutral_citation: str | None
-    decision_date: date
+    # Nullable: see AuthorityDocument model for why.
+    decision_date: date | None
     source_reference: str | None
     summary: str
     extracted_char_count: int
@@ -77,7 +78,7 @@ class AuthoritySearchResult(BaseModel):
     court_name: str
     forum_level: AuthorityForumLevelLiteral
     document_type: AuthorityDocumentTypeLiteral
-    decision_date: date
+    decision_date: date | None
     case_reference: str | None
     bench_name: str | None
     summary: str

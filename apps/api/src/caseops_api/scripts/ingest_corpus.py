@@ -142,6 +142,16 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _parse_years(value: str | None, single: int | None) -> list[int]:
+    """Expand the --years argument into a concrete ordered list.
+
+    Accepts comma-separated tokens; each token is either a single year
+    or a ``start-end`` range. Ranges expand in the direction implied by
+    the endpoints: ``2010-2014`` is ascending, ``2024-2010`` is
+    descending. Descending ranges are useful when the ingest priority
+    is "freshest first" — most citation traffic is on the last decade
+    of SC + HC judgments, so a crash / budget-stop mid-run still
+    leaves the most valuable corpus indexed.
+    """
     if single is not None:
         return [single]
     if not value:
@@ -152,8 +162,12 @@ def _parse_years(value: str | None, single: int | None) -> list[int]:
         if not token:
             continue
         if "-" in token:
-            start, end = token.split("-", 1)
-            years.extend(range(int(start), int(end) + 1))
+            start_s, end_s = token.split("-", 1)
+            start, end = int(start_s), int(end_s)
+            if start <= end:
+                years.extend(range(start, end + 1))
+            else:
+                years.extend(range(start, end - 1, -1))
         else:
             years.append(int(token))
     return years

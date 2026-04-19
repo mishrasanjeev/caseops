@@ -1663,12 +1663,30 @@ class AuthorityDocument(Base):
     case_reference: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     bench_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     neutral_citation: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    decision_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    # Nullable as of the corpus-quality fix: when the PDF text has no
+    # parseable date we store NULL rather than synthesising Jan 1 of
+    # the S3-prefix year (which produced 73% fake dates before).
+    decision_date: Mapped[date | None] = mapped_column(
+        Date, nullable=True, index=True
+    )
     canonical_key: Mapped[str] = mapped_column(String(255), nullable=False)
     source_reference: Mapped[str | None] = mapped_column(String(500), nullable=True, index=True)
     summary: Mapped[str] = mapped_column(Text, nullable=False)
     document_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     extracted_char_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Layer 2 structured extraction — JSON blobs populated by the
+    # Haiku structured-extraction pass. ``structured_version`` tracks
+    # which pipeline revision produced the payload so a future prompt
+    # tweak can be rolled out without re-extracting everything.
+    case_number: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    judges_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    parties_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    advocates_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sections_cited_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    outcome_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    structured_version: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
     ingested_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
@@ -1735,6 +1753,18 @@ class AuthorityDocumentChunk(Base):
         DateTime(timezone=True),
         nullable=True,
     )
+    # Layer 2 structured extraction — typed chunks.
+    #   chunk_role ∈ {metadata, facts, arguments, reasoning, directions,
+    #                  ratio, obiter, procedural, other}.
+    #   sections_cited_json / authorities_cited_json are JSON-encoded
+    #   lists; kept as TEXT for portability across SQLite (tests) and
+    #   Postgres (prod). related_chunk_ids_json is a JSON array of
+    #   sibling chunk_index ints that are topically linked.
+    chunk_role: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    sections_cited_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    authorities_cited_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    outcome_tag: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    related_chunk_ids_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,

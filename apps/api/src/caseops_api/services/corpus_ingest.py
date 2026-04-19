@@ -253,16 +253,62 @@ def _court_display_name(court: str) -> str:
     return court
 
 
+# Titles that the upstream PDFs like to put at the top of every page —
+# not a case name. We want the real "X v. Y" line when possible, and if
+# there isn't one, fall back to the filename rather than the banner.
+_TITLE_BANNER_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"^\s*S\.?\s*C\.?\s*R\.?\b", re.IGNORECASE),  # "S.C.R."
+    re.compile(r"SUPREME\s+COURT\s+REPORTS?", re.IGNORECASE),
+    re.compile(r"INDIAN\s+LAW\s+REPORTS?", re.IGNORECASE),
+    re.compile(r"^\s*(page\s*)?\d+\s*$", re.IGNORECASE),
+    re.compile(r"^\s*IN\s+THE\s+(HIGH\s+)?COURT\s+OF\b", re.IGNORECASE),
+    re.compile(r"^\s*BEFORE\s+THE\b", re.IGNORECASE),
+    re.compile(r"^\s*REPORTABLE\s*$", re.IGNORECASE),
+    re.compile(r"^\s*NON.REPORTABLE\s*$", re.IGNORECASE),
+    re.compile(r"^\s*CORAM\b", re.IGNORECASE),
+)
+_CASE_NAME_RE = re.compile(
+    r"[A-Z][A-Za-z.&' ]{2,}\s+v\.?\s+[A-Z][A-Za-z.&' ]{2,}",
+)
+
+
+def _looks_like_banner(line: str) -> bool:
+    return any(p.search(line) for p in _TITLE_BANNER_PATTERNS)
+
+
 def _derive_title(path: Path, text: str) -> str:
-    # Prefer the first non-trivial line; fall back to the filename stem.
-    for line in text.splitlines():
-        stripped = line.strip()
-        if 10 <= len(stripped) <= 220:
-            return stripped[:220]
+    """Return the most useful title we can find for this judgment.
+
+    Priority:
+      1. First "X v. Y" line in the first ~80 lines — that's the case name.
+      2. First non-banner line between 10 and 220 chars.
+      3. Filename stem as a last resort.
+    """
+    lines = [line.strip() for line in text.splitlines()]
+    # Pass 1 — find an explicit "v." case name in the first 80 lines.
+    for line in lines[:80]:
+        if 10 <= len(line) <= 220 and _CASE_NAME_RE.search(line):
+            return line[:220]
+    # Pass 2 — first non-banner line of reasonable length.
+    for line in lines:
+        if not (10 <= len(line) <= 220):
+            continue
+        if _looks_like_banner(line):
+            continue
+        return line[:220]
+    # Pass 3 — filename as last resort.
     return path.stem.replace("_", " ")[:220]
 
 
-def _guess_decision_date(text: str, *, default_year: int) -> date:
+def _guess_decision_date(text: str, *, default_year: int) -> date | None:
+    """Return the parsed decision date or ``None`` when we can't be honest
+    about it. The legacy fallback returned Jan 1 of the S3-prefix year,
+    which silently synthesised ~73% of all dates; we'd rather show a
+    blank and let operators backfill than mislead downstream UI and
+    filters.
+
+    ``default_year`` is used as a sanity range, not a fallback value.
+    """
     # Common legal date patterns.
     patterns = [
         r"(\d{1,2})(?:st|nd|rd|th)?(?:\s+of)?\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})",
@@ -272,18 +318,8 @@ def _guess_decision_date(text: str, *, default_year: int) -> date:
         m.lower(): i
         for i, m in enumerate(
             [
-                "January",
-                "February",
-                "March",
-                "April",
-                "May",
-                "June",
-                "July",
-                "August",
-                "September",
-                "October",
-                "November",
-                "December",
+                "January", "February", "March", "April", "May", "June",
+                "July", "August", "September", "October", "November", "December",
             ],
             start=1,
         )
@@ -300,10 +336,13 @@ def _guess_decision_date(text: str, *, default_year: int) -> date:
                 day = int(groups[0])
                 month = months[groups[1].lower()]
                 year = int(groups[2])
+            # Reject obvious OCR misreads (e.g. "1358-F Hyderabad Reg.").
+            if not (1940 <= year <= default_year + 1):
+                continue
             return date(year, month, day)
         except (ValueError, KeyError):
             continue
-    return date(default_year, 1, 1)
+    return None
 
 
 def _short_summary(text: str, *, max_chars: int = 600) -> str:

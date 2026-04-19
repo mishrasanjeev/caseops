@@ -54,6 +54,7 @@ caseops-populate-authorities = "caseops_api.scripts.populate_authorities:main"
 caseops-ingest-corpus = "caseops_api.scripts.ingest_corpus:main"
 caseops-extract-authority-metadata = "caseops_api.scripts.extract_authority_metadata:main"
 caseops-eval-drafting = "caseops_api.scripts.eval_drafting:main"
+caseops-backfill-corpus-quality = "caseops_api.scripts.backfill_corpus_quality:main"
 
 [dependency-groups]
 dev = [

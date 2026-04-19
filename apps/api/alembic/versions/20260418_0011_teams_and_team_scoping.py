@@ -125,9 +125,10 @@ def upgrade() -> None:
         )
 
     # Backfill existing rows with the server_default so SQLite's batch
-    # rebuild doesn't leave NULL values behind.
+    # rebuild doesn't leave NULL values behind. Use the standard SQL
+    # boolean literal so PostgreSQL's strict typing is happy too.
     op.execute(
-        "UPDATE companies SET team_scoping_enabled = 0 "
+        "UPDATE companies SET team_scoping_enabled = FALSE "
         "WHERE team_scoping_enabled IS NULL"
     )
 

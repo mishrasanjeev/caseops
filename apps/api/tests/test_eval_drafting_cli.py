@@ -32,14 +32,19 @@ def test_dry_run_records_evaluation_run(client) -> None:  # noqa: ARG001
     # Report is rendered markdown.
     assert "# Drafting eval — drafting.bail" in report
     assert "bail.regular.delhi.cheating" in report
-    assert "bail.anticipatory.delhi.economic" in report
+    # The bail suite now covers 4 regular-bail cases; anticipatory
+    # moved to its own suite in Sprint 11 partial.
+    assert "bail.regular.delhi.forgery" in report
+    assert "bail.regular.bombay.pmla" in report
 
     Session = get_session_factory()
     with Session() as session:
         runs = list(session.scalars(select(EvaluationRun)))
     assert len(runs) == 1
     assert runs[0].suite_name == "drafting.bail"
-    assert runs[0].case_count == 3
+    assert runs[0].case_count == len(
+        __import__("caseops_api.scripts.eval_drafting", fromlist=["BAIL_SUITE"]).BAIL_SUITE
+    )
 
 
 def test_missing_tenant_slug_exits(client) -> None:  # noqa: ARG001

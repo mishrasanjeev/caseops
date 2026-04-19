@@ -107,14 +107,20 @@ def test_guess_case_reference_handles_missing() -> None:
     assert _guess_case_reference("just-a-random-name.pdf") is None
 
 
-def test_guess_decision_date_falls_back_to_year() -> None:
-    d = _guess_decision_date("no dates here", default_year=2007)
-    assert d.year == 2007 and d.month == 1 and d.day == 1
+def test_guess_decision_date_returns_none_when_unparseable() -> None:
+    # The legacy fallback produced date(default_year, 1, 1), which
+    # synthesised ~73% fake dates across the corpus. The fix returns
+    # None; honest nulls are preferable to fake Jan-1 precision.
+    assert _guess_decision_date("no dates here", default_year=2007) is None
 
 
 def test_guess_decision_date_picks_named_month() -> None:
+    # default_year=1900 used to be ignored by the parser's happy path;
+    # the sanity-check now refuses years before 1940 as OCR misreads,
+    # so use a realistic default that still lets 2018 through.
     text = "Pronounced on the 12th of March 2018 in open court."
-    d = _guess_decision_date(text, default_year=1900)
+    d = _guess_decision_date(text, default_year=2025)
+    assert d is not None
     assert (d.year, d.month, d.day) == (2018, 3, 12)
 
 
