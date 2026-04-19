@@ -409,6 +409,17 @@ def persist_judgment(
     if not chunks_text:
         return document, []
 
+    # Prepend a synthetic metadata chunk carrying title + case reference
+    # + court + decision date. Case-name queries ("Wahid v. State of
+    # NCT of Delhi") are short and proper-noun heavy; without a
+    # dedicated target chunk, cosine similarity hunts through prose that
+    # mentions "state" and "bail" and finds weak matches. This chunk is
+    # the target.
+    header = _build_title_header(parsed)
+    has_header = bool(header)
+    if has_header:
+        chunks_text = [header, *chunks_text]
+
     embed_result = embedding_provider.embed(chunks_text)
     chunk_rows: list[AuthorityDocumentChunk] = []
     for idx, (content, vector) in enumerate(zip(chunks_text, embed_result.vectors, strict=False)):
@@ -421,6 +432,7 @@ def persist_judgment(
             embedding_dimensions=embed_result.dimensions,
             embedding_json=_encode_vector(vector),
             embedded_at=datetime.now(UTC),
+            chunk_role="metadata" if has_header and idx == 0 else None,
         )
         session.add(chunk)
         chunk_rows.append(chunk)
@@ -431,6 +443,24 @@ def persist_judgment(
         session.flush()
         _apply_pgvector_batch(session, chunks=chunk_rows, vectors=embed_result.vectors)
     return document, chunk_rows
+
+
+def _build_title_header(parsed: ParsedJudgment) -> str:
+    """Compact header for a synthetic chunk 0 — title + case-ref + court + date.
+
+    Embedded as a stand-alone chunk so case-name queries (short, proper-noun
+    heavy) have a concentrated cosine target rather than hunting through
+    prose. Order is semantic weight: the title itself carries the most
+    signal, the citation anchors it, the court disambiguates same-name
+    petitions across jurisdictions, the date settles ties.
+    """
+    parts = [
+        parsed.title,
+        parsed.case_reference,
+        parsed.court_name,
+        parsed.decision_date.isoformat() if parsed.decision_date else None,
+    ]
+    return "\n".join(p.strip() for p in parts if p and p.strip())
 
 
 def _encode_vector(vector: list[float]) -> str:
