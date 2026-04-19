@@ -32,17 +32,18 @@ const cspDirectives: string[] = [
   // would require a wider refactor. 'unsafe-inline' for styles only —
   // scripts stay locked down to the static inline JSON-LD blocks.
   "style-src 'self' 'unsafe-inline'",
-  // 'unsafe-inline' here is needed for the two app/layout.tsx
-  // JSON-LD script blocks (Organization + SoftwareApplication
-  // schema). Move them to <link rel="alternate"> if we ever need
-  // to drop 'unsafe-inline' on script-src.
-  "script-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
+  // 'unsafe-inline' on script-src covers the inline JSON-LD blocks
+  // (Organization + SoftwareApplication + WebSite schema). Allow
+  // googletagmanager.com for GA4 gtag.js; GA only loads when
+  // NEXT_PUBLIC_GA_MEASUREMENT_ID is set at build time.
+  "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com",
+  "img-src 'self' data: blob: https://www.googletagmanager.com",
   "font-src 'self' data:",
-  // The browser uses fetch() to talk to the API. The Pine Labs
-  // payment redirect happens via top-level navigation, not fetch,
-  // so we don't need to allow it here.
-  `connect-src 'self' ${apiBaseUrl} ${appUrl}`,
+  // The browser uses fetch() to talk to the API. Google Analytics
+  // posts telemetry to google-analytics.com / analytics.google.com.
+  // Pine Labs payments go via top-level navigation, not fetch — no
+  // connect-src entry needed for them.
+  `connect-src 'self' ${apiBaseUrl} ${appUrl} https://www.google-analytics.com https://analytics.google.com`,
   "worker-src 'self' blob:",
   "media-src 'self'",
   "manifest-src 'self'",

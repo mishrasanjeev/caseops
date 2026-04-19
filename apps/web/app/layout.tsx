@@ -24,6 +24,8 @@ import "@fontsource/libre-caslon-text/400-italic.css";
 import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/500.css";
 
+import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
+
 import "./globals.css";
 
 const organizationJsonLd = {
@@ -34,6 +36,8 @@ const organizationJsonLd = {
   logo: `${siteConfig.url}/icon`,
   email: siteConfig.contact.email,
   sameAs: [],
+  foundingDate: "2026",
+  areaServed: { "@type": "Country", name: "India" },
 };
 
 const softwareJsonLd = {
@@ -41,6 +45,7 @@ const softwareJsonLd = {
   "@type": "SoftwareApplication",
   name: siteConfig.name,
   applicationCategory: "BusinessApplication",
+  applicationSubCategory: "Legal Software",
   operatingSystem: "Web",
   description: siteConfig.description,
   offers: {
@@ -50,6 +55,32 @@ const softwareJsonLd = {
     availability: "https://schema.org/PreOrder",
     description: "Early access pilot",
   },
+  featureList: [
+    "Matter management",
+    "AI-assisted legal drafting with citation grounding",
+    "Hearing pack generation",
+    "Authority research over Supreme Court + High Court corpus",
+    "Contract clause and obligation extraction",
+    "Outside counsel management and spend tracking",
+    "Invoice generation and time tracking",
+    "Tenant isolation and ethical walls for multi-party matters",
+  ],
+  inLanguage: ["en", "hi"],
+};
+
+// WebSite + SearchAction — tells Google + LLM crawlers the site has
+// an internal search and what the canonical URL shape is. The
+// authenticated search lives at /app/research; we surface its shape
+// here even though it's gated behind login so structured-data
+// consumers understand the site layout.
+const websiteJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: siteConfig.name,
+  url: siteConfig.url,
+  description: siteConfig.description,
+  inLanguage: "en",
+  publisher: { "@type": "Organization", name: siteConfig.name },
 };
 
 export const metadata: Metadata = {
@@ -121,7 +152,13 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           // eslint-disable-next-line react/no-danger
           dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareJsonLd) }}
         />
+        <script
+          type="application/ld+json"
+          // eslint-disable-next-line react/no-danger
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
+        />
         {children}
+        <GoogleAnalytics />
       </body>
     </html>
   );
