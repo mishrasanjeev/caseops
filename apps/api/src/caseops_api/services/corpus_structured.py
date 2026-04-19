@@ -143,10 +143,16 @@ def build_tier_provider(tier: str) -> LLMProvider:
         )
     if not settings.llm_api_key:
         raise LLMProviderError("CASEOPS_LLM_API_KEY must be set for tiered extraction")
+    # Long bumped from the default 60s. Sonnet on a 60K-char SC
+    # judgment frequently exceeds 60s end-to-end, and three SDK retries
+    # at 60s each cost 3 min wall time per failure. 180s lets the long
+    # docs land first try; max_retries stays at 2 so transient blips
+    # still recover.
     return AnthropicProvider(
         model=model,
         api_key=settings.llm_api_key,
         prompt_cache=bool(getattr(settings, "llm_prompt_cache_enabled", True)),
+        timeout_seconds=180.0,
     )
 
 
