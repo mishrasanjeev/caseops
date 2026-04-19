@@ -82,6 +82,22 @@ def _coerce_int_list(v):  # noqa: ANN001
     except (TypeError, ValueError):
         return []
 
+
+def _coerce_to_dict(v):  # noqa: ANN001
+    """Coerce nullish / list / non-dict inputs to ``{}``.
+
+    Sonnet sometimes emits ``advocates: []`` (an empty list) when no
+    advocates were named, instead of the expected object/dict. Same
+    pattern applies to ``parties``. Treat the empty-container case as
+    "no data" and let the nested model populate its defaults."""
+    if v is None or v == "":
+        return {}
+    if isinstance(v, list):
+        return {}
+    if isinstance(v, dict):
+        return v
+    return {}
+
 # Version stamp encodes extraction tier so we never downgrade a
 # Sonnet-annotated doc with a later Haiku pass:
 #   1 = Haiku 4.5 (the budget tier)
@@ -205,6 +221,8 @@ class _ExtractionPayload(BaseModel):
 
     _coerce_judges = field_validator("judges", mode="before")(_coerce_str_list)
     _coerce_doc_secs = field_validator("sections_cited", mode="before")(_coerce_str_list)
+    _coerce_parties = field_validator("parties", mode="before")(_coerce_to_dict)
+    _coerce_advocates = field_validator("advocates", mode="before")(_coerce_to_dict)
     outcome: str | None = Field(default=None, max_length=240)
     chunks: list[_ChunkAnnotation] = Field(default_factory=list, max_length=600)
 
