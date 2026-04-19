@@ -282,6 +282,45 @@ export async function createOutsideCounselSpendRecord(input: {
   });
 }
 
+// --- Outside counsel recommendations (BG-016 follow-up) ---
+// Backend: POST /api/outside-counsel/recommendations (capability:
+// outside_counsel:recommend). Ranks panel counsel by panel status,
+// jurisdiction, practice-area fit, and prior spend on the matter's
+// peer cases.
+
+export type OutsideCounselRecommendation = {
+  counsel_id: string;
+  counsel_name: string;
+  panel_status: "active" | "preferred" | "inactive";
+  score: number;
+  total_matters_count: number;
+  active_matters_count: number;
+  approved_spend_minor: number;
+  evidence: string[];
+};
+
+export type OutsideCounselRecommendationsResult = {
+  matter_id: string;
+  matter_title: string;
+  matter_code: string;
+  generated_at: string;
+  results: OutsideCounselRecommendation[];
+};
+
+export async function fetchOutsideCounselRecommendations(input: {
+  matterId: string;
+  limit?: number;
+}): Promise<OutsideCounselRecommendationsResult> {
+  const data = await apiRequest<unknown>(
+    "/api/outside-counsel/recommendations",
+    {
+      method: "POST",
+      body: { matter_id: input.matterId, limit: input.limit ?? 5 },
+    },
+  );
+  return data as OutsideCounselRecommendationsResult;
+}
+
 // --- Court-sync (BG-012) ---
 // Backend endpoint: POST /api/matters/{id}/court-sync/pull (capability:
 // court_sync:run). Runs as a BackgroundTask; the response carries the
@@ -788,6 +827,21 @@ export async function setTeamScoping(enabled: boolean): Promise<{ enabled: boole
     method: "PUT",
     body: { enabled },
   });
+}
+
+// Assign or detach a team on a matter. Pass null to detach. The
+// backend PATCH endpoint distinguishes "leave unchanged" (omit) from
+// "detach" (explicit null) — we always send the field so callers get
+// the latter behaviour.
+export async function assignMatterTeam(input: {
+  matterId: string;
+  teamId: string | null;
+}): Promise<Matter> {
+  const data = await apiRequest<unknown>(`/api/matters/${input.matterId}`, {
+    method: "PATCH",
+    body: { team_id: input.teamId },
+  });
+  return matter.parse(data);
 }
 
 // --- Sprint 8b BG-025: GC intake queue ---

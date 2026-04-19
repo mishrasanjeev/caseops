@@ -3,6 +3,7 @@
 import { ArrowLeft, Briefcase, ExternalLink, Gavel, Scale, User } from "lucide-react";
 import Link from "next/link";
 
+import { MatterTeamPicker } from "@/components/app/MatterTeamPicker";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { cn } from "@/lib/cn";
 import type { WorkspaceMatter } from "@/lib/api/workspace-types";
@@ -63,9 +64,12 @@ export function MatterHeader({ matter }: { matter: WorkspaceMatter }) {
             </p>
           ) : null}
         </div>
-        <div className="inline-flex items-center gap-2 rounded-full border border-[var(--color-line)] bg-white px-3 py-1.5 text-xs text-[var(--color-mute)]">
-          <ExternalLink className="h-3.5 w-3.5" aria-hidden />
-          {matter.court_name ?? "No court"}
+        <div className="flex flex-col items-stretch gap-2 md:items-end">
+          <div className="inline-flex items-center gap-2 rounded-full border border-[var(--color-line)] bg-white px-3 py-1.5 text-xs text-[var(--color-mute)]">
+            <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+            {matter.court_name ?? "No court"}
+          </div>
+          <MatterTeamPicker matterId={matter.id} currentTeamId={matter.team_id} />
         </div>
       </div>
 

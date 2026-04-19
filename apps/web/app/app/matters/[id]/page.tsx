@@ -3,6 +3,7 @@
 import { ClipboardList, Gavel, ListTodo, MessageSquareText, ScrollText } from "lucide-react";
 import { useParams } from "next/navigation";
 
+import { CounselRecommendationsCard } from "@/components/app/CounselRecommendationsCard";
 import {
   Card,
   CardContent,
@@ -73,6 +74,8 @@ export default function MatterOverviewPage() {
           )}
         </CardContent>
       </Card>
+
+      <CounselRecommendationsCard matterId={data.matter.id} />
 
       <Card>
         <CardHeader>

@@ -11,6 +11,7 @@ export type WorkspaceMatter = {
   opposing_party?: string | null;
   description?: string | null;
   next_hearing_on?: string | null;
+  team_id?: string | null;
 };
 
 export type WorkspaceHearing = {
