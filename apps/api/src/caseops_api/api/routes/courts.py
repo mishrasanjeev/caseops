@@ -125,6 +125,97 @@ class CourtProfileResponse(BaseModel):
     recent_authorities: list[AuthorityStub]
 
 
+class JudgeProfileResponse(BaseModel):
+    judge: JudgeRecord
+    court: CourtRecord
+    portfolio_matter_count: int
+    authority_document_count: int
+    recent_authorities: list[AuthorityStub]
+
+
+# Declared BEFORE the catch-all /{court_id} route so FastAPI's
+# in-order matching picks "judges" as a literal segment instead of
+# treating it as a court id.
+@router.get(
+    "/judges/{judge_id}",
+    response_model=JudgeProfileResponse,
+    summary="Judge profile — court, your matters before this judge, recent authorities",
+)
+def get_judge_profile(
+    judge_id: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> JudgeProfileResponse:
+    judge = session.scalar(select(Judge).where(Judge.id == judge_id))
+    if judge is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Judge not found."
+        )
+    court = session.scalar(select(Court).where(Court.id == judge.court_id))
+    if court is None:
+        # Defensive — Judge.court_id is a FK with ON DELETE CASCADE,
+        # so an orphan judge means a manual data drift, not a normal
+        # state. Surface as 404 rather than 500.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Court for judge not found."
+        )
+    # Tenant matters where this judge appears in the freeform field. We
+    # don't have a FK (the matter judge_name is human-typed) so this is
+    # an exact-string match — close enough for the v1 profile.
+    portfolio_count = (
+        session.scalar(
+            select(func.count())
+            .select_from(Matter)
+            .where(Matter.company_id == context.company.id)
+            .where(Matter.judge_name == judge.full_name)
+        )
+        or 0
+    )
+    # Authorities where the judge sat on the bench. AuthorityDocument
+    # carries a freeform bench_name like "S Abdul Nazeer, J., et al" —
+    # an ILIKE on the surname is the v1 heuristic. Costs no schema
+    # change; can swap for a structured judge-citation table later.
+    authority_filter = AuthorityDocument.bench_name.ilike(f"%{judge.full_name}%")
+    authority_count = (
+        session.scalar(
+            select(func.count())
+            .select_from(AuthorityDocument)
+            .where(authority_filter)
+        )
+        or 0
+    )
+    recent_authorities = list(
+        session.execute(
+            select(
+                AuthorityDocument.id,
+                AuthorityDocument.title,
+                AuthorityDocument.decision_date,
+                AuthorityDocument.case_reference,
+                AuthorityDocument.neutral_citation,
+            )
+            .where(authority_filter)
+            .order_by(AuthorityDocument.decision_date.desc().nulls_last())
+            .limit(10)
+        ).all()
+    )
+    return JudgeProfileResponse(
+        judge=JudgeRecord.model_validate(judge),
+        court=CourtRecord.model_validate(court),
+        portfolio_matter_count=int(portfolio_count),
+        authority_document_count=int(authority_count),
+        recent_authorities=[
+            AuthorityStub(
+                id=row.id,
+                title=row.title,
+                decision_date=row.decision_date.isoformat() if row.decision_date else None,
+                case_reference=row.case_reference,
+                neutral_citation=row.neutral_citation,
+            )
+            for row in recent_authorities
+        ],
+    )
+
+
 @router.get(
     "/{court_id}",
     response_model=CourtProfileResponse,

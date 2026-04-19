@@ -725,6 +725,18 @@ export async function fetchCourtProfile(courtId: string): Promise<CourtProfile> 
   return apiRequest(`/api/courts/${courtId}`);
 }
 
+export type JudgeProfile = {
+  judge: JudgeRecord;
+  court: CourtRecord;
+  portfolio_matter_count: number;
+  authority_document_count: number;
+  recent_authorities: CourtAuthorityStub[];
+};
+
+export async function fetchJudgeProfile(judgeId: string): Promise<JudgeProfile> {
+  return apiRequest(`/api/courts/judges/${judgeId}`);
+}
+
 // --- Sprint 8c BG-026: teams + team scoping ---
 
 export type TeamKind = "team" | "department" | "practice_area";

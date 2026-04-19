@@ -103,15 +103,20 @@ export default function CourtProfilePage() {
               <ul className="divide-y divide-[var(--color-line-2)]">
                 {profile.judges.map((judge) => (
                   <li key={judge.id} className="py-2.5">
-                    <div className="text-sm font-medium text-[var(--color-ink)]">
-                      {judge.honorific ? `${judge.honorific} ` : ""}
-                      {judge.full_name}
-                    </div>
-                    {judge.current_position ? (
-                      <div className="text-xs text-[var(--color-mute)]">
-                        {judge.current_position}
+                    <Link
+                      href={`/app/courts/judges/${judge.id}`}
+                      className="block hover:text-[var(--color-brand-600)]"
+                    >
+                      <div className="text-sm font-medium text-[var(--color-ink)] hover:underline">
+                        {judge.honorific ? `${judge.honorific} ` : ""}
+                        {judge.full_name}
                       </div>
-                    ) : null}
+                      {judge.current_position ? (
+                        <div className="text-xs text-[var(--color-mute)]">
+                          {judge.current_position}
+                        </div>
+                      ) : null}
+                    </Link>
                   </li>
                 ))}
               </ul>
