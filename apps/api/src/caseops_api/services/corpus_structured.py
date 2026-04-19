@@ -30,12 +30,15 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from caseops_api.core.settings import get_settings
 from caseops_api.db.models import AuthorityDocument, AuthorityDocumentChunk
 from caseops_api.services.llm import (
     PURPOSE_METADATA_EXTRACT,
+    AnthropicProvider,
     LLMCallContext,
     LLMMessage,
     LLMProvider,
+    LLMProviderError,
     LLMResponseFormatError,
     build_provider,
     generate_structured,
@@ -43,7 +46,68 @@ from caseops_api.services.llm import (
 
 logger = logging.getLogger(__name__)
 
-STRUCTURED_VERSION = 1
+# Version stamp encodes extraction tier so we never downgrade a
+# Sonnet-annotated doc with a later Haiku pass:
+#   1 = Haiku 4.5 (the budget tier)
+#   2 = Sonnet 4.6 (the premium tier reserved for SC 1990-2025 English)
+HAIKU_VERSION = 1
+SONNET_VERSION = 2
+STRUCTURED_VERSION = HAIKU_VERSION  # legacy alias; prefer tier-specific constants
+
+_TIER_MODEL: dict[str, str] = {
+    "haiku": "claude-haiku-4-5-20251001",
+    "sonnet": "claude-sonnet-4-6",
+}
+_TIER_VERSION: dict[str, int] = {
+    "haiku": HAIKU_VERSION,
+    "sonnet": SONNET_VERSION,
+}
+
+# Anthropic pricing as of 2026-04 (USD per 1M tokens). Cache-hit reads
+# are 10% of the input rate but we bill pessimistically since the
+# corpus extraction sees no repeated system prompts across docs.
+_PRICING_USD_PER_MTOK: dict[str, tuple[float, float]] = {
+    "claude-haiku-4-5-20251001": (1.00, 5.00),
+    "claude-sonnet-4-6": (3.00, 15.00),
+    "claude-opus-4-7": (15.00, 75.00),
+}
+
+
+def build_tier_provider(tier: str) -> LLMProvider:
+    """Explicit provider for a named tier. Bypasses the per-purpose
+    model routing in ``build_provider`` so the triage router can pick
+    Sonnet on one doc and Haiku on the next within a single run."""
+    settings = get_settings()
+    model = _TIER_MODEL.get(tier)
+    if not model:
+        raise ValueError(f"unknown tier: {tier!r}")
+    provider_name = (settings.llm_provider or "").lower()
+    if provider_name in {"mock", "noop", "off"}:
+        return build_provider(purpose=PURPOSE_METADATA_EXTRACT)
+    if provider_name != "anthropic":
+        raise LLMProviderError(
+            "Tiered structured extraction requires CASEOPS_LLM_PROVIDER=anthropic; "
+            f"got {provider_name!r}"
+        )
+    if not settings.llm_api_key:
+        raise LLMProviderError("CASEOPS_LLM_API_KEY must be set for tiered extraction")
+    return AnthropicProvider(
+        model=model,
+        api_key=settings.llm_api_key,
+        prompt_cache=bool(getattr(settings, "llm_prompt_cache_enabled", True)),
+    )
+
+
+def completion_cost_usd(completion_provider: str, completion_model: str,
+                        prompt_tokens: int, completion_tokens: int) -> float:
+    rates = _PRICING_USD_PER_MTOK.get(completion_model)
+    if not rates or completion_provider not in {"anthropic"}:
+        return 0.0
+    input_rate, output_rate = rates
+    return (
+        prompt_tokens * input_rate / 1_000_000
+        + completion_tokens * output_rate / 1_000_000
+    )
 
 
 ChunkRole = Literal[
@@ -128,6 +192,48 @@ class StructuredExtractionSummary:
     chunks_annotated: int
     provider: str
     model: str
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    cost_usd: float = 0.0
+    quality_score: float = 0.0
+    quality_issues: tuple[str, ...] = ()
+    tier: str = "haiku"
+
+
+def _validate_quality(
+    *,
+    document: AuthorityDocument,
+    payload: _ExtractionPayload,
+    chunk_count: int,
+    annotated: int,
+) -> tuple[float, list[str]]:
+    """Cheap structural validator: judge names appear in source text,
+    chunk coverage is complete, case_number shape is plausible, title
+    is non-empty. No LLM calls. Returns (score 0..1, issues)."""
+    issues: list[str] = []
+    text = (document.document_text or "")
+    text_lower = text.lower()
+    if payload.judges:
+        missing = [
+            j for j in payload.judges
+            if j and j.strip().lower().split(",")[0].split()[0] not in text_lower
+        ]
+        if missing and len(missing) == len(payload.judges):
+            issues.append(f"judges_not_in_text:{len(missing)}")
+    if chunk_count and annotated < chunk_count:
+        issues.append(f"chunks_incomplete:{annotated}/{chunk_count}")
+    title = (payload.case_title or "").strip()
+    if not title or title.lower().startswith("unknown"):
+        issues.append("case_title_missing")
+    cn = (payload.case_number or "").strip()
+    if cn:
+        import re as _re
+        if not _re.search(r"(no\.?\s*\d|appeal|petition|writ|sp\b|civ|crl|slp|w\.p\.)",
+                         cn.lower()):
+            issues.append("case_number_shape")
+    checks = 4
+    score = max(0.0, (checks - len(issues)) / checks)
+    return score, issues
 
 
 def _build_prompt(
@@ -206,8 +312,13 @@ def extract_and_persist_structured(
     *,
     document: AuthorityDocument,
     provider: LLMProvider | None = None,
+    tier: str = "haiku",
 ) -> StructuredExtractionSummary:
     """Run the extractor on a single document and persist the payload.
+
+    ``tier`` selects Haiku 4.5 (budget) vs Sonnet 4.6 (premium). The
+    resolved tier stamps ``structured_version`` so a later run of the
+    same tier skips this doc and a higher tier can still upgrade it.
 
     Safe to call repeatedly; the second call overwrites the first. The
     caller owns the transaction — we only ``flush``, not ``commit``.
@@ -228,9 +339,16 @@ def extract_and_persist_structured(
             chunks_annotated=0,
             provider="caseops-skip",
             model="none",
+            tier=tier,
         )
 
-    llm = provider or build_provider(purpose=PURPOSE_METADATA_EXTRACT)
+    if provider is None:
+        try:
+            llm = build_tier_provider(tier)
+        except (ValueError, LLMProviderError):
+            llm = build_provider(purpose=PURPOSE_METADATA_EXTRACT)
+    else:
+        llm = provider
     messages = _build_prompt(document=document, chunks=chunks)
 
     try:
@@ -275,7 +393,7 @@ def extract_and_persist_structured(
         )
     if payload.outcome:
         document.outcome_label = payload.outcome[:120]
-    document.structured_version = STRUCTURED_VERSION
+    document.structured_version = _TIER_VERSION.get(tier, HAIKU_VERSION)
     session.add(document)
 
     # Per-chunk annotations. Primary match: LLM emits chunk_index that
@@ -331,16 +449,34 @@ def extract_and_persist_structured(
         annotated += 1
     session.flush()
 
+    cost = completion_cost_usd(
+        completion.provider, completion.model,
+        completion.prompt_tokens, completion.completion_tokens,
+    )
+    score, issues = _validate_quality(
+        document=document, payload=payload,
+        chunk_count=len(chunks), annotated=annotated,
+    )
     return StructuredExtractionSummary(
         document_id=document.id,
         chunks_annotated=annotated,
         provider=completion.provider,
         model=completion.model,
+        prompt_tokens=completion.prompt_tokens,
+        completion_tokens=completion.completion_tokens,
+        cost_usd=cost,
+        quality_score=score,
+        quality_issues=tuple(issues),
+        tier=tier,
     )
 
 
 __all__ = [
+    "HAIKU_VERSION",
+    "SONNET_VERSION",
     "STRUCTURED_VERSION",
     "StructuredExtractionSummary",
+    "build_tier_provider",
+    "completion_cost_usd",
     "extract_and_persist_structured",
 ]
