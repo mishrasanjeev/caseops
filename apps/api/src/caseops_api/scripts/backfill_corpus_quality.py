@@ -111,12 +111,25 @@ class _FakePath:
         return name
 
 
+def _year_for_doc(doc: AuthorityDocument) -> int | None:
+    """Decode the filename year from ``source_reference`` (e.g.
+    ``2025_12_593_610_EN.pdf`` → 2025). Returns None if absent."""
+    ref = doc.source_reference or ""
+    m = _YEAR_RE.search("/" + ref)
+    if not m:
+        return None
+    try:
+        return int(m.group(1))
+    except ValueError:
+        return None
+
+
 def _tier_for_doc(doc: AuthorityDocument) -> str:
     """Route a document to Sonnet (high-value) or Haiku (rest).
 
     Premium tier (Sonnet) requirements — all must hold:
       - court is the Supreme Court of India
-      - filename year is 1990..2025 (decoded from source_reference)
+      - filename year is 1980..2025 (decoded from source_reference)
       - document is English (``_EN.pdf`` suffix)
 
     Everything else goes to Haiku.
@@ -124,16 +137,10 @@ def _tier_for_doc(doc: AuthorityDocument) -> str:
     court = (doc.court_name or "").lower()
     if "supreme" not in court:
         return "haiku"
+    year = _year_for_doc(doc)
+    if year is None or not (1980 <= year <= 2025):
+        return "haiku"
     ref = doc.source_reference or ""
-    m = _YEAR_RE.search("/" + ref)
-    if not m:
-        return "haiku"
-    try:
-        year = int(m.group(1))
-    except ValueError:
-        return "haiku"
-    if not (1990 <= year <= 2025):
-        return "haiku"
     if "_EN.PDF" not in ref.upper():
         return "haiku"
     return "sonnet"
@@ -165,6 +172,7 @@ def _structured_pass(
     dry_run: bool,
     budget_usd: float,
     force_tier: str | None,
+    year_range: tuple[int, int] | None,
 ) -> dict:
     """Triage router over every doc that still needs structured data.
 
@@ -172,6 +180,11 @@ def _structured_pass(
     dollar), then the Haiku tier. Within each tier, descending
     chronological order so recent judgments are covered before older
     ones if the budget runs out.
+
+    ``year_range`` (lo, hi inclusive): when set, only Sonnet candidates
+    whose filename year falls in [lo, hi] are processed, and the Haiku
+    bucket is skipped entirely. This is the per-bucket workflow — run
+    SC 2020-2025 first, audit, then SC 2015-2019, etc.
     """
     # Candidate set: anything below the target tier's stamp.
     stmt = (
@@ -199,14 +212,33 @@ def _structured_pass(
         if _already_covered_at_tier(doc, tier):
             continue
         if tier == "sonnet":
+            if year_range is not None:
+                year = _year_for_doc(doc)
+                if year is None or not (year_range[0] <= year <= year_range[1]):
+                    continue
             sonnet_bucket.append(doc)
         else:
             haiku_bucket.append(doc)
 
-    logger.info(
-        "triage: %d sonnet candidates, %d haiku candidates, budget=$%.2f",
-        len(sonnet_bucket), len(haiku_bucket), budget_usd,
+    # Sort sonnet bucket by filename year DESC so 2025 lands before
+    # 2020 inside a multi-year bucket. NULL-dated docs without a
+    # filename year are dropped to the end via -inf.
+    sonnet_bucket.sort(
+        key=lambda d: _year_for_doc(d) or -1,
+        reverse=True,
     )
+
+    if year_range is not None:
+        logger.info(
+            "year-range %d-%d: %d sonnet candidates (Haiku bucket skipped), budget=$%.2f",
+            year_range[0], year_range[1], len(sonnet_bucket), budget_usd,
+        )
+        haiku_bucket = []
+    else:
+        logger.info(
+            "triage: %d sonnet candidates, %d haiku candidates, budget=$%.2f",
+            len(sonnet_bucket), len(haiku_bucket), budget_usd,
+        )
 
     totals = {
         "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -272,6 +304,20 @@ def _structured_pass(
     return totals
 
 
+def _parse_year_range(value: str | None) -> tuple[int, int] | None:
+    if not value:
+        return None
+    parts = value.replace(":", "-").split("-")
+    if len(parts) != 2:
+        raise SystemExit(f"--year-range must be YYYY-YYYY (got {value!r})")
+    try:
+        a, b = int(parts[0]), int(parts[1])
+    except ValueError as exc:
+        raise SystemExit(f"--year-range must be YYYY-YYYY (got {value!r})") from exc
+    lo, hi = (a, b) if a <= b else (b, a)
+    return lo, hi
+
+
 def run(
     *,
     stage: str,
@@ -279,6 +325,7 @@ def run(
     dry_run: bool,
     budget_usd: float,
     force_tier: str | None,
+    year_range: tuple[int, int] | None,
 ) -> int:
     logging.basicConfig(
         level=logging.INFO,
@@ -298,6 +345,7 @@ def run(
                 session,
                 limit=limit, dry_run=dry_run,
                 budget_usd=budget_usd, force_tier=force_tier,
+                year_range=year_range,
             )
             sys.stdout.write(
                 "structured-pass: "
@@ -339,10 +387,19 @@ def main(argv: Iterable[str] | None = None) -> int:
         "--force-tier", choices=["haiku", "sonnet"], default=None,
         help="Override the triage router and run every doc at this tier.",
     )
+    parser.add_argument(
+        "--year-range", default=None,
+        help=(
+            "Restrict the Sonnet pass to filename-year YYYY-YYYY (inclusive); "
+            "Haiku bucket is skipped. Use for per-bucket workflow, e.g. "
+            "--year-range 2020-2025."
+        ),
+    )
     args = parser.parse_args(list(argv) if argv is not None else None)
     return run(
         stage=args.stage, limit=args.limit, dry_run=args.dry_run,
         budget_usd=args.budget_usd, force_tier=args.force_tier,
+        year_range=_parse_year_range(args.year_range),
     )
 
 
