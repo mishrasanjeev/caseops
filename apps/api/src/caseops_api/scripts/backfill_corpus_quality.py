@@ -193,6 +193,17 @@ def _structured_pass(
             (AuthorityDocument.structured_version.is_(None))
             | (AuthorityDocument.structured_version < SONNET_VERSION)
         )
+        # Skip monster judgments whose structured-extraction output
+        # reliably exceeds Haiku / Sonnet max_tokens (16384) — they
+        # return malformed JSON on every attempt, burn tokens, and
+        # never persist. 80,000 chars ≈ 20k input tokens + ~25 chunks,
+        # which is the point where we see >90 % JSON-parse failures on
+        # both models. These docs need a chunked-output extractor;
+        # queueing them here just wastes budget.
+        .where(
+            (AuthorityDocument.extracted_char_count.is_(None))
+            | (AuthorityDocument.extracted_char_count < 80000)
+        )
         .order_by(
             AuthorityDocument.decision_date.desc().nulls_last(),
             AuthorityDocument.ingested_at.desc(),
