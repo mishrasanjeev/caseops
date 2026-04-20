@@ -121,6 +121,57 @@ test.describe("Marketing site", () => {
     await expect(page.getByText(/we'll be in touch within a working day/i)).toBeVisible();
   });
 
+  test("every CTA on the landing page leads somewhere (not a dead mailto or 404)", async ({
+    page,
+    request,
+  }) => {
+    // Regression guard: the Pricing "Talk to sales" card shipped as a
+    // raw `mailto:` once, which does nothing in browsers without a
+    // default mail client — the user has to go back to the form. This
+    // test walks every link/button on the landing page and verifies:
+    //   - hash anchors point at something that actually exists on the page
+    //   - internal routes return 200
+    //   - mailto: links carry a non-empty address
+    // External https links are skipped (we don't want to spider the web
+    // on every CI run), but at least their href is logged.
+    await page.goto("/");
+
+    const hrefs = await page.$$eval("main a[href], header a[href]", (els) =>
+      Array.from(new Set(els.map((el) => (el as HTMLAnchorElement).getAttribute("href") ?? ""))),
+    );
+
+    expect(hrefs.length).toBeGreaterThan(0);
+
+    const deadLinks: string[] = [];
+
+    for (const href of hrefs) {
+      if (!href) {
+        deadLinks.push("(empty href)");
+        continue;
+      }
+      if (href.startsWith("#")) {
+        const id = href.slice(1);
+        if (!id) continue;
+        const target = page.locator(`#${id}`);
+        if ((await target.count()) === 0) deadLinks.push(`${href} (no element)`);
+        continue;
+      }
+      if (href.startsWith("mailto:")) {
+        const addr = href.slice("mailto:".length).split("?")[0];
+        if (!addr || !addr.includes("@")) deadLinks.push(`${href} (malformed)`);
+        continue;
+      }
+      if (href.startsWith("/")) {
+        const res = await request.get(href);
+        if (res.status() >= 400) deadLinks.push(`${href} (HTTP ${res.status()})`);
+        continue;
+      }
+      // External: skip but record. Nothing to assert in CI.
+    }
+
+    expect(deadLinks, `dead landing-page links: ${deadLinks.join(", ")}`).toEqual([]);
+  });
+
   test("legacy route redirects into the new app", async ({ page }) => {
     // Sprint 6 parity proof: the old /legacy console is gone. Browsers
     // landing on legacy bookmarks should resolve into the new cockpit,
@@ -139,4 +190,69 @@ test.describe("Marketing site", () => {
     await expect(page).toHaveURL(/\/(app|sign-in)/);
     expect(page.url()).not.toMatch(/\/legacy/);
   });
+
+  // Segment landing pages + long-form guide. Codex 2026-04-20 test-suite
+  // gap audit flagged these four new routes as having zero e2e coverage.
+  // Smoke test: page renders 200, carries a canonical <link>, has the
+  // expected <h1>, and has no browser console errors.
+  const segmentPages: { path: string; heading: RegExp; canonical: RegExp }[] = [
+    {
+      path: "/law-firms",
+      heading: /operating system for litigation-heavy law firms/i,
+      canonical: /\/law-firms$/,
+    },
+    {
+      path: "/general-counsels",
+      heading: /operating layer for in-house legal/i,
+      canonical: /\/general-counsels$/,
+    },
+    {
+      path: "/solo-lawyers",
+      heading: /operate like a 20-lawyer practice\. alone\./i,
+      canonical: /\/solo-lawyers$/,
+    },
+    {
+      path: "/guide",
+      heading: /how to run your practice on caseops/i,
+      canonical: /\/guide$/,
+    },
+  ];
+
+  for (const { path, heading, canonical } of segmentPages) {
+    test(`segment landing page ${path} renders and is SEO-ready`, async ({ page }) => {
+      const consoleErrors: string[] = [];
+      page.on("console", (msg) => {
+        if (msg.type() === "error") consoleErrors.push(msg.text());
+      });
+
+      const response = await page.goto(path);
+      expect(response?.status()).toBe(200);
+
+      await expect(
+        page.getByRole("heading", { level: 1, name: heading }),
+      ).toBeVisible();
+
+      await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
+        "href",
+        canonical,
+      );
+      await expect(page.locator('meta[name="description"]')).toHaveAttribute(
+        "content",
+        /CaseOps|legal|matter|practice/i,
+      );
+
+      // JSON-LD schema markup — Organization / SoftwareApplication /
+      // WebSite blocks ship from layout. At least one must be present
+      // on every page so SEO surfaces don't silently regress.
+      const jsonLdCount = await page
+        .locator('script[type="application/ld+json"]')
+        .count();
+      expect(jsonLdCount).toBeGreaterThanOrEqual(1);
+
+      expect(
+        consoleErrors,
+        `console errors on ${path}: ${consoleErrors.join(" | ")}`,
+      ).toEqual([]);
+    });
+  }
 });
