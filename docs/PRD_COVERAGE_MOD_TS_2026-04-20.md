@@ -244,6 +244,42 @@ in the status table above.
 - [x] **Q4b** — `_apply_page_quality_gate` rejects pages with confidence < `ocr_min_page_confidence` (default 0.4) OR length < `ocr_min_page_chars` (default 50). Rejected pages stay in `OcrResult.pages` for telemetry; their text never reaches chunking.
 - [x] **Q4c** — 7 unit tests in `test_ocr.py` (high-conf accepted, low-conf rejected, too-short rejected, mixed 5-page doc keeps exactly 3, zero-conf rejected, thresholds configurable, `pages_rejected` + `reject_reason` surface). All 12 `test_ocr.py` tests green.
 
+### Thread D — Sprint Q8 → Q7 → Q6 (matter-summary surface) — ✅ DONE commit `ad2aada`
+
+- [x] **Q8** — `services/matter_timeline.py` — `TimelineEvent` merged from `MatterHearing` + `MatterDeadline` + `MatterCourtOrder`; `build_matter_timeline_by_id` tenancy-safe.
+- [x] **Q7** — `GET /api/matters/{id}/summary.docx` via `services/matter_summary_export.render_summary_docx`. Grounded Q8 timeline wins over LLM timeline in the DOCX body. PDF variant deferred to `fpdf2` follow-up (no native deps required).
+- [x] **Q6** — `POST /api/matters/{id}/summary/regenerate` — same response shape as GET. Web button tracked separately.
+- [x] Fixed latent bug in `matter_summary.py` — was referencing `MatterHearing.scheduled_at` (doesn't exist) and `.status.value` (string column). Unmasked by Q7 end-to-end test.
+
+### Thread E — Sprint R5 + R9 (draft validators + per-type auto-suggest)
+
+Parallel after Thread D lands. Both build on R1/R2/R3 which shipped in
+`f0c5415`.
+
+- [ ] **R5** — `services/draft_validators.py` — per-type validators. Bail validator checks for BNSS citation + parity arg presence; Cheque Bounce validator checks for the 15-day phrase + amount-in-words; Civil Suit checks for cause-of-action date/place + relief clauses.
+- [ ] **R9** — per-type auto-suggest API. Bail → standard BNSS section list; Cheque Bounce → s.138 boilerplate paragraphs; Divorce → HMA ground checklist. Surfaces as `GET /api/drafting/templates/{type}/suggestions`.
+
+### Thread F — Sprint R7 + R8 (per-type goldens + eval runner)
+
+After Thread E. Creates the regression safety net so prompt tweaks
+don't silently degrade quality.
+
+- [ ] **R7** — `apps/api/tests/fixtures/drafting/{type}.json` with 3 canonical fact-patterns per type + golden draft output.
+- [ ] **R8** — `caseops-eval-drafting --type <t>` picks the type's fixtures, runs the current prompt + Haiku fallback, scores against the golden (citation-coverage + statute-correctness heuristics from R5).
+
+### Thread G — Sprint Q2 + Q3 (OCR language + handwriting) — ✅ DONE commit `ca30a32`
+
+- [x] **Q2** — `_detect_tesseract_lang(sample_text, fallback)` — Unicode-block counter for Devanagari / Tamil / Telugu / Kannada / English with ≥ 20 % dominance threshold. Bengali logs a warning + falls back (no `ben` pack in the image). Activates only when `CASEOPS_OCR_LANGUAGES=auto`; default stays `eng`.
+- [x] **Q3** — rapidocr handwriting retry when mean confidence is in [0.25, 0.55) and per-line variance ≥ 0.04. One retry per page; kept only if it improves by ≥ 0.05. Blanket `except` guards against future rapidocr API drift.
+- **Open flag from the agent**: the `use_det=True, use_rec=True` kwargs path was verified against a stub, not a live rapidocr engine (not installed in workstation venv). Before the next redeploy, run a known low-confidence handwritten fixture through rapidocr in the ingest VM to confirm the kwargs still exist in the installed version.
+- Tests: 20 pass (12 existing Q4 + 8 new).
+
+### Thread H — Q9-Q12 (PDF viewer + annotation overlay) — **DEFERRED**
+
+Multi-day web work (react-pdf integration + annotation overlay + route + in-doc search). Deferred to a dedicated sprint slot so it gets proper design review. Not a parallel-agent fit.
+
+---
+
 ### Thread C — Sprint R1/R2 (stepwise drafting + per-type prompts) — ✅ R1/R2/R3 DONE commit `f0c5415`
 
 - [x] **R1** — `apps/api/src/caseops_api/schemas/drafting_templates.py` with `DraftTemplateType` (8 values: bail, anticipatory_bail, divorce_petition, property_dispute_notice, cheque_bounce_notice, affidavit, criminal_complaint, civil_suit) + one Pydantic facts model per type, strict validation (cheque_amount_inr > 0, affidavit min paragraphs, civil suit ≥1 relief), `DraftingFieldSpec` UX metadata for the stepper.
