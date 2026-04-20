@@ -93,6 +93,8 @@ from caseops_api.services.matter_summary import (
     MatterExecutiveSummary,
     generate_matter_summary,
 )
+from caseops_api.services.matter_summary_export import render_summary_docx
+from caseops_api.services.matter_timeline import build_matter_timeline_by_id
 from caseops_api.services.matters import (
     create_matter,
     create_matter_attachment,
@@ -221,6 +223,69 @@ async def get_current_company_matter_summary(
 ) -> MatterExecutiveSummary:
     return generate_matter_summary(
         session, context=context, matter_id=matter_id
+    )
+
+
+@router.post(
+    "/{matter_id}/summary/regenerate",
+    response_model=MatterExecutiveSummary,
+    summary=(
+        "Force a fresh Haiku pass for the matter summary. Same "
+        "response shape as GET /summary; used by the cockpit "
+        "'Regenerate' button."
+    ),
+)
+async def post_current_company_matter_summary_regenerate(
+    matter_id: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> MatterExecutiveSummary:
+    # The service currently computes on demand every call — there's no
+    # persisted cache yet. The POST shape is in place so the web UI can
+    # wire a distinct button now; when we add `Matter.executive_summary`
+    # JSONB caching (Q-follow-up), the GET returns the cached value and
+    # this POST invalidates + recomputes.
+    return generate_matter_summary(
+        session, context=context, matter_id=matter_id
+    )
+
+
+@router.get(
+    "/{matter_id}/summary.docx",
+    summary="Download the matter executive summary as DOCX (Sprint Q7).",
+    response_class=Response,
+)
+async def get_current_company_matter_summary_docx(
+    matter_id: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> Response:
+    summary = generate_matter_summary(
+        session, context=context, matter_id=matter_id
+    )
+    timeline = build_matter_timeline_by_id(
+        session=session, context=context, matter_id=matter_id
+    )
+    # Loading the matter twice is cheap (SELECT by PK + tenant) and
+    # keeps the service layer trivially unit-testable.
+    from caseops_api.services.matters import _get_matter_model
+
+    matter = _get_matter_model(session, context=context, matter_id=matter_id)
+    body, filename = render_summary_docx(
+        matter_title=matter.title,
+        matter_code=matter.matter_code,
+        summary=summary,
+        timeline=timeline,
+    )
+    return Response(
+        content=body,
+        media_type=(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml"
+            ".document"
+        ),
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
     )
 
 

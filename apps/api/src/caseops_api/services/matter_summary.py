@@ -160,15 +160,17 @@ def _load_matter_context(session: Session, matter: Matter) -> str:
         session.scalars(
             select(MatterHearing)
             .where(MatterHearing.matter_id == matter.id)
-            .order_by(MatterHearing.scheduled_at.asc().nulls_last())
+            .order_by(MatterHearing.hearing_on.asc().nulls_last())
         )
     )
     if hearings:
         parts.append("\n## Hearings")
         for h in hearings:
-            dt = h.scheduled_at.isoformat() if h.scheduled_at else "(undated)"
+            dt = h.hearing_on.isoformat() if h.hearing_on else "(undated)"
             purpose = h.purpose or "(no purpose set)"
-            status_str = (h.status.value if h.status else "scheduled")
+            # h.status is a plain string (SQLAlchemy column), not an enum
+            # instance — historical bug was reaching for ``.value``.
+            status_str = h.status or "scheduled"
             parts.append(f"- {dt} | {status_str} | {purpose}")
 
     # Latest draft versions across all drafts on the matter
