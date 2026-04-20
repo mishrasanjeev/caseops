@@ -129,6 +129,16 @@ class Settings(BaseSettings):
     ocr_render_dpi: int = Field(default=220, ge=72, le=600)
     ocr_max_pages: int = Field(default=40, ge=1, le=1000)
     ocr_languages: str = Field(default="eng")
+    # Sprint Q4 — per-page quality gate. A page is dropped from the
+    # extracted text when either its mean recognition confidence falls
+    # below ``ocr_min_page_confidence`` or its character count falls
+    # below ``ocr_min_page_chars``. This keeps OCR-garbage (stamps,
+    # seals, margin noise, handwritten flourishes the engine couldn't
+    # read) out of the embedding pipeline. Leaving both at the defaults
+    # rejects pages that are almost certainly noise while keeping
+    # genuine short first-pages (eg., cover sheets with "ORDER").
+    ocr_min_page_confidence: float = Field(default=0.4, ge=0.0, le=1.0)
+    ocr_min_page_chars: int = Field(default=50, ge=0, le=10000)
 
     # Observability. JSON logging is the default; text mode is for
     # local dev. OTel is opt-in because the exporter + instrumentations

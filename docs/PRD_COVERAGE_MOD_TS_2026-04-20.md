@@ -22,10 +22,10 @@ judge / court surfaces (PRD §10.6 neutrality is superseded there).
 
 | ID | Module | Shipped % | PRD § | Sprint | Top blocker |
 |----|--------|---------:|-------|--------|-------------|
-| MOD-TS-001 | JudgeProfile | 45 % | §10.6 | **P** (active) | Layer 2 coverage (in flight) |
-| MOD-TS-002 | OCR Extractor | 60 % | §9.1 / §14.4 | **Q** | OCR extras not installed in prod image |
+| MOD-TS-001 | JudgeProfile | **90 % (2026-04-20 evening)** | §10.6 | **P — DONE** | P1a/P1b/P2/P2b/P3/P4 all shipped; Layer-2 sweep running autonomously on GCE |
+| MOD-TS-002 | OCR Extractor | **70 %** (Q1 DONE — `[ocr]` extras + tesseract hin/mar/tam/tel/kan in Dockerfile, commit `93b94e4`) | §9.1 / §14.4 | **Q (Q1 ✅, Q4 in progress)** | language-detect (Q2), handwritten routing (Q3), quality gate (Q4) |
 | MOD-TS-003 | Legal Translator | 0 % | not covered | **U** (deferred) | Not prioritised for v1 |
-| MOD-TS-004 | Case Summary | 55 % | §9.6 / §10.3 | **Q** | No matter-level summary surface |
+| MOD-TS-004 | Case Summary | **70 %** (Q5 DONE — `services/matter_summary.py` + `GET /api/matters/{id}/summary`, commit `8d767dc`) | §9.6 / §10.3 | **Q (Q5 ✅, Q6/Q7/Q8 pending)** | regenerate button, PDF/DOCX export, timeline builder |
 | MOD-TS-005 | Document Viewer | 30 % | §10.3 | **Q** | No PDF.js / annotation UI |
 | MOD-TS-006 | Calendar | 40 % | §7.2 | **T** | Temporal (§5.1) + UI |
 | MOD-TS-007 | Notification & Reminder | 20 % | §5.3 | **T** | Temporal (§5.1) + SMS provider |
@@ -44,30 +44,27 @@ scaffold / data model exists but UX is missing.
 
 ## Per-module detail + planned changes
 
-### MOD-TS-001 JudgeProfile
-- **Shipped**: `Judge`, `Bench`, `Court` models (`apps/api/src/caseops_api/db/models.py:2366-2451`); `/api/courts/judges/{id}` route (`routes/courts.py:140-160`); `/app/courts/judges/[judge_id]` page.
-- **Partial**: `authority_documents.judges_json` populated by Layer 2 in progress (currently ~16 % coverage, 2026-04-20 T13:30).
-- **Missing**: decision-pattern analytics, case-type expertise metrics, analytics dashboard.
+### MOD-TS-001 JudgeProfile — **Sprint P DONE 2026-04-20 evening**
+- **Shipped**: `Judge`, `Bench`, `Court` models (`apps/api/src/caseops_api/db/models.py:2366-2451`); `/api/courts/judges/{id}` route with structured `judges_json` + practice-area histogram + decision-volume + tenure bounds + structured_match_coverage_percent (commit `73fc94a`); `/app/courts/judges/[judge_id]` page; case-to-bench matcher `GET /api/matters/{id}/bench-match` (commit `662de6a`, 16 tests green); SC sitting-judge roster enriched with DoB (16→80 %) / appointment (19→64 %) / retirement (derived, 80 %) in commit `8a88bbd`.
+- **Partial**: `authority_documents.judges_json` Layer-2 coverage still climbing as GCE sweep works through buckets (per-bucket pipeline, $10 budget, 4.7 rating floor). This is the one thread that remains background work, not in-code gap.
 - **PRD**: §10.6 Judge & Court Intelligence.
-- **Plan** (Sprint P, already in `WORK_TO_BE_DONE.md`):
-  - P1a — rewrite profile endpoint to use structured `judges_json`.
-  - P1b — enrich with practice-area histogram, decision-volume time series, top-citing judgments, tenure bounds.
-  - P2 — one-off `sci.gov.in` scrape for SC judge appointment / retirement dates.
-  - P3 — rule-based case-to-court-and-bench matcher.
-  - P4 — scoped authority retrieval for filing; per the 2026-04-20 bias
-    directive, boost authorities that support the user's position
-    (was: neutral). See `memory/feedback_user_bias_in_recommendations.md`.
+- **Plan status** (Sprint P, 4 phases all shipped):
+  - P1a — ✅ DONE (commit `73fc94a`) — profile endpoint uses structured `judges_json` first, `bench_name` ILIKE as fallback.
+  - P1b — ✅ DONE (commit `73fc94a`) — practice-area histogram, decision-volume, tenure, coverage %.
+  - P2 — ✅ DONE (commit `b872f0d` + enrichment `8a88bbd`) — SC roster + DoB + appointment dates.
+  - P2b — ✅ DONE (commit `8a88bbd`) — richer date extraction via per-judge profile scrape.
+  - P3 — ✅ DONE (commit `662de6a`) — rule-based bench matcher; tenancy-safe route at `GET /api/matters/{id}/bench-match`.
+  - P4 — ✅ DONE (earlier commit) — scoped authority retrieval in `services/authorities.search_authority_catalog`, same-forum boost. Per 2026-04-20 bias directive, boosts authorities that support the user's position. See `memory/feedback_user_bias_in_recommendations.md`.
 
-### MOD-TS-002 OCR Extractor
-- **Shipped**: `services/ocr.py` with tesseract + RapidOCR backends; `should_fallback_to_ocr()` triggers on sparse pdfminer extraction; pypdfium2 page renderer; `_normalize_whitespace()` cleanup.
-- **Partial**: English-only tuning; handwritten-text quality untested.
-- **Missing**: tesseract/rapidocr extras installed in the prod image; multi-language auto-detect; handwritten-specific model selection; post-OCR cleanup pipeline.
+### MOD-TS-002 OCR Extractor — **Q1 DONE, Q4 IN PROGRESS**
+- **Shipped**: `services/ocr.py` with tesseract + RapidOCR backends; `should_fallback_to_ocr()` triggers on sparse pdfminer extraction; pypdfium2 page renderer; `_normalize_whitespace()` cleanup. **Q1 DONE** (commit `93b94e4`) — `[ocr]` extra installed in `apps/api/Dockerfile` along with `tesseract-ocr-{hin,mar,tam,tel,kan}` language packs.
+- **Missing**: multi-language auto-detect; handwritten-specific model selection; OCR-garbage quality gate.
 - **PRD**: §9.1 Document-intelligence depth, §14.4 OCR / normalisation.
-- **Plan** (new Sprint Q — **Document Intelligence UX**):
-  - Q1 — install `[ocr]` extra in `apps/api/Dockerfile` so `rapidocr` + `pytesseract` ship to Cloud Run by default. Flip `CASEOPS_OCR_PROVIDER` on.
-  - Q2 — wire language-detect (e.g. `fasttext-lid` on first 2 kB of text) → pick tesseract `lang` pack accordingly (eng / hin / mar / tam / tel / kan).
-  - Q3 — handwritten pages: heuristic "stroke density > threshold" → fall through to rapidocr's handwriting model.
-  - Q4 — OCR quality metric per page (confidence + length-normalised); reject pages with conf < 0.4 from chunking (prevents OCR garbage from poisoning embeddings — lever #4 in `memory/feedback_vector_embedding_pipeline.md`).
+- **Plan status** (Sprint Q — **Document Intelligence UX**):
+  - Q1 — ✅ DONE (commit `93b94e4`) — `[ocr]` extra + tesseract language packs in prod image.
+  - Q2 — pending — wire language-detect (e.g. `fasttext-lid` on first 2 kB of text) → pick tesseract `lang` pack accordingly (eng / hin / mar / tam / tel / kan).
+  - Q3 — pending — handwritten pages: heuristic "stroke density > threshold" → fall through to rapidocr's handwriting model.
+  - Q4 — **IN PROGRESS (Thread B, 2026-04-20 evening)** — OCR quality metric per page (confidence + length-normalised); reject pages with conf < 0.4 from chunking (prevents OCR garbage from poisoning embeddings — lever #4 in `memory/feedback_vector_embedding_pipeline.md`).
 
 ### MOD-TS-003 Legal Translator
 - **Shipped**: nothing translation-related.
@@ -81,16 +78,15 @@ scaffold / data model exists but UX is missing.
   - U4 — UX: "Translate" action on document viewer + matter attachment card.
   - **Guardrail**: do not translate statutes / citations — they have canonical English form. Translate facts / arguments only.
 
-### MOD-TS-004 Case Summary
-- **Shipped**: `authority_documents.summary` populated on SC / HC corpus; `HearingPack` generation includes summary (`services/hearing_packs.py`); `MatterCourtOrder.summary`.
-- **Partial**: no matter-level "case summary" surface combining all matter documents; DOCX export path exists but only for drafts.
-- **Missing**: matter-level AI summary, key-facts extraction, timeline, legal-issues tags, PDF/DOCX export of summary.
+### MOD-TS-004 Case Summary — **Q5 DONE, Q6/Q7/Q8 pending**
+- **Shipped**: `authority_documents.summary` populated on SC / HC corpus; `HearingPack` generation includes summary; `MatterCourtOrder.summary`. **Q5 DONE** (commit `8d767dc`) — `services/matter_summary.py` + `MatterExecutiveSummary` Pydantic + `GET /api/matters/{id}/summary` endpoint (Haiku-backed, with fallback).
+- **Missing**: regenerate button, PDF/DOCX export, explicit timeline derivation.
 - **PRD**: §9.6 Hearing Preparation, §10.3 Drafting Studio.
-- **Plan** (Sprint Q):
-  - Q5 — `Matter.executive_summary` (JSONB: overview / key_facts / timeline / legal_issues / sections_cited). Populated by a new `services/matter_summary.py` that calls Haiku on concatenated matter documents.
-  - Q6 — `POST /api/matters/{id}/summary/regenerate` route + "Regenerate summary" button on cockpit.
-  - Q7 — Export: `GET /api/matters/{id}/summary.pdf` + `.docx` using the existing docx template stack.
-  - Q8 — Timeline: derive from `MatterHearing` + `MatterDeadline` + `MatterCourtOrder` chronologically.
+- **Plan status** (Sprint Q):
+  - Q5 — ✅ DONE (commit `8d767dc`) — `MatterExecutiveSummary` with overview / key_facts / timeline / legal_issues / sections_cited.
+  - Q6 — pending — `POST /api/matters/{id}/summary/regenerate` route + "Regenerate summary" button on cockpit.
+  - Q7 — pending — `GET /api/matters/{id}/summary.{pdf,docx}` export using existing docx template stack.
+  - Q8 — pending — timeline derived from `MatterHearing` + `MatterDeadline` + `MatterCourtOrder` chronologically.
 
 ### MOD-TS-005 Document Viewer
 - **Shipped**: `MatterAttachment` storage; `AuthorityAnnotation` + `AuthorityAnnotationKind` enum (flag / note / highlight); download endpoint.
@@ -225,3 +221,31 @@ New sprints added to `WORK_TO_BE_DONE.md`:
 
 Order: Q → R runs in parallel with P. S and T wait for Temporal (§5.1).
 U / V / W deferred.
+
+---
+
+## Execution log — 2026-04-20 (evening)
+
+Sequence agreed with user: **A1 deploy first**, then **Q4 OCR quality
+gate + R1/R2 drafting templates in parallel**. Update this log as
+items land. Earlier sprint shipments (P, Q1, Q5) are already reflected
+in the status table above.
+
+### Thread A — Production hygiene (unblock today's value)
+
+- [ ] **A1 — Deploy API + Web to Cloud Run.** 8 commits on `main` not in prod: `8d8528c` (backend leak + Playwright fix), `38879ea` (coverage tooling), `8f3a2d0` (auth-hook tests + segment smoke), `662de6a` (P3 bench matcher), `8a88bbd` (SC judge DoB/appointment), `8aa67e2` (BUG-004 + BUG-010), `3d7502c` (Haiku fallback batch), `8d767dc` (Q5 matter summary). `--no-traffic` first, smoke-test, then `update-traffic --to-latest`. Running in background agent.
+- [ ] **A2 — Identify + close remaining Hari bugs.** 4 of 10 unaddressed.
+- [ ] **A3 — Verify CI green** on commits `662de6a`, `8a88bbd`.
+
+### Thread B — Sprint Q4 (OCR quality gate — prevents corpus poisoning)
+
+- [ ] **Q4a** — per-page OCR confidence + length-normalised quality score emitted during extraction (both rapidocr path via `scores` list + tesseract path via `image_to_data` conf column).
+- [ ] **Q4b** — reject pages with confidence < 0.4 OR length < 50 chars from chunking so OCR garbage never reaches embeddings (lever #4 in `memory/feedback_vector_embedding_pipeline.md`).
+- [ ] **Q4c** — unit tests: high-conf page passes, low-conf page is rejected, mixed doc keeps only clean pages.
+
+### Thread C — Sprint R1/R2 (stepwise drafting + per-type prompts)
+
+- [ ] **R1** — `apps/api/src/caseops_api/schemas/drafting_templates/` — one Pydantic schema per `DraftType` (Bail, Anticipatory Bail, Divorce, Cheque Bounce, Affidavit, Criminal Complaint, Civil Suit, Property Dispute Notice). Fields: required facts, applicable statutes, procedural posture.
+- [ ] **R2** — `apps/api/src/caseops_api/services/drafting_prompts.py` — one specialised system prompt per `DraftType`. Bail enforces BNSS s.483 (not BNS), triple-test, custody-duration; Cheque Bounce enforces s.138 NI Act; etc.
+- [ ] **R3** — `GET /api/drafting/templates/{draft_type}` returns the form schema. Web builds React Hook Form + Zod stepper.
+- [ ] **R7** — per-type fixture at `apps/api/tests/fixtures/drafting/{type}.json` — 3 canonical matter seeds per type + golden draft.
