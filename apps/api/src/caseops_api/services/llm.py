@@ -650,7 +650,8 @@ def generate_structured[T: BaseModel](
         if not is_model_allowed(
             policy, purpose=context.purpose, model=provider.model
         ):
-            from fastapi import HTTPException, status as _status
+            from fastapi import HTTPException
+            from fastapi import status as _status
 
             raise HTTPException(
                 status_code=_status.HTTP_403_FORBIDDEN,

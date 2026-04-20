@@ -16,8 +16,8 @@ import pytest
 from fastapi import HTTPException
 from pydantic import BaseModel
 
-from caseops_api.db.models import Company, CompanyType, TenantAIPolicy, utcnow
 from caseops_api.core.settings import get_settings
+from caseops_api.db.models import Company, CompanyType, TenantAIPolicy, utcnow
 from caseops_api.db.session import clear_engine_cache, get_session_factory
 from caseops_api.services.llm import (
     LLMCallContext,
