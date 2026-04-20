@@ -233,9 +233,10 @@ in the status table above.
 
 ### Thread A — Production hygiene (unblock today's value)
 
-- [ ] **A1 — Deploy API + Web to Cloud Run.** 8 commits on `main` not in prod: `8d8528c` (backend leak + Playwright fix), `38879ea` (coverage tooling), `8f3a2d0` (auth-hook tests + segment smoke), `662de6a` (P3 bench matcher), `8a88bbd` (SC judge DoB/appointment), `8aa67e2` (BUG-004 + BUG-010), `3d7502c` (Haiku fallback batch), `8d767dc` (Q5 matter summary). `--no-traffic` first, smoke-test, then `update-traffic --to-latest`. Running in background agent.
+- [x] **A1 — Deploy API + Web to Cloud Run — ✅ DONE 2026-04-20 evening.** HEAD `8a88bbd` live in `asia-south1`, 100 % traffic. New revisions: `caseops-api-00006-224` (from `-00005-xb8`) and `caseops-web-00008-9n5` (from `-00007-5xm`). Images: `caseops-api:8a88bbd` + `caseops-web:8a88bbd`. Smoke tests: `GET https://api.caseops.ai/api/health` → 200 OK; `GET https://caseops.ai/app/research` → 200; `GET /api/matters/.../bench-match` → 401 missing_bearer_token (proves the P3 route is mounted). No rollback needed. Also covers the later commits `b438982` (Q4 OCR gate) + `f0c5415` (R1/R2/R3) which landed before cutover — re-deploy required to push those, tracked below.
+- [ ] **A1b — Redeploy after Q4 + R1/R2/R3 commits.** HEAD moved past `8a88bbd` → `34641a9` after the deploy. Next cutover should pick up `b438982` + `f0c5415` + `34641a9` so OCR quality gate and `GET /api/drafting/templates` reach prod.
 - [ ] **A2 — Identify + close remaining Hari bugs.** 4 of 10 unaddressed.
-- [ ] **A3 — Verify CI green** on commits `662de6a`, `8a88bbd`.
+- [ ] **A3 — Verify CI green** on commits `662de6a`, `8a88bbd`, `b438982`, `f0c5415`.
 
 ### Thread B — Sprint Q4 (OCR quality gate — prevents corpus poisoning) — ✅ DONE commit `b438982`
 
