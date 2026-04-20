@@ -83,6 +83,10 @@ from caseops_api.services.matter_access import (
     remove_ethical_wall,
     set_restricted_access,
 )
+from caseops_api.services.matter_summary import (
+    MatterExecutiveSummary,
+    generate_matter_summary,
+)
 from caseops_api.services.matters import (
     create_matter,
     create_matter_attachment,
@@ -194,6 +198,24 @@ async def get_current_company_matter_workspace(
     session: DbSession,
 ) -> MatterWorkspaceResponse:
     return get_matter_workspace(session, context=context, matter_id=matter_id)
+
+
+@router.get(
+    "/{matter_id}/summary",
+    response_model=MatterExecutiveSummary,
+    summary=(
+        "AI-generated executive summary of a matter (overview, key "
+        "facts, timeline, legal issues, sections cited)."
+    ),
+)
+async def get_current_company_matter_summary(
+    matter_id: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> MatterExecutiveSummary:
+    return generate_matter_summary(
+        session, context=context, matter_id=matter_id
+    )
 
 
 @router.patch("/{matter_id}", response_model=MatterRecord, summary="Update a matter")

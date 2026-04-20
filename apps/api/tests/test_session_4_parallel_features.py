@@ -400,6 +400,50 @@ def test_judge_profile_structured_and_fallback_match_dedup(
         assert n == 3  # three distinct docs, 'Both match' not double-counted
 
 
+# ---------------------------------------------------------------
+# 5. Matter executive summary (Sprint Q5)
+# ---------------------------------------------------------------
+
+
+def test_matter_summary_schema_shape() -> None:
+    """MatterExecutiveSummary accepts empty fields and stamps generated_at."""
+    from caseops_api.services.matter_summary import (
+        MatterExecutiveSummary,
+        MatterSummaryTimelineEvent,
+    )
+
+    s = MatterExecutiveSummary(
+        overview="",
+        key_facts=[],
+        timeline=[MatterSummaryTimelineEvent(date=None, label="No date event")],
+        legal_issues=[],
+        sections_cited=[],
+        generated_at=datetime.now(UTC),
+    )
+    assert s.timeline[0].date is None
+    assert s.timeline[0].label == "No date event"
+
+
+def test_matter_summary_haiku_fallback_guard(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Matter-summary fallback follows the same pattern as recommendations —
+    only fires for the Anthropic provider path."""
+    monkeypatch.setenv("CASEOPS_LLM_PROVIDER", "mock")
+    from caseops_api.core.settings import get_settings
+    from caseops_api.services import matter_summary
+
+    get_settings.cache_clear()
+    assert matter_summary._haiku_fallback_provider() is None
+
+    monkeypatch.setenv("CASEOPS_LLM_PROVIDER", "anthropic")
+    monkeypatch.setenv("CASEOPS_LLM_API_KEY", "sk-ant-test")
+    get_settings.cache_clear()
+    fallback = matter_summary._haiku_fallback_provider()
+    assert fallback is not None
+    assert "haiku" in fallback.model.lower()
+
+
 def test_practice_area_classifier_buckets_sections(client: TestClient) -> None:
     """Practice-area regex buckets BNSS/CrPC as Bail, IPC as Criminal."""
     from sqlalchemy import or_
