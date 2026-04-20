@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
 
 from caseops_api.core.settings import get_settings
+from caseops_api.services import ocr as ocr_module
 from caseops_api.services.ocr import (
     OcrPageResult,
     OcrResult,
     _apply_page_quality_gate,
+    _detect_tesseract_lang,
     ocr_pdf,
     should_fallback_to_ocr,
 )
@@ -190,3 +193,122 @@ def test_ocr_result_surfaces_rejection_count() -> None:
     )
     assert result.pages_rejected == 2
     assert sum(1 for p in result.pages if not p.accepted) == 2
+
+
+# ---------------------------------------------------------------
+# Sprint Q2 — tesseract language auto-detect.
+# ---------------------------------------------------------------
+
+
+def test_detect_tesseract_lang_devanagari_sample_picks_hin() -> None:
+    """A paragraph dominated by Devanagari code points (hindi / marathi)
+    must resolve to the 'hin' tesseract pack."""
+    # Sample: "appellant filed a petition" translated to Hindi, plus
+    # a bit of Latin noise to prove the dominance threshold works.
+    sample = "अपीलकर्ता ने याचिका दायर की। Case No. 123"
+    assert _detect_tesseract_lang(sample, fallback="eng") == "hin"
+
+
+def test_detect_tesseract_lang_tamil_sample_picks_tam() -> None:
+    """Tamil-heavy sample -> 'tam'."""
+    sample = "மேல்முறையீடு தாக்கல் செய்யப்பட்டது. Appeal 42"
+    assert _detect_tesseract_lang(sample, fallback="eng") == "tam"
+
+
+def test_detect_tesseract_lang_ascii_sample_picks_eng() -> None:
+    """Latin-only text must stay on 'eng' rather than fall to fallback
+    — fallback is only for the empty-input / unknown-script cases."""
+    sample = "In the matter of the petition filed on 4 April 2026"
+    assert _detect_tesseract_lang(sample, fallback="mar") == "eng"
+
+
+def test_detect_tesseract_lang_empty_sample_returns_fallback() -> None:
+    """No alphabetic characters -> hand back whatever the caller set as
+    the fallback (production wires this to 'eng')."""
+    assert _detect_tesseract_lang("", fallback="eng") == "eng"
+    assert _detect_tesseract_lang("   \n\t 12345 ???", fallback="hin") == "hin"
+
+
+def test_detect_tesseract_lang_bengali_falls_back_not_installed() -> None:
+    """Bengali code points dominate but no 'ben' pack ships in the
+    Docker image — helper must log + hand back the fallback so
+    tesseract never gets a --lang it can't load."""
+    sample = "আদালত রায় ঘোষণা করেছে"
+    assert _detect_tesseract_lang(sample, fallback="eng") == "eng"
+
+
+# ---------------------------------------------------------------
+# Sprint Q3 — rapidocr handwriting retry.
+# ---------------------------------------------------------------
+
+
+class _StubRapidOcrBackend(ocr_module._RapidOcrBackend):
+    """Bypass the real rapidocr import; drive the retry branch with a
+    scripted engine so the test covers the control flow, not the ONNX
+    runtime."""
+
+    def __init__(self, scripts: list[object]) -> None:  # noqa: D401
+        self._scripts = list(scripts)
+        self._calls: list[str] = []
+
+        def engine(arr: object, **kwargs: object) -> object:
+            self._calls.append("retry" if kwargs else "first")
+            return self._scripts.pop(0)
+
+        self._engine = engine  # type: ignore[assignment]
+
+
+def _make_rapidocr_result(txts: list[str], scores: list[float]) -> object:
+    return SimpleNamespace(txts=txts, scores=scores)
+
+
+def test_rapidocr_handwriting_retry_triggers_in_band_with_high_variance() -> None:
+    """First pass in the 0.25-0.55 band + noisy per-line scores -> the
+    backend retries once, and keeps the retry when it beats the first
+    pass by >= 0.05."""
+    first = _make_rapidocr_result(
+        txts=["murky line a", "clear line b", "barely a word"],
+        # mean 0.40, variance ~0.10 (well above threshold)
+        scores=[0.10, 0.90, 0.20],
+    )
+    retry = _make_rapidocr_result(
+        txts=["handwritten line a", "handwritten line b"],
+        scores=[0.80, 0.85],  # mean 0.825 — clear improvement
+    )
+    backend = _StubRapidOcrBackend(scripts=[first, retry])
+    pages = backend.ocr_pages([object()], languages="eng")
+    assert backend._calls == ["first", "retry"]
+    assert pages[0].text.startswith("handwritten line a")
+    assert pages[0].confidence == pytest.approx(0.825)
+
+
+def test_rapidocr_handwriting_retry_does_not_run_outside_band() -> None:
+    """A high-confidence first pass must not trigger the retry — we
+    don't waste a second decode on pages that already look clean."""
+    first = _make_rapidocr_result(
+        txts=["clean line one", "clean line two", "clean line three"],
+        scores=[0.88, 0.90, 0.92],  # mean 0.90, way above the band
+    )
+    backend = _StubRapidOcrBackend(scripts=[first])  # no retry scripted
+    pages = backend.ocr_pages([object()], languages="eng")
+    assert backend._calls == ["first"]
+    assert pages[0].confidence == pytest.approx(0.90)
+
+
+def test_rapidocr_handwriting_retry_keeps_first_pass_when_improvement_too_small() -> None:
+    """Retry ran but only nudged confidence by < 0.05 -> keep the first
+    pass so we don't swap in a marginally-better but differently-wrong
+    recognition."""
+    first = _make_rapidocr_result(
+        txts=["first pass line"],
+        scores=[0.10, 0.70],  # mean 0.40, variance 0.09 (high)
+    )
+    retry = _make_rapidocr_result(
+        txts=["retry pass line"],
+        scores=[0.40, 0.43],  # mean 0.415 — only +0.015 over first
+    )
+    backend = _StubRapidOcrBackend(scripts=[first, retry])
+    pages = backend.ocr_pages([object()], languages="eng")
+    assert backend._calls == ["first", "retry"]
+    assert pages[0].text == "first pass line"
+    assert pages[0].confidence == pytest.approx(0.40)

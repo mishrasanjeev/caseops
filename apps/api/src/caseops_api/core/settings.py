@@ -128,6 +128,11 @@ class Settings(BaseSettings):
     ocr_min_chars_before_fallback: int = Field(default=600, ge=0)
     ocr_render_dpi: int = Field(default=220, ge=72, le=600)
     ocr_max_pages: int = Field(default=40, ge=1, le=1000)
+    # Tesseract --lang code (eng, hin, mar, tam, tel, kan). Set to
+    # "auto" (Sprint Q2) to auto-detect the dominant script from the
+    # first page and pick the matching lang pack per document. Default
+    # stays "eng" — operators opt in explicitly with
+    # CASEOPS_OCR_LANGUAGES=auto.
     ocr_languages: str = Field(default="eng")
     # Sprint Q4 — per-page quality gate. A page is dropped from the
     # extracted text when either its mean recognition confidence falls

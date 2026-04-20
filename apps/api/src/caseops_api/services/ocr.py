@@ -84,6 +84,39 @@ def _render_pdf_pages(
     return images, total, page_count < total
 
 
+# Sprint Q3 — handwriting retry band. First-pass rapidocr confidence
+# inside this window AND with high per-line variance looks like a page
+# the printed-text model half-recognised: a retry with the detection +
+# recognition path explicitly on (wider beam / character set) sometimes
+# recovers a cleaner read of a handwritten page. Outside this band
+# we trust the first pass: above it is clean printed text, below it
+# is unreadable and a second pass won't help.
+_HANDWRITE_BAND_LOW = 0.25
+_HANDWRITE_BAND_HIGH = 0.55
+_HANDWRITE_VAR_THRESHOLD = 0.04  # ~ stddev 0.2 across per-line scores
+_HANDWRITE_MIN_IMPROVEMENT = 0.05
+
+
+def _score_variance(scores: list[float]) -> float:
+    """Population variance of per-line scores. 0 for <2 scores."""
+    if len(scores) < 2:
+        return 0.0
+    mean = sum(scores) / len(scores)
+    return sum((s - mean) ** 2 for s in scores) / len(scores)
+
+
+def _parse_rapidocr_result(result: object) -> tuple[list[str], list[float]]:
+    """Normalise rapidocr's v2/v3 return shapes to (txts, scores)."""
+    txts = getattr(result, "txts", None)
+    scores = getattr(result, "scores", None)
+    if txts is None:
+        # Older API: list of (box, text, score) tuples.
+        triples = [item for item in (result or []) if isinstance(item, tuple)]
+        txts = [t[1] for t in triples]
+        scores = [float(t[2]) for t in triples]
+    return list(txts or []), [float(s) for s in (scores or [])]
+
+
 class _RapidOcrBackend:
     name = "rapidocr"
 
@@ -97,6 +130,21 @@ class _RapidOcrBackend:
             ) from exc
         self._engine = RapidOCR()
 
+    def _run_engine(self, arr: object, *, handwriting: bool) -> object:
+        """Invoke rapidocr. ``handwriting=True`` asks for an explicit
+        detect+recognise pass (wider beam / character set). Older
+        rapidocr builds reject the kwargs — fall back to the plain call
+        so a minor API drift never takes the whole ingest down."""
+        if not handwriting:
+            return self._engine(arr)
+        try:
+            return self._engine(arr, use_det=True, use_rec=True)
+        except TypeError:
+            # API drift: retry with the same default call the first
+            # pass used. We still exercised a second decode round so
+            # the caller gets a fresh result object to compare.
+            return self._engine(arr)
+
     def ocr_pages(
         self, images: list[object], languages: str
     ) -> list[OcrPageResult]:
@@ -106,16 +154,8 @@ class _RapidOcrBackend:
         for image in images:
             arr = np.asarray(image)
             result = self._engine(arr)
-            # rapidocr 3.x returns a Result-like object with `.txts`
-            # (list[str]) + `.scores` (list[float]).
-            txts = getattr(result, "txts", None)
-            scores = getattr(result, "scores", None)
-            if txts is None:
-                # Older API: list of (box, text, score) tuples.
-                triples = [item for item in (result or []) if isinstance(item, tuple)]
-                txts = [t[1] for t in triples]
-                scores = [float(t[2]) for t in triples]
-            text = "\n".join(txts or [])
+            txts, scores = _parse_rapidocr_result(result)
+            text = "\n".join(txts)
             if scores:
                 # Mean of the per-line recognition scores. A page with
                 # half the lines at 0.9 and half at 0.1 is genuinely a
@@ -125,8 +165,99 @@ class _RapidOcrBackend:
                 # No lines were detected — confidence 0 so the page is
                 # cleanly rejected by the gate.
                 confidence = 0.0
+
+            # Sprint Q3 — handwriting retry. The first pass looked
+            # half-confident (printed-text model unsure) AND the per-
+            # line scores disagree strongly (variance high): plausibly
+            # a handwritten page. One retry, keep it only if it beats
+            # the first pass by a meaningful margin.
+            if (
+                _HANDWRITE_BAND_LOW <= confidence < _HANDWRITE_BAND_HIGH
+                and _score_variance(scores) >= _HANDWRITE_VAR_THRESHOLD
+            ):
+                try:
+                    retry = self._run_engine(arr, handwriting=True)
+                except Exception as exc:  # noqa: BLE001 — never fail a page
+                    logger.warning("rapidocr handwriting retry errored: %s", exc)
+                else:
+                    r_txts, r_scores = _parse_rapidocr_result(retry)
+                    r_conf = (
+                        float(sum(r_scores) / len(r_scores)) if r_scores else 0.0
+                    )
+                    if r_conf - confidence >= _HANDWRITE_MIN_IMPROVEMENT:
+                        text = "\n".join(r_txts)
+                        confidence = r_conf
             pages.append(OcrPageResult(text=text, confidence=confidence))
         return pages
+
+
+# Sprint Q2 — tesseract language auto-detect. Each tuple is
+# (unicode_block_start, unicode_block_end_exclusive, tesseract_lang).
+# Ordered so the first match wins; ranges are disjoint so ordering only
+# matters for the dominance tie-breaker.
+_SCRIPT_BLOCKS: tuple[tuple[int, int, str], ...] = (
+    (0x0900, 0x0980, "hin"),  # Devanagari (Hindi / Marathi / Sanskrit)
+    (0x0980, 0x0A00, "ben"),  # Bengali (not currently installed)
+    (0x0B80, 0x0C00, "tam"),  # Tamil
+    (0x0C00, 0x0C80, "tel"),  # Telugu
+    (0x0C80, 0x0D00, "kan"),  # Kannada
+)
+_AUTO_DETECT_SENTINEL = "auto"
+_SCRIPT_DOMINANCE_THRESHOLD = 0.20  # >= 20% of alphabetic code points
+# Languages whose tesseract data files we actually ship in the Docker
+# image. Detected scripts outside this set warn + fall back to the
+# caller-supplied fallback (usually 'eng') so we never hand tesseract a
+# --lang pack that the binary will reject with a TessdataManager error.
+_INSTALLED_TESSERACT_LANGS: frozenset[str] = frozenset(
+    {"eng", "hin", "mar", "tam", "tel", "kan"}
+)
+
+
+def _detect_tesseract_lang(sample_text: str, fallback: str) -> str:
+    """Pick a tesseract ``--lang`` code from a sample of recognised text.
+
+    Counts alphabetic-ish code points (letters only; digits, whitespace,
+    and punctuation are ignored so a page header like "2024 SCC 123" does
+    not drown out a paragraph of Devanagari). A script wins if it
+    accounts for ``_SCRIPT_DOMINANCE_THRESHOLD`` or more of the alpha
+    pool. When no script dominates — or the winning script is not
+    installed — we return ``fallback``.
+    """
+    if not sample_text:
+        return fallback
+    alpha_total = 0
+    block_counts: dict[str, int] = {}
+    for ch in sample_text:
+        if not ch.isalpha():
+            continue
+        alpha_total += 1
+        cp = ord(ch)
+        matched = False
+        for start, end, lang in _SCRIPT_BLOCKS:
+            if start <= cp < end:
+                block_counts[lang] = block_counts.get(lang, 0) + 1
+                matched = True
+                break
+        if not matched:
+            # Latin / ASCII / other → treated as English for the pool.
+            block_counts["eng"] = block_counts.get("eng", 0) + 1
+    if alpha_total == 0:
+        return fallback
+    # Consider non-English scripts first: they're the point of auto
+    # detect. If none dominates, default to English.
+    for _, _, lang in _SCRIPT_BLOCKS:
+        count = block_counts.get(lang, 0)
+        if count / alpha_total >= _SCRIPT_DOMINANCE_THRESHOLD:
+            if lang not in _INSTALLED_TESSERACT_LANGS:
+                logger.warning(
+                    "OCR auto-detect chose %r but that tesseract language "
+                    "pack is not installed; falling back to %r.",
+                    lang,
+                    fallback,
+                )
+                return fallback
+            return lang
+    return "eng"
 
 
 class _TesseractBackend:
@@ -146,40 +277,59 @@ class _TesseractBackend:
             pytesseract.pytesseract.tesseract_cmd = settings.tesseract_command
         self._pytesseract = pytesseract
 
+    def _ocr_one(self, image: object, lang: str) -> OcrPageResult:
+        from pytesseract import Output  # type: ignore[import-not-found]
+
+        data = self._pytesseract.image_to_data(
+            image, lang=lang, output_type=Output.DICT
+        )
+        tokens = data.get("text", []) or []
+        confs = data.get("conf", []) or []
+        word_confs: list[float] = []
+        words: list[str] = []
+        for tok, conf in zip(tokens, confs, strict=False):
+            try:
+                c = float(conf)
+            except (TypeError, ValueError):
+                continue
+            if c < 0:
+                continue
+            if tok and tok.strip():
+                words.append(tok)
+                word_confs.append(c / 100.0)
+        text = " ".join(words)
+        confidence = (
+            float(sum(word_confs) / len(word_confs)) if word_confs else 0.0
+        )
+        return OcrPageResult(text=text, confidence=confidence)
+
     def ocr_pages(
         self, images: list[object], languages: str
     ) -> list[OcrPageResult]:
-        from pytesseract import Output  # type: ignore[import-not-found]
+        # Sprint Q2 — when the operator opted in with
+        # CASEOPS_OCR_LANGUAGES=auto, probe the first page with a cheap
+        # eng pass, detect the dominant script, then use that lang for
+        # every page. Mixed-script judgments stay single-lang per
+        # document — tesseract's multi-lang mode ("eng+hin") is slower
+        # and routinely misclassifies Latin tokens as Devanagari, so
+        # one lang per doc is the pragmatic win.
+        effective_lang = languages
+        if languages.strip().lower() == _AUTO_DETECT_SENTINEL:
+            if images:
+                probe = self._ocr_one(images[0], "eng")
+                effective_lang = _detect_tesseract_lang(
+                    probe.text, fallback="eng"
+                )
+                logger.info(
+                    "OCR auto-detect selected lang=%r from page 1 sample.",
+                    effective_lang,
+                )
+            else:
+                effective_lang = "eng"
 
         pages: list[OcrPageResult] = []
         for image in images:
-            # image_to_data returns per-token rows with a `conf` column
-            # (0-100, or -1 for non-word rows). Filter -1, average the
-            # rest, and join the tokens as the page text so we get both
-            # the recognised string and its aggregate confidence in one
-            # pass instead of two.
-            data = self._pytesseract.image_to_data(
-                image, lang=languages, output_type=Output.DICT
-            )
-            tokens = data.get("text", []) or []
-            confs = data.get("conf", []) or []
-            word_confs: list[float] = []
-            words: list[str] = []
-            for tok, conf in zip(tokens, confs, strict=False):
-                try:
-                    c = float(conf)
-                except (TypeError, ValueError):
-                    continue
-                if c < 0:
-                    continue
-                if tok and tok.strip():
-                    words.append(tok)
-                    word_confs.append(c / 100.0)
-            text = " ".join(words)
-            confidence = (
-                float(sum(word_confs) / len(word_confs)) if word_confs else 0.0
-            )
-            pages.append(OcrPageResult(text=text, confidence=confidence))
+            pages.append(self._ocr_one(image, effective_lang))
         return pages
 
 
@@ -315,6 +465,7 @@ __all__ = [
     "OcrPageResult",
     "OcrResult",
     "_apply_page_quality_gate",
+    "_detect_tesseract_lang",
     "ocr_pdf",
     "should_fallback_to_ocr",
 ]
