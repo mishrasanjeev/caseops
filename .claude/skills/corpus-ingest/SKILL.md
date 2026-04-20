@@ -263,10 +263,10 @@ uv run --no-sync python -m caseops_api.scripts.eval_hnsw_recall \
 
 1. Ensure title-chunk **refresh** ran AFTER Layer 2 — the commonest omission.
 2. Parties-JSON pre-filter at retrieval (exact-match before vector).
-3. Query expansion via Haiku at retrieval.
+3. ~~Query expansion via Haiku~~ — **TESTED AND KILLED** on 2026-04-20. Net-negative (recall@10 90% → 63%) because Haiku hallucinates party names on ambiguous / OCR-garbage / docket-number queries. Do not re-enable without a case-name-classifier gate in front.
 4. OCR garbage gate at ingest (reject `(cid:\d+)` density > 1%).
 5. Language filter at retrieval (`WHERE language='en'`).
-6. Postgres connection retry wrapper to prevent sweep FAILs.
+6. Postgres connection retry wrapper — mitigated on GCE VM (same-region Cloud SQL).
 
 ### Spend guard-rails
 
