@@ -232,10 +232,34 @@ def promote_intake_request(
     # the intake description so the origin is preserved.
     matter_title = (payload.matter_title or row.title)[:255]
     client_name = row.business_unit or row.requester_name
+    normalised_code = payload.matter_code.upper().strip()
+
+    # Pre-flight uniqueness check — the (company_id, matter_code) unique
+    # constraint would otherwise raise an IntegrityError on flush and
+    # bubble up as a generic 500 / "Could not promote request" for the
+    # frontend. Checking here lets us return a specific, actionable 400.
+    # BUG-008 (2026-04-20): end users saw only the generic error with no
+    # hint about why. Repro path: two intake requests promoted with the
+    # same matter_code.
+    existing_code = session.scalar(
+        select(Matter.id).where(
+            Matter.company_id == context.company.id,
+            Matter.matter_code == normalised_code,
+        )
+    )
+    if existing_code is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Matter code {normalised_code!r} is already in use for "
+                "another matter in this workspace. Choose a different "
+                "code and try again."
+            ),
+        )
 
     matter = Matter(
         company_id=context.company.id,
-        matter_code=payload.matter_code.upper().strip(),
+        matter_code=normalised_code,
         title=matter_title,
         client_name=client_name,
         practice_area=payload.practice_area,

@@ -621,7 +621,12 @@ export async function createInvoicePaymentLink(input: {
   amountMinor?: number | null;
 }): Promise<MatterInvoiceRecord> {
   const data = await apiRequest<unknown>(
-    `/api/matters/${input.matterId}/invoices/${input.invoiceId}/pine-labs/link`,
+    // The payments router is mounted at /api/payments. Keeping the prefix
+    // here (rather than dropping it from router.py) preserves the
+    // Pine Labs webhook URL that was registered on their end against
+    // /api/payments/pine-labs/webhook. Changing that mount would require
+    // a webhook URL rotation on the Pine Labs portal.
+    `/api/payments/matters/${input.matterId}/invoices/${input.invoiceId}/pine-labs/link`,
     {
       method: "POST",
       body: {
@@ -641,7 +646,7 @@ export async function syncInvoicePaymentLink(input: {
   invoiceId: string;
 }): Promise<MatterInvoiceRecord> {
   const data = await apiRequest<unknown>(
-    `/api/matters/${input.matterId}/invoices/${input.invoiceId}/pine-labs/sync`,
+    `/api/payments/matters/${input.matterId}/invoices/${input.invoiceId}/pine-labs/sync`,
     { method: "POST", body: {} },
   );
   return data as MatterInvoiceRecord;

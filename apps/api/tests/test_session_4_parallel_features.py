@@ -444,6 +444,100 @@ def test_matter_summary_haiku_fallback_guard(
     assert "haiku" in fallback.model.lower()
 
 
+# ---------------------------------------------------------------
+# 6. Bug-fix coverage — BUG-001/002 drafting Haiku fallback,
+#    BUG-008 intake promote specific error.
+# ---------------------------------------------------------------
+
+
+def test_drafting_has_haiku_fallback_provider_guard(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """BUG-001/002 fix: services/drafting.py gains the same Haiku
+    fallback pattern as recommendations / matter_summary. Non-Anthropic
+    providers return None."""
+    monkeypatch.setenv("CASEOPS_LLM_PROVIDER", "mock")
+    from caseops_api.core.settings import get_settings
+    from caseops_api.services import drafting
+
+    get_settings.cache_clear()
+    assert drafting._haiku_fallback_provider() is None
+
+    monkeypatch.setenv("CASEOPS_LLM_PROVIDER", "anthropic")
+    monkeypatch.setenv("CASEOPS_LLM_API_KEY", "sk-ant-test")
+    get_settings.cache_clear()
+    fallback = drafting._haiku_fallback_provider()
+    assert fallback is not None
+    assert "haiku" in fallback.model.lower()
+
+
+def test_intake_promote_returns_400_on_duplicate_matter_code(
+    client: TestClient,
+) -> None:
+    """BUG-008 fix: when a matter_code collides, the API returns a
+    specific 400 telling the user 'code already in use' instead of the
+    generic 'Could not promote request'."""
+    from tests.test_auth_company import auth_headers, bootstrap_company
+
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    headers = auth_headers(token)
+
+    # Seed a matter with an existing code.
+    resp = client.post(
+        "/api/matters",
+        json={
+            "matter_code": "DUP-001",
+            "title": "First matter",
+            "practice_area": "criminal",
+            "forum_level": "high_court",
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 200, resp.text
+
+    # Create an intake request + promote with the same code.
+    intake_resp = client.post(
+        "/api/intake/requests",
+        json={
+            "title": "Promote-me intake",
+            "description": "please promote",
+            "requester_name": "Tester",
+            "requester_email": "tester@example.com",
+            "practice_area": "criminal",
+            "forum_level": "high_court",
+            "priority": "medium",
+        },
+        headers=headers,
+    )
+    assert intake_resp.status_code in (200, 201), intake_resp.text
+    intake_id = intake_resp.json()["id"]
+
+    # Triage first so promote is allowed (the check at line 225 of
+    # intake.py allows triaging / in_progress states).
+    triage_resp = client.patch(
+        f"/api/intake/requests/{intake_id}",
+        json={"status": "triaging"},
+        headers=headers,
+    )
+    assert triage_resp.status_code == 200, triage_resp.text
+
+    promote_resp = client.post(
+        f"/api/intake/requests/{intake_id}/promote",
+        json={
+            "matter_code": "DUP-001",  # collision with existing matter
+            "matter_title": "Promoted matter",
+            "practice_area": "criminal",
+            "forum_level": "high_court",
+        },
+        headers=headers,
+    )
+    assert promote_resp.status_code == 400, promote_resp.text
+    detail = promote_resp.json()["detail"]
+    assert "DUP-001" in detail
+    assert "already in use" in detail.lower()
+
+
 def test_practice_area_classifier_buckets_sections(client: TestClient) -> None:
     """Practice-area regex buckets BNSS/CrPC as Bail, IPC as Criminal."""
     from sqlalchemy import or_

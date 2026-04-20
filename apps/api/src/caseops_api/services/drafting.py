@@ -69,6 +69,7 @@ from caseops_api.services.draft_validators import (
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.llm import (
     PURPOSE_DRAFTING,
+    AnthropicProvider,
     LLMCallContext,
     LLMCompletion,
     LLMMessage,
@@ -81,6 +82,30 @@ from caseops_api.services.llm import (
 from caseops_api.services.matter_access import assert_access
 
 logger = logging.getLogger(__name__)
+
+
+# Same Haiku fallback pattern as services.recommendations /
+# services.matter_summary. Sonnet 4.6 sporadically returns malformed
+# JSON on long structured outputs (observed 2026-04-20 on the
+# recommendations endpoint, also flagged by end users as BUG-001 /
+# BUG-002 — drafts "not created, no error toast, indefinite hang").
+# Haiku is materially more reliable on JSON shape; we retry once
+# before raising 422 so the user always gets either a draft or a
+# clear error, never a silent hang.
+_HAIKU_FALLBACK_MODEL = "claude-haiku-4-5-20251001"
+
+
+def _haiku_fallback_provider() -> LLMProvider | None:
+    from caseops_api.core.settings import get_settings
+
+    settings = get_settings()
+    if (settings.llm_provider or "").lower() != "anthropic":
+        return None
+    return AnthropicProvider(
+        model=_HAIKU_FALLBACK_MODEL,
+        api_key=settings.llm_api_key,
+        prompt_cache=bool(getattr(settings, "llm_prompt_cache_enabled", True)),
+    )
 
 PURPOSE = "draft"
 
@@ -565,21 +590,44 @@ def generate_draft_version(
     llm_context = LLMCallContext(
         tenant_id=context.company.id, matter_id=matter.id, purpose=PURPOSE
     )
-    try:
-        response, completion = generate_structured(
-            llm,
+    def _invoke(active_llm: LLMProvider):
+        return generate_structured(
+            active_llm,
             schema=_LLMDraftResponse,
             messages=messages,
             context=llm_context,
             max_tokens=max_tokens_for_purpose(PURPOSE_DRAFTING),
             session=session,
         )
+
+    try:
+        response, completion = _invoke(llm)
     except (LLMResponseFormatError, ValidationError) as exc:
-        logger.warning("Draft LLM refused / malformed: %s", exc)
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Could not assemble a valid draft.",
-        ) from exc
+        # Sonnet malformed-JSON defect — retry once with Haiku before
+        # giving up. Keeps drafts from silently hanging on a flaky
+        # primary model (BUG-001 / BUG-002, 2026-04-20).
+        logger.warning(
+            "Draft LLM %s refused / malformed: %s",
+            getattr(llm, "model", "<unknown>"),
+            exc,
+        )
+        fallback = _haiku_fallback_provider()
+        if fallback is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Could not assemble a valid draft.",
+            ) from exc
+        try:
+            response, completion = _invoke(fallback)
+        except (LLMResponseFormatError, ValidationError) as retry_exc:
+            logger.warning("Draft Haiku fallback also failed: %s", retry_exc)
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    "Could not assemble a valid draft. Both primary model "
+                    "and Haiku fallback returned unusable output."
+                ),
+            ) from retry_exc
 
     surviving, verified_count = _verify_version_citations(session, response.citations)
     if verified_count == 0 and response.citations:
