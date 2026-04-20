@@ -25,6 +25,11 @@ MUTATING_METHODS = {"POST", "PATCH", "PUT", "DELETE"}
 # exempts the route. Additions require founder-level review.
 PUBLIC_MUTATING_ROUTES: set[tuple[str, str]] = {
     ("POST", "/api/auth/login"),
+    # Refresh takes the current-valid bearer token via get_current_context
+    # and re-issues a new one; no role / capability gate makes sense since
+    # every authenticated user may extend their own session. Hard-expired
+    # tokens fall through to 401 and the web client redirects to sign-in.
+    ("POST", "/api/auth/refresh"),
     ("POST", "/api/bootstrap/company"),
     # Pine Labs payment notifications — their own signature is the
     # auth layer; the handler enforces cross-tenant + idempotency.
