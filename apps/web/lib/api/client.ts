@@ -1,6 +1,48 @@
-import { getStoredToken } from "@/lib/session";
+import { clearSession, getStoredToken, storeSession } from "@/lib/session";
+import type { AuthSession } from "@/lib/api/schemas";
 
 import { API_BASE_URL, ApiError, NetworkError } from "./config";
+
+const REFRESH_PATH = "/api/auth/refresh";
+
+// Single-flight refresh: many components may hit a 401 simultaneously;
+// we want exactly one POST to /auth/refresh per expiry window, and all
+// queued requests to await that same promise.
+let inflightRefresh: Promise<string | null> | null = null;
+
+export async function refreshAccessToken(): Promise<string | null> {
+  if (inflightRefresh) return inflightRefresh;
+  const currentToken = getStoredToken();
+  if (!currentToken) return null;
+  inflightRefresh = (async () => {
+    try {
+      const res = await fetch(resolveUrl(REFRESH_PATH), {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${currentToken}`,
+        },
+      });
+      if (!res.ok) {
+        // Refresh itself unauthorized → the token is hard-expired.
+        // Clear so the next /sign-in redirect is clean.
+        if (res.status === 401) clearSession();
+        return null;
+      }
+      const body = (await res.json()) as AuthSession;
+      storeSession(body);
+      return body.access_token;
+    } catch {
+      return null;
+    } finally {
+      // Let the next expiry cycle start a new refresh.
+      setTimeout(() => {
+        inflightRefresh = null;
+      }, 0);
+    }
+  })();
+  return inflightRefresh;
+}
 
 export type ApiRequestInit = {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -41,6 +83,7 @@ function extractDetail(data: unknown, fallback: string): string {
 export async function apiRequest<TResponse>(
   path: string,
   init: ApiRequestInit = {},
+  _retry = false,
 ): Promise<TResponse> {
   const { method = "GET", body, headers = {}, signal } = init;
   const resolvedToken = init.token !== undefined ? init.token : getStoredToken();
@@ -100,6 +143,27 @@ export async function apiRequest<TResponse>(
         problemType = maybe;
       }
     }
+
+    // Auto-refresh on expired-token 401. One retry, no recursion on the
+    // refresh endpoint itself, and only when a token was present on the
+    // original call (an explicit `token: null` override opts out).
+    if (
+      !_retry &&
+      response.status === 401 &&
+      problemType === "invalid_token" &&
+      resolvedToken &&
+      !path.endsWith(REFRESH_PATH)
+    ) {
+      const fresh = await refreshAccessToken();
+      if (fresh) {
+        return apiRequest<TResponse>(
+          path,
+          { ...init, token: fresh },
+          true,
+        );
+      }
+    }
+
     throw new ApiError(
       response.status,
       extractDetail(parsed, `Request failed (${response.status}).`),

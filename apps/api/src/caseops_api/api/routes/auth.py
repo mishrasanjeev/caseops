@@ -7,7 +7,12 @@ from fastapi import APIRouter, Depends, Request
 from caseops_api.api.dependencies import DbSession, get_current_context
 from caseops_api.core.rate_limit import limiter, login_rate_limit
 from caseops_api.schemas.auth import AuthContextResponse, AuthSessionResponse, LoginRequest
-from caseops_api.services.identity import SessionContext, authenticate_user, build_auth_context
+from caseops_api.services.identity import (
+    SessionContext,
+    authenticate_user,
+    build_auth_context,
+    refresh_auth_session,
+)
 
 router = APIRouter()
 CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
@@ -31,3 +36,19 @@ async def login(
 @router.get("/me", response_model=AuthContextResponse, summary="Get the current auth context")
 async def me(context: CurrentContext) -> AuthContextResponse:
     return build_auth_context(context)
+
+
+@router.post(
+    "/refresh",
+    response_model=AuthSessionResponse,
+    summary="Issue a fresh access token for the current session",
+)
+async def refresh(context: CurrentContext) -> AuthSessionResponse:
+    """Extend an active session by issuing a new bearer token.
+
+    Requires a currently-valid token (the `CurrentContext` dependency
+    rejects expired ones). The web client calls this on a timer before
+    expiry and also on a 401 retry path so users are not stranded
+    mid-session.
+    """
+    return refresh_auth_session(context)

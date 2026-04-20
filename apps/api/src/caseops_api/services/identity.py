@@ -69,6 +69,16 @@ def build_auth_context(context: SessionContext) -> AuthContextResponse:
     )
 
 
+def refresh_auth_session(context: SessionContext) -> AuthSessionResponse:
+    """Issue a fresh access token for a still-authenticated caller.
+
+    Requires a valid current token (enforced by the dependency layer) so
+    only live sessions can extend themselves; once a token has hard-
+    expired, the client must sign in again.
+    """
+    return _build_auth_response(context)
+
+
 def _require_policy_compliant_password(password: str) -> None:
     try:
         enforce_password_policy(password)
