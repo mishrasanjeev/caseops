@@ -25,6 +25,8 @@ dependencies = [
   "google-genai>=1.73.1",
   "anthropic>=0.96.0",
   "voyageai>=0.3.7",
+  "fastembed>=0.4.0",
+  "clamd>=1.0.2",
 ]
 
 [project.optional-dependencies]
@@ -34,6 +36,15 @@ embeddings = [
 ocr = [
   "rapidocr>=3.4.0",
   "pytesseract>=0.3.13",
+]
+# Docling — richer PDF/DOCX extractor. Opt-in because the PyTorch
+# transitive dependency is heavy (~600 MB). When
+# CASEOPS_PDF_EXTRACTOR=docling is set at runtime and the package is
+# installed, document_processing uses Docling; otherwise the default
+# pdfminer + tesseract pipeline runs unchanged. Install with
+# `pip install .[docling]` in deployments that want it.
+docling = [
+  "docling>=2.0.0",
 ]
 # Observability. All opt-in via CASEOPS_OTEL_ENABLED; the skeleton in
 # core/observability.py degrades gracefully when these are absent so
@@ -59,6 +70,7 @@ caseops-eval-workflows = "caseops_api.scripts.eval_workflows:main"
 caseops-eval-hnsw-recall = "caseops_api.scripts.eval_hnsw_recall:main"
 caseops-seed-demo = "caseops_api.scripts.seed_demo:main"
 caseops-backfill-corpus-quality = "caseops_api.scripts.backfill_corpus_quality:main"
+caseops-backfill-title-chunks = "caseops_api.scripts.backfill_title_chunks:main"
 
 [dependency-groups]
 dev = [

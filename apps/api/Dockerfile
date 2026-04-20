@@ -20,12 +20,19 @@ RUN apt-get update \
 
 RUN pip install --no-cache-dir uv==0.11.6
 
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md alembic.ini ./
 COPY src ./src
+COPY alembic ./alembic
 
 # Install the package itself. Add `[observability]` here if/when we
 # wire OTel in prod — opt-in keeps the local image lean.
 RUN uv pip install --system .
+
+# Pre-download the fastembed cross-encoder (jina-reranker-v1-tiny-en,
+# ~130 MB ONNX) at build time so Cloud Run cold starts don't eat a
+# multi-second download on the first reranked query. The model caches
+# under /root/.cache/fastembed and stays in the image layer.
+RUN python -c "from fastembed.rerank.cross_encoder import TextCrossEncoder; TextCrossEncoder(model_name='jinaai/jina-reranker-v1-tiny-en')"
 
 # Cloud Run injects PORT (default 8080); local uses the ENV default
 # above. Bind to all interfaces so the container is reachable from

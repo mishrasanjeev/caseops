@@ -549,7 +549,41 @@ def search_authority_catalog(
         )
 
     results = sorted(best_by_document.values(), key=lambda item: item.score, reverse=True)
-    return results[:limit]
+    # Optional rerank pass (CASEOPS_RERANK_ENABLED=true). Over-fetch the
+    # top 3*limit from first-stage retrieval, then let the cross-encoder
+    # reorder on (query, title + snippet). build_reranker() returns a
+    # MockReranker when the flag is off, so disabling the feature keeps
+    # behaviour and cost identical to pre-rerank. Any reranker failure
+    # (model load, runtime exception) falls back to first-stage order —
+    # retrieval never breaks on reranker trouble.
+    top_n = results[: max(limit * 3, limit)]
+    if len(top_n) > limit:
+        try:
+            from caseops_api.services.reranker import (
+                RerankerCandidate,
+                build_reranker,
+            )
+
+            reranker = build_reranker()
+            cands = [
+                RerankerCandidate(
+                    identifier=r.authority_document_id,
+                    title=r.title or "",
+                    text=(r.snippet or r.summary or "")[:500],
+                )
+                for r in top_n
+            ]
+            ranked = reranker.rerank(query, cands, top_k=limit)
+            by_id = {r.authority_document_id: r for r in top_n}
+            reranked = [
+                by_id[c.identifier] for c in ranked if c.identifier in by_id
+            ]
+            if reranked:
+                return reranked[:limit]
+        except Exception:  # noqa: BLE001
+            # Never let a reranker hiccup break search.
+            pass
+    return top_n[:limit]
 
 
 def search_authorities(

@@ -1169,6 +1169,22 @@ def create_matter_attachment(
             filename=filename,
             stream=stream,
         )
+        # §9.3: ClamAV scan on the persisted bytes. Skipped when
+        # CASEOPS_CLAMAV_HOST is unset; raises 400 on infection.
+        from caseops_api.services.document_storage import resolve_storage_path
+        from caseops_api.services.virus_scan import reject_if_infected
+
+        try:
+            reject_if_infected(
+                resolve_storage_path(stored.storage_key),
+                filename=filename,
+            )
+        except Exception:
+            try:
+                resolve_storage_path(stored.storage_key).unlink(missing_ok=True)
+            except Exception:
+                pass
+            raise
         attachment.storage_key = stored.storage_key
         attachment.size_bytes = stored.size_bytes
         attachment.sha256_hex = stored.sha256_hex

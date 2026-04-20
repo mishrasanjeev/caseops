@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import shutil
 import subprocess
@@ -62,7 +63,39 @@ def _resolve_tesseract_command() -> str | None:
     return settings.tesseract_command or shutil.which("tesseract")
 
 
+def _extract_pdf_with_docling(path: Path) -> str:
+    """Use Docling to extract text + layout-aware structure from a PDF.
+
+    Docling preserves tables, headings, and reading order better than
+    pdfminer on multi-column / structured legal documents. We import
+    lazily because the package pulls PyTorch (~600 MB) and only
+    deployments that set ``CASEOPS_PDF_EXTRACTOR=docling`` pay that
+    cost.
+
+    Raises ImportError when the package is not installed; callers fall
+    back to ``_extract_pdf_text``.
+    """
+    from docling.document_converter import DocumentConverter  # type: ignore[import-not-found]
+
+    converter = DocumentConverter()
+    result = converter.convert(source=str(path))
+    # Markdown preserves headings + tables in a form that survives
+    # _chunk_text() better than raw text does.
+    return result.document.export_to_markdown()
+
+
 def _extract_pdf_text(path: Path) -> str:
+    backend = (os.environ.get("CASEOPS_PDF_EXTRACTOR") or "pdfminer").strip().lower()
+    if backend == "docling":
+        try:
+            return _extract_pdf_with_docling(path)
+        except ImportError:
+            logger.warning(
+                "CASEOPS_PDF_EXTRACTOR=docling but the docling package is not "
+                "installed; falling back to pdfminer."
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Docling extraction failed for %s: %s; falling back", path, exc)
     return pdf_extract_text(str(path))
 
 

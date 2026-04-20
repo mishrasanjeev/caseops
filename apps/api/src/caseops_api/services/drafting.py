@@ -572,6 +572,7 @@ def generate_draft_version(
             messages=messages,
             context=llm_context,
             max_tokens=max_tokens_for_purpose(PURPOSE_DRAFTING),
+            session=session,
         )
     except (LLMResponseFormatError, ValidationError) as exc:
         logger.warning("Draft LLM refused / malformed: %s", exc)

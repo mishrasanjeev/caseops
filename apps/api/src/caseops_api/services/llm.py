@@ -624,6 +624,7 @@ def generate_structured[T: BaseModel](
     temperature: float = 0.1,
     max_tokens: int = 2048,
     on_model_run: ModelRunWriter | None = None,
+    session: Any | None = None,
 ) -> tuple[T, LLMCompletion]:
     """Run the provider and validate its output as ``schema``.
 
@@ -631,7 +632,34 @@ def generate_structured[T: BaseModel](
     ``schema`` — we only parse and validate. A ``LLMResponseFormatError`` is
     raised if validation fails; the caller is responsible for fallback
     behaviour (retry, refuse, ask for clarification).
+
+    When a ``session`` is passed and ``context.tenant_id`` is set, the call is
+    gated by ``TenantAIPolicy``: if the model is not on the tenant's
+    allow-list for the purpose, the call is blocked *before* any tokens are
+    spent. Callers that omit ``session`` (tests, CLI) are not gated — the
+    DEFAULT_POLICY allows everything anyway, so the effect is identical when
+    no restriction has been configured.
     """
+    if session is not None and context.tenant_id:
+        from caseops_api.services.tenant_ai_policy import (
+            is_model_allowed,
+            resolve_tenant_policy,
+        )
+
+        policy = resolve_tenant_policy(session, company_id=context.tenant_id)
+        if not is_model_allowed(
+            policy, purpose=context.purpose, model=provider.model
+        ):
+            from fastapi import HTTPException, status as _status
+
+            raise HTTPException(
+                status_code=_status.HTTP_403_FORBIDDEN,
+                detail=(
+                    f"Model {provider.model!r} is blocked by the tenant AI "
+                    f"policy for purpose {context.purpose!r}. Contact your "
+                    "workspace admin to adjust the policy."
+                ),
+            )
     completion = provider.generate(
         messages=messages,
         temperature=temperature,

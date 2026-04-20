@@ -411,6 +411,7 @@ def extract_clauses(
             # 8K is comfortable headroom for the hard 30-clause cap we
             # set in the prompt.
             max_tokens=8192,
+            session=session,
         )
     except LLMResponseFormatError:
         logger.exception("Clause extraction returned malformed JSON")
@@ -538,6 +539,7 @@ def extract_obligations(
             context=call_context,
             temperature=0.0,
             max_tokens=8192,
+            session=session,
         )
     except LLMResponseFormatError:
         logger.exception("Obligation extraction returned malformed JSON")
@@ -694,6 +696,7 @@ def compare_playbook(
             # Each rule → ~80 output tokens; 15-rule default playbook
             # plus firm overrides can push past the default ceiling.
             max_tokens=8192,
+            session=session,
         )
     except LLMResponseFormatError:
         logger.exception("Playbook comparison returned malformed JSON")

@@ -374,6 +374,7 @@ def generate_recommendation(
     try:
         parsed, completion = generate_structured(
             llm,
+            session=session,
             schema=_LLMResponse,
             messages=messages,
             context=LLMCallContext(

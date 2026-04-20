@@ -356,6 +356,7 @@ def generate_hearing_pack(
             messages=messages,
             context=llm_context,
             max_tokens=max_tokens_for_purpose(PURPOSE_HEARING_PACK),
+            session=session,
         )
     except LLMResponseFormatError as exc:
         logger.warning("Hearing pack LLM refused / malformed: %s", exc)
