@@ -158,3 +158,95 @@ bash /c/Users/mishr/caseops/tmp/sweep.sh
   `CASEOPS_DATABASE_URL` — tests hit prod via cached settings.
 - Ask the user questions when they've told you to run autonomously. Execute,
   report quality ratings on the 15-min cadence, surface failures, move on.
+- Use Sonnet for Layer 2 on huge docs. Sonnet returns malformed JSON at
+  >~45k chars output — use `--force-tier haiku` until `corpus_structured`
+  adds a tolerant JSON repair path.
+- Run the per-bucket retry loop with no timeout ceiling. Cloud SQL drops
+  long-running client connections; treat that as retryable, not terminal.
+
+## Final tested recipe — reliably reaches 4.8+/5
+
+Tested 2026-04-19/20 on the CaseOps prod corpus. **Do not deviate from
+this recipe without running an HNSW probe first.**
+
+### Setup (once per session)
+
+```bash
+# 1. Proxy on port 25432 (5432/5433 blocked on Sanjeev's Windows box).
+cloud-sql-proxy --port 25432 perfect-period-305406:asia-south1:caseops-db &
+
+# 2. Export the env block. Reuse for ingest / Layer 2 / probe / backfill.
+export DB_PW=$(gcloud secrets versions access latest --secret=caseops-db-password)
+export VOYAGE_KEY=$(gcloud secrets versions access latest --secret=caseops-voyage-api-key)
+export ANTHROPIC_KEY=$(gcloud secrets versions access latest --secret=caseops-anthropic-api-key)
+export CASEOPS_DATABASE_URL="postgresql+psycopg://caseops:${DB_PW}@127.0.0.1:25432/caseops"
+export CASEOPS_EMBEDDING_PROVIDER=voyage
+export CASEOPS_EMBEDDING_MODEL=voyage-4-large
+export CASEOPS_EMBEDDING_DIMENSIONS=1024
+export CASEOPS_EMBEDDING_API_KEY="$VOYAGE_KEY"
+export CASEOPS_LLM_PROVIDER=anthropic
+export CASEOPS_LLM_MODEL=claude-haiku-4-5-20251001    # Haiku for Layer 2 reliability
+export CASEOPS_LLM_API_KEY="$ANTHROPIC_KEY"
+export CASEOPS_RERANK_ENABLED=true
+export CASEOPS_RERANK_BACKEND=fastembed
+export PYTHONUNBUFFERED=1
+```
+
+### Per-bucket exact sequence (copy-paste)
+
+```bash
+LABEL="sc-2024"   # or hc-delhi-2024, etc.
+COURT="sc"
+YEAR="2024"
+HC_COURTS=""       # set to e.g. "delhi" for HC buckets
+
+# 1. INGEST (Voyage embeddings; 10-30 min per bucket)
+uv run --no-sync python -m caseops_api.scripts.ingest_corpus \
+  --from-s3 --court "$COURT" $([ -n "$HC_COURTS" ] && echo "--hc-courts $HC_COURTS") \
+  --year "$YEAR" --min-chars 4000 --limit 2000
+
+# 2. LAYER 2 (Haiku only — Sonnet has a JSON-parse defect on huge docs)
+uv run --no-sync python -m caseops_api.scripts.backfill_corpus_quality \
+  --stage structured --force-tier haiku --budget-usd 30
+
+# 3. TITLE CHUNKS (new docs, idempotent via chunk_role='metadata')
+uv run --no-sync python -m caseops_api.scripts.backfill_title_chunks \
+  --batch-size 32
+
+# 4. TITLE CHUNK REFRESH (rebuild with Layer-2-improved metadata)
+uv run --no-sync python -m caseops_api.scripts.backfill_title_chunks \
+  --batch-size 32 --refresh
+
+# 5. PROBE and RATE
+uv run --no-sync python -m caseops_api.scripts.eval_hnsw_recall \
+  --tenant aster-demo --sample-size 30 --k 10 --seed 42
+# Report as: "rating: X.Y/5 (recall@10=NN.N%, MRR=0.YYY, rank=Z.ZZ)"
+```
+
+### Decision tree at each bucket boundary
+
+- **Rating improved**: proceed to next bucket.
+- **Rating flat (±0.1)**: proceed.
+- **Rating dropped >0.2**: STOP. Check in this order:
+  1. Layer 2 succeeded on the bucket? (check `structured_version` counts)
+  2. Rerank flag still on? (verify `CASEOPS_RERANK_ENABLED=true`)
+  3. Probe seed pinned to 42?
+  4. OCR / cross-lingual contamination in top-10 misses?
+
+### Known-broken docs (skip these)
+
+- `129b3e0a-d448-436a-8a11-dc876f5b12f1` — malformed JSON on Sonnet AND Haiku at >45k chars output. Skip until `corpus_structured._tolerant_json_loads` can repair this class.
+
+### Levers in priority order when stuck at 4.0-4.5
+
+1. Ensure title-chunk **refresh** ran AFTER Layer 2 — the commonest omission.
+2. Parties-JSON pre-filter at retrieval (exact-match before vector).
+3. Query expansion via Haiku at retrieval.
+4. OCR garbage gate at ingest (reject `(cid:\d+)` density > 1%).
+5. Language filter at retrieval (`WHERE language='en'`).
+6. Postgres connection retry wrapper to prevent sweep FAILs.
+
+### Spend guard-rails
+
+- After every 5 buckets, probe budget + chunk ratio. If Voyage burns > $2/1k docs, stop and audit chunks-per-doc.
+- If Anthropic > 50% of $450 cap before SC is done, drop Layer 2 to `--budget-usd 15` per bucket.
