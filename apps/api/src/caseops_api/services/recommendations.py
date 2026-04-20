@@ -36,8 +36,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from caseops_api.core.settings import get_settings
-from sqlalchemy import select
-
 from caseops_api.db.models import (
     AuthorityDocument,
     Matter,
@@ -65,7 +63,6 @@ from caseops_api.services.llm import (
     build_provider,
     generate_structured,
 )
-
 
 # Haiku is materially more reliable than Sonnet at structured JSON
 # output on long prompts — verified empirically during Layer 2

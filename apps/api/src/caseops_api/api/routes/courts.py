@@ -336,7 +336,6 @@ def get_judge_profile(
     # A doc may match either or both; the OR is deduplicated via
     # DISTINCT on the doc id.
     stripped = _strip_judge_honorific(judge.full_name)
-    surname = _judge_surname(judge.full_name)
     json_pattern = f'%"{stripped}%'
     bench_pattern = f"%{stripped}%"
     structured_filter = AuthorityDocument.judges_json.ilike(json_pattern)
