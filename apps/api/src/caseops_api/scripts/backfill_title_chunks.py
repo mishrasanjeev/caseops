@@ -21,6 +21,7 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import sys
 from dataclasses import dataclass
@@ -52,9 +53,15 @@ class _Summary:
 
 
 def _build_header_from_row(doc: AuthorityDocument) -> str:
-    """Same shape as services.corpus_ingest._build_title_header but
-    drawn from the DB row (richer — post-Layer-2 metadata is available)."""
-    parts = [
+    """Build a metadata header from every useful DB column.
+
+    Includes parties_json (Layer 2 output) because many SC rows carry a
+    citation-only title like ``"[2024] 4 S.C.R. 340"`` that is useless
+    for case-name queries; the party names live in parties_json. Pulling
+    them into the embedded header is the single biggest lever for
+    case-name recall on the post-Layer-2 corpus.
+    """
+    parts: list[str | None] = [
         doc.title,
         doc.case_reference,
         doc.neutral_citation,
@@ -62,6 +69,23 @@ def _build_header_from_row(doc: AuthorityDocument) -> str:
         doc.bench_name,
         doc.decision_date.isoformat() if doc.decision_date else None,
     ]
+    # parties_json is written by Layer 2 as a JSON array of strings
+    # (["Petitioner", "Respondent", ...]). Fold each into the header.
+    if doc.parties_json:
+        try:
+            parsed = json.loads(doc.parties_json)
+            if isinstance(parsed, list):
+                parts.extend(
+                    str(p) for p in parsed if isinstance(p, str) and p.strip()
+                )
+            elif isinstance(parsed, dict):
+                # Some extractors emit {"petitioner": "...", "respondent": "..."}.
+                parts.extend(
+                    str(v) for v in parsed.values()
+                    if isinstance(v, str) and v.strip()
+                )
+        except json.JSONDecodeError:
+            pass
     return "\n".join(p.strip() for p in parts if p and p.strip())
 
 
