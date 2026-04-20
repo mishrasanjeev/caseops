@@ -116,28 +116,41 @@ def _expand_query_via_haiku(query: str) -> str:
         return query
 
     prompt = (
-        "Expand this Indian-law case-name search query into a single richer "
-        "phrase (20-35 words) including: a clean 'v.' marker between parties, "
-        "likely procedural posture (e.g. bail, SLP, criminal appeal, writ "
-        "petition, quashing, anticipatory bail, compensation), and the court "
-        "type. Return ONLY the expanded phrase on one line, no preamble or "
-        "quotes.\n\nQuery: " + query
+        "You rewrite Indian-law case-name queries for vector retrieval. "
+        "Return ONE LINE ONLY, 20-35 words, no preamble, no quotes, no "
+        "explanation. Add: a clean ' v. ' between parties, likely procedural "
+        "posture (bail / SLP / criminal appeal / writ petition / quashing / "
+        "anticipatory bail / compensation / 482 CrPC), and the court (Supreme "
+        "Court of India / High Court).\n\nInput: " + query + "\n\nRewrite:"
     )
     try:
         result = llm.generate(
             messages=[LLMMessage(role="user", content=prompt)],
             temperature=0.0,
-            max_tokens=160,
+            max_tokens=80,
         )
     except Exception:  # noqa: BLE001
         return query
 
-    expanded = (result.text or "").strip().splitlines()[0].strip().strip('"').strip()
-    # Reject obviously broken expansions — only accept a clearly longer string.
+    # Haiku sometimes prefaces with "Rewrite:" or "Sure! ..." — strip the
+    # first chatty line if present.
+    text = (result.text or "").strip().strip('"').strip("`").strip()
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    if not lines:
+        return query
+    expanded = lines[-1]  # take the last non-empty line — chatter first, content last
+    # Drop leading labels the model sometimes emits.
+    for prefix in ("Rewrite:", "Output:", "Expanded:", "Query:"):
+        if expanded.startswith(prefix):
+            expanded = expanded[len(prefix):].strip()
+    expanded = expanded.strip('"').strip("`").strip()
+    # Strict validation — reject chatty / preamble / too-short / too-long responses.
+    # 290-char hard ceiling stays under the AuthoritySearchRequest 300-char limit.
     if (
         not expanded
-        or len(expanded) > 600
-        or len(expanded) < max(len(query) + 10, 40)
+        or len(expanded) > 290
+        or len(expanded.split()) < 6
+        or len(expanded) < max(len(query) + 10, 30)
     ):
         return query
     return expanded
