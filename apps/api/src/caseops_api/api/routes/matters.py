@@ -4,6 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, UploadFile
 from fastapi.responses import FileResponse, Response
+from pydantic import BaseModel
 
 from caseops_api.api.dependencies import (
     DbSession,
@@ -82,6 +83,11 @@ from caseops_api.services.matter_access import (
     remove_access_grant,
     remove_ethical_wall,
     set_restricted_access,
+)
+from caseops_api.services.bench_matcher import (
+    BenchSuggestion as BenchSuggestionDC,
+    JudgeStub as JudgeStubDC,
+    suggest_bench_for_matter_id,
 )
 from caseops_api.services.matter_summary import (
     MatterExecutiveSummary,
@@ -215,6 +221,71 @@ async def get_current_company_matter_summary(
 ) -> MatterExecutiveSummary:
     return generate_matter_summary(
         session, context=context, matter_id=matter_id
+    )
+
+
+class BenchMatchJudge(BaseModel):
+    id: str
+    full_name: str
+    honorific: str | None = None
+    current_position: str | None = None
+    practice_area_authority_count: int
+
+
+class BenchMatchResponse(BaseModel):
+    court_id: str | None
+    court_name: str | None
+    court_short_name: str | None
+    forum_level: str | None
+    bench_size: str
+    bench_size_rationale: str
+    practice_area_inferred: str | None
+    confidence: str
+    reasoning: list[str]
+    suggested_judges: list[BenchMatchJudge]
+
+
+@router.get(
+    "/{matter_id}/bench-match",
+    response_model=BenchMatchResponse,
+    summary=(
+        "Rule-based bench suggestion: likely court, bench size and "
+        "sitting judges for this matter (not favorability)."
+    ),
+)
+async def get_current_company_matter_bench_match(
+    matter_id: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> BenchMatchResponse:
+    dc = suggest_bench_for_matter_id(
+        session=session, context=context, matter_id=matter_id
+    )
+    return _bench_suggestion_to_response(dc)
+
+
+def _bench_suggestion_to_response(dc: BenchSuggestionDC) -> BenchMatchResponse:
+    return BenchMatchResponse(
+        court_id=dc.court_id,
+        court_name=dc.court_name,
+        court_short_name=dc.court_short_name,
+        forum_level=dc.forum_level,
+        bench_size=dc.bench_size,
+        bench_size_rationale=dc.bench_size_rationale,
+        practice_area_inferred=dc.practice_area_inferred,
+        confidence=dc.confidence,
+        reasoning=list(dc.reasoning),
+        suggested_judges=[_judge_stub_to_response(j) for j in dc.suggested_judges],
+    )
+
+
+def _judge_stub_to_response(stub: JudgeStubDC) -> BenchMatchJudge:
+    return BenchMatchJudge(
+        id=stub.id,
+        full_name=stub.full_name,
+        honorific=stub.honorific,
+        current_position=stub.current_position,
+        practice_area_authority_count=stub.practice_area_authority_count,
     )
 
 
