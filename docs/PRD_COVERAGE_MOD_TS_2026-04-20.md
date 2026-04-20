@@ -251,21 +251,16 @@ in the status table above.
 - [x] **Q6** — `POST /api/matters/{id}/summary/regenerate` — same response shape as GET. Web button tracked separately.
 - [x] Fixed latent bug in `matter_summary.py` — was referencing `MatterHearing.scheduled_at` (doesn't exist) and `.status.value` (string column). Unmasked by Q7 end-to-end test.
 
-### Thread E — Sprint R5 + R9 (draft validators + per-type auto-suggest)
+### Thread E — Sprint R5 + R9 (draft validators + per-type auto-suggest) — ✅ DONE commit `1f4f1be`
 
-Parallel after Thread D lands. Both build on R1/R2/R3 which shipped in
-`f0c5415`.
+- [x] **R5** — `services/draft_type_validators.py` layered on top of the generic `draft_validators.py`. Per-type findings with severity (error/warning/info); errors block finalisation, warnings surface to reviewer. Bail = BNSS s.483 + triple-test + custody; Cheque Bounce = s.138 + 15-day window + amount-format; Civil Suit = cause-of-action + valuation + prayer; Criminal Complaint = BNSS s.223 + BNS-first warning.
+- [x] **R9** — `services/drafting_suggestions.py` + `GET /api/drafting/templates/{type}/suggestions`. Bail → standard BNS sections + bail-ground templates; Cheque Bounce → dishonour reasons + statutory boilerplate; Divorce → HMA/SMA grounds; Criminal Complaint → BNS-first section catalogue.
 
-- [ ] **R5** — `services/draft_validators.py` — per-type validators. Bail validator checks for BNSS citation + parity arg presence; Cheque Bounce validator checks for the 15-day phrase + amount-in-words; Civil Suit checks for cause-of-action date/place + relief clauses.
-- [ ] **R9** — per-type auto-suggest API. Bail → standard BNSS section list; Cheque Bounce → s.138 boilerplate paragraphs; Divorce → HMA ground checklist. Surfaces as `GET /api/drafting/templates/{type}/suggestions`.
+### Thread F — Sprint R7 + R8 (per-type goldens + eval runner) — ✅ R7 + R8 first slice DONE commit `e0300ce`
 
-### Thread F — Sprint R7 + R8 (per-type goldens + eval runner)
-
-After Thread E. Creates the regression safety net so prompt tweaks
-don't silently degrade quality.
-
-- [ ] **R7** — `apps/api/tests/fixtures/drafting/{type}.json` with 3 canonical fact-patterns per type + golden draft output.
-- [ ] **R8** — `caseops-eval-drafting --type <t>` picks the type's fixtures, runs the current prompt + Haiku fallback, scores against the golden (citation-coverage + statute-correctness heuristics from R5).
+- [x] **R7** — `apps/api/tests/fixtures/drafting/` with fact patterns per type (3 each for bail / anticipatory bail / cheque bounce / civil suit; 1 each for divorce / property notice / affidavit / criminal complaint). Every fixture validates against its Pydantic facts model.
+- [x] **R8 (first slice)** — `test_drafting_goldens.py` — 29 deterministic tests that exercise R5 validators with synthetic good + bad drafts per type and guarantee every `DraftTemplateType` has at least one fact-pattern fixture. Catches a prompt regression before it ships.
+- **Deferred**: live-Haiku run with human-curated goldens. Needs ~$5/type/run plus expert review; belongs in a dedicated eval sprint. The CLI stub (`caseops-eval-drafting --type <t>`) is unchanged for now.
 
 ### Thread G — Sprint Q2 + Q3 (OCR language + handwriting) — ✅ DONE commit `ca30a32`
 
