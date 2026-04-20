@@ -7,19 +7,151 @@ the `Matter.court_name` freeform column still works.
 """
 from __future__ import annotations
 
+import re
+from collections import Counter
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, ConfigDict
-from sqlalchemy import func, select
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import func, or_, select
 
 from caseops_api.api.dependencies import DbSession, get_current_context
-from caseops_api.db.models import AuthorityDocument, Court, Judge, Matter
+from caseops_api.db.models import (
+    AuthorityDocument,
+    AuthorityDocumentChunk,
+    Court,
+    Judge,
+    Matter,
+)
 from caseops_api.services.identity import SessionContext
 
 router = APIRouter()
 CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
+
+
+_HONORIFIC_RE = re.compile(
+    r"^(?:Hon'?ble\s+)?(?:Mr\.|Ms\.|Mrs\.|Dr\.|The\s+)?\s*"
+    r"(?:Chief\s+Justice|Justice|J\.\s+|J)\s*",
+    flags=re.IGNORECASE,
+)
+_J_SUFFIX_RE = re.compile(r"[,\s]+J\.?$", flags=re.IGNORECASE)
+
+
+def _strip_judge_honorific(name: str) -> str:
+    """Normalise 'Justice Vikram Nath' / 'Hon'ble Mr. Justice Vikram Nath'
+    → 'Vikram Nath', so the string matches entries in judges_json (which
+    may be 'Vikram Nath J.' or 'Vikram Nath') and in bench_name
+    ('Vikram Nath, J.')."""
+    if not name:
+        return ""
+    out = _HONORIFIC_RE.sub("", name).strip()
+    out = _J_SUFFIX_RE.sub("", out).strip()
+    return out
+
+
+def _judge_surname(name: str) -> str:
+    """Last token of the stripped name. Useful as a looser ILIKE when
+    the full-name match returns nothing."""
+    stripped = _strip_judge_honorific(name)
+    parts = stripped.split()
+    return parts[-1] if parts else stripped
+
+
+# Section-header → practice-area mapping. Narrow on purpose: we'd
+# rather label 60 % of authorities accurately than label 100 %
+# badly. Users can click through to see actual sections cited.
+_PRACTICE_AREAS: list[tuple[str, re.Pattern[str]]] = [
+    ("Bail / Custody", re.compile(
+        r"\b(?:bail|438|439|437|482|483|bnss\s+sec(?:tion)?\s+(?:43[789]|48[23])|"
+        r"crpc\s+sec(?:tion)?\s+(?:43[789]|48[23]))\b",
+        re.IGNORECASE,
+    )),
+    ("Criminal (other)", re.compile(
+        r"\b(?:ipc|bns\b|indian\s+penal\s+code|bharatiya\s+nyaya|"
+        r"pocso|ndps|pmla|uapa|mcoca)\b",
+        re.IGNORECASE,
+    )),
+    ("Civil / Contract", re.compile(
+        r"\b(?:specific\s+relief|indian\s+contract\s+act|transfer\s+of\s+property|"
+        r"cpc|civil\s+procedure)\b",
+        re.IGNORECASE,
+    )),
+    ("Constitutional", re.compile(
+        r"\b(?:art(?:icle)?\s*(?:14|19|21|32|226|227)|constitution\s+of\s+india)\b",
+        re.IGNORECASE,
+    )),
+    ("Commercial / Arbitration", re.compile(
+        r"\b(?:arbitration|commercial\s+courts|companies\s+act|ibc|"
+        r"insolvency\s+and\s+bankruptcy)\b",
+        re.IGNORECASE,
+    )),
+    ("Family / Matrimonial", re.compile(
+        r"\b(?:hindu\s+marriage|special\s+marriage|domestic\s+violence|"
+        r"guardian|cpc\s+sec(?:tion)?\s+125|498a|498\-?a)\b",
+        re.IGNORECASE,
+    )),
+    ("Tax / Revenue", re.compile(
+        r"\b(?:income\s+tax|gst|customs|excise|service\s+tax)\b",
+        re.IGNORECASE,
+    )),
+    ("Service / Employment", re.compile(
+        r"\b(?:service\s+rules|industrial\s+disputes|id\s+act|"
+        r"cat|central\s+administrative\s+tribunal)\b",
+        re.IGNORECASE,
+    )),
+    ("Writ / PIL", re.compile(
+        r"\b(?:writ\s+petition|public\s+interest\s+litigation|pil)\b",
+        re.IGNORECASE,
+    )),
+    ("Property / Land", re.compile(
+        r"\b(?:land\s+acquisition|ceiling\s+act|registration\s+act|"
+        r"benami|evacuee\s+property)\b",
+        re.IGNORECASE,
+    )),
+]
+
+
+def _practice_area_histogram(
+    session: Any, *, judge_filter: Any, limit: int = 8
+) -> list[tuple[str, int]]:
+    """Bucket this judge's authorities by practice area.
+
+    Pulls every doc's concatenated ``sections_cited_json`` from the
+    chunks table, classifies against the ``_PRACTICE_AREAS`` patterns,
+    and returns (area, count) sorted by count desc. Any unclassifiable
+    doc rolls up under "Other".
+    """
+    rows = session.execute(
+        select(
+            AuthorityDocument.id,
+            func.string_agg(
+                AuthorityDocumentChunk.sections_cited_json, " "
+            ).label("sections_blob"),
+        )
+        .join(
+            AuthorityDocumentChunk,
+            AuthorityDocumentChunk.authority_document_id == AuthorityDocument.id,
+        )
+        .where(judge_filter)
+        .where(AuthorityDocumentChunk.sections_cited_json.is_not(None))
+        .group_by(AuthorityDocument.id)
+    ).all()
+
+    tally: Counter[str] = Counter()
+    for _doc_id, blob in rows:
+        if not blob:
+            continue
+        hit = False
+        for area, rx in _PRACTICE_AREAS:
+            if rx.search(blob):
+                tally[area] += 1
+                hit = True
+                break  # one bucket per doc
+        if not hit:
+            tally["Other"] += 1
+
+    return tally.most_common(limit)
 
 
 class CourtRecord(BaseModel):
@@ -125,12 +257,36 @@ class CourtProfileResponse(BaseModel):
     recent_authorities: list[AuthorityStub]
 
 
+class PracticeAreaCount(BaseModel):
+    area: str
+    count: int
+
+
+class DecisionVolumePoint(BaseModel):
+    year: int
+    count: int
+
+
 class JudgeProfileResponse(BaseModel):
     judge: JudgeRecord
     court: CourtRecord
     portfolio_matter_count: int
     authority_document_count: int
     recent_authorities: list[AuthorityStub]
+    # Layer-2 derived tiles. `practice_areas` is a histogram of sections /
+    # statutes cited in this judge's judgments (pulled from
+    # authority_document_chunks.sections_cited_json). Empty list when
+    # no Layer-2-processed authorities match.
+    practice_areas: list[PracticeAreaCount] = Field(default_factory=list)
+    # Decisions per calendar year over the judge's tenure, oldest-first.
+    decision_volume: list[DecisionVolumePoint] = Field(default_factory=list)
+    # Earliest / latest decision dates we have for this judge (for a
+    # "tenure" tile). ISO yyyy-mm-dd.
+    earliest_decision_date: str | None = None
+    latest_decision_date: str | None = None
+    # Transparency: what share of the authority-count comes from
+    # structured Layer-2 matches (vs. the bench_name ILIKE fallback).
+    structured_match_coverage_percent: int = 0
 
 
 # Declared BEFORE the catch-all /{court_id} route so FastAPI's
@@ -171,19 +327,40 @@ def get_judge_profile(
         )
         or 0
     )
-    # Authorities where the judge sat on the bench. AuthorityDocument
-    # carries a freeform bench_name like "S Abdul Nazeer, J., et al" —
-    # an ILIKE on the surname is the v1 heuristic. Costs no schema
-    # change; can swap for a structured judge-citation table later.
-    authority_filter = AuthorityDocument.bench_name.ilike(f"%{judge.full_name}%")
-    authority_count = (
+    # Authorities where the judge sat on the bench. Two signals:
+    #   1) structured — `judges_json` is a Layer-2-populated JSON array
+    #      of judge names for that document. Matches here are high
+    #      confidence.
+    #   2) fallback — `bench_name` is a freeform string. ILIKE catches
+    #      pre-Layer-2 docs.
+    # A doc may match either or both; the OR is deduplicated via
+    # DISTINCT on the doc id.
+    stripped = _strip_judge_honorific(judge.full_name)
+    surname = _judge_surname(judge.full_name)
+    json_pattern = f'%"{stripped}%'
+    bench_pattern = f"%{stripped}%"
+    structured_filter = AuthorityDocument.judges_json.ilike(json_pattern)
+    fallback_filter = AuthorityDocument.bench_name.ilike(bench_pattern)
+    authority_filter = or_(structured_filter, fallback_filter)
+
+    authority_count = int(
         session.scalar(
-            select(func.count())
-            .select_from(AuthorityDocument)
+            select(func.count(AuthorityDocument.id.distinct()))
             .where(authority_filter)
-        )
-        or 0
+        ) or 0
     )
+    structured_count = int(
+        session.scalar(
+            select(func.count(AuthorityDocument.id.distinct()))
+            .where(structured_filter)
+        ) or 0
+    )
+    coverage_pct = (
+        int(round(100 * structured_count / authority_count))
+        if authority_count else 0
+    )
+
+    # Recent authorities: dedup by doc id; order by date desc.
     recent_authorities = list(
         session.execute(
             select(
@@ -198,11 +375,42 @@ def get_judge_profile(
             .limit(10)
         ).all()
     )
+
+    # Tenure tiles. Pull earliest + latest decision dates.
+    earliest, latest = session.execute(
+        select(
+            func.min(AuthorityDocument.decision_date),
+            func.max(AuthorityDocument.decision_date),
+        ).where(authority_filter)
+    ).one()
+
+    # Decision-volume histogram, by year. NULL decision_date rows are
+    # dropped (can't place them on a timeline). Oldest-first.
+    volume_rows = session.execute(
+        select(
+            func.extract("year", AuthorityDocument.decision_date).label("yr"),
+            func.count(AuthorityDocument.id),
+        )
+        .where(authority_filter)
+        .where(AuthorityDocument.decision_date.is_not(None))
+        .group_by("yr")
+        .order_by("yr")
+    ).all()
+
+    # Practice areas: join to chunks and count distinct (doc,
+    # section_family) pairs. sections_cited_json is "["BNSS Section
+    # 483", "CrPC Section 439", ...]" after Layer 2. We stringify to
+    # an ILIKE so SQLite (tests) and Postgres (prod) both work without
+    # JSONB-specific operators. Top 8.
+    practice_rows = _practice_area_histogram(
+        session, judge_filter=authority_filter, limit=8
+    )
+
     return JudgeProfileResponse(
         judge=JudgeRecord.model_validate(judge),
         court=CourtRecord.model_validate(court),
         portfolio_matter_count=int(portfolio_count),
-        authority_document_count=int(authority_count),
+        authority_document_count=authority_count,
         recent_authorities=[
             AuthorityStub(
                 id=row.id,
@@ -213,6 +421,16 @@ def get_judge_profile(
             )
             for row in recent_authorities
         ],
+        practice_areas=[
+            PracticeAreaCount(area=area, count=count) for area, count in practice_rows
+        ],
+        decision_volume=[
+            DecisionVolumePoint(year=int(yr), count=int(cnt))
+            for yr, cnt in volume_rows
+        ],
+        earliest_decision_date=earliest.isoformat() if earliest else None,
+        latest_decision_date=latest.isoformat() if latest else None,
+        structured_match_coverage_percent=coverage_pct,
     )
 
 
