@@ -321,6 +321,34 @@ export async function fetchOutsideCounselRecommendations(input: {
   return data as OutsideCounselRecommendationsResult;
 }
 
+// --- Manual hearing scheduling (BUG-004 fix, 2026-04-20) ---
+// Lets a lawyer schedule a hearing from the matter page even when the
+// matter has no third-party court-sync feed. Backend endpoint
+// POST /api/matters/{id}/hearings has existed for a while; we just
+// didn't expose it on the web. Shape mirrors
+// schemas.matters.MatterHearingCreateRequest.
+
+export type MatterHearingCreateInput = {
+  matterId: string;
+  hearing_on: string;  // ISO date "yyyy-mm-dd"
+  forum_name: string;
+  purpose: string;
+  judge_name?: string | null;
+  outcome_note?: string | null;
+  status?: "scheduled" | "completed" | "adjourned";
+};
+
+export async function createMatterHearing(
+  input: MatterHearingCreateInput,
+): Promise<unknown> {
+  const { matterId, ...body } = input;
+  return apiRequest<unknown>(`/api/matters/${matterId}/hearings`, {
+    method: "POST",
+    body,
+  });
+}
+
+
 // --- Court-sync (BG-012) ---
 // Backend endpoint: POST /api/matters/{id}/court-sync/pull (capability:
 // court_sync:run). Runs as a BackgroundTask; the response carries the

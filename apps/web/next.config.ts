@@ -103,6 +103,14 @@ const nextConfig: NextConfig = {
   // Sprint 6 BG-017: /legacy is removed. Existing bookmarks and any
   // stray external links resolve into the new app shell instead of
   // 404ing. Permanent (308) so the browser updates its cache.
+  //
+  // BUG-010 (2026-04-20): www.caseops.ai and caseops.ai were BOTH
+  // serving 200 from Cloud Run. localStorage is scoped per origin, so
+  // a user who bookmarked www. and opened a fresh tab at the bare
+  // apex (or vice versa) lost their session. Canonicalise on the
+  // apex ``caseops.ai`` via a 308 — browsers cache, and every
+  // subsequent tab load lands on a single origin with shared
+  // localStorage.
   async redirects() {
     return [
       {
@@ -113,6 +121,17 @@ const nextConfig: NextConfig = {
       {
         source: "/legacy/:path*",
         destination: "/app",
+        permanent: true,
+      },
+      {
+        source: "/:path*",
+        has: [
+          {
+            type: "host",
+            value: "www.caseops.ai",
+          },
+        ],
+        destination: "https://caseops.ai/:path*",
         permanent: true,
       },
     ];

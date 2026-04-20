@@ -1,7 +1,14 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Calendar, Gavel, Loader2, RefreshCw, ScrollText } from "lucide-react";
+import {
+  Calendar,
+  CalendarPlus,
+  Gavel,
+  Loader2,
+  RefreshCw,
+  ScrollText,
+} from "lucide-react";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -9,10 +16,25 @@ import { toast } from "sonner";
 import { HearingPackDialog } from "@/components/app/HearingPackDialog";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/Dialog";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ApiError } from "@/lib/api/config";
-import { pullMatterCourtSync, type MatterCourtSyncJob } from "@/lib/api/endpoints";
+import {
+  createMatterHearing,
+  pullMatterCourtSync,
+  type MatterCourtSyncJob,
+} from "@/lib/api/endpoints";
 import { useCapability } from "@/lib/capabilities";
 import { formatLegalDate } from "@/lib/dates";
 import { useMatterWorkspace } from "@/lib/use-matter-workspace";
@@ -135,9 +157,15 @@ export default function MatterHearingsPage() {
       ) : null}
 
       <Card>
-        <CardHeader>
-          <CardTitle>Scheduled hearings</CardTitle>
-          <CardDescription>All hearings tracked on this matter.</CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+          <div>
+            <CardTitle>Scheduled hearings</CardTitle>
+            <CardDescription>
+              All hearings tracked on this matter — imported from the
+              court sync above, or added here manually.
+            </CardDescription>
+          </div>
+          <ScheduleHearingDialog matterId={matterId} />
         </CardHeader>
         <CardContent>
           {data.hearings.length === 0 ? (
@@ -255,5 +283,152 @@ export default function MatterHearingsPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+
+/**
+ * ScheduleHearingDialog — manual hearing creation for matters without a
+ * third-party court-sync feed. Fix for BUG-004 (2026-04-20): previously
+ * the only path to add a hearing was through Run Sync, leaving matters
+ * with no live adapter silently stuck. Backend
+ * POST /api/matters/{id}/hearings already existed; we just hadn't
+ * exposed it on the web.
+ */
+function ScheduleHearingDialog({ matterId }: { matterId: string }): React.JSX.Element {
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [hearingOn, setHearingOn] = useState("");
+  const [forumName, setForumName] = useState("");
+  const [purpose, setPurpose] = useState("");
+  const [judgeName, setJudgeName] = useState("");
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      createMatterHearing({
+        matterId,
+        hearing_on: hearingOn,
+        forum_name: forumName,
+        purpose,
+        judge_name: judgeName.trim() || null,
+      }),
+    onSuccess: async () => {
+      setOpen(false);
+      setHearingOn("");
+      setForumName("");
+      setPurpose("");
+      setJudgeName("");
+      await queryClient.invalidateQueries({
+        queryKey: ["matters", matterId, "workspace"],
+      });
+      toast.success("Hearing scheduled.");
+    },
+    onError: (err) => {
+      toast.error(err instanceof ApiError ? err.detail : "Could not schedule hearing.");
+    },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          data-testid="schedule-hearing-open"
+        >
+          <CalendarPlus className="h-4 w-4" aria-hidden /> Schedule hearing
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Schedule a hearing</DialogTitle>
+          <DialogDescription>
+            Add a listing manually. Dates imported by court sync appear
+            here alongside manual entries — pick whichever fits the
+            matter.
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          className="flex flex-col gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            mutation.mutate();
+          }}
+        >
+          <div>
+            <Label htmlFor="hearing_on">Hearing date</Label>
+            <Input
+              id="hearing_on"
+              type="date"
+              required
+              value={hearingOn}
+              onChange={(e) => setHearingOn(e.target.value)}
+              data-testid="schedule-hearing-date"
+            />
+          </div>
+          <div>
+            <Label htmlFor="forum_name">Forum / bench</Label>
+            <Input
+              id="forum_name"
+              type="text"
+              required
+              minLength={2}
+              maxLength={255}
+              placeholder="e.g. Delhi HC, Bench: Hon'ble Mr. Justice X"
+              value={forumName}
+              onChange={(e) => setForumName(e.target.value)}
+            />
+          </div>
+          <div>
+            <Label htmlFor="purpose">Purpose / stage</Label>
+            <Input
+              id="purpose"
+              type="text"
+              required
+              minLength={2}
+              maxLength={255}
+              placeholder="e.g. Arguments on bail, first listing, evidence"
+              value={purpose}
+              onChange={(e) => setPurpose(e.target.value)}
+            />
+          </div>
+          <div>
+            <Label htmlFor="judge_name">Judge name (optional)</Label>
+            <Input
+              id="judge_name"
+              type="text"
+              maxLength={255}
+              placeholder="Leave blank if the bench is not yet assigned"
+              value={judgeName}
+              onChange={(e) => setJudgeName(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setOpen(false)}
+              disabled={mutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={mutation.isPending || !hearingOn || !forumName || !purpose}
+              data-testid="schedule-hearing-submit"
+            >
+              {mutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Saving…
+                </>
+              ) : (
+                "Schedule"
+              )}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
