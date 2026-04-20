@@ -36,7 +36,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from caseops_api.core.settings import get_settings
+from sqlalchemy import select
+
 from caseops_api.db.models import (
+    AuthorityDocument,
     Matter,
     ModelRun,
     Recommendation,
@@ -119,24 +122,123 @@ class RetrievedAuthority:
     aliases: tuple[str, ...] = ()
 
 
+# Per the 2026-04-20 bias directive
+# (memory/feedback_user_bias_in_recommendations.md) CaseOps recommendations
+# should favor authorities whose outcome_label supports the user's
+# typical position. For most practice areas the user in CaseOps is the
+# lawyer for the moving party (accused seeking bail, petitioner
+# seeking relief, plaintiff seeking decree). So "preferred" outcomes
+# here are the grant / allow / decree side.
+#
+# The dictionary is keyed by the lowercased `Matter.practice_area`.
+# Values:
+#   preferred — case-insensitive substrings we want at the top
+#   against   — case-insensitive substrings we want demoted
+# Anything not listed falls back to neutral (no bias applied).
+_OUTCOME_BIAS: dict[str, dict[str, tuple[str, ...]]] = {
+    "criminal": {
+        "preferred": ("allowed", "granted", "quashed", "acquitted"),
+        "against": ("dismissed", "rejected", "denied", "convicted"),
+    },
+    "bail": {
+        "preferred": ("granted", "allowed", "bail allowed"),
+        "against": ("denied", "dismissed", "rejected"),
+    },
+    "civil": {
+        "preferred": ("allowed", "decreed", "partly allowed"),
+        "against": ("dismissed",),
+    },
+    "commercial": {
+        "preferred": ("allowed", "decreed", "partly allowed"),
+        "against": ("dismissed",),
+    },
+    "employment": {
+        "preferred": ("allowed", "granted", "reinstated"),
+        "against": ("dismissed", "rejected"),
+    },
+    "family": {
+        "preferred": ("allowed", "granted", "decreed"),
+        "against": ("dismissed", "rejected"),
+    },
+    "intellectual_property": {
+        "preferred": ("allowed", "granted", "injunction granted"),
+        "against": ("dismissed", "rejected"),
+    },
+    "real_estate": {
+        "preferred": ("allowed", "decreed", "specific performance"),
+        "against": ("dismissed",),
+    },
+    "constitutional": {
+        "preferred": ("allowed", "struck down", "directions issued"),
+        "against": ("dismissed",),
+    },
+}
+
+
+def _rerank_by_outcome_bias(
+    session: Session, results, *, matter
+) -> list:
+    """Reorder retrieval results so authorities with outcome_labels
+    favourable to the user's position come first.
+
+    Fetches outcome_label for each doc in one SQL query, scores
+    +1 / -1 / 0 on the _OUTCOME_BIAS mapping for the matter's
+    practice_area, then does a stable-sort descending. Non-biased
+    practice areas fall through unchanged.
+    """
+    if not results:
+        return results
+    practice = (matter.practice_area or "").lower()
+    bias = _OUTCOME_BIAS.get(practice)
+    if not bias:
+        return results
+
+    doc_ids = [r.authority_document_id for r in results]
+    rows = session.execute(
+        select(AuthorityDocument.id, AuthorityDocument.outcome_label)
+        .where(AuthorityDocument.id.in_(doc_ids))
+    ).all()
+    outcome_by_id = {row.id: (row.outcome_label or "").lower() for row in rows}
+
+    preferred = bias["preferred"]
+    against = bias["against"]
+
+    def score(r) -> int:
+        label = outcome_by_id.get(r.authority_document_id, "")
+        if any(token in label for token in preferred):
+            return 1
+        if any(token in label for token in against):
+            return -1
+        return 0
+
+    # Stable sort: ties preserve the cross-encoder reranker's ordering.
+    return sorted(results, key=score, reverse=True)
+
+
 def _gather_authorities(
-    session: Session, *, query: str, forum_level: str | None, limit: int = 6
+    session: Session,
+    *,
+    query: str,
+    forum_level: str | None,
+    matter=None,
+    limit: int = 6,
 ) -> list[RetrievedAuthority]:
     # Precedent cascades: a High Court matter can (and typically should) rely
     # on Supreme Court precedent. Only filter by forum when the matter is at
     # the Supreme Court itself — otherwise broaden the search.
     filter_forum = forum_level if forum_level == "supreme_court" else None
+    # Over-fetch 3x so the outcome-bias rerank has material to work
+    # with. Without over-fetch, a top-6 dominated by against-outcomes
+    # has nothing better to promote — we'd just be reshuffling noise.
+    fetch_limit = max(limit * 3, limit)
     # Do NOT catch-and-swallow here. An embedding provider outage, a
     # pgvector index corruption, or a DB timeout is a 503, not a
-    # legitimate empty retrieval. The earlier fail-open collapsed both
-    # signals into results=[] — which then paid the LLM to produce a
-    # confident refusal that masked the real outage. Propagate unknown
-    # failures so the caller sees a 503 and the LLM is never called.
+    # legitimate empty retrieval.
     try:
         results = search_authority_catalog(
             session,
             query=query,
-            limit=limit,
+            limit=fetch_limit,
             forum_level=filter_forum,
         )
     except HTTPException:
@@ -150,6 +252,14 @@ def _gather_authorities(
                 "Recommendation generation is refused until retrieval recovers."
             ),
         ) from exc
+
+    # Bias step — promote authorities whose outcome_label supports the
+    # user's likely position. Skipped when no matter context is passed
+    # (legacy callers) or when the practice area isn't in the bias
+    # mapping.
+    if matter is not None:
+        results = _rerank_by_outcome_bias(session, results, matter=matter)
+    results = results[:limit]
 
     picked: list[RetrievedAuthority] = []
     for result in results[:limit]:
@@ -389,6 +499,7 @@ def generate_recommendation(
         session,
         query=_build_retrieval_query(matter, rec_type),
         forum_level=matter.forum_level,
+        matter=matter,
     )
 
     llm = provider or build_provider(purpose=PURPOSE_RECOMMENDATIONS)
