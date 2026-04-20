@@ -1,0 +1,227 @@
+# MOD-TS modules ↔ PRD coverage + planned changes
+
+Source: `C:\Users\mishr\Downloads\CaseOps_Session1_Missing_Modules.xlsx`
+(13 modules flagged "missing" on 2026-04-20)
+Audit date: 2026-04-20.
+
+This document maps each MOD-TS module to:
+
+1. What ships in the CaseOps repo today (file paths).
+2. Which PRD section (`docs/PRD.md`) governs it.
+3. Which Sprint in `docs/WORK_TO_BE_DONE.md` now owns the gap.
+4. The concrete changes planned.
+
+See `WORK_TO_BE_DONE.md` §15 for sprint-level sequencing. See the
+directive in `memory/feedback_user_bias_in_recommendations.md` for the
+2026-04-20 product-owner override that allows favorability analytics on
+judge / court surfaces (PRD §10.6 neutrality is superseded there).
+
+---
+
+## Status table
+
+| ID | Module | Shipped % | PRD § | Sprint | Top blocker |
+|----|--------|---------:|-------|--------|-------------|
+| MOD-TS-001 | JudgeProfile | 45 % | §10.6 | **P** (active) | Layer 2 coverage (in flight) |
+| MOD-TS-002 | OCR Extractor | 60 % | §9.1 / §14.4 | **Q** | OCR extras not installed in prod image |
+| MOD-TS-003 | Legal Translator | 0 % | not covered | **U** (deferred) | Not prioritised for v1 |
+| MOD-TS-004 | Case Summary | 55 % | §9.6 / §10.3 | **Q** | No matter-level summary surface |
+| MOD-TS-005 | Document Viewer | 30 % | §10.3 | **Q** | No PDF.js / annotation UI |
+| MOD-TS-006 | Calendar | 40 % | §7.2 | **T** | Temporal (§5.1) + UI |
+| MOD-TS-007 | Notification & Reminder | 20 % | §5.3 | **T** | Temporal (§5.1) + SMS provider |
+| MOD-TS-008 | Pleading Step By Step | 30 % | §9.5 / §10.3 | **R** | Per-draft-type schema / form builder |
+| MOD-TS-009 | Clients & Advocates | 50 % | §9.2 (counsel) / new | **S** | Structured `Client` entity not modeled |
+| MOD-TS-010 | AutoMail Transfer | 25 % | §5.3 / §16.2 | **S/T** | Email templates + Temporal |
+| MOD-TS-011 | Support (in-app) | 0 % | not covered | **W** (v2) | Out of v1 scope |
+| MOD-TS-012 | Draft Generator (8 types) | 55 % | §9.5 / §10.3 | **R** | Per-type prompts / templates |
+| MOD-TS-013 | Clients Verification (KYC) | 0 % | not covered | **V** (post-launch) | Regulatory / enterprise tier |
+
+Percentage = approximate fraction of the module's scope already in
+code / DB. "Shipped" means runnable in prod today; "partial" means
+scaffold / data model exists but UX is missing.
+
+---
+
+## Per-module detail + planned changes
+
+### MOD-TS-001 JudgeProfile
+- **Shipped**: `Judge`, `Bench`, `Court` models (`apps/api/src/caseops_api/db/models.py:2366-2451`); `/api/courts/judges/{id}` route (`routes/courts.py:140-160`); `/app/courts/judges/[judge_id]` page.
+- **Partial**: `authority_documents.judges_json` populated by Layer 2 in progress (currently ~16 % coverage, 2026-04-20 T13:30).
+- **Missing**: decision-pattern analytics, case-type expertise metrics, analytics dashboard.
+- **PRD**: §10.6 Judge & Court Intelligence.
+- **Plan** (Sprint P, already in `WORK_TO_BE_DONE.md`):
+  - P1a — rewrite profile endpoint to use structured `judges_json`.
+  - P1b — enrich with practice-area histogram, decision-volume time series, top-citing judgments, tenure bounds.
+  - P2 — one-off `sci.gov.in` scrape for SC judge appointment / retirement dates.
+  - P3 — rule-based case-to-court-and-bench matcher.
+  - P4 — scoped authority retrieval for filing; per the 2026-04-20 bias
+    directive, boost authorities that support the user's position
+    (was: neutral). See `memory/feedback_user_bias_in_recommendations.md`.
+
+### MOD-TS-002 OCR Extractor
+- **Shipped**: `services/ocr.py` with tesseract + RapidOCR backends; `should_fallback_to_ocr()` triggers on sparse pdfminer extraction; pypdfium2 page renderer; `_normalize_whitespace()` cleanup.
+- **Partial**: English-only tuning; handwritten-text quality untested.
+- **Missing**: tesseract/rapidocr extras installed in the prod image; multi-language auto-detect; handwritten-specific model selection; post-OCR cleanup pipeline.
+- **PRD**: §9.1 Document-intelligence depth, §14.4 OCR / normalisation.
+- **Plan** (new Sprint Q — **Document Intelligence UX**):
+  - Q1 — install `[ocr]` extra in `apps/api/Dockerfile` so `rapidocr` + `pytesseract` ship to Cloud Run by default. Flip `CASEOPS_OCR_PROVIDER` on.
+  - Q2 — wire language-detect (e.g. `fasttext-lid` on first 2 kB of text) → pick tesseract `lang` pack accordingly (eng / hin / mar / tam / tel / kan).
+  - Q3 — handwritten pages: heuristic "stroke density > threshold" → fall through to rapidocr's handwriting model.
+  - Q4 — OCR quality metric per page (confidence + length-normalised); reject pages with conf < 0.4 from chunking (prevents OCR garbage from poisoning embeddings — lever #4 in `memory/feedback_vector_embedding_pipeline.md`).
+
+### MOD-TS-003 Legal Translator
+- **Shipped**: nothing translation-related.
+- **Partial**: `ocr_languages` env var is for OCR input, not translation output.
+- **Missing**: the whole module.
+- **PRD**: not formalised. User story exists ("bilingual research") but no PRD § covers it.
+- **Plan** (Sprint U — deferred to v2):
+  - U1 — decide provider: Anthropic Haiku (we already depend on it; decent Hindi / regional) vs Google Translate API vs in-house fine-tune. Default to Haiku.
+  - U2 — new service `services/translation.py`. Bilingual prompt template enforcing legal-terminology preservation (BNSS vs IPC, petition / appeal, etc.).
+  - U3 — `/api/matters/{id}/attachments/{id}/translate` endpoint; result stored as a sibling attachment `{original}.en.txt`.
+  - U4 — UX: "Translate" action on document viewer + matter attachment card.
+  - **Guardrail**: do not translate statutes / citations — they have canonical English form. Translate facts / arguments only.
+
+### MOD-TS-004 Case Summary
+- **Shipped**: `authority_documents.summary` populated on SC / HC corpus; `HearingPack` generation includes summary (`services/hearing_packs.py`); `MatterCourtOrder.summary`.
+- **Partial**: no matter-level "case summary" surface combining all matter documents; DOCX export path exists but only for drafts.
+- **Missing**: matter-level AI summary, key-facts extraction, timeline, legal-issues tags, PDF/DOCX export of summary.
+- **PRD**: §9.6 Hearing Preparation, §10.3 Drafting Studio.
+- **Plan** (Sprint Q):
+  - Q5 — `Matter.executive_summary` (JSONB: overview / key_facts / timeline / legal_issues / sections_cited). Populated by a new `services/matter_summary.py` that calls Haiku on concatenated matter documents.
+  - Q6 — `POST /api/matters/{id}/summary/regenerate` route + "Regenerate summary" button on cockpit.
+  - Q7 — Export: `GET /api/matters/{id}/summary.pdf` + `.docx` using the existing docx template stack.
+  - Q8 — Timeline: derive from `MatterHearing` + `MatterDeadline` + `MatterCourtOrder` chronologically.
+
+### MOD-TS-005 Document Viewer
+- **Shipped**: `MatterAttachment` storage; `AuthorityAnnotation` + `AuthorityAnnotationKind` enum (flag / note / highlight); download endpoint.
+- **Partial**: no PDF.js component; no in-document search UI; annotations stored but not surfaced visually.
+- **Missing**: PDF viewer (web), highlight / comment UI, page navigation, zoom, batch download, in-document search.
+- **PRD**: §10.3 Drafting Studio document-context.
+- **Plan** (Sprint Q):
+  - Q9 — install `react-pdf` (MIT) into `apps/web`. Wrap in `components/document/PDFViewer.tsx` (keyboard nav, zoom, page select, search).
+  - Q10 — annotation overlay: fetch `AuthorityAnnotation` rows → draw highlights on viewer; new-highlight button POSTs to existing annotation API.
+  - Q11 — attachment viewer route `/app/matters/{id}/documents/{attachment_id}/view` that renders the PDF viewer with annotation layer.
+  - Q12 — full-text search inside the PDF: leverage the chunked text already in `authority_document_chunks` (for authorities) or extracted attachment text (for matter docs).
+
+### MOD-TS-006 Calendar
+- **Shipped**: `MatterHearing` (status SCHEDULED / COMPLETED / ADJOURNED); `MatterDeadline` + `Deadline` service; `MatterCauseListEntry` from court-sync.
+- **Partial**: data models solid; no calendar UI.
+- **Missing**: calendar week / month view, event CRUD UI, Google / Outlook sync, push / SMS reminders.
+- **PRD**: §7.2 Task / Deadline / Obligation.
+- **Plan** (Sprint T — **Calendar & Notifications**, depends on §5.1 Temporal):
+  - T1 — web component `components/calendar/CalendarGrid.tsx` (week + month toggle). Reads hearings / deadlines / cause-list entries via a unified `/api/matters/me/calendar` endpoint.
+  - T2 — event editor modal (create hearing / deadline / custom event).
+  - T3 — Google Calendar push: one-way sync via `calendar.events.insert`. Per-user OAuth token stored encrypted (new `UserCalendarConnection` model).
+  - T4 — Temporal workflow `schedule_reminders` that fans out T-1 day, T-1 hour, T-30 min reminders per event according to per-user rules.
+  - T5 — SMS provider integration (MSG91 — India-friendly). Opt-in per user.
+
+### MOD-TS-007 Notification & Reminder
+- **Shipped**: SMTP config; `MatterDeadline` tracking.
+- **Partial**: SMTP wired but no live send route.
+- **Missing**: hearing-reminder service, deadline-alert delivery, SMS integration, custom / recurring reminder rules, push notifications, delivery-status tracking.
+- **PRD**: §5.3 Notifications (blocked on §5.1 Temporal).
+- **Plan** (Sprint T, shared with Calendar):
+  - T6 — `NotificationRule` model (entity_type, trigger_offset, channel, recipient). Sensible defaults on matter creation.
+  - T7 — Temporal worker picks up scheduled jobs and delivers via SMTP (SendGrid at scale) + SMS (MSG91) + web-push.
+  - T8 — `NotificationEvent` audit trail with `status ∈ {queued, sent, delivered, failed}` + vendor ID for traceability.
+  - T9 — in-app notification bell: poll `/api/me/notifications` (or websocket if Temporal is up).
+
+### MOD-TS-008 Pleading Step By Step
+- **Shipped**: `Draft`, `DraftVersion`, `DraftType` enum (8 types); `services/drafting.py` generates via single generic prompt.
+- **Partial**: 8 draft types enumerated; single prompt works but quality varies per type.
+- **Missing**: per-type form schema (case-type → fields → validations), stepwise UI, auto-suggestions (e.g. "common sections for Bail"), per-step draft preview.
+- **PRD**: §9.5 Drafting Flow, §10.3 Drafting Studio.
+- **Plan** (Sprint R — **Stepwise Drafting + Per-type Templates**):
+  - R1 — `apps/api/src/caseops_api/schemas/drafting_templates/` with one Pydantic schema per `DraftType`. Fields: which facts are required, which statutes apply, which procedural posture to enforce.
+  - R2 — per-type prompt library in `services/drafting_prompts.py`. Bail-specific prompt enforces BNSS s.483 (not BNS s.483), triple-test, custody-duration, etc.
+  - R3 — `/api/drafting/templates/{draft_type}` returns the form schema; web builds a React Hook Form + Zod-validated stepper (`app/matters/{id}/drafts/new?type=bail`).
+  - R4 — per-step preview: after each completed step, re-run a partial Haiku call that previews the emerging draft. Feedback-loop UX.
+  - R5 — validators: re-use `services/draft_validators.py` per-type (statute confusion, UUID leakage, citation coverage).
+
+### MOD-TS-009 Clients & Advocates Management
+- **Shipped**: `Matter.client_name` (freeform); `OutsideCounsel` + `MatterOutsideCounselAssignment`; `authority_documents.advocates_json` via Layer 2.
+- **Partial**: outside-counsel CRUD live; no client profile model; no comms log; no document-to-client linking.
+- **Missing**: structured `Client` entity (name, phones, emails, KYC, addresses), client-profile page, communication log table, client document library.
+- **PRD**: §9.2 covers counsel; clients are implicit (referenced via `Matter.client_name`) but no formal module.
+- **Plan** (Sprint S — **Clients & Comms**):
+  - S1 — new `Client` model: id, company_id (tenant), name, type ∈ {individual, corporate, government}, primary_contact, emails, phones, addresses, kyc_status.
+  - S2 — `MatterClientAssignment` model linking matters to clients (N-N for corporate defence work).
+  - S3 — `CommunicationLog` entity: direction (inbound / outbound), channel (email / call / meeting / WhatsApp), participants, summary, attachments. Manual-entry first; email-auto-capture (MOD-TS-010) later.
+  - S4 — `/api/clients` CRUD + `/app/clients` + `/app/clients/{id}` pages.
+  - S5 — attach communications to matters: `CommunicationLog.matter_id` nullable FK for log-only entries.
+
+### MOD-TS-010 AutoMail Transfer
+- **Shipped**: SMTP config; payment-link URLs embedded in invoices.
+- **Partial**: no email-send route; no templates; no auto-share trigger.
+- **Missing**: template-based emails, auto-document-sharing workflow, notification emails, delivery-status tracking, inbound-email ingestion.
+- **PRD**: §5.3 Notifications, §16.2 Connectors (email / calendar).
+- **Plan** (Sprint S, shared with Clients):
+  - S6 — `EmailTemplate` model + seeded templates: `matter_update`, `hearing_reminder`, `document_share`, `invite_outside_counsel`, `client_onboarding`.
+  - S7 — email-send service (`services/email_outbound.py`). Production uses SendGrid; dev uses SMTP.
+  - S8 — "Send via email" action on document viewer → pick template → pick recipient(s) from `CommunicationLog` / `Client` / `OutsideCounsel` → queue via Temporal → persist to `CommunicationLog`.
+  - S9 — delivery tracking: SendGrid webhook → `CommunicationLog.delivery_status`.
+  - S10 — inbound: per-tenant `{slug}@inbound.caseops.ai` address; SES / Postmark webhook parses and attaches to matter by `matter_id` in subject tag.
+
+### MOD-TS-011 Support
+- **Shipped**: marketing FAQ component only; nothing in-app.
+- **Missing**: in-app FAQ, live chat, ticket system, feedback form, help docs.
+- **PRD**: out of v1 scope.
+- **Plan** (Sprint W — **Support**, scheduled v2):
+  - W1 — Intercom-style embed on authenticated shell. SaaS: Crisp (free tier) or Plain.com.
+  - W2 — in-app feedback: "Send feedback" button → posts to a GitHub issue via a bot account.
+  - W3 — `/help` route with markdown-rendered docs from `docs/user_guides/`.
+  - W4 — defer: dedicated ticket system until > 10 paying tenants.
+
+### MOD-TS-012 Draft Generator (8 types)
+- **Shipped**: `DraftType` enum — Bail, Anticipatory Bail, Divorce Petition, Property Dispute Notice, Cheque Bounce Notice, Affidavit, Criminal Complaint, Civil Suit. Generic LLM prompt used for all.
+- **Partial**: all 8 types generate end-to-end but with variable quality.
+- **Missing**: per-type templates, per-type prompts, per-type auto-suggestions, per-type quality benchmarks.
+- **PRD**: §9.5, §10.3.
+- **Plan** (Sprint R — same sprint as stepwise drafting; tightly coupled):
+  - R6 — `services/drafting_prompts.py` — one specialised system prompt per `DraftType`, enforcing domain statutes + procedural posture. Builds on the ABSOLUTE-RULES prompt from Phase 19.
+  - R7 — per-type seed cases in `tests/fixtures/drafting/{type}.json` — 3 canonical matter fixtures per type → golden draft for regression testing.
+  - R8 — `caseops-eval-drafting --type bail` runs the suite, measures citation-coverage + statute-correctness (BNSS vs BNS, etc.).
+  - R9 — per-type auto-suggest on form: e.g. `Bail → suggest standard BNSS sections`, `Cheque Bounce → suggest s.138 NI Act boilerplate`.
+
+### MOD-TS-013 Clients Verification (KYC)
+- **Missing**: entire module.
+- **PRD**: not in scope.
+- **Plan** (Sprint V — **Identity & KYC**, post-launch, enterprise tier):
+  - V1 — decide integration: DigiLocker (official government), Signzy / Karza (commercial aggregators). Default DigiLocker + Aadhaar offline-XML.
+  - V2 — PAN via NSDL CVL e-KYC.
+  - V3 — OTP for contact verification (MSG91).
+  - V4 — `ClientVerification` record: kyc_status ∈ {pending, verified, rejected}, aadhaar_verified_at, pan_verified_at, documents_json.
+  - V5 — fraud-detection: reject if `pan.dob` ≠ `aadhaar.dob` (already surfaced by providers).
+  - V6 — regulatory posture: this is legally sensitive. Bar Council practice rules may restrict lawyer-side KYC. Legal-review required before build.
+
+---
+
+## Cross-cutting blockers
+
+- **Temporal (PRD §5.1)** — required for Calendar reminders (T), Notifications (T), AutoMail queueing (S), Clients communication log async fan-out (S). Not started. Start of Sprint T is blocked until Temporal is stood up.
+- **Email provider** — SMTP is fine for alerts but production needs SendGrid / SES for deliverability + webhooks. Not provisioned.
+- **SMS provider** — MSG91 or Twilio. Not provisioned.
+- **Form builder library** — React Hook Form + Zod (standard MIT stack); no blocker.
+- **PDF viewer** — `react-pdf` (MIT); no blocker.
+- **Translation provider** — Haiku (already integrated); no blocker.
+- **KYC aggregators** — DigiLocker + NSDL need enterprise agreement; legal review.
+
+---
+
+## Sprint assignment summary
+
+New sprints added to `WORK_TO_BE_DONE.md`:
+
+| Sprint | Covers MOD-TS | Weeks | Order |
+|--------|---------------|------:|------:|
+| P (active) | 001 | 1–4 | Now |
+| Q — Document Intelligence UX | 002, 004, 005 | 3 | Next |
+| R — Stepwise Drafting + Per-type Templates | 008, 012 | 3 | Next+1 |
+| S — Clients & Comms | 009, 010 | 4 | After Temporal |
+| T — Calendar & Notifications | 006, 007 | 3 | After Temporal |
+| U — Legal Translator | 003 | 2 | v2 |
+| V — Identity & KYC | 013 | 4 | Post-launch, enterprise |
+| W — In-app Support | 011 | 1 | v2 |
+
+Order: Q → R runs in parallel with P. S and T wait for Temporal (§5.1).
+U / V / W deferred.

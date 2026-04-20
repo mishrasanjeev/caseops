@@ -777,6 +777,27 @@ Sprints A–F (security, frontend spine, AI core, drafting v1) all **shipped** �
 **Sprint O onward — broader court integrations and jurisdiction rollout.**
 §12.1 Tamil Nadu + Gujarat adapters, §12.2 connector health UI, §12.3 email + calendar ingest.
 
+**Sprints Q-W — MOD-TS product modules flagged 2026-04-20.**
+Source: `CaseOps_Session1_Missing_Modules.xlsx` (13 modules) mapped to
+PRD in `docs/PRD_COVERAGE_MOD_TS_2026-04-20.md`. Full per-module detail
+lives in that file; sprint summary here.
+
+- **Sprint Q — Document Intelligence UX (3 w).** MOD-TS-002 (OCR install + multi-lang + handwritten + OCR-garbage gate), MOD-TS-004 (matter executive summary + PDF/DOCX export), MOD-TS-005 (react-pdf viewer + annotation overlay + in-doc search). PRD §9.1, §9.6, §10.3, §14.4. **No blockers** — runs in parallel with Sprint P.
+
+- **Sprint R — Stepwise Drafting + Per-type Templates (3 w).** MOD-TS-008 + MOD-TS-012. One Pydantic form-schema per `DraftType` (Bail, Anticipatory Bail, Divorce, Property Dispute Notice, Cheque Bounce, Affidavit, Criminal Complaint, Civil Suit), one specialised prompt per type in a new `services/drafting_prompts.py`, stepper UI (React Hook Form + Zod), per-step preview, per-type regression suite under `caseops-eval-drafting --type <t>`. PRD §9.5, §10.3. **No blockers** — runs after / during Q.
+
+- **Sprint S — Clients & Comms (4 w).** MOD-TS-009 (structured `Client` entity + profile page + matter ↔ client N-N) + MOD-TS-010 (email templates, outbound-email service via SendGrid, "Send via email" action with attachment picker, inbound email ingest via `{slug}@inbound.caseops.ai`, `CommunicationLog` with delivery-status tracking). PRD §9.2 (counsel) + §5.3 (notifications) + §16.2 (connectors). **Blocker**: §5.1 Temporal for async email fan-out; SendGrid account provisioning.
+
+- **Sprint T — Calendar & Notifications (3 w).** MOD-TS-006 (week/month calendar UI, event CRUD, Google Calendar one-way sync, MSG91 SMS opt-in) + MOD-TS-007 (`NotificationRule` per matter / user, Temporal-scheduled delivery, `NotificationEvent` audit trail, in-app bell). PRD §5.3, §7.2. **Blocker**: §5.1 Temporal; SMS provider agreement.
+
+- **Sprint U — Legal Translator (2 w, v2).** MOD-TS-003 (EN↔HI + regional via Haiku; preserves legal terminology; attachment-level translate action). Not in PRD today — adds new §16.x "Translation". **No blocker** but deferred post-v1.
+
+- **Sprint V — Identity & KYC (4 w, post-launch enterprise).** MOD-TS-013 (DigiLocker Aadhaar offline-XML + NSDL PAN + MSG91 OTP + fraud heuristics + `ClientVerification` audit). Not in PRD. **Blocker**: legal review of Bar Council practice rules re: lawyer-side KYC.
+
+- **Sprint W — In-app Support (1 w, v2).** MOD-TS-011 (Crisp / Plain chat embed, feedback → GitHub issues, `/help` markdown). Not in PRD. Defer until >10 paying tenants.
+
+---
+
 **Sprint P — Judge & Court Intelligence depth (1-4 weeks, 4 phases).**
 Planned 2026-04-20 against PRD §10.6. Base schema (`Court`, `Bench`,
 `Judge`, `authorities.judges_json` / `bench_name` / `parties_json`) and
