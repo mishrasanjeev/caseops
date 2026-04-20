@@ -237,15 +237,15 @@ in the status table above.
 - [ ] **A2 — Identify + close remaining Hari bugs.** 4 of 10 unaddressed.
 - [ ] **A3 — Verify CI green** on commits `662de6a`, `8a88bbd`.
 
-### Thread B — Sprint Q4 (OCR quality gate — prevents corpus poisoning)
+### Thread B — Sprint Q4 (OCR quality gate — prevents corpus poisoning) — ✅ DONE commit `b438982`
 
-- [ ] **Q4a** — per-page OCR confidence + length-normalised quality score emitted during extraction (both rapidocr path via `scores` list + tesseract path via `image_to_data` conf column).
-- [ ] **Q4b** — reject pages with confidence < 0.4 OR length < 50 chars from chunking so OCR garbage never reaches embeddings (lever #4 in `memory/feedback_vector_embedding_pipeline.md`).
-- [ ] **Q4c** — unit tests: high-conf page passes, low-conf page is rejected, mixed doc keeps only clean pages.
+- [x] **Q4a** — per-page OCR confidence + length-normalised quality score emitted during extraction (rapidocr averages per-line `scores`; tesseract switches to `image_to_data` and averages per-word conf).
+- [x] **Q4b** — `_apply_page_quality_gate` rejects pages with confidence < `ocr_min_page_confidence` (default 0.4) OR length < `ocr_min_page_chars` (default 50). Rejected pages stay in `OcrResult.pages` for telemetry; their text never reaches chunking.
+- [x] **Q4c** — 7 unit tests in `test_ocr.py` (high-conf accepted, low-conf rejected, too-short rejected, mixed 5-page doc keeps exactly 3, zero-conf rejected, thresholds configurable, `pages_rejected` + `reject_reason` surface). All 12 `test_ocr.py` tests green.
 
-### Thread C — Sprint R1/R2 (stepwise drafting + per-type prompts)
+### Thread C — Sprint R1/R2 (stepwise drafting + per-type prompts) — ✅ R1/R2/R3 DONE commit `f0c5415`
 
-- [ ] **R1** — `apps/api/src/caseops_api/schemas/drafting_templates/` — one Pydantic schema per `DraftType` (Bail, Anticipatory Bail, Divorce, Cheque Bounce, Affidavit, Criminal Complaint, Civil Suit, Property Dispute Notice). Fields: required facts, applicable statutes, procedural posture.
-- [ ] **R2** — `apps/api/src/caseops_api/services/drafting_prompts.py` — one specialised system prompt per `DraftType`. Bail enforces BNSS s.483 (not BNS), triple-test, custody-duration; Cheque Bounce enforces s.138 NI Act; etc.
-- [ ] **R3** — `GET /api/drafting/templates/{draft_type}` returns the form schema. Web builds React Hook Form + Zod stepper.
-- [ ] **R7** — per-type fixture at `apps/api/tests/fixtures/drafting/{type}.json` — 3 canonical matter seeds per type + golden draft.
+- [x] **R1** — `apps/api/src/caseops_api/schemas/drafting_templates.py` with `DraftTemplateType` (8 values: bail, anticipatory_bail, divorce_petition, property_dispute_notice, cheque_bounce_notice, affidavit, criminal_complaint, civil_suit) + one Pydantic facts model per type, strict validation (cheque_amount_inr > 0, affidavit min paragraphs, civil suit ≥1 relief), `DraftingFieldSpec` UX metadata for the stepper.
+- [x] **R2** — `apps/api/src/caseops_api/services/drafting_prompts.py` — one specialised prompt per type. Bail enforces BNSS s.483 + triple test + parity. Cheque Bounce hard-enforces the statutory 15-day window + amount in figures AND words. Criminal Complaint defaults to BNS with the 2024-07-01 cutover called out. Civil Suit flags Commercial Courts Act s.12A.
+- [x] **R3** — `GET /api/drafting/templates` (list) + `GET /api/drafting/templates/{type}` (full schema + Pydantic JSON-schema for Zod). Wired at `/api/drafting/*`.
+- [ ] **R7** — per-type fixture at `apps/api/tests/fixtures/drafting/{type}.json` with a golden draft. Deferred to a follow-up (the 18 tests in `test_drafting_templates.py` already cover schema + prompt gates; goldens belong in a dedicated `eval_drafting --type bail` pass which is its own sprint line-item).
