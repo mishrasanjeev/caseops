@@ -5,6 +5,7 @@ Vendored Claude Code skills that apply to CaseOps.
 | Skill | Purpose | Scope |
 | --- | --- | --- |
 | [`impeccable/`](./impeccable/SKILL.md) | Frontend design quality — typography, OKLCH colour, spatial rhythm, motion, interaction, UX writing, and hardening guardrails against generic "AI aesthetic" output. | All frontend work. |
+| [`corpus-ingest/`](./corpus-ingest/SKILL.md) | Per-bucket SC/HC ingest pipeline (ingest → Layer-2 metadata → title-chunk embed → HNSW probe → 0-5 rating) that avoids the "placeholder title poisons embeddings" failure. | Any data-ingest / vector-quality request on the authority corpus. |
 
 ## Why these live in the repo
 

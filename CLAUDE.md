@@ -111,6 +111,23 @@ These rules are the default coding behavior for all implementation work in this 
 - When in doubt, run the `audit` or `critique` references inside the
   impeccable skill against the target surface before shipping.
 
+### Corpus ingestion and vector embedding quality
+
+- **Before any SC / HC corpus ingest, re-embed, backfill, or retrieval
+  quality work**, read `.claude/skills/corpus-ingest/SKILL.md` and
+  `.claude/projects/C--Users-mishr-caseops/memory/feedback_vector_embedding_pipeline.md`
+  (personal memory). Both are mandatory, not advisory.
+- Per-bucket pipeline order is **ingest → Layer-2 metadata → title-chunk
+  embed → HNSW probe → 0-5 rating**. Never batch Layer 2 at the end of a
+  multi-bucket sweep — it poisons embeddings with filename-derived
+  placeholder titles and costs Voyage twice.
+- Rate retrieval quality from `caseops-eval-hnsw-recall` only. Never from
+  Layer-2 extraction samples — they diverge wildly (4.7 extraction / 2.5
+  retrieval, 2026-04-19 incident).
+- Target rating is **4.8+ / 5**. Report after every bucket as
+  `rating: X.Y/5 (recall@10=…, MRR=…, rank=…)`. A bucket-over-bucket
+  drop is a stop-the-line signal.
+
 ---
 
 ## Testing Expectations

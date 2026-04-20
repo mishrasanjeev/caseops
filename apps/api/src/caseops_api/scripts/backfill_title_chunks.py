@@ -16,6 +16,7 @@ Usage::
     uv run caseops-backfill-title-chunks --limit 50       # trial
     uv run caseops-backfill-title-chunks                  # full run
     uv run caseops-backfill-title-chunks --batch-size 32  # tune Voyage batch
+    uv run caseops-backfill-title-chunks --refresh        # rebuild after Layer 2
 """
 from __future__ import annotations
 
@@ -25,7 +26,7 @@ import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import AuthorityDocument, AuthorityDocumentChunk
@@ -46,6 +47,7 @@ class _Summary:
     skipped_already_done: int = 0
     skipped_no_header_data: int = 0
     inserted: int = 0
+    refreshed_dropped: int = 0
     errors: int = 0
 
 
@@ -64,23 +66,41 @@ def _build_header_from_row(doc: AuthorityDocument) -> str:
 
 
 def _docs_needing_header(
-    session: Session, *, limit: int | None = None
+    session: Session, *, limit: int | None = None, refresh: bool = False
 ) -> list[AuthorityDocument]:
-    """Docs without any chunk_role='metadata' chunk, ordered by ingested_at."""
-    has_header_subq = (
-        select(AuthorityDocumentChunk.authority_document_id)
-        .where(AuthorityDocumentChunk.chunk_role == "metadata")
-        .distinct()
-        .subquery()
-    )
-    stmt = (
-        select(AuthorityDocument)
-        .where(AuthorityDocument.id.not_in(select(has_header_subq)))
-        .order_by(AuthorityDocument.ingested_at.desc())
-    )
+    """Docs needing a metadata chunk, ordered by ingested_at desc.
+
+    Default mode: only docs that have *no* chunk with ``chunk_role='metadata'``.
+    When ``refresh=True``: every doc qualifies (caller is expected to delete
+    the stale metadata chunks per doc right before re-embedding).
+    """
+    stmt = select(AuthorityDocument).order_by(AuthorityDocument.ingested_at.desc())
+    if not refresh:
+        has_header_subq = (
+            select(AuthorityDocumentChunk.authority_document_id)
+            .where(AuthorityDocumentChunk.chunk_role == "metadata")
+            .distinct()
+            .subquery()
+        )
+        stmt = stmt.where(AuthorityDocument.id.not_in(select(has_header_subq)))
     if limit is not None:
         stmt = stmt.limit(limit)
     return list(session.execute(stmt).scalars())
+
+
+def _drop_existing_metadata_chunks(session: Session, *, document_id: str) -> int:
+    """Delete this doc's existing metadata chunks (Voyage embeddings too).
+
+    Returns count removed. Used by --refresh after Layer 2 populates richer
+    title/parties/citation; the previous header embedding no longer matches
+    the newer, better metadata.
+    """
+    result = session.execute(
+        delete(AuthorityDocumentChunk)
+        .where(AuthorityDocumentChunk.authority_document_id == document_id)
+        .where(AuthorityDocumentChunk.chunk_role == "metadata")
+    )
+    return result.rowcount or 0
 
 
 def _next_chunk_index(session: Session, *, document_id: str) -> int:
@@ -98,11 +118,16 @@ def _run(
     embedder: EmbeddingProvider,
     limit: int | None,
     batch_size: int,
+    refresh: bool = False,
 ) -> _Summary:
     summary = _Summary()
-    docs = _docs_needing_header(session, limit=limit)
+    docs = _docs_needing_header(session, limit=limit, refresh=refresh)
     summary.scanned = len(docs)
-    logger.info("docs needing title-header chunk: %d", summary.scanned)
+    logger.info(
+        "docs %s title-header chunk: %d",
+        "to refresh" if refresh else "needing",
+        summary.scanned,
+    )
 
     # Build (doc, header) pairs, skipping docs with no usable header text.
     pending: list[tuple[AuthorityDocument, str]] = []
@@ -127,6 +152,10 @@ def _run(
         for (doc, header), vector in zip(
             batch, embed_result.vectors, strict=False
         ):
+            if refresh:
+                summary.refreshed_dropped += _drop_existing_metadata_chunks(
+                    session, document_id=doc.id
+                )
             idx = _next_chunk_index(session, document_id=doc.id)
             chunk = AuthorityDocumentChunk(
                 authority_document_id=doc.id,
@@ -169,6 +198,17 @@ def main(argv: list[str] | None = None) -> int:
         default=32,
         help="Headers per Voyage embed call. Default 32.",
     )
+    parser.add_argument(
+        "--refresh",
+        action="store_true",
+        help=(
+            "Rebuild metadata chunks for every doc — drop existing "
+            "chunk_role='metadata' rows and re-embed with current metadata. "
+            "Use this after Layer 2 extraction fills richer title / parties / "
+            "neutral_citation, because the previous header was built from "
+            "filename-derived placeholders."
+        ),
+    )
     parser.add_argument("--verbose", "-v", action="store_true")
     args = parser.parse_args(argv)
 
@@ -185,13 +225,15 @@ def main(argv: list[str] | None = None) -> int:
             embedder=embedder,
             limit=args.limit,
             batch_size=args.batch_size,
+            refresh=args.refresh,
         )
 
     print(
         "title-chunk backfill: "
+        f"mode={'refresh' if args.refresh else 'insert'} "
         f"scanned={summary.scanned} "
         f"inserted={summary.inserted} "
-        f"skipped_already_done={summary.skipped_already_done} "
+        f"refreshed_dropped={summary.refreshed_dropped} "
         f"skipped_no_header_data={summary.skipped_no_header_data} "
         f"errors={summary.errors}"
     )
