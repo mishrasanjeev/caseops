@@ -402,6 +402,22 @@ def search_authority_catalog(
     court_name: str | None = None,
     document_type: str | None = None,
 ) -> list[AuthoritySearchResult]:
+    # Parties / title exact-match boost: case-name queries ("Wahid State
+    # Govt of NCT of Delhi") carry a distinctive proper noun that
+    # almost certainly appears verbatim in the target doc's parties_json
+    # or title after Layer 2. Matching that exact token BEFORE vector
+    # search eliminates the class of probe misses where cosine walks
+    # away from a short, semantically-thin case name. Topic queries
+    # ("bail triple test") return zero exact hits → fall through.
+    name_match_ids = _exact_name_match_document_ids(
+        session,
+        query=query,
+        forum_level=forum_level,
+        court_name=court_name,
+        document_type=document_type,
+        limit=max(limit * 6, 30),
+    )
+
     # Fast path: when running on Postgres + we have embeddings in the column
     # AND we can build a query vector, ask pgvector to pick top-K chunks via
     # the HNSW index, then load only those documents. At any real corpus
@@ -415,11 +431,23 @@ def search_authority_catalog(
         limit=max(limit * 6, 30),
     )
 
+    # Merge: exact-name matches first (highest confidence), then vector
+    # results. Dedup while preserving order.
+    merged_ids: list[str] | None = None
+    if name_match_ids or pg_document_ids is not None:
+        seen: set[str] = set()
+        merged_ids = []
+        for doc_id in (*name_match_ids, *(pg_document_ids or [])):
+            if doc_id in seen:
+                continue
+            seen.add(doc_id)
+            merged_ids.append(doc_id)
+
     stmt = select(AuthorityDocument)
-    if pg_document_ids is not None:
-        if not pg_document_ids:
+    if merged_ids is not None:
+        if not merged_ids:
             return []
-        stmt = stmt.where(AuthorityDocument.id.in_(pg_document_ids))
+        stmt = stmt.where(AuthorityDocument.id.in_(merged_ids))
     else:
         stmt = stmt.order_by(
             AuthorityDocument.decision_date.desc(),
@@ -606,6 +634,118 @@ def search_authorities(
             document_type=payload.document_type,
         ),
     )
+
+
+# Case-name queries carry at least one distinctive proper noun (the
+# petitioner / respondent name). Stopwords below are the capitalised
+# tokens that appear in MOST case names and therefore don't narrow the
+# search: "State", "Union", "The", "Court", etc. A token with a capital
+# first letter and ≥ 4 chars and not in this set is treated as a
+# candidate proper noun.
+_CASE_NAME_STOPWORDS = frozenset({
+    "State", "Union", "The", "Court", "India", "Ors", "Anr", "Another",
+    "Others", "Petitioner", "Respondent", "Appellant", "Accused", "And",
+    "Vs", "Versus", "Honble", "Commissioner", "Officer", "Ltd", "Limited",
+    "Pvt", "Corporation", "Committee", "Council", "Authority", "Board",
+    "Government", "Gov", "Govt", "High", "Supreme", "Dist", "District",
+    "Civil", "Criminal", "Crime", "Police", "Station",
+})
+
+
+def _proper_noun_tokens(query: str) -> list[str]:
+    """Extract distinctive proper-noun tokens from a query.
+
+    Rules:
+    - Tokenise on whitespace, strip trailing punctuation.
+    - Keep tokens that (a) start with an uppercase letter, (b) are
+      ≥ 4 chars, (c) aren't in `_CASE_NAME_STOPWORDS`, (d) are
+      alphabetic (rejects docket numbers like "CRLP", "WP", "CRR").
+    Returns up to 2 such tokens in query order (primary + secondary
+    signals). Returns [] if no proper-noun tokens are present — that's
+    the signal the query is topical and should fall through to pure
+    vector search.
+    """
+    if not query:
+        return []
+    tokens: list[str] = []
+    for raw in query.split():
+        clean = raw.strip(".,;:!?\"'()[]{}")
+        if len(clean) < 4 or not clean[0].isupper() or not clean.isalpha():
+            continue
+        if clean in _CASE_NAME_STOPWORDS:
+            continue
+        tokens.append(clean)
+        if len(tokens) >= 2:
+            break
+    return tokens
+
+
+def _exact_name_match_document_ids(
+    session: Session,
+    *,
+    query: str,
+    forum_level: str | None,
+    court_name: str | None,
+    document_type: str | None,
+    limit: int,
+) -> list[str]:
+    """Return doc ids whose parties_json OR title contains every proper-
+    noun token from the query. Empty list if the query is topical or
+    if the match is too broad to be confident (> 2 × limit hits).
+    """
+    tokens = _proper_noun_tokens(query)
+    if not tokens:
+        return []
+    try:
+        if session.bind is None or session.bind.dialect.name != "postgresql":
+            return []
+    except Exception:
+        return []
+
+    # Build a WHERE clause that requires EVERY token (AND) to appear in
+    # either parties_json or title — ILIKE '%token%' on both columns.
+    # PG will use a seq scan without a trigram index but at ~20k rows
+    # the whole table fits in memory and the scan is <10 ms.
+    from sqlalchemy import text
+
+    where_parts: list[str] = []
+    params: dict[str, object] = {
+        "forum": forum_level,
+        "court": court_name,
+        "dtype": document_type,
+        "lim": limit,
+    }
+    for idx, tok in enumerate(tokens):
+        pkey = f"tok{idx}"
+        where_parts.append(
+            f"(d.parties_json ILIKE :{pkey} OR d.title ILIKE :{pkey})"
+        )
+        params[pkey] = f"%{tok}%"
+    where_sql = " AND ".join(where_parts)
+
+    try:
+        rows = session.execute(
+            text(
+                "SELECT d.id FROM authority_documents d "
+                f"WHERE {where_sql} "
+                "AND (cast(:forum as text) IS NULL OR d.forum_level = :forum) "
+                "AND (cast(:court as text) IS NULL OR d.court_name = :court) "
+                "AND (cast(:dtype as text) IS NULL OR d.document_type = :dtype) "
+                "LIMIT :lim"
+            ),
+            params,
+        ).all()
+    except Exception:
+        session.rollback()
+        return []
+
+    ids = [r.id for r in rows]
+    # Too broad (likely topical token that slipped the stopword list) →
+    # don't boost. Keeping the threshold loose (2x limit) lets legitimate
+    # multi-hit cases (same parties appear in related judgments) through.
+    if len(ids) > max(limit * 2, 20):
+        return []
+    return ids
 
 
 def _pg_prefilter_document_ids(
