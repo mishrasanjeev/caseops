@@ -98,6 +98,51 @@ def _build_query(title: str) -> str:
     return " ".join(words[:10])
 
 
+def _expand_query_via_haiku(query: str) -> str:
+    """Ask Haiku to expand a short case-name query with procedural context.
+
+    Short queries like "Wahid State Govt of NCT of Delhi" carry little
+    semantic signal for Voyage. A Haiku rewrite expanding to include a
+    clean v./versus marker, likely procedural posture (bail, SLP,
+    criminal appeal, writ petition), and typical court terms gives the
+    cosine search much richer matching targets. Returns the original
+    query on any failure.
+    """
+    from caseops_api.services.llm import LLMMessage, build_provider
+
+    try:
+        llm = build_provider()
+    except Exception:  # noqa: BLE001
+        return query
+
+    prompt = (
+        "Expand this Indian-law case-name search query into a single richer "
+        "phrase (20-35 words) including: a clean 'v.' marker between parties, "
+        "likely procedural posture (e.g. bail, SLP, criminal appeal, writ "
+        "petition, quashing, anticipatory bail, compensation), and the court "
+        "type. Return ONLY the expanded phrase on one line, no preamble or "
+        "quotes.\n\nQuery: " + query
+    )
+    try:
+        result = llm.generate(
+            messages=[LLMMessage(role="user", content=prompt)],
+            temperature=0.0,
+            max_tokens=160,
+        )
+    except Exception:  # noqa: BLE001
+        return query
+
+    expanded = (result.text or "").strip().splitlines()[0].strip().strip('"').strip()
+    # Reject obviously broken expansions — only accept a clearly longer string.
+    if (
+        not expanded
+        or len(expanded) > 600
+        or len(expanded) < max(len(query) + 10, 40)
+    ):
+        return query
+    return expanded
+
+
 def _sample_probes(
     session: Session, *, sample_size: int, seed: int
 ) -> list[_Probe]:
@@ -220,7 +265,15 @@ def _format_report(
     return "\n".join(lines) + "\n"
 
 
-def run(*, tenant_slug: str, sample_size: int, k: int, seed: int, dry_run: bool) -> int:
+def run(
+    *,
+    tenant_slug: str,
+    sample_size: int,
+    k: int,
+    seed: int,
+    dry_run: bool,
+    expand_query: bool = False,
+) -> int:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
@@ -241,6 +294,18 @@ def run(*, tenant_slug: str, sample_size: int, k: int, seed: int, dry_run: bool)
             probes: list[_Probe] = []
         else:
             probes = _sample_probes(session, sample_size=sample_size, seed=seed)
+            if expand_query and probes:
+                expanded: list[_Probe] = []
+                for p in probes:
+                    new_q = _expand_query_via_haiku(p.query)
+                    if new_q != p.query:
+                        logging.info(
+                            "query-expansion: %r -> %r", p.query, new_q[:140]
+                        )
+                    expanded.append(
+                        _Probe(document_id=p.document_id, title=p.title, query=new_q)
+                    )
+                probes = expanded
         if not probes and not dry_run:
             sys.stderr.write(
                 "no Layer-2 docs (structured_version IS NOT NULL) to sample. "
@@ -290,10 +355,18 @@ def main(argv: Iterable[str] | None = None) -> int:
         "--dry-run", action="store_true",
         help="Skip retrieval; record empty run (plumbing test).",
     )
+    parser.add_argument(
+        "--expand-query", action="store_true",
+        help=(
+            "Send each probe's stripped query through Haiku for expansion "
+            "before embedding. Tests whether LLM-side query expansion is a "
+            "quality lever. Adds ~0.5s + a few hundred tokens per probe."
+        ),
+    )
     args = parser.parse_args(list(argv) if argv is not None else None)
     return run(
         tenant_slug=args.tenant, sample_size=args.sample_size, k=args.k,
-        seed=args.seed, dry_run=args.dry_run,
+        seed=args.seed, dry_run=args.dry_run, expand_query=args.expand_query,
     )
 
 
