@@ -47,7 +47,13 @@ def _iter_all_scenarios() -> list[tuple[DraftTemplateType, str, dict, dict]]:
     """Flatten every fixture into (template_type, key, facts, meta)."""
     out: list[tuple[DraftTemplateType, str, dict, dict]] = []
     # Standalone fixture files (one template type each).
-    for fname in ("bail.json", "cheque_bounce_notice.json", "anticipatory_bail.json", "civil_suit.json"):
+    standalone = (
+        "bail.json",
+        "cheque_bounce_notice.json",
+        "anticipatory_bail.json",
+        "civil_suit.json",
+    )
+    for fname in standalone:
         data = _load(fname)
         tt = DraftTemplateType(data["template_type"])
         for s in data["scenarios"]:

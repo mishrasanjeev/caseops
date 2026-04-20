@@ -31,7 +31,6 @@ from caseops_api.schemas.drafting_templates import (
 )
 from caseops_api.services.drafting_prompts import get_prompt_parts
 
-
 # ---------------------------------------------------------------
 # Registry + schema coverage.
 # ---------------------------------------------------------------

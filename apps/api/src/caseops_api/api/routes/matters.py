@@ -56,6 +56,15 @@ from caseops_api.schemas.matters import (
     MatterUpdateRequest,
     MatterWorkspaceResponse,
 )
+from caseops_api.services.bench_matcher import (
+    BenchSuggestion as BenchSuggestionDC,
+)
+from caseops_api.services.bench_matcher import (
+    JudgeStub as JudgeStubDC,
+)
+from caseops_api.services.bench_matcher import (
+    suggest_bench_for_matter_id,
+)
 from caseops_api.services.court_sync_jobs import (
     create_matter_court_sync_job,
     run_matter_court_sync_job,
@@ -83,11 +92,6 @@ from caseops_api.services.matter_access import (
     remove_access_grant,
     remove_ethical_wall,
     set_restricted_access,
-)
-from caseops_api.services.bench_matcher import (
-    BenchSuggestion as BenchSuggestionDC,
-    JudgeStub as JudgeStubDC,
-    suggest_bench_for_matter_id,
 )
 from caseops_api.services.matter_summary import (
     MatterExecutiveSummary,

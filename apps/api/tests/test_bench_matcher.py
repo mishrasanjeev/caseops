@@ -36,7 +36,6 @@ from caseops_api.services.bench_matcher import (
     _infer_practice_area,
 )
 
-
 # ---------------------------------------------------------------
 # Pure-function tests — no DB, no client.
 # ---------------------------------------------------------------

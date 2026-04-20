@@ -165,7 +165,10 @@ _AFFIDAVIT_SUGGESTIONS: list[FieldSuggestions] = [
         label="Verification clauses",
         options=[
             "Paragraphs 1 to N are true to my personal knowledge.",
-            "Paragraph M is on information received from the records of the matter, believed to be true.",
+            (
+                "Paragraph M is on information received from the records of "
+                "the matter, believed to be true."
+            ),
             "Paragraphs X to Y are based on legal advice received which I believe to be correct.",
         ],
     ),

@@ -192,8 +192,8 @@ def test_build_timeline_by_id_rejects_cross_tenant(client: TestClient) -> None:
     # factory — the bench matcher test does the same thing via an HTTP
     # wrapper; we keep this at the service layer to exercise the
     # tenancy-safe wrapper directly.
-    from caseops_api.services.identity import SessionContext
     from caseops_api.db.models import Company, CompanyMembership, User
+    from caseops_api.services.identity import SessionContext
 
     factory = get_session_factory()
     with factory() as session:

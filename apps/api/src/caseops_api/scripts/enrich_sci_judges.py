@@ -11,10 +11,11 @@ import sys
 import time
 import urllib.request
 from pathlib import Path
-from typing import Optional
 
-ROOT = Path(__file__).resolve().parents[1]
-JSON_PATH = ROOT / "apps" / "api" / "src" / "caseops_api" / "scripts" / "seed_data" / "sci_sitting_judges.json"
+# Script now lives under apps/api/src/caseops_api/scripts/. The seed
+# JSON is a sibling `seed_data/` directory; resolve relative to this
+# file so the script runs from anywhere (repo root, apps/api, etc.).
+JSON_PATH = Path(__file__).resolve().parent / "seed_data" / "sci_sitting_judges.json"
 
 USER_AGENT = "CaseOps legal-ops tool (research)"
 SLEEP_SEC = 1.0
@@ -27,7 +28,7 @@ MONTHS = {
 }
 
 
-def fetch(url: str) -> Optional[str]:
+def fetch(url: str) -> str | None:
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
@@ -74,13 +75,13 @@ PAT_MONTH_FIRST = re.compile(
 )
 
 
-def to_iso(day: int, month: int, year: int) -> Optional[str]:
+def to_iso(day: int, month: int, year: int) -> str | None:
     if not (1 <= month <= 12 and 1 <= day <= 31 and 1900 <= year <= 2100):
         return None
     return f"{year:04d}-{month:02d}-{day:02d}"
 
 
-def parse_date_near(text: str, anchor_regex: re.Pattern) -> Optional[str]:
+def parse_date_near(text: str, anchor_regex: re.Pattern) -> str | None:
     """Find the first date mention within a short window AFTER each anchor match."""
     for m in anchor_regex.finditer(text):
         window = text[m.end(): m.end() + 220]
@@ -139,10 +140,14 @@ def parse_profile(html: str) -> dict:
         # First sentence-ish
         end = re.search(r"[.\n]", tail)
         parent_hc = (tail[: end.start()] if end else tail).strip() or None
-    return {"date_of_birth": dob, "date_of_appointment_sc": appt, "parent_high_court_new": parent_hc}
+    return {
+        "date_of_birth": dob,
+        "date_of_appointment_sc": appt,
+        "parent_high_court_new": parent_hc,
+    }
 
 
-def compute_retirement(dob_iso: Optional[str]) -> Optional[str]:
+def compute_retirement(dob_iso: str | None) -> str | None:
     if not dob_iso:
         return None
     try:
@@ -155,7 +160,14 @@ def compute_retirement(dob_iso: Optional[str]) -> Optional[str]:
 def coverage(records: list[dict]) -> dict:
     n = len(records)
     out = {}
-    for k in ("name", "parent_high_court", "date_of_appointment_sc", "date_of_birth", "computed_retirement_date"):
+    fields = (
+        "name",
+        "parent_high_court",
+        "date_of_appointment_sc",
+        "date_of_birth",
+        "computed_retirement_date",
+    )
+    for k in fields:
         c = sum(1 for r in records if r.get(k))
         out[k] = (c, n, 100.0 * c / n if n else 0.0)
     return out

@@ -7,7 +7,7 @@ import { useSession } from "./use-session";
 const refreshAccessToken = vi.fn(() => Promise.resolve("new-token"));
 
 vi.mock("./api/client", () => ({
-  refreshAccessToken: (...args: unknown[]) => refreshAccessToken(...args),
+  refreshAccessToken: () => refreshAccessToken(),
 }));
 
 function buildSession() {

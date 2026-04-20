@@ -13,7 +13,6 @@ from caseops_api.services.draft_type_validators import (
     validate_draft_by_type,
 )
 
-
 # ---------------------------------------------------------------
 # Bail
 # ---------------------------------------------------------------
