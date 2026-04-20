@@ -1,0 +1,89 @@
+{
+  "template_type": "civil_suit",
+  "description": "Three canonical civil-suit fact patterns.",
+  "scenarios": [
+    {
+      "key": "recovery-of-money-commercial",
+      "facts": {
+        "plaintiff_name": "Alpha Exports Pvt Ltd",
+        "defendant_name": "Beta Trading Co",
+        "cause_of_action_date": "2025-11-10",
+        "cause_of_action_place": "Mumbai",
+        "suit_valuation_inr": 1500000,
+        "relief_sought": [
+          "Decree for recovery of INR 15,00,000 with interest at 12% p.a.",
+          "Costs of the suit"
+        ],
+        "is_commercial_suit": true,
+        "court_name": "Bombay High Court (Commercial Division)",
+        "facts_brief": "Plaintiff supplied goods against purchase orders dated June-October 2025. Defendant issued post-dated cheques which were dishonoured. Demand notice under s.12A Commercial Courts Act issued and pre-institution mediation concluded without settlement."
+      },
+      "expected_signals": [
+        "cause of action",
+        "valuation",
+        "prayer",
+        "commercial courts act",
+        "s.12a"
+      ],
+      "must_pass_rules": [
+        "civil_suit_cause_of_action_missing",
+        "civil_suit_prayer_missing"
+      ],
+      "should_warn_on": []
+    },
+    {
+      "key": "specific-performance-real-estate",
+      "facts": {
+        "plaintiff_name": "Aarti Jain",
+        "defendant_name": "Delhi Developers LLP",
+        "cause_of_action_date": "2025-09-15",
+        "cause_of_action_place": "New Delhi",
+        "suit_valuation_inr": 9500000,
+        "relief_sought": [
+          "Decree for specific performance of the agreement dated 01-05-2025",
+          "Declaration of plaintiff's title",
+          "Permanent injunction restraining defendant from alienating the property",
+          "Costs"
+        ],
+        "is_commercial_suit": false,
+        "court_name": "Delhi High Court",
+        "facts_brief": "Plaintiff entered into an agreement to sell for Flat 4B, Tower 2, Greater Kailash II. Full consideration of INR 95,00,000 paid. Defendant refused to execute the sale deed citing price escalation. Plaintiff is ready and willing to perform her part."
+      },
+      "expected_signals": [
+        "cause of action",
+        "valuation",
+        "prayer",
+        "specific performance"
+      ],
+      "must_pass_rules": [
+        "civil_suit_cause_of_action_missing",
+        "civil_suit_prayer_missing"
+      ],
+      "should_warn_on": []
+    },
+    {
+      "key": "permanent-injunction-easement",
+      "facts": {
+        "plaintiff_name": "Madhav Singh",
+        "defendant_name": "Ramesh Builders",
+        "cause_of_action_date": "2026-01-20",
+        "cause_of_action_place": "Pune",
+        "suit_valuation_inr": 200000,
+        "relief_sought": [
+          "Permanent injunction restraining defendant from obstructing the plaintiff's right of way",
+          "Mandatory injunction to remove the wall built on 15-01-2026",
+          "Costs"
+        ],
+        "is_commercial_suit": false,
+        "court_name": "Pune District Court",
+        "facts_brief": "Plaintiff has been using a common passage adjoining the disputed wall for over 25 years. Defendant constructed a wall on 15-01-2026 blocking the passage. Easement by prescription is established."
+      },
+      "expected_signals": ["cause of action", "prayer"],
+      "must_pass_rules": [
+        "civil_suit_cause_of_action_missing",
+        "civil_suit_prayer_missing"
+      ],
+      "should_warn_on": []
+    }
+  ]
+}

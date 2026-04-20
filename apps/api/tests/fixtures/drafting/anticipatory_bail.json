@@ -1,0 +1,51 @@
+{
+  "template_type": "anticipatory_bail",
+  "description": "Three canonical anticipatory-bail fact patterns.",
+  "scenarios": [
+    {
+      "key": "economic-offence-business-dispute",
+      "facts": {
+        "applicant_name": "Suresh Mehta",
+        "fir_number": "FIR 234/2026",
+        "apprehended_sections": ["BNS s.318", "BNS s.316"],
+        "police_station": "Economic Offences Wing",
+        "court_name": "Bombay High Court",
+        "apprehension_grounds": "Complainant is a former business partner. Dispute arises from unpaid commercial invoices. Applicant has offered to participate in investigation and has already submitted all requested records.",
+        "has_received_notice": true
+      },
+      "expected_signals": ["bnss s.482", "apprehension", "arrest"],
+      "must_pass_rules": ["anticipatory_bail_missing_statute"],
+      "should_warn_on": []
+    },
+    {
+      "key": "matrimonial-no-fir",
+      "facts": {
+        "applicant_name": "Rahul Verma",
+        "fir_number": null,
+        "apprehended_sections": ["BNS s.85"],
+        "police_station": "Gurgaon Sector 29",
+        "court_name": "Punjab and Haryana High Court",
+        "apprehension_grounds": "Wife's family has threatened to file a complaint. Applicant's in-laws have visited the police station twice. Applicant is a permanent resident and willing to cooperate.",
+        "has_received_notice": false
+      },
+      "expected_signals": ["bnss s.482", "apprehension"],
+      "must_pass_rules": ["anticipatory_bail_missing_statute"],
+      "should_warn_on": []
+    },
+    {
+      "key": "cheque-dishonour-summons",
+      "facts": {
+        "applicant_name": "Priya Shah",
+        "fir_number": null,
+        "apprehended_sections": ["NI Act s.138"],
+        "police_station": "Borivali",
+        "court_name": "Bombay High Court",
+        "apprehension_grounds": "Summons issued by the Metropolitan Magistrate in a complaint case. Applicant seeks protection pending her personal appearance and bail bond.",
+        "has_received_notice": false
+      },
+      "expected_signals": ["bnss s.482"],
+      "must_pass_rules": ["anticipatory_bail_missing_statute"],
+      "should_warn_on": []
+    }
+  ]
+}

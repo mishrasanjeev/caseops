@@ -1,0 +1,67 @@
+{
+  "template_type": "bail",
+  "description": "Three canonical regular-bail fact patterns. Used by tests/test_drafting_goldens.py to run a validator-only regression when the per-type prompt changes, and by eval_drafting_types.py when a live LLM comparison is run.",
+  "scenarios": [
+    {
+      "key": "bnss-303-simple-theft",
+      "facts": {
+        "accused_name": "Ramesh Kumar",
+        "fir_number": "FIR 123/2026",
+        "police_station": "Connaught Place",
+        "sections_charged": ["BNS s.303", "BNS s.305"],
+        "custody_since": "2026-03-01",
+        "court_name": "Delhi High Court",
+        "prior_bail_applications": 0,
+        "grounds_brief": "Accused is a resident of Delhi with no prior antecedents. Co-accused Ravi Singh has already been granted bail by this Hon'ble Court on similar facts. Investigation is complete and chargesheet filed."
+      },
+      "expected_signals": [
+        "bnss s.483",
+        "triple test",
+        "custody",
+        "parity"
+      ],
+      "must_pass_rules": ["bail_missing_statute"],
+      "should_warn_on": []
+    },
+    {
+      "key": "ndps-prolonged-custody",
+      "facts": {
+        "accused_name": "Vinod Sharma",
+        "fir_number": "FIR 045/2025",
+        "police_station": "Narcotics Cell - Dwarka",
+        "sections_charged": ["NDPS Act s.20", "NDPS Act s.29"],
+        "custody_since": "2025-05-15",
+        "court_name": "Delhi High Court",
+        "prior_bail_applications": 2,
+        "grounds_brief": "Accused has been in custody for over 10 months. Prosecution has examined its material witnesses. Trial has not commenced; default bail under Satender Kumar Antil principles attracted."
+      },
+      "expected_signals": [
+        "bnss s.483",
+        "custody",
+        "ndps"
+      ],
+      "must_pass_rules": ["bail_missing_statute"],
+      "should_warn_on": []
+    },
+    {
+      "key": "498a-economic-offence",
+      "facts": {
+        "accused_name": "Arjun Mehta",
+        "fir_number": "FIR 078/2026",
+        "police_station": "Hauz Khas",
+        "sections_charged": ["BNS s.85", "BNS s.74"],
+        "custody_since": "2026-02-20",
+        "court_name": "Delhi High Court",
+        "prior_bail_applications": 1,
+        "grounds_brief": "Allegations are of a matrimonial nature. Complainant is the applicant's wife. The couple is in mediation. Custody no longer serves any investigative purpose."
+      },
+      "expected_signals": [
+        "bnss s.483",
+        "custody",
+        "triple test"
+      ],
+      "must_pass_rules": ["bail_missing_statute"],
+      "should_warn_on": []
+    }
+  ]
+}

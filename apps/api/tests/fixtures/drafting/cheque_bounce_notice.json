@@ -1,0 +1,68 @@
+{
+  "template_type": "cheque_bounce_notice",
+  "description": "Three canonical s.138 NI Act demand-notice fact patterns.",
+  "scenarios": [
+    {
+      "key": "standard-insufficient-funds",
+      "facts": {
+        "drawer_name": "Vendor Alpha Pvt Ltd",
+        "drawee_name": "Suresh Trading Co",
+        "cheque_number": "000123",
+        "cheque_date": "2026-02-15",
+        "cheque_amount_inr": 500000,
+        "bank_name": "State Bank of India",
+        "bank_memo_date": "2026-03-01",
+        "dishonour_reason": "insufficient_funds"
+      },
+      "expected_signals": [
+        "s.138",
+        "15 days",
+        "rupees",
+        "only"
+      ],
+      "must_pass_rules": [
+        "cheque_bounce_missing_s138",
+        "cheque_bounce_missing_15_day_window"
+      ],
+      "should_warn_on": []
+    },
+    {
+      "key": "payment-stopped-high-value",
+      "facts": {
+        "drawer_name": "Tech Innovations LLP",
+        "drawee_name": "Priya Enterprises",
+        "cheque_number": "778812",
+        "cheque_date": "2026-01-30",
+        "cheque_amount_inr": 2500000,
+        "bank_name": "HDFC Bank",
+        "bank_memo_date": "2026-02-10",
+        "dishonour_reason": "payment_stopped"
+      },
+      "expected_signals": ["s.138", "fifteen days", "rupees", "only"],
+      "must_pass_rules": [
+        "cheque_bounce_missing_s138",
+        "cheque_bounce_missing_15_day_window"
+      ],
+      "should_warn_on": []
+    },
+    {
+      "key": "account-closed-small",
+      "facts": {
+        "drawer_name": "Deepak Singh",
+        "drawee_name": "Ramesh Contractors",
+        "cheque_number": "441903",
+        "cheque_date": "2026-03-10",
+        "cheque_amount_inr": 75000,
+        "bank_name": "Punjab National Bank",
+        "bank_memo_date": "2026-03-15",
+        "dishonour_reason": "other"
+      },
+      "expected_signals": ["s.138", "15 days"],
+      "must_pass_rules": [
+        "cheque_bounce_missing_s138",
+        "cheque_bounce_missing_15_day_window"
+      ],
+      "should_warn_on": []
+    }
+  ]
+}

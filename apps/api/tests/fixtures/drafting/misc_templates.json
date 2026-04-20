@@ -1,0 +1,81 @@
+{
+  "description": "Compact fact-pattern fixtures for the remaining five template types. Each type gets at least one canonical scenario so the R5 validator regression catches a prompt tweak that accidentally drops a hard requirement. Extensible to 3/type once an operator grades the live-LLM output.",
+  "templates": {
+    "divorce_petition": {
+      "scenarios": [
+        {
+          "key": "hma-cruelty-desertion",
+          "facts": {
+            "petitioner_name": "Neha Kapoor",
+            "respondent_name": "Arjun Kapoor",
+            "marriage_date": "2018-02-14",
+            "marriage_place": "Chandigarh",
+            "separation_date": "2023-06-01",
+            "grounds": ["Cruelty", "Desertion"],
+            "act_governing": "HMA",
+            "children_details": "One child, Aarav, 5 years old, in petitioner's custody.",
+            "court_name": "Chandigarh Family Court"
+          },
+          "must_pass_rules": ["divorce_missing_act"]
+        }
+      ]
+    },
+    "property_dispute_notice": {
+      "scenarios": [
+        {
+          "key": "encroachment-flat",
+          "facts": {
+            "sender_name": "Priya Desai",
+            "recipient_name": "Neighbour Occupant",
+            "property_address": "Flat 12A, Sunshine Apartments, Andheri West, Mumbai",
+            "property_type": "flat",
+            "title_basis": "sale_deed",
+            "relief_sought": "Remove the unauthorised partition erected on the common landing within fifteen days, failing which legal proceedings will follow.",
+            "response_deadline_days": 15
+          },
+          "must_pass_rules": []
+        }
+      ]
+    },
+    "affidavit": {
+      "scenarios": [
+        {
+          "key": "standard-evidentiary",
+          "facts": {
+            "deponent_name": "Sanjay Verma",
+            "deponent_age": 45,
+            "deponent_occupation": "Advocate",
+            "deponent_address": "Chambers 204, High Court Annexe, Mumbai",
+            "statement_paragraphs": [
+              "I am the counsel on record for the petitioner in WP No. 1234/2026.",
+              "The contents of the accompanying petition are true to my knowledge based on the records of the matter.",
+              "No facts material to the petition have been suppressed."
+            ],
+            "sworn_place": "Mumbai",
+            "sworn_date": "2026-04-20"
+          },
+          "must_pass_rules": ["affidavit_missing_affirmation"]
+        }
+      ]
+    },
+    "criminal_complaint": {
+      "scenarios": [
+        {
+          "key": "bns-cheating-forgery",
+          "facts": {
+            "complainant_name": "Aarti Sharma",
+            "accused_name": "Rajesh Kumar",
+            "alleged_sections": ["BNS s.318", "BNS s.337"],
+            "incident_date": "2026-02-01",
+            "incident_place": "Connaught Place, New Delhi",
+            "narrative": "Accused induced the complainant to invest INR 10,00,000 in a fictitious real-estate scheme. Accused forged the allotment letter and has since absconded.",
+            "witness_count": 3,
+            "prior_fir_filed": false,
+            "court_name": "Patiala House Courts, New Delhi"
+          },
+          "must_pass_rules": ["criminal_complaint_missing_statute"]
+        }
+      ]
+    }
+  }
+}
