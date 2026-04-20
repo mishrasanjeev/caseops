@@ -184,13 +184,22 @@ def _run(
     )
 
     # Build (doc, header) pairs, skipping docs with no usable header text.
+    # In --refresh mode, docs that fail the quality gate have their old
+    # metadata chunk DELETED with no replacement — a stale placeholder
+    # embedding is worse than a missing row.
     pending: list[tuple[AuthorityDocument, str]] = []
     for doc in docs:
         header = _build_header_from_row(doc)
         if not header:
             summary.skipped_no_header_data += 1
+            if refresh:
+                summary.refreshed_dropped += _drop_existing_metadata_chunks(
+                    session, document_id=doc.id
+                )
             continue
         pending.append((doc, header))
+    if refresh and summary.skipped_no_header_data:
+        session.commit()
 
     for start in range(0, len(pending), batch_size):
         batch = pending[start : start + batch_size]
