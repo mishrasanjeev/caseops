@@ -777,6 +777,54 @@ Sprints A–F (security, frontend spine, AI core, drafting v1) all **shipped** �
 **Sprint O onward — broader court integrations and jurisdiction rollout.**
 §12.1 Tamil Nadu + Gujarat adapters, §12.2 connector health UI, §12.3 email + calendar ingest.
 
+**Sprint P — Judge & Court Intelligence depth (1-4 weeks, 4 phases).**
+Planned 2026-04-20 against PRD §10.6. Base schema (`Court`, `Bench`,
+`Judge`, `authorities.judges_json` / `bench_name` / `parties_json`) and
+read-only surfaces (`/api/courts/{id}`, `/api/courts/judges/{id}`,
+`/app/courts`) are already shipped. This sprint deepens the data.
+
+- **P1 — activate current data (2-3 days).**
+  - Finish Layer 2 across all 17.5 k docs so `judges_json` and
+    `parties_json` are fully populated (in flight on GCE ingest VM,
+    ~15 % done at 2026-04-20 T13:00).
+  - Rewrite `/api/courts/judges/{id}` profile to use structured
+    `judges_json` instead of the brittle `bench_name ILIKE` heuristic.
+  - Enrich judge profile with: cases decided by practice area
+    (from `sections_cited_json`), decision-volume time series,
+    top-citing judgments, tenure bounds (earliest / latest
+    decision date).
+  - Guardrail: no favorability / outcome prediction surfaces. PRD
+    §10.6 forbids "black-box favorability scoring".
+
+- **P2 — SC judge supplement (1 day).**
+  - One-off scrape of `sci.gov.in` judge roster → enrich `Judge`
+    rows with `joined_at`, `retired_at`, `designation_history`.
+  - No HC scraping in this phase (24 HCs, wildly heterogeneous
+    DOM; derive from our own corpus instead).
+
+- **P3 — case-to-court matching (1-2 weeks).**
+  - Given `(matter.practice_area, matter.forum_level,
+    matter.jurisdiction)`, auto-suggest the destination court and
+    likely bench. Rule-based using each court's publicly documented
+    allocation / roster policy — NOT a model.
+  - Surface: "this looks like a Delhi HC Single Bench criminal-side
+    matter; bail list typically goes before Justice X on Tuesdays".
+    Factual, sourced from the court's own roster.
+
+- **P4 — scoped authority retrieval for filing (2-3 weeks).**
+  - Given a matter, surface authorities that this court / bench
+    has cited on similar facts. Rerank boosts same-forum /
+    higher-forum decisions.
+  - Does NOT score judges, predict outcomes, or suggest tailoring
+    arguments to a judge's preferences. Holds the §10.6 line.
+  - Implemented as a filter + scorer inside the existing retrieval
+    path (`services/authorities.search_authority_catalog`) — no new
+    top-level surface.
+
+External data posture: derive from our 17.5 k-doc corpus as primary;
+`sci.gov.in` as optional supplement for SC. Do not license Manupatra /
+SCC Online — corpus is sufficient for MVP.
+
 Re-order as founder priorities dictate. The critical insight today: **Sprint H (audit + ethical walls)** is the single biggest blocker for an enterprise pilot, and **Sprint G (full corpus)** is the single biggest retrieval-quality lift.
 
 ---
