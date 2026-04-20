@@ -219,6 +219,30 @@ def list_supported_court_sync_sources() -> list[str]:
     return sorted(ADAPTERS.keys())
 
 
+# Map matter.court_name → default live adapter key. Used when the client
+# doesn't specify a source on POST /matters/{id}/court-sync/pull — we
+# infer from the matter's court rather than making the lawyer pick one.
+# Add entries here as new adapters are wired into ADAPTERS above.
+_COURT_NAME_TO_SOURCE: dict[str, str] = {
+    "Supreme Court of India": "supreme_court_live",
+    "Delhi High Court": "delhi_high_court_live",
+    "Bombay High Court": "bombay_high_court_live",
+    "Karnataka High Court": "karnataka_high_court_live",
+    "Madras High Court": "chennai_high_court_live",
+    "Telangana High Court": "hyderabad_high_court_live",
+}
+
+
+def resolve_source_for_court(court_name: str | None) -> str | None:
+    """Return the default adapter key for a matter's court, or None
+    when no live adapter covers that court. The caller should surface
+    a clear 400 pointing at ``list_supported_court_sync_sources()``.
+    """
+    if not court_name:
+        return None
+    return _COURT_NAME_TO_SOURCE.get(court_name.strip())
+
+
 def _fetch_text(url: str) -> tuple[str, str]:
     # TLS verification is mandatory. The earlier code retried with
     # verify=False for `TLS_RETRY_HOSTS_KNOWN_BROKEN_CHAIN` on a

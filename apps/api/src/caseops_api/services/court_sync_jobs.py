@@ -15,7 +15,11 @@ from caseops_api.db.models import (
 )
 from caseops_api.db.session import get_session_factory
 from caseops_api.schemas.matters import MatterCourtSyncJobRecord
-from caseops_api.services.court_sync_sources import get_court_sync_adapter
+from caseops_api.services.court_sync_sources import (
+    get_court_sync_adapter,
+    list_supported_court_sync_sources,
+    resolve_source_for_court,
+)
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.matters import _get_matter_model, _persist_court_sync_import
 
@@ -50,10 +54,27 @@ def create_matter_court_sync_job(
     *,
     context: SessionContext,
     matter_id: str,
-    source: str,
+    source: str | None,
     source_reference: str | None,
 ) -> MatterCourtSyncJobRecord:
     matter = _get_matter_model(session, context=context, matter_id=matter_id)
+
+    # When the client omits `source`, derive it from the matter's court.
+    # Most matters only ever want one live adapter — forcing the lawyer
+    # to pick one from a dropdown is bad UX.
+    if not source or not source.strip():
+        resolved = resolve_source_for_court(matter.court_name)
+        if resolved is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "No live court-sync adapter for "
+                    f"{matter.court_name!r}. Pass an explicit `source` — "
+                    f"supported: {', '.join(list_supported_court_sync_sources())}"
+                ),
+            )
+        source = resolved
+
     try:
         get_court_sync_adapter(source)
     except ValueError as exc:

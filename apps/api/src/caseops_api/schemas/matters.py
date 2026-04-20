@@ -312,7 +312,12 @@ class MatterCourtSyncRunRecord(BaseModel):
 
 
 class MatterCourtSyncPullRequest(BaseModel):
-    source: str = Field(min_length=2, max_length=120)
+    # Optional — when omitted, the server derives the adapter key from
+    # the matter's court_name via services.court_sync_sources
+    # .resolve_source_for_court. This lets the web "Run Sync" button
+    # work with no UI picker for matters where the court is already
+    # known; a client explicitly passing ``source`` still wins.
+    source: str | None = Field(default=None, min_length=2, max_length=120)
     source_reference: str | None = Field(default=None, max_length=500)
 
 
