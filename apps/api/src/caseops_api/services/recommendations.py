@@ -53,6 +53,7 @@ from caseops_api.services.citations import (
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.llm import (
     PURPOSE_RECOMMENDATIONS,
+    AnthropicProvider,
     LLMCallContext,
     LLMCompletion,
     LLMMessage,
@@ -61,6 +62,30 @@ from caseops_api.services.llm import (
     build_provider,
     generate_structured,
 )
+
+
+# Haiku is materially more reliable than Sonnet at structured JSON
+# output on long prompts — verified empirically during Layer 2
+# backfills (Sonnet 38/38 parse failures on monster docs, Haiku ~10%).
+# When the primary (usually Sonnet) returns invalid JSON we retry once
+# with Haiku so a prod recommendation never 502s due to a parse edge.
+_HAIKU_FALLBACK_MODEL = "claude-haiku-4-5-20251001"
+
+
+def _haiku_fallback_provider() -> LLMProvider | None:
+    """Build a dedicated Haiku provider for the JSON-parse retry path.
+
+    Returns None when the primary provider isn't Anthropic — Gemini /
+    mock don't have the Sonnet-specific defect this guards against.
+    """
+    settings = get_settings()
+    if (settings.llm_provider or "").lower() != "anthropic":
+        return None
+    return AnthropicProvider(
+        model=_HAIKU_FALLBACK_MODEL,
+        api_key=settings.llm_api_key,
+        prompt_cache=bool(getattr(settings, "llm_prompt_cache_enabled", True)),
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -371,25 +396,54 @@ def generate_recommendation(
     prompt_hash = _prompt_hash(messages)
 
     settings = get_settings()
-    try:
-        parsed, completion = generate_structured(
-            llm,
+    _call_context = LLMCallContext(
+        tenant_id=context.company.id,
+        matter_id=matter.id,
+        purpose=f"recommendation:{rec_type}",
+    )
+
+    def _invoke(active: LLMProvider) -> tuple[_LLMResponse, LLMCompletion]:
+        return generate_structured(
+            active,
             session=session,
             schema=_LLMResponse,
             messages=messages,
-            context=LLMCallContext(
-                tenant_id=context.company.id,
-                matter_id=matter.id,
-                purpose=f"recommendation:{rec_type}",
-            ),
+            context=_call_context,
             temperature=settings.llm_temperature,
             max_tokens=settings.llm_max_output_tokens,
         )
+
+    try:
+        parsed, completion = _invoke(llm)
     except LLMResponseFormatError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(exc),
-        ) from exc
+        # Sonnet (and sometimes Opus) returns malformed JSON on long
+        # structured outputs — this is the class of failure that
+        # bit us on the bail-recommendation 502 on 2026-04-20. Retry
+        # once with Haiku; the lower-quality model is materially more
+        # reliable on JSON shape. Only applies when the primary is
+        # Anthropic (for mock/gemini we re-raise unchanged).
+        fallback = _haiku_fallback_provider()
+        if fallback is None:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=str(exc),
+            ) from exc
+        logger.warning(
+            "recommendation %s: primary LLM %s returned invalid JSON; "
+            "retrying with Haiku fallback",
+            rec_type,
+            getattr(llm, "model", "<unknown>"),
+        )
+        try:
+            parsed, completion = _invoke(fallback)
+        except LLMResponseFormatError as retry_exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=(
+                    f"Both primary and Haiku fallback returned invalid "
+                    f"JSON. Primary: {exc}. Fallback: {retry_exc}"
+                ),
+            ) from retry_exc
 
     cleaned_options, report = _filter_and_verify_options(parsed.options, retrieved)
     total_verified_citations = sum(
