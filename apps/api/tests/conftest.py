@@ -12,6 +12,28 @@ from caseops_api.db.session import clear_engine_cache
 from caseops_api.main import create_application
 
 
+# Autouse fixture — defense against suite-order leakage.
+#
+# Monkeypatch restores environment variables at test teardown, but it does
+# NOT touch in-process caches. Any test that calls
+# ``get_settings.cache_clear()`` after a ``monkeypatch.setenv`` leaves the
+# cached Settings object holding the monkeypatched values. The NEXT test
+# that reads settings without going through the ``client`` fixture sees
+# the stale object and — if it happened to be pointed at the shared prod
+# DSN — produces the 5 spurious failures Codex flagged in the
+# 2026-04-20 gap audit (full suite 382 / 5, isolated 15 / 0).
+#
+# Clearing the caches at teardown is cheap (microseconds) and breaks the
+# leak at source. Individual tests can still opt into setting up a fresh
+# environment inside their body; the autouse wipe just makes sure nobody
+# hands a polluted cache to the next test.
+@pytest.fixture(autouse=True)
+def _reset_settings_and_engine_caches_after_test() -> Generator[None]:
+    yield
+    get_settings.cache_clear()
+    clear_engine_cache()
+
+
 @pytest.fixture
 def client(
     tmp_path: Path,

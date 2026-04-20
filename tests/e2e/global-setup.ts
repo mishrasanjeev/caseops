@@ -11,6 +11,33 @@ import {
   uploadsRoot,
 } from "./support/env";
 
+/**
+ * Resolve the API venv Python interpreter. Playwright global-setup used
+ * to invoke ``uv --directory apps/api run python ...`` which triggers
+ * uv's package-sync step on every run. On Windows, that step can fail
+ * with a file-lock on ``.venv/Scripts/caseops-*.exe`` whenever another
+ * process (ingest worker, dev server) is holding the script. The
+ * Codex 2026-04-20 test-suite gap audit flagged this as a P0 because
+ * the entire Playwright suite was blocked before any browser tests ran.
+ *
+ * Fix: prefer the interpreter path directly (no sync path) and fall
+ * back to ``uv run --no-sync`` — which skips sync but still resolves
+ * through uv — only if the interpreter isn't materialised yet.
+ */
+function apiVenvPython(): { cmd: string; prefixArgs: string[] } {
+  const direct =
+    process.platform === "win32"
+      ? path.join(repoRoot, "apps", "api", ".venv", "Scripts", "python.exe")
+      : path.join(repoRoot, "apps", "api", ".venv", "bin", "python");
+  if (fs.existsSync(direct)) {
+    return { cmd: direct, prefixArgs: [] };
+  }
+  return {
+    cmd: "uv",
+    prefixArgs: ["--directory", "apps/api", "run", "--no-sync", "python"],
+  };
+}
+
 export default async function globalSetup(): Promise<void> {
   fs.rmSync(runtimeRoot, { force: true, recursive: true });
   fs.rmSync(path.join(repoRoot, "caseops-e2e.db"), { force: true });
@@ -19,13 +46,11 @@ export default async function globalSetup(): Promise<void> {
   fs.mkdirSync(documentCachePath, { recursive: true });
   fs.mkdirSync(uploadsRoot, { recursive: true });
 
+  const { cmd, prefixArgs } = apiVenvPython();
   const migrationRun = spawnSync(
-    "uv",
+    cmd,
     [
-      "--directory",
-      "apps/api",
-      "run",
-      "python",
+      ...prefixArgs,
       "-c",
       "from caseops_api.db.migrations import run_migrations; run_migrations()",
     ],
