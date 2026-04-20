@@ -52,15 +52,61 @@ class _Summary:
     errors: int = 0
 
 
+_CASE_NAME_SIGNAL = ("v.", " vs ", "versus", "v/s")
+
+
+def _title_is_case_name(title: str | None) -> bool:
+    """True when the title carries a real case name, not a placeholder.
+
+    Filenames like "2024_2_231_238_EN.pdf" and citation-only strings like
+    "[2024] 4 S.C.R. 340 : 2024 INSC 270" are NOT case names. Their
+    embeddings are useless for party-name queries and their presence in
+    the header just adds noise.
+    """
+    if not title:
+        return False
+    t = title.strip().lower()
+    if not t:
+        return False
+    return any(s in t for s in _CASE_NAME_SIGNAL)
+
+
+def _parties_from_json(parties_json: str | None) -> list[str]:
+    if not parties_json:
+        return []
+    try:
+        parsed = json.loads(parties_json)
+    except json.JSONDecodeError:
+        return []
+    out: list[str] = []
+    if isinstance(parsed, list):
+        out.extend(str(p) for p in parsed if isinstance(p, str) and p.strip())
+    elif isinstance(parsed, dict):
+        for v in parsed.values():
+            if isinstance(v, str) and v.strip():
+                out.append(v)
+            elif isinstance(v, list):
+                out.extend(str(p) for p in v if isinstance(p, str) and p.strip())
+    return [s for s in (p.strip() for p in out) if s]
+
+
 def _build_header_from_row(doc: AuthorityDocument) -> str:
     """Build a metadata header from every useful DB column.
 
-    Includes parties_json (Layer 2 output) because many SC rows carry a
-    citation-only title like ``"[2024] 4 S.C.R. 340"`` that is useless
-    for case-name queries; the party names live in parties_json. Pulling
-    them into the embedded header is the single biggest lever for
-    case-name recall on the post-Layer-2 corpus.
+    Quality gate: returns ``""`` (→ caller skips the chunk) when the
+    only available signal is a citation-only / placeholder title AND
+    parties_json is empty. Better to have a missing metadata row
+    (auditable via chunk_role IS NULL) than to embed a worthless header
+    that pollutes top-K. See north-star rule in SKILL.md: "best
+    quality, no dummy or incorrect rows".
     """
+    parties = _parties_from_json(doc.parties_json)
+    title_is_name = _title_is_case_name(doc.title)
+
+    # Quality gate — reject headers that carry no party-level signal.
+    if not title_is_name and not parties:
+        return ""
+
     parts: list[str | None] = [
         doc.title,
         doc.case_reference,
@@ -69,23 +115,7 @@ def _build_header_from_row(doc: AuthorityDocument) -> str:
         doc.bench_name,
         doc.decision_date.isoformat() if doc.decision_date else None,
     ]
-    # parties_json is written by Layer 2 as a JSON array of strings
-    # (["Petitioner", "Respondent", ...]). Fold each into the header.
-    if doc.parties_json:
-        try:
-            parsed = json.loads(doc.parties_json)
-            if isinstance(parsed, list):
-                parts.extend(
-                    str(p) for p in parsed if isinstance(p, str) and p.strip()
-                )
-            elif isinstance(parsed, dict):
-                # Some extractors emit {"petitioner": "...", "respondent": "..."}.
-                parts.extend(
-                    str(v) for v in parsed.values()
-                    if isinstance(v, str) and v.strip()
-                )
-        except json.JSONDecodeError:
-            pass
+    parts.extend(parties)
     return "\n".join(p.strip() for p in parts if p and p.strip())
 
 

@@ -15,6 +15,28 @@ reordering costs real money (Voyage + Anthropic spend) and drops retrieval
 quality below the starting bar. This was learned the hard way on 2026-04-19 —
 see `memory/feedback_vector_embedding_pipeline.md` for the incident.
 
+## North-star rule — best quality, no dummy or incorrect rows
+
+> Prefer a smaller clean corpus to a larger noisy one. If a doc / chunk /
+> header can only be produced from placeholder or malformed data, **SKIP
+> IT**. Do not save a degraded row "just to have coverage". Quality
+> trumps scope. Always.
+
+Enforcement in this pipeline:
+
+- Title-chunk header builder returns `""` (→ skip embed) when the only
+  available signal is a citation-only title AND parties_json is empty.
+- Layer 2 on malformed JSON: raise + skip, NEVER partial-save.
+- OCR-garbage gate at ingest: reject chunks with `(cid:\d+)` density > 1%
+  or > 20% control / non-BMP glyph density.
+- `--min-chars 4000` floor is non-negotiable.
+- Non-English docs must be tagged `language=non_en` so retrieval can
+  filter. Do not embed them as if they were English.
+- Do NOT run title-chunk backfill before Layer 2 — the header would be
+  built from the placeholder title. Per-bucket order matters.
+- A missing row is recoverable (`structured_version IS NULL` tells you).
+  A dummy row is invisible poison. Err towards missing.
+
 ## The ONE pipeline — per bucket (a "bucket" is one court-year, e.g. sc-2023 or hc-delhi-2024)
 
 ```

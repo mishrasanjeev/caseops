@@ -445,6 +445,9 @@ def persist_judgment(
     return document, chunk_rows
 
 
+_CASE_NAME_SIGNAL_INGEST = ("v.", " vs ", "versus", "v/s")
+
+
 def _build_title_header(parsed: ParsedJudgment) -> str:
     """Compact header for a synthetic chunk 0 — title + case-ref + court + date.
 
@@ -453,7 +456,17 @@ def _build_title_header(parsed: ParsedJudgment) -> str:
     prose. Order is semantic weight: the title itself carries the most
     signal, the citation anchors it, the court disambiguates same-name
     petitions across jurisdictions, the date settles ties.
+
+    Quality gate: returns ``""`` (→ caller skips the chunk) when the
+    ingest-time title is a filename placeholder or citation-only string
+    (no "v." / "vs" / "versus"). Ingest has no parties_json yet — better
+    no title-chunk than a noisy one. The post-Layer-2 refresh pass in
+    `caseops-backfill-title-chunks --refresh` will add the chunk once
+    real metadata exists.
     """
+    title = (parsed.title or "").strip()
+    if not any(s in title.lower() for s in _CASE_NAME_SIGNAL_INGEST):
+        return ""
     parts = [
         parsed.title,
         parsed.case_reference,
