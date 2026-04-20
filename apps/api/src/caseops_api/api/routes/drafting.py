@@ -20,6 +20,11 @@ from caseops_api.schemas.drafting_templates import (
     list_template_schemas,
 )
 from caseops_api.services.drafting_prompts import get_prompt_parts
+from caseops_api.services.drafting_suggestions import (
+    FieldSuggestions,
+    TemplateSuggestions,
+    get_template_suggestions,
+)
 from caseops_api.services.identity import SessionContext
 
 router = APIRouter()
@@ -84,3 +89,55 @@ async def get_drafting_template(
             detail=f"Unknown drafting template '{template_type}'.",
         ) from exc
     return get_template_schema(template)
+
+
+class FieldSuggestionsResponse(BaseModel):
+    field_name: str
+    label: str
+    options: list[str]
+
+
+class TemplateSuggestionsResponse(BaseModel):
+    template_type: str
+    fields: list[FieldSuggestionsResponse]
+
+
+@router.get(
+    "/templates/{template_type}/suggestions",
+    response_model=TemplateSuggestionsResponse,
+    summary=(
+        "Per-type auto-suggest snippets for the stepper (Sprint R9). "
+        "Common BNS sections for Bail, s.138 boilerplate for Cheque "
+        "Bounce, HMA grounds for Divorce, etc."
+    ),
+)
+async def get_drafting_template_suggestions(
+    template_type: str,
+    context: CurrentContext,
+) -> TemplateSuggestionsResponse:
+    _ = context
+    try:
+        template = DraftTemplateType(template_type)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Unknown drafting template '{template_type}'.",
+        ) from exc
+    suggestions = get_template_suggestions(template)
+    return TemplateSuggestionsResponse(
+        template_type=suggestions.template_type,
+        fields=[_field_to_response(f) for f in suggestions.fields],
+    )
+
+
+def _field_to_response(field: FieldSuggestions) -> FieldSuggestionsResponse:
+    return FieldSuggestionsResponse(
+        field_name=field.field_name,
+        label=field.label,
+        options=list(field.options),
+    )
+
+
+# Silence unused-import warnings — TemplateSuggestions is re-exported
+# via the service module, not needed in the route body directly.
+_ = TemplateSuggestions
