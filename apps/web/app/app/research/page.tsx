@@ -147,6 +147,35 @@ export default function ResearchPage() {
         }
       />
 
+      {/* BUG-018 Hari 2026-04-21: if the corpus-stats API fails we
+          previously fell back silently to the generic header and users
+          couldn't tell whether the page was broken or just quiet.
+          Surface it as a non-blocking banner so users can retry or
+          report without guessing. Search itself stays independent of
+          stats. */}
+      {statsQuery.isError ? (
+        <div
+          className="flex items-center justify-between gap-3 rounded-md border border-[var(--color-warn-600)]/30 bg-[var(--color-warn-50)] px-3 py-2 text-xs text-[var(--color-warn-700)]"
+          role="alert"
+        >
+          <span>
+            Could not load corpus stats —{" "}
+            {statsQuery.error instanceof ApiError
+              ? statsQuery.error.detail
+              : "network or API error."}{" "}
+            Search itself may still work.
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => statsQuery.refetch()}
+            data-testid="research-stats-retry"
+          >
+            Retry
+          </Button>
+        </div>
+      ) : null}
+
       <Card>
         <CardHeader>
           <CardTitle as="h2" className="text-base">
@@ -269,7 +298,16 @@ export default function ResearchPage() {
           description={
             searchQuery.error instanceof ApiError
               ? searchQuery.error.detail
-              : "Try again in a moment."
+              : "Try again in a moment. If this persists, check your connection or report the issue."
+          }
+          action={
+            <Button
+              size="sm"
+              onClick={() => searchQuery.refetch()}
+              data-testid="research-search-retry"
+            >
+              Retry search
+            </Button>
           }
         />
       ) : results.length === 0 ? (

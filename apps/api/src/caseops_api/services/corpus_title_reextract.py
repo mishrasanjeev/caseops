@@ -153,8 +153,44 @@ def find_placeholder_title_docs(
 ) -> list[tuple[str, str, str]]:
     """Return ``(doc_id, title, document_text)`` tuples flagged by the
     detector. Capped at ``limit`` rows. Caller filters further via the
-    predicate (belt-and-braces)."""
-    rows = session.execute(_DETECTOR_SQL, {"lim": limit}).all()
+    predicate (belt-and-braces).
+
+    The detector uses PostgreSQL-native regex (``~`` / ``~*``). On
+    non-Postgres engines (SQLite in tests) we load all rows with a
+    non-null title and filter in Python using the shared predicate —
+    slower but dialect-independent so the test suite stays green.
+    """
+    try:
+        dialect = session.bind.dialect.name if session.bind else None
+    except Exception:  # noqa: BLE001
+        dialect = None
+    if dialect != "postgresql":
+        from sqlalchemy import select as _select
+
+        from caseops_api.db.models import AuthorityDocument
+        stmt = (
+            _select(
+                AuthorityDocument.id,
+                AuthorityDocument.title,
+                AuthorityDocument.document_text,
+            )
+            .where(AuthorityDocument.title.is_not(None))
+            .limit(limit)
+        )
+        raw_rows = session.execute(stmt).all()
+        rows = []
+        for r in raw_rows:
+            title = r.title or ""
+            ok, _reason = title_is_case_name(title)
+            if ok:
+                continue
+            rows.append(type("R", (), {
+                "id": r.id,
+                "title": title,
+                "document_text": r.document_text or "",
+            })())
+    else:
+        rows = session.execute(_DETECTOR_SQL, {"lim": limit}).all()
     out: list[tuple[str, str, str]] = []
     for row in rows:
         # Reassert via the predicate so edge cases (regex false

@@ -565,15 +565,19 @@ def generate_recommendation(
         if retrieved:
             error_msg = "All citations failed verification."
             detail = (
-                "The model did not produce any verifiable citations. "
-                "Refusing to surface this recommendation."
+                "The model returned citations, but none matched verified "
+                "authorities in the corpus. Try again — if this persists, "
+                "widen the matter description so retrieval has more "
+                "context to ground on."
             )
         else:
             error_msg = "Retrieval returned no authorities."
             detail = (
-                "No authorities were retrieved for this matter. Refusing to "
-                "surface an ungrounded recommendation; widen the matter "
-                "description or expand the corpus before retrying."
+                "No grounding authorities were retrieved for this matter. "
+                "Add more detail to the matter description (facts, "
+                "sections, forum) or check corpus coverage before "
+                "retrying. Recommendations require at least one verified "
+                "citation per PRD §6.1."
             )
         run = _write_model_run(
             session,
@@ -586,9 +590,12 @@ def generate_recommendation(
             error=error_msg,
         )
         session.commit()
+        # User-facing ``detail`` stays clean; the model_run_id ends up on
+        # ``ModelRun`` + is still discoverable via audit for debugging.
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=f"{detail} model_run_id={run.id}",
+            detail=detail,
+            headers={"X-Model-Run-Id": run.id},
         )
 
     confidence = _cap_confidence(parsed.confidence, total_verified_citations)

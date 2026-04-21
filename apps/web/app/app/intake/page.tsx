@@ -352,6 +352,13 @@ function IntakeRow({
                 <PromoteButton
                   busy={promoteMutation.isPending}
                   onConfirm={(code) => promoteMutation.mutate(code)}
+                  errorDetail={
+                    promoteMutation.isError
+                      ? (promoteMutation.error instanceof ApiError
+                          ? promoteMutation.error.detail
+                          : "Could not promote request.")
+                      : null
+                  }
                 />
               ) : null}
             </div>
@@ -389,12 +396,22 @@ function IntakeRow({
 function PromoteButton({
   busy,
   onConfirm,
+  errorDetail,
 }: {
   busy: boolean;
   onConfirm: (matterCode: string) => void;
+  errorDetail: string | null;
 }) {
   const [open, setOpen] = useState(false);
   const [code, setCode] = useState("");
+
+  // Detect the "matter code already in use" backend error and auto-bump
+  // the trailing index so one click suggests a free code. BUG-017 Hari
+  // 2026-04-21: previously this error only fired as a toast and the
+  // user had to manually retry.
+  const codeInUse =
+    errorDetail !== null && /already in use/i.test(errorDetail);
+  const suggestion = codeInUse ? suggestNextMatterCode(code.trim()) : null;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -422,7 +439,29 @@ function PromoteButton({
             value={code}
             onChange={(event) => setCode(event.target.value.toUpperCase())}
             placeholder="INT-2026-0001"
+            aria-invalid={codeInUse ? true : undefined}
+            data-testid="intake-promote-code"
           />
+          {codeInUse ? (
+            <div
+              className="flex flex-col gap-2 rounded-md border border-[var(--color-warn-600)]/30 bg-[var(--color-warn-50)] p-2 text-xs text-[var(--color-warn-700)]"
+              role="alert"
+            >
+              <span>
+                Matter code <span className="font-mono">{code.trim()}</span> is already in use.
+              </span>
+              {suggestion ? (
+                <button
+                  type="button"
+                  className="self-start rounded-md border border-[var(--color-warn-600)]/40 bg-white px-2 py-0.5 font-mono text-[var(--color-warn-700)] hover:bg-[var(--color-warn-50)]"
+                  onClick={() => setCode(suggestion)}
+                  data-testid="intake-promote-suggest"
+                >
+                  Try {suggestion}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => setOpen(false)}>
@@ -439,6 +478,25 @@ function PromoteButton({
       </DialogContent>
     </Dialog>
   );
+}
+
+
+/**
+ * Given a matter code like `"CORP-ARB-99"`, suggest the next available
+ * one by bumping the trailing numeric segment: `"CORP-ARB-100"`. If the
+ * code has no trailing digits, append `-2`. Pure function — exported
+ * for unit testing.
+ */
+export function suggestNextMatterCode(current: string): string | null {
+  const trimmed = current.trim();
+  if (trimmed.length < 2) return null;
+  const match = /^(.*?)(\d+)$/.exec(trimmed);
+  if (match) {
+    const [, prefix, digits] = match;
+    const next = String(Number(digits) + 1).padStart(digits.length, "0");
+    return `${prefix}${next}`;
+  }
+  return `${trimmed}-2`;
 }
 
 const newIntakeSchema = z.object({

@@ -253,9 +253,19 @@ def sync_invoice_payment_link(
     )
     latest_attempt = invoice.payment_attempts[0] if invoice.payment_attempts else None
     if not latest_attempt or not latest_attempt.provider_order_id:
+        # BUG-016 Hari 2026-04-21: the raw 404 was confusing when the
+        # invoice simply hadn't been shared with the client yet. The
+        # button text is "Sync" but there's nothing to sync until a
+        # pay-link is issued. Make the precondition explicit so the
+        # user knows what step is missing.
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No Pine Labs payment attempt was found for this invoice.",
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Sync is only available after a Pay Link has been "
+                "issued for this invoice. Click Pay Link first — once "
+                "the client opens or pays it, Sync will fetch the latest "
+                "status from Pine Labs."
+            ),
         )
 
     gateway_client = _get_gateway_client()

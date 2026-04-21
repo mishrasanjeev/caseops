@@ -90,14 +90,17 @@ export default function MatterRecommendationsPage() {
       toast.success("Recommendation ready for review");
     },
     onError: (err) => {
-      if (err instanceof ApiError && err.status === 422) {
-        toast.error(
-          "The model could not produce a verifiable recommendation. Refused on purpose.",
-        );
-        return;
-      }
+      // BUG-012 Hari 2026-04-21: previously we hard-coded "Refused on
+      // purpose" for EVERY 422 and discarded the backend's actionable
+      // detail. The backend distinguishes (a) retrieval returned zero
+      // authorities — widen the matter description or expand the
+      // corpus — from (b) the model produced citations but none were
+      // verifiable. Surface that text so the user knows which lever
+      // to pull.
       toast.error(
-        err instanceof ApiError ? err.detail : "Could not generate a recommendation.",
+        err instanceof ApiError
+          ? err.detail
+          : "Could not generate a recommendation.",
       );
     },
   });

@@ -65,13 +65,26 @@ def create_matter_court_sync_job(
     if not source or not source.strip():
         resolved = resolve_source_for_court(matter.court_name)
         if resolved is None:
+            # Distinguish "no court set on matter" from "court set but
+            # no adapter" — the first is a data-completion action for
+            # the user; the second is a product-coverage gap.
+            supported = ", ".join(list_supported_court_sync_sources())
+            if not matter.court_name:
+                detail = (
+                    "This matter doesn't have a court set. Edit the matter "
+                    "to choose a court before running sync — supported: "
+                    f"{supported}."
+                )
+            else:
+                detail = (
+                    f"Live sync isn't wired for {matter.court_name!r} yet. "
+                    "Pass an explicit `source` from the supported list "
+                    "or edit the matter to use a supported court — "
+                    f"supported: {supported}."
+                )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    "No live court-sync adapter for "
-                    f"{matter.court_name!r}. Pass an explicit `source` — "
-                    f"supported: {', '.join(list_supported_court_sync_sources())}"
-                ),
+                detail=detail,
             )
         source = resolved
 

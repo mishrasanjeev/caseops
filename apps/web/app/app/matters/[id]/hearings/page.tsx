@@ -78,6 +78,29 @@ export default function MatterHearingsPage() {
 
   if (!data) return null;
 
+  // Courts with a live court-sync adapter wired on the backend. Must
+  // stay in sync with `court_sync_sources._COURT_NAME_TO_SOURCE`.
+  // If the matter's court isn't in this set, POST /court-sync/pull
+  // returns 400 with "no live court-sync adapter for …" — we'd rather
+  // disable the button with a clear explanation than let the user hit
+  // a raw API error (BUG-014 Hari 2026-04-21).
+  const SUPPORTED_COURTS = new Set<string>([
+    "Supreme Court of India",
+    "Delhi High Court",
+    "Bombay High Court",
+    "Karnataka High Court",
+    "Madras High Court",
+    "Telangana High Court",
+  ]);
+  const matterCourt = data.matter.court_name ?? null;
+  const hasLiveAdapter =
+    matterCourt !== null && SUPPORTED_COURTS.has(matterCourt);
+  const syncDisabledReason = !matterCourt
+    ? "Set the matter's court before running sync."
+    : !hasLiveAdapter
+      ? `Live sync isn't wired for ${matterCourt} yet — supported: Supreme Court of India, Delhi / Bombay / Karnataka / Madras / Telangana High Courts.`
+      : null;
+
   return (
     <div className="grid gap-5 lg:grid-cols-2">
       {canRunSync ? (
@@ -86,15 +109,16 @@ export default function MatterHearingsPage() {
             <div>
               <CardTitle>Court sync</CardTitle>
               <CardDescription>
-                Pull the latest cause-list entries and orders from the court
-                portal for this matter.
+                {syncDisabledReason ??
+                  "Pull the latest cause-list entries and orders from the court portal for this matter."}
               </CardDescription>
             </div>
             <Button
               type="button"
               size="sm"
-              disabled={syncMutation.isPending}
+              disabled={syncMutation.isPending || syncDisabledReason !== null}
               onClick={() => syncMutation.mutate()}
+              title={syncDisabledReason ?? undefined}
               data-testid="matter-court-sync-run"
             >
               {syncMutation.isPending ? (
@@ -404,6 +428,18 @@ function ScheduleHearingDialog({ matterId }: { matterId: string }): React.JSX.El
               onChange={(e) => setJudgeName(e.target.value)}
             />
           </div>
+          {/* BUG-013 Hari 2026-04-21: reminders aren't wired yet
+              (requires Temporal + email/SMS provider, tracked under
+              MOD-TS-007). Set expectations in the dialog so users
+              don't silently wait on a notification that never fires. */}
+          <p
+            className="rounded-md border border-[var(--color-line)] bg-[var(--color-bg-2)] px-3 py-2 text-xs text-[var(--color-mute)]"
+            role="note"
+          >
+            <strong className="font-medium text-[var(--color-ink-2)]">Reminders:</strong>{" "}
+            email + in-app reminders aren't sent yet. The hearing will appear on
+            this page and on the matter overview — check back closer to the date.
+          </p>
           <DialogFooter>
             <Button
               type="button"

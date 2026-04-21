@@ -1,6 +1,7 @@
 "use client";
 
-import { ClipboardList, Gavel, ListTodo, MessageSquareText, ScrollText } from "lucide-react";
+import { ClipboardList, Gavel, MessageSquareText, ScrollText } from "lucide-react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 
 import { CounselRecommendationsCard } from "@/components/app/CounselRecommendationsCard";
@@ -106,25 +107,30 @@ export default function MatterOverviewPage() {
             <EmptyState
               icon={ScrollText}
               title="No orders yet"
-              description="Sync the court feed or upload an order from the Documents tab."
+              description="Orders are imported by court sync or uploaded from the Documents tab."
+              action={
+                <Link
+                  className="inline-flex items-center justify-center gap-2 rounded-md bg-[var(--color-ink)] px-3 py-1.5 text-sm font-medium text-white hover:bg-[var(--color-ink-2)]"
+                  href={`/app/matters/${data.matter.id}/hearings`}
+                >
+                  Go to court sync
+                </Link>
+              }
             />
           )}
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Open tasks</CardTitle>
-          <CardDescription>Across this matter.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {activeTasks.length === 0 ? (
-            <EmptyState
-              icon={ListTodo}
-              title="No open tasks"
-              description="Tasks you raise from hearings, documents, or intake will appear here."
-            />
-          ) : (
+      {/* BUG-011: Open tasks card only renders when there ARE tasks —
+          there's no task-creation UI on the overview today, so an
+          always-visible empty card reads as a broken promise. */}
+      {activeTasks.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Open tasks</CardTitle>
+            <CardDescription>Across this matter.</CardDescription>
+          </CardHeader>
+          <CardContent>
             <ul className="flex flex-col gap-3">
               {activeTasks.map((task) => (
                 <li
@@ -144,9 +150,9 @@ export default function MatterOverviewPage() {
                 </li>
               ))}
             </ul>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>
@@ -158,7 +164,15 @@ export default function MatterOverviewPage() {
             <EmptyState
               icon={Gavel}
               title="No hearings scheduled"
-              description="Listings imported from court feeds or added manually will appear here."
+              description="Import from the court feed or schedule one manually."
+              action={
+                <Link
+                  className="inline-flex items-center justify-center gap-2 rounded-md bg-[var(--color-ink)] px-3 py-1.5 text-sm font-medium text-white hover:bg-[var(--color-ink-2)]"
+                  href={`/app/matters/${data.matter.id}/hearings`}
+                >
+                  Schedule hearing
+                </Link>
+              }
             />
           ) : (
             <ul className="flex flex-col gap-3">

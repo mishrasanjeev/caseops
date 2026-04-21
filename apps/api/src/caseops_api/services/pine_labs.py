@@ -144,11 +144,23 @@ class PineLabsGatewayClient:
         if not self.settings.pine_labs_api_base_url or not path:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Pine Labs payment gateway is not configured yet.",
+                detail=(
+                    "Pay Link isn't available — the payment gateway "
+                    "isn't configured on this environment. Please "
+                    "contact support to enable online payments."
+                ),
             )
         resolved_path = path
         if provider_order_id:
-            resolved_path = resolved_path.replace("{provider_order_id}", provider_order_id)
+            # Pine Labs Plural V2 uses ``{payment_link_id}``; older
+            # configs used our generic ``{provider_order_id}``. Support
+            # both so admins can paste Pine Labs' native path spec
+            # verbatim.
+            resolved_path = resolved_path.replace(
+                "{payment_link_id}", provider_order_id,
+            ).replace(
+                "{provider_order_id}", provider_order_id,
+            )
         return f"{self.settings.pine_labs_api_base_url.rstrip('/')}/{resolved_path.lstrip('/')}"
 
     def _build_headers(self) -> dict[str, str]:
@@ -194,16 +206,34 @@ class PineLabsGatewayClient:
         )
         response.raise_for_status()
         data = response.json()
+        # Pine Labs Plural V2 returns nested payloads under ``data`` or
+        # ``result`` on success. Try the nested envelope first, then
+        # fall through to the flat top-level.
+        inner = data.get("data") if isinstance(data.get("data"), dict) else data
+        if not isinstance(inner, dict):
+            inner = data
         return PineLabsCreatePaymentLinkResult(
             provider_order_id=_extract_first(
-                data,
+                inner,
+                "payment_link_id",  # Pine Labs Plural V2 native
                 "provider_order_id",
                 "order_id",
                 "payment_id",
             ),
-            payment_url=_extract_first(data, "payment_url", "checkout_url", "redirect_url"),
-            provider_reference=_extract_first(data, "reference_id", "provider_reference"),
-            status=_normalize_status(_extract_first(data, "status", "payment_status")),
+            payment_url=_extract_first(
+                inner,
+                "payment_link_url",  # Pine Labs Plural V2 native
+                "short_url",
+                "payment_url",
+                "checkout_url",
+                "redirect_url",
+            ),
+            provider_reference=_extract_first(
+                inner, "reference_id", "provider_reference",
+            ),
+            status=_normalize_status(
+                _extract_first(inner, "payment_link_status", "status", "payment_status"),
+            ),
             raw_payload=data,
         )
 
@@ -218,31 +248,47 @@ class PineLabsGatewayClient:
         )
         response.raise_for_status()
         data = response.json()
+        inner = data.get("data") if isinstance(data.get("data"), dict) else data
+        if not isinstance(inner, dict):
+            inner = data
         return PineLabsPaymentStatusResult(
             provider_order_id=_extract_first(
-                data,
+                inner,
+                "payment_link_id",
                 "provider_order_id",
                 "order_id",
                 "payment_id",
             ),
-            provider_reference=_extract_first(data, "reference_id", "provider_reference"),
-            status=_normalize_status(_extract_first(data, "status", "payment_status")),
-            amount_received_minor=_extract_amount_minor(data),
+            provider_reference=_extract_first(
+                inner, "reference_id", "provider_reference",
+            ),
+            status=_normalize_status(
+                _extract_first(inner, "payment_link_status", "status", "payment_status"),
+            ),
+            amount_received_minor=_extract_amount_minor(inner),
             raw_payload=data,
         )
 
     def parse_webhook_payload(self, payload: dict[str, object]) -> PineLabsPaymentStatusResult:
+        inner = payload.get("data") if isinstance(payload.get("data"), dict) else payload
+        if not isinstance(inner, dict):
+            inner = payload
         return PineLabsPaymentStatusResult(
             provider_order_id=_extract_first(
-                payload,
+                inner,
+                "payment_link_id",
                 "provider_order_id",
                 "order_id",
                 "payment_id",
                 "merchant_order_id",
             ),
-            provider_reference=_extract_first(payload, "reference_id", "provider_reference"),
-            status=_normalize_status(_extract_first(payload, "status", "payment_status")),
-            amount_received_minor=_extract_amount_minor(payload),
+            provider_reference=_extract_first(
+                inner, "reference_id", "provider_reference",
+            ),
+            status=_normalize_status(
+                _extract_first(inner, "payment_link_status", "status", "payment_status"),
+            ),
+            amount_received_minor=_extract_amount_minor(inner),
             raw_payload=payload,
         )
 
