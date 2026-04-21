@@ -674,15 +674,39 @@ def generate_structured[T: BaseModel](
     try:
         payload = _tolerant_json_loads(_strip_code_fence(completion.text))
     except json.JSONDecodeError as exc:
+        # Include a prefix of the raw model output so prod 502s are
+        # debuggable without a redeploy-to-log cycle. ``completion.text``
+        # is bounded by ``max_tokens`` so a 1000-char prefix is always
+        # safe to surface.
+        preview = (completion.text or "").strip()[:1000]
+        logger.warning(
+            "generate_structured JSON decode failed (%s:%s). raw preview: %s",
+            completion.provider,
+            completion.model,
+            preview,
+        )
         raise LLMResponseFormatError(
-            f"{completion.provider}:{completion.model} did not return valid JSON.",
+            f"{completion.provider}:{completion.model} did not return valid "
+            f"JSON. raw[:500]={preview[:500]!r}",
         ) from exc
     try:
         validated = schema.model_validate(payload)
     except ValidationError as exc:
+        # Same treatment for schema-validation failures — we still parsed
+        # SOMETHING, so surface what the keys looked like so the fix is
+        # targeted.
+        preview_keys: Any = payload
+        if isinstance(payload, dict):
+            preview_keys = list(payload.keys())
+        logger.warning(
+            "generate_structured schema mismatch (%s:%s). payload keys: %s",
+            completion.provider,
+            completion.model,
+            preview_keys,
+        )
         raise LLMResponseFormatError(
             f"{completion.provider}:{completion.model} returned JSON that did "
-            "not match the expected schema.",
+            f"not match the expected schema. keys={preview_keys!r}",
         ) from exc
     return validated, completion
 
