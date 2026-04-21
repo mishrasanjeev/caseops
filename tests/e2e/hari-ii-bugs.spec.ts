@@ -1,0 +1,303 @@
+/**
+ * Hari 2026-04-21 bug batch II — end-to-end regressions.
+ *
+ * One spec per bug so a future regression names itself. Where the
+ * bug needs a server-side precondition (Pine Labs, recommendations),
+ * we drive it via the API; where it's a pure UI fix (overview cards,
+ * research banner), we exercise the Next.js page.
+ */
+import { expect, request, test } from "@playwright/test";
+import type { APIRequestContext } from "@playwright/test";
+
+import { apiBaseUrl } from "./support/env";
+
+const PASSWORD = "HariBugsBatch2026!";
+
+async function bootstrap(
+  api: APIRequestContext,
+  slug: string,
+): Promise<{ slug: string; token: string }> {
+  const resp = await api.post(`${apiBaseUrl}/api/bootstrap/company`, {
+    data: {
+      company_name: "Hari Bugs II LLP",
+      company_slug: slug,
+      company_type: "law_firm",
+      owner_full_name: "Hari Bugs II Owner",
+      owner_email: `owner-${slug}@example.com`,
+      owner_password: PASSWORD,
+    },
+  });
+  if (resp.status() !== 200) {
+    throw new Error(`Bootstrap failed: ${resp.status()} ${await resp.text()}`);
+  }
+  return { slug, token: (await resp.json()).access_token as string };
+}
+
+function unique(prefix: string): string {
+  return `${prefix}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+
+test.describe("Hari II bug regressions", () => {
+  test.setTimeout(120_000);
+
+  // --------------------------------------------------------------
+  // BUG-014 — Run Sync button disabled with a reason on a matter
+  // whose court is not set / not adapter-backed.
+  // --------------------------------------------------------------
+  test("BUG-014: Run Sync disabled + actionable 400 for no-court matter", async ({
+    page,
+  }) => {
+    const api = await request.newContext();
+    const slug = unique("b14");
+    const { token } = await bootstrap(api, slug);
+
+    // Matter with no court_name — reproduces Hari's exact trigger.
+    const resp = await api.post(`${apiBaseUrl}/api/matters/`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: {
+        title: "BUG-014 — no court matter",
+        matter_code: unique("B14").toUpperCase(),
+        practice_area: "criminal",
+        forum_level: "high_court",
+        status: "active",
+      },
+    });
+    expect(resp.status()).toBe(200);
+    const matter = (await resp.json()) as { id: string };
+
+    // Direct API call — returns actionable 400 (no `None` leak, no
+    // `Pass an explicit source` ops-speak).
+    const sync = await api.post(
+      `${apiBaseUrl}/api/matters/${matter.id}/court-sync/pull`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        data: {},
+      },
+    );
+    expect(sync.status()).toBe(400);
+    const detail = (await sync.json()).detail as string;
+    expect(detail).toContain("doesn't have a court set");
+    expect(detail).not.toMatch(/'None'/);
+
+    // UI: sign in, open hearings tab, verify button is disabled.
+    await page.goto("/sign-in");
+    await page.locator("#company-slug").fill(slug);
+    await page.locator("#email").fill(`owner-${slug}@example.com`);
+    await page.locator("#password").fill(PASSWORD);
+    await page.getByRole("button", { name: /^Sign in$/ }).click();
+    await page.waitForURL(/\/app/);
+    await page.goto(`/app/matters/${matter.id}/hearings`);
+    const btn = page.getByTestId("matter-court-sync-run");
+    await expect(btn).toBeVisible({ timeout: 15_000 });
+    await expect(btn).toBeDisabled();
+  });
+
+
+  // --------------------------------------------------------------
+  // BUG-017 — Intake promote dialog suggests next code on dup.
+  // --------------------------------------------------------------
+  test("BUG-017: intake promote on dup code shows inline suggestion", async ({
+    page,
+  }) => {
+    const api = await request.newContext();
+    const slug = unique("b17");
+    const { token } = await bootstrap(api, slug);
+    const taken = "BUG17-DUP-1";
+
+    // Consume the code first.
+    const mk = await api.post(`${apiBaseUrl}/api/matters/`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: {
+        title: "First matter",
+        matter_code: taken,
+        practice_area: "civil",
+        forum_level: "high_court",
+        status: "active",
+      },
+    });
+    expect(mk.status()).toBe(200);
+
+    // Create an intake to promote.
+    const intake = await api.post(`${apiBaseUrl}/api/intake/requests`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: {
+        title: "Dup code promote",
+        description: "BUG-017 regression",
+        category: "contract_review",
+        requester_name: "Hari",
+        requester_email: "hari@example.com",
+      },
+    });
+    expect(intake.status()).toBe(200);
+
+    // Sign in.
+    await page.goto("/sign-in");
+    await page.locator("#company-slug").fill(slug);
+    await page.locator("#email").fill(`owner-${slug}@example.com`);
+    await page.locator("#password").fill(PASSWORD);
+    await page.getByRole("button", { name: /^Sign in$/ }).click();
+    await page.waitForURL(/\/app/);
+
+    await page.goto("/app/intake");
+    // Expand the intake row, click promote, enter taken code, click create.
+    await page.getByText("Dup code promote").first().click();
+    await page.getByRole("button", { name: /Promote to matter/i }).click();
+    await page.getByTestId("intake-promote-code").fill(taken);
+    await page.getByTestId("intake-promote-confirm").click();
+
+    // Inline warning + suggestion button appear.
+    await expect(page.getByTestId("intake-promote-suggest")).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(page.getByText(/already in use/i)).toBeVisible();
+  });
+
+
+  // --------------------------------------------------------------
+  // BUG-019 — per-matter outside-counsel route redirects instead
+  // of 404'ing.
+  // --------------------------------------------------------------
+  test("BUG-019: /app/matters/{id}/outside-counsel redirects to workspace", async ({
+    page,
+  }) => {
+    const api = await request.newContext();
+    const slug = unique("b19");
+    const { token } = await bootstrap(api, slug);
+    const mk = await api.post(`${apiBaseUrl}/api/matters/`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: {
+        title: "B19 matter",
+        matter_code: unique("B19").toUpperCase(),
+        practice_area: "civil",
+        forum_level: "high_court",
+        status: "active",
+      },
+    });
+    const matter = (await mk.json()) as { id: string };
+
+    await page.goto("/sign-in");
+    await page.locator("#company-slug").fill(slug);
+    await page.locator("#email").fill(`owner-${slug}@example.com`);
+    await page.locator("#password").fill(PASSWORD);
+    await page.getByRole("button", { name: /^Sign in$/ }).click();
+    await page.waitForURL(/\/app/);
+    await page.goto(`/app/matters/${matter.id}/outside-counsel`);
+    await page.waitForURL(/\/app\/outside-counsel/, { timeout: 15_000 });
+  });
+
+
+  // --------------------------------------------------------------
+  // BUG-018 — research page renders for an authenticated user
+  // (no blank page, stats or banner visible, search input present).
+  // --------------------------------------------------------------
+  test("BUG-018: research page renders stats or banner + search input", async ({
+    page,
+  }) => {
+    const api = await request.newContext();
+    const slug = unique("b18");
+    const { } = await bootstrap(api, slug);
+
+    await page.goto("/sign-in");
+    await page.locator("#company-slug").fill(slug);
+    await page.locator("#email").fill(`owner-${slug}@example.com`);
+    await page.locator("#password").fill(PASSWORD);
+    await page.getByRole("button", { name: /^Sign in$/ }).click();
+    await page.waitForURL(/\/app/);
+    await page.goto("/app/research");
+    // Search input is present and enabled.
+    const input = page.getByTestId("research-query-input");
+    await expect(input).toBeVisible({ timeout: 15_000 });
+    // Either stats render successfully (the happy path) or the
+    // non-blocking warning banner from the stats-failure regression.
+    // Both count as "research page is working"; what must NOT happen
+    // is a blank screen or a hard crash.
+    const hasStatsCopy = await page
+      .getByText(/Searching .* judgments/i)
+      .isVisible()
+      .catch(() => false);
+    const hasBanner = await page
+      .getByText(/Could not load corpus stats/i)
+      .isVisible()
+      .catch(() => false);
+    expect(hasStatsCopy || hasBanner).toBe(true);
+  });
+
+
+  // --------------------------------------------------------------
+  // BUG-013 — the reminders note is present in the schedule-hearing
+  // dialog so users know reminders aren't sent yet.
+  // --------------------------------------------------------------
+  test("BUG-013: Schedule hearing dialog carries a reminders note", async ({
+    page,
+  }) => {
+    const api = await request.newContext();
+    const slug = unique("b13");
+    const { token } = await bootstrap(api, slug);
+    const mk = await api.post(`${apiBaseUrl}/api/matters/`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: {
+        title: "B13 matter",
+        matter_code: unique("B13").toUpperCase(),
+        practice_area: "civil",
+        forum_level: "high_court",
+        status: "active",
+      },
+    });
+    const matter = (await mk.json()) as { id: string };
+
+    await page.goto("/sign-in");
+    await page.locator("#company-slug").fill(slug);
+    await page.locator("#email").fill(`owner-${slug}@example.com`);
+    await page.locator("#password").fill(PASSWORD);
+    await page.getByRole("button", { name: /^Sign in$/ }).click();
+    await page.waitForURL(/\/app/);
+    await page.goto(`/app/matters/${matter.id}/hearings`);
+    await page.getByTestId("schedule-hearing-open").click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText(/Reminders:/i)).toBeVisible();
+    await expect(
+      dialog.getByText(/reminders aren't sent yet/i),
+    ).toBeVisible();
+  });
+
+
+  // --------------------------------------------------------------
+  // BUG-011 — overview hides the Open tasks card when empty and
+  // shows CTAs on Last order / Upcoming hearings.
+  // --------------------------------------------------------------
+  test("BUG-011: overview hides empty Open tasks + shows hearings CTA", async ({
+    page,
+  }) => {
+    const api = await request.newContext();
+    const slug = unique("b11");
+    const { token } = await bootstrap(api, slug);
+    const mk = await api.post(`${apiBaseUrl}/api/matters/`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: {
+        title: "B11 matter",
+        matter_code: unique("B11").toUpperCase(),
+        practice_area: "civil",
+        forum_level: "high_court",
+        status: "active",
+      },
+    });
+    const matter = (await mk.json()) as { id: string };
+
+    await page.goto("/sign-in");
+    await page.locator("#company-slug").fill(slug);
+    await page.locator("#email").fill(`owner-${slug}@example.com`);
+    await page.locator("#password").fill(PASSWORD);
+    await page.getByRole("button", { name: /^Sign in$/ }).click();
+    await page.waitForURL(/\/app/);
+    await page.goto(`/app/matters/${matter.id}`);
+
+    // Open tasks card should NOT render on a fresh matter.
+    await expect(page.getByText("Open tasks")).toHaveCount(0);
+    // Upcoming hearings empty-state carries a Schedule-hearing CTA.
+    await expect(
+      page.getByRole("link", { name: /Schedule hearing/i }),
+    ).toBeVisible();
+  });
+});
