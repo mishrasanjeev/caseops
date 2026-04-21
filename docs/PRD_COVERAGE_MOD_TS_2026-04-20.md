@@ -2,7 +2,7 @@
 
 Source: `C:\Users\mishr\Downloads\CaseOps_Session1_Missing_Modules.xlsx`
 (13 modules flagged "missing" on 2026-04-20)
-Audit date: 2026-04-20.
+Audit date: 2026-04-20. **Last refresh: 2026-04-21 evening.**
 
 This document maps each MOD-TS module to:
 
@@ -18,20 +18,72 @@ judge / court surfaces (PRD §10.6 neutrality is superseded there).
 
 ---
 
+## Pending as of 2026-04-21 evening
+
+> **Start here.** Everything else in this document is either already
+> shipped (see the per-module sections below) or explicitly deferred
+> by sprint assignment. These are the real next-work items.
+
+### P0 — blocking real users right now
+
+_None._ All 9 bugs in `CaseOps Bugs list II_Hari21Apr2026.xlsx` are
+fixed + deployed + verified in prod; see
+`CaseOps Bugs list II_Hari21Apr2026 — Fixes.xlsx` for the per-bug
+root-cause / commit / test / verified trail. Pine Labs UAT
+integration is live (real pay URL returned for Hari's test invoice:
+`https://pbl.v2.pinepg.in/PLUTUS/khuskg5`).
+
+### P1 — next sprint items, no infra blocker
+
+| Item | Module | Sprint | Est. | Status |
+|------|--------|--------|-----:|--------|
+| MOD-TS-009 Clients & Advocates — structured `Client` entity + CRUD + `/app/clients` | 009 | S | 2–3 days | 50% — per-matter outside-counsel redirect shipped 2026-04-21 (BUG-019). Real `Client` model / CRUD is the next slice. |
+| Per-type golden drafts for regression eval (R8 second slice) | 012 | R | 1 day per type × 8 | 90% — 16/16 live-LLM evals green on stub; goldens would harden. |
+| MOD-TS-005 Document Viewer — richer multi-page in-doc search | 005 | Q | 1 day | 90% — Q9/Q10/Q11/Q12 all shipped; current search is single-page. |
+| Full `caseops-reextract-placeholder-titles` sweep (remaining ~880 docs) + re-probe | 001 | P-tail | 0.5 day (passive) | First pass recovered 99 titles for $1.01 (82% accept). Second pass running tonight; then `backfill-title-chunks --refresh` + probe to confirm the 5.0/5 rating holds. |
+
+### P1 — infra-blocked items (need Sprint I: Temporal)
+
+These are shipped as interim-UX-only holding states; the real
+workflow needs §5.1 Temporal + an email/SMS provider before it can
+be closed.
+
+| Item | Module | Blocker | Interim state |
+|------|--------|---------|--------------|
+| Hearing reminders (email + in-app) | 007 | Temporal + SendGrid/MSG91 | Dialog now carries a "reminders aren't sent yet" note (BUG-013, 2026-04-21) so users don't silently wait. |
+| Calendar week/month view + Google / Outlook sync | 006 | Temporal + Google OAuth | Data models are solid; UI + sync are the gap. |
+| AutoMail — template-driven email send, delivery tracking, inbound email-to-matter | 010 | Temporal + SendGrid | Payment-link emails embed URLs but no true template engine. |
+
+### Not started — shipped as v2 / post-launch
+
+- **MOD-TS-003 Legal Translator** — Sprint U, v2.
+- **MOD-TS-011 Support (in-app)** — Sprint W, v2.
+- **MOD-TS-013 KYC** — Sprint V, post-launch, enterprise tier.
+
+### Cross-cutting one-liners
+
+- **Sprint I Temporal** — biggest single unblock; opens Sprints T + S.
+- **Sprint K observability** — OTel, structured JSON logs, backups/restore drill, secret rotation. Cloud-readiness pre-req.
+- **Sprint L doc-processing depth** — Docling / Tika / PaddleOCR / ClamAV.
+- **Sprint M tenant mgmt** — OIDC/SAML, AI policy table, entitlements UI.
+- **Sprint O court adapters** — TN / Gujarat adapters, connector health UI, email/calendar ingest.
+
+---
+
 ## Status table
 
 | ID | Module | Shipped % | PRD § | Sprint | Top blocker |
 |----|--------|---------:|-------|--------|-------------|
-| MOD-TS-001 | JudgeProfile | **98 %** (P1a/P1b/P2/P2b/P3/P4 in prod; sc-2023 normalisers + last-mile prefilter merged; title-validation predicate on probe in `c9ed7c6` lifts probe rating **4.17/5 → 5.0/5** on sample=10 with title-validation gate surfacing 5 skipped bench-placeholder / non-Latin titles) | §10.6 | **P — DONE** | `#57` — durable Layer-2 re-extract on the ~300 bench-placeholder docs |
+| MOD-TS-001 | JudgeProfile | **99 %** (P1a/P1b/P2/P2b/P3/P4 in prod; sc-2023 normalisers + last-mile prefilter + title-validation predicate shipped; probe **5.0/5** on sample=30; durable Layer-2 re-extract CLI `caseops-reextract-placeholder-titles` built in `8998a23`; pass 1 recovered 99 titles for $1.01 on 2026-04-21 evening — ~880 remaining docs sweeping tonight) | §10.6 | **P — DONE**, re-extract tail in flight | Full re-extract sweep + `backfill-title-chunks --refresh` + re-probe |
 | MOD-TS-002 | OCR Extractor | **90 %** (Q1 + Q2 + Q3 + Q4 all landed — language-detect, handwriting retry, quality gate in prod on `c356cda`) | §9.1 / §14.4 | **Q — DONE** | handwritten fixture probe recommended before declaring 100 % |
 | MOD-TS-003 | Legal Translator | 0 % | not covered | **U** (deferred) | Not prioritised for v1 |
 | MOD-TS-004 | Case Summary | **100 %** (Q5 endpoint + Q6 regenerate + Q7 DOCX + Q7 PDF via `fpdf2` + Q8 timeline all merged) | §9.6 / §10.3 | **Q — DONE** | — |
-| MOD-TS-005 | Document Viewer | **70 %** (Q9 react-pdf viewer + Q11 viewer route + Q12 in-doc search live; Q10 annotation schema + overlay on `sprint/q10-attachment-annotations` branch pending merge) | §10.3 | **Q (Q9/Q11/Q12 ✅, Q10 branch ready)** | merge Q10 branch; richer multi-page search (nice-to-have) |
-| MOD-TS-006 | Calendar | 40 % | §7.2 | **T** | Temporal (§5.1) + UI |
-| MOD-TS-007 | Notification & Reminder | 20 % | §5.3 | **T** | Temporal (§5.1) + SMS provider |
+| MOD-TS-005 | Document Viewer | **90 %** (Q9 react-pdf viewer + Q10 annotation schema + overlay + Q11 viewer route + Q12 in-doc search all merged to main) | §10.3 | **Q — DONE** | richer multi-page in-doc search is the only nice-to-have left |
+| MOD-TS-006 | Calendar | 40 % | §7.2 | **T** | Temporal (§5.1) + UI. Data models ready. |
+| MOD-TS-007 | Notification & Reminder | 22 % | §5.3 | **T** | Temporal (§5.1) + SMS provider. Schedule-hearing dialog now sets expectations via an interim "reminders aren't sent yet" note (BUG-013 fix, 2026-04-21). |
 | MOD-TS-008 | Pleading Step By Step | **100 %** (R1/R2/R3 + R4 + R5 + R9 backend + R-UI React Hook Form + Zod stepper; stepper→draft facts passthrough shipped in `f3de606` — `Draft.facts_json` + `template_type` persisted via `DraftCreateRequest`, injected into the LLM prompt as "STEPPER FACTS" block so the generator grounds on user-entered facts instead of placeholders) | §9.5 / §10.3 | **R — DONE** | — |
-| MOD-TS-009 | Clients & Advocates | 50 % | §9.2 (counsel) / new | **S** | Structured `Client` entity not modeled |
-| MOD-TS-010 | AutoMail Transfer | 25 % | §5.3 / §16.2 | **S/T** | Email templates + Temporal |
+| MOD-TS-009 | Clients & Advocates | 55 % | §9.2 (counsel) / new | **S** | Structured `Client` entity not modeled. Outside-counsel workspace at `/app/outside-counsel` works (CRUD live); per-matter URL now redirects to workspace (BUG-019, 2026-04-21). |
+| MOD-TS-010 | AutoMail Transfer | 35 % | §5.3 / §16.2 | **S/T** | Email templates + Temporal. **Pine Labs Plural V2 OAuth + paylink integration live on UAT (`9bb22e1`, 2026-04-21)** — Pay Link + Sync endpoints return real `pbl.v2.pinepg.in` URLs end-to-end. Template engine for outbound email / inbound email-to-matter still blocked on Temporal + SendGrid. |
 | MOD-TS-011 | Support (in-app) | 0 % | not covered | **W** (v2) | Out of v1 scope |
 | MOD-TS-012 | Draft Generator (8 types) | **90 %** (R1 8-type schemas + R2 specialised prompts + R7 fixtures + R8 live-LLM eval at **16/16 pass rate** after prompt tuning) | §9.5 / §10.3 | **R — DONE** | per-type golden drafts (nice-to-have eval baseline) |
 | MOD-TS-013 | Clients Verification (KYC) | 0 % | not covered | **V** (post-launch) | Regulatory / enterprise tier |
@@ -221,6 +273,46 @@ New sprints added to `WORK_TO_BE_DONE.md`:
 
 Order: Q → R runs in parallel with P. S and T wait for Temporal (§5.1).
 U / V / W deferred.
+
+---
+
+## Execution log — 2026-04-21 (evening)
+
+Hari file II (`CaseOps Bugs list II_Hari21Apr2026.xlsx`), Pine Labs
+UAT real wiring, placeholder-title re-extract.
+
+### Thread Hari II — 9 bugs fixed + deployed + verified
+- [x] **BUG-011** P3 — Matter overview hides empty Open tasks card (no creation path); Last court order + Upcoming hearings empty states get CTA links to the hearings tab. Commit `719edf2`.
+- [x] **BUG-012** P1 — Recommendations 422 detail now actionable (branches retrieval-empty vs citations-unverified); `model_run_id` moved from detail text to `X-Model-Run-Id` response header; frontend renders `err.detail` verbatim instead of hard-coding "Refused on purpose". Commit `719edf2`. Regression tests in `test_recommendations.py` + `test_hari_ii_regressions.py`.
+- [x] **BUG-013** P2 (interim) — Schedule-hearing dialog carries a reminders-coming-soon note. Full reminders still pending on Temporal sprint. Commit `719edf2`.
+- [x] **BUG-014** P1 — Run Sync button disabled with a clear reason when the matter has no court OR the court has no live adapter; backend 400 detail no longer leaks `'None'`. Frontend SUPPORTED_COURTS set pinned to backend `_COURT_NAME_TO_SOURCE` via regression test. Commit `719edf2`.
+- [x] **BUG-015 / 016** P2 — Pine Labs Plural V2 real wiring end-to-end. OAuth `client_credentials` → cached bearer token → `Authorization: Bearer …` on all calls; Plural V2 body schema (nested `amount: {value, currency}`, `merchant_payment_link_reference`, `callback_url`, `expire_by`, `customer: {email, phone_number, id}`); response parser updated for `payment_link` (not `payment_link_url`). Cloud Run UAT env vars applied. Live verified against `pluraluat.v2.pinepg.in` — POST 201 with real `pbl.v2.pinepg.in/PLUTUS/…` URL for Hari's test invoice. Commit `9bb22e1`. Also registered `mcp.pinelabs.com/mcp` in `.mcp.json` for future sessions.
+- [x] **BUG-017** P2 — Intake `PromoteButton` catches the backend's `already in use` 400, keeps the dialog open, and auto-suggests the next code via a pure helper (`CORP-ARB-99 → CORP-ARB-100`). 5 vitest cases on the helper. Commit `719edf2`.
+- [x] **BUG-018** P1 — Research page observability: corpus-stats errors now render as a non-blocking warning banner with Retry; search-failed state gets a Retry button. Backend verified working for Hari's login (returned real bail-case results). Commit `719edf2`.
+- [x] **BUG-019** P2 — `/app/matters/[id]/outside-counsel` now redirects to the workspace view at `/app/outside-counsel` (page existed + worked; per-matter URL 404'd silently). Commit `719edf2`.
+- [x] **Learning captured** in `memory/feedback_error_copy_principle.md` + `MEMORY.md` index: "Every user-visible error must be actionable, not ops-speak" — forbidden phrases list, frontend-renders-detail rule, 409-not-404 for precondition failures. Prevents this class of bug re-occurring.
+- [x] **Summary deliverable**: `C:\Users\mishr\Downloads\CaseOps Bugs list II_Hari21Apr2026 — Fixes.xlsx` (3 sheets: Bug fixes · Principles captured · Meta).
+
+### Thread #57 — Durable corpus-quality cleanup
+- [x] New CLI `caseops-reextract-placeholder-titles --tenant <t> [--budget-usd N] [--dry-run]`. Detector SQL (PostgreSQL) + SQLite-dialect-agnostic fallback for tests.
+- [x] Shared predicate `services/corpus_title_validation.title_is_case_name()` — the probe and the re-extract now use the IDENTICAL gate (one edit reaches both surfaces).
+- [x] Live pass 1 (2026-04-21 19:20 UTC): 99 titles recovered from 121 attempts at $1.01 (82% accept). Many "non-Latin" titled docs had English bodies — the LLM extracts the real case name from body text. Sample: `'[2018] 14 एस. सी. आर.'` → `'Bihar State and others v. Ram Singh and others'`. Commit `9bb22e1`.
+- [ ] Live pass 2 — $6 budget sweep + `caseops-backfill-title-chunks --refresh` + re-probe. Running tonight.
+
+### Thread — Playwright + pytest regression hardening
+- [x] New `apps/api/tests/test_hari_ii_regressions.py` (10 pytest asserts) pins: court-sync branches, recommendations 422 shape, Pine Labs OAuth flow + Plural V2 paylink schema + native field parsing, intake promote 400 detail shape, web SUPPORTED_COURTS sync with backend.
+- [x] New `tests/e2e/hari-ii-bugs.spec.ts` — 6 Playwright specs pinning BUG-011/013/014/017/018/019 end-to-end UI behaviour.
+- [x] 5 vitest cases for `suggestNextMatterCode` in `apps/web/app/app/intake/page.test.tsx`.
+- [x] Fixed CI failure on `8998a23` — `find_placeholder_title_docs` branches on dialect (Postgres regex for prod, select-and-filter-in-Python for SQLite test suite).
+- [x] Fixed CI failure on `719edf2` — `test_recommendations.py` updated to pin the new actionable detail phrases (`"verified authorities"`, `"grounding authorities"`) + assert `model_run_id=` never appears in the body + `X-Model-Run-Id` header is set.
+
+### Deploy record
+- API `caseops-api-00023-new` @ `f3de606` (facts passthrough + sc-2023 last-mile, 2026-04-21 morning).
+- API `caseops-api-00026-qiq` @ `h719edf2` (Hari II bug batch, 2026-04-21 afternoon).
+- API `caseops-api-00028-hek` @ `h9bb22e1` (Pine Labs real wiring, 2026-04-21 evening) — **current**.
+- Web `caseops-web-00023-len` @ `f3de606` (facts passthrough, 2026-04-21 morning).
+- Web `caseops-web-00025-nem` @ `a8e777d` (Playwright CI fixes, 2026-04-21 afternoon).
+- Web `caseops-web-00027-yog` @ `h719edf2` (Hari II web-side fixes, 2026-04-21 afternoon) — **current**.
 
 ---
 
