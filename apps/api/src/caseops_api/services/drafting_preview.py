@@ -29,13 +29,10 @@ from fastapi import HTTPException, status
 from caseops_api.schemas.drafting_templates import DraftTemplateType
 from caseops_api.services.drafting_prompts import get_prompt_parts
 from caseops_api.services.llm import (
-    AnthropicProvider,
-    LLMCallContext,
     LLMMessage,
     LLMProvider,
     build_provider,
 )
-
 
 _PREVIEW_MAX_TOKENS = 900
 _PREVIEW_TEMPERATURE = 0.15

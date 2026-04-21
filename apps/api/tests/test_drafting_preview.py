@@ -7,10 +7,9 @@ from fastapi.testclient import TestClient
 
 from caseops_api.schemas.drafting_templates import DraftTemplateType
 from caseops_api.services.drafting_preview import (
-    DraftPreview,
     generate_step_preview,
 )
-from caseops_api.services.llm import LLMCompletion, LLMMessage
+from caseops_api.services.llm import LLMCompletion
 
 
 class _StubProvider:
