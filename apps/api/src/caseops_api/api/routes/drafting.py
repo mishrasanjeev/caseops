@@ -20,6 +20,10 @@ from caseops_api.schemas.drafting_templates import (
     list_template_schemas,
 )
 from caseops_api.services.drafting_prompts import get_prompt_parts
+from caseops_api.services.drafting_preview import (
+    DraftPreview,
+    generate_step_preview,
+)
 from caseops_api.services.drafting_suggestions import (
     FieldSuggestions,
     TemplateSuggestions,
@@ -141,3 +145,60 @@ def _field_to_response(field: FieldSuggestions) -> FieldSuggestionsResponse:
 # Silence unused-import warnings — TemplateSuggestions is re-exported
 # via the service module, not needed in the route body directly.
 _ = TemplateSuggestions
+
+
+class DraftPreviewRequest(BaseModel):
+    template_type: str
+    facts: dict = {}
+    step_group: str | None = None
+
+
+class DraftPreviewResponse(BaseModel):
+    template_type: str
+    preview_text: str
+    step_group: str | None = None
+    model: str
+    prompt_tokens: int
+    completion_tokens: int
+
+
+@router.post(
+    "/preview",
+    response_model=DraftPreviewResponse,
+    summary=(
+        "Sprint R4 — Haiku-backed partial draft preview for the "
+        "stepper. Returns a 300-500 word preview reflecting whatever "
+        "fields the user has filled so far; unfilled fields render as "
+        "'[not yet specified]' instead of invented values."
+    ),
+)
+async def post_drafting_preview(
+    payload: DraftPreviewRequest,
+    context: CurrentContext,
+) -> DraftPreviewResponse:
+    _ = context
+    try:
+        template = DraftTemplateType(payload.template_type)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Unknown drafting template '{payload.template_type}'.",
+        ) from exc
+
+    preview = generate_step_preview(
+        template_type=template,
+        facts=payload.facts,
+        step_group=payload.step_group,
+    )
+    return _preview_to_response(preview)
+
+
+def _preview_to_response(preview: DraftPreview) -> DraftPreviewResponse:
+    return DraftPreviewResponse(
+        template_type=preview.template_type,
+        preview_text=preview.preview_text,
+        step_group=preview.step_group,
+        model=preview.model,
+        prompt_tokens=preview.prompt_tokens,
+        completion_tokens=preview.completion_tokens,
+    )
