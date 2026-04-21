@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
-import { signIn } from "@/lib/api/endpoints";
+import { signIn } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/config";
 import { storeSession } from "@/lib/session";
 

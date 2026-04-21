@@ -12,8 +12,8 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { PasswordInput } from "@/components/ui/PasswordInput";
+import { bootstrapCompany } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/config";
-import { bootstrapCompany } from "@/lib/api/endpoints";
 import { storeSession } from "@/lib/session";
 
 const schema = z.object({
