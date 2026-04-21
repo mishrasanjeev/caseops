@@ -559,6 +559,19 @@ export async function reindexMatterAttachment(input: {
   return data as MatterAttachmentRecord;
 }
 
+// Sprint Q11 — attachment download URL helper for the inline PDF
+// viewer. The API streams the bytes directly, so we construct the
+// absolute URL (including the API host) and let the browser fetch it
+// with the cookie/bearer attached. Returning a Blob would force us
+// to keep the PDF in JS memory; streaming through <object>/<iframe>
+// is what react-pdf prefers.
+export function matterAttachmentDownloadUrl(input: {
+  matterId: string;
+  attachmentId: string;
+}): string {
+  return `${API_BASE_URL}/api/matters/${input.matterId}/attachments/${input.attachmentId}/download`;
+}
+
 // --- Billing: invoices + time entries + Pine Labs payment links ---
 // The backend gates these on invoices:issue, invoices:send_payment_link,
 // and time_entries:write respectively. The UI's useCapability guards
