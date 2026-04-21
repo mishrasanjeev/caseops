@@ -1444,3 +1444,144 @@ export async function createMatter(input: {
   });
   return matter.parse(data);
 }
+
+
+// --------------------------------------------------------------
+// Clients module (MOD-TS-009 / Sprint S1)
+// --------------------------------------------------------------
+
+export type ClientType = "individual" | "corporate" | "government" | "nonprofit";
+export type ClientKycStatus =
+  | "not_started"
+  | "pending"
+  | "verified"
+  | "rejected";
+
+export type ClientMatterLink = {
+  matter_id: string;
+  matter_code: string;
+  matter_title: string;
+  role: string | null;
+  is_primary: boolean;
+  status: string;
+};
+
+export type ClientRecord = {
+  id: string;
+  company_id: string;
+  name: string;
+  client_type: ClientType;
+  primary_contact_name: string | null;
+  primary_contact_email: string | null;
+  primary_contact_phone: string | null;
+  city: string | null;
+  state: string | null;
+  country: string | null;
+  pan: string | null;
+  gstin: string | null;
+  internal_notes: string | null;
+  kyc_status: ClientKycStatus;
+  is_active: boolean;
+  active_matters_count: number;
+  total_matters_count: number;
+  matters: ClientMatterLink[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type ClientListResponse = {
+  clients: ClientRecord[];
+  next_cursor: string | null;
+};
+
+export type ClientCreateInput = {
+  name: string;
+  client_type: ClientType;
+  primary_contact_name?: string | null;
+  primary_contact_email?: string | null;
+  primary_contact_phone?: string | null;
+  city?: string | null;
+  state?: string | null;
+  country?: string | null;
+  pan?: string | null;
+  gstin?: string | null;
+  internal_notes?: string | null;
+  kyc_status?: ClientKycStatus;
+};
+
+export type ClientUpdateInput = Partial<ClientCreateInput> & {
+  is_active?: boolean;
+};
+
+export async function listClients(): Promise<ClientListResponse> {
+  return apiRequest<ClientListResponse>("/api/clients/");
+}
+
+export async function fetchClient(clientId: string): Promise<ClientRecord> {
+  return apiRequest<ClientRecord>(`/api/clients/${clientId}`);
+}
+
+export async function createClient(
+  input: ClientCreateInput,
+): Promise<ClientRecord> {
+  return apiRequest<ClientRecord>("/api/clients/", {
+    method: "POST",
+    body: input,
+  });
+}
+
+export async function updateClient(
+  clientId: string,
+  patch: ClientUpdateInput,
+): Promise<ClientRecord> {
+  return apiRequest<ClientRecord>(`/api/clients/${clientId}`, {
+    method: "PATCH",
+    body: patch,
+  });
+}
+
+export async function archiveClient(
+  clientId: string,
+): Promise<ClientRecord> {
+  return apiRequest<ClientRecord>(`/api/clients/${clientId}`, {
+    method: "DELETE",
+  });
+}
+
+export type MatterClientAssignRecord = {
+  id: string;
+  matter_id: string;
+  client_id: string;
+  role: string | null;
+  is_primary: boolean;
+  created_at: string;
+};
+
+export async function assignClientToMatter(input: {
+  matterId: string;
+  clientId: string;
+  role?: string | null;
+  isPrimary?: boolean;
+}): Promise<MatterClientAssignRecord> {
+  return apiRequest<MatterClientAssignRecord>(
+    `/api/matters/${input.matterId}/clients`,
+    {
+      method: "POST",
+      body: {
+        client_id: input.clientId,
+        role: input.role ?? null,
+        is_primary: input.isPrimary ?? true,
+      },
+    },
+  );
+}
+
+export async function unassignClientFromMatter(input: {
+  matterId: string;
+  clientId: string;
+}): Promise<void> {
+  await apiRequest<void>(
+    `/api/matters/${input.matterId}/clients/${input.clientId}`,
+    { method: "DELETE" },
+  );
+}

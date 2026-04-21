@@ -6,6 +6,7 @@ from caseops_api.api.routes import (
     auth,
     authorities,
     bootstrap,
+    clients,
     companies,
     contracts,
     courts,
@@ -42,3 +43,9 @@ api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
 api_router.include_router(courts.router, prefix="/courts", tags=["courts"])
 api_router.include_router(intake.router, prefix="/intake", tags=["intake"])
 api_router.include_router(teams.router, prefix="/teams", tags=["teams"])
+api_router.include_router(clients.router, prefix="/clients", tags=["clients"])
+# Per-matter client-assignment endpoints mount under /matters/... to
+# keep the URL shape consistent with the rest of the matter surface.
+api_router.include_router(
+    clients.matter_scoped_router, prefix="/matters", tags=["clients"],
+)

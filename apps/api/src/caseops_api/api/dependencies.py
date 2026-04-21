@@ -158,6 +158,14 @@ CAPABILITY_ROLES: dict[str, frozenset[MembershipRole]] = {
     # everyone authenticated can read who's on what team so staffing
     # and assignment flows don't need a separate gate.
     "teams:manage": _OWNER_ADMIN,
+    # --- clients (Sprint S1 MOD-TS-009) ---
+    # Anyone authenticated can view the client list (same bar as
+    # matters). Create / edit / archive is a fee-earner action —
+    # paralegals included; viewers stay read-only.
+    "clients:view": _ALL_AUTHENTICATED,
+    "clients:create": _ALL_FEE_EARNERS,
+    "clients:edit": _ALL_FEE_EARNERS,
+    "clients:archive": _STAFF,
 }
 
 

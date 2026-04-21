@@ -82,7 +82,12 @@ export type Capability =
   | "intake:triage"
   | "intake:promote"
   // teams (Sprint 8c BG-026)
-  | "teams:manage";
+  | "teams:manage"
+  // clients (Sprint S1 — MOD-TS-009)
+  | "clients:view"
+  | "clients:create"
+  | "clients:edit"
+  | "clients:archive";
 
 // Baseline caps for a fee-earner (owner / admin / partner / member).
 // Paralegals inherit most of these but lose a small, explicit set.
@@ -97,6 +102,11 @@ const FEE_EARNER: Capability[] = [
   "ai:generate",
   "authorities:search",
   "authorities:annotate",
+  // clients (Sprint S1 MOD-TS-009) — everyone who can touch matters
+  // can manage clients; archive is staff-only.
+  "clients:view",
+  "clients:create",
+  "clients:edit",
 ];
 
 // Creator caps — paralegals can NOT create matters/contracts or run
@@ -128,6 +138,7 @@ const STAFF: Capability[] = [
   "recommendations:decide",
   "intake:triage",
   "intake:promote",
+  "clients:archive",
 ];
 
 // Governance caps — owner / admin only.
@@ -145,6 +156,7 @@ const OWNER_ONLY: Capability[] = ["invoices:void", "audit:export"];
 const VIEWER_CAPS: ReadonlySet<Capability> = new Set<Capability>([
   "authorities:search",
   "intake:submit",
+  "clients:view",
 ]);
 
 const PARALEGAL_CAPS: ReadonlySet<Capability> = new Set<Capability>([

@@ -3,6 +3,7 @@
 import {
   Briefcase,
   ChevronsRight,
+  Contact,
   FileSignature,
   Gavel,
   Inbox,
@@ -52,6 +53,13 @@ const NAV: NavItem[] = [
     section: "intel",
   },
   { href: "/app/contracts", label: "Contracts", icon: Scale, section: "work" },
+  {
+    href: "/app/clients",
+    label: "Clients",
+    icon: Contact,
+    section: "work",
+    requiresCapability: "clients:view",
+  },
   {
     href: "/app/outside-counsel",
     label: "Outside Counsel",

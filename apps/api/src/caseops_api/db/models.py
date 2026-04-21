@@ -267,6 +267,10 @@ class Company(Base):
         back_populates="company",
         cascade="all, delete-orphan",
     )
+    clients: Mapped[list[Client]] = relationship(
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
     outside_counsel_assignments: Mapped[list[MatterOutsideCounselAssignment]] = relationship(
         back_populates="company",
         cascade="all, delete-orphan",
@@ -529,6 +533,10 @@ class Matter(Base):
     )
     linked_contracts: Mapped[list[Contract]] = relationship(
         back_populates="linked_matter",
+    )
+    client_assignments: Mapped[list[MatterClientAssignment]] = relationship(
+        back_populates="matter",
+        cascade="all, delete-orphan",
     )
     outside_counsel_assignments: Mapped[list[MatterOutsideCounselAssignment]] = relationship(
         back_populates="matter",
@@ -1121,6 +1129,124 @@ class MatterInvoicePaymentAttempt(Base):
     initiated_by_membership: Mapped[CompanyMembership | None] = relationship(
         back_populates="initiated_payment_attempts"
     )
+
+
+class ClientType(StrEnum):
+    INDIVIDUAL = "individual"
+    CORPORATE = "corporate"
+    GOVERNMENT = "government"
+    NONPROFIT = "nonprofit"
+
+
+class ClientKycStatus(StrEnum):
+    NOT_STARTED = "not_started"
+    PENDING = "pending"
+    VERIFIED = "verified"
+    REJECTED = "rejected"
+
+
+class Client(Base):
+    """A law-firm client (MOD-TS-009). Tenant-scoped by ``company_id``.
+
+    The legacy ``Matter.client_name`` free-text column is kept in
+    place for back-compat; new matters should link via
+    :class:`MatterClientAssignment` instead. Neither is authoritative
+    by itself — the cockpit renders the linked client if present,
+    falling back to the free-text name.
+    """
+    __tablename__ = "clients"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id", "name", "client_type",
+            name="uq_clients_tenant_name_type",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    client_type: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=ClientType.INDIVIDUAL,
+    )
+    primary_contact_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    primary_contact_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    primary_contact_phone: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    city: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    state: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    country: Mapped[str | None] = mapped_column(String(120), nullable=True, default="India")
+    pan: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    gstin: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    internal_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    kyc_status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=ClientKycStatus.NOT_STARTED,
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship(back_populates="clients")
+    assignments: Mapped[list[MatterClientAssignment]] = relationship(
+        back_populates="client",
+        cascade="all, delete-orphan",
+    )
+
+
+class MatterClientAssignment(Base):
+    """Link between a matter and a client. Most matters link to
+    exactly one client, but corporate-defence / multi-party cases can
+    link N clients — hence a full N-N association rather than a
+    direct FK on ``Matter``. Role captures whether the client is the
+    plaintiff / respondent / etc. on that matter."""
+    __tablename__ = "matter_client_assignments"
+    __table_args__ = (
+        UniqueConstraint(
+            "matter_id", "client_id",
+            name="uq_matter_client_assignment",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    client_id: Mapped[str] = mapped_column(
+        ForeignKey("clients.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    role: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    is_primary: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+
+    matter: Mapped[Matter] = relationship(back_populates="client_assignments")
+    client: Mapped[Client] = relationship(back_populates="assignments")
 
 
 class OutsideCounsel(Base):
