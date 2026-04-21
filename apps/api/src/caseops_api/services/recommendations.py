@@ -518,7 +518,7 @@ def generate_recommendation(
             messages=messages,
             context=_call_context,
             temperature=settings.llm_temperature,
-            max_tokens=settings.llm_max_output_tokens,
+            max_tokens=settings.llm_max_output_tokens_recommendations,
         )
 
     try:

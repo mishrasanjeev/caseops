@@ -101,6 +101,13 @@ class Settings(BaseSettings):
     # structured JSON and stay tight.
     llm_max_output_tokens_drafting: int = Field(default=8192, ge=512)
     llm_max_output_tokens_hearing_pack: int = Field(default=4096, ge=512)
+    # BUG-005 2026-04-21: the default 2048 was truncating
+    # recommendations mid-rationale — both Sonnet and Haiku ended
+    # their JSON at ~2k output tokens on a real matter, and the
+    # tolerant JSON loader couldn't parse a doc with no closing
+    # brace. Raising to 4096 is the same budget as hearing packs
+    # and gives ~500-600 words of rationale per option.
+    llm_max_output_tokens_recommendations: int = Field(default=4096, ge=512)
     llm_temperature: float = Field(default=0.1, ge=0.0, le=2.0)
     # Anthropic ephemeral prompt caching (5-min TTL) on the large
     # system prompt. When true, repeated calls within 5 min share the
