@@ -691,26 +691,93 @@ _TRAILING_COMMA_RE = __import__("re").compile(r",(\s*[}\]])")
 
 
 def _tolerant_json_loads(text: str) -> Any:
-    """``json.loads`` first; if that fails on a trailing-comma defect
-    that LLMs commonly emit (``{"a": 1,}`` or ``[1, 2,]``), strip those
-    commas and retry once. Anything else propagates the original
-    JSONDecodeError so we don't paper over real malformations.
+    """Load JSON emitted by an LLM, tolerating the three common
+    failure modes:
 
-    Sonnet on long structured-output prompts emits a stray ``,}`` at
-    the end of nested arrays maybe 4-5 % of the time; that's enough
-    to lose ~$4-5 per 2000-doc Sonnet bucket on retry-cost. Tolerating
-    one well-known defect class is a far better trade than dropping
-    the whole completion."""
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        cleaned = _TRAILING_COMMA_RE.sub(r"\1", text)
-        # Retry. Re-raise the *original* error if this also fails so the
-        # diagnostic text is the real one, not the post-rewrite one.
+    1. **Trailing commas** inside objects / arrays — Sonnet emits them
+       on long structured outputs ~4 % of the time.
+    2. **Preamble / postamble text** — the model writes "Here is the
+       JSON you asked for:" before the block, or commentary after.
+       BUG-005: prod recommendations endpoint 502'd because both
+       Sonnet AND Haiku were sometimes wrapping the payload in
+       narration. Extract the first balanced ``{...}`` (or
+       ``[...]``) block and retry.
+    3. **Escaped single quotes / smart quotes** — not handled here;
+       would need a proper tokenizer. Callers that still fail after
+       this pass should bump to a bigger model or simplify the
+       schema.
+
+    Order: raw → trailing-comma → balanced-block → balanced-block
+    + trailing-comma. Re-raise the *first* JSONDecodeError so the
+    caller sees the real error, not the post-rewrite one."""
+    original_error: json.JSONDecodeError | None = None
+
+    attempts = [
+        lambda s: s,
+        lambda s: _TRAILING_COMMA_RE.sub(r"\1", s),
+    ]
+    for transform in attempts:
         try:
-            return json.loads(cleaned)
-        except json.JSONDecodeError:
-            raise
+            return json.loads(transform(text))
+        except json.JSONDecodeError as exc:
+            if original_error is None:
+                original_error = exc
+
+    # Preamble / postamble extraction — find the first balanced JSON
+    # block and try again. Handles "Here is the JSON: {...}" and
+    # "{...}\n\nNote: I've included X" equally.
+    extracted = _extract_first_json_block(text)
+    if extracted is not None and extracted != text:
+        for transform in attempts:
+            try:
+                return json.loads(transform(extracted))
+            except json.JSONDecodeError:
+                continue
+
+    assert original_error is not None
+    raise original_error
+
+
+def _extract_first_json_block(text: str) -> str | None:
+    """Return the first balanced ``{...}`` or ``[...]`` block in
+    ``text``, or None if no obvious JSON structure is present.
+
+    Walks the text respecting quoted strings (so a ``}`` inside
+    ``"foo}bar"`` does not close the outer brace).
+    """
+    # Find the earlier of '{' or '['.
+    start_obj = text.find("{")
+    start_arr = text.find("[")
+    candidates = [s for s in (start_obj, start_arr) if s >= 0]
+    if not candidates:
+        return None
+    start = min(candidates)
+    opener = text[start]
+    closer = "}" if opener == "{" else "]"
+
+    depth = 0
+    in_str = False
+    escape = False
+    for idx in range(start, len(text)):
+        ch = text[idx]
+        if escape:
+            escape = False
+            continue
+        if ch == "\\" and in_str:
+            escape = True
+            continue
+        if ch == '"':
+            in_str = not in_str
+            continue
+        if in_str:
+            continue
+        if ch == opener:
+            depth += 1
+        elif ch == closer:
+            depth -= 1
+            if depth == 0:
+                return text[start : idx + 1]
+    return None
 
 
 def _strip_code_fence(text: str) -> str:
