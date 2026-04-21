@@ -179,7 +179,14 @@ def test_generate_recommendation_refuses_when_no_verified_citations(
         json={"type": "authority"},
     )
     assert response.status_code == 422
-    assert "verifiable citations" in response.json()["detail"]
+    # BUG-012 Hari 2026-04-21 reworded the detail to be actionable —
+    # assert against the stable "verified authorities in the corpus"
+    # phrase the user sees and the model_run_id going into a header
+    # instead of the message body.
+    detail = response.json()["detail"]
+    assert "verified authorities" in detail or "verifiable citations" in detail
+    assert "model_run_id=" not in detail
+    assert "X-Model-Run-Id" in response.headers
 
     # ModelRun captures the refusal for audit.
     factory = get_session_factory()
@@ -321,7 +328,12 @@ def test_generate_recommendation_refuses_when_retrieval_is_empty(
     )
     assert response.status_code == 422, response.text
     detail = response.json()["detail"].lower()
-    assert "refusing" in detail or "refuse" in detail
+    # BUG-012 reworded to actionable copy — pin the stable phrases
+    # the user sees ("grounding authorities", "matter description")
+    # and the clean-detail rule (no model_run_id leak).
+    assert "grounding authorities" in detail or "matter description" in detail
+    assert "model_run_id=" not in detail
+    assert "X-Model-Run-Id" in response.headers
 
     # No Recommendation row should have been persisted.
     factory = get_session_factory()
