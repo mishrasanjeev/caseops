@@ -75,6 +75,88 @@ _TITLE_NOISE_RE = re.compile(
 )
 _PUNCT_RE = re.compile(r"[^A-Za-z0-9\s]+")
 
+# Known bench / court-header tokens that PDF page-header extraction leaks
+# into the `title` slot. A title composed only of these is NEVER a
+# case name. See `.claude/skills/corpus-ingest/SKILL.md` and
+# `memory/feedback_title_validation_legal_corpus.md`.
+_BENCH_HEADER_TOKENS = frozenset({
+    "DHARWAD", "AURANGABAD", "JODHPUR", "KOZHIKODE", "NAGPUR",
+    "MADURAI", "LUCKNOW", "INDORE", "GWALIOR", "RANCHI",
+    "JABALPUR", "GUWAHATI", "SHILLONG", "IMPHAL", "AIZAWL",
+    "KOHIMA", "GANGTOK", "ITANAGAR", "PORT BLAIR", "KOLKATA",
+    "BENCH", "AT", "CIRCUIT", "HIGH", "SUPREME", "COURT", "OF",
+    "INDIA", "STATE", "UNION", "THE", "HON", "HONBLE",
+})
+
+# Party-role labels. Presence of one of these in the title is a strong
+# signal that it IS a case name, not a page header.
+_PARTY_ROLE_RE = re.compile(
+    r"\b(petitioner|respondent|appellant|applicant|accused|"
+    r"complainant|plaintiff|defendant)s?\b",
+    re.IGNORECASE,
+)
+# Party separator with alphabetic chars on each side.
+_PARTY_SEPARATOR_RE = re.compile(
+    r"\b[A-Za-z]{3,}[\w\s]*\s+(?:v\.?|vs\.?|versus|and)\s+[A-Za-z]{3,}",
+    re.IGNORECASE,
+)
+# Neutral citation / case reference patterns.
+_CITATION_RE = re.compile(
+    r"\[\d{4}\]|\b(?:SCC|AIR|INSC|DHC|SCR|BOM|MAD|CAL|KHC|MHC|KER)\b|"
+    r"\d{4}[:_-][A-Z]{2,6}[:_-]?\d+",
+    re.IGNORECASE,
+)
+# PDF OCR placeholder glyphs we've seen in the corpus.
+_CID_MARKER_RE = re.compile(r"\(cid:\d+\)")
+# Non-Latin script ranges common in Indian-court PDFs (Hindi, Punjabi,
+# Tamil, Telugu, Kannada, Malayalam, Bengali, Gurmukhi).
+_NON_LATIN_RE = re.compile(
+    "[\u0900-\u097F\u0A00-\u0A7F\u0B00-\u0B7F\u0B80-\u0BFF"
+    "\u0C00-\u0C7F\u0C80-\u0CFF\u0D00-\u0D7F]"
+)
+
+
+def _title_is_case_name(title: str) -> tuple[bool, str]:
+    """Return (is_valid, reason) for a Layer-2 `title` string.
+
+    A valid case-name seed must satisfy at least ONE of:
+
+    - party-separator form ("X v. Y" / "X and Y")
+    - contain a neutral citation / case-reference token
+    - contain a party-role label
+    - have ≥ 3 distinctive proper-noun tokens NOT in the bench-header
+      stopword set
+
+    Otherwise it's probably a leaked PDF page header like `"DHARWAD BENCH"`
+    or a translation-cover placeholder, and should NOT seed a probe
+    query. The `reason` is a short tag for telemetry.
+    """
+    if not title or not title.strip():
+        return False, "empty"
+    s = title.strip()
+    # Fast rejects before regex.
+    if len(s) < 12:
+        return False, "too_short"
+    if _CID_MARKER_RE.search(s):
+        return False, "cid_marker"
+    if _NON_LATIN_RE.search(s):
+        return False, "non_latin"
+    if _PARTY_SEPARATOR_RE.search(s):
+        return True, "party_separator"
+    if _CITATION_RE.search(s):
+        return True, "citation"
+    if _PARTY_ROLE_RE.search(s):
+        return True, "party_role"
+    # Count proper-noun tokens that aren't bench-header noise.
+    proper = [
+        t for t in re.findall(r"[A-Za-z]{3,}", s)
+        if t[0].isupper() and t.upper() not in _BENCH_HEADER_TOKENS
+    ]
+    # Dedup so "DHARWAD BENCH DHARWAD" doesn't score as 2 tokens.
+    if len({t.lower() for t in proper}) >= 3:
+        return True, "proper_nouns"
+    return False, "bench_header_or_thin"
+
 
 @dataclass(frozen=True)
 class _Probe:
@@ -158,7 +240,17 @@ def _expand_query_via_haiku(query: str) -> str:
 
 def _sample_probes(
     session: Session, *, sample_size: int, seed: int
-) -> list[_Probe]:
+) -> tuple[list[_Probe], dict[str, int]]:
+    """Return ``(probes, skip_reasons)``.
+
+    ``skip_reasons`` tags why a doc was excluded from the probe sample
+    — almost always a title-validation failure (bench placeholder, OCR
+    gibberish, too-short, non-Latin). Surfaced in the report so
+    operators see the data-quality tail explicitly and don't mistake a
+    shrunken sample for a retrieval regression. See
+    ``memory/feedback_title_validation_legal_corpus.md`` for why this
+    gate exists.
+    """
     # Pull every Layer-2 doc id + title in one shot — the result set
     # is bounded (~14K rows × ~300 bytes) so loading into memory is
     # fine. Random sampling here is more honest than ``ORDER BY
@@ -171,16 +263,29 @@ def _sample_probes(
     )
     candidates = list(session.execute(stmt).all())
     if not candidates:
-        return []
+        return [], {}
     rng = random.Random(seed)
-    sample = rng.sample(candidates, k=min(sample_size, len(candidates)))
+    # Over-sample so we still land ``sample_size`` good probes after
+    # filtering out bench-placeholder / non-Latin / OCR-garbage titles.
+    # 3x is enough to cover the ~10-15 % rejection rate we see on SC/HC
+    # 2023 buckets without degrading probe-selection variance.
+    overshoot = min(sample_size * 3, len(candidates))
+    pool = rng.sample(candidates, k=overshoot)
     probes: list[_Probe] = []
-    for doc_id, title in sample:
+    skip_reasons: dict[str, int] = {}
+    for doc_id, title in pool:
+        ok, reason = _title_is_case_name(title or "")
+        if not ok:
+            skip_reasons[reason] = skip_reasons.get(reason, 0) + 1
+            continue
         query = _build_query(title or "")
         if not query.strip():
+            skip_reasons["empty_query"] = skip_reasons.get("empty_query", 0) + 1
             continue
         probes.append(_Probe(document_id=doc_id, title=title or "", query=query))
-    return probes
+        if len(probes) >= sample_size:
+            break
+    return probes, skip_reasons
 
 
 def _resolve_tenant(
@@ -240,7 +345,11 @@ def _evaluate_probe(
 
 
 def _format_report(
-    run, results: list[tuple[_Probe, str, dict[str, object]]], *, k: int
+    run,
+    results: list[tuple[_Probe, str, dict[str, object]]],
+    *,
+    k: int,
+    skip_reasons: dict[str, int] | None = None,
 ) -> str:
     total = max(len(results), 1)
     found = [m for _, _, m in results if m.get("found")]
@@ -266,6 +375,17 @@ def _format_report(
     lines.append(f"- **recall@10**: {found_at_10}/{total} ({100*found_at_10/total:.1f} %)")
     lines.append(f"- **MRR**: {mrr:.3f}")
     lines.append(f"- **mean rank (when found)**: {mean_rank:.2f}")
+    if skip_reasons:
+        skip_total = sum(skip_reasons.values())
+        lines.append("")
+        lines.append("## Skipped (title-validation)")
+        lines.append("")
+        lines.append(
+            f"- **skipped**: {skip_total} (docs whose `title` failed the "
+            "case-name predicate and were excluded from the probe sample)"
+        )
+        for reason, count in sorted(skip_reasons.items(), key=lambda kv: -kv[1]):
+            lines.append(f"  - `{reason}`: {count}")
     lines.append("")
     lines.append("## Misses (first 10)")
     lines.append("")
@@ -304,10 +424,13 @@ def run(
             provider="caseops-authority-search-v2", model=f"k={k}",
         )
 
+        skip_reasons: dict[str, int] = {}
         if dry_run:
             probes: list[_Probe] = []
         else:
-            probes = _sample_probes(session, sample_size=sample_size, seed=seed)
+            probes, skip_reasons = _sample_probes(
+                session, sample_size=sample_size, seed=seed,
+            )
             if expand_query and probes:
                 expanded: list[_Probe] = []
                 for p in probes:
@@ -343,7 +466,9 @@ def run(
         finalize_run(session, run_row)
         session.commit()
 
-    sys.stdout.write(_format_report(run_row, results, k=k))
+    sys.stdout.write(
+        _format_report(run_row, results, k=k, skip_reasons=skip_reasons)
+    )
     # 2026-04-21 BUG: the sweep orchestrator was halting on valid
     # 83.3 % recall runs because this CLI previously returned 1 on ANY
     # miss. That's wrong for a metrics eval — every real run has

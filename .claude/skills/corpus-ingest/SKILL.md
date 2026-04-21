@@ -133,6 +133,127 @@ metadata quality, not retrieval. They diverge wildly (4.7 extraction /
 Report after every bucket as: `rating: X.Y/5 (recall@10=NN.N%, MRR=0.YYY, rank=Z.ZZ)`.
 A drop bucket-over-bucket → STOP and diagnose.
 
+## Title hygiene is upstream of every retrieval fix
+
+Learned on 2026-04-21 (sc-2023 stuck at 4.17/5 for a week of algorithm work):
+PDF page headers leak into `title` during extraction — e.g.
+`"DHARWAD BENCH"`, `"BENCH AT AURANGABAD"`, `"IN THE HIGH COURT OF
+KARNATAKA"`. These strings:
+
+- Pass every naive gate (non-empty, latin, no `(cid:XX)` markers).
+- Get embedded into the title-chunk header as if they were case names.
+- Collapse hundreds of docs onto near-identical embedding coordinates.
+- Get fed back into the probe as `_build_query(title)` → 287 docs share
+  the seed query `"DHARWAD BENCH"` → recall@10 for those samples is
+  structurally 1/287.
+
+**Dashboards lie in this state.** Probe rating is stuck in the low 4s and
+every retrieval-side fix (prefilters, rerank, normalisers, query
+expansion) moves it by noise because the failure isn't in retrieval.
+
+### Detection — run after every ingest bucket
+
+```sql
+SELECT count(*), 'bench_placeholder' AS pattern FROM authority_documents
+  WHERE title ~* '^(DHARWAD|AURANGABAD|JODHPUR|KOZHIKODE|NAGPUR|MADURAI|LUCKNOW|INDORE|GWALIOR|RANCHI|JABALPUR|GUWAHATI|SHILLONG|IMPHAL|AIZAWL|KOHIMA|GANGTOK|ITANAGAR) BEN ?CH$'
+     OR title ~* '^BENCH AT [A-Z]+$'
+UNION ALL
+SELECT count(*), 'court_header' FROM authority_documents
+  WHERE title ~* '^IN THE (HIGH|SUPREME) COURT'
+UNION ALL
+SELECT count(*), 'too_short' FROM authority_documents
+  WHERE length(title) < 12
+UNION ALL
+SELECT count(*), 'non_latin' FROM authority_documents
+  WHERE title ~ '[\u0900-\u097F\u0A00-\u0A7F\u0B80-\u0BFF\u0C00-\u0C7F\u0D00-\u0D7F]'
+UNION ALL
+SELECT count(*), 'cid_marker' FROM authority_documents
+  WHERE title ~ '\(cid:[0-9]+\)';
+```
+
+**> 1% of bucket flagged = STOP**. Do not ship retrieval fixes on a
+corpus with a dirty title tail; fix the titles first.
+
+### Title-validation predicate (write at ingest, re-check at probe)
+
+A Layer-2-extracted title is a valid case-name seed iff it matches at
+least ONE of:
+
+1. Party separator with proper nouns on each side — regex
+   `\b\w{3,}\s+(v\.?|vs\.?|versus|and)\s+\w{3,}\b` (case-insensitive).
+2. Neutral citation / case reference — one of `\[\d{4}\]`, `\bSCC\b`,
+   `\bAIR\b`, `\bINSC\b`, `\bDHC\b`, `\bSCR\b`, `\d{4}[a-z:]{3,}\d+`.
+3. Party-role label — `Petitioner`, `Respondent`, `Appellant`,
+   `Applicant`, `Accused`, `Complainant` as a standalone word.
+4. ≥ 3 distinct proper-noun tokens NOT in the bench-header stopword set
+   (same list as the SQL detector above plus `BENCH`, `AT`, `CIRCUIT`,
+   `HIGH`, `COURT`, `SUPREME`, `STATE`, `UNION`, `OF`, `INDIA`).
+
+### Fallback chain when the predicate fails
+
+Apply at ingest time (before the row is written) AND at title-chunk
+refresh time (before a new header is embedded):
+
+```
+raw_title → predicate → if pass: keep
+                     → if fail: try `case_reference` → predicate
+                              → if fail: try first entry of
+                                  `parties_json` → predicate
+                              → if fail: SKIP the title-chunk
+                                  embedding entirely and mark
+                                  `title_needs_reextract = true`
+```
+
+**Never save a degraded title string as the canonical title.** A missing
+title is recoverable; a placeholder title is invisible poison (see the
+north-star rule at the top of this skill).
+
+### Probe must skip, not measure, garbage-titled docs
+
+`caseops-eval-hnsw-recall`'s `_sample_probes` must apply the
+title-validation predicate to each candidate. Docs that fail the
+predicate are skipped (not added to the sample) and the skip count is
+reported alongside the rating:
+
+```
+rating: 4.83/5 (recall@10=96.7 %, MRR=0.902, rank=1.18)
+skipped: 3/33 (bench_placeholder=2, too_short=1)
+```
+
+If `skipped / total > 10%`: the probe is measuring a shrunken sample
+and the rating is unreliable. Schedule a Layer-2 re-extract pass on the
+skipped docs with the targeted prompt below.
+
+### Targeted Layer-2 re-extract prompt for bench-placeholder docs
+
+```
+Extract the case name from this judgment's first 3 pages.
+
+Rules:
+- Do NOT return the page header, bench name alone, or court name alone.
+  Strings like "DHARWAD BENCH", "BENCH AT AURANGABAD",
+  "IN THE HIGH COURT OF KARNATAKA" are NEVER valid case names.
+- A valid case name has two parties separated by "v." / "vs." / "versus"
+  / "and", OR a neutral citation, OR at least three distinctive
+  proper-noun tokens.
+- If the first 3 pages do not contain the case name (continuation
+  pages, translation covers, procedural orders), return the JSON
+  literal `null`. Do not invent.
+
+Return a JSON object: {"title": "<case name or null>"}.
+```
+
+Run on the subset flagged by the SQL detector; do NOT re-extract the
+whole bucket.
+
+### Principle
+
+In any pipeline where stage N writes a field that stage N+1 trusts to
+be semantically meaningful, "field is non-empty" is NEVER sufficient;
+the predicate stage N+1 actually needs must be enforced at the write,
+or reasserted at the read. Prefer the former: fail early, fail at the
+source.
+
 ## Levers to move from 4.0 → 4.8+
 
 Ordered by impact per dollar:

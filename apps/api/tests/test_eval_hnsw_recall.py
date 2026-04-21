@@ -19,6 +19,7 @@ from caseops_api.scripts.eval_hnsw_recall import (
     _build_query,
     _Probe,
     _sample_probes,
+    _title_is_case_name,
     main,
 )
 from tests.test_auth_company import bootstrap_company
@@ -111,7 +112,7 @@ def test_sample_probes_only_pulls_layer_2_docs(client) -> None:
 
     Session = get_session_factory()
     with Session() as session:
-        probes = _sample_probes(session, sample_size=10, seed=0)
+        probes, _skip = _sample_probes(session, sample_size=10, seed=0)
     ids = {p.document_id for p in probes}
     assert layer2_id in ids
     # The pre-layer-2 doc must NOT be sampled.
@@ -128,8 +129,8 @@ def test_sample_probes_respects_seed_for_reproducibility(client) -> None:
         _seed_doc(title=f"Doc number {i}", structured_version=1)
     Session = get_session_factory()
     with Session() as session:
-        a = _sample_probes(session, sample_size=5, seed=123)
-        b = _sample_probes(session, sample_size=5, seed=123)
+        a, _ = _sample_probes(session, sample_size=5, seed=123)
+        b, _ = _sample_probes(session, sample_size=5, seed=123)
     assert [p.document_id for p in a] == [p.document_id for p in b]
 
 
@@ -207,3 +208,112 @@ def test_probe_dataclass_is_immutable() -> None:
     p = _Probe(document_id="x", title="t", query="q")
     with pytest.raises(FrozenInstanceError):
         p.document_id = "y"  # type: ignore[misc]
+
+
+# ---------------------------------------------------------------
+# Title-validation predicate (learned 2026-04-21 — bench-placeholder
+# titles leaked into the corpus and poisoned the probe). See
+# `memory/feedback_title_validation_legal_corpus.md`.
+# ---------------------------------------------------------------
+
+
+class TestTitleIsCaseName:
+    """The predicate stage N+1 actually needs: is this a case name?"""
+
+    @pytest.mark.parametrize(
+        "title",
+        [
+            "Arun Kumar v. State of Karnataka",
+            "Wahid vs. Govt of NCT of Delhi",
+            "State versus Gurbaksh Singh Sibbia and Another",
+            "Tata Sons And Siva Industries",
+        ],
+    )
+    def test_party_separator_accepted(self, title: str) -> None:
+        ok, reason = _title_is_case_name(title)
+        assert ok, f"expected accept on party separator: {title!r}"
+        assert reason == "party_separator"
+
+    def test_citation_accepted(self) -> None:
+        ok, reason = _title_is_case_name(
+            "Order dated 12 Jan 2024 [2024] 3 SCC 421"
+        )
+        assert ok
+        assert reason == "citation"
+
+    def test_party_role_accepted(self) -> None:
+        ok, reason = _title_is_case_name(
+            "Order on the application filed by the Petitioner"
+        )
+        assert ok
+        assert reason == "party_role"
+
+    def test_three_proper_nouns_accepted(self) -> None:
+        ok, reason = _title_is_case_name(
+            "Rajesh Sharma Anita Malhotra Pritam Yadav"
+        )
+        assert ok
+        assert reason == "proper_nouns"
+
+    @pytest.mark.parametrize(
+        "title,expected_reason",
+        [
+            ("DHARWAD BENCH", "bench_header_or_thin"),
+            ("DHARWAD BEN CH", "bench_header_or_thin"),
+            ("BENCH AT AURANGABAD", "bench_header_or_thin"),
+            ("IN THE HIGH COURT OF KARNATAKA", "bench_header_or_thin"),
+            ("CIRCUIT BENCH AT JODHPUR", "bench_header_or_thin"),
+            ("Short", "too_short"),
+            ("", "empty"),
+            ("   ", "empty"),
+        ],
+    )
+    def test_bench_placeholders_rejected(
+        self, title: str, expected_reason: str,
+    ) -> None:
+        ok, reason = _title_is_case_name(title)
+        assert not ok, f"expected reject on bench placeholder: {title!r}"
+        assert reason == expected_reason
+
+    def test_cid_marker_rejected(self) -> None:
+        ok, reason = _title_is_case_name(
+            "Basavaraj (cid:8117)ರಾ(cid:8132) v State of Karnataka"
+        )
+        assert not ok
+        assert reason == "cid_marker"
+
+    def test_non_latin_rejected(self) -> None:
+        # Pure Devanagari / Tamil / Gurmukhi titles — we don't attempt
+        # non-English retrieval self-probes today.
+        ok, reason = _title_is_case_name(
+            "भारत अत्यु न्या यस्था नेपालीमा अनुवाद"
+        )
+        assert not ok
+        assert reason == "non_latin"
+
+
+@_skip_seed_on_windows
+def test_sample_probes_skips_bench_placeholder_titles(client) -> None:
+    """The probe must not measure GIGO — docs whose Layer-2 title is a
+    PDF page header (DHARWAD BENCH, etc.) are excluded from the
+    sample and tallied under ``skip_reasons``. Keeps the probe from
+    structurally mis-rating a retrieval system on placeholder noise."""
+    bootstrap_company(client)
+    good_id = _seed_doc(
+        title="Arun Kumar v. State of Karnataka", structured_version=1,
+    )
+    _seed_doc(title="DHARWAD BENCH", structured_version=1)
+    _seed_doc(title="BENCH AT AURANGABAD", structured_version=1)
+    _seed_doc(
+        title="IN THE HIGH COURT OF KARNATAKA", structured_version=1,
+    )
+
+    Session = get_session_factory()
+    with Session() as session:
+        probes, skip_reasons = _sample_probes(
+            session, sample_size=10, seed=0,
+        )
+    ids = {p.document_id for p in probes}
+    assert good_id in ids
+    # All three placeholder titles rejected.
+    assert skip_reasons.get("bench_header_or_thin", 0) >= 3
