@@ -25,11 +25,11 @@ judge / court surfaces (PRD §10.6 neutrality is superseded there).
 | MOD-TS-001 | JudgeProfile | **95 %** (P1a/P1b/P2/P2b/P3/P4 all in prod on `c356cda`; Layer-2 sweep autonomous; citation/bench normalisers on `quality/sc-2023-multilingual` branch pending merge) | §10.6 | **P — DONE**, sc-2023 branch pending merge | retrieval quality gap (normalisers ready — need probe+merge) |
 | MOD-TS-002 | OCR Extractor | **90 %** (Q1 + Q2 + Q3 + Q4 all landed — language-detect, handwriting retry, quality gate in prod on `c356cda`) | §9.1 / §14.4 | **Q — DONE** | handwritten fixture probe recommended before declaring 100 % |
 | MOD-TS-003 | Legal Translator | 0 % | not covered | **U** (deferred) | Not prioritised for v1 |
-| MOD-TS-004 | Case Summary | **95 %** (Q5 endpoint + Q6 regenerate + Q7 DOCX export + Q8 timeline all in prod; PDF export via `fpdf2` is the remaining slice) | §9.6 / §10.3 | **Q (Q5/Q6/Q7-docx/Q8 ✅)** | PDF export (follow-up; `fpdf2` dep, no native blocker) |
+| MOD-TS-004 | Case Summary | **100 %** (Q5 endpoint + Q6 regenerate + Q7 DOCX + Q7 PDF via `fpdf2` + Q8 timeline all merged) | §9.6 / §10.3 | **Q — DONE** | — |
 | MOD-TS-005 | Document Viewer | **70 %** (Q9 react-pdf viewer + Q11 viewer route + Q12 in-doc search live; Q10 annotation schema + overlay on `sprint/q10-attachment-annotations` branch pending merge) | §10.3 | **Q (Q9/Q11/Q12 ✅, Q10 branch ready)** | merge Q10 branch; richer multi-page search (nice-to-have) |
 | MOD-TS-006 | Calendar | 40 % | §7.2 | **T** | Temporal (§5.1) + UI |
 | MOD-TS-007 | Notification & Reminder | 20 % | §5.3 | **T** | Temporal (§5.1) + SMS provider |
-| MOD-TS-008 | Pleading Step By Step | **75 %** (R1/R2/R3 discovery route + R4 stepper preview endpoint + R5 validators + R9 auto-suggest all live; React Hook Form + Zod stepper UI is the remaining slice) | §9.5 / §10.3 | **R (R1-R5/R9 ✅)** | frontend stepper UI wiring to the new `/api/drafting/templates/*` + `/api/drafting/preview` endpoints |
+| MOD-TS-008 | Pleading Step By Step | **95 %** (R1/R2/R3 + R4 + R5 + R9 backend + R-UI React Hook Form + Zod stepper merged; stepper→draft facts passthrough is the last follow-up) | §9.5 / §10.3 | **R — DONE (stepper shipped)** | optional: persist stepper facts into the draft record so the generate action reuses them |
 | MOD-TS-009 | Clients & Advocates | 50 % | §9.2 (counsel) / new | **S** | Structured `Client` entity not modeled |
 | MOD-TS-010 | AutoMail Transfer | 25 % | §5.3 / §16.2 | **S/T** | Email templates + Temporal |
 | MOD-TS-011 | Support (in-app) | 0 % | not covered | **W** (v2) | Out of v1 scope |
