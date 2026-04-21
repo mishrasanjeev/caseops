@@ -234,19 +234,25 @@ def test_pine_labs_payment_link_id_placeholder_is_substituted() -> None:
 
 
 def test_pine_labs_parses_plural_v2_native_field_names() -> None:
-    """Plural V2 responds with ``payment_link_id`` / ``payment_link_url``
-    / ``payment_link_status`` — our parser must pick those up, not
-    just the legacy generic names."""
+    """Plural V2 responds with ``payment_link_id`` + ``payment_link``
+    (NOT ``payment_link_url``) at the top level — verify the parser
+    picks these up."""
+    import os
+    from datetime import UTC, datetime, timedelta
+    from unittest.mock import patch
+
     import httpx
 
-    from caseops_api.services.pine_labs import PineLabsGatewayClient
+    from caseops_api.services.pine_labs import (
+        PineLabsGatewayClient,
+        _BearerTokenCache,
+    )
 
     raw = {
-        "data": {
-            "payment_link_id": "plink_123",
-            "payment_link_url": "https://pluraluat.v2.pinepg.in/l/plink_123",
-            "payment_link_status": "CREATED",
-        }
+        "payment_link_id": "pl-v1-xyz",
+        "payment_link": "https://pbl.v2.pinepg.in/PLUTUS/xyz",
+        "status": "CREATED",
+        "merchant_payment_link_reference": "inv-1",
     }
 
     class _FakeResponse:
@@ -256,9 +262,6 @@ def test_pine_labs_parses_plural_v2_native_field_names() -> None:
         def json(self) -> dict:
             return raw
 
-    # Patch httpx.post so we don't hit the network.
-    import os
-    from unittest.mock import patch
     os.environ["CASEOPS_PINE_LABS_API_BASE_URL"] = "https://example.test"
     os.environ["CASEOPS_PINE_LABS_PAYMENT_LINK_PATH"] = "/api/pay/v1/paymentlink"
     os.environ["CASEOPS_PINE_LABS_MERCHANT_ID"] = "111077"
@@ -268,6 +271,9 @@ def test_pine_labs_parses_plural_v2_native_field_names() -> None:
     from caseops_api.core.settings import get_settings
     get_settings.cache_clear()
     try:
+        # Preload a cached bearer so the client skips the OAuth fetch.
+        _BearerTokenCache._token = "fake-bearer"
+        _BearerTokenCache._expires_at = datetime.now(UTC) + timedelta(hours=1)
         client = PineLabsGatewayClient()
         with patch.object(httpx, "post", return_value=_FakeResponse()):
             result = client.create_payment_link(
@@ -281,10 +287,119 @@ def test_pine_labs_parses_plural_v2_native_field_names() -> None:
                 return_url="https://caseops.ai/return",
                 webhook_url="https://api.caseops.ai/webhook",
             )
-        assert result.provider_order_id == "plink_123"
-        assert result.payment_url.startswith("https://pluraluat")
+        assert result.provider_order_id == "pl-v1-xyz"
+        assert result.payment_url.startswith("https://pbl.v2.pinepg.in")
         assert result.status == "created"
     finally:
+        _BearerTokenCache.clear()
+        for key in (
+            "CASEOPS_PINE_LABS_API_BASE_URL",
+            "CASEOPS_PINE_LABS_PAYMENT_LINK_PATH",
+            "CASEOPS_PINE_LABS_MERCHANT_ID",
+            "CASEOPS_PINE_LABS_API_KEY",
+            "CASEOPS_PINE_LABS_API_SECRET",
+        ):
+            os.environ.pop(key, None)
+        get_settings.cache_clear()
+
+
+def test_pine_labs_oauth_flow_is_bearer_not_x_api_key() -> None:
+    """Regression for BUG-015 Hari 2026-04-21: the initial integration
+    sent custom ``X-Api-Key`` / ``X-Api-Secret`` headers and got 401
+    from Plural V2. The correct scheme is OAuth
+    ``client_credentials`` → cached bearer token → ``Authorization:
+    Bearer …`` on every call. Pin the flow with a stub."""
+    import os
+    from unittest.mock import patch
+
+    import httpx
+
+    from caseops_api.services.pine_labs import (
+        PineLabsGatewayClient,
+        _BearerTokenCache,
+    )
+
+    calls: list[dict] = []
+
+    def _fake_post(url, *args, **kwargs):  # noqa: ARG001
+        body = kwargs.get("json") or {}
+        hdrs = kwargs.get("headers") or {}
+        calls.append(
+            {"url": url, "body": body, "auth": hdrs.get("Authorization", "")}
+        )
+
+        class R:
+            status_code = 200
+            def raise_for_status(self):  # noqa: D401
+                return None
+            def json(self):
+                if "token" in url:
+                    return {
+                        "access_token": "fake-bearer",
+                        "expires_at": "2099-01-01T00:00:00Z",
+                    }
+                return {
+                    "payment_link_id": "pl-x",
+                    "payment_link": "https://p/x",
+                    "status": "CREATED",
+                }
+        return R()
+
+    os.environ["CASEOPS_PINE_LABS_API_BASE_URL"] = "https://example.test"
+    os.environ["CASEOPS_PINE_LABS_PAYMENT_LINK_PATH"] = "/api/pay/v1/paymentlink"
+    os.environ["CASEOPS_PINE_LABS_MERCHANT_ID"] = "111077"
+    os.environ["CASEOPS_PINE_LABS_API_KEY"] = "test-key"
+    os.environ["CASEOPS_PINE_LABS_API_SECRET"] = "test-secret"
+
+    from caseops_api.core.settings import get_settings
+    get_settings.cache_clear()
+    try:
+        _BearerTokenCache.clear()
+        with patch.object(httpx, "post", side_effect=_fake_post):
+            client = PineLabsGatewayClient()
+            client.create_payment_link(
+                merchant_order_id="caseops-token-1",
+                amount_minor=10_000,
+                currency="INR",
+                customer_name=None,
+                customer_email=None,
+                customer_phone=None,
+                description="token probe",
+                return_url="https://caseops.ai/return",
+                webhook_url="",
+            )
+            client.create_payment_link(  # second call — token cached
+                merchant_order_id="caseops-token-2",
+                amount_minor=10_000,
+                currency="INR",
+                customer_name=None,
+                customer_email=None,
+                customer_phone=None,
+                description="token probe",
+                return_url="https://caseops.ai/return",
+                webhook_url="",
+            )
+        token_posts = [c for c in calls if "/api/auth/v1/token" in c["url"]]
+        paylink_posts = [c for c in calls if "/paymentlink" in c["url"]]
+        assert len(token_posts) == 1, "token must be cached across calls"
+        assert len(paylink_posts) == 2
+        # OAuth client_credentials body shape.
+        assert token_posts[0]["body"]["grant_type"] == "client_credentials"
+        assert token_posts[0]["body"]["client_id"] == "test-key"
+        assert token_posts[0]["body"]["client_secret"] == "test-secret"
+        assert token_posts[0]["body"]["merchant_id"] == "111077"
+        # Every paylink call uses Bearer auth.
+        assert all(
+            c["auth"].startswith("Bearer ") for c in paylink_posts
+        )
+        # Plural V2 body shape: nested amount + reference name.
+        sample = paylink_posts[0]["body"]
+        assert sample["amount"] == {"value": 10_000, "currency": "INR"}
+        assert sample["merchant_payment_link_reference"] == "caseops-token-1"
+        assert "callback_url" in sample
+        assert "expire_by" in sample
+    finally:
+        _BearerTokenCache.clear()
         for key in (
             "CASEOPS_PINE_LABS_API_BASE_URL",
             "CASEOPS_PINE_LABS_PAYMENT_LINK_PATH",

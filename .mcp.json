@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "pinelabs": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://mcp.pinelabs.com/mcp",
+        "--header",
+        "X-Client-Id:59194fe5-4c27-4e6e-8deb-4e59f8f4fd7b",
+        "--header",
+        "X-Client-Secret:024dd66a367549b380bd322ff6c3b279"
+      ]
+    }
+  }
+}

@@ -3,12 +3,18 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
+import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from threading import Lock
 
 import httpx
 from fastapi import HTTPException, status
 
 from caseops_api.core.settings import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -136,7 +142,42 @@ def redact_provider_payload(payload: dict[str, object]) -> dict[str, object]:
     return redacted
 
 
+class _BearerTokenCache:
+    """Cache the Plural V2 OAuth bearer token in-memory with a small
+    safety margin before the declared expiry. Thread-safe for the
+    simple single-process Cloud Run model; if we ever go multi-worker
+    the token endpoint is cheap enough that per-worker caching is fine.
+    """
+    _lock = Lock()
+    _token: str | None = None
+    _expires_at: datetime | None = None
+
+    @classmethod
+    def get(cls, fetcher) -> str:
+        with cls._lock:
+            now = datetime.now(UTC)
+            if (
+                cls._token
+                and cls._expires_at
+                and cls._expires_at - now > timedelta(seconds=60)
+            ):
+                return cls._token
+            token, expires_at = fetcher()
+            cls._token = token
+            cls._expires_at = expires_at
+            return token
+
+    @classmethod
+    def clear(cls) -> None:
+        with cls._lock:
+            cls._token = None
+            cls._expires_at = None
+
+
 class PineLabsGatewayClient:
+    # Plural V2 OAuth token endpoint — relative to ``pine_labs_api_base_url``.
+    _TOKEN_PATH = "/api/auth/v1/token"
+
     def __init__(self) -> None:
         self.settings = get_settings()
 
@@ -163,15 +204,84 @@ class PineLabsGatewayClient:
             )
         return f"{self.settings.pine_labs_api_base_url.rstrip('/')}/{resolved_path.lstrip('/')}"
 
+    def _fetch_bearer_token(self) -> tuple[str, datetime]:
+        """POST /api/auth/v1/token → bearer access_token.
+
+        Plural V2 uses an OAuth ``client_credentials`` grant: send
+        ``client_id`` + ``client_secret`` + ``merchant_id`` in JSON
+        body (header auth is NOT accepted despite common examples).
+        """
+        if (
+            not self.settings.pine_labs_api_key
+            or not self.settings.pine_labs_api_secret
+            or not self.settings.pine_labs_merchant_id
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "Pay Link isn't available — the payment gateway "
+                    "credentials are incomplete on this environment. "
+                    "Please contact support."
+                ),
+            )
+        token_url = (
+            self.settings.pine_labs_api_base_url.rstrip("/") + self._TOKEN_PATH
+        )
+        response = httpx.post(
+            token_url,
+            json={
+                "grant_type": "client_credentials",
+                "client_id": self.settings.pine_labs_api_key,
+                "client_secret": self.settings.pine_labs_api_secret,
+                "merchant_id": self.settings.pine_labs_merchant_id,
+            },
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+            timeout=self.settings.pine_labs_request_timeout_seconds,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        token = payload.get("access_token")
+        expires_at_raw = payload.get("expires_at") or ""
+        try:
+            expires_at = datetime.fromisoformat(
+                expires_at_raw.replace("Z", "+00:00"),
+            )
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=UTC)
+        except ValueError:
+            # Fallback: token is typically valid ~2h; assume 30 min
+            # so we refresh well before any real expiry.
+            expires_at = datetime.now(UTC) + timedelta(minutes=30)
+        if not token:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=(
+                    "Pay Link is temporarily unavailable — the payment "
+                    "gateway did not return a valid auth token. Please "
+                    "try again in a few minutes."
+                ),
+            )
+        return token, expires_at
+
     def _build_headers(self) -> dict[str, str]:
-        headers = {"Content-Type": "application/json", "Accept": "application/json"}
-        if self.settings.pine_labs_api_key:
-            headers["X-Api-Key"] = self.settings.pine_labs_api_key
-        if self.settings.pine_labs_api_secret:
-            headers["X-Api-Secret"] = self.settings.pine_labs_api_secret
-        if self.settings.pine_labs_merchant_id:
-            headers["X-Merchant-Id"] = self.settings.pine_labs_merchant_id
-        return headers
+        token = _BearerTokenCache.get(self._fetch_bearer_token)
+        return {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            # Plural V2 requires a unique per-request id + timestamp
+            # on mutating endpoints. Emitting them on every request
+            # is safe and simplifies the client.
+            "Request-ID": str(uuid.uuid4()),
+            "Request-Timestamp": (
+                datetime.now(UTC)
+                .isoformat(timespec="milliseconds")
+                .replace("+00:00", "Z")
+            ),
+        }
 
     def create_payment_link(
         self,
@@ -186,24 +296,51 @@ class PineLabsGatewayClient:
         return_url: str,
         webhook_url: str,
     ) -> PineLabsCreatePaymentLinkResult:
+        # Plural V2 paymentlink schema: amount nested as
+        # ``{"value": <paisa>, "currency": "<ISO>"}``. Customer uses
+        # ``email`` + ``phone_number`` (NOT email_id/mobile_number).
+        # ``callback_url`` is the success-redirect; webhook is wired
+        # via the merchant dashboard out-of-band, not per-request.
+        # Reference field is ``merchant_payment_link_reference``.
+        expire_by = (
+            datetime.now(UTC) + timedelta(days=60)
+        ).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+        customer_block = {}
+        if customer_email:
+            customer_block["email"] = customer_email
+        if customer_phone:
+            customer_block["phone_number"] = customer_phone
+        if customer_name:
+            # Plural stores customer id as a free-form token; use the
+            # name as a stable-ish identifier when present.
+            customer_block["id"] = customer_name[:60]
         payload = {
-            "merchant_id": self.settings.pine_labs_merchant_id,
-            "merchant_order_id": merchant_order_id,
-            "amount_minor": amount_minor,
-            "currency": currency,
-            "customer_name": customer_name,
-            "customer_email": customer_email,
-            "customer_phone": customer_phone,
-            "description": description,
-            "return_url": return_url,
-            "webhook_url": webhook_url,
+            "amount": {"value": amount_minor, "currency": currency},
+            "description": description or "",
+            "merchant_payment_link_reference": merchant_order_id,
+            "allowed_payment_methods": ["CARD", "UPI", "NETBANKING"],
+            "callback_url": return_url,
+            "expire_by": expire_by,
         }
+        if customer_block:
+            payload["customer"] = customer_block
+        _ = webhook_url  # wired via Plural merchant dashboard, not per-request
         response = httpx.post(
             self._build_url(self.settings.pine_labs_payment_link_path),
             json=payload,
             headers=self._build_headers(),
             timeout=self.settings.pine_labs_request_timeout_seconds,
         )
+        if response.status_code == 401:
+            # Bearer token probably expired between our cache check
+            # and the real call — blow away the cache and try once.
+            _BearerTokenCache.clear()
+            response = httpx.post(
+                self._build_url(self.settings.pine_labs_payment_link_path),
+                json=payload,
+                headers=self._build_headers(),
+                timeout=self.settings.pine_labs_request_timeout_seconds,
+            )
         response.raise_for_status()
         data = response.json()
         # Pine Labs Plural V2 returns nested payloads under ``data`` or
@@ -222,17 +359,21 @@ class PineLabsGatewayClient:
             ),
             payment_url=_extract_first(
                 inner,
-                "payment_link_url",  # Pine Labs Plural V2 native
+                "payment_link",  # Plural V2 native (2026-04-21)
+                "payment_link_url",
                 "short_url",
                 "payment_url",
                 "checkout_url",
                 "redirect_url",
             ),
             provider_reference=_extract_first(
-                inner, "reference_id", "provider_reference",
+                inner,
+                "merchant_payment_link_reference",  # Plural V2 native
+                "reference_id",
+                "provider_reference",
             ),
             status=_normalize_status(
-                _extract_first(inner, "payment_link_status", "status", "payment_status"),
+                _extract_first(inner, "status", "payment_link_status", "payment_status"),
             ),
             raw_payload=data,
         )
@@ -246,6 +387,16 @@ class PineLabsGatewayClient:
             headers=self._build_headers(),
             timeout=self.settings.pine_labs_request_timeout_seconds,
         )
+        if response.status_code == 401:
+            _BearerTokenCache.clear()
+            response = httpx.get(
+                self._build_url(
+                    self.settings.pine_labs_payment_status_path,
+                    provider_order_id=provider_order_id,
+                ),
+                headers=self._build_headers(),
+                timeout=self.settings.pine_labs_request_timeout_seconds,
+            )
         response.raise_for_status()
         data = response.json()
         inner = data.get("data") if isinstance(data.get("data"), dict) else data
