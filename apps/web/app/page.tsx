@@ -7,6 +7,7 @@ import { Footer } from "@/components/marketing/Footer";
 import { Hero } from "@/components/marketing/Hero";
 import { Nav } from "@/components/marketing/Nav";
 import { Pricing } from "@/components/marketing/Pricing";
+import { ProductGallery } from "@/components/marketing/ProductGallery";
 import { Security } from "@/components/marketing/Security";
 import { Workflows } from "@/components/marketing/Workflows";
 import { SkipLink } from "@/components/ui/SkipLink";
@@ -74,6 +75,7 @@ export default function LandingPage() {
       <main id="main" tabIndex={-1} className="focus:outline-none">
         <Hero />
         <Features />
+        <ProductGallery />
         <Workflows />
         <Security />
         <Pricing />

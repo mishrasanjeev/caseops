@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { cn } from "@/lib/cn";
+import { siteConfig } from "@/lib/site";
 
 const tiers = [
   {
@@ -45,7 +46,7 @@ const tiers = [
       "Dedicated adapters and connectors",
       "Quarterly evaluation and tuning",
     ],
-    cta: { label: "Talk to sales", href: "mailto:sales@caseops.ai" },
+    cta: { label: "Talk to sales", href: "#cta" },
     highlighted: false,
   },
 ] as const;

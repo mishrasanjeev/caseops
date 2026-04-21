@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { NextResponse } from "next/server";
+import nodemailer from "nodemailer";
 
 type DemoRequestPayload = {
   name?: string;
@@ -54,6 +55,87 @@ function emailHashForDedupe(email: string): string {
   return createHash("sha256").update(email.toLowerCase()).digest("hex").slice(0, 12);
 }
 
+// Forward demo requests to the founder inbox. Uses Gmail SMTP via
+// nodemailer. Env vars:
+//   CASEOPS_SMTP_HOST       — default smtp.gmail.com
+//   CASEOPS_SMTP_PORT       — default 465 (implicit TLS); 587 for STARTTLS
+//   CASEOPS_SMTP_USER       — the Gmail address that will send (required)
+//   CASEOPS_SMTP_PASSWORD   — Gmail **app password** (16 chars), not the
+//                             account password. Generated at
+//                             https://myaccount.google.com/apppasswords
+//                             with 2FA enabled.
+//   CASEOPS_DEMO_NOTIFY_TO   — recipient (default sanjeev@agenticorg.ai)
+//   CASEOPS_DEMO_NOTIFY_FROM — From header (default: "CaseOps <SMTP_USER>")
+// When SMTP_USER or SMTP_PASSWORD is missing (local dev), the function
+// silently returns — the request is still acked to the client and logged.
+async function notifyFounder(payload: {
+  name: string;
+  email: string;
+  company: string;
+  role: string;
+}): Promise<void> {
+  const user = process.env.CASEOPS_SMTP_USER;
+  const pass = process.env.CASEOPS_SMTP_PASSWORD;
+  if (!user || !pass) return;
+
+  const host = process.env.CASEOPS_SMTP_HOST ?? "smtp.gmail.com";
+  const port = Number(process.env.CASEOPS_SMTP_PORT ?? "465");
+  const secure = port === 465;
+  const to = process.env.CASEOPS_DEMO_NOTIFY_TO ?? "sanjeev@agenticorg.ai";
+  const from = process.env.CASEOPS_DEMO_NOTIFY_FROM ?? `CaseOps <${user}>`;
+  const subject = `New demo request — ${payload.company}`;
+  const escape = (s: string) =>
+    s.replace(/[&<>"']/g, (c) =>
+      c === "&" ? "&amp;" :
+      c === "<" ? "&lt;" :
+      c === ">" ? "&gt;" :
+      c === "\"" ? "&quot;" : "&#39;",
+    );
+  const html =
+    `<p>A new demo request came in on caseops.ai.</p>` +
+    `<table cellpadding="6" style="border-collapse:collapse;font-family:system-ui,sans-serif;font-size:14px">` +
+    `<tr><td><strong>Name</strong></td><td>${escape(payload.name)}</td></tr>` +
+    `<tr><td><strong>Email</strong></td><td><a href="mailto:${escape(payload.email)}">${escape(payload.email)}</a></td></tr>` +
+    `<tr><td><strong>Firm / company</strong></td><td>${escape(payload.company)}</td></tr>` +
+    `<tr><td><strong>Role</strong></td><td>${escape(payload.role)}</td></tr>` +
+    `</table>` +
+    `<p style="color:#666;font-size:12px">Sent ${new Date().toISOString()} from the CaseOps landing page.</p>`;
+  const text =
+    `New demo request on caseops.ai\n\n` +
+    `Name: ${payload.name}\n` +
+    `Email: ${payload.email}\n` +
+    `Firm / company: ${payload.company}\n` +
+    `Role: ${payload.role}\n\n` +
+    `Sent ${new Date().toISOString()}.`;
+
+  try {
+    const transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure,
+      auth: { user, pass },
+    });
+    await transporter.sendMail({
+      from,
+      to,
+      replyTo: payload.email,
+      subject,
+      html,
+      text,
+    });
+  } catch (err) {
+    // Surface in logs but do not fail the user — the PII-redacted
+    // log line still records the request hash for reconciliation.
+    console.warn(
+      JSON.stringify({
+        event: "demo_request_notify_error",
+        reason: err instanceof Error ? err.message : "unknown",
+        email_hash: emailHashForDedupe(payload.email),
+      }),
+    );
+  }
+}
+
 export async function POST(request: Request) {
   const ip = clientIp(request);
   if (!rateLimitOk(ip)) {
@@ -97,6 +179,11 @@ export async function POST(request: Request) {
       at: new Date().toISOString(),
     }),
   );
+
+  // Notify the founder inbox. Fire-and-forget so a slow mail provider
+  // never blocks the client's 202. The log line above still records
+  // that the request arrived even if Resend is misconfigured.
+  void notifyFounder({ name, email, company, role });
 
   return NextResponse.json({ accepted: true }, { status: 202 });
 }

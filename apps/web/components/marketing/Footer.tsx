@@ -5,6 +5,8 @@ import { Logo } from "./Logo";
 
 export function Footer() {
   const groups = Object.entries(siteConfig.nav.footer);
+  const showFounder = siteConfig.contact.founder !== siteConfig.contact.email;
+
   return (
     <footer className="border-t border-[var(--color-line)] bg-white py-14">
       <Container>
@@ -14,12 +16,28 @@ export function Footer() {
             <p className="mt-4 max-w-xs text-sm leading-relaxed text-[var(--color-mute)]">
               {siteConfig.tagline} Built for Indian law firms and corporate legal teams.
             </p>
-            <a
-              href={`mailto:${siteConfig.contact.email}`}
-              className="mt-4 inline-block text-sm font-medium text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
-            >
-              {siteConfig.contact.email}
-            </a>
+            <div className="mt-4 space-y-1 text-sm">
+              <div>
+                <span className="text-[var(--color-mute-2)]">Contact · </span>
+                <a
+                  href={`mailto:${siteConfig.contact.email}`}
+                  className="font-medium text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
+                >
+                  {siteConfig.contact.email}
+                </a>
+              </div>
+              {showFounder ? (
+                <div>
+                  <span className="text-[var(--color-mute-2)]">Founder · </span>
+                  <a
+                    href={`mailto:${siteConfig.contact.founder}`}
+                    className="font-medium text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
+                  >
+                    {siteConfig.contact.founder}
+                  </a>
+                </div>
+              ) : null}
+            </div>
           </div>
 
           {groups.map(([title, items]) => (

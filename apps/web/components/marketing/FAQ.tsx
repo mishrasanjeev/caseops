@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Container } from "@/components/ui/Container";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { cn } from "@/lib/cn";
+import { siteConfig } from "@/lib/site";
 
 const faqs = [
   {
@@ -46,7 +47,7 @@ export function FAQ() {
         <SectionHeader
           eyebrow="FAQ"
           title="Answers before you book a call."
-          description="If we missed your question, write to hello@caseops.ai and a human will respond within a working day."
+          description={`If we missed your question, write to ${siteConfig.contact.email} and a human will respond within a working day.`}
         />
 
         <ul className="mx-auto mt-14 max-w-3xl divide-y divide-[var(--color-line)] rounded-2xl border border-[var(--color-line)] bg-white">

@@ -26,17 +26,19 @@ export const siteConfig = {
   twitter: "@caseops",
   locale: "en_IN",
   contact: {
-    email: "hello@caseops.ai",
-    sales: "sales@caseops.ai",
+    email: "sanjeev@agenticorg.ai",
+    sales: "sanjeev@agenticorg.ai",
     support: "support@caseops.ai",
+    founder: "sanjeev@agenticorg.ai",
   },
   nav: {
     primary: [
       { label: "Product", href: "#product" },
-      { label: "Workflows", href: "#workflows" },
-      { label: "Security", href: "#security" },
       { label: "Pricing", href: "#pricing" },
-      { label: "FAQ", href: "#faq" },
+      { label: "Law firms", href: "/law-firms" },
+      { label: "General counsels", href: "/general-counsels" },
+      { label: "Solo lawyers", href: "/solo-lawyers" },
+      { label: "Guide", href: "/guide" },
     ],
     footer: {
       Product: [
@@ -48,9 +50,11 @@ export const siteConfig = {
         { label: "Recommendations", href: "#product" },
       ],
       Company: [
-        { label: "About", href: "#" },
-        { label: "Careers", href: "#" },
-        { label: "Contact", href: "mailto:hello@caseops.ai" },
+        { label: "For law firms", href: "/law-firms" },
+        { label: "For general counsels", href: "/general-counsels" },
+        { label: "For solo lawyers", href: "/solo-lawyers" },
+        { label: "User guide", href: "/guide" },
+        { label: "Contact", href: "mailto:sanjeev@agenticorg.ai" },
       ],
       Trust: [
         { label: "Security", href: "#security" },

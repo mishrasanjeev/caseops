@@ -9,7 +9,8 @@ import {
   Search,
   SlidersHorizontal,
 } from "lucide-react";
-import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/Button";
@@ -49,8 +50,23 @@ type DocTypeFilter = "any" | AuthorityDocumentType;
 export default function ResearchPage() {
   const canSearch = useCapability("authorities:search");
   const canAnnotate = useCapability("authorities:annotate");
-  const [query, setQuery] = useState("");
-  const [pendingQuery, setPendingQuery] = useState("");
+  const searchParams = useSearchParams();
+  const initialQuery = searchParams?.get("q")?.trim() ?? "";
+  const [query, setQuery] = useState(initialQuery);
+  const [pendingQuery, setPendingQuery] = useState(
+    initialQuery.length >= 2 ? initialQuery : "",
+  );
+
+  // When the user arrives via the topbar search (?q=...), re-sync local
+  // state + fire the query if a new ?q= lands while we're on the page.
+  useEffect(() => {
+    const nextQ = searchParams?.get("q")?.trim() ?? "";
+    if (nextQ && nextQ !== pendingQuery) {
+      setQuery(nextQ);
+      if (nextQ.length >= 2) setPendingQuery(nextQ);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
   const [forumLevel, setForumLevel] = useState<ForumFilter>("any");
   const [courtName, setCourtName] = useState("");
   const [documentType, setDocumentType] = useState<DocTypeFilter>("any");

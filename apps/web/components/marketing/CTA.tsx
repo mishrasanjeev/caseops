@@ -7,6 +7,7 @@ import type { FormEvent } from "react";
 import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
 import { cn } from "@/lib/cn";
+import { siteConfig } from "@/lib/site";
 
 type Status = "idle" | "submitting" | "success" | "error";
 
@@ -74,6 +75,16 @@ export function CTA() {
                   </li>
                 ))}
               </ul>
+              <p className="mt-6 text-sm text-white/70">
+                Or write directly to{" "}
+                <a
+                  href={`mailto:${siteConfig.contact.founder}`}
+                  className="font-medium text-white underline-offset-4 hover:underline"
+                >
+                  {siteConfig.contact.founder}
+                </a>
+                .
+              </p>
             </div>
 
             <form
@@ -131,7 +142,7 @@ export function CTA() {
                 {status === "success"
                   ? "Thanks — we'll be in touch within a working day."
                   : status === "error"
-                  ? (error ?? "Could not submit. Please email hello@caseops.ai.")
+                  ? (error ?? `Could not submit. Please email ${siteConfig.contact.founder}.`)
                   : "We read every submission. No marketing spam."}
               </p>
             </form>
