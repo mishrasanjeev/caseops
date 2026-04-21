@@ -2,24 +2,24 @@
 //
 // Extracted from the monolithic ``lib/api/endpoints.ts`` so the
 // ``/sign-in`` + ``/new-workspace`` pages do not pull the whole
-// 1,250-line endpoints file (every matter / draft / contract /
-// payment / recommendation / intake wrapper) into their bundle. Those
-// pages only need three calls — ``signIn``, ``bootstrapCompany``, and
-// ``fetchAuthContext`` — plus a minimal schema subset.
+// 1,250-line endpoints file into their bundle.
 //
-// Leaving ``endpoints.ts`` intact so authenticated pages keep their
-// existing import path; the auth pages import from this module
-// instead. Next.js can then tree-shake / code-split the auth route
-// aggressively.
+// This file is also **zod-free on purpose**: importing the zod
+// schemas from ``./schemas`` would re-introduce the entire 60-schema
+// graph + zod's runtime (~30 kB min+gz) for nothing — a successful
+// response from our own ``/api/auth/login`` has a known shape, and
+// any mismatch is a backend contract bug that a zod check can only
+// mask. Types come from ``./schema-types`` which is declaration-only
+// and compiles to zero JS.
 import { apiRequest } from "./client";
-import { type AuthContext, type AuthSession, authContext, authSession } from "./schemas";
+import type { AuthContext, AuthSession } from "./schema-types";
 
 export async function signIn(input: {
   email: string;
   password: string;
   companySlug: string;
 }): Promise<AuthSession> {
-  const data = await apiRequest<unknown>("/api/auth/login", {
+  return apiRequest<AuthSession>("/api/auth/login", {
     method: "POST",
     body: {
       email: input.email,
@@ -28,7 +28,6 @@ export async function signIn(input: {
     },
     token: null,
   });
-  return authSession.parse(data);
 }
 
 export async function bootstrapCompany(input: {
@@ -39,7 +38,7 @@ export async function bootstrapCompany(input: {
   ownerEmail: string;
   ownerPassword: string;
 }): Promise<AuthSession> {
-  const data = await apiRequest<unknown>("/api/bootstrap/company", {
+  return apiRequest<AuthSession>("/api/bootstrap/company", {
     method: "POST",
     body: {
       company_name: input.companyName,
@@ -51,10 +50,10 @@ export async function bootstrapCompany(input: {
     },
     token: null,
   });
-  return authSession.parse(data);
 }
 
-export async function fetchAuthContext(token?: string | null): Promise<AuthContext> {
-  const data = await apiRequest<unknown>("/api/auth/me", { token });
-  return authContext.parse(data);
+export async function fetchAuthContext(
+  token?: string | null,
+): Promise<AuthContext> {
+  return apiRequest<AuthContext>("/api/auth/me", { token });
 }
