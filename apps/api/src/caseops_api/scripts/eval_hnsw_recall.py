@@ -52,6 +52,9 @@ from caseops_api.db.models import (
 from caseops_api.db.session import get_session_factory
 from caseops_api.schemas.authorities import AuthoritySearchRequest
 from caseops_api.services.authorities import search_authorities
+from caseops_api.services.corpus_title_validation import (
+    title_is_case_name as _title_is_case_name,
+)
 from caseops_api.services.draft_validators import DraftFinding
 from caseops_api.services.evaluation import (
     CASE_STATUS_FAIL,
@@ -74,88 +77,6 @@ _TITLE_NOISE_RE = re.compile(
     re.IGNORECASE,
 )
 _PUNCT_RE = re.compile(r"[^A-Za-z0-9\s]+")
-
-# Known bench / court-header tokens that PDF page-header extraction leaks
-# into the `title` slot. A title composed only of these is NEVER a
-# case name. See `.claude/skills/corpus-ingest/SKILL.md` and
-# `memory/feedback_title_validation_legal_corpus.md`.
-_BENCH_HEADER_TOKENS = frozenset({
-    "DHARWAD", "AURANGABAD", "JODHPUR", "KOZHIKODE", "NAGPUR",
-    "MADURAI", "LUCKNOW", "INDORE", "GWALIOR", "RANCHI",
-    "JABALPUR", "GUWAHATI", "SHILLONG", "IMPHAL", "AIZAWL",
-    "KOHIMA", "GANGTOK", "ITANAGAR", "PORT BLAIR", "KOLKATA",
-    "BENCH", "AT", "CIRCUIT", "HIGH", "SUPREME", "COURT", "OF",
-    "INDIA", "STATE", "UNION", "THE", "HON", "HONBLE",
-})
-
-# Party-role labels. Presence of one of these in the title is a strong
-# signal that it IS a case name, not a page header.
-_PARTY_ROLE_RE = re.compile(
-    r"\b(petitioner|respondent|appellant|applicant|accused|"
-    r"complainant|plaintiff|defendant)s?\b",
-    re.IGNORECASE,
-)
-# Party separator with alphabetic chars on each side.
-_PARTY_SEPARATOR_RE = re.compile(
-    r"\b[A-Za-z]{3,}[\w\s]*\s+(?:v\.?|vs\.?|versus|and)\s+[A-Za-z]{3,}",
-    re.IGNORECASE,
-)
-# Neutral citation / case reference patterns.
-_CITATION_RE = re.compile(
-    r"\[\d{4}\]|\b(?:SCC|AIR|INSC|DHC|SCR|BOM|MAD|CAL|KHC|MHC|KER)\b|"
-    r"\d{4}[:_-][A-Z]{2,6}[:_-]?\d+",
-    re.IGNORECASE,
-)
-# PDF OCR placeholder glyphs we've seen in the corpus.
-_CID_MARKER_RE = re.compile(r"\(cid:\d+\)")
-# Non-Latin script ranges common in Indian-court PDFs (Hindi, Punjabi,
-# Tamil, Telugu, Kannada, Malayalam, Bengali, Gurmukhi).
-_NON_LATIN_RE = re.compile(
-    "[\u0900-\u097F\u0A00-\u0A7F\u0B00-\u0B7F\u0B80-\u0BFF"
-    "\u0C00-\u0C7F\u0C80-\u0CFF\u0D00-\u0D7F]"
-)
-
-
-def _title_is_case_name(title: str) -> tuple[bool, str]:
-    """Return (is_valid, reason) for a Layer-2 `title` string.
-
-    A valid case-name seed must satisfy at least ONE of:
-
-    - party-separator form ("X v. Y" / "X and Y")
-    - contain a neutral citation / case-reference token
-    - contain a party-role label
-    - have ≥ 3 distinctive proper-noun tokens NOT in the bench-header
-      stopword set
-
-    Otherwise it's probably a leaked PDF page header like `"DHARWAD BENCH"`
-    or a translation-cover placeholder, and should NOT seed a probe
-    query. The `reason` is a short tag for telemetry.
-    """
-    if not title or not title.strip():
-        return False, "empty"
-    s = title.strip()
-    # Fast rejects before regex.
-    if len(s) < 12:
-        return False, "too_short"
-    if _CID_MARKER_RE.search(s):
-        return False, "cid_marker"
-    if _NON_LATIN_RE.search(s):
-        return False, "non_latin"
-    if _PARTY_SEPARATOR_RE.search(s):
-        return True, "party_separator"
-    if _CITATION_RE.search(s):
-        return True, "citation"
-    if _PARTY_ROLE_RE.search(s):
-        return True, "party_role"
-    # Count proper-noun tokens that aren't bench-header noise.
-    proper = [
-        t for t in re.findall(r"[A-Za-z]{3,}", s)
-        if t[0].isupper() and t.upper() not in _BENCH_HEADER_TOKENS
-    ]
-    # Dedup so "DHARWAD BENCH DHARWAD" doesn't score as 2 tokens.
-    if len({t.lower() for t in proper}) >= 3:
-        return True, "proper_nouns"
-    return False, "bench_header_or_thin"
 
 
 @dataclass(frozen=True)

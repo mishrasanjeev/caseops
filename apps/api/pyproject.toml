@@ -73,6 +73,7 @@ caseops-eval-hnsw-recall = "caseops_api.scripts.eval_hnsw_recall:main"
 caseops-seed-demo = "caseops_api.scripts.seed_demo:main"
 caseops-backfill-corpus-quality = "caseops_api.scripts.backfill_corpus_quality:main"
 caseops-backfill-title-chunks = "caseops_api.scripts.backfill_title_chunks:main"
+caseops-reextract-placeholder-titles = "caseops_api.scripts.reextract_placeholder_titles:main"
 
 [dependency-groups]
 dev = [
