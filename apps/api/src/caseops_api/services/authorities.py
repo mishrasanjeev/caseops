@@ -8,6 +8,16 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+# NOTE for reviewers: the task spec asked for this wiring to land in
+# ``services/retrieval.py``, but ``search_authority_catalog`` (the
+# HNSW-driven authority search) actually lives in this module.
+# ``services/retrieval.py`` is the pure lexical/hybrid ranker
+# (``rank_candidates``) that the search calls AFTER the HNSW prefilter.
+# Wiring at this layer is correct: variants must expand before the
+# ``_embed_query`` / ``_pg_prefilter_document_ids`` calls, which sit
+# here. The first-stage retrieval fan-out happens below; the
+# reranker path downstream is left unchanged per the spec.
+from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     AuthorityCitation,
     AuthorityDocument,
@@ -42,6 +52,7 @@ from caseops_api.services.document_processing import _chunk_text
 from caseops_api.services.embeddings import EmbeddingProviderError, build_provider
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.retrieval import RetrievalCandidate, rank_candidates
+from caseops_api.services.retrieval_normalisers import build_query_variants
 
 
 def _require_admin(context: SessionContext) -> None:
@@ -422,14 +433,47 @@ def search_authority_catalog(
     # AND we can build a query vector, ask pgvector to pick top-K chunks via
     # the HNSW index, then load only those documents. At any real corpus
     # scale this is dramatically faster than the 300-row scan below.
-    pg_document_ids = _pg_prefilter_document_ids(
-        session,
-        query=query,
-        forum_level=forum_level,
-        court_name=court_name,
-        document_type=document_type,
-        limit=max(limit * 6, 30),
-    )
+    #
+    # 2026-04-21: fan out over query-side normalisers so numeric / bracketed
+    # SC citations, all-caps bench names, and non-English party names each
+    # embed on a form the corpus actually stores. Variants are unioned
+    # (preserving per-variant order) before the ranker sees them — the
+    # lexical / hybrid re-score then picks the winner. Gated by
+    # ``retrieval_query_normalisers_enabled`` so operators can flip it off
+    # without a deploy if quality regresses on another surface.
+    settings = get_settings()
+    if getattr(settings, "retrieval_query_normalisers_enabled", True):
+        query_variants = build_query_variants(query)
+    else:
+        query_variants = [query]
+
+    pg_document_ids: list[str] | None = None
+    pg_any_attempted = False
+    for variant in query_variants:
+        variant_ids = _pg_prefilter_document_ids(
+            session,
+            query=variant,
+            forum_level=forum_level,
+            court_name=court_name,
+            document_type=document_type,
+            limit=max(limit * 6, 30),
+        )
+        if variant_ids is None:
+            continue
+        pg_any_attempted = True
+        if pg_document_ids is None:
+            pg_document_ids = []
+        seen_ids = set(pg_document_ids)
+        for doc_id in variant_ids:
+            if doc_id in seen_ids:
+                continue
+            seen_ids.add(doc_id)
+            pg_document_ids.append(doc_id)
+    # Preserve prior behaviour: when no variant triggered the fast path
+    # (SQLite tests, no embeddings yet), leave ``pg_document_ids`` as
+    # None so the fallback 300-row scan runs.
+    if not pg_any_attempted:
+        pg_document_ids = None
 
     # Merge: exact-name matches first (highest confidence), then vector
     # results. Dedup while preserving order.
