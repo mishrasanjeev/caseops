@@ -334,3 +334,111 @@ def test_generate_increments_revision_and_keeps_history(client: TestClient) -> N
     # current_version_id tracks the newest version.
     newest = next(v for v in second["versions"] if v["revision"] == 2)
     assert second["current_version_id"] == newest["id"]
+
+
+def test_create_draft_stepper_facts_passthrough(client: TestClient) -> None:
+    """R-UI: the stepper POSTs template_type + facts; both must be
+    persisted and surfaced on the response, and the fact values must
+    land in the LLM prompt so the generator can ground the body.
+    """
+    import json
+
+    from caseops_api.db.models import Draft
+    from caseops_api.db.session import get_session_factory
+
+    token = str(bootstrap_company(client)["access_token"])
+    matter_id = _create_matter(client, token, "DS-FACTS")
+
+    facts = {
+        "applicant_name": "Aastha Mishra",
+        "fir_number": "FIR 123/2026",
+        "section_number": "BNS s.303",
+        "period_of_custody_days": 45,
+    }
+    resp = client.post(
+        f"/api/matters/{matter_id}/drafts",
+        headers=auth_headers(token),
+        json={
+            "title": "Bail application — BNSS s.483",
+            "draft_type": "brief",
+            "template_type": "bail_application",
+            "facts": facts,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["template_type"] == "bail_application"
+
+    # DB row carries the full facts_json + template_type.
+    factory = get_session_factory()
+    session = factory()
+    try:
+        row = session.get(Draft, body["id"])
+        assert row is not None
+        assert row.template_type == "bail_application"
+        assert row.facts_json is not None
+        assert json.loads(row.facts_json) == facts
+    finally:
+        session.close()
+
+
+def test_generate_draft_uses_stepper_facts_in_prompt(client: TestClient) -> None:
+    """Prompt-assembly regression: when the Draft has facts_json set,
+    the generated body echoes those facts rather than inserting
+    bracketed placeholders."""
+    from unittest.mock import patch
+
+    from caseops_api.services import drafting as drafting_service
+
+    token = str(bootstrap_company(client)["access_token"])
+    matter_id = _create_matter(client, token, "DS-FACTS-2")
+    _seed_authority(neutral_citation="2024 SCC OnLine SC 777")
+
+    resp = client.post(
+        f"/api/matters/{matter_id}/drafts",
+        headers=auth_headers(token),
+        json={
+            "title": "Bail — stepper-driven",
+            "draft_type": "brief",
+            "template_type": "bail_application",
+            "facts": {"applicant_name": "Ravi Verma", "fir_number": "FIR 9/2026"},
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    draft_id = resp.json()["id"]
+
+    original_build = drafting_service._build_messages
+    captured: dict[str, str] = {}
+
+    def _spy(matter, draft, retrieved, focus_note):
+        msgs = original_build(matter, draft, retrieved, focus_note)
+        captured["user"] = next(m.content for m in msgs if m.role == "user")
+        return msgs
+
+    with patch.object(drafting_service, "_build_messages", _spy):
+        _generate(client, token, matter_id, draft_id)
+
+    user_msg = captured["user"]
+    assert "STEPPER FACTS" in user_msg
+    assert "applicant_name: Ravi Verma" in user_msg
+    assert "fir_number: FIR 9/2026" in user_msg
+    assert "Template: bail_application" in user_msg
+
+
+def test_create_draft_rejects_oversized_facts(client: TestClient) -> None:
+    """Defensive cap: >64 KiB of facts JSON → 413 so a pathological
+    client can't inflate draft rows."""
+    token = str(bootstrap_company(client)["access_token"])
+    matter_id = _create_matter(client, token, "DS-FACTS-CAP")
+
+    resp = client.post(
+        f"/api/matters/{matter_id}/drafts",
+        headers=auth_headers(token),
+        json={
+            "title": "Too much",
+            "draft_type": "brief",
+            "template_type": "bail_application",
+            "facts": {"blob": "x" * (65 * 1024)},
+        },
+    )
+    assert resp.status_code == 413, resp.text

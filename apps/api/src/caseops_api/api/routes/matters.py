@@ -879,6 +879,8 @@ async def post_current_company_matter_draft(
         matter_id=matter_id,
         title=payload.title,
         draft_type=payload.draft_type,
+        template_type=payload.template_type,
+        facts=payload.facts,
     )
     return DraftRecord.model_validate(load_draft_record(draft))
 

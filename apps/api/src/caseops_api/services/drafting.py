@@ -156,15 +156,31 @@ def create_draft(
     matter_id: str,
     title: str,
     draft_type: str = DraftType.BRIEF,
+    template_type: str | None = None,
+    facts: dict | None = None,
 ) -> Draft:
     matter = _load_matter(session, context, matter_id)
+    facts_json = None
+    if facts:
+        # Defensive cap: the facts dict is user-entered per-field text
+        # (addresses, names, amounts, …). 64 KiB of JSON is ample for
+        # every template we ship today and bounds worst-case row size.
+        serialised = json.dumps(facts, ensure_ascii=False)
+        if len(serialised) > 64 * 1024:
+            raise HTTPException(
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                detail="Facts payload exceeds 64 KiB.",
+            )
+        facts_json = serialised
     draft = Draft(
         matter_id=matter.id,
         created_by_membership_id=context.membership.id,
         title=title.strip(),
         draft_type=draft_type,
+        template_type=template_type,
         status=DraftStatus.DRAFT,
         review_required=True,
+        facts_json=facts_json,
     )
     session.add(draft)
     session.flush()
@@ -175,7 +191,12 @@ def create_draft(
         target_type="draft",
         target_id=draft.id,
         matter_id=matter.id,
-        metadata={"title": draft.title, "draft_type": draft.draft_type},
+        metadata={
+            "title": draft.title,
+            "draft_type": draft.draft_type,
+            "template_type": draft.template_type,
+            "facts_keys": sorted(facts.keys()) if facts else [],
+        },
     )
     session.commit()
     session.refresh(draft)
@@ -289,6 +310,27 @@ def _build_messages(
     parts.append("")
     parts.append(f"Draft title: {draft.title}")
     parts.append(f"Draft type: {draft.draft_type}")
+    if draft.template_type:
+        parts.append(f"Template: {draft.template_type}")
+    if draft.facts_json:
+        try:
+            facts = json.loads(draft.facts_json)
+        except json.JSONDecodeError:
+            facts = None
+        if isinstance(facts, dict) and facts:
+            parts.append("")
+            parts.append(
+                "=== STEPPER FACTS (authoritative — use as-is) ==="
+            )
+            for key, value in facts.items():
+                if value is None or value == "":
+                    continue
+                parts.append(f"- {key}: {value}")
+            parts.append(
+                "(These facts came from the drafting stepper; treat them "
+                "as the lawyer's verified input. Do NOT override with "
+                "bracketed placeholders for any field listed above.)"
+            )
     if focus_note:
         parts.append(f"Focus: {focus_note}")
     parts.append("")
@@ -950,6 +992,7 @@ def load_draft_record(draft: Draft) -> dict:
         "created_by_membership_id": draft.created_by_membership_id,
         "title": draft.title,
         "draft_type": draft.draft_type,
+        "template_type": draft.template_type,
         "status": draft.status,
         "review_required": draft.review_required,
         "current_version_id": draft.current_version_id,

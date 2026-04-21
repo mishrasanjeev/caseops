@@ -239,7 +239,13 @@ function StepperInner({ matterId, template, suggestions, onSubmitted }: InnerPro
   const createMutation = useMutation({
     mutationFn: async (values: FieldValues) => {
       const title = deriveTitle(template.display_name, values);
-      return createDraft({ matterId, title, draftType: "brief" });
+      return createDraft({
+        matterId,
+        title,
+        draftType: "brief",
+        templateType: template.template_type,
+        facts: pruneFacts(values),
+      });
     },
     onSuccess: (draft) => {
       toast.success("Draft created — generating first version next.");

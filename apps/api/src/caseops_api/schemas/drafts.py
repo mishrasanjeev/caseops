@@ -19,6 +19,11 @@ DraftReviewActionLiteral = Literal["submit", "request_changes", "approve", "fina
 class DraftCreateRequest(BaseModel):
     title: str = Field(min_length=3, max_length=255)
     draft_type: DraftTypeLiteral = "brief"
+    # R-UI stepper passthrough — the template the user picked and the
+    # structured facts they filled in. Both optional so the legacy
+    # "empty shell" path (title + draft_type only) keeps working.
+    template_type: str | None = Field(default=None, max_length=60)
+    facts: dict | None = None
 
 
 class DraftGenerateRequest(BaseModel):
@@ -88,6 +93,7 @@ class DraftRecord(BaseModel):
     created_by_membership_id: str | None
     title: str
     draft_type: DraftTypeLiteral
+    template_type: str | None
     status: DraftStatusLiteral
     review_required: bool
     current_version_id: str | None

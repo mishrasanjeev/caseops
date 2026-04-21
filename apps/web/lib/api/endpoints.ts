@@ -447,12 +447,19 @@ export async function createDraft(input: {
   matterId: string;
   title: string;
   draftType: DraftType;
+  templateType?: string | null;
+  facts?: Record<string, unknown> | null;
 }): Promise<Draft> {
   const data = await apiRequest<unknown>(
     `/api/matters/${input.matterId}/drafts`,
     {
       method: "POST",
-      body: { title: input.title, draft_type: input.draftType },
+      body: {
+        title: input.title,
+        draft_type: input.draftType,
+        template_type: input.templateType ?? null,
+        facts: input.facts ?? null,
+      },
     },
   );
   return draft.parse(data);

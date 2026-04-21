@@ -302,6 +302,7 @@ export const draft = z.object({
   created_by_membership_id: z.string().nullable(),
   title: z.string(),
   draft_type: draftType,
+  template_type: z.string().nullable().optional(),
   status: draftStatus,
   review_required: z.boolean(),
   current_version_id: z.string().nullable(),

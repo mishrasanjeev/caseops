@@ -2133,9 +2133,15 @@ class Draft(Base):
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     draft_type: Mapped[str] = mapped_column(String(40), nullable=False, default=DraftType.BRIEF)
+    template_type: Mapped[str | None] = mapped_column(String(60), nullable=True)
     status: Mapped[str] = mapped_column(String(24), nullable=False, default=DraftStatus.DRAFT)
     review_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     current_version_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    # Stepper-collected facts keyed by field name, persisted as JSON
+    # text so the generator can ground the body on structured facts
+    # instead of a free-form focus note. Optional — drafts created
+    # without the stepper stay at NULL.
+    facts_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
