@@ -286,6 +286,7 @@ def run(
     seed: int,
     dry_run: bool,
     expand_query: bool = False,
+    fail_on_miss: bool = False,
 ) -> int:
     logging.basicConfig(
         level=logging.INFO,
@@ -343,7 +344,16 @@ def run(
         session.commit()
 
     sys.stdout.write(_format_report(run_row, results, k=k))
-    return 1 if run_row.fail_count > 0 else 0
+    # 2026-04-21 BUG: the sweep orchestrator was halting on valid
+    # 83.3 % recall runs because this CLI previously returned 1 on ANY
+    # miss. That's wrong for a metrics eval — every real run has
+    # some misses, and the caller should gate on the PRINTED rating
+    # number, not on the exit code. Successful evaluation → exit 0.
+    # Callers that want the strict "every probe must pass" mode can
+    # opt in with --fail-on-miss.
+    if fail_on_miss and run_row.fail_count > 0:
+        return 1
+    return 0
 
 
 def main(argv: Iterable[str] | None = None) -> int:
@@ -376,10 +386,20 @@ def main(argv: Iterable[str] | None = None) -> int:
             "quality lever. Adds ~0.5s + a few hundred tokens per probe."
         ),
     )
+    parser.add_argument(
+        "--fail-on-miss", action="store_true",
+        help=(
+            "Exit 1 when any probe misses. Default: exit 0 on a "
+            "successful eval run regardless of per-query misses — the "
+            "rating lives in the printed report, not the exit code. "
+            "Turn this on for strict CI gating."
+        ),
+    )
     args = parser.parse_args(list(argv) if argv is not None else None)
     return run(
         tenant_slug=args.tenant, sample_size=args.sample_size, k=args.k,
         seed=args.seed, dry_run=args.dry_run, expand_query=args.expand_query,
+        fail_on_miss=args.fail_on_miss,
     )
 
 
