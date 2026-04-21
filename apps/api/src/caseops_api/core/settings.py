@@ -125,6 +125,22 @@ class Settings(BaseSettings):
     embedding_model: str = Field(default="caseops-mock-embed")
     embedding_api_key: str | None = Field(default=None)
     embedding_dimensions: int = Field(default=1024, ge=64, le=4096)
+    # 2026-04-21 retrieval-quality gap — see
+    # docs/SC_2023_QUALITY_INVESTIGATION_2026-04-21.md. The 2026-04-20
+    # SC-2023 HNSW probe ran recall@10 = 83.3 % (25/30). Five misses
+    # clustered on query-side normalisation (numeric citations,
+    # all-caps bench names, punctuated SC reporter cites, Punjabi-
+    # script party names). The fix embeds the query variants at
+    # search time and unions the HNSW top-k per variant; no re-ingest
+    # needed. Flag is on by default so the next probe measures the
+    # uplift; operators can flip to False if quality regresses on
+    # other surfaces.
+    retrieval_query_normalisers_enabled: bool = Field(default=True)
+    # Haiku-backed transliteration for Indic-script queries. OFF by
+    # default — every non-English query would otherwise pay a Haiku
+    # round-trip. Enable once the probe confirms the variant beats the
+    # raw query on the Gurmukhi / Devanagari miss bucket.
+    retrieval_non_english_translate: bool = Field(default=False)
     # Streaming corpus ingestion caps — keep workstation disk safe.
     corpus_ingest_batch_size: int = Field(default=25, ge=1, le=500)
     corpus_ingest_max_workdir_mb: int = Field(default=500, ge=32, le=20000)
