@@ -36,6 +36,16 @@ PUBLIC_MUTATING_ROUTES: set[tuple[str, str]] = {
     ("POST", "/api/payments/pine-labs/webhook"),
     # Demo-request form on the marketing site; rate-limited, emails out.
     ("POST", "/api/demo-request"),
+    # Compute-only recompute of an existing matter summary; the only
+    # effect is an LLM call whose response is returned to the caller.
+    # No tenant data is mutated. Access is already scoped by the
+    # tenancy check inside generate_matter_summary.
+    ("POST", "/api/matters/{matter_id}/summary/regenerate"),
+    # Sprint R4 stepper preview — pure compute, no persistence, no
+    # tenant data mutated. The route reads only ``template_type``
+    # (global catalogue) and user-provided ``facts`` (not stored).
+    # The session context is consumed for auth only.
+    ("POST", "/api/drafting/preview"),
 }
 
 
