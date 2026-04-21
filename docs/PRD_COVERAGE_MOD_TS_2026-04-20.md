@@ -22,18 +22,18 @@ judge / court surfaces (PRD §10.6 neutrality is superseded there).
 
 | ID | Module | Shipped % | PRD § | Sprint | Top blocker |
 |----|--------|---------:|-------|--------|-------------|
-| MOD-TS-001 | JudgeProfile | **90 % (2026-04-20 evening)** | §10.6 | **P — DONE** | P1a/P1b/P2/P2b/P3/P4 all shipped; Layer-2 sweep running autonomously on GCE |
-| MOD-TS-002 | OCR Extractor | **70 %** (Q1 DONE — `[ocr]` extras + tesseract hin/mar/tam/tel/kan in Dockerfile, commit `93b94e4`) | §9.1 / §14.4 | **Q (Q1 ✅, Q4 in progress)** | language-detect (Q2), handwritten routing (Q3), quality gate (Q4) |
+| MOD-TS-001 | JudgeProfile | **95 %** (P1a/P1b/P2/P2b/P3/P4 all in prod on `c356cda`; Layer-2 sweep autonomous; citation/bench normalisers on `quality/sc-2023-multilingual` branch pending merge) | §10.6 | **P — DONE**, sc-2023 branch pending merge | retrieval quality gap (normalisers ready — need probe+merge) |
+| MOD-TS-002 | OCR Extractor | **90 %** (Q1 + Q2 + Q3 + Q4 all landed — language-detect, handwriting retry, quality gate in prod on `c356cda`) | §9.1 / §14.4 | **Q — DONE** | handwritten fixture probe recommended before declaring 100 % |
 | MOD-TS-003 | Legal Translator | 0 % | not covered | **U** (deferred) | Not prioritised for v1 |
-| MOD-TS-004 | Case Summary | **70 %** (Q5 DONE — `services/matter_summary.py` + `GET /api/matters/{id}/summary`, commit `8d767dc`) | §9.6 / §10.3 | **Q (Q5 ✅, Q6/Q7/Q8 pending)** | regenerate button, PDF/DOCX export, timeline builder |
-| MOD-TS-005 | Document Viewer | 30 % | §10.3 | **Q** | No PDF.js / annotation UI |
+| MOD-TS-004 | Case Summary | **95 %** (Q5 endpoint + Q6 regenerate + Q7 DOCX export + Q8 timeline all in prod; PDF export via `fpdf2` is the remaining slice) | §9.6 / §10.3 | **Q (Q5/Q6/Q7-docx/Q8 ✅)** | PDF export (follow-up; `fpdf2` dep, no native blocker) |
+| MOD-TS-005 | Document Viewer | **70 %** (Q9 react-pdf viewer + Q11 viewer route + Q12 in-doc search live; Q10 annotation schema + overlay on `sprint/q10-attachment-annotations` branch pending merge) | §10.3 | **Q (Q9/Q11/Q12 ✅, Q10 branch ready)** | merge Q10 branch; richer multi-page search (nice-to-have) |
 | MOD-TS-006 | Calendar | 40 % | §7.2 | **T** | Temporal (§5.1) + UI |
 | MOD-TS-007 | Notification & Reminder | 20 % | §5.3 | **T** | Temporal (§5.1) + SMS provider |
-| MOD-TS-008 | Pleading Step By Step | 30 % | §9.5 / §10.3 | **R** | Per-draft-type schema / form builder |
+| MOD-TS-008 | Pleading Step By Step | **75 %** (R1/R2/R3 discovery route + R4 stepper preview endpoint + R5 validators + R9 auto-suggest all live; React Hook Form + Zod stepper UI is the remaining slice) | §9.5 / §10.3 | **R (R1-R5/R9 ✅)** | frontend stepper UI wiring to the new `/api/drafting/templates/*` + `/api/drafting/preview` endpoints |
 | MOD-TS-009 | Clients & Advocates | 50 % | §9.2 (counsel) / new | **S** | Structured `Client` entity not modeled |
 | MOD-TS-010 | AutoMail Transfer | 25 % | §5.3 / §16.2 | **S/T** | Email templates + Temporal |
 | MOD-TS-011 | Support (in-app) | 0 % | not covered | **W** (v2) | Out of v1 scope |
-| MOD-TS-012 | Draft Generator (8 types) | 55 % | §9.5 / §10.3 | **R** | Per-type prompts / templates |
+| MOD-TS-012 | Draft Generator (8 types) | **90 %** (R1 8-type schemas + R2 specialised prompts + R7 fixtures + R8 live-LLM eval at **16/16 pass rate** after prompt tuning) | §9.5 / §10.3 | **R — DONE** | per-type golden drafts (nice-to-have eval baseline) |
 | MOD-TS-013 | Clients Verification (KYC) | 0 % | not covered | **V** (post-launch) | Regulatory / enterprise tier |
 
 Percentage = approximate fraction of the module's scope already in
