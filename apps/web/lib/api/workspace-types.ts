@@ -16,6 +16,10 @@ export type WorkspaceMatter = {
 
 export type WorkspaceHearing = {
   id: string;
+  // Backend (`MatterHearingRecord`) emits `hearing_on` (a SQL date).
+  // `scheduled_for` / `listing_date` are historical aliases kept
+  // optional so callers that read either shape don't break.
+  hearing_on?: string | null;
   scheduled_for?: string | null;
   listing_date?: string | null;
   hearing_type?: string | null;

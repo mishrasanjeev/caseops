@@ -186,7 +186,7 @@ export default function MatterHearingsPage() {
                       {h.hearing_type ?? "Hearing"}
                     </div>
                     <div className="mt-1 text-xs text-[var(--color-mute)]">
-                      Scheduled: {formatDateTime(h.scheduled_for)}
+                      Scheduled: {formatDateTime(h.hearing_on ?? h.scheduled_for)}
                     </div>
                     {h.outcome_notes ? (
                       <p className="mt-2 line-clamp-3 text-sm text-[var(--color-ink-2)]">

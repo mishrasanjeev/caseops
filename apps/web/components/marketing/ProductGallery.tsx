@@ -45,7 +45,7 @@ function CockpitMock() {
                   "ml-2 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold",
                   i.active
                     ? "bg-white/15 text-white"
-                    : "bg-[var(--color-bg-2)] text-[var(--color-mute-2)]",
+                    : "bg-[var(--color-bg-2)] text-[var(--color-ink-2)]",
                 )}
               >
                 {i.tag}
@@ -434,7 +434,7 @@ export function ProductGallery() {
                     <span className="h-2.5 w-2.5 rounded-full bg-[#febc2e]" />
                     <span className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
                   </div>
-                  <div className="ml-3 flex-1 rounded-md bg-[var(--color-bg-2)] px-3 py-1 text-left text-xs text-[var(--color-mute-2)]">
+                  <div className="ml-3 flex-1 rounded-md bg-[var(--color-bg-2)] px-3 py-1 text-left text-xs text-[var(--color-ink-2)]">
                     caseops.ai / workspace / {current.id === "cockpit" ? "matters / arbitral-award-challenge" : current.id === "drafting" ? "matters / arbitral-award-challenge / drafts / v3" : "hearings / 22-apr-2026"}
                   </div>
                 </div>

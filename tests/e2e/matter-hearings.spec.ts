@@ -95,10 +95,13 @@ test.describe("Matter hearings (BUG-004 manual schedule)", () => {
     // The new hearing row appears under Scheduled hearings. The row
     // renders hearing_type (defaulted to "Hearing" when not supplied)
     // and the scheduled-for date — asserting the formatted date is the
-    // most robust signal that the row landed.
+    // most robust signal that the row landed. The ul sits inside the
+    // Card's CardContent, which is a sibling of the CardHeader that
+    // holds the heading — so we walk up to the enclosing Card before
+    // searching for the row text.
     const scheduledCard = page
       .getByRole("heading", { name: /Scheduled hearings/i })
-      .locator("..");
+      .locator("xpath=ancestor::*[.//ul][1]");
     await expect(scheduledCard.getByText(/Scheduled:/).first()).toBeVisible({
       timeout: 15_000,
     });

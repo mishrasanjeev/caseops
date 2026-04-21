@@ -49,7 +49,7 @@ test.describe("Contract detail workspace (§4.4)", () => {
         contract_code: contractCode,
         counterparty_name: "ACME Services Pvt Ltd",
         contract_type: "msa",
-        status: "in_review",
+        status: "under_review",
       },
     });
     expect(createResp.status()).toBe(200);

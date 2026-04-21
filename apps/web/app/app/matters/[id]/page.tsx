@@ -45,7 +45,7 @@ export default function MatterOverviewPage() {
 
   const activeTasks = data.tasks.filter((t) => t.status !== "done").slice(0, 5);
   const upcomingHearings = data.hearings
-    .filter((h) => h.scheduled_for || h.listing_date)
+    .filter((h) => h.hearing_on || h.scheduled_for || h.listing_date)
     .slice(0, 4);
   const latestOrder = data.court_orders[0];
   const recentActivity = data.activity.slice(0, 6);
@@ -172,7 +172,7 @@ export default function MatterOverviewPage() {
                       {h.hearing_type ?? "Hearing"}
                     </span>
                     <span className="text-xs text-[var(--color-mute)]">
-                      {formatDate(h.scheduled_for ?? h.listing_date, true)}
+                      {formatDate(h.hearing_on ?? h.scheduled_for ?? h.listing_date, true)}
                     </span>
                   </div>
                   <StatusBadge status={h.status ?? "pending"} />
