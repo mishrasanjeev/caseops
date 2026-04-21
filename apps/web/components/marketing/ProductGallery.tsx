@@ -396,6 +396,21 @@ export function ProductGallery() {
             ))}
           </div>
 
+          {/* Render placeholder panels for inactive tabs so every tab's
+              aria-controls reference resolves to an element in the DOM.
+              axe otherwise flags this as a serious ARIA violation. */}
+          {surfaces
+            .filter((s) => s.id !== current.id)
+            .map((s) => (
+              <div
+                key={s.id}
+                role="tabpanel"
+                id={`panel-${s.id}`}
+                aria-labelledby={`tab-${s.id}`}
+                hidden
+              />
+            ))}
+
           <div
             role="tabpanel"
             id={`panel-${current.id}`}

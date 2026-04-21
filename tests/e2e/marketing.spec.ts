@@ -35,7 +35,8 @@ test.describe("Marketing site", () => {
     await expect(page.getByRole("link", { name: "Sign in" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Request a demo" }).first()).toBeVisible();
 
-    for (const label of ["Product", "Workflows", "Security", "Pricing", "FAQ"]) {
+    // Nav now links to segment + guide pages instead of on-page anchors (see siteConfig.nav.primary).
+    for (const label of ["Product", "Pricing", "Law firms", "General counsels", "Solo lawyers", "Guide"]) {
       await expect(
         page.getByRole("link", { name: label, exact: true }).first(),
       ).toBeVisible();
@@ -228,8 +229,10 @@ test.describe("Marketing site", () => {
       const response = await page.goto(path);
       expect(response?.status()).toBe(200);
 
+      // Pitch primitives (solo-lawyers, general-counsels) render slide titles as <h2>;
+      // law-firms uses an inline <h1>; guide has an <h1>. Match by accessible name only.
       await expect(
-        page.getByRole("heading", { level: 1, name: heading }),
+        page.getByRole("heading", { name: heading }).first(),
       ).toBeVisible();
 
       await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
