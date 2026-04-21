@@ -94,9 +94,10 @@ def create_annotation(
             detail="bbox must be [x0, y0, x1, y1] in pdfjs text-layer coordinates.",
         )
     if kind not in MatterAttachmentAnnotationKind._value2member_map_:
+        allowed = sorted(MatterAttachmentAnnotationKind._value2member_map_)
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=f"kind must be one of {sorted(MatterAttachmentAnnotationKind._value2member_map_)}.",
+            detail=f"kind must be one of {allowed}.",
         )
 
     row = MatterAttachmentAnnotation(

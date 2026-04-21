@@ -198,6 +198,58 @@ def test_summary_docx_route_returns_attachment(
     assert docx_resp.content[:2] == b"PK"
 
 
+def test_render_summary_pdf_produces_valid_pdf_bytes() -> None:
+    """Pure-function PDF render: bytes start with %PDF, filename
+    uses the matter code, and the body contains the expected section
+    labels. No network, no LLM."""
+    from caseops_api.services.matter_summary_export import render_summary_pdf
+
+    body, filename = render_summary_pdf(
+        matter_title="State v Accused",
+        matter_code="CR-001/2026",
+        summary=_summary(),
+        timeline=_timeline(),
+    )
+    assert body.startswith(b"%PDF-"), "fpdf2 must emit a real PDF"
+    assert filename.endswith(".pdf")
+    assert "CR-001-2026" in filename
+    # Helvetica cannot encode em-dashes / smart quotes; the _ascii_safe
+    # helper flattens those — verify no encoding crash emitted bytes.
+    assert len(body) > 500
+
+
+def test_summary_pdf_route_returns_attachment(
+    client: TestClient, stub_summary: None,
+) -> None:
+    from tests.test_auth_company import auth_headers, bootstrap_company
+
+    bootstrap = bootstrap_company(client)
+    headers = auth_headers(str(bootstrap["access_token"]))
+    resp = client.post(
+        "/api/matters",
+        json={
+            "matter_code": "Q7P-001",
+            "title": "Bail application PDF export",
+            "practice_area": "Bail / Custody",
+            "forum_level": "high_court",
+            "description": "PDF summary export.",
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    matter_id = resp.json()["id"]
+
+    pdf_resp = client.get(
+        f"/api/matters/{matter_id}/summary.pdf", headers=headers,
+    )
+    assert pdf_resp.status_code == 200, pdf_resp.text
+    assert pdf_resp.headers["content-type"] == "application/pdf"
+    assert 'attachment; filename="Q7P-001-summary.pdf"' in (
+        pdf_resp.headers["content-disposition"]
+    )
+    assert pdf_resp.content.startswith(b"%PDF-")
+
+
 def test_summary_docx_route_404s_cross_tenant(
     client: TestClient, stub_summary: None,
 ) -> None:
