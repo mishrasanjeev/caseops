@@ -97,6 +97,13 @@ from caseops_api.services.matter_summary import (
     MatterExecutiveSummary,
     generate_matter_summary,
 )
+from caseops_api.services.matter_attachment_annotations import (
+    AnnotationKindLiteral,
+    AnnotationRecord,
+    archive_annotation,
+    create_annotation,
+    list_annotations,
+)
 from caseops_api.services.matter_summary_export import render_summary_docx
 from caseops_api.services.matter_timeline import build_matter_timeline_by_id
 from caseops_api.services.matters import (
@@ -291,6 +298,121 @@ async def get_current_company_matter_summary_docx(
             "Content-Disposition": f'attachment; filename="{filename}"',
         },
     )
+
+
+# Sprint Q10 — attachment annotations -------------------------
+
+
+class AnnotationResponse(BaseModel):
+    id: str
+    matter_attachment_id: str
+    kind: str
+    page: int
+    bbox: list[float] | None = None
+    quoted_text: str | None = None
+    body: str | None = None
+    color: str | None = None
+
+
+class AnnotationListResponse(BaseModel):
+    annotations: list[AnnotationResponse]
+
+
+class AnnotationCreateRequest(BaseModel):
+    kind: AnnotationKindLiteral = "highlight"
+    page: int
+    bbox: list[float] | None = None
+    quoted_text: str | None = None
+    body: str | None = None
+    color: str | None = None
+
+
+def _annotation_to_response(record: AnnotationRecord) -> AnnotationResponse:
+    return AnnotationResponse(
+        id=record.id,
+        matter_attachment_id=record.matter_attachment_id,
+        kind=record.kind,
+        page=record.page,
+        bbox=record.bbox,
+        quoted_text=record.quoted_text,
+        body=record.body,
+        color=record.color,
+    )
+
+
+@router.get(
+    "/{matter_id}/attachments/{attachment_id}/annotations",
+    response_model=AnnotationListResponse,
+    summary="Sprint Q10 — list annotations on a matter attachment.",
+)
+async def get_attachment_annotations(
+    matter_id: str,
+    attachment_id: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> AnnotationListResponse:
+    records = list_annotations(
+        session=session,
+        context=context,
+        matter_id=matter_id,
+        attachment_id=attachment_id,
+    )
+    return AnnotationListResponse(
+        annotations=[_annotation_to_response(r) for r in records],
+    )
+
+
+@router.post(
+    "/{matter_id}/attachments/{attachment_id}/annotations",
+    response_model=AnnotationResponse,
+    summary=(
+        "Sprint Q10 — add an annotation (highlight / note / flag) on a "
+        "matter attachment. bbox is pdfjs text-layer coords; page is "
+        "1-based."
+    ),
+)
+async def post_attachment_annotation(
+    matter_id: str,
+    attachment_id: str,
+    payload: AnnotationCreateRequest,
+    context: MatterWriter,
+    session: DbSession,
+) -> AnnotationResponse:
+    record = create_annotation(
+        session=session,
+        context=context,
+        matter_id=matter_id,
+        attachment_id=attachment_id,
+        kind=payload.kind,
+        page=payload.page,
+        bbox=payload.bbox,
+        quoted_text=payload.quoted_text,
+        body=payload.body,
+        color=payload.color,
+    )
+    return _annotation_to_response(record)
+
+
+@router.delete(
+    "/{matter_id}/attachments/{attachment_id}/annotations/{annotation_id}",
+    status_code=204,
+    summary="Sprint Q10 — archive (soft-delete) an attachment annotation.",
+)
+async def delete_attachment_annotation(
+    matter_id: str,
+    attachment_id: str,
+    annotation_id: str,
+    context: MatterWriter,
+    session: DbSession,
+) -> Response:
+    archive_annotation(
+        session=session,
+        context=context,
+        matter_id=matter_id,
+        attachment_id=attachment_id,
+        annotation_id=annotation_id,
+    )
+    return Response(status_code=204)
 
 
 class BenchMatchJudge(BaseModel):

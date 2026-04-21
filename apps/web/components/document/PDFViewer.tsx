@@ -30,6 +30,16 @@ import { cn } from "@/lib/cn";
 // clean and still caches per-visitor after the first hit.
 pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
+export interface PDFAnnotation {
+  id: string;
+  kind: "highlight" | "note" | "flag";
+  page: number;
+  /** pdfjs text-layer coords: [x0, y0, x1, y1], pre-zoom. */
+  bbox?: [number, number, number, number] | null;
+  body?: string | null;
+  color?: string | null;
+}
+
 interface PDFViewerProps {
   /** Absolute or same-origin URL to the PDF. The fetch must include
    *  the auth token — callers pass a URL that the browser can GET
@@ -39,9 +49,16 @@ interface PDFViewerProps {
   /** Optional filename for the download button. */
   filename?: string;
   className?: string;
+  /** Sprint Q10 — annotations to render as overlays on each page. */
+  annotations?: PDFAnnotation[];
 }
 
-export function PDFViewer({ url, filename, className }: PDFViewerProps): React.JSX.Element {
+export function PDFViewer({
+  url,
+  filename,
+  className,
+  annotations = [],
+}: PDFViewerProps): React.JSX.Element {
   const [numPages, setNumPages] = useState<number | null>(null);
   const [page, setPage] = useState(1);
   const [zoom, setZoom] = useState(1);
@@ -220,22 +237,61 @@ export function PDFViewer({ url, filename, className }: PDFViewerProps): React.J
           }
         >
           {numPages ? (
-            <Page
-              pageNumber={page}
-              scale={zoom}
-              renderTextLayer
-              renderAnnotationLayer
-              customTextRenderer={({ str }: { str: string }) => {
-                if (!query) return str;
-                // react-pdf v10 customTextRenderer returns JSX/HTML;
-                // we mark the match so browser-native Ctrl-F and our
-                // Next button both feel consistent.
-                const parts = str.split(new RegExp(`(${escapeRegex(query)})`, "ig"));
-                return parts
-                  .map((p, i) => (i % 2 === 1 ? `<mark>${escapeHtml(p)}</mark>` : escapeHtml(p)))
-                  .join("");
-              }}
-            />
+            <div className="relative inline-block">
+              <Page
+                pageNumber={page}
+                scale={zoom}
+                renderTextLayer
+                renderAnnotationLayer
+                customTextRenderer={({ str }: { str: string }) => {
+                  if (!query) return str;
+                  // react-pdf v10 customTextRenderer returns JSX/HTML;
+                  // we mark the match so browser-native Ctrl-F and our
+                  // Next button both feel consistent.
+                  const parts = str.split(new RegExp(`(${escapeRegex(query)})`, "ig"));
+                  return parts
+                    .map((p, i) =>
+                      i % 2 === 1 ? `<mark>${escapeHtml(p)}</mark>` : escapeHtml(p),
+                    )
+                    .join("");
+                }}
+              />
+              {/* Sprint Q10 — annotation overlay. Each annotation
+                  is painted as an absolute-positioned div sitting
+                  above the canvas, scaled by the current zoom so
+                  the box tracks the rendered text.*/}
+              {annotations
+                .filter((a) => a.page === page && a.bbox && a.bbox.length === 4)
+                .map((a) => {
+                  const [x0, y0, x1, y1] = a.bbox as [number, number, number, number];
+                  const bg =
+                    a.color ??
+                    (a.kind === "flag"
+                      ? "rgba(239, 68, 68, 0.25)"
+                      : a.kind === "note"
+                        ? "rgba(59, 130, 246, 0.20)"
+                        : "rgba(250, 204, 21, 0.35)");
+                  return (
+                    <div
+                      key={a.id}
+                      role="note"
+                      aria-label={a.body ?? a.kind}
+                      title={a.body ?? undefined}
+                      data-annotation-id={a.id}
+                      style={{
+                        position: "absolute",
+                        left: `${x0 * zoom}px`,
+                        top: `${y0 * zoom}px`,
+                        width: `${Math.max(6, (x1 - x0) * zoom)}px`,
+                        height: `${Math.max(6, (y1 - y0) * zoom)}px`,
+                        backgroundColor: bg,
+                        pointerEvents: "auto",
+                        cursor: "pointer",
+                      }}
+                    />
+                  );
+                })}
+            </div>
           ) : null}
         </Document>
       </div>

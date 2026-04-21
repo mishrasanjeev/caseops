@@ -572,6 +572,66 @@ export function matterAttachmentDownloadUrl(input: {
   return `${API_BASE_URL}/api/matters/${input.matterId}/attachments/${input.attachmentId}/download`;
 }
 
+// Sprint Q10 — matter attachment annotations CRUD.
+export interface MatterAttachmentAnnotationRecord {
+  id: string;
+  matter_attachment_id: string;
+  kind: "highlight" | "note" | "flag";
+  page: number;
+  bbox?: number[] | null;
+  quoted_text?: string | null;
+  body?: string | null;
+  color?: string | null;
+}
+
+export async function listMatterAttachmentAnnotations(input: {
+  matterId: string;
+  attachmentId: string;
+}): Promise<MatterAttachmentAnnotationRecord[]> {
+  const data = await apiRequest<{ annotations: MatterAttachmentAnnotationRecord[] }>(
+    `/api/matters/${input.matterId}/attachments/${input.attachmentId}/annotations`,
+  );
+  return data.annotations;
+}
+
+export async function createMatterAttachmentAnnotation(input: {
+  matterId: string;
+  attachmentId: string;
+  kind?: "highlight" | "note" | "flag";
+  page: number;
+  bbox?: number[];
+  quotedText?: string;
+  body?: string;
+  color?: string;
+}): Promise<MatterAttachmentAnnotationRecord> {
+  const data = await apiRequest<MatterAttachmentAnnotationRecord>(
+    `/api/matters/${input.matterId}/attachments/${input.attachmentId}/annotations`,
+    {
+      method: "POST",
+      body: {
+        kind: input.kind ?? "highlight",
+        page: input.page,
+        bbox: input.bbox,
+        quoted_text: input.quotedText,
+        body: input.body,
+        color: input.color,
+      },
+    },
+  );
+  return data;
+}
+
+export async function deleteMatterAttachmentAnnotation(input: {
+  matterId: string;
+  attachmentId: string;
+  annotationId: string;
+}): Promise<void> {
+  await apiRequest<void>(
+    `/api/matters/${input.matterId}/attachments/${input.attachmentId}/annotations/${input.annotationId}`,
+    { method: "DELETE" },
+  );
+}
+
 // --- Billing: invoices + time entries + Pine Labs payment links ---
 // The backend gates these on invoices:issue, invoices:send_payment_link,
 // and time_entries:write respectively. The UI's useCapability guards

@@ -2625,6 +2625,81 @@ class AuthorityAnnotation(Base):
     )
 
 
+class MatterAttachmentAnnotationKind(StrEnum):
+    """Annotation on an uploaded matter document. Scoped to the
+    matter, not to the shared authority corpus — ``AuthorityAnnotation``
+    exists separately for per-tenant overlays on the public-law index.
+    """
+
+    HIGHLIGHT = "highlight"
+    NOTE = "note"
+    FLAG = "flag"
+
+
+class MatterAttachmentAnnotation(Base):
+    """Sprint Q10 — per-matter annotations on an uploaded attachment.
+
+    Rendered as an overlay by the PDF viewer at
+    ``/app/matters/{id}/documents/{attachment_id}/view``. Scoped to
+    the owning matter's company_id; callers MUST filter by
+    company_id + matter_id before writing / reading.
+
+    ``page`` is 1-based. ``bbox`` is stored as a JSON array
+    ``[x0, y0, x1, y1]`` in pdfjs text-layer coordinates (pre-zoom);
+    the viewer scales at render time. Nullable when the annotation
+    is "about the page" rather than a specific rectangle (plain
+    page-level note).
+    """
+
+    __tablename__ = "matter_attachment_annotations"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_attachment_id: Mapped[str] = mapped_column(
+        ForeignKey("matter_attachments.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    kind: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=MatterAttachmentAnnotationKind.HIGHLIGHT,
+    )
+    page: Mapped[int] = mapped_column(Integer, nullable=False)
+    bbox_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    quoted_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    body: Mapped[str | None] = mapped_column(Text, nullable=True)
+    color: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    is_archived: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        onupdate=utcnow,
+    )
+
+
 class MatterDeadlineStatus(StrEnum):
     OPEN = "open"
     DONE = "done"
