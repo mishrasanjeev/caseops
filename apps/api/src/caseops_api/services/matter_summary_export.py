@@ -103,6 +103,144 @@ def render_summary_docx(
     return buf.getvalue(), filename
 
 
+def render_summary_pdf(
+    *,
+    matter_title: str,
+    matter_code: str,
+    summary: MatterExecutiveSummary,
+    timeline: MatterTimeline,
+) -> tuple[bytes, str]:
+    """Sprint Q7 PDF slice — same shape as ``render_summary_docx``
+    but emits a PDF using ``fpdf2`` (pure Python MIT, no native deps).
+
+    Prefers the grounded Q8 timeline over the LLM-guessed one in the
+    summary payload, matching the DOCX path.
+    """
+    from fpdf import FPDF  # type: ignore[import-not-found]
+
+    pdf = FPDF(format="A4", unit="mm")
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+
+    pdf.set_font("Helvetica", size=18, style="B")
+    pdf.cell(0, 12, _ascii_safe("Matter Executive Summary"), new_x="LMARGIN", new_y="NEXT")
+
+    pdf.set_font("Helvetica", size=11, style="B")
+    pdf.cell(
+        0, 7,
+        _ascii_safe(f"{matter_title} ({matter_code})"),
+        new_x="LMARGIN", new_y="NEXT",
+    )
+    pdf.set_font("Helvetica", size=9, style="I")
+    pdf.cell(
+        0, 5,
+        _ascii_safe(f"Generated {summary.generated_at.strftime('%d %b %Y, %H:%M')}"),
+        new_x="LMARGIN", new_y="NEXT",
+    )
+    pdf.ln(3)
+
+    if summary.overview:
+        _pdf_section(pdf, "Overview", [summary.overview])
+
+    if summary.key_facts:
+        _pdf_section(pdf, "Key facts", summary.key_facts, bullet=True)
+
+    if summary.legal_issues:
+        _pdf_section(pdf, "Legal issues", summary.legal_issues, bullet=True)
+
+    if summary.sections_cited:
+        _pdf_section(pdf, "Statutes and sections cited", summary.sections_cited, bullet=True)
+
+    if timeline.events:
+        _pdf_heading(pdf, "Timeline")
+        for event in timeline.events:
+            pdf.set_font("Helvetica", size=10, style="B")
+            pdf.multi_cell(
+                0, 5,
+                _ascii_safe(f"{event.event_date.isoformat()} — {event.title}"),
+                new_x="LMARGIN", new_y="NEXT",
+            )
+            pdf.set_font("Helvetica", size=10)
+            pdf.multi_cell(0, 5, _ascii_safe(event.summary), new_x="LMARGIN", new_y="NEXT")
+            pdf.ln(1)
+    elif summary.timeline:
+        _pdf_heading(pdf, "Timeline (AI summary)")
+        for event in summary.timeline:
+            pdf.set_font("Helvetica", size=10, style="B")
+            prefix = event.date or "—"
+            pdf.multi_cell(
+                0, 5,
+                _ascii_safe(f"{prefix} — {event.label}"),
+                new_x="LMARGIN", new_y="NEXT",
+            )
+            pdf.ln(1)
+
+    pdf.ln(3)
+    pdf.set_font("Helvetica", size=9, style="I")
+    pdf.multi_cell(
+        0, 5,
+        _ascii_safe(
+            "AI-assisted summary. Every cited statute traces to documents "
+            "attached to this matter. Review before filing or circulating."
+        ),
+        new_x="LMARGIN", new_y="NEXT",
+    )
+
+    body = bytes(pdf.output())
+    filename = _safe_filename(matter_code) + "-summary.pdf"
+    return body, filename
+
+
+def _pdf_heading(pdf, text: str) -> None:
+    pdf.set_font("Helvetica", size=13, style="B")
+    pdf.ln(2)
+    pdf.cell(0, 7, _ascii_safe(text), new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", size=10)
+
+
+def _pdf_section(pdf, heading: str, items: list[str], *, bullet: bool = False) -> None:
+    _pdf_heading(pdf, heading)
+    for item in items:
+        if bullet:
+            pdf.multi_cell(
+                0, 5,
+                _ascii_safe(f"• {item}"),
+                new_x="LMARGIN", new_y="NEXT",
+            )
+        else:
+            pdf.multi_cell(0, 5, _ascii_safe(item), new_x="LMARGIN", new_y="NEXT")
+
+
+def _ascii_safe(text: str) -> str:
+    """fpdf2's built-in Helvetica is a WinAnsi font — non-Latin code
+    points blow up the PDF writer. For Q7's first PDF slice we flatten
+    to an ASCII-biased fallback; Hindi / Tamil / etc bodies still ship
+    through the DOCX path unchanged, and a future pass can add a
+    TrueType font subset for the PDF path."""
+    if not text:
+        return ""
+    # Replace typographic dashes / ellipses / quotes with ASCII
+    # equivalents, then best-effort drop anything Helvetica-1252
+    # can't encode.
+    table = {
+        "\u2013": "-",  # en dash
+        "\u2014": "--",  # em dash
+        "\u2018": "'",
+        "\u2019": "'",
+        "\u201c": '"',
+        "\u201d": '"',
+        "\u2026": "...",
+        "\u00a0": " ",  # non-breaking space
+        "•": "*",
+    }
+    out = text.translate({ord(k): v for k, v in table.items()})
+    try:
+        out.encode("latin-1")
+    except UnicodeEncodeError:
+        out = out.encode("ascii", "replace").decode("ascii")
+    return out
+
+
 def _safe_filename(matter_code: str) -> str:
     """Collapse whitespace / slashes to hyphens so the download is
     safe on every OS."""
@@ -110,4 +248,4 @@ def _safe_filename(matter_code: str) -> str:
     return cleaned.strip("-") or "matter"
 
 
-__all__ = ["render_summary_docx"]
+__all__ = ["render_summary_docx", "render_summary_pdf"]

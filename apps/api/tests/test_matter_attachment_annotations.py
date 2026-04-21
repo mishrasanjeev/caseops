@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select

@@ -15,7 +15,6 @@ from caseops_api.services.retrieval_normalisers import (
     normalise_citation_query,
 )
 
-
 # ---------------------------------------------------------------------------
 # normalise_citation_query
 # ---------------------------------------------------------------------------

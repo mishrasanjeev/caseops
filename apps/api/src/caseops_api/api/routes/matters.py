@@ -93,10 +93,6 @@ from caseops_api.services.matter_access import (
     remove_ethical_wall,
     set_restricted_access,
 )
-from caseops_api.services.matter_summary import (
-    MatterExecutiveSummary,
-    generate_matter_summary,
-)
 from caseops_api.services.matter_attachment_annotations import (
     AnnotationKindLiteral,
     AnnotationRecord,
@@ -104,7 +100,14 @@ from caseops_api.services.matter_attachment_annotations import (
     create_annotation,
     list_annotations,
 )
-from caseops_api.services.matter_summary_export import render_summary_docx
+from caseops_api.services.matter_summary import (
+    MatterExecutiveSummary,
+    generate_matter_summary,
+)
+from caseops_api.services.matter_summary_export import (
+    render_summary_docx,
+    render_summary_pdf,
+)
 from caseops_api.services.matter_timeline import build_matter_timeline_by_id
 from caseops_api.services.matters import (
     create_matter,
@@ -294,6 +297,40 @@ async def get_current_company_matter_summary_docx(
             "application/vnd.openxmlformats-officedocument.wordprocessingml"
             ".document"
         ),
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
+    )
+
+
+@router.get(
+    "/{matter_id}/summary.pdf",
+    summary="Download the matter executive summary as PDF (Sprint Q7 PDF slice).",
+    response_class=Response,
+)
+async def get_current_company_matter_summary_pdf(
+    matter_id: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> Response:
+    summary = generate_matter_summary(
+        session, context=context, matter_id=matter_id
+    )
+    timeline = build_matter_timeline_by_id(
+        session=session, context=context, matter_id=matter_id
+    )
+    from caseops_api.services.matters import _get_matter_model
+
+    matter = _get_matter_model(session, context=context, matter_id=matter_id)
+    body, filename = render_summary_pdf(
+        matter_title=matter.title,
+        matter_code=matter.matter_code,
+        summary=summary,
+        timeline=timeline,
+    )
+    return Response(
+        content=body,
+        media_type="application/pdf",
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',
         },
