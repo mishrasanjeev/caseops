@@ -747,7 +747,13 @@ def _exact_name_match_document_ids(
         return []
 
     # Build a WHERE clause that requires EVERY token (AND) to appear in
-    # either parties_json or title — ILIKE '%token%' on both columns.
+    # parties_json OR title OR bench_name — ILIKE '%token%' across all
+    # three columns. The bench_name axis was added 2026-04-21 after the
+    # sc-2023 probe: queries like 'DHARWAD BENCH' hit docs whose
+    # bench_name is 'Dharwad Bench' but whose parties_json / title
+    # carries only party strings. Without the bench_name column in the
+    # prefilter, the exact-name path dropped those candidates and the
+    # vector-only fallback missed them.
     # PG will use a seq scan without a trigram index but at ~20k rows
     # the whole table fits in memory and the scan is <10 ms.
     from sqlalchemy import text
@@ -762,7 +768,8 @@ def _exact_name_match_document_ids(
     for idx, tok in enumerate(tokens):
         pkey = f"tok{idx}"
         where_parts.append(
-            f"(d.parties_json ILIKE :{pkey} OR d.title ILIKE :{pkey})"
+            f"(d.parties_json ILIKE :{pkey} OR d.title ILIKE :{pkey} "
+            f"OR d.bench_name ILIKE :{pkey})"
         )
         params[pkey] = f"%{tok}%"
     where_sql = " AND ".join(where_parts)
@@ -785,10 +792,16 @@ def _exact_name_match_document_ids(
 
     ids = [r.id for r in rows]
     # Too broad (likely topical token that slipped the stopword list) →
-    # don't boost. Keeping the threshold loose (2x limit) lets legitimate
-    # multi-hit cases (same parties appear in related judgments) through.
-    if len(ids) > max(limit * 2, 20):
-        return []
+    # DON'T drop entirely — that path was the sc-2023 Pradeep Kumar
+    # v. State of Chhattisgarh miss, where 'Pradeep' + 'Kumar' matched
+    # dozens of related judgments and the prefilter used to return [].
+    # Instead, trim to the first ``limit`` ids (already filtered by
+    # forum_level / court_name / document_type) and hand that to the
+    # vector ranker, which will re-score by cosine distance and pick
+    # the real top-k. Legitimate narrow hits still pass untouched.
+    broad_cap = max(limit * 2, 20)
+    if len(ids) > broad_cap:
+        ids = ids[:limit]
     return ids
 
 
