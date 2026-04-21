@@ -16,7 +16,7 @@ const { signInMock, storeSessionMock, toastSuccess, toastError } = vi.hoisted(
   }),
 );
 
-vi.mock("@/lib/api/endpoints", () => ({
+vi.mock("@/lib/api/auth", () => ({
   signIn: signInMock,
 }));
 

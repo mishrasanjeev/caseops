@@ -13,7 +13,7 @@ const { bootstrapCompanyMock, storeSessionMock, toastSuccess, toastError, router
     routerReplace: vi.fn(),
   }));
 
-vi.mock("@/lib/api/endpoints", () => ({
+vi.mock("@/lib/api/auth", () => ({
   bootstrapCompany: bootstrapCompanyMock,
 }));
 
