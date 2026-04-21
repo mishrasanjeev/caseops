@@ -1303,6 +1303,121 @@ export async function fetchContractAttachmentRedline(input: {
   );
 }
 
+// --- Sprint R3 — drafting templates (stepper) ---
+// Backend: GET /api/drafting/templates, GET /templates/{type},
+// GET /templates/{type}/suggestions, POST /drafting/preview.
+// Shapes mirror schemas.drafting_templates.DraftTemplateSchema +
+// services.drafting_suggestions.TemplateSuggestions +
+// services.drafting_preview.DraftPreview.
+
+export type DraftTemplateType =
+  | "bail"
+  | "anticipatory_bail"
+  | "divorce_petition"
+  | "property_dispute_notice"
+  | "cheque_bounce_notice"
+  | "affidavit"
+  | "criminal_complaint"
+  | "civil_suit";
+
+export type DraftingFieldKind =
+  | "string"
+  | "text"
+  | "date"
+  | "number"
+  | "boolean"
+  | "enum";
+
+export type DraftingFieldSpec = {
+  name: string;
+  label: string;
+  kind: DraftingFieldKind;
+  required: boolean;
+  placeholder: string | null;
+  help_text: string | null;
+  example: string | null;
+  enum_options: string[] | null;
+  step_group: string;
+};
+
+export type DraftTemplateSummary = {
+  template_type: DraftTemplateType;
+  display_name: string;
+  summary: string;
+  statutory_basis: string[];
+  focus: string;
+};
+
+export type DraftTemplateSchema = {
+  template_type: DraftTemplateType;
+  display_name: string;
+  summary: string;
+  statutory_basis: string[];
+  step_groups: string[];
+  fields: DraftingFieldSpec[];
+  // Pydantic model_json_schema() — we only read `.properties[name].type`
+  // to refine enum-vs-string when the FieldSpec kind is ambiguous.
+  facts_model_json_schema: Record<string, unknown>;
+};
+
+export type FieldSuggestions = {
+  field_name: string;
+  label: string;
+  options: string[];
+};
+
+export type TemplateSuggestions = {
+  template_type: DraftTemplateType;
+  fields: FieldSuggestions[];
+};
+
+export type DraftPreview = {
+  template_type: DraftTemplateType;
+  preview_text: string;
+  step_group: string | null;
+  model: string;
+  prompt_tokens: number;
+  completion_tokens: number;
+};
+
+export async function listDraftingTemplates(): Promise<DraftTemplateSummary[]> {
+  const data = await apiRequest<{ templates: DraftTemplateSummary[] }>(
+    "/api/drafting/templates",
+  );
+  return data.templates;
+}
+
+export async function fetchDraftingTemplate(
+  templateType: string,
+): Promise<DraftTemplateSchema> {
+  return apiRequest<DraftTemplateSchema>(
+    `/api/drafting/templates/${templateType}`,
+  );
+}
+
+export async function fetchDraftingSuggestions(
+  templateType: string,
+): Promise<TemplateSuggestions> {
+  return apiRequest<TemplateSuggestions>(
+    `/api/drafting/templates/${templateType}/suggestions`,
+  );
+}
+
+export async function previewDraft(input: {
+  template_type: DraftTemplateType;
+  facts: Record<string, unknown>;
+  step_group?: string | null;
+}): Promise<DraftPreview> {
+  return apiRequest<DraftPreview>("/api/drafting/preview", {
+    method: "POST",
+    body: {
+      template_type: input.template_type,
+      facts: input.facts,
+      step_group: input.step_group ?? null,
+    },
+  });
+}
+
 export async function createMatter(input: {
   title: string;
   matter_code: string;
