@@ -61,3 +61,8 @@ infra/.terraform/
 infra/.pulumi/
 *.tfstate
 *.tfstate.*
+
+# Python coverage data
+apps/api/.coverage
+apps/api/htmlcov/
+apps/api/coverage.xml
