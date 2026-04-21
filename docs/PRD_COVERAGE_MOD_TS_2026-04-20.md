@@ -22,14 +22,14 @@ judge / court surfaces (PRD §10.6 neutrality is superseded there).
 
 | ID | Module | Shipped % | PRD § | Sprint | Top blocker |
 |----|--------|---------:|-------|--------|-------------|
-| MOD-TS-001 | JudgeProfile | **95 %** (P1a/P1b/P2/P2b/P3/P4 all in prod on `c356cda`; Layer-2 sweep autonomous; citation/bench normalisers on `quality/sc-2023-multilingual` branch pending merge) | §10.6 | **P — DONE**, sc-2023 branch pending merge | retrieval quality gap (normalisers ready — need probe+merge) |
+| MOD-TS-001 | JudgeProfile | **98 %** (P1a/P1b/P2/P2b/P3/P4 in prod; sc-2023 normalisers + last-mile prefilter merged; title-validation predicate on probe in `c9ed7c6` lifts probe rating **4.17/5 → 5.0/5** on sample=10 with title-validation gate surfacing 5 skipped bench-placeholder / non-Latin titles) | §10.6 | **P — DONE** | `#57` — durable Layer-2 re-extract on the ~300 bench-placeholder docs |
 | MOD-TS-002 | OCR Extractor | **90 %** (Q1 + Q2 + Q3 + Q4 all landed — language-detect, handwriting retry, quality gate in prod on `c356cda`) | §9.1 / §14.4 | **Q — DONE** | handwritten fixture probe recommended before declaring 100 % |
 | MOD-TS-003 | Legal Translator | 0 % | not covered | **U** (deferred) | Not prioritised for v1 |
 | MOD-TS-004 | Case Summary | **100 %** (Q5 endpoint + Q6 regenerate + Q7 DOCX + Q7 PDF via `fpdf2` + Q8 timeline all merged) | §9.6 / §10.3 | **Q — DONE** | — |
 | MOD-TS-005 | Document Viewer | **70 %** (Q9 react-pdf viewer + Q11 viewer route + Q12 in-doc search live; Q10 annotation schema + overlay on `sprint/q10-attachment-annotations` branch pending merge) | §10.3 | **Q (Q9/Q11/Q12 ✅, Q10 branch ready)** | merge Q10 branch; richer multi-page search (nice-to-have) |
 | MOD-TS-006 | Calendar | 40 % | §7.2 | **T** | Temporal (§5.1) + UI |
 | MOD-TS-007 | Notification & Reminder | 20 % | §5.3 | **T** | Temporal (§5.1) + SMS provider |
-| MOD-TS-008 | Pleading Step By Step | **95 %** (R1/R2/R3 + R4 + R5 + R9 backend + R-UI React Hook Form + Zod stepper merged; stepper→draft facts passthrough is the last follow-up) | §9.5 / §10.3 | **R — DONE (stepper shipped)** | optional: persist stepper facts into the draft record so the generate action reuses them |
+| MOD-TS-008 | Pleading Step By Step | **100 %** (R1/R2/R3 + R4 + R5 + R9 backend + R-UI React Hook Form + Zod stepper; stepper→draft facts passthrough shipped in `f3de606` — `Draft.facts_json` + `template_type` persisted via `DraftCreateRequest`, injected into the LLM prompt as "STEPPER FACTS" block so the generator grounds on user-entered facts instead of placeholders) | §9.5 / §10.3 | **R — DONE** | — |
 | MOD-TS-009 | Clients & Advocates | 50 % | §9.2 (counsel) / new | **S** | Structured `Client` entity not modeled |
 | MOD-TS-010 | AutoMail Transfer | 25 % | §5.3 / §16.2 | **S/T** | Email templates + Temporal |
 | MOD-TS-011 | Support (in-app) | 0 % | not covered | **W** (v2) | Out of v1 scope |
@@ -234,9 +234,10 @@ in the status table above.
 ### Thread A — Production hygiene (unblock today's value)
 
 - [x] **A1 — Deploy API + Web to Cloud Run — ✅ DONE 2026-04-20 evening.** HEAD `8a88bbd` live in `asia-south1`, 100 % traffic. New revisions: `caseops-api-00006-224` (from `-00005-xb8`) and `caseops-web-00008-9n5` (from `-00007-5xm`). Images: `caseops-api:8a88bbd` + `caseops-web:8a88bbd`. Smoke tests: `GET https://api.caseops.ai/api/health` → 200 OK; `GET https://caseops.ai/app/research` → 200; `GET /api/matters/.../bench-match` → 401 missing_bearer_token (proves the P3 route is mounted). No rollback needed. Also covers the later commits `b438982` (Q4 OCR gate) + `f0c5415` (R1/R2/R3) which landed before cutover — re-deploy required to push those, tracked below.
-- [ ] **A1b — Redeploy after Q4 + R1/R2/R3 commits.** HEAD moved past `8a88bbd` → `34641a9` after the deploy. Next cutover should pick up `b438982` + `f0c5415` + `34641a9` so OCR quality gate and `GET /api/drafting/templates` reach prod.
-- [ ] **A2 — Identify + close remaining Hari bugs.** 4 of 10 unaddressed.
-- [ ] **A3 — Verify CI green** on commits `662de6a`, `8a88bbd`, `b438982`, `f0c5415`.
+- [x] **A1b — Redeploy for Q4 + R1/R2/R3 + subsequent commits — ✅ DONE 2026-04-20 night.** Shipped in the `8a88bbd → e64c007` API redeploy cycle. All Q4/R1/R2/R3 routes reachable in prod.
+- [x] **A1c — Redeploy for facts passthrough + sc-2023 last-mile — ✅ DONE 2026-04-21 morning.** API `caseops-api-00023-new` + Web `caseops-web-00023-len` on `f3de606` at 100% traffic. Alembic `20260421_0002` (facts_json + template_type columns) applied. Smoke: /api/health 200, /api/drafting/templates 401 on no-auth (route wired), / on web 200 with CSP/HSTS intact.
+- [x] **A2 — Close remaining Hari bugs — ✅ DONE.** All 10 bugs verified PASS in `docs/BUG_VERIFY_2026_04_21.md` against prod on `aster-demo`. BUG-001/002 (Haiku fallback), BUG-003 (court-sync body), BUG-004 (schedule-hearing dialog), BUG-005 (recommendations 502 → 422 citation gate — token budget bump), BUG-006 (invoice router prefix), BUG-007 (intake 401), BUG-008 (dup matter_code 400 detail), BUG-009 (research search no invalid_token), BUG-010 (canonical origin 308).
+- [x] **A3 — CI green** — verified green across the shipped commit chain.
 
 ### Thread B — Sprint Q4 (OCR quality gate — prevents corpus poisoning) — ✅ DONE commit `b438982`
 
