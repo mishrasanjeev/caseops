@@ -318,11 +318,15 @@ test.describe("Hari II bug regressions", () => {
     await expect(page.getByText("Open tasks")).toHaveCount(0);
     await expect(page.getByText("Last court order")).toHaveCount(0);
     await expect(page.getByText("Upcoming hearings")).toHaveCount(0);
-    // The Hearings sub-nav link is still present, so the user can
-    // open the dedicated Hearings tab and Schedule-hearing dialog
-    // there. We assert on the sub-nav link, not the overview CTA.
+    // The matter cockpit "Hearings" tab is still reachable so the
+    // user can open the schedule-hearing dialog there. Scope the
+    // assertion to the matter sub-nav (aria-label "Matter cockpit
+    // tabs") to avoid colliding with the global sidebar's
+    // "Hearings" link, which also matches /^Hearings$/.
     await expect(
-      page.getByRole("link", { name: /^Hearings$/ }),
+      page
+        .getByLabel("Matter cockpit tabs")
+        .getByRole("link", { name: /^Hearings$/ }),
     ).toBeVisible();
   });
 });
