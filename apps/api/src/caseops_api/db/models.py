@@ -657,6 +657,117 @@ class MatterHearing(Base):
     )
 
     matter: Mapped[Matter] = relationship(back_populates="hearings")
+    reminders: Mapped[list[HearingReminder]] = relationship(
+        back_populates="hearing",
+        cascade="all, delete-orphan",
+        order_by="HearingReminder.scheduled_for",
+    )
+
+
+class HearingReminderChannel(StrEnum):
+    EMAIL = "email"
+    SMS = "sms"
+    IN_APP = "in_app"
+
+
+class HearingReminderStatus(StrEnum):
+    # Persisted at hearing-create time, waiting for ``scheduled_for``
+    # to fall inside the worker's "due now" window.
+    QUEUED = "queued"
+    # Worker picked it up, handed off to the provider, provider returned
+    # a message-id (message delivered to provider, not yet delivered to
+    # recipient).
+    SENT = "sent"
+    # Provider confirmed delivery (via webhook) to the recipient.
+    DELIVERED = "delivered"
+    # Provider reported a permanent failure; won't retry.
+    FAILED = "failed"
+    # Operator cancelled before send (hearing moved / cancelled).
+    CANCELLED = "cancelled"
+
+
+class HearingReminder(Base):
+    """Durable record of one reminder we intend to send for a hearing.
+
+    Rows are created by ``services.hearing_reminders.schedule_reminders``
+    when a ``MatterHearing`` is inserted or rescheduled. A worker
+    (``caseops-send-hearing-reminders``) polls for ``QUEUED`` rows
+    whose ``scheduled_for`` has passed and dispatches them via the
+    configured channel.
+
+    Persisting the intent separately from the delivery lets us
+    dark-launch the feature: rows accumulate in production even when
+    the provider isn't configured, so flipping the feature flag on
+    starts delivering immediately without a backfill. See
+    ``memory/feedback_fix_vs_mitigation.md`` for why this is the
+    shape we want — reminders the user CAN'T yet receive are still
+    reminders the system intends to send.
+    """
+    __tablename__ = "hearing_reminders"
+    __table_args__ = (
+        UniqueConstraint(
+            "hearing_id", "channel", "scheduled_for",
+            name="uq_hearing_reminders_channel_time",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    hearing_id: Mapped[str] = mapped_column(
+        ForeignKey("matter_hearings.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    recipient_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    recipient_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    recipient_phone: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    channel: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default=HearingReminderChannel.EMAIL,
+    )
+    scheduled_for: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default=HearingReminderStatus.QUEUED,
+        index=True,
+    )
+    provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    provider_message_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    hearing: Mapped[MatterHearing] = relationship(back_populates="reminders")
 
 
 class MatterActivity(Base):

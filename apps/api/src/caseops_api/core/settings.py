@@ -78,6 +78,28 @@ class Settings(BaseSettings):
     pine_labs_webhook_signature_header: str = Field(default="X-PineLabs-Signature")
     pine_labs_request_timeout_seconds: int = Field(default=30)
 
+    # Hearing reminders (MOD-TS-007 Sprint T first slice — dark-
+    # launched on 2026-04-22). Rows accumulate in ``hearing_reminders``
+    # the moment a hearing is scheduled. The worker only sends when
+    # both the feature flag AND the provider config are set; otherwise
+    # it logs "would send" and leaves the row at QUEUED so flipping
+    # the flag later doesn't need a backfill.
+    hearing_reminders_enabled: bool = Field(default=False)
+    hearing_reminder_offsets_hours: list[int] = Field(
+        default_factory=lambda: [24, 1],
+    )
+    sendgrid_api_key: str | None = Field(default=None)
+    sendgrid_sender_email: str | None = Field(default=None)
+    sendgrid_sender_name: str = Field(default="CaseOps")
+    # Public key that SendGrid signs event webhooks with. When set,
+    # the webhook endpoint refuses to process events whose signature
+    # doesn't verify — keeping an attacker from forging "delivered"
+    # events against our tenants.
+    sendgrid_webhook_public_key: str | None = Field(default=None)
+    # Twilio / MSG91 come in a follow-up; keep the keys optional.
+    msg91_auth_key: str | None = Field(default=None)
+    msg91_sender_id: str | None = Field(default=None)
+
     auth_rate_limit_login_per_minute: int = Field(default=20, ge=1)
     auth_rate_limit_bootstrap_per_hour: int = Field(default=10, ge=1)
     auth_rate_limit_enabled: bool = Field(default=True)

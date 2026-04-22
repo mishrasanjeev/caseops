@@ -74,6 +74,7 @@ caseops-seed-demo = "caseops_api.scripts.seed_demo:main"
 caseops-backfill-corpus-quality = "caseops_api.scripts.backfill_corpus_quality:main"
 caseops-backfill-title-chunks = "caseops_api.scripts.backfill_title_chunks:main"
 caseops-reextract-placeholder-titles = "caseops_api.scripts.reextract_placeholder_titles:main"
+caseops-send-hearing-reminders = "caseops_api.scripts.send_hearing_reminders:main"
 
 [dependency-groups]
 dev = [

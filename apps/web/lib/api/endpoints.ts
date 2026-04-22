@@ -760,6 +760,58 @@ export async function syncInvoicePaymentLink(input: {
   return data as MatterInvoiceRecord;
 }
 
+// --------------------------------------------------------------
+// Admin notifications (BUG-013 dashboard)
+// --------------------------------------------------------------
+
+export type HearingReminderStatus =
+  | "queued"
+  | "sent"
+  | "delivered"
+  | "failed"
+  | "cancelled";
+
+export type HearingReminderRecord = {
+  id: string;
+  company_id: string;
+  matter_id: string;
+  hearing_id: string;
+  recipient_email: string | null;
+  channel: string;
+  scheduled_for: string;
+  status: HearingReminderStatus;
+  provider: string | null;
+  provider_message_id: string | null;
+  last_error: string | null;
+  attempts: number;
+  sent_at: string | null;
+  delivered_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type HearingReminderListResponse = {
+  reminders: HearingReminderRecord[];
+  total_queued: number;
+  total_sent: number;
+  total_delivered: number;
+  total_failed: number;
+};
+
+export async function listAdminNotifications(input?: {
+  status?: "all" | HearingReminderStatus;
+  limit?: number;
+}): Promise<HearingReminderListResponse> {
+  const qs = new URLSearchParams();
+  if (input?.status && input.status !== "all") qs.set("status_filter", input.status);
+  if (input?.limit) qs.set("limit", String(input.limit));
+  const path = qs.toString()
+    ? `/api/admin/notifications?${qs.toString()}`
+    : "/api/admin/notifications";
+  return apiRequest<HearingReminderListResponse>(path);
+}
+
+
 export type PaymentConfig = { pine_labs_configured: boolean };
 
 /**

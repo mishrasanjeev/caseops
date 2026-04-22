@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime
 from typing import BinaryIO
 
@@ -75,6 +76,8 @@ from caseops_api.services.matter_access import (
     assert_access,
     visible_matters_filter,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _matter_record(matter: Matter) -> MatterRecord:
@@ -1015,6 +1018,23 @@ def create_matter_hearing(
         title="Hearing scheduled",
         detail=f"{payload.forum_name.strip()} on {payload.hearing_on.isoformat()}",
     )
+    # BUG-013 dark-launched reminders (2026-04-22) — persist the
+    # reminder intent now so the worker can pick up the rows the
+    # moment SendGrid credentials land. See
+    # ``services/hearing_reminders.py`` and
+    # ``memory/feedback_fix_vs_mitigation.md``. Scheduling failure
+    # must not block the hearing create — the transaction proceeds
+    # even if reminder persistence raises.
+    try:
+        from caseops_api.services.hearing_reminders import (
+            schedule_reminders_for_hearing,
+        )
+        schedule_reminders_for_hearing(session, hearing=hearing)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "hearing_reminders.schedule_reminders_for_hearing failed: %s",
+            exc,
+        )
     session.commit()
     session.refresh(hearing)
     return _hearing_record(hearing)

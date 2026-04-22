@@ -106,14 +106,22 @@ export default function AdminPage() {
         title="Admin & governance"
         description="Audit trail export is live. Tenant profile, SSO, AI policy, and plan management follow in §10.1–§10.3."
         actions={
-          canTeamsManage ? (
+          <div className="flex items-center gap-2">
             <Link
-              href="/app/admin/teams"
+              href="/app/admin/notifications"
               className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-line)] bg-white px-3 py-1.5 text-sm font-medium text-[var(--color-ink-2)] hover:bg-[var(--color-bg-2)]"
             >
-              <UsersIcon className="h-4 w-4" aria-hidden /> Manage teams
+              Notifications
             </Link>
-          ) : null
+            {canTeamsManage ? (
+              <Link
+                href="/app/admin/teams"
+                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-line)] bg-white px-3 py-1.5 text-sm font-medium text-[var(--color-ink-2)] hover:bg-[var(--color-bg-2)]"
+              >
+                <UsersIcon className="h-4 w-4" aria-hidden /> Manage teams
+              </Link>
+            ) : null}
+          </div>
         }
       />
 

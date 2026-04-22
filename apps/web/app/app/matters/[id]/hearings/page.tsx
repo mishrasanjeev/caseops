@@ -428,17 +428,21 @@ function ScheduleHearingDialog({ matterId }: { matterId: string }): React.JSX.El
               onChange={(e) => setJudgeName(e.target.value)}
             />
           </div>
-          {/* BUG-013 Hari 2026-04-21: reminders aren't wired yet
-              (requires Temporal + email/SMS provider, tracked under
-              MOD-TS-007). Set expectations in the dialog so users
-              don't silently wait on a notification that never fires. */}
+          {/* BUG-013 — dark-launched on 2026-04-22. When the hearing
+              is created, backend persists ``hearing_reminders`` rows
+              at T-24h and T-1h per configured offsets. The worker
+              drains them when SendGrid credentials are present; until
+              then the rows wait at status=queued. This copy is honest
+              about that state. */}
           <p
             className="rounded-md border border-[var(--color-line)] bg-[var(--color-bg-2)] px-3 py-2 text-xs text-[var(--color-mute)]"
             role="note"
           >
             <strong className="font-medium text-[var(--color-ink-2)]">Reminders:</strong>{" "}
-            email + in-app reminders aren't sent yet. The hearing will appear on
-            this page and on the matter overview — check back closer to the date.
+            the hearing will appear on this page and on the matter overview.
+            Email reminders (T-24h and T-1h) are scheduled the moment the
+            hearing is saved — they'll be delivered once the workspace's
+            email provider is configured.
           </p>
           <DialogFooter>
             <Button

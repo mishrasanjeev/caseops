@@ -15,6 +15,7 @@ from caseops_api.api.routes import (
     intake,
     matters,
     meta,
+    notifications,
     outside_counsel,
     payments,
     recommendations,
@@ -48,4 +49,11 @@ api_router.include_router(clients.router, prefix="/clients", tags=["clients"])
 # keep the URL shape consistent with the rest of the matter surface.
 api_router.include_router(
     clients.matter_scoped_router, prefix="/matters", tags=["clients"],
+)
+# Hearing-reminders surface (BUG-013): admin list + SendGrid webhook.
+api_router.include_router(
+    notifications.admin_router, prefix="/admin", tags=["notifications"],
+)
+api_router.include_router(
+    notifications.webhook_router, prefix="/webhooks", tags=["webhooks"],
 )
