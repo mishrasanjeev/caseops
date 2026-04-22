@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 
 from caseops_api.services.contract_intelligence import (
     DEFAULT_INDIAN_COMMERCIAL_PLAYBOOK,
+    _structured_with_retry,
 )
 from caseops_api.services.contract_redline import parse_redline_docx
 
@@ -135,6 +136,61 @@ def test_install_default_playbook_preserves_user_authored_rules(
     assert len(workspace["playbook_rules"]) == (
         len(DEFAULT_INDIAN_COMMERCIAL_PLAYBOOK) + 1
     )
+
+
+def test_structured_with_retry_returns_actionable_422_when_provider_keeps_failing() -> None:
+    """Strict Ledger #9 (2026-04-22) — Ram-BUG-009 (clauses) and
+    Ram-BUG-010 (obligations) were generic 500s because contract
+    intelligence only caught LLMResponseFormatError. The
+    AnthropicProvider 503 wraps as LLMProviderError (parent), which
+    slipped past the catch and surfaced as opaque 500s with no
+    actionable detail.
+
+    Commit 4104265 introduced ``_structured_with_retry`` (same-model
+    retry on LLMProviderError, then 422 with actionable detail).
+    This is a unit test of that helper — covers all three call
+    sites uniformly (extract_clauses, extract_obligations,
+    compare_playbook) without bootstrapping the full upload flow.
+    """
+    from fastapi import HTTPException
+    from pydantic import BaseModel
+
+    from caseops_api.services.llm import LLMCallContext, LLMProviderError
+
+    class _AlwaysFails:
+        name = "mock"
+        model = "mock-503"
+
+        def generate(self, messages, **_kw):
+            raise LLMProviderError(
+                "Anthropic call failed: 503 overloaded — please retry",
+            )
+
+    class _Schema(BaseModel):
+        ok: bool
+
+    try:
+        _structured_with_retry(
+            _AlwaysFails(),
+            schema=_Schema,
+            messages=[],
+            context=LLMCallContext(
+                purpose="metadata_extract",
+                tenant_id="t-test",
+                matter_id=None,
+            ),
+            temperature=0.0,
+            max_tokens=512,
+            session=None,
+            feature="extract clauses",
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 422
+        assert "Could not extract clauses" in exc.detail
+        assert "LLMProviderError" in exc.detail
+        assert "retry in a minute" in exc.detail.lower()
+    else:
+        raise AssertionError("expected HTTPException 422 after both retries")
 
 
 def test_parse_redline_docx_recovers_insertions_and_deletions() -> None:

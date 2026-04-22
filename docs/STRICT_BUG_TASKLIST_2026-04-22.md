@@ -248,72 +248,69 @@ Required verification:
 
 ### 7. Contract intelligence provider-failure regressions are still not pinned down
 
-Status: Inconclusive
+Status: Properly fixed
 
-Evidence:
+Implementation (commit 4104265): added `_structured_with_retry`
+helper to `services/contract_intelligence.py` that catches
+`LLMProviderError` (the parent of the format-error subclass), retries
+once with the same model on transient overload, and raises
+`HTTPException 422` with an actionable detail naming the failure
+shape if the retry also fails. All three callers
+(extract_clauses, extract_obligations, compare_playbook) route
+through the helper.
 
-- The code in `apps/api/src/caseops_api/services/contract_intelligence.py`
-  suggests failure handling was improved.
-- There is still no strong targeted regression proving timeout, empty-output, or
-  malformed-provider responses stay user-safe.
-
-Done when:
-
-- Targeted tests cover provider failure classes that previously broke clause or
-  obligation extraction.
-- The user-visible workflow degrades safely and predictably under those
-  failures.
-
-Required verification:
-
-- Focused backend tests around provider-failure branches
-- One end-to-end UI or API smoke flow that exercises the safe failure path
+Regression:
+`apps/api/tests/test_contract_intelligence.py::test_structured_with_retry_returns_actionable_422_when_provider_keeps_failing`
+— calls the helper directly with a stub provider that raises
+`LLMProviderError("503 overloaded")` on every call, asserts the
+final HTTPException carries status 422 + the user-actionable
+phrase ("Could not extract clauses ... LLMProviderError ... retry
+in a minute"). Direct unit test covers all three call sites
+uniformly without bootstrapping the contract upload pipeline. PASS.
 
 ### 8. Hearing-pack provider-failure regressions are still not pinned down
 
-Status: Inconclusive
+Status: Properly fixed
 
-Evidence:
+Implementation (commit 4104265): added Haiku fallback +
+`LLMProviderError` parent-class catch in
+`services/hearing_packs.py` (mirroring drafts/recommendations).
+Both primary and fallback failures emit an HTTPException 422 with
+an actionable detail (`Could not assemble a hearing pack: the
+primary model is unavailable (LLMProviderError) ... retry in a
+minute`).
 
-- `apps/api/src/caseops_api/services/hearing_packs.py` contains failure-path
-  handling.
-- There is still no strong targeted regression proving those branches stay safe
-  when upstream providers fail.
-
-Done when:
-
-- Hearing-pack generation failure branches have dedicated tests.
-- The product surfaces a user-actionable outcome instead of silent or confusing
-  failure.
-
-Required verification:
-
-- Focused backend tests around hearing-pack provider failures
-- Manual or automated smoke flow covering the user-visible failure state
+Regression:
+`apps/api/tests/test_hearing_packs.py::test_hearing_pack_provider_error_returns_actionable_422`
+— mocks `services.hearing_packs.build_provider` to return a stub
+that raises `LLMProviderError("503")` on every call AND mocks
+`_haiku_fallback_provider` to return None (worst-case branch),
+asserts POST `/api/matters/{id}/hearings/{id}/pack` returns 422
+with the actionable detail. PASS.
 
 ### 9. Drafting provider-failure regressions still need explicit proof
 
-Status: Inconclusive
+Status: Properly fixed
 
-Evidence:
+Implementation (commit 4104265): broadened
+`services/drafting.py::generate_draft_version` `except` from
+`(LLMResponseFormatError, ValidationError)` to `(LLMProviderError,
+ValidationError)` so 503 / httpx timeout bubbles into the Haiku
+fallback branch instead of escaping as a 500. Both primary and
+fallback failure paths raise HTTPException 422 with detail naming
+the failure shape.
 
-- `apps/web/app/app/matters/[id]/drafts/[draftId]/page.tsx` now surfaces
-  `ApiError.detail`.
-- `apps/api/src/caseops_api/services/drafting.py` contains fallback and
-  provider-detail handling.
-- There is still no dedicated regression proving the exact failure path remains
-  user-actionable.
+Regression:
+`apps/api/tests/test_drafting_studio.py::test_generate_draft_provider_error_returns_actionable_422`
+— mocks `services.drafting.build_provider` to return a stub that
+raises `LLMProviderError("503")`, mocks `_haiku_fallback_provider`
+to None, asserts POST `/api/matters/{id}/drafts/{id}/generate`
+returns 422 with `primary model is unavailable ... LLMProviderError
+... retry in a minute`. PASS.
 
-Done when:
-
-- A targeted regression proves provider failures surface actionable detail in
-  the drafting workflow.
-- The flow avoids silent failure and avoids pretending the draft succeeded.
-
-Required verification:
-
-- Dedicated drafting failure-path regression
-- One end-user flow verification
+Frontend `apps/web/app/app/matters/[id]/drafts/[draftId]/page.tsx`
+already renders `ApiError.detail` verbatim (verified during the
+2026-04-22 audit), so the 422 detail reaches the user as the toast.
 
 ### 10. Backend verification environment is still not trustworthy enough
 

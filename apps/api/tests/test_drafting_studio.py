@@ -336,6 +336,60 @@ def test_generate_increments_revision_and_keeps_history(client: TestClient) -> N
     assert second["current_version_id"] == newest["id"]
 
 
+def test_generate_draft_provider_error_returns_actionable_422(
+    client: TestClient, monkeypatch,
+) -> None:
+    """Strict Ledger #7 (2026-04-22) — mirrors the recommendations
+    regression for the drafting endpoint. AnthropicProvider wraps
+    503 / httpx timeout in ``LLMProviderError`` (parent of
+    ``LLMResponseFormatError``). Before commit 4104265 the drafting
+    service caught only the format-error child; 503s escaped past
+    the Haiku fallback and surfaced as opaque 500s with no
+    actionable detail.
+
+    Regression: when the primary provider raises
+    ``LLMProviderError`` AND the Haiku fallback is unavailable, the
+    endpoint MUST return a 422 with detail that names the failure
+    shape and tells the user what to do — not a 500 with no body.
+    """
+    from caseops_api.services.llm import LLMMessage, LLMProviderError
+
+    token = str(bootstrap_company(client)["access_token"])
+    matter_id = _create_matter(client, token, "DS-PROVIDER-503")
+    _seed_authority(neutral_citation="2024 SCC OnLine SC 503")
+    draft = _create_draft(client, token, matter_id)
+
+    class _OverloadedProvider:
+        name = "mock"
+        model = "mock-overload-503"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            raise LLMProviderError(
+                "Anthropic call failed: 503 overloaded — please retry",
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.drafting.build_provider",
+        lambda *a, **kw: _OverloadedProvider(),
+    )
+    # Force the no-fallback branch so we test the worst-case detail.
+    monkeypatch.setattr(
+        "caseops_api.services.drafting._haiku_fallback_provider",
+        lambda: None,
+    )
+
+    resp = client.post(
+        f"/api/matters/{matter_id}/drafts/{draft['id']}/generate",
+        headers=auth_headers(token),
+        json={},
+    )
+    assert resp.status_code == 422, resp.text
+    detail = resp.json()["detail"]
+    assert "primary model is unavailable" in detail
+    assert "LLMProviderError" in detail
+    assert "retry in a minute" in detail.lower()
+
+
 def test_create_draft_stepper_facts_passthrough(client: TestClient) -> None:
     """R-UI: the stepper POSTs template_type + facts; both must be
     persisted and surfaced on the response, and the fact values must

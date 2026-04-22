@@ -216,3 +216,52 @@ def test_hearing_pack_is_tenant_scoped(client: TestClient) -> None:
         json={},
     )
     assert forbidden_generate.status_code == 404
+
+
+def test_hearing_pack_provider_error_returns_actionable_422(
+    client: TestClient, monkeypatch,
+) -> None:
+    """Strict Ledger #8 (2026-04-22) — Ram-BUG-001 was a 500 with a
+    generic toast because hearing_packs.py only caught
+    LLMResponseFormatError; AnthropicProvider 503 wraps as
+    LLMProviderError (parent) and slipped past. Commit 4104265
+    broadened the catch + added a Haiku fallback. Regression: when
+    both primary AND Haiku fallback raise LLMProviderError, the
+    endpoint MUST return a 422 with detail naming the failure shape
+    + telling the user what to do.
+    """
+    from caseops_api.services.llm import LLMMessage, LLMProviderError
+
+    token = str(bootstrap_company(client)["access_token"])
+    matter_id = _create_matter(client, token, "HP-PROV-503")
+    hearing_id = _create_hearing(client, token, matter_id)
+
+    class _OverloadedProvider:
+        name = "mock"
+        model = "mock-overload-503"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            raise LLMProviderError(
+                "Anthropic call failed: 503 overloaded — please retry",
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.hearing_packs.build_provider",
+        lambda *a, **kw: _OverloadedProvider(),
+    )
+    # No fallback configured — exercises the worst-case detail.
+    monkeypatch.setattr(
+        "caseops_api.services.hearing_packs._haiku_fallback_provider",
+        lambda: None,
+    )
+
+    resp = client.post(
+        f"/api/matters/{matter_id}/hearings/{hearing_id}/pack",
+        headers=auth_headers(token),
+        json={},
+    )
+    assert resp.status_code == 422, resp.text
+    detail = resp.json()["detail"]
+    assert "primary model is unavailable" in detail
+    assert "LLMProviderError" in detail
+    assert "retry in a minute" in detail.lower()
