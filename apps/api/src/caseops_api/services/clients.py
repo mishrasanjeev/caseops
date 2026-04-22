@@ -49,8 +49,11 @@ def _client_record(
         primary_contact_name=client.primary_contact_name,
         primary_contact_email=client.primary_contact_email,
         primary_contact_phone=client.primary_contact_phone,
+        address_line_1=client.address_line_1,
+        address_line_2=client.address_line_2,
         city=client.city,
         state=client.state,
+        postal_code=client.postal_code,
         country=client.country,
         pan=client.pan,
         gstin=client.gstin,
@@ -120,8 +123,17 @@ def create_client(
             payload.primary_contact_phone.strip()
             if payload.primary_contact_phone else None
         ),
+        address_line_1=(
+            payload.address_line_1.strip() if payload.address_line_1 else None
+        ),
+        address_line_2=(
+            payload.address_line_2.strip() if payload.address_line_2 else None
+        ),
         city=payload.city.strip() if payload.city else None,
         state=payload.state.strip() if payload.state else None,
+        postal_code=(
+            payload.postal_code.strip() if payload.postal_code else None
+        ),
         country=payload.country.strip() if payload.country else None,
         pan=payload.pan.strip().upper() if payload.pan else None,
         gstin=payload.gstin.strip().upper() if payload.gstin else None,
@@ -218,6 +230,7 @@ def update_client(
             detail=f"Unknown kyc_status {update_data['kyc_status']!r}.",
         )
     for field in ("name", "primary_contact_name", "primary_contact_phone",
+                  "address_line_1", "address_line_2", "postal_code",
                   "city", "state", "country", "pan", "gstin"):
         if field in update_data and update_data[field] is not None:
             value = str(update_data[field]).strip()

@@ -1575,8 +1575,14 @@ export type ClientRecord = {
   primary_contact_name: string | null;
   primary_contact_email: string | null;
   primary_contact_phone: string | null;
+  // Strict Ledger #4 (BUG-022): full street address. Hari's bug
+  // treated "address" as one field — the model breaks it down so
+  // every typed piece round-trips and renders on the detail page.
+  address_line_1: string | null;
+  address_line_2: string | null;
   city: string | null;
   state: string | null;
+  postal_code: string | null;
   country: string | null;
   pan: string | null;
   gstin: string | null;
@@ -1601,8 +1607,11 @@ export type ClientCreateInput = {
   primary_contact_name?: string | null;
   primary_contact_email?: string | null;
   primary_contact_phone?: string | null;
+  address_line_1?: string | null;
+  address_line_2?: string | null;
   city?: string | null;
   state?: string | null;
+  postal_code?: string | null;
   country?: string | null;
   pan?: string | null;
   gstin?: string | null;

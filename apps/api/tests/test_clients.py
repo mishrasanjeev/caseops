@@ -77,6 +77,63 @@ def test_client_get_returns_profile(client: TestClient) -> None:
     assert resp.json()["total_matters_count"] == 0
 
 
+def test_client_full_address_round_trips(client: TestClient) -> None:
+    """Strict Ledger #4 (BUG-022, 2026-04-22): the prior schema only
+    persisted city/state/country, so a typed door-no + street was
+    silently discarded. Migration 20260422_0002 added
+    address_line_1, address_line_2, postal_code; this regression
+    proves all three fields round-trip cleanly through create →
+    fetch → update → re-fetch.
+    """
+    token = str(bootstrap_company(client)["access_token"])
+    create = _mk_client(
+        client,
+        token,
+        address_line_1="Door no. 12, MG Road",
+        address_line_2="Brigade Towers, 4th floor",
+        city="Bengaluru",
+        state="Karnataka",
+        postal_code="560001",
+        country="India",
+    )
+    assert create.status_code == 200, create.text
+    created = create.json()
+    assert created["address_line_1"] == "Door no. 12, MG Road"
+    assert created["address_line_2"] == "Brigade Towers, 4th floor"
+    assert created["postal_code"] == "560001"
+    assert created["city"] == "Bengaluru"
+    assert created["state"] == "Karnataka"
+    assert created["country"] == "India"
+
+    # Fetch — same shape comes back.
+    fetched = client.get(
+        f"/api/clients/{created['id']}", headers=auth_headers(token),
+    )
+    assert fetched.status_code == 200
+    body = fetched.json()
+    for field in (
+        "address_line_1", "address_line_2", "postal_code",
+        "city", "state", "country",
+    ):
+        assert body[field] == created[field], (field, body[field])
+
+    # Update — patch all four address-tier fields and re-read.
+    patch = client.patch(
+        f"/api/clients/{created['id']}",
+        headers=auth_headers(token),
+        json={
+            "address_line_1": "1 Embassy Park Drive",
+            "address_line_2": None,  # explicit clear
+            "postal_code": "560034",
+        },
+    )
+    assert patch.status_code == 200, patch.text
+    updated = patch.json()
+    assert updated["address_line_1"] == "1 Embassy Park Drive"
+    assert updated["address_line_2"] is None
+    assert updated["postal_code"] == "560034"
+
+
 def test_client_update_changes_fields(client: TestClient) -> None:
     token = str(bootstrap_company(client)["access_token"])
     cid = _mk_client(client, token).json()["id"]

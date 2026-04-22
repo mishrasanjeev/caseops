@@ -173,12 +173,22 @@ export default function ClientProfilePage() {
                 {[c.pan, c.gstin].filter(Boolean).join(" · ") || "—"}
               </dd>
             </div>
-            {/* Hari-BUG-022 (2026-04-22): the prior layout collapsed
-                city/state/country into the page-header description,
-                where missing fields were invisible. Show address in
-                the Contact dl alongside email/phone so the user can
-                see exactly what's recorded — with the same dt/dd
-                empty-state treatment. */}
+            {/* Strict Ledger #4 (BUG-022 follow-up, 2026-04-22):
+                full street address renders alongside contact in
+                the Contact dl. Each piece on its own row so the
+                user can see exactly what's recorded vs missing. */}
+            <div className="sm:col-span-2">
+              <dt className="text-xs text-[var(--color-mute)]">Address line 1</dt>
+              <dd className="text-sm font-medium text-[var(--color-ink-2)]">
+                {c.address_line_1 ?? "—"}
+              </dd>
+            </div>
+            <div className="sm:col-span-2">
+              <dt className="text-xs text-[var(--color-mute)]">Address line 2</dt>
+              <dd className="text-sm font-medium text-[var(--color-ink-2)]">
+                {c.address_line_2 ?? "—"}
+              </dd>
+            </div>
             <div>
               <dt className="text-xs text-[var(--color-mute)]">City</dt>
               <dd className="text-sm font-medium text-[var(--color-ink-2)]">
@@ -189,6 +199,12 @@ export default function ClientProfilePage() {
               <dt className="text-xs text-[var(--color-mute)]">State</dt>
               <dd className="text-sm font-medium text-[var(--color-ink-2)]">
                 {c.state ?? "—"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-[var(--color-mute)]">Postal code</dt>
+              <dd className="text-sm font-medium text-[var(--color-ink-2)]">
+                {c.postal_code ?? "—"}
               </dd>
             </div>
             <div>

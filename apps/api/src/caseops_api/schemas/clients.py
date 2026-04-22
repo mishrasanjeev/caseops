@@ -16,8 +16,15 @@ class ClientCreateRequest(BaseModel):
     primary_contact_name: str | None = Field(default=None, max_length=255)
     primary_contact_email: EmailStr | None = None
     primary_contact_phone: str | None = Field(default=None, max_length=40)
+    # Strict Ledger #4 (BUG-022): full street address. Hari's bug
+    # treated "address" as a single concept — we model it as
+    # line_1 + line_2 + city + state + postal_code + country so the
+    # detail page can render every piece of what the user typed.
+    address_line_1: str | None = Field(default=None, max_length=255)
+    address_line_2: str | None = Field(default=None, max_length=255)
     city: str | None = Field(default=None, max_length=255)
     state: str | None = Field(default=None, max_length=120)
+    postal_code: str | None = Field(default=None, max_length=20)
     country: str | None = Field(default="India", max_length=120)
     pan: str | None = Field(default=None, max_length=20)
     gstin: str | None = Field(default=None, max_length=20)
@@ -31,8 +38,11 @@ class ClientUpdateRequest(BaseModel):
     primary_contact_name: str | None = Field(default=None, max_length=255)
     primary_contact_email: EmailStr | None = None
     primary_contact_phone: str | None = Field(default=None, max_length=40)
+    address_line_1: str | None = Field(default=None, max_length=255)
+    address_line_2: str | None = Field(default=None, max_length=255)
     city: str | None = Field(default=None, max_length=255)
     state: str | None = Field(default=None, max_length=120)
+    postal_code: str | None = Field(default=None, max_length=20)
     country: str | None = Field(default=None, max_length=120)
     pan: str | None = Field(default=None, max_length=20)
     gstin: str | None = Field(default=None, max_length=20)
@@ -61,8 +71,11 @@ class ClientRecord(BaseModel):
     primary_contact_name: str | None
     primary_contact_email: str | None
     primary_contact_phone: str | None
+    address_line_1: str | None
+    address_line_2: str | None
     city: str | None
     state: str | None
+    postal_code: str | None
     country: str | None
     pan: str | None
     gstin: str | None

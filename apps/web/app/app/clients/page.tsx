@@ -157,12 +157,16 @@ function NewClientDialog(): React.JSX.Element {
   const [contactName, setContactName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  // Strict Ledger #4 (BUG-022, 2026-04-22): the form now captures
+  // the full mailing address — line_1, line_2, city, state,
+  // postal_code, country. The backend gained address_line_1 +
+  // address_line_2 + postal_code columns in migration 20260422_0002
+  // so what the user types round-trips end-to-end.
+  const [addressLine1, setAddressLine1] = useState("");
+  const [addressLine2, setAddressLine2] = useState("");
   const [city, setCity] = useState("");
-  // Hari-BUG-022 (2026-04-22): the form previously only captured city,
-  // so state/country always rendered as "—" on the detail page —
-  // making the client profile feel incomplete. Both fields are
-  // already on the backend ClientCreateRequest schema.
   const [stateName, setStateName] = useState("");
+  const [postalCode, setPostalCode] = useState("");
   const [country, setCountry] = useState("India");
 
   const mutation = useMutation({
@@ -173,8 +177,11 @@ function NewClientDialog(): React.JSX.Element {
         primary_contact_name: contactName.trim() || null,
         primary_contact_email: email.trim() || null,
         primary_contact_phone: phone.trim() || null,
+        address_line_1: addressLine1.trim() || null,
+        address_line_2: addressLine2.trim() || null,
         city: city.trim() || null,
         state: stateName.trim() || null,
+        postal_code: postalCode.trim() || null,
         country: country.trim() || null,
       }),
     onSuccess: async () => {
@@ -184,8 +191,11 @@ function NewClientDialog(): React.JSX.Element {
       setContactName("");
       setEmail("");
       setPhone("");
+      setAddressLine1("");
+      setAddressLine2("");
       setCity("");
       setStateName("");
+      setPostalCode("");
       setCountry("India");
       setClientType("individual");
       await queryClient.invalidateQueries({ queryKey: ["clients", "list"] });
@@ -297,6 +307,15 @@ function NewClientDialog(): React.JSX.Element {
               />
             </div>
             <div>
+              <Label htmlFor="client-postal">Postal code</Label>
+              <Input
+                id="client-postal"
+                value={postalCode}
+                onChange={(e) => setPostalCode(e.target.value)}
+                maxLength={20}
+              />
+            </div>
+            <div>
               <Label htmlFor="client-country">Country</Label>
               <Input
                 id="client-country"
@@ -305,6 +324,27 @@ function NewClientDialog(): React.JSX.Element {
                 maxLength={120}
               />
             </div>
+          </div>
+          {/* Strict Ledger #4 (BUG-022): full street address. */}
+          <div>
+            <Label htmlFor="client-address-1">Address line 1</Label>
+            <Input
+              id="client-address-1"
+              value={addressLine1}
+              onChange={(e) => setAddressLine1(e.target.value)}
+              maxLength={255}
+              placeholder="Door no., street"
+            />
+          </div>
+          <div>
+            <Label htmlFor="client-address-2">Address line 2 (optional)</Label>
+            <Input
+              id="client-address-2"
+              value={addressLine2}
+              onChange={(e) => setAddressLine2(e.target.value)}
+              maxLength={255}
+              placeholder="Locality, landmark"
+            />
           </div>
           <DialogFooter>
             <Button

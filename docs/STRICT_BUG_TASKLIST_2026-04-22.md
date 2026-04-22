@@ -175,27 +175,52 @@ Done when:
 
 ### 4. BUG-022 - Client detail completeness is still below the reported need
 
-Status: Partially fixed
+Status: Properly fixed
 
-Evidence:
+Implementation:
 
-- `apps/web/app/app/clients/[id]/page.tsx` now renders contact plus
-  city/state/country.
-- `apps/web/app/app/clients/page.tsx` now captures more locality fields.
-- `apps/api/src/caseops_api/schemas/clients.py` still has no real street-address
-  field, so the product still cannot store a full address.
+- DB columns added via Alembic `20260422_0002_clients_full_address`
+  (uses `op.batch_alter_table` so SQLite-backed tests + Postgres
+  prod both upgrade cleanly): `address_line_1`, `address_line_2`,
+  `postal_code` (all nullable, varchar 255 / 255 / 20).
+- Model `Client` (apps/api/src/caseops_api/db/models.py) gains the
+  three columns + a docstring noting the BUG-022 rationale.
+- Pydantic schemas (`apps/api/src/caseops_api/schemas/clients.py`):
+  `ClientCreateRequest`, `ClientUpdateRequest`, `ClientRecord` all
+  carry the three new fields.
+- Service (`apps/api/src/caseops_api/services/clients.py`):
+  - `_client_record` returns the new fields
+  - `create_client` strips + persists them
+  - `update_client` field-list now includes the new fields so
+    `PATCH` can clear them (via the existing strip-on-update path)
+- Frontend types (`apps/web/lib/api/endpoints.ts`): `ClientRecord`
+  + `ClientCreateInput` mirror the backend exactly (same field
+  names, same nullability).
+- Create form (`apps/web/app/app/clients/page.tsx`): two new
+  Input rows for Address line 1 + Address line 2, plus a Postal
+  code input next to State + Country. State persists via
+  `useState` and is wired into the createClient mutation.
+- Detail page (`apps/web/app/app/clients/[id]/page.tsx`): Contact
+  card now renders Address line 1, Address line 2, City, State,
+  Postal code, Country as separate dt/dd rows. Empty fields show
+  "—" so the user sees exactly what's recorded vs missing.
+
+Verification:
+
+- `apps/api/tests/test_clients.py::test_client_full_address_round_trips`
+  asserts CREATE → fetch → PATCH (with explicit clear of
+  address_line_2) → re-fetch all preserve the canonical fields. PASS.
+- Full `test_clients.py` suite: 15/15 still pass.
+- `npx tsc --noEmit` on web: clean.
 
 Done when:
 
-- The client model and UI support the address detail required by the bug, or
-  the product requirement is explicitly narrowed and the bug statement is
-  updated to match reality.
-- Create, edit, and detail screens all show the same supported address fields.
-
-Required verification:
-
-- API schema test for client address fields
-- UI create/detail regression covering the full supported address
+- ✅ The client model supports the full mailing address (street +
+  locality + postal code + country).
+- ✅ Create form, detail view, and update path all handle the same
+  field set.
+- ✅ Round-trip regression pinned in the backend test suite so a
+  future schema or service drift fails CI.
 
 ### 5. BUG-013 - Reminder parity is still incomplete
 

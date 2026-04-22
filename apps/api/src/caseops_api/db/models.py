@@ -1288,8 +1288,15 @@ class Client(Base):
     primary_contact_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     primary_contact_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     primary_contact_phone: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # Strict Ledger #4 (BUG-022, 2026-04-22): full street address.
+    # Hari's bug said "address" — the original schema only had
+    # city/state/country, so a typed door-no + street was silently
+    # discarded. Optional + nullable to preserve back-compat.
+    address_line_1: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    address_line_2: Mapped[str | None] = mapped_column(String(255), nullable=True)
     city: Mapped[str | None] = mapped_column(String(255), nullable=True)
     state: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    postal_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
     country: Mapped[str | None] = mapped_column(String(120), nullable=True, default="India")
     pan: Mapped[str | None] = mapped_column(String(20), nullable=True)
     gstin: Mapped[str | None] = mapped_column(String(20), nullable=True)
