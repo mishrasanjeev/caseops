@@ -44,11 +44,12 @@ from caseops_api.services.audit import record_from_context
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.llm import (
     PURPOSE_HEARING_PACK,
+    AnthropicProvider,
     LLMCallContext,
     LLMCompletion,
     LLMMessage,
     LLMProvider,
-    LLMResponseFormatError,
+    LLMProviderError,
     build_provider,
     generate_structured,
     max_tokens_for_purpose,
@@ -62,6 +63,26 @@ PURPOSE = "hearing_pack"
 
 # The item kinds we accept from the model. Anything else is dropped.
 _ALLOWED_KINDS = {kind.value for kind in HearingPackItemKind}
+
+# Haiku fallback (parallels services.drafting / services.recommendations).
+# 2026-04-22 Ram-BUG-001: hearing pack assembly was failing on Anthropic
+# 503 / overload because we only retried on format errors. Catching the
+# parent LLMProviderError + Haiku retry gives us the same resilience the
+# drafts and recommendations endpoints already had.
+_HAIKU_FALLBACK_MODEL = "claude-haiku-4-5-20251001"
+
+
+def _haiku_fallback_provider() -> LLMProvider | None:
+    from caseops_api.core.settings import get_settings
+
+    settings = get_settings()
+    if (settings.llm_provider or "").lower() != "anthropic":
+        return None
+    return AnthropicProvider(
+        model=_HAIKU_FALLBACK_MODEL,
+        api_key=settings.llm_api_key,
+        prompt_cache=bool(getattr(settings, "llm_prompt_cache_enabled", True)),
+    )
 
 
 class _LLMItem(BaseModel):
@@ -349,21 +370,51 @@ def generate_hearing_pack(
         matter_id=matter.id,
         purpose=PURPOSE,
     )
-    try:
-        response, completion = generate_structured(
-            llm,
+    def _invoke(active: LLMProvider) -> tuple[_LLMPackResponse, LLMCompletion]:
+        return generate_structured(
+            active,
             schema=_LLMPackResponse,
             messages=messages,
             context=llm_context,
             max_tokens=max_tokens_for_purpose(PURPOSE_HEARING_PACK),
             session=session,
         )
-    except LLMResponseFormatError as exc:
-        logger.warning("Hearing pack LLM refused / malformed: %s", exc)
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Could not assemble a valid hearing pack.",
-        ) from exc
+
+    try:
+        response, completion = _invoke(llm)
+    except LLMProviderError as exc:
+        # Ram-BUG-001 (2026-04-22): catching only the format-error
+        # child let Anthropic 503 / overload escape and surface as a
+        # generic 500. Catch the parent + retry once with Haiku before
+        # giving up so a transient provider blip doesn't break the
+        # hearing-pack workflow on the day-of-court page.
+        logger.warning(
+            "Hearing pack LLM %s failed (%s: %s); retrying with Haiku",
+            getattr(llm, "model", "<unknown>"),
+            type(exc).__name__,
+            exc,
+        )
+        fallback = _haiku_fallback_provider()
+        if fallback is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    f"Could not assemble a hearing pack: the primary model "
+                    f"is unavailable ({type(exc).__name__}) and no Haiku "
+                    "fallback is configured. Please retry in a minute."
+                ),
+            ) from exc
+        try:
+            response, completion = _invoke(fallback)
+        except LLMProviderError as retry_exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    f"Could not assemble a hearing pack: both primary and "
+                    f"Haiku fallback failed ({type(retry_exc).__name__}). "
+                    "Please retry in a minute."
+                ),
+            ) from retry_exc
 
     model_run = _write_model_run(
         session,

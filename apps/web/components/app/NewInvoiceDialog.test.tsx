@@ -48,6 +48,30 @@ describe("NewInvoiceDialog", () => {
     expect(createInvoiceMock).not.toHaveBeenCalled();
   });
 
+  it("disables submit when no billable source is selected (Ram-BUG-008)", async () => {
+    // The user opens the dialog, clears manual items, and unchecks
+    // "Include uninvoiced time entries". The Issue button must be
+    // disabled and an inline note must explain why — instead of the
+    // user discovering the rule only after a 400 toast.
+    const user = userEvent.setup();
+    render(withClient(<NewInvoiceDialog matterId="m1" />));
+    await user.click(screen.getByTestId("new-invoice-trigger"));
+    await user.clear(screen.getByLabelText(/Invoice number/i));
+    await user.type(screen.getByLabelText(/Invoice number/i), "INV-2026-9999");
+
+    const includeCheckbox = screen.getByLabelText(
+      /Include uninvoiced billable time/i,
+    );
+    await user.click(includeCheckbox); // toggles from default-true to false
+
+    const submit = screen.getByTestId("new-invoice-submit");
+    expect(submit).toBeDisabled();
+    expect(
+      screen.getByText(/at least one manual line item/i),
+    ).toBeInTheDocument();
+    expect(createInvoiceMock).not.toHaveBeenCalled();
+  });
+
   it("submits with the expected shape and converts rupees to minor units", async () => {
     const user = userEvent.setup();
     createInvoiceMock.mockResolvedValue({ id: "i1" });

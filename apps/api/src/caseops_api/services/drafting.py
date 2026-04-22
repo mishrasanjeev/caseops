@@ -74,7 +74,7 @@ from caseops_api.services.llm import (
     LLMCompletion,
     LLMMessage,
     LLMProvider,
-    LLMResponseFormatError,
+    LLMProviderError,
     build_provider,
     generate_structured,
     max_tokens_for_purpose,
@@ -644,12 +644,19 @@ def generate_draft_version(
 
     try:
         response, completion = _invoke(llm)
-    except (LLMResponseFormatError, ValidationError) as exc:
-        # Sonnet malformed-JSON defect — retry once with Haiku before
-        # giving up. Keeps drafts from silently hanging on a flaky
-        # primary model (BUG-001 / BUG-002, 2026-04-20).
+    except (LLMProviderError, ValidationError) as exc:
+        # Broadened from LLMResponseFormatError (2026-04-22, Hari/Ram
+        # bug batch III): Anthropic 503s / httpx timeouts / connection
+        # errors are wrapped in LLMProviderError (the parent), NOT the
+        # format-error child. Catching only the child let 503s escape
+        # past the Haiku retry and surface as opaque 500s — users saw
+        # "Could not generate a new version." with no actionable
+        # detail. Catching the parent means every recoverable upstream
+        # failure (overload, malformed JSON, schema mismatch) triggers
+        # the Haiku fallback, and only a Haiku-also-down scenario
+        # reaches the 422.
         logger.warning(
-            "Draft LLM %s refused / malformed: %s",
+            "Draft LLM %s refused / malformed / upstream error: %s",
             getattr(llm, "model", "<unknown>"),
             exc,
         )
@@ -657,17 +664,23 @@ def generate_draft_version(
         if fallback is None:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Could not assemble a valid draft.",
+                detail=(
+                    "Could not generate a draft: the primary model is "
+                    f"unavailable ({type(exc).__name__}) and no Haiku "
+                    "fallback is configured. Please retry in a minute."
+                ),
             ) from exc
         try:
             response, completion = _invoke(fallback)
-        except (LLMResponseFormatError, ValidationError) as retry_exc:
+        except (LLMProviderError, ValidationError) as retry_exc:
             logger.warning("Draft Haiku fallback also failed: %s", retry_exc)
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=(
-                    "Could not assemble a valid draft. Both primary model "
-                    "and Haiku fallback returned unusable output."
+                    "Could not generate a draft: both the primary model and "
+                    f"the Haiku fallback failed ({type(retry_exc).__name__}). "
+                    "Please retry in a minute, or contact support if this "
+                    "persists."
                 ),
             ) from retry_exc
 

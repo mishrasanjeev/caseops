@@ -78,13 +78,21 @@ export default function MatterOverviewPage() {
 
       <CounselRecommendationsCard matterId={data.matter.id} />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Last court order</CardTitle>
-          <CardDescription>Most recent imported or attached order.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {latestOrder ? (
+      {/* BUG-011 (Hari 2026-04-22 reopen): hide the "Last court order"
+          card on matters with no order yet, mirroring the Open tasks
+          treatment. The empty state with "Go to court sync" CTA reads
+          as a broken promise on a fresh matter — court sync only
+          works for adapter-backed courts (Delhi, Bombay, Karnataka,
+          Madras) and only after a court_name is set, which most
+          fresh matters don't have. When an order exists we render the
+          card; otherwise we keep the overview lean. */}
+      {latestOrder ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Last court order</CardTitle>
+            <CardDescription>Most recent imported or attached order.</CardDescription>
+          </CardHeader>
+          <CardContent>
             <div className="flex flex-col gap-1.5">
               <div className="text-xs font-medium uppercase tracking-wider text-[var(--color-mute-2)]">
                 {formatDate(latestOrder.order_date)}
@@ -103,23 +111,9 @@ export default function MatterOverviewPage() {
                 </span>
               ) : null}
             </div>
-          ) : (
-            <EmptyState
-              icon={ScrollText}
-              title="No orders yet"
-              description="Orders are imported by court sync or uploaded from the Documents tab."
-              action={
-                <Link
-                  className="inline-flex items-center justify-center gap-2 rounded-md bg-[var(--color-ink)] px-3 py-1.5 text-sm font-medium text-white hover:bg-[var(--color-ink-2)]"
-                  href={`/app/matters/${data.matter.id}/hearings`}
-                >
-                  Go to court sync
-                </Link>
-              }
-            />
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {/* BUG-011: Open tasks card only renders when there ARE tasks —
           there's no task-creation UI on the overview today, so an
@@ -154,27 +148,19 @@ export default function MatterOverviewPage() {
         </Card>
       ) : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Upcoming hearings</CardTitle>
-          <CardDescription>Next four on the calendar.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {upcomingHearings.length === 0 ? (
-            <EmptyState
-              icon={Gavel}
-              title="No hearings scheduled"
-              description="Import from the court feed or schedule one manually."
-              action={
-                <Link
-                  className="inline-flex items-center justify-center gap-2 rounded-md bg-[var(--color-ink)] px-3 py-1.5 text-sm font-medium text-white hover:bg-[var(--color-ink-2)]"
-                  href={`/app/matters/${data.matter.id}/hearings`}
-                >
-                  Schedule hearing
-                </Link>
-              }
-            />
-          ) : (
+      {/* BUG-011 (Hari 2026-04-22 reopen): symmetric with Open tasks
+          and Last court order — only render Upcoming hearings when
+          there are some. The "Schedule hearing" CTA lives in the
+          dedicated Hearings tab, which is one click away in the
+          matter sub-nav, so removing it here doesn't lose the
+          affordance. Keeps the overview honest on a fresh matter. */}
+      {upcomingHearings.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Upcoming hearings</CardTitle>
+            <CardDescription>Next four on the calendar.</CardDescription>
+          </CardHeader>
+          <CardContent>
             <ul className="flex flex-col gap-3">
               {upcomingHearings.map((h) => (
                 <li
@@ -193,9 +179,9 @@ export default function MatterOverviewPage() {
                 </li>
               ))}
             </ul>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card className="lg:col-span-3">
         <CardHeader className="flex-row items-center justify-between gap-4">

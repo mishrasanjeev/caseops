@@ -195,6 +195,53 @@ def test_generate_recommendation_refuses_when_no_verified_citations(
     assert any(run.status == "rejected_no_verified_citations" for run in runs)
 
 
+def test_recommendation_provider_error_returns_actionable_502(
+    client: TestClient, monkeypatch,
+) -> None:
+    """Ram-BUG-007 / Hari-BUG-020 (2026-04-22): a 503 / overload from
+    Anthropic was wrapped as ``LLMProviderError`` (parent of the
+    format-error subclass we used to catch). The narrow ``except
+    LLMResponseFormatError`` let it escape the Haiku-fallback branch
+    and surface as an opaque 500 with no actionable detail. Regression:
+    a primary provider that raises ``LLMProviderError`` must end up at
+    a 502 with a detail string the user can act on (model name,
+    "retry in a minute"), NOT at a 500 with no body."""
+    from caseops_api.services.llm import LLMMessage, LLMProviderError
+
+    _seed_relevant_authority()
+
+    class _OverloadedProvider:
+        name = "mock"
+        model = "mock-overload-503"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            raise LLMProviderError("Anthropic call failed: 503 overloaded")
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _OverloadedProvider(),
+    )
+    # Mock provider lookup → Haiku fallback returns None, so the path
+    # forces the "no fallback configured" branch which is the worst
+    # user-visible case we still need to make actionable.
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations._haiku_fallback_provider",
+        lambda: None,
+    )
+
+    token, _, matter_id = _setup_matter(client)
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "authority"},
+    )
+    assert response.status_code == 502, response.text
+    detail = response.json()["detail"]
+    # Detail must name the failure shape and tell the user what to do.
+    assert "primary model is unavailable" in detail
+    assert "LLMProviderError" in detail
+
+
 def test_shared_citation_credits_every_option_that_cites_it(
     client: TestClient, monkeypatch
 ) -> None:

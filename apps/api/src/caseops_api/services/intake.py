@@ -234,6 +234,30 @@ def promote_intake_request(
     client_name = row.business_unit or row.requester_name
     normalised_code = payload.matter_code.upper().strip()
 
+    # Ram-BUG-003 (2026-04-22): the original promote dialog only asked
+    # for matter_code; payload.practice_area arrived as None and the
+    # Matter insert blew up on the NOT NULL constraint at flush
+    # time, propagating as a generic 500 / "Could not promote
+    # request" with no actionable detail. Resolve practice_area via
+    # explicit payload → category map → fallback. The category enum
+    # the intake form ships maps cleanly to the matter taxonomy used
+    # in retrieval / recommendations, so the auto-derive is safe.
+    _CATEGORY_TO_PRACTICE_AREA: dict[str, str] = {
+        "contract_review": "commercial",
+        "policy_question": "regulatory",
+        "litigation_support": "litigation",
+        "compliance": "regulatory",
+        "employment": "employment",
+        "ip_trademark": "ip",
+        "m_and_a": "commercial",
+        "regulatory": "regulatory",
+        "other": "general",
+    }
+    resolved_practice_area = (
+        (payload.practice_area or "").strip()
+        or _CATEGORY_TO_PRACTICE_AREA.get((row.category or "").lower(), "general")
+    )
+
     # Pre-flight uniqueness check — the (company_id, matter_code) unique
     # constraint would otherwise raise an IntegrityError on flush and
     # bubble up as a generic 500 / "Could not promote request" for the
@@ -262,7 +286,7 @@ def promote_intake_request(
         matter_code=normalised_code,
         title=matter_title,
         client_name=client_name,
-        practice_area=payload.practice_area,
+        practice_area=resolved_practice_area,
         forum_level=MatterForumLevel(payload.forum_level),
         status=MatterStatus.INTAKE,
         description=f"Promoted from intake request {row.id}. {row.description}"[

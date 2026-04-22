@@ -159,6 +159,40 @@ def test_intake_promote_blocked_when_terminal(client: TestClient) -> None:
     assert "rejected" in promote.json()["detail"].lower()
 
 
+def test_intake_promote_accepts_slash_matter_code(client: TestClient) -> None:
+    """Ram-BUG-003 (2026-04-22): user reported "Could not promote
+    request" when entering matter_code ``2065/2026``. Indian court
+    filings often use slash-formatted codes (e.g. ``WRIT/220/2026``,
+    ``COMAPL/123/2026``) so the schema explicitly allows ``/`` in the
+    pattern. This regression pins that contract — if anyone tightens
+    the regex, the canonical Indian filing format breaks. The test
+    also verifies the promote returns 200 (not the generic 500 the
+    bug report described), which would have surfaced as the toast
+    Ram saw."""
+    session = _bootstrap(client, "intake-slashcode")
+    headers = _headers(session["access_token"])
+    create = client.post(
+        "/api/intake/requests",
+        headers=headers,
+        json={
+            "title": "WRIT petition intake",
+            "category": "litigation_support",
+            "requester_name": "Solicitor",
+            "description": "Quash impugned order, urgent.",
+        },
+    )
+    assert create.status_code == 200, create.text
+    request_id = create.json()["id"]
+
+    promote = client.post(
+        f"/api/intake/requests/{request_id}/promote",
+        headers=headers,
+        json={"matter_code": "2065/2026"},
+    )
+    assert promote.status_code == 200, promote.text
+    assert promote.json()["linked_matter_code"] == "2065/2026"
+
+
 def test_intake_status_filter(client: TestClient) -> None:
     session = _bootstrap(client, "intake-filter")
     headers = _headers(session["access_token"])

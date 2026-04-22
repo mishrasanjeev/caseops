@@ -176,12 +176,16 @@ export const contractsList = z.object({
   next_cursor: z.string().nullable().optional(),
 });
 
+// Hari-BUG-023 (2026-04-22): the values below MUST match
+// db.models.OutsideCounselPanelStatus exactly. The previous list
+// (preferred, approved, trial, inactive, blocked) appeared to be
+// confused with the assignment-status enum and caused every workspace
+// load to throw a Zod parse error on `panel_status`, which in turn
+// made the Outside Counsel module appear broken (Hari-BUG-018).
 export const panelStatus = z.enum([
+  "active",
   "preferred",
-  "approved",
-  "trial",
   "inactive",
-  "blocked",
 ]);
 
 export const outsideCounsel = z.object({

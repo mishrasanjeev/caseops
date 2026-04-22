@@ -33,6 +33,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import Literal
 
+from fastapi import HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
@@ -52,12 +53,60 @@ from caseops_api.services.llm import (
     PURPOSE_RECOMMENDATIONS,
     LLMCallContext,
     LLMMessage,
-    LLMResponseFormatError,
+    LLMProviderError,
     build_provider,
     generate_structured,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _structured_with_retry(
+    provider,
+    *,
+    schema,
+    messages,
+    context,
+    temperature: float,
+    max_tokens: int,
+    session,
+    feature: str,
+):
+    """Run generate_structured; on transient provider failure (503,
+    timeout, malformed JSON) retry once with the same model before
+    surfacing an actionable HTTPException 422.
+
+    Why same model (not Haiku fallback): contract_intelligence already
+    runs on Haiku for clause / obligation extraction (the primary is
+    Haiku-tier), so a Haiku→Haiku fallback wouldn't help for model
+    quality. The retry is purely for transient overload — Anthropic 503s
+    typically clear within a second, and one retry covers the common
+    case without doubling latency on the happy path.
+    """
+    try:
+        return generate_structured(
+            provider, schema=schema, messages=messages, context=context,
+            temperature=temperature, max_tokens=max_tokens, session=session,
+        )
+    except LLMProviderError as exc:
+        logger.warning(
+            "%s: provider failed (%s: %s); retrying once",
+            feature, type(exc).__name__, exc,
+        )
+        try:
+            return generate_structured(
+                provider, schema=schema, messages=messages, context=context,
+                temperature=temperature, max_tokens=max_tokens, session=session,
+            )
+        except LLMProviderError as retry_exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    f"Could not {feature}: the model is unavailable "
+                    f"({type(retry_exc).__name__}: {retry_exc}). Please "
+                    "retry in a minute, or contact support if this persists."
+                ),
+            ) from retry_exc
 
 
 # ---------------------------------------------------------------------------
@@ -398,24 +447,21 @@ def extract_clauses(
         tenant_id=context.company.id,
         matter_id=None,
     )
-    try:
-        payload, completion = generate_structured(
-            provider,
-            schema=_ClauseExtractionPayload,
-            messages=messages,
-            context=call_context,
-            temperature=0.0,
-            # A full MSA can carry 20-30 clauses × ~200 output tokens
-            # each; the default 2K ceiling truncates the JSON mid-array
-            # and generate_structured rejects the malformed payload.
-            # 8K is comfortable headroom for the hard 30-clause cap we
-            # set in the prompt.
-            max_tokens=8192,
-            session=session,
-        )
-    except LLMResponseFormatError:
-        logger.exception("Clause extraction returned malformed JSON")
-        raise
+    payload, completion = _structured_with_retry(
+        provider,
+        schema=_ClauseExtractionPayload,
+        messages=messages,
+        context=call_context,
+        temperature=0.0,
+        # A full MSA can carry 20-30 clauses × ~200 output tokens each;
+        # the default 2K ceiling truncates the JSON mid-array and
+        # generate_structured rejects the malformed payload. 8K is
+        # comfortable headroom for the hard 30-clause cap we set in
+        # the prompt.
+        max_tokens=8192,
+        session=session,
+        feature="extract clauses",
+    )
 
     removed = session.execute(
         delete(ContractClause)
@@ -531,19 +577,16 @@ def extract_obligations(
         tenant_id=context.company.id,
         matter_id=None,
     )
-    try:
-        payload, completion = generate_structured(
-            provider,
-            schema=_ObligationExtractionPayload,
-            messages=messages,
-            context=call_context,
-            temperature=0.0,
-            max_tokens=8192,
-            session=session,
-        )
-    except LLMResponseFormatError:
-        logger.exception("Obligation extraction returned malformed JSON")
-        raise
+    payload, completion = _structured_with_retry(
+        provider,
+        schema=_ObligationExtractionPayload,
+        messages=messages,
+        context=call_context,
+        temperature=0.0,
+        max_tokens=8192,
+        session=session,
+        feature="extract obligations",
+    )
 
     removed = session.execute(
         delete(ContractObligation)
@@ -686,21 +729,18 @@ def compare_playbook(
         tenant_id=context.company.id,
         matter_id=None,
     )
-    try:
-        payload, completion = generate_structured(
-            provider,
-            schema=_PlaybookComparisonPayload,
-            messages=messages,
-            context=call_context,
-            temperature=0.1,
-            # Each rule → ~80 output tokens; 15-rule default playbook
-            # plus firm overrides can push past the default ceiling.
-            max_tokens=8192,
-            session=session,
-        )
-    except LLMResponseFormatError:
-        logger.exception("Playbook comparison returned malformed JSON")
-        raise
+    payload, completion = _structured_with_retry(
+        provider,
+        schema=_PlaybookComparisonPayload,
+        messages=messages,
+        context=call_context,
+        temperature=0.1,
+        # Each rule → ~80 output tokens; 15-rule default playbook plus
+        # firm overrides can push past the default ceiling.
+        max_tokens=8192,
+        session=session,
+        feature="compare playbook",
+    )
 
     # Project the LLM's structured output back through the canonical
     # rule table — we trust the LLM for status + summary, but rule

@@ -86,6 +86,10 @@ export function NewInvoiceDialog({ matterId }: { matterId: string }) {
     },
   });
   const manualItems = useFieldArray({ control: form.control, name: "manual_items" });
+  // Ram-BUG-008 pre-flight: watch the two billable sources so we
+  // can disable the Issue button until at least one is present.
+  const includeTimeEntries = form.watch("include_uninvoiced_time_entries");
+  const manualItemsValues = form.watch("manual_items") ?? [];
 
   const mutation = useMutation({
     mutationFn: (values: FormValues) =>
@@ -255,6 +259,25 @@ export function NewInvoiceDialog({ matterId }: { matterId: string }) {
             <Textarea id="invoice-notes" rows={3} {...form.register("notes")} />
           </FormField>
 
+          {/* Ram-BUG-008 (2026-04-22): pre-flight gate so the user
+              can't submit an invoice with zero billable sources.
+              Backend rejected this with a 400 ("Add billable
+              uninvoiced time entries or manual items before
+              creating an invoice."), but the user only saw it as a
+              toast AFTER hitting the API — slow and confusing.
+              Disabling the button + showing the rule inline is the
+              "disable the button, not the error" fix per
+              feedback_fix_vs_mitigation.md. */}
+          {!includeTimeEntries && manualItemsValues.length === 0 ? (
+            <p
+              className="rounded-md border border-[var(--color-warn-600)]/30 bg-[var(--color-warn-50)] px-3 py-2 text-xs text-[var(--color-warn-700)]"
+              role="note"
+            >
+              Add at least one manual line item, or enable
+              <em> Include uninvoiced time entries</em>, before issuing
+              this invoice.
+            </p>
+          ) : null}
           <DialogFooter>
             <Button
               type="button"
@@ -266,7 +289,10 @@ export function NewInvoiceDialog({ matterId }: { matterId: string }) {
             </Button>
             <Button
               type="submit"
-              disabled={mutation.isPending}
+              disabled={
+                mutation.isPending ||
+                (!includeTimeEntries && manualItemsValues.length === 0)
+              }
               data-testid="new-invoice-submit"
             >
               {mutation.isPending ? (

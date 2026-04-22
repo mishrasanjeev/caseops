@@ -59,7 +59,7 @@ from caseops_api.services.llm import (
     LLMCompletion,
     LLMMessage,
     LLMProvider,
-    LLMResponseFormatError,
+    LLMProviderError,
     build_provider,
     generate_structured,
 )
@@ -523,33 +523,40 @@ def generate_recommendation(
 
     try:
         parsed, completion = _invoke(llm)
-    except LLMResponseFormatError as exc:
-        # Sonnet (and sometimes Opus) returns malformed JSON on long
-        # structured outputs — this is the class of failure that
-        # bit us on the bail-recommendation 502 on 2026-04-20. Retry
-        # once with Haiku; the lower-quality model is materially more
-        # reliable on JSON shape. Only applies when the primary is
-        # Anthropic (for mock/gemini we re-raise unchanged).
+    except LLMProviderError as exc:
+        # Broadened from LLMResponseFormatError (2026-04-22, Ram-007 /
+        # Hari-020 bug batch III): Anthropic 503s / httpx timeouts are
+        # wrapped in LLMProviderError — the format-error child
+        # doesn't catch them, so 503s escaped past Haiku retry and
+        # surfaced as opaque 500s. Catching the parent means every
+        # recoverable upstream failure triggers the fallback.
         fallback = _haiku_fallback_provider()
         if fallback is None:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=str(exc),
+                detail=(
+                    f"Could not generate the recommendation: the primary "
+                    f"model is unavailable ({type(exc).__name__}: {exc}) and "
+                    "no Haiku fallback is configured."
+                ),
             ) from exc
         logger.warning(
-            "recommendation %s: primary LLM %s returned invalid JSON; "
+            "recommendation %s: primary LLM %s failed (%s); "
             "retrying with Haiku fallback",
             rec_type,
             getattr(llm, "model", "<unknown>"),
+            type(exc).__name__,
         )
         try:
             parsed, completion = _invoke(fallback)
-        except LLMResponseFormatError as retry_exc:
+        except LLMProviderError as retry_exc:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail=(
-                    f"Both primary and Haiku fallback returned invalid "
-                    f"JSON. Primary: {exc}. Fallback: {retry_exc}"
+                    f"Both the primary model and the Haiku fallback failed. "
+                    f"Primary: {type(exc).__name__}: {exc}. Fallback: "
+                    f"{type(retry_exc).__name__}: {retry_exc}. Please retry "
+                    "in a minute."
                 ),
             ) from retry_exc
 

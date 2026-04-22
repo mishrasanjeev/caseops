@@ -281,10 +281,14 @@ test.describe("Hari II bug regressions", () => {
 
 
   // --------------------------------------------------------------
-  // BUG-011 — overview hides the Open tasks card when empty and
-  // shows CTAs on Last order / Upcoming hearings.
+  // BUG-011 (reopened 2026-04-22) — overview hides ALL three
+  // empty-state cards (Open tasks, Last court order, Upcoming
+  // hearings) on a fresh matter. The prior fix only hid Open tasks;
+  // user wants symmetric behaviour because the empty CTAs read as
+  // a broken promise. The Hearings tab is still reachable from the
+  // matter sub-nav so the Schedule-hearing affordance isn't lost.
   // --------------------------------------------------------------
-  test("BUG-011: overview hides empty Open tasks + shows hearings CTA", async ({
+  test("BUG-011: overview hides all three empty-state cards on a fresh matter", async ({
     page,
   }) => {
     const api = await request.newContext();
@@ -310,11 +314,15 @@ test.describe("Hari II bug regressions", () => {
     await page.waitForURL(/\/app/);
     await page.goto(`/app/matters/${matter.id}`);
 
-    // Open tasks card should NOT render on a fresh matter.
+    // None of the three empty-state cards render on a fresh matter.
     await expect(page.getByText("Open tasks")).toHaveCount(0);
-    // Upcoming hearings empty-state carries a Schedule-hearing CTA.
+    await expect(page.getByText("Last court order")).toHaveCount(0);
+    await expect(page.getByText("Upcoming hearings")).toHaveCount(0);
+    // The Hearings sub-nav link is still present, so the user can
+    // open the dedicated Hearings tab and Schedule-hearing dialog
+    // there. We assert on the sub-nav link, not the overview CTA.
     await expect(
-      page.getByRole("link", { name: /Schedule hearing/i }),
+      page.getByRole("link", { name: /^Hearings$/ }),
     ).toBeVisible();
   });
 });
