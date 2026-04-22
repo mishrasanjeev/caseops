@@ -46,6 +46,15 @@ PUBLIC_MUTATING_ROUTES: set[tuple[str, str]] = {
     # (global catalogue) and user-provided ``facts`` (not stored).
     # The session context is consumed for auth only.
     ("POST", "/api/drafting/preview"),
+    # SendGrid event webhook (BUG-013) — signed by SendGrid's own
+    # ECDSA key, verified server-side via _verify_sendgrid_signature
+    # against ``CASEOPS_SENDGRID_WEBHOOK_PUBLIC_KEY``. Tenancy is
+    # implicit: events are matched back to ``hearing_reminders`` rows
+    # by ``sg_message_id``, and rows are written only from the
+    # worker's authenticated send path. No session context available
+    # (SendGrid is a third party), so a role/capability guard would
+    # reject every legitimate event.
+    ("POST", "/api/webhooks/sendgrid/events"),
 }
 
 

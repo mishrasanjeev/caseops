@@ -141,13 +141,21 @@ def schedule_reminders_for_hearing(
                 scheduled_for=send_at,
                 status=HearingReminderStatus.QUEUED,
             )
-            session.add(reminder)
+            # Use a nested transaction (SAVEPOINT) so an
+            # IntegrityError on this single reminder doesn't roll back
+            # the enclosing hearing-create transaction. A full
+            # ``session.rollback()`` here would nuke the hearing row
+            # the caller JUST inserted — observed as "MatterHearing
+            # not persistent" in test_company_profile_and_matters.
+            sp = session.begin_nested()
             try:
+                session.add(reminder)
                 session.flush()
+                sp.commit()
                 created.append(reminder)
             except IntegrityError:
-                # Another concurrent create beat us — safe to ignore.
-                session.rollback()
+                # Another concurrent create beat us — safe to skip.
+                sp.rollback()
                 continue
     return created
 
