@@ -88,24 +88,32 @@ export default function IntakePage() {
 
   const [filter, setFilter] = useState<IntakeStatus | "all">("all");
 
-  const queryKey = ["intake", "requests", filter];
+  // Ram-BUG-002 (2026-04-22): the previous design re-fetched the
+  // list with the active status filter as a query param, then
+  // derived the per-status counts from the (now-filtered) list.
+  // Result: clicking a tile dropped every other tile to 0 because
+  // the count source was the same already-filtered subset, not the
+  // full set. Fix: fetch the unfiltered set once, derive counts
+  // from THAT, and apply the filter client-side. Intake is small
+  // (dozens, not thousands) so a single page is fine.
   const listQuery = useQuery({
-    queryKey,
-    queryFn: () =>
-      listIntakeRequests({
-        status: filter === "all" ? null : filter,
-      }),
+    queryKey: ["intake", "requests", "all"],
+    queryFn: () => listIntakeRequests({ status: null }),
     enabled: canSubmit,
   });
 
-  const requests = listQuery.data?.requests ?? [];
+  const allRequests = listQuery.data?.requests ?? [];
   const counts = STATUS_ORDER.reduce<Record<IntakeStatus, number>>(
     (acc, key) => {
-      acc[key] = requests.filter((r) => r.status === key).length;
+      acc[key] = allRequests.filter((r) => r.status === key).length;
       return acc;
     },
     { new: 0, triaging: 0, in_progress: 0, completed: 0, rejected: 0 },
   );
+  const requests =
+    filter === "all"
+      ? allRequests
+      : allRequests.filter((r) => r.status === filter);
 
   return (
     <div className="flex flex-col gap-6">

@@ -83,8 +83,16 @@ const SECTION_LABEL: Record<NavItem["section"], string> = {
   admin: "Workspace",
 };
 
-export function Sidebar() {
-  const pathname = usePathname();
+// Ram-BUG-005 (2026-04-22): the inner nav body is split out so the
+// mobile hamburger trigger in Topbar can render the same content
+// inside a Radix Dialog without copy-pasting the menu items.
+export function SidebarBody({
+  pathname,
+  onNavigate,
+}: {
+  pathname: string;
+  onNavigate?: () => void;
+}) {
   const role = useRole();
   const visible = NAV.filter((item) => {
     if (!item.requiresCapability) return true;
@@ -99,10 +107,7 @@ export function Sidebar() {
     .filter((group) => group.items.length > 0);
 
   return (
-    <aside
-      aria-label="Primary navigation"
-      className="hidden w-64 shrink-0 flex-col border-r border-[var(--color-line)] bg-white md:flex"
-    >
+    <>
       <div className="flex h-16 items-center border-b border-[var(--color-line)] px-5">
         <Logo />
       </div>
@@ -115,7 +120,11 @@ export function Sidebar() {
             <ul className="flex flex-col gap-0.5">
               {group.items.map((item) => (
                 <li key={item.href}>
-                  <NavLink item={item} active={isActive(pathname, item.href)} />
+                  <NavLink
+                    item={item}
+                    active={isActive(pathname, item.href)}
+                    onNavigate={onNavigate}
+                  />
                 </li>
               ))}
             </ul>
@@ -131,17 +140,38 @@ export function Sidebar() {
           </p>
         </div>
       </nav>
+    </>
+  );
+}
+
+export function Sidebar() {
+  const pathname = usePathname();
+  return (
+    <aside
+      aria-label="Primary navigation"
+      className="hidden w-64 shrink-0 flex-col border-r border-[var(--color-line)] bg-white md:flex"
+    >
+      <SidebarBody pathname={pathname} />
     </aside>
   );
 }
 
-function NavLink({ item, active }: { item: NavItem; active: boolean }) {
+function NavLink({
+  item,
+  active,
+  onNavigate,
+}: {
+  item: NavItem;
+  active: boolean;
+  onNavigate?: () => void;
+}) {
   const Icon = item.icon;
   return (
     <Link
       href={item.href}
       aria-label={item.label}
       aria-current={active ? "page" : undefined}
+      onClick={onNavigate}
       className={cn(
         "group flex items-center gap-2.5 rounded-md px-2 py-2 text-sm font-medium transition-colors",
         active

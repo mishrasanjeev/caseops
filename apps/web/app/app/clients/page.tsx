@@ -158,6 +158,12 @@ function NewClientDialog(): React.JSX.Element {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [city, setCity] = useState("");
+  // Hari-BUG-022 (2026-04-22): the form previously only captured city,
+  // so state/country always rendered as "—" on the detail page —
+  // making the client profile feel incomplete. Both fields are
+  // already on the backend ClientCreateRequest schema.
+  const [stateName, setStateName] = useState("");
+  const [country, setCountry] = useState("India");
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -168,6 +174,8 @@ function NewClientDialog(): React.JSX.Element {
         primary_contact_email: email.trim() || null,
         primary_contact_phone: phone.trim() || null,
         city: city.trim() || null,
+        state: stateName.trim() || null,
+        country: country.trim() || null,
       }),
     onSuccess: async () => {
       toast.success("Client added.");
@@ -177,6 +185,8 @@ function NewClientDialog(): React.JSX.Element {
       setEmail("");
       setPhone("");
       setCity("");
+      setStateName("");
+      setCountry("India");
       setClientType("individual");
       await queryClient.invalidateQueries({ queryKey: ["clients", "list"] });
     },
@@ -275,6 +285,24 @@ function NewClientDialog(): React.JSX.Element {
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 maxLength={40}
+              />
+            </div>
+            <div>
+              <Label htmlFor="client-state">State</Label>
+              <Input
+                id="client-state"
+                value={stateName}
+                onChange={(e) => setStateName(e.target.value)}
+                maxLength={120}
+              />
+            </div>
+            <div>
+              <Label htmlFor="client-country">Country</Label>
+              <Input
+                id="client-country"
+                value={country}
+                onChange={(e) => setCountry(e.target.value)}
+                maxLength={120}
               />
             </div>
           </div>

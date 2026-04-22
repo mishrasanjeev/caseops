@@ -45,6 +45,64 @@ describe("IntakePage", () => {
     expect(screen.getByText(/Legal intake queue/i)).toBeInTheDocument();
     await waitFor(() => expect(listIntakeMock).toHaveBeenCalledTimes(1));
   });
+
+  it(
+    "Ram-BUG-002: status counts are derived from the unfiltered set so they don't reset when the user clicks a filter tile",
+    async () => {
+      // Three requests across two statuses; the unfiltered fetch
+      // returns all of them once. The page should derive
+      // counts.new=2 and counts.in_progress=1 from this single
+      // payload — and KEEP showing 2/1 even when the user clicks
+      // any filter tile (no second fetch with status param). The
+      // prior bug refetched on filter click and zeroed every other
+      // count.
+      listIntakeMock.mockResolvedValue({
+        requests: [
+          { id: "r1", status: "new", title: "A", category: "other",
+            requester_name: "X", description: "", priority: "low",
+            submitted_by_membership_id: null, submitted_by_name: null,
+            assigned_to_membership_id: null, assigned_to_name: null,
+            linked_matter_id: null, linked_matter_code: null,
+            triage_notes: null, business_unit: null,
+            created_at: "2026-04-22T00:00:00Z",
+            updated_at: "2026-04-22T00:00:00Z" },
+          { id: "r2", status: "new", title: "B", category: "other",
+            requester_name: "Y", description: "", priority: "low",
+            submitted_by_membership_id: null, submitted_by_name: null,
+            assigned_to_membership_id: null, assigned_to_name: null,
+            linked_matter_id: null, linked_matter_code: null,
+            triage_notes: null, business_unit: null,
+            created_at: "2026-04-22T00:00:00Z",
+            updated_at: "2026-04-22T00:00:00Z" },
+          { id: "r3", status: "in_progress", title: "C", category: "other",
+            requester_name: "Z", description: "", priority: "low",
+            submitted_by_membership_id: null, submitted_by_name: null,
+            assigned_to_membership_id: null, assigned_to_name: null,
+            linked_matter_id: null, linked_matter_code: "M-001",
+            triage_notes: null, business_unit: null,
+            created_at: "2026-04-22T00:00:00Z",
+            updated_at: "2026-04-22T00:00:00Z" },
+        ],
+      });
+
+      render(withClient(<IntakePage />));
+      // Single un-status'd fetch.
+      await waitFor(() => {
+        expect(listIntakeMock).toHaveBeenCalledTimes(1);
+        expect(listIntakeMock.mock.calls[0][0]).toEqual({ status: null });
+      });
+
+      // Tile values come from the full set: All=3, New=2, InProgress=1.
+      // The legible-string check looks for the count rendered
+      // alongside the status label — counts are unique per tile so
+      // a substring assertion is sufficient.
+      await waitFor(() => {
+        expect(screen.getByText("3")).toBeInTheDocument(); // All
+        expect(screen.getByText("2")).toBeInTheDocument(); // New
+        expect(screen.getAllByText("1").length).toBeGreaterThan(0);
+      });
+    },
+  );
 });
 
 

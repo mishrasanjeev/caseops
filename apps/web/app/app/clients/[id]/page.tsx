@@ -173,6 +173,30 @@ export default function ClientProfilePage() {
                 {[c.pan, c.gstin].filter(Boolean).join(" · ") || "—"}
               </dd>
             </div>
+            {/* Hari-BUG-022 (2026-04-22): the prior layout collapsed
+                city/state/country into the page-header description,
+                where missing fields were invisible. Show address in
+                the Contact dl alongside email/phone so the user can
+                see exactly what's recorded — with the same dt/dd
+                empty-state treatment. */}
+            <div>
+              <dt className="text-xs text-[var(--color-mute)]">City</dt>
+              <dd className="text-sm font-medium text-[var(--color-ink-2)]">
+                {c.city ?? "—"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-[var(--color-mute)]">State</dt>
+              <dd className="text-sm font-medium text-[var(--color-ink-2)]">
+                {c.state ?? "—"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-[var(--color-mute)]">Country</dt>
+              <dd className="text-sm font-medium text-[var(--color-ink-2)]">
+                {c.country ?? "—"}
+              </dd>
+            </div>
           </dl>
         </CardContent>
       </Card>
