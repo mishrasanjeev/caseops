@@ -569,3 +569,132 @@ def test_admin_notifications_list_is_tenant_scoped(client: TestClient) -> None:
     assert b_list.status_code == 200
     assert b_list.json()["total_queued"] == 0
     assert b_list.json()["reminders"] == []
+
+
+def test_full_lifecycle_create_hearing_through_delivered(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """End-to-end demo of BUG-013 reminders, mirroring the live-prod
+    verification recipe in session_log:
+
+      1. Create a hearing → two QUEUED rows appear (T-24h + T-1h).
+      2. The admin notifications endpoint reports total_queued=2.
+      3. Simulate the cadence catching up to the scheduled times by
+         shifting both rows' ``scheduled_for`` into the past
+         (``_force_due``).
+      4. Run the worker in ``mode=auto`` with SendGrid mocked → both
+         rows flip QUEUED → SENT and carry a ``provider_message_id``.
+      5. POST the SendGrid ``delivered`` event for each row → both
+         flip SENT → DELIVERED with ``delivered_at`` set.
+      6. Final admin view: total_queued=0, total_sent=0,
+         total_delivered=2, total_failed=0.
+
+    This is the test the user asked for after we wired Cloud Scheduler
+    on 2026-04-22 — it codifies every transition in one read so a
+    future regression in any single hop fails this test loudly."""
+    import os
+    import httpx
+
+    from caseops_api.core.settings import get_settings
+
+    os.environ["CASEOPS_HEARING_REMINDERS_ENABLED"] = "true"
+    os.environ["CASEOPS_SENDGRID_API_KEY"] = "SG.fake"
+    os.environ["CASEOPS_SENDGRID_SENDER_EMAIL"] = "hearings@caseops.ai"
+    get_settings.cache_clear()
+
+    try:
+        # ---- Step 1: create the hearing -------------------------------
+        token = str(bootstrap_company(client)["access_token"])
+        matter = _mk_matter(client, token, code="REM-LIFECYCLE")
+        hearing = _mk_hearing_via_api(client, token, matter["id"], days_ahead=2)
+
+        # ---- Step 2: admin endpoint sees the two queued rows ----------
+        list_resp = client.get(
+            "/api/admin/notifications",
+            headers=auth_headers(token),
+        )
+        assert list_resp.status_code == 200, list_resp.text
+        listing = list_resp.json()
+        assert listing["total_queued"] == 2
+        assert listing["total_sent"] == 0
+        assert listing["total_delivered"] == 0
+        assert {r["status"] for r in listing["reminders"]} == {"queued"}
+
+        # ---- Step 3+4: force-due + run worker with mocked SendGrid ----
+        sent_message_ids: list[str] = []
+
+        class _FakeResponse:
+            status_code = 202
+            text = ""
+
+            def __init__(self, msg_id: str) -> None:
+                self.headers = {"X-Message-Id": msg_id}
+
+        call_counter = {"n": 0}
+
+        def _fake_post(*args, **kwargs):
+            call_counter["n"] += 1
+            mid = f"msg-lifecycle-{call_counter['n']}"
+            sent_message_ids.append(mid)
+            return _FakeResponse(mid)
+
+        factory = get_session_factory()
+        with factory() as session:
+            _force_due(session, hearing["id"])
+            with patch.object(httpx, "post", side_effect=_fake_post) as mock:
+                report = run_reminder_worker(session, mode="auto")
+                assert mock.call_count == 2
+
+        assert report["effective_live"] is True
+        assert report["sent"] == 2
+        assert report["failed"] == 0
+
+        with factory() as session:
+            after_send = list(
+                session.query(HearingReminder).filter(
+                    HearingReminder.hearing_id == hearing["id"]
+                )
+            )
+        assert {r.status for r in after_send} == {HearingReminderStatus.SENT}
+        assert {r.provider for r in after_send} == {"sendgrid"}
+        # Both rows have distinct provider_message_id values from the fake.
+        assert {r.provider_message_id for r in after_send} == set(sent_message_ids)
+
+        # ---- Step 5: SendGrid posts a ``delivered`` event per row ----
+        for mid in sent_message_ids:
+            wh = client.post(
+                "/api/webhooks/sendgrid/events",
+                json=[
+                    {
+                        "event": "delivered",
+                        # SendGrid appends ``.filterdrecv-...`` after the
+                        # message id; our matcher uses prefix.
+                        "sg_message_id": f"{mid}.filterdrecv-1",
+                        "timestamp": 1_777_000_900,
+                    }
+                ],
+            )
+            assert wh.status_code == 200, wh.text
+            assert wh.json()["matched"] == 1
+
+        # ---- Step 6: final state via the admin endpoint --------------
+        final = client.get(
+            "/api/admin/notifications",
+            headers=auth_headers(token),
+        )
+        assert final.status_code == 200
+        body = final.json()
+        assert body["total_queued"] == 0
+        assert body["total_sent"] == 0
+        assert body["total_delivered"] == 2
+        assert body["total_failed"] == 0
+        assert {r["status"] for r in body["reminders"]} == {"delivered"}
+        assert all(r["delivered_at"] is not None for r in body["reminders"])
+    finally:
+        for key in (
+            "CASEOPS_HEARING_REMINDERS_ENABLED",
+            "CASEOPS_SENDGRID_API_KEY",
+            "CASEOPS_SENDGRID_SENDER_EMAIL",
+        ):
+            os.environ.pop(key, None)
+        get_settings.cache_clear()
