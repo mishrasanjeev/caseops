@@ -33,6 +33,8 @@ export default defineConfig({
     /matter-hearings\.spec\.ts/,
     /research\.spec\.ts/,
     /billing-payment\.spec\.ts/,
+    /hari-ii-bugs\.spec\.ts/,
+    /matter-outside-counsel\.spec\.ts/,
   ],
   fullyParallel: false,
   workers: 1,

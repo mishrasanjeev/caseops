@@ -3,12 +3,14 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
+from pydantic import BaseModel
 
 from caseops_api.api.dependencies import (
     DbSession,
     get_current_context,
     require_capability,
 )
+from caseops_api.core.settings import get_settings
 from caseops_api.schemas.billing import (
     InvoicePaymentAttemptRecord,
     PaymentLinkCreateRequest,
@@ -20,6 +22,17 @@ from caseops_api.services.payments import (
     handle_pine_labs_webhook,
     sync_invoice_payment_link,
 )
+
+
+class PaymentConfigResponse(BaseModel):
+    """Environment-level payment provider readiness.
+
+    Consumed by the web billing UI to decide whether to render a
+    Pay Link button (BUG-015 Codex fix 2026-04-21). Returning "not
+    configured" lets the UI hide the action rather than surface a
+    failure after the user clicks.
+    """
+    pine_labs_configured: bool
 
 router = APIRouter()
 CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
@@ -67,6 +80,26 @@ async def sync_current_company_invoice_payment_link(
         matter_id=matter_id,
         invoice_id=invoice_id,
     )
+
+
+@router.get(
+    "/config",
+    response_model=PaymentConfigResponse,
+    summary="Tenant-facing payment-gateway readiness",
+)
+async def get_payment_config(
+    context: CurrentContext,
+) -> PaymentConfigResponse:
+    _ = context  # authenticated tenants only; body is environment-global
+    settings = get_settings()
+    configured = bool(
+        settings.pine_labs_api_base_url
+        and settings.pine_labs_payment_link_path
+        and settings.pine_labs_api_key
+        and settings.pine_labs_api_secret
+        and settings.pine_labs_merchant_id
+    )
+    return PaymentConfigResponse(pine_labs_configured=configured)
 
 
 @router.post(

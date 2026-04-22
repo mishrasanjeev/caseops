@@ -12,7 +12,9 @@ of bug can't re-occur without the test going red first.
   Pay Link first", not a raw 404.
 - BUG-015: payment link when Pine Labs isn't configured returns the
   user-facing "contact support" 503, not the internal
-  "not configured yet" text.
+  "not configured yet" text. Also asserts the /api/payments/config
+  endpoint reports whether the gateway is configured so the web UI
+  can hide the Pay Link button when it isn't (Codex fix, same date).
 """
 from __future__ import annotations
 
@@ -480,4 +482,136 @@ def test_frontend_supported_courts_list_matches_backend_adapter_map() -> None:
         assert f'"{court_name}"' in src, (
             f"Web SUPPORTED_COURTS missing {court_name!r}; "
             "update apps/web/app/app/matters/[id]/hearings/page.tsx"
+        )
+
+
+# ---------------------------------------------------------------
+# BUG-015 Codex fix — /api/payments/config exposes gateway readiness
+# so the UI can gate the Pay Link button BEFORE the user clicks.
+# ---------------------------------------------------------------
+
+
+def test_payment_config_reports_unconfigured_when_keys_missing(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression for BUG-015 Codex verdict: the web UI must be able
+    to ask the API whether Pine Labs is configured, NOT just improve
+    the error message when it isn't. The endpoint reports false when
+    any of the required settings are unset."""
+    import os
+
+    from caseops_api.core.settings import get_settings
+
+    # Force an unconfigured environment for the duration of the test.
+    for key in (
+        "CASEOPS_PINE_LABS_API_BASE_URL",
+        "CASEOPS_PINE_LABS_PAYMENT_LINK_PATH",
+        "CASEOPS_PINE_LABS_API_KEY",
+        "CASEOPS_PINE_LABS_API_SECRET",
+        "CASEOPS_PINE_LABS_MERCHANT_ID",
+    ):
+        os.environ.pop(key, None)
+    get_settings.cache_clear()
+
+    try:
+        token = str(bootstrap_company(client)["access_token"])
+        resp = client.get(
+            "/api/payments/config", headers=auth_headers(token),
+        )
+        assert resp.status_code == 200
+        assert resp.json() == {"pine_labs_configured": False}
+    finally:
+        get_settings.cache_clear()
+
+
+def test_payment_config_reports_configured_when_all_keys_present(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """And reports true when every required Pine Labs setting is set."""
+    import os
+
+    from caseops_api.core.settings import get_settings
+
+    os.environ["CASEOPS_PINE_LABS_API_BASE_URL"] = "https://example.test"
+    os.environ["CASEOPS_PINE_LABS_PAYMENT_LINK_PATH"] = "/api/pay/v1/paymentlink"
+    os.environ["CASEOPS_PINE_LABS_API_KEY"] = "test-key"
+    os.environ["CASEOPS_PINE_LABS_API_SECRET"] = "test-secret"
+    os.environ["CASEOPS_PINE_LABS_MERCHANT_ID"] = "111077"
+    get_settings.cache_clear()
+
+    try:
+        token = str(bootstrap_company(client)["access_token"])
+        resp = client.get(
+            "/api/payments/config", headers=auth_headers(token),
+        )
+        assert resp.status_code == 200
+        assert resp.json() == {"pine_labs_configured": True}
+    finally:
+        for key in (
+            "CASEOPS_PINE_LABS_API_BASE_URL",
+            "CASEOPS_PINE_LABS_PAYMENT_LINK_PATH",
+            "CASEOPS_PINE_LABS_API_KEY",
+            "CASEOPS_PINE_LABS_API_SECRET",
+            "CASEOPS_PINE_LABS_MERCHANT_ID",
+        ):
+            os.environ.pop(key, None)
+        get_settings.cache_clear()
+
+
+def test_payment_config_requires_auth(client: TestClient) -> None:
+    """Same as every other authed route — no token, no answer."""
+    resp = client.get("/api/payments/config")
+    assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------
+# BUG-019 Codex fix — per-matter outside-counsel page is no longer a
+# redirect; the frontend file renders real KPI cards + assignments.
+# Backend stays unchanged (workspace endpoint already carries
+# assignments), but we pin the frontend regression here because the
+# Playwright spec lives in the e2e suite.
+# ---------------------------------------------------------------
+
+
+def test_per_matter_outside_counsel_page_is_not_a_redirect() -> None:
+    """The /app/matters/[id]/outside-counsel page renders the real
+    counsel view (assignments filtered to the matter + KPIs +
+    AssignCounselDialog), not a ``router.replace`` redirect. Codex
+    flagged the prior redirect as a band-aid; this test ensures the
+    file stays real."""
+    from pathlib import Path
+
+    web_page = Path(__file__).parent.parent.parent.parent / (
+        "apps/web/app/app/matters/[id]/outside-counsel/page.tsx"
+    )
+    src = web_page.read_text(encoding="utf-8")
+    # Must not contain the redirect-style implementation.
+    assert 'router.replace("/app/outside-counsel"' not in src
+    # Must render the real matter-scoped view.
+    assert "matterAssignments" in src
+    assert "AssignCounselDialog" in src
+    assert "matter-oc-assign-open" in src  # a11y/testid hook for e2e
+
+
+# ---------------------------------------------------------------
+# Playwright wiring — the hari-ii-bugs + matter-outside-counsel
+# specs must be included in playwright.app.config.ts testMatch.
+# Codex flagged that we shipped the spec without including it in the
+# default glob — the regression was in-repo but not in CI.
+# ---------------------------------------------------------------
+
+
+def test_playwright_config_runs_hari_ii_specs() -> None:
+    from pathlib import Path
+
+    cfg = Path(__file__).parent.parent.parent.parent / "playwright.app.config.ts"
+    src = cfg.read_text(encoding="utf-8")
+    # testMatch entries use regex literals with escaped dots
+    # (``/hari-ii-bugs\.spec\.ts/``). Match the stem so the assertion
+    # survives either form — raw string or escaped-dot regex.
+    for stem in ("hari-ii-bugs", "matter-outside-counsel"):
+        assert stem in src, (
+            f"playwright.app.config.ts must include a testMatch entry "
+            f"matching {stem!r} so the Hari II regressions run on every "
+            "PR. Add it or the spec is shelf-ware."
         )

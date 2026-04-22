@@ -214,9 +214,64 @@ export const outsideCounselPortfolioSummary = z.object({
   profitability_signal_minor: z.number().int().optional(),
 }).passthrough();
 
+export const outsideCounselAssignmentStatus = z.enum([
+  "proposed",
+  "approved",
+  "declined",
+  "completed",
+]);
+
+export const outsideCounselAssignment = z.object({
+  id: z.string(),
+  company_id: z.string(),
+  matter_id: z.string(),
+  matter_title: z.string(),
+  matter_code: z.string(),
+  counsel_id: z.string(),
+  counsel_name: z.string(),
+  assigned_by_membership_id: z.string().nullable(),
+  assigned_by_name: z.string().nullable(),
+  role_summary: z.string().nullable(),
+  budget_amount_minor: z.number().int().nullable(),
+  currency: z.string(),
+  status: outsideCounselAssignmentStatus,
+  internal_notes: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const outsideCounselSpendStatus = z.enum([
+  "submitted",
+  "approved",
+  "rejected",
+  "paid",
+  "disputed",
+]);
+
+export const outsideCounselSpend = z.object({
+  id: z.string(),
+  company_id: z.string(),
+  matter_id: z.string(),
+  matter_title: z.string(),
+  matter_code: z.string(),
+  counsel_id: z.string(),
+  counsel_name: z.string(),
+  assignment_id: z.string().nullable(),
+  description: z.string(),
+  stage_label: z.string().nullable(),
+  currency: z.string(),
+  amount_minor: z.number().int(),
+  approved_amount_minor: z.number().int().nullable(),
+  status: outsideCounselSpendStatus,
+  created_at: z.string(),
+  updated_at: z.string(),
+}).passthrough();
+
 export const outsideCounselWorkspace = z.object({
   summary: outsideCounselPortfolioSummary,
   profiles: z.array(outsideCounsel),
+  assignments: z.array(outsideCounselAssignment).default([]),
+  spend_records: z.array(outsideCounselSpend).default([]),
 }).passthrough();
 
 export const hearingPackItemKind = z.enum([

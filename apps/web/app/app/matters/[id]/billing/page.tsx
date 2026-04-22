@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Banknote,
   Clock,
@@ -30,6 +30,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ApiError } from "@/lib/api/config";
 import {
   createInvoicePaymentLink,
+  fetchPaymentConfig,
   syncInvoicePaymentLink,
 } from "@/lib/api/endpoints";
 import { useCapability } from "@/lib/capabilities";
@@ -49,6 +50,13 @@ function canIssuePaymentLink(inv: WorkspaceInvoice): boolean {
   return inv.balance_due_minor > 0;
 }
 
+function hasPaymentAttempt(inv: WorkspaceInvoice): boolean {
+  // BUG-016 Codex fix 2026-04-21: Sync is only meaningful after a
+  // Pay Link has been issued. Gate the button on the workspace
+  // response so users don't click into a 409 precondition error.
+  return (inv.payment_attempts?.length ?? 0) > 0;
+}
+
 export default function MatterBillingPage() {
   const params = useParams<{ id: string }>();
   const matterId = params.id;
@@ -57,6 +65,18 @@ export default function MatterBillingPage() {
   const canIssueInvoice = useCapability("invoices:issue");
   const canSendPaymentLink = useCapability("invoices:send_payment_link");
   const canWriteTimeEntry = useCapability("time_entries:write");
+  // BUG-015 Codex fix 2026-04-21: gate Pay Link on environment-
+  // level gateway readiness. Pay Link only renders when Pine Labs
+  // is configured; otherwise the invoice row skips that action
+  // so the user isn't invited into a preventable 503.
+  const paymentConfigQuery = useQuery({
+    queryKey: ["payments", "config"],
+    queryFn: () => fetchPaymentConfig(),
+    staleTime: 5 * 60 * 1000,
+    enabled: canSendPaymentLink,
+  });
+  const pineLabsConfigured =
+    paymentConfigQuery.data?.pine_labs_configured === true;
 
   const [pendingPaymentInvoiceId, setPendingPaymentInvoiceId] = useState<string | null>(
     null,
@@ -199,7 +219,7 @@ export default function MatterBillingPage() {
                       {canSendPaymentLink ? (
                         <td className="px-4 py-3 text-right">
                           <div className="inline-flex items-center gap-2">
-                            {canIssuePaymentLink(inv) ? (
+                            {canIssuePaymentLink(inv) && pineLabsConfigured ? (
                               <Button
                                 type="button"
                                 variant="ghost"
@@ -216,7 +236,9 @@ export default function MatterBillingPage() {
                                 Pay link
                               </Button>
                             ) : null}
-                            {inv.balance_due_minor > 0 && inv.status !== "void" ? (
+                            {inv.balance_due_minor > 0 &&
+                            inv.status !== "void" &&
+                            hasPaymentAttempt(inv) ? (
                               <Button
                                 type="button"
                                 variant="ghost"

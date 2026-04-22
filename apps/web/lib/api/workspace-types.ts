@@ -38,6 +38,14 @@ export type WorkspaceAttachment = {
   created_at: string;
 };
 
+export type WorkspacePaymentAttempt = {
+  id: string;
+  status: string;
+  provider_order_id?: string | null;
+  payment_url?: string | null;
+  amount_received_minor: number;
+};
+
 export type WorkspaceInvoice = {
   id: string;
   invoice_number: string;
@@ -48,6 +56,9 @@ export type WorkspaceInvoice = {
   balance_due_minor: number;
   amount_received_minor: number;
   currency: string;
+  // Surfaced so the UI can gate the Sync action (BUG-016): Sync is
+  // only meaningful after at least one Pay Link has been issued.
+  payment_attempts?: WorkspacePaymentAttempt[];
 };
 
 export type WorkspaceTimeEntry = {

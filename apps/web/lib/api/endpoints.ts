@@ -760,6 +760,18 @@ export async function syncInvoicePaymentLink(input: {
   return data as MatterInvoiceRecord;
 }
 
+export type PaymentConfig = { pine_labs_configured: boolean };
+
+/**
+ * Fetch the environment-level payment-gateway readiness so the UI
+ * can gate the Pay Link button before the user clicks it (BUG-015).
+ * Cached at the React-Query layer for 5 minutes; every tenant in an
+ * environment sees the same answer.
+ */
+export async function fetchPaymentConfig(): Promise<PaymentConfig> {
+  return apiRequest<PaymentConfig>("/api/payments/config");
+}
+
 export async function createMatterTimeEntry(input: {
   matterId: string;
   workDate: string;
