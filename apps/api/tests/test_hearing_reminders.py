@@ -191,6 +191,73 @@ def test_cancel_reminders_flips_queued_to_cancelled(client: TestClient) -> None:
     assert {r.status for r in rows} == {HearingReminderStatus.CANCELLED}
 
 
+def test_update_hearing_reschedule_cancels_old_and_schedules_new(
+    client: TestClient,
+) -> None:
+    """Rescheduling a hearing via PATCH must (a) flip the old reminder
+    rows to CANCELLED so the worker skips them, and (b) queue fresh
+    rows for the new date. Without this, flipping on SendGrid later
+    would deliver a "hearing in 24h" email for a hearing that's now
+    a month away."""
+    token = str(bootstrap_company(client)["access_token"])
+    matter = _mk_matter(client, token, code="REM-RESCHED")
+    hearing = _mk_hearing_via_api(client, token, matter["id"], days_ahead=3)
+    new_date = _days_ahead(10)
+
+    resp = client.patch(
+        f"/api/matters/{matter['id']}/hearings/{hearing['id']}",
+        headers=auth_headers(token),
+        json={"hearing_on": new_date.isoformat()},
+    )
+    assert resp.status_code == 200, resp.text
+
+    factory = get_session_factory()
+    with factory() as session:
+        all_rows = list(
+            session.query(HearingReminder).filter(
+                HearingReminder.hearing_id == hearing["id"]
+            )
+        )
+    cancelled = [r for r in all_rows if r.status == HearingReminderStatus.CANCELLED]
+    queued = [r for r in all_rows if r.status == HearingReminderStatus.QUEUED]
+    # Old rows still exist but are now CANCELLED; the new rows are QUEUED
+    # against the new date. We don't pin row counts (depends on whether
+    # each offset is still in the future from "now") but we MUST see both
+    # a cancelled and a queued row, and the queued row's scheduled_for
+    # must fall on / around the new hearing date.
+    assert cancelled, "old reminders should be cancelled on reschedule"
+    assert queued, "new reminders should be queued for the new date"
+    for q in queued:
+        assert q.scheduled_for.date() in {new_date, new_date - timedelta(days=1)}
+
+
+def test_update_hearing_mark_completed_cancels_queued_reminders(
+    client: TestClient,
+) -> None:
+    """Completing a hearing via PATCH flips every queued reminder to
+    CANCELLED. No new reminders get scheduled (the hearing is done)."""
+    token = str(bootstrap_company(client)["access_token"])
+    matter = _mk_matter(client, token, code="REM-COMPLETE")
+    hearing = _mk_hearing_via_api(client, token, matter["id"], days_ahead=3)
+
+    resp = client.patch(
+        f"/api/matters/{matter['id']}/hearings/{hearing['id']}",
+        headers=auth_headers(token),
+        json={"status": MatterHearingStatus.COMPLETED.value},
+    )
+    assert resp.status_code == 200, resp.text
+
+    factory = get_session_factory()
+    with factory() as session:
+        rows = list(
+            session.query(HearingReminder).filter(
+                HearingReminder.hearing_id == hearing["id"]
+            )
+        )
+    assert rows, "row count shouldn't change on complete"
+    assert {r.status for r in rows} == {HearingReminderStatus.CANCELLED}
+
+
 # ---------------------------------------------------------------
 # Worker — dark-launch + live paths
 # ---------------------------------------------------------------

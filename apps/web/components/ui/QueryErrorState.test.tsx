@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -53,7 +53,12 @@ describe("QueryErrorState", () => {
     expect(button).toBeDisabled();
     expect(button).toHaveTextContent(/Retrying/i);
 
-    resolve();
+    // Resolve the retry promise inside act() so React's post-resolve
+    // re-render (button re-enabled + label reset) is flushed before the
+    // test ends — otherwise Testing Library warns about an un-act'd update.
+    await act(async () => {
+      resolve();
+    });
   });
 
   it("renders a secondary action alongside retry when provided", () => {

@@ -927,6 +927,7 @@ def update_matter_hearing(
         )
 
     prior_status = hearing.status
+    prior_hearing_on = hearing.hearing_on
     if payload.status is not None:
         hearing.status = payload.status
     if payload.outcome_note is not None:
@@ -936,6 +937,31 @@ def update_matter_hearing(
         matter.next_hearing_on = payload.hearing_on
     session.add(hearing)
     session.flush()
+
+    # BUG-013 follow-up: reminders stay in sync with the hearing's real
+    # state. A reschedule queues new rows for the new time AND cancels
+    # the stale old ones; a completed transition just cancels queued
+    # rows so the worker doesnt fire a "you have a hearing in 24h"
+    # email against a hearing that already happened.
+    rescheduled = (
+        payload.hearing_on is not None and payload.hearing_on != prior_hearing_on
+    )
+    completed_transition = (
+        hearing.status == "completed" and prior_status != "completed"
+    )
+    if rescheduled or completed_transition:
+        try:
+            from caseops_api.services.hearing_reminders import (
+                cancel_reminders_for_hearing,
+                schedule_reminders_for_hearing,
+            )
+            cancel_reminders_for_hearing(session, hearing_id=hearing.id)
+            if rescheduled and hearing.status != "completed":
+                schedule_reminders_for_hearing(session, hearing=hearing)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "hearing_reminders sync on update failed: %s", exc,
+            )
 
     completed = (
         payload.status == "completed"
