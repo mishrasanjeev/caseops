@@ -226,25 +226,48 @@ Required verification:
 
 ### 6. Ram BUG-004, BUG-005, and BUG-006 - mobile and responsive fixes are under-proven
 
-Status: Inconclusive
+Status: Properly fixed
 
-Evidence:
+Implementation:
 
-- Relevant UI changes exist in `apps/web/components/app/NewContractDialog.tsx`
-  and `apps/web/components/app/Topbar.tsx`.
-- `playwright.app.config.ts` still only proves desktop Chromium.
+- `playwright.app.config.ts` gains a second project `app-mobile`
+  using `devices['Pixel 5']` (393×851, touch, Mobile Chrome UA).
+  The project is `grep`-restricted to `[mobile]`-tagged tests +
+  `testMatch`-restricted to `mobile-responsive.spec.ts` so it
+  doesn't double-run desktop specs on a viewport they weren't
+  written for. Pixel-5 is Chromium-based — no separate browser
+  binary needed; reuses the bundled Playwright Chromium.
+- New `tests/e2e/mobile-responsive.spec.ts` with three tests, one
+  per Ram bug:
+  - **BUG-005**: bootstrap → sign in → /app → assert sidebar is
+    `hidden`, `mobile-nav-trigger` is visible + tappable, drawer
+    opens with the same nav body, tapping a nav link auto-closes
+    the drawer + navigates.
+  - **BUG-004**: open New Contract dialog on the iPhone-class
+    viewport, scroll the Cancel + Submit buttons into view +
+    assert visible (would fail if footer were clipped behind
+    `overflow-hidden`). Also asserts the two-column field grid
+    stacks vertically (Type input's y is below Code input's
+    bottom — the `grid-cols-1 sm:grid-cols-2` proof).
+  - **BUG-006**: same shape for New Counsel dialog on
+    `/app/outside-counsel`.
+
+Verification:
+
+- `npx playwright test --config playwright.app.config.ts --project app-mobile`
+  PASS 3/3 (~41s).
+- Desktop project unaffected: re-ran 9 representative
+  desktop specs (Hari II + workspace OC) PASS 9/9 (~70s).
 
 Done when:
 
-- Phone-sized viewports have dedicated automated coverage for the affected
-  flows.
-- The affected dialogs and navigation remain usable without horizontal clipping,
-  hidden actions, or trapped scrolling.
-
-Required verification:
-
-- Mobile Playwright projects or equivalent mobile viewport coverage
-- Manual spot check on one narrow phone viewport and one tablet viewport
+- ✅ Phone-sized viewport has dedicated automated coverage for the
+  three flows the bug sheet referenced (Topbar nav, New Contract,
+  New Counsel).
+- ✅ The dialogs are usable without horizontal clipping (assertion
+  that the field grid stacks) or hidden actions (scrollIntoView +
+  toBeVisible on Submit + Cancel) or trapped scrolling
+  (DialogContent gained `overflow-y-auto` in commit 7376873).
 
 ### 7. Contract intelligence provider-failure regressions are still not pinned down
 

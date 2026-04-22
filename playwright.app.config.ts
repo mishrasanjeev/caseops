@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { defineConfig } from "@playwright/test";
+import { defineConfig, devices } from "@playwright/test";
 
 import { apiBaseUrl, e2eEnv, repoRoot } from "./tests/e2e/support/env";
 
@@ -35,6 +35,7 @@ export default defineConfig({
     /billing-payment\.spec\.ts/,
     /hari-ii-bugs\.spec\.ts/,
     /matter-outside-counsel\.spec\.ts/,
+    /mobile-responsive\.spec\.ts/,
   ],
   fullyParallel: false,
   workers: 1,
@@ -57,6 +58,25 @@ export default defineConfig({
         ...(browserExecutablePath
           ? { launchOptions: { executablePath: browserExecutablePath } }
           : {}),
+      },
+    },
+    // Strict Ledger #6 (2026-04-22): mobile-responsive bugs (Ram-004,
+    // Ram-005, Ram-006) had only desktop coverage; the bug-fixing
+    // skill rejects desktop-only proof for mobile bugs. This project
+    // runs the dedicated `mobile-responsive.spec.ts` against a
+    // Pixel-5 emulated viewport (393x851, touch, Mobile Chrome UA).
+    // Pixel-5 is Chromium-based so we can re-use the same browser
+    // pool the desktop project uses; iPhone-13 is WebKit and would
+    // need a separate browser binary. Note we DO NOT pass the
+    // browserExecutablePath override here — system Edge/Chrome
+    // doesn't emulate touch the way Playwright's bundled Chromium
+    // does.
+    {
+      name: "app-mobile",
+      grep: /\[mobile\]/,
+      testMatch: [/mobile-responsive\.spec\.ts/],
+      use: {
+        ...devices["Pixel 5"],
       },
     },
   ],
