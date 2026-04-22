@@ -329,4 +329,66 @@ test.describe("Hari II bug regressions", () => {
         .getByRole("link", { name: /^Hearings$/ }),
     ).toBeVisible();
   });
+
+
+  // --------------------------------------------------------------
+  // BUG-011 companion — populated matter must STILL show the cards
+  // it would hide when empty. Without this, a future "always hide"
+  // regression would silently slip past the empty-matter test.
+  // --------------------------------------------------------------
+  test("BUG-011 companion: a populated matter shows Upcoming hearings card", async ({
+    page,
+  }) => {
+    const api = await request.newContext();
+    const slug = unique("b11pop");
+    const { token } = await bootstrap(api, slug);
+    const mk = await api.post(`${apiBaseUrl}/api/matters/`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: {
+        title: "B11 populated matter",
+        matter_code: unique("B11POP").toUpperCase(),
+        practice_area: "civil",
+        forum_level: "high_court",
+        status: "active",
+      },
+    });
+    const matter = (await mk.json()) as { id: string };
+
+    // Schedule a hearing so the Upcoming hearings card has a row.
+    const tomorrow = new Date(Date.now() + 24 * 3600 * 1000)
+      .toISOString()
+      .slice(0, 10);
+    const hr = await api.post(
+      `${apiBaseUrl}/api/matters/${matter.id}/hearings`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        data: {
+          hearing_on: tomorrow,
+          forum_name: "Delhi HC, Bench: Hon'ble X",
+          purpose: "BUG-011 companion populated test",
+        },
+      },
+    );
+    if (hr.status() !== 200) {
+      throw new Error(`Hearing seed failed: ${hr.status()} ${await hr.text()}`);
+    }
+
+    await page.goto("/sign-in");
+    await page.locator("#company-slug").fill(slug);
+    await page.locator("#email").fill(`owner-${slug}@example.com`);
+    await page.locator("#password").fill(PASSWORD);
+    await page.getByRole("button", { name: /^Sign in$/ }).click();
+    await page.waitForURL(/\/app/);
+    await page.goto(`/app/matters/${matter.id}`);
+
+    // The Upcoming hearings card now renders (one row inside) — proves
+    // the conditional is "hide ONLY when empty", not "hide always".
+    await expect(page.getByText("Upcoming hearings")).toBeVisible({
+      timeout: 15_000,
+    });
+    // Last court order + Open tasks remain hidden — we didn't seed
+    // those, so the conditional behaviour is still correct.
+    await expect(page.getByText("Last court order")).toHaveCount(0);
+    await expect(page.getByText("Open tasks")).toHaveCount(0);
+  });
 });

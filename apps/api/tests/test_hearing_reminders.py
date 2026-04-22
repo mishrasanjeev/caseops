@@ -593,6 +593,7 @@ def test_full_lifecycle_create_hearing_through_delivered(
     on 2026-04-22 — it codifies every transition in one read so a
     future regression in any single hop fails this test loudly."""
     import os
+
     import httpx
 
     from caseops_api.core.settings import get_settings

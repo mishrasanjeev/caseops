@@ -40,6 +40,8 @@ These rules are the default coding behavior for all implementation work in this 
 - Prefer tests or checks that prove the change works.
 - For multi-step work, state the plan and verify each step.
 - Do not stop at implementation if verification is feasible.
+- For bug work, fail closed: if the intended workflow is not proven to work, do
+  not call it fixed.
 
 ---
 
@@ -142,11 +144,57 @@ These rules are the default coding behavior for all implementation work in this 
   - data-leakage checks
 - Workflow changes should be verified end to end when practical.
 
+### Mandatory Bug-Fixing Protocol
+
+- Before any bug triage, bug fix, bug verification, or reopen analysis, read
+  `.claude/skills/bug-fixing/SKILL.md`. This is mandatory, not advisory.
+- Use only these verdicts for bug status:
+  - `Properly fixed`
+  - `Partially fixed`
+  - `Not fixed`
+  - `Inconclusive`
+- Do not call a bug fixed because the copy improved, the route redirects, or
+  the backend explains the failure better while the UI still invites failure.
+- For schema, enum, or status bugs, inspect backend schema, frontend schema,
+  endpoint typings, create forms, update forms, and read-path parsing before
+  closure.
+- For mobile or responsive bugs, desktop-only proof is insufficient.
+- Reopened bugs require fresh end-user verification before closure.
+- If the environment blocks the strongest verification, say so explicitly and
+  lower confidence.
+- Keep `docs/STRICT_BUG_TASKLIST_2026-04-22.md` current for any Hari or Ram bug,
+  reopen, or adjacent defect found through the same audit.
+
 When fixing a bug:
 
 - first reproduce it with a test or a concrete verification step
 - then fix it
 - then prove the fix works
+- then record whether it is `Properly fixed`, `Partially fixed`, `Not fixed`,
+  or `Inconclusive`
+
+### Canonical backend verification recipe
+
+The local backend `uv run` path is fragile on Windows when long-running
+processes (notably the corpus sweep) hold a lock on
+`.venv/Scripts/*.exe`. Use `scripts/verify-backend.sh` (or the `.ps1`
+equivalent) for every backend verification — it bypasses `uv run`,
+calls `uv sync --frozen --no-install-project` only when the venv is
+missing (which doesn't rebuild the locked entry-point exes), runs an
+import sanity check that fails loudly on a partial sync, then runs
+ruff + targeted pytest:
+
+```bash
+scripts/verify-backend.sh                                    # full suite
+scripts/verify-backend.sh tests/test_intake.py               # one file
+scripts/verify-backend.sh -k "reminders or intake"           # by keyword
+```
+
+This is the recipe an outside reviewer (Codex, second agent) should
+use. If `uv sync --frozen` fails on a locked exe, stop the process
+holding it (typically the GCE-VM corpus sweep is **not** the local
+problem — it runs on `caseops-ingest-vm`, not the workstation). For
+local sweeps, use `Stop-Process -Name caseops-ingest-corpus` first.
 
 ---
 
@@ -161,4 +209,3 @@ Before considering a change complete, ask:
 - Did we verify the change with tests or concrete checks?
 
 If the answer to any of these is no, revise before shipping.
-
