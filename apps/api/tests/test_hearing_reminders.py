@@ -571,6 +571,76 @@ def test_admin_notifications_list_is_tenant_scoped(client: TestClient) -> None:
     assert b_list.json()["reminders"] == []
 
 
+def test_per_matter_reminders_endpoint_is_tenant_and_matter_scoped(
+    client: TestClient,
+) -> None:
+    """Strict Ledger #5 (BUG-013 in-app visibility, 2026-04-22):
+    end users — not just workspace admins — must be able to see
+    reminder rows on a matter they have access to. The
+    `GET /api/matters/{matter_id}/reminders` endpoint mirrors the
+    admin notifications data but scoped to a single matter.
+
+    Verify three things:
+    - Owner of a fresh matter sees the two queued T-24h + T-1h
+      rows the create-hearing path enqueued.
+    - A matter with NO hearings returns `reminders: []`.
+    - Cross-tenant access 404s (anyone in tenant B sees no rows
+      for tenant A's matter — same gate as get_matter).
+    """
+    token = str(bootstrap_company(client)["access_token"])
+    matter = _mk_matter(client, token, code="REM-PERMATTER")
+    hearing = _mk_hearing_via_api(client, token, matter["id"], days_ahead=4)
+
+    # Owner-on-matter sees both reminders.
+    listed = client.get(
+        f"/api/matters/{matter['id']}/reminders",
+        headers=auth_headers(token),
+    )
+    assert listed.status_code == 200, listed.text
+    body = listed.json()
+    assert body["matter_id"] == matter["id"]
+    assert len(body["reminders"]) == 2
+    statuses = {r["status"] for r in body["reminders"]}
+    assert statuses == {"queued"}
+    hearing_ids = {r["hearing_id"] for r in body["reminders"]}
+    assert hearing_ids == {hearing["id"]}
+    # Each row carries the user-actionable scheduling fields.
+    for r in body["reminders"]:
+        assert r["channel"] == "email"
+        assert r["scheduled_for"] is not None
+        assert r["sent_at"] is None
+        assert r["delivered_at"] is None
+
+    # Empty matter on the same tenant.
+    other_matter = _mk_matter(client, token, code="REM-NOMATTER")
+    empty = client.get(
+        f"/api/matters/{other_matter['id']}/reminders",
+        headers=auth_headers(token),
+    )
+    assert empty.status_code == 200
+    assert empty.json()["reminders"] == []
+
+    # Cross-tenant: another tenant cannot read tenant A's matter
+    # (404 from the underlying get_matter ACL).
+    b_resp = client.post(
+        "/api/bootstrap/company",
+        json={
+            "company_name": "Tenant B Reminders LLP",
+            "company_slug": "tenant-b-permatter-rem",
+            "company_type": "law_firm",
+            "owner_full_name": "Owner B",
+            "owner_email": "b@tenant-b-permatter-rem.example",
+            "owner_password": "TenantB-Strong!234",
+        },
+    )
+    token_b = str(b_resp.json()["access_token"])
+    cross = client.get(
+        f"/api/matters/{matter['id']}/reminders",
+        headers=auth_headers(token_b),
+    )
+    assert cross.status_code == 404
+
+
 def test_full_lifecycle_create_hearing_through_delivered(
     client: TestClient, monkeypatch: pytest.MonkeyPatch,
 ) -> None:

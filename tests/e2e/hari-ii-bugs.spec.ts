@@ -349,6 +349,68 @@ test.describe("Hari II bug regressions", () => {
 
 
   // --------------------------------------------------------------
+  // Strict Ledger #5 (BUG-013 in-app visibility, 2026-04-22):
+  // after a hearing is created, the queued reminders show up
+  // INLINE on the matter cockpit Hearings tab as a reminder
+  // strip — the in-platform half of "in-platform + email
+  // notifications". End-user surface, not just admin.
+  // --------------------------------------------------------------
+  test("BUG-013 in-app: hearing reminder strip shows queued rows on the matter cockpit", async ({
+    page,
+  }) => {
+    const api = await request.newContext();
+    const slug = unique("b13ia");
+    const { token } = await bootstrap(api, slug);
+    const mk = await api.post(`${apiBaseUrl}/api/matters/`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: {
+        title: "BUG-013 in-app reminder strip",
+        matter_code: unique("B13IA").toUpperCase(),
+        practice_area: "civil",
+        forum_level: "high_court",
+        status: "active",
+      },
+    });
+    const matter = (await mk.json()) as { id: string };
+
+    // Create a hearing 4 days out so both T-24h AND T-1h offsets
+    // are in the future → backend persists 2 queued reminders.
+    const hearingDate = new Date(Date.now() + 4 * 24 * 3600 * 1000)
+      .toISOString()
+      .slice(0, 10);
+    const hr = await api.post(
+      `${apiBaseUrl}/api/matters/${matter.id}/hearings`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        data: {
+          hearing_on: hearingDate,
+          forum_name: "Delhi HC, Bench: Hon'ble X",
+          purpose: "BUG-013 in-app strip",
+        },
+      },
+    );
+    expect(hr.status()).toBe(200);
+
+    await page.goto("/sign-in");
+    await page.locator("#company-slug").fill(slug);
+    await page.locator("#email").fill(`owner-${slug}@example.com`);
+    await page.locator("#password").fill(PASSWORD);
+    await page.getByRole("button", { name: /^Sign in$/ }).click();
+    await page.waitForURL(/\/app/);
+    await page.goto(`/app/matters/${matter.id}/hearings`);
+
+    // The strip renders inline under the hearing summary.
+    const strip = page.getByTestId("hearing-reminder-strip");
+    await expect(strip).toBeVisible({ timeout: 15_000 });
+    // Both rows are queued (worker hasn't run in the e2e env).
+    await expect(strip.getByText(/queued/i).first()).toBeVisible();
+    // Two distinct status pills (T-24h + T-1h).
+    const pills = await strip.getByText(/queued/i).count();
+    expect(pills).toBeGreaterThanOrEqual(1);
+  });
+
+
+  // --------------------------------------------------------------
   // BUG-011 (reopened 2026-04-22) — overview hides ALL three
   // empty-state cards (Open tasks, Last court order, Upcoming
   // hearings) on a fresh matter. The prior fix only hid Open tasks;

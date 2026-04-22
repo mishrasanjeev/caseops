@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Calendar,
   CalendarPlus,
@@ -32,8 +32,10 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ApiError } from "@/lib/api/config";
 import {
   createMatterHearing,
-  pullMatterCourtSync,
+  listMatterReminders,
   type MatterCourtSyncJob,
+  type MatterReminderRecord,
+  pullMatterCourtSync,
 } from "@/lib/api/endpoints";
 import { useCapability } from "@/lib/capabilities";
 import { formatLegalDate } from "@/lib/dates";
@@ -57,6 +59,22 @@ export default function MatterHearingsPage() {
   const canRunSync = useCapability("court_sync:run");
   const [lastJob, setLastJob] = useState<MatterCourtSyncJob | null>(null);
   const { data } = useMatterWorkspace(matterId);
+  // Strict Ledger #5 (BUG-013 in-app visibility, 2026-04-22):
+  // per-matter reminder rows. Re-fetched on a 30s polling cadence
+  // so the user sees the queue → sent → delivered transitions
+  // without a hard refresh after the worker fires.
+  const remindersQuery = useQuery({
+    queryKey: ["matters", matterId, "reminders"],
+    queryFn: () => listMatterReminders(matterId),
+    refetchInterval: 30_000,
+    enabled: Boolean(matterId),
+  });
+  const remindersByHearing = new Map<string, MatterReminderRecord[]>();
+  for (const r of remindersQuery.data?.reminders ?? []) {
+    const list = remindersByHearing.get(r.hearing_id) ?? [];
+    list.push(r);
+    remindersByHearing.set(r.hearing_id, list);
+  }
 
   const syncMutation = useMutation({
     mutationFn: () => pullMatterCourtSync({ matterId }),
@@ -205,7 +223,7 @@ export default function MatterHearingsPage() {
                   key={h.id}
                   className="flex items-start justify-between gap-3 rounded-xl border border-[var(--color-line)] bg-white p-4"
                 >
-                  <div>
+                  <div className="min-w-0 flex-1">
                     <div className="text-sm font-semibold text-[var(--color-ink)]">
                       {h.hearing_type ?? "Hearing"}
                     </div>
@@ -217,6 +235,9 @@ export default function MatterHearingsPage() {
                         {h.outcome_notes}
                       </p>
                     ) : null}
+                    <HearingReminderStrip
+                      reminders={remindersByHearing.get(h.id) ?? []}
+                    />
                     <div className="mt-3">
                       <HearingPackDialog matterId={matterId} hearingId={h.id} />
                     </div>
@@ -470,5 +491,68 @@ function ScheduleHearingDialog({ matterId }: { matterId: string }): React.JSX.El
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+
+// Strict Ledger #5 (BUG-013 in-app visibility, 2026-04-22): renders
+// the queued / sent / delivered / failed reminders for a single
+// hearing as an inline strip under the hearing summary. Hari's bug
+// asked for "in-platform + email notifications" — email lands in
+// the inbox; this strip is the in-platform half. The text shows
+// the offset relative to the hearing date so the user can verify
+// at a glance that T-24h and T-1h are queued for tomorrow's 4pm
+// listing without opening the admin dashboard.
+function HearingReminderStrip({
+  reminders,
+}: {
+  reminders: MatterReminderRecord[];
+}) {
+  if (reminders.length === 0) return null;
+  // Sort by scheduled_for so the earliest fire is on the left.
+  const ordered = [...reminders].sort((a, b) => {
+    const aT = a.scheduled_for ?? "";
+    const bT = b.scheduled_for ?? "";
+    return aT.localeCompare(bT);
+  });
+  return (
+    <div
+      className="mt-3 flex flex-wrap items-center gap-2 text-xs"
+      data-testid="hearing-reminder-strip"
+    >
+      <span className="text-[var(--color-mute)]">Reminders:</span>
+      {ordered.map((r) => (
+        <span
+          key={r.id}
+          className={
+            "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 " +
+            (r.status === "delivered"
+              ? "border-[var(--color-brand-600)]/30 bg-[var(--color-brand-50,#eef2ff)] text-[var(--color-brand-700)]"
+              : r.status === "sent"
+                ? "border-[var(--color-line)] bg-[var(--color-bg)] text-[var(--color-ink-2)]"
+                : r.status === "queued"
+                  ? "border-[var(--color-line)] bg-white text-[var(--color-mute)]"
+                  : "border-[var(--color-warn-600)]/30 bg-[var(--color-warn-50)] text-[var(--color-warn-700)]")
+          }
+          title={
+            r.scheduled_for
+              ? `Scheduled for ${new Date(r.scheduled_for).toLocaleString()}` +
+                (r.last_error ? ` — ${r.last_error}` : "")
+              : ""
+          }
+        >
+          {r.scheduled_for
+            ? new Date(r.scheduled_for).toLocaleString(undefined, {
+                day: "2-digit",
+                month: "short",
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            : "?"}
+          {" · "}
+          {r.status}
+        </span>
+      ))}
+    </div>
   );
 }

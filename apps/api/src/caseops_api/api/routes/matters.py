@@ -109,6 +109,9 @@ from caseops_api.services.matter_summary_export import (
     render_summary_pdf,
 )
 from caseops_api.services.matter_timeline import build_matter_timeline_by_id
+from caseops_api.services.hearing_reminders import (
+    list_reminders_for_matter,
+)
 from caseops_api.services.matters import (
     create_matter,
     create_matter_attachment,
@@ -220,6 +223,53 @@ async def check_matter_code_available(
     session: DbSession,
 ) -> dict:
     return matter_code_available(session, context=context, code=code)
+
+
+@router.get(
+    "/{matter_id}/reminders",
+    summary="List hearing reminders for a single matter",
+    description=(
+        "Strict Ledger #5 (BUG-013 in-app visibility, 2026-04-22). "
+        "Per-matter view of the queued/sent/delivered/failed "
+        "reminder rows the worker is going to send (or has sent) "
+        "for hearings on this matter. Tenant-scoped + matter-access-"
+        "scoped: anyone with `matters:read` who can see the matter "
+        "can see its reminders. Mirrors the data the admin "
+        "notifications dashboard surfaces but filtered to the "
+        "matter the user is already looking at."
+    ),
+)
+async def list_current_company_matter_reminders(
+    matter_id: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> dict:
+    # get_matter enforces tenant + matter-ACL gates; raises 404 if the
+    # caller can't see the matter.
+    matter = get_matter(session, context=context, matter_id=matter_id)
+    rows = list_reminders_for_matter(
+        session, company_id=context.company.id, matter_id=matter.id,
+    )
+    return {
+        "matter_id": matter.id,
+        "reminders": [
+            {
+                "id": r.id,
+                "hearing_id": r.hearing_id,
+                "recipient_email": r.recipient_email,
+                "channel": r.channel,
+                "status": r.status,
+                "scheduled_for": r.scheduled_for.isoformat()
+                if r.scheduled_for else None,
+                "sent_at": r.sent_at.isoformat() if r.sent_at else None,
+                "delivered_at": r.delivered_at.isoformat()
+                if r.delivered_at else None,
+                "last_error": r.last_error,
+                "attempts": r.attempts,
+            }
+            for r in rows
+        ],
+    }
 
 
 @router.get("/{matter_id}", response_model=MatterRecord, summary="Get a matter by id")

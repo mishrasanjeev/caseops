@@ -459,9 +459,32 @@ def apply_sendgrid_event(
     return updated
 
 
+def list_reminders_for_matter(
+    session: Session, *, company_id: str, matter_id: str,
+) -> list[HearingReminder]:
+    """Strict Ledger #5 (BUG-013 in-app visibility): tenant-scoped
+    per-matter reminders, ordered by scheduled_for descending so
+    the most recent / next-up rows render first. Both the admin
+    notifications page and the per-matter cockpit Hearings tab
+    surface the same data — this helper is what the per-matter
+    endpoint calls. Caller MUST have already verified the matter
+    is in the caller's tenant."""
+    return list(
+        session.scalars(
+            select(HearingReminder)
+            .where(
+                HearingReminder.company_id == company_id,
+                HearingReminder.matter_id == matter_id,
+            )
+            .order_by(HearingReminder.scheduled_for.desc())
+        )
+    )
+
+
 __all__ = [
     "schedule_reminders_for_hearing",
     "cancel_reminders_for_hearing",
+    "list_reminders_for_matter",
     "run_reminder_worker",
     "apply_sendgrid_event",
 ]

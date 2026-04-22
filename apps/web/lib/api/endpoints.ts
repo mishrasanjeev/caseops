@@ -89,6 +89,37 @@ export async function fetchMatter(matterId: string): Promise<Matter> {
   return matter.parse(data);
 }
 
+// Strict Ledger #5 (BUG-013 in-app visibility, 2026-04-22):
+// per-matter reminder rows the matter cockpit Hearings tab shows
+// alongside each hearing. Mirrors the admin notifications data
+// but matter-scoped + visible to anyone with `matters:read`.
+export type MatterReminderRecord = {
+  id: string;
+  hearing_id: string;
+  recipient_email: string | null;
+  channel: string;
+  status: "queued" | "sent" | "delivered" | "failed" | "cancelled";
+  scheduled_for: string | null;
+  sent_at: string | null;
+  delivered_at: string | null;
+  last_error: string | null;
+  attempts: number;
+};
+
+export type MatterRemindersResponse = {
+  matter_id: string;
+  reminders: MatterReminderRecord[];
+};
+
+export async function listMatterReminders(
+  matterId: string,
+): Promise<MatterRemindersResponse> {
+  return apiRequest<MatterRemindersResponse>(
+    `/api/matters/${matterId}/reminders`,
+  );
+}
+
+
 // Pre-submit guard for the intake → matter promotion dialog
 // (BUG-021 / Strict Ledger #3). Returns whether the matter_code is
 // free in the current tenant + a one-click suggestion when taken.
