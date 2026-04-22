@@ -218,11 +218,17 @@ export const outsideCounselPortfolioSummary = z.object({
   profitability_signal_minor: z.number().int().optional(),
 }).passthrough();
 
+// Hari-BUG-018/023 follow-up (2026-04-22): assignment status MUST
+// match db.models.OutsideCounselAssignmentStatus exactly. The
+// previous enum had `declined` and `completed`, neither of which
+// the backend emits — so any spend record with the canonical
+// `active` or `closed` status would have crashed Zod parsing on
+// the workspace fetch (same failure mode as panel_status drift).
 export const outsideCounselAssignmentStatus = z.enum([
   "proposed",
   "approved",
-  "declined",
-  "completed",
+  "active",
+  "closed",
 ]);
 
 export const outsideCounselAssignment = z.object({
@@ -244,12 +250,17 @@ export const outsideCounselAssignment = z.object({
   updated_at: z.string(),
 });
 
+// Hari-BUG-018/023 follow-up (2026-04-22): spend status MUST match
+// db.models.OutsideCounselSpendStatus exactly. Backend emits
+// `partially_approved` (a real outcome when a partner approves
+// some line items but not others); the previous enum was missing
+// it AND included `rejected` which the backend never emits.
 export const outsideCounselSpendStatus = z.enum([
   "submitted",
   "approved",
-  "rejected",
-  "paid",
+  "partially_approved",
   "disputed",
+  "paid",
 ]);
 
 export const outsideCounselSpend = z.object({

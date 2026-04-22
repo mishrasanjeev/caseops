@@ -43,7 +43,12 @@ const schema = z.object({
   firm_city: z.string().max(255).optional(),
   jurisdictions: z.string().max(400).optional(),
   practice_areas: z.string().max(400).optional(),
-  panel_status: z.enum(["active", "on_hold", "preferred", "archived"]),
+  // Hari-BUG-018/023 (2026-04-22): values MUST match
+  // db.models.OutsideCounselPanelStatus. Prior set
+  // (active | on_hold | preferred | archived) was the original
+  // drift source — submitting on_hold or archived would 422 at
+  // the API and confuse the user with no path forward.
+  panel_status: z.enum(["active", "preferred", "inactive"]),
   internal_notes: z.string().max(4000).optional(),
 });
 
@@ -212,8 +217,7 @@ export function NewCounselDialog() {
               <SelectContent>
                 <SelectItem value="preferred">Preferred</SelectItem>
                 <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="on_hold">On hold</SelectItem>
-                <SelectItem value="archived">Archived</SelectItem>
+                <SelectItem value="inactive">Inactive</SelectItem>
               </SelectContent>
             </Select>
           </FormField>

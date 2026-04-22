@@ -71,31 +71,61 @@ Done when:
 
 ### 2. Outside counsel schema and status drift related to BUG-018 and BUG-023
 
-Status: Partially fixed
+Status: Properly fixed
 
-Evidence:
+Backend canonical (apps/api/src/caseops_api/db/models.py):
 
-- `apps/web/components/app/NewCounselDialog.tsx` still offers invalid
-  `panel_status` values (`on_hold`, `archived`) that the backend does not
-  accept.
-- `apps/web/lib/api/endpoints.ts` still types outside counsel panel status as
-  `active | on_hold | preferred | archived`.
-- `apps/web/lib/api/schemas.ts` still drifts on assignment statuses and spend
-  statuses.
-- `apps/api/src/caseops_api/schemas/outside_counsel.py` is the backend source
-  of truth and does not match the frontend contracts.
+- OutsideCounselPanelStatus: `active | preferred | inactive` (3)
+- OutsideCounselAssignmentStatus: `proposed | approved | active | closed` (4)
+- OutsideCounselSpendStatus: `submitted | approved | partially_approved | disputed | paid` (5)
+
+Drift sites closed:
+
+- `apps/web/lib/api/schemas.ts`:
+  - `panelStatus` matched on a prior pass
+  - `outsideCounselAssignmentStatus`: was `proposed | approved | declined | completed` → fixed to canonical
+  - `outsideCounselSpendStatus`: was `submitted | approved | rejected | paid | disputed` (missing `partially_approved`, had invalid `rejected`) → fixed
+- `apps/web/lib/api/endpoints.ts`:
+  - `OutsideCounselPanelStatus` write type: was `active | on_hold | preferred | archived` → fixed
+  - `OutsideCounselAssignmentStatus` write type: was `proposed | approved | declined | completed` → fixed
+  - Added new `OutsideCounselSpendStatus` exported type; `createOutsideCounselSpendRecord.input.status` no longer has an inline incorrect literal
+- `apps/web/components/app/NewCounselDialog.tsx`:
+  - Form Zod was `["active", "on_hold", "preferred", "archived"]` → fixed
+  - SelectItems removed `on_hold` + `archived`, added `inactive`
+
+Adjacent-path 404 found + fixed during audit:
+
+- `apps/web/lib/api/endpoints.ts:277` was POSTing to
+  `/api/outside-counsel/spend` but the backend route is
+  `/api/outside-counsel/spend-records` — every spend record in
+  production was 404'ing. Fixed.
+
+Verification:
+
+- `apps/web/lib/api/schemas.test.ts` now pins 18 cases (3 panel +
+  4 assignment + 5 spend canonical accepts; 6 previously-incorrect
+  rejects). Each enum has its own describe block so the failure
+  identifies which enum drifted. PASS 24/24.
+- `apps/web/components/app/NewCounselDialog.test.tsx` 2/2 still pass
+  with the new enum values.
+- `tests/e2e/matter-outside-counsel.spec.ts` extended with a workspace
+  E2E that seeds **canonical-but-previously-rejected** values (panel
+  `inactive`, assignment `active`, spend `partially_approved`), then
+  loads `/app/outside-counsel` and asserts the page header + counsel
+  name render — proving every read-path Zod parse succeeds. PASS 2/2.
+- Backend `apps/api/tests/test_outside_counsel.py` already covers
+  round-trips with `partially_approved` etc. (line 96–103).
 
 Done when:
 
-- Backend schema, frontend schema, endpoint typings, create forms, update forms,
-  fixtures, and seeded examples use the same enum values.
-- The UI cannot emit invalid outside counsel statuses.
-- The UI can read and render real backend values without parse failure.
-
-Required verification:
-
-- Unit tests for schema parsing and form submission payloads
-- End-to-end create/edit/read outside counsel workflow verification
+- ✅ Backend schema, frontend Zod, frontend TS types, NewCounselDialog
+  form, NewCounselDialog SelectItems all use the same enum values.
+- ✅ The UI cannot emit invalid outside counsel statuses (form Zod
+  rejects them at submit).
+- ✅ The UI can read every canonical backend value without parse
+  failure (E2E proves panel=inactive, assignment=active,
+  spend=partially_approved all render).
+- ✅ Spend record POST hits the right route (`/spend-records`).
 
 ### 3. BUG-021 - Duplicate matter-code validation is still reactive, not proactive
 

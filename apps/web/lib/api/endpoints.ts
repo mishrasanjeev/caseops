@@ -153,17 +153,30 @@ export async function fetchOutsideCounselWorkspace(): Promise<OutsideCounselWork
 //   outside_counsel:manage — create/edit profile, assign, record spend
 //   outside_counsel:recommend — fetch recommendations
 
+// Hari-BUG-018/023 (2026-04-22): these MUST match the backend
+// StrEnums in apps/api/src/caseops_api/db/models.py exactly. The
+// drift map (now closed):
+//   panel: prior had on_hold + archived (neither in backend)
+//   assignment: prior had declined + completed (neither in backend)
+//                 and was missing active + closed (both canonical)
+// schemas.test.ts pins these so a future drift fails CI loudly.
 export type OutsideCounselPanelStatus =
   | "active"
-  | "on_hold"
   | "preferred"
-  | "archived";
+  | "inactive";
 
 export type OutsideCounselAssignmentStatus =
   | "proposed"
   | "approved"
-  | "declined"
-  | "completed";
+  | "active"
+  | "closed";
+
+export type OutsideCounselSpendStatus =
+  | "submitted"
+  | "approved"
+  | "partially_approved"
+  | "disputed"
+  | "paid";
 
 export async function createOutsideCounselProfile(input: {
   name: string;
@@ -255,13 +268,16 @@ export async function createOutsideCounselSpendRecord(input: {
   currency?: string;
   amountMinor: number;
   approvedAmountMinor?: number | null;
-  status?: "submitted" | "approved" | "paid" | "disputed";
+  status?: OutsideCounselSpendStatus;
   billedOn?: string | null;
   dueOn?: string | null;
   paidOn?: string | null;
   notes?: string | null;
 }): Promise<unknown> {
-  return apiRequest<unknown>("/api/outside-counsel/spend", {
+  // Backend route is /spend-records (apps/api/.../routes/outside_counsel.py).
+  // The prior path /spend was a 404 in production — adjacent-path
+  // bug discovered during the BUG-018/023 schema audit on 2026-04-22.
+  return apiRequest<unknown>("/api/outside-counsel/spend-records", {
     method: "POST",
     body: {
       matter_id: input.matterId,
