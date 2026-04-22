@@ -150,15 +150,19 @@ test.describe("Hari II bug regressions", () => {
     await expect(page.getByTestId("intake-promote-suggest")).toBeVisible({
       timeout: 10_000,
     });
-    await expect(page.getByText(/already in use/i)).toBeVisible();
+    // Scope to the dialog's alert to avoid matching the list-row error
+    // banner on the intake page behind the dialog (strict-mode clash).
+    await expect(
+      page.getByRole("dialog").getByRole("alert").getByText(/already in use/i),
+    ).toBeVisible();
   });
 
 
   // --------------------------------------------------------------
-  // BUG-019 — per-matter outside-counsel route redirects instead
-  // of 404'ing.
+  // BUG-019 — per-matter outside-counsel route now renders a real
+  // page (was a redirect; Codex demoted the redirect to Partial).
   // --------------------------------------------------------------
-  test("BUG-019: /app/matters/{id}/outside-counsel redirects to workspace", async ({
+  test("BUG-019: /app/matters/{id}/outside-counsel renders per-matter page", async ({
     page,
   }) => {
     const api = await request.newContext();
@@ -183,7 +187,18 @@ test.describe("Hari II bug regressions", () => {
     await page.getByRole("button", { name: /^Sign in$/ }).click();
     await page.waitForURL(/\/app/);
     await page.goto(`/app/matters/${matter.id}/outside-counsel`);
-    await page.waitForURL(/\/app\/outside-counsel/, { timeout: 15_000 });
+    // Page must NOT redirect away from the per-matter URL.
+    await expect(page).toHaveURL(
+      new RegExp(`/app/matters/${matter.id}/outside-counsel$`),
+      { timeout: 15_000 },
+    );
+    // Per-matter page renders its own header + empty state.
+    await expect(
+      page.getByText(/Matter · Outside counsel/i),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(
+      page.getByText(/No counsel assigned to this matter yet/i),
+    ).toBeVisible();
   });
 
 
@@ -226,7 +241,8 @@ test.describe("Hari II bug regressions", () => {
 
   // --------------------------------------------------------------
   // BUG-013 — the reminders note is present in the schedule-hearing
-  // dialog so users know reminders aren't sent yet.
+  // dialog. Copy was updated once reminders were dark-launched
+  // (rows scheduled on save, delivered when provider is configured).
   // --------------------------------------------------------------
   test("BUG-013: Schedule hearing dialog carries a reminders note", async ({
     page,
@@ -257,8 +273,9 @@ test.describe("Hari II bug regressions", () => {
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
     await expect(dialog.getByText(/Reminders:/i)).toBeVisible();
+    await expect(dialog.getByText(/T-24h and T-1h/i)).toBeVisible();
     await expect(
-      dialog.getByText(/reminders aren't sent yet/i),
+      dialog.getByText(/email provider is configured/i),
     ).toBeVisible();
   });
 
