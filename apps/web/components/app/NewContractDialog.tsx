@@ -102,7 +102,14 @@ export function NewContractDialog() {
           <Plus className="h-4 w-4" aria-hidden /> New contract
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-lg">
+      {/* Ram-BUG-004 (2026-04-22): on narrow viewports the dialog
+          rendered with the form taller than the screen and the
+          submit/cancel buttons fell below the fold with no scroll
+          affordance. Cap the height at 90vh + scroll the body so
+          the footer is always reachable. The grid-cols-2 fields
+          below also stack vertically on mobile via the
+          grid-cols-1 sm: prefix added at the same time. */}
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create a new contract</DialogTitle>
           <DialogDescription>
@@ -130,7 +137,7 @@ export function NewContractDialog() {
             />
           </Field>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field
               id="contract-code"
               label="Code"
@@ -159,7 +166,7 @@ export function NewContractDialog() {
             />
           </Field>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field id="effective-on" label="Effective on">
               <Input
                 id="effective-on"
