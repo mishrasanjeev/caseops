@@ -642,6 +642,87 @@ def get_matter(session: Session, *, context: SessionContext, matter_id: str) -> 
     return _matter_record(_get_matter_model(session, context=context, matter_id=matter_id))
 
 
+def matter_code_available(
+    session: Session, *, context: SessionContext, code: str,
+) -> dict:
+    """Pre-submit guard for the intake → matter promotion dialog
+    (BUG-021 / Strict Ledger #3). Returns
+    ``{available: bool, normalised: str, suggestion: str | None}``.
+
+    - ``normalised`` is the upper-cased + stripped form the backend
+      will actually persist; the UI should reflect this so the user
+      knows what they're submitting.
+    - ``suggestion`` is the next lexically-bumped variant when the
+      code is taken (e.g. ``CR-2026-099 → CR-2026-100``); the dialog
+      uses it as a one-click 'Try this' affordance, mirroring the
+      post-failure auto-suggest the BUG-017 fix shipped — but now the
+      user gets it BEFORE the failed submit.
+    Tenant-scoped: codes from other companies cannot leak in either
+    the availability check or the suggestion.
+    """
+    normalised = (code or "").strip().upper()
+    if len(normalised) < 2:
+        return {
+            "available": False,
+            "normalised": normalised,
+            "suggestion": None,
+            "reason": "Matter code must be at least 2 characters.",
+        }
+    existing = session.scalar(
+        select(Matter.id).where(
+            Matter.company_id == context.company.id,
+            Matter.matter_code == normalised,
+        )
+    )
+    if existing is None:
+        return {
+            "available": True,
+            "normalised": normalised,
+            "suggestion": None,
+            "reason": None,
+        }
+    suggestion = _next_available_code(
+        session, company_id=context.company.id, code=normalised,
+    )
+    return {
+        "available": False,
+        "normalised": normalised,
+        "suggestion": suggestion,
+        "reason": "Matter code is already in use in this workspace.",
+    }
+
+
+def _next_available_code(
+    session: Session, *, company_id: str, code: str, max_iters: int = 100,
+) -> str | None:
+    """Bump the trailing numeric segment until we find a free code.
+    Mirrors the frontend ``suggestNextMatterCode`` so server + client
+    suggest the same value on a duplicate. Returns None when no
+    trailing number is found OR the bump search is exhausted (very
+    unlikely — the cap is just a hard safety stop)."""
+    import re
+
+    match = re.match(r"^(.*?)(\d+)$", code)
+    if not match:
+        return None
+    prefix = match.group(1)
+    digits = match.group(2)
+    width = len(digits)
+    n = int(digits)
+    for _ in range(max_iters):
+        n += 1
+        candidate = f"{prefix}{str(n).zfill(width)}"
+        taken = session.scalar(
+            select(Matter.id).where(
+                Matter.company_id == company_id,
+                Matter.matter_code == candidate,
+            )
+        )
+        if taken is None:
+            return candidate
+    return None
+
+
 def update_matter(
     session: Session,
     *,

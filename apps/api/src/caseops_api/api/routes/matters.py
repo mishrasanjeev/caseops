@@ -122,6 +122,7 @@ from caseops_api.services.matters import (
     get_matter_attachment_download,
     get_matter_workspace,
     list_matters,
+    matter_code_available,
     request_matter_attachment_processing,
     update_matter,
     update_matter_hearing,
@@ -198,6 +199,27 @@ async def create_current_company_matter(
     session: DbSession,
 ) -> MatterRecord:
     return create_matter(session, context=context, payload=payload)
+
+
+@router.get(
+    "/code-available",
+    summary="Check whether a matter_code is available for the current tenant",
+    description=(
+        "Pre-submit guard for the intake → matter promotion dialog "
+        "(BUG-021 / Strict Ledger #3). Returns ``{available: bool, "
+        "suggestion: str | None}``. The suggestion is the next "
+        "lexically-bumped variant when the queried code is taken "
+        "(e.g. ``CR-001 → CR-002``); the frontend uses it as a "
+        "one-click 'Try this' affordance. Tenant-scoped — codes from "
+        "other companies never leak."
+    ),
+)
+async def check_matter_code_available(
+    code: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> dict:
+    return matter_code_available(session, context=context, code=code)
 
 
 @router.get("/{matter_id}", response_model=MatterRecord, summary="Get a matter by id")

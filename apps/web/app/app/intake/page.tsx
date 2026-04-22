@@ -16,7 +16,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -55,10 +55,12 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Textarea } from "@/components/ui/Textarea";
 import { ApiError } from "@/lib/api/config";
 import {
+  checkMatterCodeAvailable,
   createIntakeRequest,
   type IntakePriority,
   type IntakeRequest,
   type IntakeStatus,
+  type MatterCodeAvailability,
   listIntakeRequests,
   promoteIntakeRequest,
   updateIntakeRequest,
@@ -413,13 +415,56 @@ function PromoteButton({
   const [open, setOpen] = useState(false);
   const [code, setCode] = useState("");
 
-  // Detect the "matter code already in use" backend error and auto-bump
-  // the trailing index so one click suggests a free code. BUG-017 Hari
-  // 2026-04-21: previously this error only fired as a toast and the
-  // user had to manually retry.
-  const codeInUse =
+  // Strict Ledger #3 (2026-04-22): pre-submit availability check so
+  // the user never reaches a failed submit on a known-dup. Debounced
+  // 350ms so a typing burst issues at most one GET. The fetch is
+  // tenant-scoped (server reads context.company.id), and the result
+  // gives us the SAME normalised + suggestion shape the post-submit
+  // error path was already showing — but BEFORE the click. The
+  // post-submit error path (errorDetail / suggestNextMatterCode)
+  // stays as a backstop for a race where two users grab the same
+  // code in the 350ms window.
+  const [availability, setAvailability] =
+    useState<MatterCodeAvailability | null>(null);
+  const trimmedCode = code.trim();
+  useEffect(() => {
+    if (!open || trimmedCode.length < 2) {
+      setAvailability(null);
+      return;
+    }
+    const handle = setTimeout(() => {
+      let cancelled = false;
+      checkMatterCodeAvailable(trimmedCode)
+        .then((res) => {
+          if (!cancelled) setAvailability(res);
+        })
+        .catch(() => {
+          // Network blip → don't block the submit; fall back to the
+          // post-submit error path. The user will still get the
+          // "already in use" toast + auto-suggest if the code IS
+          // taken — we just lose the pre-emptive disable.
+          if (!cancelled) setAvailability(null);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }, 350);
+    return () => clearTimeout(handle);
+  }, [trimmedCode, open]);
+
+  // Post-submit error path (backstop for the pre-flight race).
+  const codeInUseFromError =
     errorDetail !== null && /already in use/i.test(errorDetail);
-  const suggestion = codeInUse ? suggestNextMatterCode(code.trim()) : null;
+  // Pre-flight result is authoritative when available; the error
+  // path is only used when the pre-flight returned null (network
+  // blip) and the user still managed to submit a dup.
+  const codeInUse =
+    availability !== null
+      ? !availability.available && availability.normalised === trimmedCode.toUpperCase()
+      : codeInUseFromError;
+  const suggestion =
+    availability?.suggestion ??
+    (codeInUseFromError ? suggestNextMatterCode(trimmedCode) : null);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -476,7 +521,7 @@ function PromoteButton({
             Cancel
           </Button>
           <Button
-            disabled={busy || code.trim().length < 2}
+            disabled={busy || code.trim().length < 2 || codeInUse}
             onClick={() => onConfirm(code.trim())}
             data-testid="intake-promote-confirm"
           >

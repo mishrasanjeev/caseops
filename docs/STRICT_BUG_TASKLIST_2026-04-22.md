@@ -129,27 +129,49 @@ Done when:
 
 ### 3. BUG-021 - Duplicate matter-code validation is still reactive, not proactive
 
-Status: Partially fixed
+Status: Properly fixed
 
-Evidence:
+Implementation:
 
-- Backend uniqueness enforcement exists in
-  `apps/api/src/caseops_api/services/intake.py`.
-- The intake UI only suggests a next code after the API rejects the duplicate in
-  `apps/web/app/app/intake/page.tsx`.
+- New backend endpoint `GET /api/matters/code-available?code=XXX`
+  (apps/api/src/caseops_api/api/routes/matters.py + service helper
+  `matter_code_available` in services/matters.py). Tenant-scoped via
+  `context.company.id` like every other matter endpoint. Returns
+  `{available, normalised, suggestion, reason}` — `suggestion` mirrors
+  the frontend `suggestNextMatterCode` so client + server propose the
+  same value on a dup.
+- Frontend (`apps/web/app/app/intake/page.tsx::PromoteButton`):
+  - 350ms debounced `checkMatterCodeAvailable` on every code change
+    once the dialog is open + the code is ≥2 chars.
+  - When the response says `available: false`, `aria-invalid` flips
+    on the input, the warning + suggestion render, AND the Create
+    button is disabled (`disabled={busy || code < 2 || codeInUse}`).
+  - The post-submit error path (BUG-017's auto-suggest) stays as a
+    backstop for the race between the check and the actual submit
+    (e.g. two operators grabbing the same code in the 350ms window).
+- Server uniqueness guard untouched — still the source of truth.
+
+Verification:
+
+- `apps/api/tests/test_intake.py::test_matter_code_available_endpoint`:
+  asserts free + taken cases (with case-insensitive normalisation,
+  proper bumped suggestion, tenant isolation). PASS.
+- `tests/e2e/hari-ii-bugs.spec.ts::BUG-021`: opens the promote
+  dialog, types a known-taken code, asserts the warning +
+  suggestion appear AND the Create button is disabled — without any
+  click on Create. Verifies the user cannot reach a failed submit.
+  PASS alongside the existing BUG-017 spec (which tests the
+  backstop path); 2/2 after npm run build.
 
 Done when:
 
-- The intake UI warns before submit when the matter code is already taken or
-  obviously conflicting.
-- The server-side uniqueness guard remains in place.
-- The user can resolve the conflict without first hitting a failed submit.
-
-Required verification:
-
-- Frontend regression test for pre-submit duplicate validation
-- End-to-end duplicate-code flow proving the user is stopped before a failed
-  submit
+- ✅ The intake UI warns before submit AND disables Create on a
+  taken code (no failed submit needed for the user to see the
+  conflict).
+- ✅ The server-side uniqueness guard remains in place
+  (services/intake.py:244-258).
+- ✅ The user can resolve the conflict by clicking the
+  one-click suggestion BEFORE any failed submit.
 
 ### 4. BUG-022 - Client detail completeness is still below the reported need
 

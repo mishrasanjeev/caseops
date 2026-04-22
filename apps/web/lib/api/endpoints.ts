@@ -89,6 +89,27 @@ export async function fetchMatter(matterId: string): Promise<Matter> {
   return matter.parse(data);
 }
 
+// Pre-submit guard for the intake → matter promotion dialog
+// (BUG-021 / Strict Ledger #3). Returns whether the matter_code is
+// free in the current tenant + a one-click suggestion when taken.
+// Intentionally minimal contract — `available` is the only field
+// the UI must branch on; `suggestion` and `reason` are display-only.
+export type MatterCodeAvailability = {
+  available: boolean;
+  normalised: string;
+  suggestion: string | null;
+  reason: string | null;
+};
+
+export async function checkMatterCodeAvailable(
+  code: string,
+): Promise<MatterCodeAvailability> {
+  const params = new URLSearchParams({ code });
+  return apiRequest<MatterCodeAvailability>(
+    `/api/matters/code-available?${params.toString()}`,
+  );
+}
+
 export async function fetchMatterWorkspace(matterId: string): Promise<unknown> {
   return apiRequest<unknown>(`/api/matters/${matterId}/workspace`);
 }

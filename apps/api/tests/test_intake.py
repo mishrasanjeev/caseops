@@ -159,6 +159,73 @@ def test_intake_promote_blocked_when_terminal(client: TestClient) -> None:
     assert "rejected" in promote.json()["detail"].lower()
 
 
+def test_matter_code_available_endpoint(client: TestClient) -> None:
+    """Strict Ledger #3 (BUG-021): the intake promote dialog must be
+    able to check whether a matter_code is free BEFORE submit. This
+    endpoint backs that pre-flight. Verify both branches:
+
+    - A code that doesn't exist returns ``available=true`` and no
+      suggestion.
+    - A code that's taken returns ``available=false`` plus the next
+      lexically-bumped suggestion (so the UI can offer one-click
+      'Try this').
+    Tenant-scoped — codes from other companies don't leak.
+    """
+    session = _bootstrap(client, "intake-codecheck")
+    headers = _headers(session["access_token"])
+    # Seed a matter so we have a known-taken code.
+    create = client.post(
+        "/api/matters/",
+        headers=headers,
+        json={
+            "title": "Seed matter for code check",
+            "matter_code": "CR-2026-099",
+            "practice_area": "criminal",
+            "forum_level": "high_court",
+            "status": "active",
+        },
+    )
+    assert create.status_code == 200, create.text
+
+    # Free code → available, no suggestion.
+    free = client.get(
+        "/api/matters/code-available",
+        headers=headers,
+        params={"code": "WRIT-2026-1"},
+    )
+    assert free.status_code == 200, free.text
+    body = free.json()
+    assert body == {
+        "available": True,
+        "normalised": "WRIT-2026-1",
+        "suggestion": None,
+        "reason": None,
+    }
+
+    # Taken code → not available, suggestion bumps the trailing index.
+    taken = client.get(
+        "/api/matters/code-available",
+        headers=headers,
+        params={"code": "cr-2026-099"},  # lower-case to prove normalisation
+    )
+    assert taken.status_code == 200, taken.text
+    body = taken.json()
+    assert body["available"] is False
+    assert body["normalised"] == "CR-2026-099"
+    assert body["suggestion"] == "CR-2026-100"
+    assert "already in use" in (body["reason"] or "").lower()
+
+    # Tenant isolation — a fresh tenant sees the same code as available.
+    other = _bootstrap(client, "intake-codecheck-other")
+    other_headers = _headers(other["access_token"])
+    isolated = client.get(
+        "/api/matters/code-available",
+        headers=other_headers,
+        params={"code": "CR-2026-099"},
+    )
+    assert isolated.json()["available"] is True
+
+
 def test_intake_promote_accepts_slash_matter_code(client: TestClient) -> None:
     """Ram-BUG-003 (2026-04-22): user reported "Could not promote
     request" when entering matter_code ``2065/2026``. Indian court

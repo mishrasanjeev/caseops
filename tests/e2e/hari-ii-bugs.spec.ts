@@ -159,6 +159,74 @@ test.describe("Hari II bug regressions", () => {
 
 
   // --------------------------------------------------------------
+  // BUG-021 — Pre-submit dup-code guard. After typing a taken code
+  // the Create-matter button MUST be disabled BEFORE the user
+  // clicks; the dup warning + suggestion render without a failed
+  // submit. Strict Ledger #3 (2026-04-22).
+  // --------------------------------------------------------------
+  test("BUG-021: promote dialog disables Create on a known-dup code BEFORE submit", async ({
+    page,
+  }) => {
+    const api = await request.newContext();
+    const slug = unique("b21");
+    const { token } = await bootstrap(api, slug);
+    const taken = "BUG21-DUP-1";
+
+    // Seed the matter so the code is taken.
+    const mk = await api.post(`${apiBaseUrl}/api/matters/`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: {
+        title: "BUG-21 seed matter",
+        matter_code: taken,
+        practice_area: "civil",
+        forum_level: "high_court",
+        status: "active",
+      },
+    });
+    expect(mk.status()).toBe(200);
+
+    // Create an intake to promote.
+    const intake = await api.post(`${apiBaseUrl}/api/intake/requests`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: {
+        title: "BUG-21 pre-submit guard",
+        description: "Pre-submit dup-code guard",
+        category: "contract_review",
+        requester_name: "Hari",
+        requester_email: "hari@example.com",
+      },
+    });
+    expect(intake.status()).toBe(200);
+
+    await page.goto("/sign-in");
+    await page.locator("#company-slug").fill(slug);
+    await page.locator("#email").fill(`owner-${slug}@example.com`);
+    await page.locator("#password").fill(PASSWORD);
+    await page.getByRole("button", { name: /^Sign in$/ }).click();
+    await page.waitForURL(/\/app/);
+
+    await page.goto("/app/intake");
+    await page.getByText("BUG-21 pre-submit guard").first().click();
+    await page.getByRole("button", { name: /Promote to matter/i }).click();
+    await page.getByTestId("intake-promote-code").fill(taken);
+
+    // Wait past the 350ms debounce + the network round-trip; assert
+    // the warning + suggestion appear WITHOUT us clicking Create.
+    await expect(
+      page
+        .getByRole("dialog")
+        .getByRole("alert")
+        .getByText(/already in use/i),
+    ).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByTestId("intake-promote-suggest")).toBeVisible();
+
+    // The submit button is disabled — the user cannot reach a
+    // failed submit. This is the difference vs. BUG-017.
+    await expect(page.getByTestId("intake-promote-confirm")).toBeDisabled();
+  });
+
+
+  // --------------------------------------------------------------
   // BUG-019 — per-matter outside-counsel route now renders a real
   // page (was a redirect; Codex demoted the redirect to Partial).
   // --------------------------------------------------------------
