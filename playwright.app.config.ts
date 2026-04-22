@@ -53,6 +53,12 @@ export default defineConfig({
   projects: [
     {
       name: "app-chromium",
+      // Exclude the mobile-only specs (tagged `[mobile]`) — those run
+      // in the `app-mobile` project below with the right viewport +
+      // touch emulation. Without this, the desktop project would
+      // double-run them on a 1280-wide viewport with no touch and
+      // (correctly) fail tap()s + hidden-hamburger assertions.
+      grepInvert: /\[mobile\]/,
       use: {
         browserName: "chromium",
         ...(browserExecutablePath

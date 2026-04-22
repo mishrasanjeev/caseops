@@ -84,6 +84,9 @@ from caseops_api.services.hearing_packs import (
     get_latest_hearing_pack,
     mark_hearing_pack_reviewed,
 )
+from caseops_api.services.hearing_reminders import (
+    list_reminders_for_matter,
+)
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import (
     add_access_grant,
@@ -109,9 +112,6 @@ from caseops_api.services.matter_summary_export import (
     render_summary_pdf,
 )
 from caseops_api.services.matter_timeline import build_matter_timeline_by_id
-from caseops_api.services.hearing_reminders import (
-    list_reminders_for_matter,
-)
 from caseops_api.services.matters import (
     create_matter,
     create_matter_attachment,

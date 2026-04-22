@@ -29,9 +29,20 @@ export function makeUploadFixture(filename: string, contents: string): string {
 }
 
 export async function runDocumentWorkerOnce(): Promise<void> {
+  // Strict Ledger #10 follow-up (2026-04-22): bypass `uv run`'s
+  // implicit sync (EBUSY on Windows when a long-running process
+  // holds a lock on a .venv/Scripts/*.exe wrapper). Invoke the
+  // worker as a python module — works whether or not uv has
+  // refreshed the entry-point .exe, and shares the same
+  // interpreter the test suite is already using.
+  const venvPython =
+    process.platform === "win32"
+      ? path.join(repoRoot, "apps", "api", ".venv", "Scripts", "python.exe")
+      : path.join(repoRoot, "apps", "api", ".venv", "bin", "python");
+
   const result = spawnSync(
-    "uv",
-    ["--directory", "apps/api", "run", "caseops-document-worker", "--once"],
+    venvPython,
+    ["-m", "caseops_api.workers.document_processor", "--once"],
     {
       cwd: repoRoot,
       env: {
