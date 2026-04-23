@@ -186,6 +186,11 @@ CAPABILITY_ROLES: dict[str, frozenset[MembershipRole]] = {
     # for the SendGrid send action.
     "communications:view": _ALL_AUTHENTICATED,
     "communications:write": _ALL_FEE_EARNERS,
+    # Email template catalogue is workspace-admin work — same gate
+    # as company:manage_users etc. The Compose & send action itself
+    # rides on communications:write so any fee-earner can SEND
+    # using the templates an admin created.
+    "email_templates:manage": _OWNER_ADMIN,
 }
 
 

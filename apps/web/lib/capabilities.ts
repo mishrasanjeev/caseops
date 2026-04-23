@@ -90,7 +90,9 @@ export type Capability =
   | "clients:archive"
   // communications log (Phase B / J12 / M11)
   | "communications:view"
-  | "communications:write";
+  | "communications:write"
+  // email templates admin (Phase B M11 slice 2)
+  | "email_templates:manage";
 
 // Baseline caps for a fee-earner (owner / admin / partner / member).
 // Paralegals inherit most of these but lose a small, explicit set.
@@ -156,6 +158,8 @@ const GOVERNANCE: Capability[] = [
   "workspace:admin",
   "matter_access:manage",
   "teams:manage",
+  // Email templates editor sits next to Teams admin.
+  "email_templates:manage",
 ];
 
 // Owner-only caps.

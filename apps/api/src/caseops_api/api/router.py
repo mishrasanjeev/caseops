@@ -13,6 +13,7 @@ from caseops_api.api.routes import (
     contracts,
     courts,
     drafting,
+    email_templates,
     health,
     intake,
     matters,
@@ -54,6 +55,10 @@ api_router.include_router(calendar.router, prefix="/calendar", tags=["calendar"]
 # so the URL shape stays consistent with the cockpit's other tabs.
 api_router.include_router(
     communications.router, prefix="/matters", tags=["communications"],
+)
+# Phase B M11 slice 2 — AutoMail templates admin surface.
+api_router.include_router(
+    email_templates.router, prefix="/admin", tags=["email-templates"],
 )
 # Per-matter client-assignment endpoints mount under /matters/... to
 # keep the URL shape consistent with the rest of the matter surface.

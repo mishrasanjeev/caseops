@@ -3314,3 +3314,57 @@ class Communication(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False,
     )
+
+
+# ---------------------------------------------------------------
+# Phase B M11 slice 2 — AutoMail email templates
+# ---------------------------------------------------------------
+
+
+class EmailTemplate(Base):
+    """Per-tenant email template catalogue.
+
+    The Compose & send action on the matter Communications tab picks
+    a template here, fills its declared variables, renders subject +
+    body via simple ``{{var}}`` substitution, and dispatches via
+    SendGrid. The resulting communications row carries
+    ``external_message_id`` so the SendGrid event webhook can update
+    its ``status`` from QUEUED → SENT → DELIVERED / OPENED / BOUNCED.
+    """
+
+    __tablename__ = "email_templates"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(400), nullable=True)
+    subject_template: Mapped[str] = mapped_column(String(400), nullable=False)
+    body_template: Mapped[str] = mapped_column(Text, nullable=False)
+    variables_json: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True,
+    )
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow,
+        nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id", "name",
+            name="uq_email_templates_company_name",
+        ),
+    )

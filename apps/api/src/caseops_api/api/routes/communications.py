@@ -20,9 +20,11 @@ from caseops_api.schemas.communications import (
     CommunicationListResponse,
     CommunicationRecord,
 )
+from caseops_api.schemas.email_templates import EmailSendRequest
 from caseops_api.services.communications import (
     create_matter_communication,
     list_matter_communications,
+    send_matter_email,
 )
 from caseops_api.services.identity import SessionContext
 
@@ -64,5 +66,21 @@ async def post_current_matter_communication(
     session: DbSession,
 ) -> CommunicationRecord:
     return create_matter_communication(
+        session, context=context, matter_id=matter_id, payload=payload,
+    )
+
+
+@router.post(
+    "/{matter_id}/communications/send-email",
+    response_model=CommunicationRecord,
+    summary="Compose & send an email via a template (Phase B M11 slice 2).",
+)
+async def send_current_matter_email(
+    matter_id: str,
+    payload: EmailSendRequest,
+    context: CommunicationsWriter,
+    session: DbSession,
+) -> CommunicationRecord:
+    return send_matter_email(
         session, context=context, matter_id=matter_id, payload=payload,
     )

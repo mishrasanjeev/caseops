@@ -14,6 +14,10 @@ import {
   type Draft,
   type DraftList,
   type DraftType,
+  type EmailRenderResponse,
+  type EmailTemplateListResponse,
+  type EmailTemplateRecord,
+  type EmailTemplateVariable,
   type HearingPack,
   type Matter,
   type MattersList,
@@ -29,6 +33,9 @@ import {
   contractsList,
   draft,
   draftList,
+  emailRenderResponse,
+  emailTemplateListResponse,
+  emailTemplateRecord,
   hearingPack,
   matter,
   mattersList,
@@ -1786,6 +1793,78 @@ export async function createMatterCommunication(input: {
   const data = await apiRequest<unknown>(
     `/api/matters/${matterId}/communications`,
     { method: "POST", body: rest },
+  );
+  return communicationRecord.parse(data);
+}
+
+// Phase B M11 slice 2 — email templates + Compose & send.
+export async function listEmailTemplates(
+  includeInactive = false,
+): Promise<EmailTemplateListResponse> {
+  const path = includeInactive
+    ? "/api/admin/email-templates?include_inactive=true"
+    : "/api/admin/email-templates";
+  const data = await apiRequest<unknown>(path);
+  return emailTemplateListResponse.parse(data);
+}
+
+export async function createEmailTemplate(input: {
+  name: string;
+  kind: string;
+  subject_template: string;
+  body_template: string;
+  description?: string | null;
+  variables?: EmailTemplateVariable[];
+}): Promise<EmailTemplateRecord> {
+  const data = await apiRequest<unknown>("/api/admin/email-templates", {
+    method: "POST",
+    body: input,
+  });
+  return emailTemplateRecord.parse(data);
+}
+
+export async function archiveEmailTemplate(
+  templateId: string,
+): Promise<EmailTemplateRecord> {
+  const data = await apiRequest<unknown>(
+    `/api/admin/email-templates/${templateId}`,
+    { method: "DELETE" },
+  );
+  return emailTemplateRecord.parse(data);
+}
+
+export async function renderEmailTemplate(input: {
+  templateId: string;
+  variables: Record<string, string>;
+}): Promise<EmailRenderResponse> {
+  const data = await apiRequest<unknown>(
+    `/api/admin/email-templates/${input.templateId}/render`,
+    { method: "POST", body: { variables: input.variables } },
+  );
+  return emailRenderResponse.parse(data);
+}
+
+export async function sendMatterEmail(input: {
+  matterId: string;
+  templateId: string;
+  recipient_email: string;
+  recipient_name?: string | null;
+  variables: Record<string, string>;
+  client_id?: string | null;
+}): Promise<CommunicationRecord> {
+  const { matterId, ...rest } = input;
+  const data = await apiRequest<unknown>(
+    `/api/matters/${matterId}/communications/send-email`,
+    {
+      method: "POST",
+      body: {
+        template_id: rest.templateId,
+        recipient_email: rest.recipient_email,
+        recipient_name: rest.recipient_name,
+        variables: rest.variables,
+        client_id: rest.client_id,
+      },
+    },
   );
   return communicationRecord.parse(data);
 }

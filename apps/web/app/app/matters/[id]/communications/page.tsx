@@ -16,11 +16,12 @@ import {
   MessageSquare,
   Phone,
   Plus,
+  Send,
   StickyNote,
   Users,
 } from "lucide-react";
 import { useParams } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/Button";
@@ -32,10 +33,14 @@ import { apiErrorMessage } from "@/lib/api/config";
 import {
   createMatterCommunication,
   fetchMatterCommunications,
+  listEmailTemplates,
+  renderEmailTemplate,
+  sendMatterEmail,
 } from "@/lib/api/endpoints";
 import type {
   CommunicationChannel,
   CommunicationRecord,
+  EmailTemplateRecord,
 } from "@/lib/api/schemas";
 import { useCapability } from "@/lib/capabilities";
 import { cn } from "@/lib/cn";
@@ -74,10 +79,17 @@ export default function MatterCommunicationsPage() {
   const canWrite = useCapability("communications:write");
 
   const [composing, setComposing] = useState(false);
+  const [sending, setSending] = useState(false);
 
   const query = useQuery({
     queryKey: ["matters", matterId, "communications"],
     queryFn: () => fetchMatterCommunications(matterId),
+  });
+
+  const templatesQuery = useQuery({
+    queryKey: ["matters", matterId, "communications", "templates"],
+    queryFn: () => listEmailTemplates(),
+    enabled: sending,  // only load when the Compose dialog opens
   });
 
   const createMutation = useMutation({
@@ -108,6 +120,31 @@ export default function MatterCommunicationsPage() {
     },
   });
 
+  const sendMutation = useMutation({
+    mutationFn: (input: {
+      templateId: string;
+      recipient_email: string;
+      recipient_name: string | null;
+      variables: Record<string, string>;
+    }) =>
+      sendMatterEmail({
+        matterId,
+        templateId: input.templateId,
+        recipient_email: input.recipient_email,
+        recipient_name: input.recipient_name,
+        variables: input.variables,
+      }),
+    onSuccess: async () => {
+      toast.success("Email sent.");
+      setSending(false);
+      await queryClient.invalidateQueries({
+        queryKey: ["matters", matterId, "communications"],
+      });
+    },
+    onError: (err) =>
+      toast.error(apiErrorMessage(err, "Could not send email.")),
+  });
+
   return (
     <div className="flex flex-col gap-5">
       <header className="flex flex-wrap items-center justify-between gap-3">
@@ -120,14 +157,31 @@ export default function MatterCommunicationsPage() {
           </p>
         </div>
         {canWrite ? (
-          <Button
-            type="button"
-            onClick={() => setComposing((c) => !c)}
-            data-testid="comm-log-toggle"
-          >
-            <Plus className="h-4 w-4" aria-hidden />
-            {composing ? "Cancel" : "Log communication"}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setComposing((c) => !c);
+                setSending(false);
+              }}
+              data-testid="comm-log-toggle"
+            >
+              <Plus className="h-4 w-4" aria-hidden />
+              {composing ? "Cancel" : "Log communication"}
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                setSending((c) => !c);
+                setComposing(false);
+              }}
+              data-testid="comm-send-toggle"
+            >
+              <Send className="h-4 w-4" aria-hidden />
+              {sending ? "Cancel" : "Compose & send"}
+            </Button>
+          </div>
         ) : null}
       </header>
 
@@ -135,6 +189,15 @@ export default function MatterCommunicationsPage() {
         <LogForm
           submitting={createMutation.isPending}
           onSubmit={(input) => createMutation.mutate(input)}
+        />
+      ) : null}
+
+      {sending ? (
+        <ComposeSendForm
+          templates={templatesQuery.data?.templates ?? []}
+          loadingTemplates={templatesQuery.isPending}
+          submitting={sendMutation.isPending}
+          onSubmit={(input) => sendMutation.mutate(input)}
         />
       ) : null}
 
@@ -338,6 +401,228 @@ function LogForm({
                 </>
               ) : (
                 "Log"
+              )}
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Phase B M11 slice 2 — Compose & send (template picker + variables).
+const PLACEHOLDER_RE = /\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g;
+
+function detectVarsFromTemplate(t: EmailTemplateRecord): string[] {
+  const seen = new Set<string>();
+  for (const text of [t.subject_template, t.body_template]) {
+    let m: RegExpExecArray | null;
+    while ((m = PLACEHOLDER_RE.exec(text)) !== null) {
+      seen.add(m[1]);
+    }
+  }
+  return [...seen];
+}
+
+function ComposeSendForm({
+  templates,
+  loadingTemplates,
+  submitting,
+  onSubmit,
+}: {
+  templates: EmailTemplateRecord[];
+  loadingTemplates: boolean;
+  submitting: boolean;
+  onSubmit: (input: {
+    templateId: string;
+    recipient_email: string;
+    recipient_name: string | null;
+    variables: Record<string, string>;
+  }) => void;
+}) {
+  const [templateId, setTemplateId] = useState<string>("");
+  const [recipientEmail, setRecipientEmail] = useState("");
+  const [recipientName, setRecipientName] = useState("");
+  const [variables, setVariables] = useState<Record<string, string>>({});
+  const [previewSubject, setPreviewSubject] = useState<string | null>(null);
+  const [previewBody, setPreviewBody] = useState<string | null>(null);
+
+  const selected = useMemo(
+    () => templates.find((t) => t.id === templateId) ?? null,
+    [templates, templateId],
+  );
+  const requiredVarNames = useMemo(
+    () => (selected ? detectVarsFromTemplate(selected) : []),
+    [selected],
+  );
+
+  const onPreview = async () => {
+    if (!selected) return;
+    try {
+      const r = await renderEmailTemplate({
+        templateId: selected.id,
+        variables,
+      });
+      setPreviewSubject(r.subject);
+      setPreviewBody(r.body);
+    } catch (err) {
+      toast.error(apiErrorMessage(err, "Could not render preview."));
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle as="h2" className="text-base">
+          Compose & send
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form
+          className="flex flex-col gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!templateId || !recipientEmail.trim()) return;
+            onSubmit({
+              templateId,
+              recipient_email: recipientEmail.trim(),
+              recipient_name: recipientName.trim() || null,
+              variables,
+            });
+          }}
+        >
+          {loadingTemplates ? (
+            <Skeleton className="h-10 w-full" />
+          ) : templates.length === 0 ? (
+            <div className="rounded-md border border-[var(--color-line)] bg-[var(--color-line-1)]/40 p-3 text-xs">
+              No active templates. Ask a workspace admin to create one
+              under{" "}
+              <a
+                href="/app/admin/email-templates"
+                className="underline"
+              >
+                /app/admin/email-templates
+              </a>
+              .
+            </div>
+          ) : (
+            <label className="flex flex-col gap-1 text-xs font-medium text-[var(--color-ink)]">
+              Template
+              <select
+                value={templateId}
+                onChange={(e) => {
+                  setTemplateId(e.target.value);
+                  setVariables({});
+                  setPreviewSubject(null);
+                  setPreviewBody(null);
+                }}
+                required
+                className="rounded-md border border-[var(--color-line)] px-3 py-2 text-sm"
+                data-testid="comm-send-template"
+              >
+                <option value="">— Pick a template —</option>
+                {templates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="flex flex-col gap-1 text-xs font-medium text-[var(--color-ink)]">
+              Recipient email
+              <input
+                type="email"
+                value={recipientEmail}
+                onChange={(e) => setRecipientEmail(e.target.value)}
+                required
+                placeholder="client@example.com"
+                className="rounded-md border border-[var(--color-line)] px-3 py-2 text-sm"
+                data-testid="comm-send-recipient-email"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-medium text-[var(--color-ink)]">
+              Recipient name (optional)
+              <input
+                type="text"
+                value={recipientName}
+                onChange={(e) => setRecipientName(e.target.value)}
+                placeholder="Hari Gupta"
+                className="rounded-md border border-[var(--color-line)] px-3 py-2 text-sm"
+                data-testid="comm-send-recipient-name"
+              />
+            </label>
+          </div>
+
+          {requiredVarNames.length > 0 ? (
+            <div className="rounded-md border border-[var(--color-line)] bg-[var(--color-line-1)]/40 p-3">
+              <div className="mb-2 text-xs font-medium text-[var(--color-ink)]">
+                Variables
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {requiredVarNames.map((name) => (
+                  <label
+                    key={name}
+                    className="flex flex-col gap-1 text-xs"
+                  >
+                    <span className="font-mono text-[var(--color-mute)]">
+                      {`{{${name}}}`}
+                    </span>
+                    <input
+                      type="text"
+                      value={variables[name] ?? ""}
+                      onChange={(e) =>
+                        setVariables((v) => ({ ...v, [name]: e.target.value }))
+                      }
+                      className="rounded-md border border-[var(--color-line)] px-2 py-1 text-sm"
+                      data-testid={`comm-send-var-${name}`}
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {previewSubject !== null ? (
+            <div className="rounded-md border border-[var(--color-line)] bg-white p-3">
+              <div className="text-xs font-medium text-[var(--color-mute)]">
+                Preview
+              </div>
+              <div className="mt-1 text-sm font-semibold">{previewSubject}</div>
+              <div className="mt-2 whitespace-pre-wrap text-xs text-[var(--color-ink-2)]">
+                {previewBody}
+              </div>
+            </div>
+          ) : null}
+
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!templateId}
+              onClick={onPreview}
+              data-testid="comm-send-preview"
+            >
+              Preview
+            </Button>
+            <Button
+              type="submit"
+              disabled={
+                submitting || !templateId || !recipientEmail.trim()
+              }
+              data-testid="comm-send-submit"
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Sending…
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4" aria-hidden /> Send
+                </>
               )}
             </Button>
           </div>

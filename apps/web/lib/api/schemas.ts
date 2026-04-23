@@ -465,3 +465,40 @@ export type CommunicationChannel = z.infer<typeof communicationChannel>;
 export type CommunicationStatus = z.infer<typeof communicationStatus>;
 export type CommunicationRecord = z.infer<typeof communicationRecord>;
 export type CommunicationListResponse = z.infer<typeof communicationListResponse>;
+
+// Phase B M11 slice 2 — email templates + send action.
+export const emailTemplateVariable = z.object({
+  name: z.string(),
+  label: z.string().nullable().optional(),
+  required: z.boolean().default(true),
+});
+
+export const emailTemplateRecord = z.object({
+  id: z.string(),
+  company_id: z.string(),
+  name: z.string(),
+  kind: z.string(),
+  description: z.string().nullable(),
+  subject_template: z.string(),
+  body_template: z.string(),
+  variables: z.array(emailTemplateVariable).default([]),
+  is_active: z.boolean(),
+  created_by_membership_id: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const emailTemplateListResponse = z.object({
+  templates: z.array(emailTemplateRecord),
+});
+
+export const emailRenderResponse = z.object({
+  subject: z.string(),
+  body: z.string(),
+  missing_variables: z.array(z.string()).default([]),
+});
+
+export type EmailTemplateVariable = z.infer<typeof emailTemplateVariable>;
+export type EmailTemplateRecord = z.infer<typeof emailTemplateRecord>;
+export type EmailTemplateListResponse = z.infer<typeof emailTemplateListResponse>;
+export type EmailRenderResponse = z.infer<typeof emailRenderResponse>;

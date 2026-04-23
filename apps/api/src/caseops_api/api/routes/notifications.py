@@ -28,6 +28,9 @@ from caseops_api.api.dependencies import (
 )
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import HearingReminder
+from caseops_api.services.communications import (
+    apply_sendgrid_communication_event,
+)
 from caseops_api.services.hearing_reminders import apply_sendgrid_event
 from caseops_api.services.identity import SessionContext
 
@@ -158,7 +161,15 @@ async def sendgrid_events(
     for ev in events:
         if not isinstance(ev, dict):
             continue
-        if apply_sendgrid_event(session, event=ev):
+        # The same SendGrid X-Message-Id is shared by hearing
+        # reminders AND AutoMail sends. Try both handlers per
+        # event — only one will find a matching row in practice.
+        # Phase B M11 slice 2 (FT-048).
+        hit_reminder = apply_sendgrid_event(session, event=ev)
+        hit_communication = apply_sendgrid_communication_event(
+            session, event=ev,
+        )
+        if hit_reminder or hit_communication:
             matched += 1
     session.commit()
     return WebhookAckResponse(accepted=len(events), matched=matched)
