@@ -36,12 +36,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime
 
 from pydantic import BaseModel, Field, ValidationError
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, text
 
-from caseops_api.db.models import AuthorityDocument
+from caseops_api.db.models import AuthorityDocument, ModelRun
 from caseops_api.db.session import get_session_factory
 from caseops_api.services.llm import (
     PURPOSE_METADATA_EXTRACT,
+    LLMCompletion,
     LLMMessage,
     LLMProvider,
     LLMProviderError,
@@ -53,6 +54,97 @@ logger = logging.getLogger("extract_authority_metadata")
 HEAD_CHARS = 2800
 TAIL_CHARS = 1600
 MAX_PARTIES = 6
+
+# Phase B audit gap (2026-04-23): every Anthropic Opus call is now
+# recorded as a ``ModelRun`` row so corpus spend is finally visible
+# on the same audit table the production AI surfaces use. Cost cap:
+# the worker periodically sums the last 24h of metadata-extract
+# spend and halts if it exceeds CASEOPS_LAYER2_DAILY_USD_CAP
+# (default $100). Bypasses are explicit:
+#
+#   CASEOPS_LAYER2_DAILY_USD_CAP=0   # disable cap entirely (unsafe)
+#   CASEOPS_LAYER2_DAILY_USD_CAP=200 # raise to $200
+#
+# Anthropic public Opus pricing per million tokens (no prompt-cache
+# discount applied — the cap is conservative on purpose). Update
+# these constants if Anthropic changes pricing.
+_OPUS_USD_PER_M_INPUT = 15.0
+_OPUS_USD_PER_M_OUTPUT = 75.0
+# Sonnet / Haiku rates roughly an order of magnitude lower; the
+# default model for this purpose is Haiku per
+# CASEOPS_LLM_MODEL_METADATA_EXTRACT, but the live corpus sweep
+# uses Opus. Falling back to Opus rates means the cap is on the
+# safe side regardless of actual model.
+_DEFAULT_DAILY_USD_CAP = 100.0
+_HALT_FLAG = threading.Event()
+# Re-check the cap every N completed extractions so a runaway cannot
+# overshoot by more than a few seconds of throughput.
+_CAP_CHECK_EVERY_N = 50
+_processed_since_cap_check = 0
+_cap_check_lock = threading.Lock()
+
+
+def _layer2_daily_cap_usd() -> float:
+    raw = (
+        # Allow ops to override without redeploying.
+        __import__("os").environ.get("CASEOPS_LAYER2_DAILY_USD_CAP")
+    )
+    if raw is None:
+        return _DEFAULT_DAILY_USD_CAP
+    try:
+        return float(raw)
+    except ValueError:
+        logger.warning(
+            "CASEOPS_LAYER2_DAILY_USD_CAP=%r is not numeric; using default $%.2f",
+            raw, _DEFAULT_DAILY_USD_CAP,
+        )
+        return _DEFAULT_DAILY_USD_CAP
+
+
+def _spend_last_24h_usd(session) -> float:
+    """Sum tokens from model_runs for purpose='metadata_extract' in
+    the last 24 hours and convert to USD at Opus rates. Returns 0.0
+    if the query fails (DB blip should not crash the cap check)."""
+    try:
+        row = session.execute(text(
+            "SELECT COALESCE(SUM(prompt_tokens), 0) AS pin, "
+            "       COALESCE(SUM(completion_tokens), 0) AS cout "
+            "FROM model_runs WHERE purpose = :purpose "
+            "AND created_at > NOW() - INTERVAL '24 hours'"
+        ), {"purpose": "metadata_extract"}).one()
+        in_usd = (row.pin or 0) * _OPUS_USD_PER_M_INPUT / 1_000_000
+        out_usd = (row.cout or 0) * _OPUS_USD_PER_M_OUTPUT / 1_000_000
+        return in_usd + out_usd
+    except Exception as exc:  # noqa: BLE001 — cap is best-effort
+        logger.warning("daily-cap query failed (ignoring): %s", exc)
+        return 0.0
+
+
+def _record_model_run(
+    session,
+    *,
+    completion: LLMCompletion,
+    status: str = "ok",
+    error: str | None = None,
+) -> None:
+    """Persist one ModelRun row. company_id / matter_id /
+    actor_membership_id are all NULL — corpus extraction is a global
+    ops process, not tied to a tenant."""
+    run = ModelRun(
+        company_id=None,
+        matter_id=None,
+        actor_membership_id=None,
+        purpose="metadata_extract",
+        provider=completion.provider,
+        model=completion.model,
+        prompt_tokens=completion.prompt_tokens,
+        completion_tokens=completion.completion_tokens,
+        latency_ms=completion.latency_ms,
+        status=status,
+        error=error,
+    )
+    session.add(run)
+    session.flush()
 
 
 class _Extracted(BaseModel):
@@ -179,6 +271,10 @@ def _extract_one(doc_id: str, provider: LLMProvider) -> dict:
         tail = text[-TAIL_CHARS:] if len(text) > HEAD_CHARS + TAIL_CHARS else ""
         prompt = _build_user_prompt(head, tail)
 
+        # Cap check — fast-path bail before spending tokens.
+        if _HALT_FLAG.is_set():
+            return {"ok": False, "reason": "daily_cap_halt"}
+
         try:
             completion = provider.generate(
                 messages=[
@@ -192,7 +288,37 @@ def _extract_one(doc_id: str, provider: LLMProvider) -> dict:
             with _stats_lock:
                 _stats["llm_error"] += 1
             logger.warning("llm error on %s: %s", doc_id, exc)
+            # Record the failed call for spend visibility too — tokens
+            # billed by the provider on a 4xx are still real charges.
+            try:
+                _record_model_run(
+                    s,
+                    completion=LLMCompletion(
+                        text="",
+                        provider=getattr(provider, "name", "unknown"),
+                        model=getattr(provider, "model", "unknown"),
+                        prompt_tokens=0,
+                        completion_tokens=0,
+                        latency_ms=0,
+                    ),
+                    status="error",
+                    error=str(exc)[:500],
+                )
+                s.commit()
+            except Exception:  # noqa: BLE001
+                logger.exception("failed to record error ModelRun")
             return {"ok": False, "reason": "llm_error"}
+
+        # Record the successful Opus call so corpus spend is finally
+        # visible in model_runs alongside production AI usage. The
+        # _maybe_check_cap below uses this same table to decide if
+        # the day's $100 ceiling has been reached.
+        try:
+            _record_model_run(s, completion=completion, status="ok")
+            s.commit()
+        except Exception:
+            logger.exception("failed to record ok ModelRun for %s", doc_id)
+        _maybe_check_cap()
 
         raw = _strip_code_fence(completion.text)
         try:
@@ -242,6 +368,41 @@ def _extract_one(doc_id: str, provider: LLMProvider) -> dict:
         return {"ok": True, "updated": True, "fields": list(updates.keys())}
 
 
+def _maybe_check_cap() -> None:
+    """Re-poll the daily-spend cap every ``_CAP_CHECK_EVERY_N``
+    successful completions. Called from worker threads so the cap
+    is enforced even if no progress ticker is running. Sets
+    ``_HALT_FLAG`` once the cap is reached; subsequent extractions
+    bail at the start of ``_extract_one``."""
+    global _processed_since_cap_check
+    cap = _layer2_daily_cap_usd()
+    if cap <= 0:  # operator opted out
+        return
+    if _HALT_FLAG.is_set():
+        return
+    with _cap_check_lock:
+        _processed_since_cap_check += 1
+        if _processed_since_cap_check < _CAP_CHECK_EVERY_N:
+            return
+        _processed_since_cap_check = 0
+    factory = get_session_factory()
+    with factory() as s:
+        spend = _spend_last_24h_usd(s)
+    if spend >= cap:
+        _HALT_FLAG.set()
+        logger.error(
+            "daily Layer-2 spend cap reached: $%.2f >= $%.2f. "
+            "Setting HALT flag — remaining extractions will short-circuit. "
+            "Override via CASEOPS_LAYER2_DAILY_USD_CAP.",
+            spend, cap,
+        )
+    else:
+        logger.info(
+            "daily Layer-2 spend so far: $%.2f / $%.2f cap (%.0f%% used)",
+            spend, cap, 100.0 * spend / cap,
+        )
+
+
 def _progress_ticker(total: int) -> None:
     while True:
         time.sleep(15)
@@ -276,6 +437,27 @@ def run(
     logger.info("targets: %d documents", total)
     if total == 0:
         return 0
+
+    # Pre-flight cap gate so a no-op start when the cap is already
+    # blown is quiet — the worker would otherwise burn one full doc
+    # before noticing.
+    cap = _layer2_daily_cap_usd()
+    if cap > 0:
+        factory = get_session_factory()
+        with factory() as s:
+            spend = _spend_last_24h_usd(s)
+        if spend >= cap:
+            logger.error(
+                "Refusing to start: Layer-2 spend in the last 24h is "
+                "$%.2f, at or above the $%.2f cap. Wait, raise "
+                "CASEOPS_LAYER2_DAILY_USD_CAP, or set it to 0 to disable.",
+                spend, cap,
+            )
+            return 2
+        logger.info(
+            "spend pre-flight: $%.2f / $%.2f cap used so far in the last 24h",
+            spend, cap,
+        )
 
     provider = build_provider(purpose=PURPOSE_METADATA_EXTRACT)
     logger.info("provider: %s model=%s", provider.name, provider.model)
