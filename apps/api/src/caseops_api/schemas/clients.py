@@ -61,6 +61,28 @@ class ClientMatterLink(BaseModel):
     status: str
 
 
+class KycDocumentRecord(BaseModel):
+    """One tracked KYC document. Stored as a JSON array on the
+    client; slice 3 ships with manual entry. A future revision can
+    attach a file URL to each row."""
+
+    name: str = Field(min_length=1, max_length=120)
+    status: Literal["pending", "received", "verified"] = "pending"
+    note: str | None = Field(default=None, max_length=400)
+
+
+class KycSubmitRequest(BaseModel):
+    """Submit a KYC pack — moves the client into ``pending``.
+    ``documents`` is the list of artefacts the lawyer collected
+    from the client (PAN, address proof, board resolution, …)."""
+
+    documents: list[KycDocumentRecord] = Field(default_factory=list)
+
+
+class KycRejectRequest(BaseModel):
+    reason: str = Field(min_length=4, max_length=1000)
+
+
 class ClientRecord(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -81,6 +103,12 @@ class ClientRecord(BaseModel):
     gstin: str | None
     internal_notes: str | None
     kyc_status: ClientKycStatusLiteral
+    # Phase B M11 slice 3 — KYC audit trail surface.
+    kyc_submitted_at: datetime | None = None
+    kyc_verified_at: datetime | None = None
+    kyc_verified_by_membership_id: str | None = None
+    kyc_rejection_reason: str | None = None
+    kyc_documents: list[KycDocumentRecord] = Field(default_factory=list)
     is_active: bool
     active_matters_count: int = 0
     total_matters_count: int = 0
@@ -113,12 +141,15 @@ class MatterClientAssignmentRecord(BaseModel):
 
 __all__ = [
     "ClientCreateRequest",
-    "ClientUpdateRequest",
+    "ClientKycStatusLiteral",
+    "ClientListResponse",
     "ClientMatterLink",
     "ClientRecord",
-    "ClientListResponse",
+    "ClientTypeLiteral",
+    "ClientUpdateRequest",
+    "KycDocumentRecord",
+    "KycRejectRequest",
+    "KycSubmitRequest",
     "MatterClientAssignRequest",
     "MatterClientAssignmentRecord",
-    "ClientTypeLiteral",
-    "ClientKycStatusLiteral",
 ]

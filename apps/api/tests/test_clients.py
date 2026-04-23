@@ -431,3 +431,164 @@ def test_client_crud_emits_audit_events(client: TestClient) -> None:
     assert "client.created" in actions
     assert "client.updated" in actions
     assert "client.archived" in actions
+
+
+# ---------------------------------------------------------------
+# Phase B M11 slice 3 — KYC lifecycle
+# ---------------------------------------------------------------
+
+
+def _bootstrap_with_role(client, slug: str, role: str) -> str:
+    """Bootstrap an owner then downgrade the membership row to
+    ``role`` so we can test the staff-only KYC review gate without
+    needing a full invite-flow fixture."""
+    from sqlalchemy import update
+
+    from caseops_api.db.models import CompanyMembership, MembershipRole
+    from caseops_api.db.session import get_session_factory
+
+    resp = client.post(
+        "/api/bootstrap/company",
+        json={
+            "company_name": f"KYC {slug} LLP",
+            "company_slug": f"kyc-{slug}",
+            "company_type": "law_firm",
+            "owner_full_name": f"KYC {slug} Owner",
+            "owner_email": f"owner@kyc-{slug}.example",
+            "owner_password": f"KycPw-{slug}!234",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    factory = get_session_factory()
+    with factory() as session:
+        session.execute(
+            update(CompanyMembership)
+            .where(CompanyMembership.id == body["membership"]["id"])
+            .values(role=MembershipRole(role))
+        )
+        session.commit()
+    client.cookies.clear()
+    return str(body["access_token"])
+
+
+def test_kyc_submit_then_verify_round_trip(client: TestClient) -> None:
+    """The headline lifecycle: not_started → pending → verified.
+    Status, audit columns, and document list all populate."""
+    token = str(bootstrap_company(client)["access_token"])
+    cid = _mk_client(client, token).json()["id"]
+
+    submitted = client.post(
+        f"/api/clients/{cid}/kyc/submit",
+        headers=auth_headers(token),
+        json={"documents": [
+            {"name": "PAN", "status": "received"},
+            {"name": "Aadhaar", "status": "received"},
+        ]},
+    )
+    assert submitted.status_code == 200, submitted.text
+    body = submitted.json()
+    assert body["kyc_status"] == "pending"
+    assert body["kyc_submitted_at"] is not None
+    assert len(body["kyc_documents"]) == 2
+
+    verified = client.post(
+        f"/api/clients/{cid}/kyc/verify", headers=auth_headers(token),
+    )
+    assert verified.status_code == 200
+    body = verified.json()
+    assert body["kyc_status"] == "verified"
+    assert body["kyc_verified_at"] is not None
+    assert body["kyc_verified_by_membership_id"] is not None
+    assert body["kyc_rejection_reason"] is None
+
+
+def test_kyc_reject_records_reason_then_resubmit_clears_it(
+    client: TestClient,
+) -> None:
+    """Reject path: reviewer rejects with reason; lawyer re-submits
+    a fresh pack; the rejection reason clears so the next reviewer
+    is not biased by the previous rejection."""
+    token = str(bootstrap_company(client)["access_token"])
+    cid = _mk_client(client, token).json()["id"]
+
+    client.post(
+        f"/api/clients/{cid}/kyc/submit",
+        headers=auth_headers(token),
+        json={"documents": [{"name": "PAN"}]},
+    )
+    rejected = client.post(
+        f"/api/clients/{cid}/kyc/reject",
+        headers=auth_headers(token),
+        json={"reason": "Address proof missing"},
+    )
+    assert rejected.status_code == 200, rejected.text
+    body = rejected.json()
+    assert body["kyc_status"] == "rejected"
+    assert body["kyc_rejection_reason"] == "Address proof missing"
+
+    resubmitted = client.post(
+        f"/api/clients/{cid}/kyc/submit",
+        headers=auth_headers(token),
+        json={"documents": [{"name": "PAN"}, {"name": "Address proof"}]},
+    )
+    assert resubmitted.status_code == 200
+    body = resubmitted.json()
+    assert body["kyc_status"] == "pending"
+    assert body["kyc_rejection_reason"] is None
+    assert len(body["kyc_documents"]) == 2
+
+
+def test_kyc_verify_refuses_when_not_pending_409(client: TestClient) -> None:
+    """Verifying without a submission would invent an audit row with
+    no documents on file. Refuse with 409 so the lawyer must submit
+    first."""
+    token = str(bootstrap_company(client)["access_token"])
+    cid = _mk_client(client, token).json()["id"]
+    resp = client.post(
+        f"/api/clients/{cid}/kyc/verify", headers=auth_headers(token),
+    )
+    assert resp.status_code == 409
+    assert "submit" in resp.json()["detail"].lower()
+
+
+def test_kyc_review_requires_staff_capability_403(client: TestClient) -> None:
+    """A paralegal can SUBMIT KYC but not VERIFY — the staff-only
+    review gate enforces the four-eyes pattern between the lawyer
+    who collected docs and the partner who approves them."""
+    token = _bootstrap_with_role(client, "para", "paralegal")
+    cid = _mk_client(client, token).json()["id"]
+
+    submitted = client.post(
+        f"/api/clients/{cid}/kyc/submit",
+        headers=auth_headers(token),
+        json={"documents": [{"name": "PAN"}]},
+    )
+    assert submitted.status_code == 200, submitted.text
+
+    verify = client.post(
+        f"/api/clients/{cid}/kyc/verify", headers=auth_headers(token),
+    )
+    assert verify.status_code == 403
+    reject = client.post(
+        f"/api/clients/{cid}/kyc/reject",
+        headers=auth_headers(token),
+        json={"reason": "irrelevant — should never reach service layer"},
+    )
+    assert reject.status_code == 403
+
+
+def test_kyc_does_not_leak_across_tenants(client: TestClient) -> None:
+    """Tenant isolation. Tenant B POST /kyc/submit on tenant A's
+    client must 404 — never confirm existence."""
+    token_a = str(bootstrap_company(client)["access_token"])
+    cid_a = _mk_client(client, token_a).json()["id"]
+    client.cookies.clear()
+
+    token_b = _bootstrap_with_role(client, "tenantb", "owner")
+    leak = client.post(
+        f"/api/clients/{cid_a}/kyc/submit",
+        headers=auth_headers(token_b),
+        json={"documents": []},
+    )
+    assert leak.status_code == 404

@@ -191,6 +191,13 @@ CAPABILITY_ROLES: dict[str, frozenset[MembershipRole]] = {
     # rides on communications:write so any fee-earner can SEND
     # using the templates an admin created.
     "email_templates:manage": _OWNER_ADMIN,
+    # KYC lifecycle (Phase B M11 slice 3 — US-037 / FT-049).
+    # Submit: any fee-earner can collect docs from a client they
+    # know. Review (verify / reject): staff only — partner / admin /
+    # owner — to keep a four-eyes pattern between the lawyer who
+    # collected the pack and the reviewer who approves it.
+    "clients:kyc_submit": _ALL_FEE_EARNERS,
+    "clients:kyc_review": _STAFF,
 }
 
 

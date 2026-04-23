@@ -1635,6 +1635,12 @@ export type ClientRecord = {
   gstin: string | null;
   internal_notes: string | null;
   kyc_status: ClientKycStatus;
+  // Phase B M11 slice 3 — KYC audit trail.
+  kyc_submitted_at: string | null;
+  kyc_verified_at: string | null;
+  kyc_verified_by_membership_id: string | null;
+  kyc_rejection_reason: string | null;
+  kyc_documents: { name: string; status: string; note: string | null }[];
   is_active: boolean;
   active_matters_count: number;
   total_matters_count: number;
@@ -1867,4 +1873,37 @@ export async function sendMatterEmail(input: {
     },
   );
   return communicationRecord.parse(data);
+}
+
+// Phase B M11 slice 3 — KYC lifecycle.
+export type KycDocumentInput = {
+  name: string;
+  status?: "pending" | "received" | "verified";
+  note?: string | null;
+};
+
+export async function submitClientKyc(input: {
+  clientId: string;
+  documents: KycDocumentInput[];
+}): Promise<unknown> {
+  return apiRequest<unknown>(
+    `/api/clients/${input.clientId}/kyc/submit`,
+    { method: "POST", body: { documents: input.documents } },
+  );
+}
+
+export async function verifyClientKyc(clientId: string): Promise<unknown> {
+  return apiRequest<unknown>(
+    `/api/clients/${clientId}/kyc/verify`, { method: "POST" },
+  );
+}
+
+export async function rejectClientKyc(input: {
+  clientId: string;
+  reason: string;
+}): Promise<unknown> {
+  return apiRequest<unknown>(
+    `/api/clients/${input.clientId}/kyc/reject`,
+    { method: "POST", body: { reason: input.reason } },
+  );
 }

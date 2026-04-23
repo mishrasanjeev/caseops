@@ -24,6 +24,9 @@ from caseops_api.schemas.clients import (
     ClientMatterLink,
     ClientRecord,
     ClientUpdateRequest,
+    KycDocumentRecord,
+    KycRejectRequest,
+    KycSubmitRequest,
     MatterClientAssignmentRecord,
     MatterClientAssignRequest,
 )
@@ -59,6 +62,11 @@ def _client_record(
         gstin=client.gstin,
         internal_notes=client.internal_notes,
         kyc_status=client.kyc_status,
+        kyc_submitted_at=client.kyc_submitted_at,
+        kyc_verified_at=client.kyc_verified_at,
+        kyc_verified_by_membership_id=client.kyc_verified_by_membership_id,
+        kyc_rejection_reason=client.kyc_rejection_reason,
+        kyc_documents=_kyc_documents(client),
         is_active=client.is_active,
         active_matters_count=active,
         total_matters_count=total,
@@ -416,3 +424,138 @@ def remove_client_from_matter(
         metadata={"client_id": client_id},
     )
     session.commit()
+
+
+# ---------------------------------------------------------------
+# Phase B M11 slice 3 — KYC lifecycle (US-037 / FT-049 / MOD-TS-013)
+# ---------------------------------------------------------------
+
+
+def _kyc_documents(client: Client) -> list[KycDocumentRecord]:
+    """Hydrate the JSON column into typed records. A bad blob (older
+    schema, hand-edited DB row) returns an empty list rather than
+    blowing up the GET — the lawyer can re-submit to repair."""
+    raw = client.kyc_documents_json or []
+    out: list[KycDocumentRecord] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        try:
+            out.append(KycDocumentRecord.model_validate(item))
+        except Exception:  # noqa: BLE001
+            continue
+    return out
+
+
+def submit_client_kyc(
+    session: Session,
+    *,
+    context: SessionContext,
+    client_id: str,
+    payload: KycSubmitRequest,
+) -> ClientRecord:
+    """Lawyer collects KYC documents from the client and submits the
+    pack for verification. Status moves to ``pending``. Idempotent —
+    a re-submission overwrites the document list and resets any prior
+    rejection reason so a re-attempt looks clean."""
+    from datetime import UTC
+    from datetime import datetime as _dt
+
+    client = _get_client_model(session, context=context, client_id=client_id)
+    client.kyc_status = ClientKycStatus.PENDING
+    client.kyc_submitted_at = _dt.now(UTC)
+    client.kyc_documents_json = [d.model_dump() for d in payload.documents]
+    # Clear any stale rejection / verification — this is a fresh cycle.
+    client.kyc_rejection_reason = None
+    client.kyc_verified_at = None
+    client.kyc_verified_by_membership_id = None
+    record_from_context(
+        session, context,
+        action="client.kyc_submitted",
+        target_type="client",
+        target_id=client.id,
+        metadata={"document_count": len(payload.documents)},
+    )
+    session.commit()
+    session.refresh(client)
+    return _client_record(
+        client, matters=_matter_links_for(session, client),
+    )
+
+
+def verify_client_kyc(
+    session: Session,
+    *,
+    context: SessionContext,
+    client_id: str,
+) -> ClientRecord:
+    """Staff reviewer approves a submitted KYC pack. Refuses to verify
+    a client that hasn't been submitted (must go via /submit first)
+    so the audit trail can never claim a verification with no
+    documents on file."""
+    from datetime import UTC
+    from datetime import datetime as _dt
+
+    client = _get_client_model(session, context=context, client_id=client_id)
+    if client.kyc_status not in (
+        ClientKycStatus.PENDING.value, ClientKycStatus.REJECTED.value,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"KYC cannot be verified from status {client.kyc_status!r}. "
+                "Submit a KYC pack first."
+            ),
+        )
+    client.kyc_status = ClientKycStatus.VERIFIED
+    client.kyc_verified_at = _dt.now(UTC)
+    client.kyc_verified_by_membership_id = context.membership.id
+    client.kyc_rejection_reason = None
+    record_from_context(
+        session, context,
+        action="client.kyc_verified",
+        target_type="client",
+        target_id=client.id,
+    )
+    session.commit()
+    session.refresh(client)
+    return _client_record(
+        client, matters=_matter_links_for(session, client),
+    )
+
+
+def reject_client_kyc(
+    session: Session,
+    *,
+    context: SessionContext,
+    client_id: str,
+    payload: KycRejectRequest,
+) -> ClientRecord:
+    """Staff reviewer rejects a submitted KYC pack with a reason. The
+    reason MUST be present (schema enforces min_length=4) so the
+    lawyer who has to re-collect docs knows what to fix."""
+    client = _get_client_model(session, context=context, client_id=client_id)
+    if client.kyc_status != ClientKycStatus.PENDING.value:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"KYC cannot be rejected from status {client.kyc_status!r}. "
+                "Only a pending submission can be rejected."
+            ),
+        )
+    client.kyc_status = ClientKycStatus.REJECTED
+    client.kyc_rejection_reason = payload.reason
+    client.kyc_verified_at = None
+    client.kyc_verified_by_membership_id = None
+    record_from_context(
+        session, context,
+        action="client.kyc_rejected",
+        target_type="client",
+        target_id=client.id,
+        metadata={"reason": payload.reason[:200]},
+    )
+    session.commit()
+    session.refresh(client)
+    return _client_record(
+        client, matters=_matter_links_for(session, client),
+    )

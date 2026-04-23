@@ -92,7 +92,10 @@ export type Capability =
   | "communications:view"
   | "communications:write"
   // email templates admin (Phase B M11 slice 2)
-  | "email_templates:manage";
+  | "email_templates:manage"
+  // KYC lifecycle (Phase B M11 slice 3 — US-037)
+  | "clients:kyc_submit"
+  | "clients:kyc_review";
 
 // Baseline caps for a fee-earner (owner / admin / partner / member).
 // Paralegals inherit most of these but lose a small, explicit set.
@@ -117,6 +120,10 @@ const FEE_EARNER: Capability[] = [
   // to viewers via VIEWER_CAPS below.
   "communications:view",
   "communications:write",
+  // KYC submit (Phase B M11 slice 3) — any fee-earner can submit
+  // a KYC pack for a client they know. Reviewing (verify/reject)
+  // is staff-only — see STAFF below for kyc_review.
+  "clients:kyc_submit",
 ];
 
 // Creator caps — paralegals can NOT create matters/contracts or run
@@ -149,6 +156,8 @@ const STAFF: Capability[] = [
   "intake:triage",
   "intake:promote",
   "clients:archive",
+  // KYC review — staff only (four-eyes between collector and approver).
+  "clients:kyc_review",
 ];
 
 // Governance caps — owner / admin only.

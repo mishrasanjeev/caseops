@@ -1325,6 +1325,23 @@ class Client(Base):
         nullable=False,
         default=ClientKycStatus.NOT_STARTED,
     )
+    # Phase B M11 slice 3 — KYC audit trail. Without these the
+    # status badge has no provenance: under a compliance audit the
+    # workspace owner needs to point at WHO verified the client and
+    # WHEN. Documents stored as JSON so a later "secure storage URL
+    # per doc" extension does not need another migration.
+    kyc_submitted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
+    kyc_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
+    kyc_verified_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    kyc_rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    kyc_documents_json: Mapped[list | None] = mapped_column(JSON, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_by_membership_id: Mapped[str | None] = mapped_column(
         ForeignKey("company_memberships.id", ondelete="SET NULL"),
