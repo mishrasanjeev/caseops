@@ -277,6 +277,43 @@ def test_calendar_rejects_inverted_range_400(client: TestClient) -> None:
     assert "before" in resp.json()["detail"].lower()
 
 
+def test_calendar_ics_export_shape_is_rfc5545(client: TestClient) -> None:
+    """Phase B slice 2b / FT-043 — the .ics feed is what Google /
+    Outlook / Apple Calendar subscribe to. If the wire shape drifts
+    off RFC 5545, every subscribed client silently stops updating.
+    Lock in the invariants:
+
+    - ``BEGIN:VCALENDAR`` / ``END:VCALENDAR`` wrap the file
+    - exactly one ``BEGIN:VEVENT`` per event returned by the
+      live endpoint
+    - CRLF line breaks
+    - content-type is ``text/calendar``
+    """
+    bootstrap = bootstrap_company(client)
+    headers = auth_headers(str(bootstrap["access_token"]))
+    matter_id = _create_matter(client, headers, "ICS-001", "ICS matter")
+    today = date.today()
+    _schedule_hearing(client, headers, matter_id, today + timedelta(days=3), "Ical hearing")
+
+    resp = client.get(
+        "/api/calendar/events.ics",
+        headers=headers,
+        params={
+            "from": today.isoformat(),
+            "to": (today + timedelta(days=30)).isoformat(),
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.headers["content-type"].startswith("text/calendar")
+    body = resp.text
+    assert body.startswith("BEGIN:VCALENDAR"), body[:80]
+    assert body.rstrip().endswith("END:VCALENDAR"), body[-80:]
+    assert "\r\n" in body  # CRLF required by RFC 5545
+    assert body.count("BEGIN:VEVENT") == 1
+    assert body.count("END:VEVENT") == 1
+    assert "SUMMARY:[HEARING] Ical hearing" in body
+
+
 def test_calendar_rejects_oversize_range_400(client: TestClient) -> None:
     """The 92-day cap protects the API from a UI bug or scraper that
     asks for "show me all events ever" — that query would dump the

@@ -1,21 +1,17 @@
 "use client";
 
-// Phase B / J08 / M08 / US-022 / US-023 / FT-042 — unified calendar.
+// Phase B / J08 / M08 / US-022 / US-023 / FT-042-043 — unified calendar.
 //
-// Single screen, single primary job per the impeccable / PRD UX rule:
-// show every hearing, task due-date, and matter_deadline due-on for the
-// caller's company in one month grid the lawyer can scan in seconds.
-// Click a cell → see the events for that day; click an event → deep
-// link to the source matter's tab.
-//
-// Slice 1 ships month view only. Week / day views and iCal export
-// land in slice 2.
+// Slice 1 (shipped 2026-04-23): month grid + tenant-scoped event feed
+// across hearings + tasks + matter_deadlines.
+// Slice 2b (this file): adds Week + Day views and an .ics subscribe link.
 
 import { useQuery } from "@tanstack/react-query";
 import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  Download,
   ExternalLink,
   Gavel,
   ListTodo,
@@ -28,7 +24,10 @@ import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { fetchCalendarEvents } from "@/lib/api/endpoints";
 import type { CalendarEventKind, CalendarEventRecord } from "@/lib/api/schemas";
+import { API_BASE_URL } from "@/lib/api/config";
 import { cn } from "@/lib/cn";
+
+type ViewMode = "month" | "week" | "day";
 
 const KIND_ICON: Record<CalendarEventKind, typeof Gavel> = {
   hearing: Gavel,
@@ -36,8 +35,6 @@ const KIND_ICON: Record<CalendarEventKind, typeof Gavel> = {
   deadline: Timer,
 };
 
-// OKLCH-derived semantic colours — the impeccable skill prohibits
-// neon / gradient. These map to the existing palette tokens.
 const KIND_DOT: Record<CalendarEventKind, string> = {
   hearing: "bg-[var(--color-accent)]",
   task: "bg-[var(--color-info-500)]",
@@ -48,10 +45,15 @@ function startOfMonth(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), 1);
 }
 
+function startOfWeekMonday(d: Date): Date {
+  // Indian court week is Mon-Fri so Monday-first matches user mental model.
+  const out = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const offsetToMonday = (out.getDay() + 6) % 7;
+  out.setDate(out.getDate() - offsetToMonday);
+  return out;
+}
+
 function isoDate(d: Date): string {
-  // Local-tz YYYY-MM-DD. Cookie-set TZ doesn't matter; the API works
-  // in dates not datetimes, so the user's local interpretation of
-  // "today" is the right one.
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
@@ -59,11 +61,7 @@ function isoDate(d: Date): string {
 }
 
 function buildMonthGrid(monthStart: Date): Date[] {
-  // Six weeks × seven days; pad with prev-month / next-month days so
-  // the grid is always a full rectangle. Indian calendars start on
-  // Sunday by convention, but our user base is mixed — defaulting to
-  // Monday-first because it matches court week structure (Mon–Fri).
-  const firstWeekday = monthStart.getDay(); // 0 = Sun, 1 = Mon, …
+  const firstWeekday = monthStart.getDay();
   const offsetToMonday = (firstWeekday + 6) % 7;
   const gridStart = new Date(monthStart);
   gridStart.setDate(monthStart.getDate() - offsetToMonday);
@@ -81,20 +79,45 @@ const MONTH_NAMES = [
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export default function CalendarPage() {
-  const [cursor, setCursor] = useState<Date>(() => startOfMonth(new Date()));
+  const [view, setView] = useState<ViewMode>("month");
+  const [cursor, setCursor] = useState<Date>(() => new Date());
 
-  const monthStart = startOfMonth(cursor);
-  const monthEnd = new Date(
-    monthStart.getFullYear(), monthStart.getMonth() + 1, 0,
-  );
-  const grid = useMemo(() => buildMonthGrid(monthStart), [monthStart]);
-  const gridFrom = grid[0];
-  const gridTo = grid[grid.length - 1];
+  // Compute the [from, to] range for the current view. The same
+  // /api/calendar/events endpoint serves all three; only the slice
+  // size changes.
+  const { rangeFrom, rangeTo, label } = useMemo(() => {
+    if (view === "month") {
+      const monthStart = startOfMonth(cursor);
+      const grid = buildMonthGrid(monthStart);
+      return {
+        rangeFrom: grid[0],
+        rangeTo: grid[grid.length - 1],
+        label: `${MONTH_NAMES[monthStart.getMonth()]} ${monthStart.getFullYear()}`,
+      };
+    }
+    if (view === "week") {
+      const weekStart = startOfWeekMonday(cursor);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 6);
+      const sameMonth = weekStart.getMonth() === weekEnd.getMonth();
+      const labelText = sameMonth
+        ? `${weekStart.getDate()}–${weekEnd.getDate()} ${MONTH_NAMES[weekEnd.getMonth()]} ${weekEnd.getFullYear()}`
+        : `${weekStart.getDate()} ${MONTH_NAMES[weekStart.getMonth()].slice(0, 3)} – ${weekEnd.getDate()} ${MONTH_NAMES[weekEnd.getMonth()].slice(0, 3)} ${weekEnd.getFullYear()}`;
+      return { rangeFrom: weekStart, rangeTo: weekEnd, label: labelText };
+    }
+    // day
+    const day = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate());
+    return {
+      rangeFrom: day,
+      rangeTo: day,
+      label: `${WEEKDAY_LABELS[(day.getDay() + 6) % 7]}, ${day.getDate()} ${MONTH_NAMES[day.getMonth()]} ${day.getFullYear()}`,
+    };
+  }, [view, cursor]);
 
   const query = useQuery({
-    queryKey: ["calendar", isoDate(gridFrom), isoDate(gridTo)],
+    queryKey: ["calendar", view, isoDate(rangeFrom), isoDate(rangeTo)],
     queryFn: () =>
-      fetchCalendarEvents({ from: isoDate(gridFrom), to: isoDate(gridTo) }),
+      fetchCalendarEvents({ from: isoDate(rangeFrom), to: isoDate(rangeTo) }),
   });
 
   const eventsByDay = useMemo(() => {
@@ -109,7 +132,18 @@ export default function CalendarPage() {
 
   const today = new Date();
   const todayKey = isoDate(today);
-  const monthLabel = `${MONTH_NAMES[monthStart.getMonth()]} ${monthStart.getFullYear()}`;
+
+  const navigate = (delta: 1 | -1) => {
+    setCursor((c) => {
+      const next = new Date(c);
+      if (view === "month") next.setMonth(c.getMonth() + delta);
+      else if (view === "week") next.setDate(c.getDate() + delta * 7);
+      else next.setDate(c.getDate() + delta);
+      return next;
+    });
+  };
+
+  const icsHref = `${API_BASE_URL}/api/calendar/events.ics?from=${isoDate(rangeFrom)}&to=${isoDate(rangeTo)}`;
 
   return (
     <div className="flex flex-col gap-5">
@@ -123,43 +157,77 @@ export default function CalendarPage() {
             this workspace.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* View toggle */}
+          <div
+            className="inline-flex items-center rounded-md border border-[var(--color-line-2)] p-0.5"
+            role="tablist"
+            aria-label="Calendar view"
+          >
+            {(["month", "week", "day"] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                role="tab"
+                aria-selected={view === v}
+                onClick={() => setView(v)}
+                data-testid={`calendar-view-${v}`}
+                className={cn(
+                  "h-7 px-3 text-xs font-medium capitalize",
+                  view === v
+                    ? "rounded-sm bg-[var(--color-ink)] text-white"
+                    : "text-[var(--color-mute)] hover:text-[var(--color-ink)]",
+                )}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
           <button
             type="button"
-            onClick={() =>
-              setCursor((c) => new Date(c.getFullYear(), c.getMonth() - 1, 1))
-            }
+            onClick={() => navigate(-1)}
             className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--color-line-2)] text-[var(--color-mute)] hover:text-[var(--color-ink)]"
-            aria-label="Previous month"
+            aria-label="Previous"
             data-testid="calendar-prev-month"
           >
             <ChevronLeft className="h-4 w-4" aria-hidden />
           </button>
           <div
-            className="min-w-[10rem] text-center text-sm font-medium text-[var(--color-ink)]"
+            className="min-w-[12rem] text-center text-sm font-medium text-[var(--color-ink)]"
             data-testid="calendar-month-label"
           >
-            {monthLabel}
+            {label}
           </div>
           <button
             type="button"
-            onClick={() =>
-              setCursor((c) => new Date(c.getFullYear(), c.getMonth() + 1, 1))
-            }
+            onClick={() => navigate(1)}
             className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--color-line-2)] text-[var(--color-mute)] hover:text-[var(--color-ink)]"
-            aria-label="Next month"
+            aria-label="Next"
             data-testid="calendar-next-month"
           >
             <ChevronRight className="h-4 w-4" aria-hidden />
           </button>
           <button
             type="button"
-            onClick={() => setCursor(startOfMonth(new Date()))}
+            onClick={() => setCursor(new Date())}
             className="ml-2 inline-flex h-8 items-center rounded-md border border-[var(--color-line-2)] px-3 text-xs font-medium text-[var(--color-ink)] hover:bg-[var(--color-line-1)]"
             data-testid="calendar-today"
           >
             Today
           </button>
+          {/* iCal export — Google Calendar / Outlook / Apple Calendar
+              all subscribe to this URL. The link target uses the
+              current view's range so a "Subscribe" downloads
+              exactly what's on screen. */}
+          <a
+            href={icsHref}
+            className="ml-2 inline-flex h-8 items-center gap-1.5 rounded-md border border-[var(--color-line-2)] px-3 text-xs font-medium text-[var(--color-ink)] hover:bg-[var(--color-line-1)]"
+            data-testid="calendar-ics-download"
+            download="caseops-calendar.ics"
+          >
+            <Download className="h-3.5 w-3.5" aria-hidden />
+            Export .ics
+          </a>
         </div>
       </header>
 
@@ -185,65 +253,247 @@ export default function CalendarPage() {
         />
       ) : null}
 
-      {/* Month grid */}
-      <div className="overflow-hidden rounded-lg border border-[var(--color-line-2)]">
-        <div className="grid grid-cols-7 border-b border-[var(--color-line-2)] bg-[var(--color-line-1)] text-[10px] font-semibold uppercase tracking-wider text-[var(--color-mute)]">
-          {WEEKDAY_LABELS.map((w) => (
-            <div key={w} className="px-3 py-2">{w}</div>
-          ))}
-        </div>
-        <div className="grid grid-cols-7 grid-rows-6">
-          {grid.map((d, idx) => {
-            const key = isoDate(d);
-            const inMonth = d.getMonth() === monthStart.getMonth();
-            const isToday = key === todayKey;
-            const events = eventsByDay.get(key) ?? [];
-            const showCount = events.slice(0, 3);
-            const overflow = events.length - showCount.length;
-            return (
+      {view === "month" ? (
+        <MonthView
+          monthStart={startOfMonth(cursor)}
+          eventsByDay={eventsByDay}
+          isPending={query.isPending}
+          todayKey={todayKey}
+        />
+      ) : view === "week" ? (
+        <WeekView
+          weekStart={startOfWeekMonday(cursor)}
+          eventsByDay={eventsByDay}
+          isPending={query.isPending}
+          todayKey={todayKey}
+        />
+      ) : (
+        <DayView
+          day={cursor}
+          eventsByDay={eventsByDay}
+          isPending={query.isPending}
+          todayKey={todayKey}
+        />
+      )}
+    </div>
+  );
+}
+
+// --- views ----------------------------------------------------------
+
+function MonthView({
+  monthStart,
+  eventsByDay,
+  isPending,
+  todayKey,
+}: {
+  monthStart: Date;
+  eventsByDay: Map<string, CalendarEventRecord[]>;
+  isPending: boolean;
+  todayKey: string;
+}) {
+  const grid = buildMonthGrid(monthStart);
+  return (
+    <div className="overflow-hidden rounded-lg border border-[var(--color-line-2)]">
+      <div className="grid grid-cols-7 border-b border-[var(--color-line-2)] bg-[var(--color-line-1)] text-[10px] font-semibold uppercase tracking-wider text-[var(--color-mute)]">
+        {WEEKDAY_LABELS.map((w) => (
+          <div key={w} className="px-3 py-2">{w}</div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 grid-rows-6">
+        {grid.map((d, idx) => {
+          const key = isoDate(d);
+          const inMonth = d.getMonth() === monthStart.getMonth();
+          const isToday = key === todayKey;
+          const events = eventsByDay.get(key) ?? [];
+          const showCount = events.slice(0, 3);
+          const overflow = events.length - showCount.length;
+          return (
+            <div
+              key={`${idx}-${key}`}
+              className={cn(
+                "min-h-[7rem] border-b border-r border-[var(--color-line-2)] p-2",
+                !inMonth && "bg-[var(--color-line-1)]/40",
+                isToday && "bg-[var(--color-accent-bg)]",
+                idx % 7 === 6 && "border-r-0",
+                idx >= 35 && "border-b-0",
+              )}
+            >
               <div
-                key={`${idx}-${key}`}
                 className={cn(
-                  "min-h-[7rem] border-b border-r border-[var(--color-line-2)] p-2",
-                  !inMonth && "bg-[var(--color-line-1)]/40",
-                  isToday && "bg-[var(--color-accent-bg)]",
-                  // Last column / row strip the right / bottom border
-                  // so the table sits flush in its rounded container.
-                  idx % 7 === 6 && "border-r-0",
-                  idx >= 35 && "border-b-0",
+                  "mb-1 text-[11px] font-medium",
+                  inMonth
+                    ? isToday
+                      ? "text-[var(--color-accent)]"
+                      : "text-[var(--color-ink)]"
+                    : "text-[var(--color-mute)]",
                 )}
               >
+                {d.getDate()}
+              </div>
+              <div className="flex flex-col gap-1">
+                {isPending ? (
+                  <Skeleton className="h-4 w-full" />
+                ) : (
+                  showCount.map((event) => (
+                    <CalendarEventChip key={event.id} event={event} />
+                  ))
+                )}
+                {overflow > 0 ? (
+                  <div className="text-[10px] text-[var(--color-mute)]">
+                    +{overflow} more
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function WeekView({
+  weekStart,
+  eventsByDay,
+  isPending,
+  todayKey,
+}: {
+  weekStart: Date;
+  eventsByDay: Map<string, CalendarEventRecord[]>;
+  isPending: boolean;
+  todayKey: string;
+}) {
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(weekStart);
+    d.setDate(weekStart.getDate() + i);
+    return d;
+  });
+  return (
+    <div className="overflow-hidden rounded-lg border border-[var(--color-line-2)]">
+      <div className="grid grid-cols-7">
+        {days.map((d, idx) => {
+          const key = isoDate(d);
+          const isToday = key === todayKey;
+          const events = eventsByDay.get(key) ?? [];
+          return (
+            <div
+              key={key}
+              className={cn(
+                "flex min-h-[24rem] flex-col border-b border-r border-[var(--color-line-2)] p-2",
+                isToday && "bg-[var(--color-accent-bg)]",
+                idx === 6 && "border-r-0",
+                "border-b-0",
+              )}
+              data-testid={`calendar-week-day-${key}`}
+            >
+              <div className="mb-2 flex items-baseline justify-between">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-mute)]">
+                  {WEEKDAY_LABELS[idx]}
+                </div>
                 <div
                   className={cn(
-                    "mb-1 text-[11px] font-medium",
-                    inMonth
-                      ? isToday
-                        ? "text-[var(--color-accent)]"
-                        : "text-[var(--color-ink)]"
-                      : "text-[var(--color-mute)]",
+                    "text-sm font-semibold tabular",
+                    isToday
+                      ? "text-[var(--color-accent)]"
+                      : "text-[var(--color-ink)]",
                   )}
                 >
                   {d.getDate()}
                 </div>
-                <div className="flex flex-col gap-1">
-                  {query.isPending ? (
-                    <Skeleton className="h-4 w-full" />
-                  ) : (
-                    showCount.map((event) => (
-                      <CalendarEventChip key={event.id} event={event} />
-                    ))
-                  )}
-                  {overflow > 0 ? (
-                    <div className="text-[10px] text-[var(--color-mute)]">
-                      +{overflow} more
-                    </div>
-                  ) : null}
-                </div>
               </div>
+              <div className="flex flex-col gap-1">
+                {isPending ? (
+                  <Skeleton className="h-4 w-full" />
+                ) : events.length === 0 ? (
+                  <div className="text-[10px] italic text-[var(--color-mute)]">
+                    No events
+                  </div>
+                ) : (
+                  events.map((event) => (
+                    <CalendarEventChip key={event.id} event={event} />
+                  ))
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function DayView({
+  day,
+  eventsByDay,
+  isPending,
+  todayKey,
+}: {
+  day: Date;
+  eventsByDay: Map<string, CalendarEventRecord[]>;
+  isPending: boolean;
+  todayKey: string;
+}) {
+  const key = isoDate(day);
+  const isToday = key === todayKey;
+  const events = eventsByDay.get(key) ?? [];
+  return (
+    <div
+      className={cn(
+        "rounded-lg border border-[var(--color-line-2)] p-4",
+        isToday && "bg-[var(--color-accent-bg)]",
+      )}
+      data-testid={`calendar-day-pane-${key}`}
+    >
+      {isPending ? (
+        <div className="flex flex-col gap-2">
+          <Skeleton className="h-6 w-3/4" />
+          <Skeleton className="h-6 w-1/2" />
+        </div>
+      ) : events.length === 0 ? (
+        <div className="text-sm italic text-[var(--color-mute)]">
+          No hearings, tasks, or deadlines on this day.
+        </div>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {events.map((event) => {
+            const Icon = KIND_ICON[event.kind];
+            return (
+              <li key={event.id}>
+                <Link
+                  href={deepLinkForEvent(event)}
+                  className="group flex items-start gap-3 rounded-md border border-[var(--color-line-2)] bg-white px-3 py-2 hover:border-[var(--color-ink-3)]"
+                  data-testid={`calendar-event-${event.id}`}
+                >
+                  <span
+                    className={cn(
+                      "mt-1 inline-flex h-6 w-6 items-center justify-center rounded-full text-white",
+                      KIND_DOT[event.kind],
+                    )}
+                  >
+                    <Icon className="h-3.5 w-3.5" aria-hidden />
+                  </span>
+                  <div className="flex-1">
+                    <div className="font-medium text-[var(--color-ink)]">
+                      {event.title}
+                    </div>
+                    <div className="text-xs text-[var(--color-mute)]">
+                      <span className="font-mono">{event.matter_code}</span>
+                      {" · "}
+                      {event.matter_title}
+                      {event.detail ? ` · ${event.detail}` : ""}
+                    </div>
+                  </div>
+                  <ExternalLink
+                    className="h-4 w-4 text-[var(--color-mute)] opacity-0 group-hover:opacity-100"
+                    aria-hidden
+                  />
+                </Link>
+              </li>
             );
           })}
-        </div>
-      </div>
+        </ul>
+      )}
     </div>
   );
 }
@@ -281,9 +531,5 @@ function CalendarEventChip({ event }: { event: CalendarEventRecord }) {
   );
 }
 
-// Placeholder import the bundler will tree-shake when the icon is
-// only referenced via type. Keeping the import explicit so the
-// dev-tools devtools tooltip on the page header shows the right
-// icon at a glance.
 const _calendarIcon = CalendarDays;
 void _calendarIcon;

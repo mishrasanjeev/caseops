@@ -184,4 +184,75 @@ def _collect_deadlines(
     return out
 
 
-__all__ = ["aggregate_calendar_events"]
+def render_events_as_ical(
+    events: list[CalendarEventRecord],
+    *,
+    calendar_name: str = "CaseOps",
+) -> str:
+    """Serialise ``CalendarEventRecord`` rows as an RFC 5545 VCALENDAR
+    stream for subscribe-by-URL (Google Calendar, Outlook, Apple
+    Calendar).
+
+    All events are date-granular — VALUE=DATE with DTSTART and
+    DTEND on consecutive days. RFC 5545 line folding at 75 octets is
+    omitted because every major consumer (Google, Outlook, Apple)
+    tolerates the longer lines and our summaries are <200 chars
+    anyway.
+
+    No external dependency — the vcal grammar is simple enough that
+    a 40-line hand-roll is clearer than pulling in a new package
+    (and keeps the Anthropic-friendly dep footprint tight).
+    """
+    lines: list[str] = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//CaseOps//Calendar//EN",
+        f"X-WR-CALNAME:{_ical_escape(calendar_name)}",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+    ]
+    for event in events:
+        start = event.occurs_on.strftime("%Y%m%d")
+        end = (event.occurs_on.replace(day=event.occurs_on.day)  # same day
+               ).strftime("%Y%m%d")
+        # Non-floating all-day event — DTEND is the day after DTSTART
+        # per iCal convention so the slot fills a single calendar cell.
+        from datetime import timedelta as _td
+
+        end = (event.occurs_on + _td(days=1)).strftime("%Y%m%d")
+        description_parts = [
+            f"Matter: {event.matter_code} · {event.matter_title}",
+        ]
+        if event.detail:
+            description_parts.append(event.detail)
+        if event.status:
+            description_parts.append(f"Status: {event.status}")
+        description = "\\n".join(_ical_escape(p) for p in description_parts)
+        lines.extend([
+            "BEGIN:VEVENT",
+            f"UID:{event.id}@caseops.ai",
+            f"SUMMARY:{_ical_escape(f'[{event.kind.upper()}] {event.title}')}",
+            f"DTSTART;VALUE=DATE:{start}",
+            f"DTEND;VALUE=DATE:{end}",
+            f"DESCRIPTION:{description}",
+            f"CATEGORIES:{event.kind.upper()}",
+            "END:VEVENT",
+        ])
+    lines.append("END:VCALENDAR")
+    # RFC 5545 requires CRLF line breaks.
+    return "\r\n".join(lines) + "\r\n"
+
+
+def _ical_escape(text: str) -> str:
+    """Escape the four characters RFC 5545 mandates inside a TEXT
+    property value: backslash, comma, semicolon, newline."""
+    return (
+        text.replace("\\", "\\\\")
+        .replace(",", "\\,")
+        .replace(";", "\\;")
+        .replace("\n", "\\n")
+        .replace("\r", "")
+    )
+
+
+__all__ = ["aggregate_calendar_events", "render_events_as_ical"]

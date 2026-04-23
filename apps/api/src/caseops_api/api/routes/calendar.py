@@ -10,13 +10,17 @@ from datetime import date, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import PlainTextResponse
 
 from caseops_api.api.dependencies import DbSession, get_current_context
 from caseops_api.schemas.calendar import (
     CalendarEventKind,
     CalendarEventListResponse,
 )
-from caseops_api.services.calendar import aggregate_calendar_events
+from caseops_api.services.calendar import (
+    aggregate_calendar_events,
+    render_events_as_ical,
+)
 from caseops_api.services.identity import SessionContext
 
 router = APIRouter()
@@ -85,4 +89,56 @@ async def list_calendar_events(
         range_from=range_from,
         range_to=range_to,
         events=events,
+    )
+
+
+@router.get(
+    "/events.ics",
+    response_class=PlainTextResponse,
+    summary="Download / subscribe to the calendar as iCalendar (FT-043).",
+)
+async def list_calendar_events_ical(
+    context: CurrentContext,
+    session: DbSession,
+    range_from: Annotated[date, Query(alias="from")],
+    range_to: Annotated[date, Query(alias="to")],
+    kinds: Annotated[list[CalendarEventKind] | None, Query()] = None,
+) -> PlainTextResponse:
+    """Return the same event feed as :func:`list_calendar_events` but
+    wire-formatted as RFC 5545 vCalendar. Google Calendar / Outlook
+    / Apple Calendar all accept this as a subscribable URL so users
+    see their CaseOps events alongside their personal calendar.
+    """
+    if range_from > range_to:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="`from` must be on or before `to`.",
+        )
+    if (range_to - range_from) > timedelta(days=_MAX_RANGE_DAYS):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Calendar range is capped at {_MAX_RANGE_DAYS} days. "
+                "Request a narrower window."
+            ),
+        )
+    events = aggregate_calendar_events(
+        session,
+        context=context,
+        range_from=range_from,
+        range_to=range_to,
+        kinds=kinds,
+    )
+    body = render_events_as_ical(
+        events, calendar_name=f"CaseOps — {context.company.name}",
+    )
+    return PlainTextResponse(
+        content=body,
+        media_type="text/calendar; charset=utf-8",
+        headers={
+            # Content-Disposition so a browser "download" button
+            # yields a nicely-named .ics file, while subscribe-by-
+            # URL clients just read the body and ignore the header.
+            "Content-Disposition": 'inline; filename="caseops-calendar.ics"',
+        },
     )
