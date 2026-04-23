@@ -3,10 +3,11 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from caseops_api.core.cookies import SESSION_COOKIE
 from caseops_api.core.observability import set_tenant_context
 from caseops_api.core.security import TokenValidationError, decode_access_token
 from caseops_api.db.models import MembershipRole
@@ -18,17 +19,28 @@ DbSession = Annotated[Session, Depends(get_db_session)]
 
 
 def get_current_context(
+    request: Request,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
     session: DbSession,
 ) -> SessionContext:
-    if credentials is None:
+    # EG-001 (2026-04-23): cookie-first auth. ``Authorization: Bearer
+    # ...`` is still accepted as a fallback so SDKs, automation, the
+    # E2E suite, and any in-flight web bundle from the previous deploy
+    # keep working. The cookie wins when both are present so a refresh
+    # immediately pivots an existing session to the new flow.
+    cookie_token = request.cookies.get(SESSION_COOKIE)
+    if cookie_token:
+        token = cookie_token
+    elif credentials is not None:
+        token = credentials.credentials
+    else:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing bearer token.",
+            detail="Missing session cookie or bearer token.",
         )
 
     try:
-        claims = decode_access_token(credentials.credentials)
+        claims = decode_access_token(token)
     except TokenValidationError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

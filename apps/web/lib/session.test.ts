@@ -53,15 +53,23 @@ describe("session storage helpers", () => {
   });
 
   it("returns null for token and context when storage is empty", () => {
+    // EG-001: getStoredToken always returns null in the cookie era.
     expect(getStoredToken()).toBeNull();
     expect(getStoredContext()).toBeNull();
   });
 
-  it("stores token and structured context on storeSession", () => {
+  it("stores ONLY structured context (never the access token)", () => {
+    // EG-001 (2026-04-23): the access token now lives in an HttpOnly
+    // cookie. The previous implementation wrote it to localStorage,
+    // which an XSS could read. The current contract: storeSession
+    // stores ONLY the non-sensitive workspace/user/membership context
+    // for UI hydration; nothing token-shaped is written.
     const session = buildSession();
     storeSession(session);
 
-    expect(window.localStorage.getItem(TOKEN_KEY)).toBe("test-token");
+    // Token MUST NOT be in localStorage — that's the whole point of
+    // the EG-001 migration.
+    expect(window.localStorage.getItem(TOKEN_KEY)).toBeNull();
     const raw = window.localStorage.getItem(CONTEXT_KEY);
     expect(raw).not.toBeNull();
 
@@ -73,12 +81,26 @@ describe("session storage helpers", () => {
     expect(raw).not.toContain("test-token");
   });
 
-  it("round-trips through getStoredToken / getStoredContext", () => {
+  it("getStoredToken always returns null in the cookie era", () => {
+    // Even after storeSession, JS cannot read the session credential —
+    // it sits behind HttpOnly. Bearer-token callers (tests, SDKs)
+    // must pass token explicitly to apiRequest; the browser path
+    // relies on credentials: 'include'.
     storeSession(buildSession());
-    expect(getStoredToken()).toBe("test-token");
+    expect(getStoredToken()).toBeNull();
     const ctx = getStoredContext();
     expect(ctx?.company.slug).toBe("test-co");
     expect(ctx?.user.full_name).toBe("Test User");
+  });
+
+  it("storeSession wipes any legacy localStorage token left over from the pre-cookie era", () => {
+    // A user mid-session at the time of the cookie cutover may still
+    // have caseops.session.token in localStorage from the previous
+    // bundle. Each storeSession call must clean that up so the
+    // legacy entry never lingers.
+    window.localStorage.setItem(TOKEN_KEY, "stale-pre-cookie-token");
+    storeSession(buildSession());
+    expect(window.localStorage.getItem(TOKEN_KEY)).toBeNull();
   });
 
   it("returns null on malformed JSON context rather than throwing", () => {
@@ -86,8 +108,10 @@ describe("session storage helpers", () => {
     expect(getStoredContext()).toBeNull();
   });
 
-  it("clearSession wipes both keys", () => {
+  it("clearSession wipes the context and any legacy token entry", () => {
     storeSession(buildSession());
+    // Simulate a legacy token entry left over from the pre-cookie era.
+    window.localStorage.setItem(TOKEN_KEY, "legacy-token-from-old-bundle");
     clearSession();
     expect(getStoredToken()).toBeNull();
     expect(getStoredContext()).toBeNull();

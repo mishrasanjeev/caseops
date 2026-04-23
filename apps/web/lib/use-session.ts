@@ -7,7 +7,6 @@ import {
   type StoredContext,
   clearSession,
   getStoredContext,
-  getStoredToken,
   subscribeSession,
 } from "@/lib/session";
 
@@ -30,12 +29,16 @@ export function useSession(): SessionState & { signOut: () => void } {
   });
 
   const read = useCallback(() => {
-    const token = getStoredToken();
+    // EG-001 (2026-04-23): the access token now lives in an HttpOnly
+    // cookie that JS cannot read, so we derive auth status from
+    // whether we have stored context (workspace + user + membership)
+    // alone. ``token`` stays in the state shape for back-compat with
+    // call sites that still read ``state.token``; it is always null.
     const context = getStoredContext();
     setState({
-      token,
+      token: null,
       context,
-      status: token && context ? "authenticated" : "anonymous",
+      status: context ? "authenticated" : "anonymous",
     });
   }, []);
 
@@ -58,6 +61,20 @@ export function useSession(): SessionState & { signOut: () => void } {
   }, [state.status]);
 
   const signOut = useCallback(() => {
+    // EG-001 (2026-04-23): the session credential lives in an
+    // HttpOnly cookie that JS cannot delete. Hitting /api/auth/logout
+    // makes the server respond with Set-Cookie max-age=0 to wipe
+    // both the session and CSRF cookies. Local context goes too so
+    // the next /sign-in is clean. Fire-and-forget — even if the API
+    // is unreachable we still clear local state so the UI shows the
+    // signed-out shell immediately.
+    void fetch(
+      `${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"}/api/auth/logout`,
+      {
+        method: "POST",
+        credentials: "include",
+      },
+    ).catch(() => undefined);
     clearSession();
   }, []);
 

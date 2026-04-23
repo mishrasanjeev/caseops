@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 from slowapi.middleware import SlowAPIMiddleware
 
 from caseops_api.api.router import api_router
+from caseops_api.core.csrf import CSRFMiddleware
 from caseops_api.core.observability import configure_logging, configure_tracing
 from caseops_api.core.problem_details import problem_json, register_problem_handlers
 from caseops_api.core.rate_limit import RateLimitExceeded, configure_limiter
@@ -45,6 +46,16 @@ def create_application() -> FastAPI:
     # sees the request_id on every log line.
     application.add_middleware(RequestContextMiddleware)
     application.add_middleware(SlowAPIMiddleware)
+    # EG-001 (2026-04-23): CSRF middleware. The bearer-auth path is
+    # exempt — see core/csrf.py for the policy. Order matters:
+    # Starlette wraps later-added middleware OUTSIDE earlier ones,
+    # so we add CSRF BEFORE CORS. Effective request flow:
+    # CORS → CSRF → SlowAPI → RequestContext → app. That keeps CORS
+    # outermost so a 403 from CSRF still picks up
+    # ``Access-Control-Allow-Origin`` on the way out and the browser
+    # surfaces it as a real HTTP error rather than a generic CORS
+    # block.
+    application.add_middleware(CSRFMiddleware)
     application.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,

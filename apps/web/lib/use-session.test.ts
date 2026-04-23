@@ -63,7 +63,10 @@ describe("useSession", () => {
     const { result } = renderHook(() => useSession());
 
     expect(result.current.status).toBe("authenticated");
-    expect(result.current.token).toBe("test-token");
+    // EG-001 (2026-04-23): the access token now lives in an HttpOnly
+    // cookie that JS cannot read. ``state.token`` is always null in
+    // the cookie era; auth status is derived from stored context.
+    expect(result.current.token).toBeNull();
     expect(result.current.context?.company.slug).toBe("test-co");
     expect(result.current.context?.user.email).toBe("test@test-co.in");
   });
@@ -77,7 +80,10 @@ describe("useSession", () => {
     });
 
     expect(result.current.status).toBe("authenticated");
-    expect(result.current.token).toBe("test-token");
+    // EG-001 (2026-04-23): the access token now lives in an HttpOnly
+    // cookie that JS cannot read. ``state.token`` is always null in
+    // the cookie era; auth status is derived from stored context.
+    expect(result.current.token).toBeNull();
   });
 
   it("signOut clears storage and transitions back to anonymous", () => {
