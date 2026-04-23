@@ -20,12 +20,14 @@ workspace — with tenant isolation, scoped agent grants, and audit by default.
 | Marketing site (`/`) | Live | `apps/web/app/page.tsx` |
 | Sign in (`/sign-in`) | Live | `apps/web/app/sign-in/` |
 | App shell + Matter Cockpit (`/app`) | Live | `apps/web/app/app/` |
-| Legacy founder console (`/legacy`) | Preserved during rebuild | `apps/web/app/legacy/` |
-| API (auth, matters, contracts, documents, billing, authorities, recommendations) | Founder-stage, security-hardened | `apps/api/` |
-| Document worker | Founder-stage | `apps/api/src/caseops_api/workers/` |
+| API (auth, matters, contracts, documents, billing, authorities, recommendations, drafting, hearing packs, hearing reminders, outside counsel, clients) | Production, security-hardened | `apps/api/` |
+| Document worker | Production (Cloud Run Job) | `apps/api/src/caseops_api/workers/` |
+| Hearing reminders worker | Production (Cloud Run Job + Scheduler `*/5 * * * *` Asia/Kolkata, SendGrid sender `hearings@caseops.ai`) | `apps/api/src/caseops_api/scripts/send_hearing_reminders.py` |
+| Mobile responsive | Hamburger nav + responsive forms verified on Pixel-5 viewport | Playwright `app-mobile` project |
 | PRD | Stable | [`docs/PRD.md`](./docs/PRD.md) |
 | Architecture | Stable | [`docs/architecture.md`](./docs/architecture.md) |
 | Work plan | Current | [`docs/WORK_TO_BE_DONE.md`](./docs/WORK_TO_BE_DONE.md) |
+| Strict bug ledger | Closed (10/10 Properly fixed) | [`docs/STRICT_BUG_TASKLIST_2026-04-22.md`](./docs/STRICT_BUG_TASKLIST_2026-04-22.md) |
 
 ---
 
@@ -139,6 +141,8 @@ Run from the repo root.
 | `npm run test:e2e:headed` | Same, in headed mode |
 | `npm run test:e2e:marketing` | Marketing suite against a production web build |
 | `npm run test:e2e:app` | App shell + matter cockpit suite against a production build |
+| `bash scripts/verify-backend.sh [pytest-args]` | **Canonical** backend recipe (bypasses `uv run`'s implicit sync — required on Windows when long-running processes hold a `.venv/Scripts/*.exe` lock). Runs ruff + targeted pytest. |
+| `bash scripts/verify-web.sh [--quick] [-g <grep>]` | **Canonical** web recipe — vitest + tsc + (mandatory) `npm run build` + Playwright. The mandatory rebuild prevents stale-bundle false negatives. |
 
 ---
 
@@ -178,9 +182,35 @@ CASEOPS_LLM_API_KEY=              # required for anthropic / gemini
   exercises the landing page, SEO surface, OG image, sitemap/robots, and demo-request API.
 - **App spine** — `npm run test:e2e:app` runs against a production build + live API;
   covers sign-in, dashboard, matter creation, cockpit tabs, roadmap stubs, sign-out.
-- **Legacy e2e** — `npm run test:e2e` drives the founder-mode console end-to-end.
+- **Mobile responsive** — Playwright `app-mobile` project (`devices['Pixel 5']`,
+  393×851, touch) runs `tests/e2e/mobile-responsive.spec.ts` to prove the
+  Topbar hamburger + dialog footers + grid stacking on phone viewports.
+  `npx playwright test --config playwright.app.config.ts --project app-mobile`.
 - **Live integrations** — gated behind `CASEOPS_E2E_ENABLE_LIVE_SOURCES=1` and
   `CASEOPS_E2E_ENABLE_PINE_LABS=1`.
+
+### Bug-fixing protocol
+
+Any bug triage / fix / verification / reopen review on this repo MUST
+follow the fail-closed workflow in
+[`.claude/skills/bug-fixing/SKILL.md`](./.claude/skills/bug-fixing/SKILL.md):
+verdicts are exactly one of `Properly fixed` / `Partially fixed` /
+`Not fixed` / `Inconclusive`; mobile bugs need mobile proof; reopened
+bugs need fresh end-user verification; schema/enum drift needs the
+full adjacent-path audit (backend schema → Zod → TS types → create
+form → update form → fixtures). Hooked from `CLAUDE.md` so every
+contributor gets it automatically.
+
+### Post-deploy verification
+
+Every Cloud Run deploy must pass the four-step staleness sweep before
+being called "deployed" — see
+[`memory/feedback_post_deploy_staleness_check.md`](./.claude/projects/C--Users-mishr-caseops/memory/feedback_post_deploy_staleness_check.md):
+(1) HEAD vs revision tag, (2) public-domain `/api/health`, (3)
+new-shape smoke (a route added in the deploy returns 401, not 404),
+(4) image digest cross-check (`gcloud artifacts docker images describe
+:$HEAD --format='value(image_summary.digest)'` matches the running
+revision's `sha256:...`).
 
 Security, tenant-leakage, agent, and AI-safety tests are tracked in
 [`docs/WORK_TO_BE_DONE.md`](./docs/WORK_TO_BE_DONE.md) §11.

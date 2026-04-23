@@ -64,7 +64,7 @@ function emailHashForDedupe(email: string): string {
 //                             account password. Generated at
 //                             https://myaccount.google.com/apppasswords
 //                             with 2FA enabled.
-//   CASEOPS_DEMO_NOTIFY_TO   — recipient (default sanjeev@agenticorg.ai)
+//   CASEOPS_DEMO_NOTIFY_TO   — recipient (default mishra.sanjeev@gmail.com)
 //   CASEOPS_DEMO_NOTIFY_FROM — From header (default: "CaseOps <SMTP_USER>")
 // When SMTP_USER or SMTP_PASSWORD is missing (local dev), the function
 // silently returns — the request is still acked to the client and logged.
@@ -81,7 +81,7 @@ async function notifyFounder(payload: {
   const host = process.env.CASEOPS_SMTP_HOST ?? "smtp.gmail.com";
   const port = Number(process.env.CASEOPS_SMTP_PORT ?? "465");
   const secure = port === 465;
-  const to = process.env.CASEOPS_DEMO_NOTIFY_TO ?? "sanjeev@agenticorg.ai";
+  const to = process.env.CASEOPS_DEMO_NOTIFY_TO ?? "mishra.sanjeev@gmail.com";
   const from = process.env.CASEOPS_DEMO_NOTIFY_FROM ?? `CaseOps <${user}>`;
   const subject = `New demo request — ${payload.company}`;
   const escape = (s: string) =>

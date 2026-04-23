@@ -165,6 +165,29 @@ These rules are the default coding behavior for all implementation work in this 
 - Keep `docs/STRICT_BUG_TASKLIST_2026-04-22.md` current for any Hari or Ram bug,
   reopen, or adjacent defect found through the same audit.
 
+### Mandatory Release Sign-Off Hygiene
+
+- For release sign-off or post-deploy reopen analysis, treat remaining work as
+  operational verification hygiene unless fresh verification reveals a new
+  product defect.
+- Prefer deployed build fingerprints that prove exact commit SHA, build time,
+  and environment. If the deployed surface cannot prove commit identity, say so
+  explicitly and lower confidence.
+- Verification must be repeatable. Do not normalize temp/cache permission
+  failures, flaky test harnesses, or one-off local workarounds as clean proof.
+- Provider- or payment-dependent flows need a real verification path. A skipped
+  E2E is not clean sign-off unless equivalent automated or documented manual
+  evidence exists.
+- Persist release evidence: target commit, environment URLs, commands run,
+  results, skipped checks, and explicit caveats.
+- Use only these release verdicts:
+  - `GO`
+  - `GO with caveat`
+  - `NO-GO`
+- Do not issue a clean `GO` if commit identity is unproven without fallback
+  evidence, if a required smoke test is skipped without equivalent proof, or if
+  the environment is too broken to run the strongest practical verification.
+
 When fixing a bug:
 
 - first reproduce it with a test or a concrete verification step

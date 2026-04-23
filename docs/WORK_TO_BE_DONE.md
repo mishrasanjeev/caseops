@@ -6,6 +6,13 @@
 **Status:** For founder review and sprint planning. All P0 items are closed; remaining P1–P3 items are sequenced in §15.
 **Instructions for readers:** Every item below traces to either (a) a specific PRD section, (b) a concrete file:line or Alembic revision, or (c) a security/correctness bug that blocks production. Do not expand scope beyond these. `§1.1` has the phase-by-phase commit ladder; `§1.2` has the corpus-ingestion state.
 
+> **For the most-recent bug-fix status (2026-04-22 / 23 batch),
+> see [`docs/STRICT_BUG_TASKLIST_2026-04-22.md`](./STRICT_BUG_TASKLIST_2026-04-22.md)**
+> — closed 10/10 Properly fixed under the strict bug-fixing skill.
+> Hari + Ram bug sheets, mobile-responsive proof, contract-extraction
+> success-path coverage, and the per-matter in-app reminder strip all
+> live in production at HEAD `a44ea31`.
+
 ---
 
 ## 0. How to read this document

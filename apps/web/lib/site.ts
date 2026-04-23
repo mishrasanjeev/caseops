@@ -26,10 +26,10 @@ export const siteConfig = {
   twitter: "@caseops",
   locale: "en_IN",
   contact: {
-    email: "sanjeev@agenticorg.ai",
-    sales: "sanjeev@agenticorg.ai",
+    email: "mishra.sanjeev@gmail.com",
+    sales: "mishra.sanjeev@gmail.com",
     support: "support@caseops.ai",
-    founder: "sanjeev@agenticorg.ai",
+    founder: "mishra.sanjeev@gmail.com",
   },
   nav: {
     primary: [
@@ -54,7 +54,7 @@ export const siteConfig = {
         { label: "For general counsels", href: "/general-counsels" },
         { label: "For solo lawyers", href: "/solo-lawyers" },
         { label: "User guide", href: "/guide" },
-        { label: "Contact", href: "mailto:sanjeev@agenticorg.ai" },
+        { label: "Contact", href: "mailto:mishra.sanjeev@gmail.com" },
       ],
       Trust: [
         { label: "Security", href: "#security" },
