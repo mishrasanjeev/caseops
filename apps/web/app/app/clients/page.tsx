@@ -31,7 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { ApiError } from "@/lib/api/config";
+import { apiErrorMessage } from "@/lib/api/config";
 import {
   type ClientRecord,
   type ClientType,
@@ -201,7 +201,7 @@ function NewClientDialog(): React.JSX.Element {
       await queryClient.invalidateQueries({ queryKey: ["clients", "list"] });
     },
     onError: (err) => {
-      toast.error(err instanceof ApiError ? err.detail : "Could not add client.");
+      toast.error(apiErrorMessage(err, "Could not add client."));
     },
   });
 

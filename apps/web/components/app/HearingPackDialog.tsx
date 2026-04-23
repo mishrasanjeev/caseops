@@ -18,7 +18,7 @@ import {
 import { EmptyState } from "@/components/ui/EmptyState";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { ApiError } from "@/lib/api/config";
+import { apiErrorMessage } from "@/lib/api/config";
 import {
   fetchHearingPack,
   generateHearingPack,
@@ -75,9 +75,7 @@ export function HearingPackDialog({
     },
     onError: (err) => {
       const msg =
-        err instanceof ApiError
-          ? err.detail
-          : "Could not assemble a hearing pack.";
+        apiErrorMessage(err, "Could not assemble a hearing pack.");
       toast.error(msg);
     },
   });
@@ -93,7 +91,7 @@ export function HearingPackDialog({
     },
     onError: (err) => {
       const msg =
-        err instanceof ApiError ? err.detail : "Could not save the review.";
+        apiErrorMessage(err, "Could not save the review.");
       toast.error(msg);
     },
   });

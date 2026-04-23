@@ -13,7 +13,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { ApiError } from "@/lib/api/config";
+import { apiErrorMessage } from "@/lib/api/config";
 import { archiveClient, fetchClient } from "@/lib/api/endpoints";
 import { useCapability } from "@/lib/capabilities";
 
@@ -38,7 +38,7 @@ export default function ClientProfilePage() {
       router.push("/app/clients");
     },
     onError: (err) => {
-      toast.error(err instanceof ApiError ? err.detail : "Could not archive.");
+      toast.error(apiErrorMessage(err, "Could not archive."));
     },
   });
 

@@ -38,7 +38,7 @@ import {
 } from "@/components/ui/Select";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { ApiError } from "@/lib/api/config";
+import { apiErrorMessage } from "@/lib/api/config";
 import {
   createOutsideCounselAssignment,
   fetchOutsideCounselWorkspace,
@@ -317,7 +317,7 @@ function AssignCounselDialog({
       });
     },
     onError: (err) => {
-      toast.error(err instanceof ApiError ? err.detail : "Could not assign.");
+      toast.error(apiErrorMessage(err, "Could not assign."));
     },
   });
 

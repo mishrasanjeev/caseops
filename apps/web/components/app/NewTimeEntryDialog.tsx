@@ -21,7 +21,7 @@ import {
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { Textarea } from "@/components/ui/Textarea";
-import { ApiError } from "@/lib/api/config";
+import { apiErrorMessage } from "@/lib/api/config";
 import { createMatterTimeEntry } from "@/lib/api/endpoints";
 
 const schema = z.object({
@@ -92,7 +92,7 @@ export function NewTimeEntryDialog({ matterId }: { matterId: string }) {
     },
     onError: (err) => {
       toast.error(
-        err instanceof ApiError ? err.detail : "Could not log the time entry.",
+        apiErrorMessage(err, "Could not log the time entry."),
       );
     },
   });

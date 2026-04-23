@@ -31,7 +31,7 @@ import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
-import { ApiError } from "@/lib/api/config";
+import { apiErrorMessage } from "@/lib/api/config";
 import {
   comparePlaybook,
   extractContractClauses,
@@ -122,7 +122,7 @@ export default function ContractDetailPage() {
       toast.success("Document uploaded — processing will begin shortly.");
     },
     onError: (err) =>
-      toast.error(err instanceof ApiError ? err.detail : "Could not upload the file."),
+      toast.error(apiErrorMessage(err, "Could not upload the file.")),
     onSettled: () => {
       if (fileInput.current) fileInput.current.value = "";
     },
@@ -137,7 +137,7 @@ export default function ContractDetailPage() {
       );
     },
     onError: (err) =>
-      toast.error(err instanceof ApiError ? err.detail : "Could not extract clauses."),
+      toast.error(apiErrorMessage(err, "Could not extract clauses.")),
   });
 
   const extractObligations = useMutation({
@@ -150,7 +150,7 @@ export default function ContractDetailPage() {
     },
     onError: (err) =>
       toast.error(
-        err instanceof ApiError ? err.detail : "Could not extract obligations.",
+        apiErrorMessage(err, "Could not extract obligations."),
       ),
   });
 
@@ -161,7 +161,7 @@ export default function ContractDetailPage() {
       toast.success(`Installed ${result.installed} default playbook rules.`);
     },
     onError: (err) =>
-      toast.error(err instanceof ApiError ? err.detail : "Could not install playbook."),
+      toast.error(apiErrorMessage(err, "Could not install playbook.")),
   });
 
   const runPlaybookCompare = useMutation({
@@ -172,7 +172,7 @@ export default function ContractDetailPage() {
     },
     onError: (err) =>
       toast.error(
-        err instanceof ApiError ? err.detail : "Could not run the playbook comparison.",
+        apiErrorMessage(err, "Could not run the playbook comparison."),
       ),
   });
 

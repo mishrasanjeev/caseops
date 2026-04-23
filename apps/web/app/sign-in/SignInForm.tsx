@@ -18,7 +18,7 @@ import { Label } from "@/components/ui/Label";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { signIn } from "@/lib/api/auth";
-import { ApiError } from "@/lib/api/config";
+import { apiErrorMessage } from "@/lib/api/config";
 import { storeSession } from "@/lib/session";
 
 import { NewWorkspaceForm } from "./NewWorkspaceForm";
@@ -61,7 +61,7 @@ export function SignInForm() {
     },
     onError: (err) => {
       const message =
-        err instanceof ApiError ? err.detail : "We could not sign you in. Please try again.";
+        apiErrorMessage(err, "We could not sign you in. Please try again.");
       toast.error(message);
     },
   });

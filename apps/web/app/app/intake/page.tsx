@@ -53,7 +53,7 @@ import {
 import { Skeleton } from "@/components/ui/Skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Textarea } from "@/components/ui/Textarea";
-import { ApiError } from "@/lib/api/config";
+import { ApiError, apiErrorMessage } from "@/lib/api/config";
 import {
   checkMatterCodeAvailable,
   createIntakeRequest,
@@ -252,7 +252,7 @@ function IntakeRow({
       toast.success("Intake request updated.");
     },
     onError: (err) =>
-      toast.error(err instanceof ApiError ? err.detail : "Could not update request."),
+      toast.error(apiErrorMessage(err, "Could not update request.")),
   });
 
   const promoteMutation = useMutation({
@@ -267,7 +267,7 @@ function IntakeRow({
       }
     },
     onError: (err) =>
-      toast.error(err instanceof ApiError ? err.detail : "Could not promote request."),
+      toast.error(apiErrorMessage(err, "Could not promote request.")),
   });
 
   const priorityColor: Record<IntakePriority, string> = {
@@ -610,7 +610,7 @@ function NewIntakeDialog() {
       setOpen(false);
     },
     onError: (err) =>
-      toast.error(err instanceof ApiError ? err.detail : "Could not file request."),
+      toast.error(apiErrorMessage(err, "Could not file request.")),
   });
 
   return (

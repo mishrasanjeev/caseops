@@ -28,7 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
-import { ApiError } from "@/lib/api/config";
+import { apiErrorMessage } from "@/lib/api/config";
 import { createMatter } from "@/lib/api/endpoints";
 
 const schema = z.object({
@@ -96,7 +96,7 @@ export function NewMatterDialog() {
       setOpen(false);
     },
     onError: (err) => {
-      const message = err instanceof ApiError ? err.detail : "Could not create matter.";
+      const message = apiErrorMessage(err, "Could not create matter.");
       toast.error(message);
     },
   });

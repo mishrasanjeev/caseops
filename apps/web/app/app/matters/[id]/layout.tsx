@@ -8,7 +8,7 @@ import { MatterCockpitNav } from "@/components/app/MatterCockpitNav";
 import { MatterHeader } from "@/components/app/MatterHeader";
 import { Button } from "@/components/ui/Button";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
-import { ApiError } from "@/lib/api/config";
+import { isApiErrorShape } from "@/lib/api/config";
 import { useMatterWorkspace } from "@/lib/use-matter-workspace";
 
 export default function MatterCockpitLayout({ children }: { children: ReactNode }) {
@@ -26,7 +26,7 @@ export default function MatterCockpitLayout({ children }: { children: ReactNode 
   if (isError || !data) {
     // 404 = no such matter / not authorized; retrying won't help, so we
     // offer the "back to portfolio" out instead of a retry button.
-    const notFound = error instanceof ApiError && error.status === 404;
+    const notFound = isApiErrorShape(error) && error.status === 404;
     return (
       <QueryErrorState
         title={notFound ? "Matter not found" : "Could not load this matter"}

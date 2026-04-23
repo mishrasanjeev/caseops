@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/Select";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Textarea } from "@/components/ui/Textarea";
-import { ApiError } from "@/lib/api/config";
+import { apiErrorMessage } from "@/lib/api/config";
 import {
   createDraft,
   fetchDraftingSuggestions,
@@ -252,7 +252,7 @@ function StepperInner({ matterId, template, suggestions, onSubmitted }: InnerPro
       onSubmitted(draft.id);
     },
     onError: (err) => {
-      toast.error(err instanceof ApiError ? err.detail : "Could not create draft.");
+      toast.error(apiErrorMessage(err, "Could not create draft."));
     },
   });
 

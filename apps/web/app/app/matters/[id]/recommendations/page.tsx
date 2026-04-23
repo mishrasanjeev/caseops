@@ -26,7 +26,7 @@ import {
 import { EmptyState } from "@/components/ui/EmptyState";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { ApiError } from "@/lib/api/config";
+import { apiErrorMessage } from "@/lib/api/config";
 import {
   generateRecommendation,
   listRecommendations,
@@ -98,9 +98,7 @@ export default function MatterRecommendationsPage() {
       // verifiable. Surface that text so the user knows which lever
       // to pull.
       toast.error(
-        err instanceof ApiError
-          ? err.detail
-          : "Could not generate a recommendation.",
+        apiErrorMessage(err, "Could not generate a recommendation."),
       );
     },
   });
@@ -117,7 +115,7 @@ export default function MatterRecommendationsPage() {
       });
     },
     onError: (err) =>
-      toast.error(err instanceof ApiError ? err.detail : "Could not record decision."),
+      toast.error(apiErrorMessage(err, "Could not record decision.")),
   });
 
   const recommendations = query.data?.recommendations ?? [];

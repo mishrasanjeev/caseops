@@ -27,7 +27,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { ApiError } from "@/lib/api/config";
+import { apiErrorMessage } from "@/lib/api/config";
 import {
   createInvoicePaymentLink,
   fetchPaymentConfig,
@@ -103,7 +103,7 @@ export default function MatterBillingPage() {
     },
     onError: (err) => {
       toast.error(
-        err instanceof ApiError ? err.detail : "Could not issue a payment link.",
+        apiErrorMessage(err, "Could not issue a payment link."),
       );
     },
     onSettled: () => setPendingPaymentInvoiceId(null),
@@ -118,7 +118,7 @@ export default function MatterBillingPage() {
       toast.success("Payment status refreshed.");
     },
     onError: (err) => {
-      toast.error(err instanceof ApiError ? err.detail : "Could not sync payment.");
+      toast.error(apiErrorMessage(err, "Could not sync payment."));
     },
     onSettled: () => setPendingPaymentInvoiceId(null),
   });

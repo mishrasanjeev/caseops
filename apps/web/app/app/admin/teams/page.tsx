@@ -47,7 +47,7 @@ import {
 import { Skeleton } from "@/components/ui/Skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Textarea } from "@/components/ui/Textarea";
-import { ApiError } from "@/lib/api/config";
+import { apiErrorMessage } from "@/lib/api/config";
 import {
   createTeam,
   deleteTeam,
@@ -84,7 +84,7 @@ export default function TeamsAdminPage() {
       );
     },
     onError: (err) =>
-      toast.error(err instanceof ApiError ? err.detail : "Could not update scoping."),
+      toast.error(apiErrorMessage(err, "Could not update scoping.")),
   });
 
   const deleteMutation = useMutation({
@@ -94,7 +94,7 @@ export default function TeamsAdminPage() {
       toast.success("Team deleted.");
     },
     onError: (err) =>
-      toast.error(err instanceof ApiError ? err.detail : "Could not delete team."),
+      toast.error(apiErrorMessage(err, "Could not delete team.")),
   });
 
   return (
@@ -278,7 +278,7 @@ function NewTeamDialog() {
       setOpen(false);
     },
     onError: (err) =>
-      toast.error(err instanceof ApiError ? err.detail : "Could not create team."),
+      toast.error(apiErrorMessage(err, "Could not create team.")),
   });
 
   return (

@@ -32,7 +32,7 @@ import {
 } from "@/components/ui/Select";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { ApiError } from "@/lib/api/config";
+import { apiErrorMessage } from "@/lib/api/config";
 import { createDraft, listDrafts } from "@/lib/api/endpoints";
 import type { DraftType } from "@/lib/api/schemas";
 
@@ -179,7 +179,7 @@ function NewDraftDialog({ matterId }: { matterId: string }) {
     },
     onError: (err) => {
       toast.error(
-        err instanceof ApiError ? err.detail : "Could not create draft.",
+        apiErrorMessage(err, "Could not create draft."),
       );
     },
   });

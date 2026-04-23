@@ -1,7 +1,8 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { File, FileText, Loader2, RefreshCw, Upload } from "lucide-react";
+import { Eye, File, FileText, Loader2, RefreshCw, Upload } from "lucide-react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
@@ -10,7 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { ApiError } from "@/lib/api/config";
+import { apiErrorMessage } from "@/lib/api/config";
 import {
   reindexMatterAttachment,
   retryMatterAttachment,
@@ -55,7 +56,7 @@ export default function MatterDocumentsPage() {
     },
     onError: (err) => {
       toast.error(
-        err instanceof ApiError ? err.detail : "Could not upload the document.",
+        apiErrorMessage(err, "Could not upload the document."),
       );
     },
     onSettled: () => {
@@ -73,7 +74,7 @@ export default function MatterDocumentsPage() {
     },
     onError: (err) => {
       toast.error(
-        err instanceof ApiError ? err.detail : "Could not retry processing.",
+        apiErrorMessage(err, "Could not retry processing."),
       );
     },
     onSettled: () => setPendingId(null),
@@ -89,7 +90,7 @@ export default function MatterDocumentsPage() {
     },
     onError: (err) => {
       toast.error(
-        err instanceof ApiError ? err.detail : "Could not reindex the document.",
+        apiErrorMessage(err, "Could not reindex the document."),
       );
     },
     onSettled: () => setPendingId(null),
@@ -171,9 +172,7 @@ export default function MatterDocumentsPage() {
                 <th className="px-4 py-2.5 text-left font-semibold">Size</th>
                 <th className="px-4 py-2.5 text-left font-semibold">Processing</th>
                 <th className="px-4 py-2.5 text-left font-semibold">Added</th>
-                {canManage ? (
-                  <th className="px-4 py-2.5 text-right font-semibold">Actions</th>
-                ) : null}
+                <th className="px-4 py-2.5 text-right font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -182,18 +181,27 @@ export default function MatterDocumentsPage() {
                 const isPending = pendingId === doc.id;
                 const canRetry = canManage && RETRY_STATUSES.has(status);
                 const canReindex = canManage && REINDEX_STATUSES.has(status);
+                // BUG-024 (Hari 2026-04-23): every uploaded attachment
+                // must be openable. The view route + the
+                // /attachments/{id}/download endpoint already exist;
+                // the only gap was a UI affordance to reach them.
+                const viewHref = `/app/matters/${matterId}/documents/${doc.id}/view`;
                 return (
                   <tr
                     key={doc.id}
                     className="border-b border-[var(--color-line-2)] last:border-0"
                   >
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
+                      <Link
+                        href={viewHref}
+                        className="inline-flex items-center gap-2 font-medium text-[var(--color-ink)] hover:underline"
+                        data-testid={`matter-attachment-name-${doc.id}`}
+                      >
                         <File className="h-4 w-4 text-[var(--color-mute)]" aria-hidden />
-                        <span className="font-medium text-[var(--color-ink)]">
+                        <span>
                           {doc.original_filename ?? doc.filename ?? "Untitled"}
                         </span>
-                      </div>
+                      </Link>
                     </td>
                     <td className="px-4 py-3 text-xs text-[var(--color-mute)]">
                       {doc.mime_type ?? "—"}
@@ -211,46 +219,53 @@ export default function MatterDocumentsPage() {
                         year: "numeric",
                       })}
                     </td>
-                    {canManage ? (
-                      <td className="px-4 py-3 text-right">
-                        <div className="inline-flex gap-2">
-                          {canRetry ? (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              disabled={isPending}
-                              onClick={() => retryMutation.mutate(doc.id)}
-                              data-testid={`matter-attachment-retry-${doc.id}`}
-                            >
-                              {isPending && retryMutation.isPending ? (
-                                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                              ) : (
-                                <RefreshCw className="h-4 w-4" aria-hidden />
-                              )}
-                              Retry
-                            </Button>
-                          ) : null}
-                          {canReindex ? (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              disabled={isPending}
-                              onClick={() => reindexMutation.mutate(doc.id)}
-                              data-testid={`matter-attachment-reindex-${doc.id}`}
-                            >
-                              {isPending && reindexMutation.isPending ? (
-                                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                              ) : (
-                                <RefreshCw className="h-4 w-4" aria-hidden />
-                              )}
-                              Reindex
-                            </Button>
-                          ) : null}
-                        </div>
-                      </td>
-                    ) : null}
+                    <td className="px-4 py-3 text-right">
+                      <div className="inline-flex gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          href={viewHref}
+                          data-testid={`matter-attachment-view-${doc.id}`}
+                        >
+                          <Eye className="h-4 w-4" aria-hidden />
+                          View
+                        </Button>
+                        {canRetry ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            disabled={isPending}
+                            onClick={() => retryMutation.mutate(doc.id)}
+                            data-testid={`matter-attachment-retry-${doc.id}`}
+                          >
+                            {isPending && retryMutation.isPending ? (
+                              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                            ) : (
+                              <RefreshCw className="h-4 w-4" aria-hidden />
+                            )}
+                            Retry
+                          </Button>
+                        ) : null}
+                        {canReindex ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            disabled={isPending}
+                            onClick={() => reindexMutation.mutate(doc.id)}
+                            data-testid={`matter-attachment-reindex-${doc.id}`}
+                          >
+                            {isPending && reindexMutation.isPending ? (
+                              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                            ) : (
+                              <RefreshCw className="h-4 w-4" aria-hidden />
+                            )}
+                            Reindex
+                          </Button>
+                        ) : null}
+                      </div>
+                    </td>
                   </tr>
                 );
               })}

@@ -32,7 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
-import { ApiError } from "@/lib/api/config";
+import { ApiError, apiErrorMessage } from "@/lib/api/config";
 import {
   type AuthorityDocumentType,
   type AuthorityForumLevel,
@@ -118,7 +118,7 @@ export default function ResearchPage() {
       toast.success("Saved to your research notebook");
     },
     onError: (err) => {
-      toast.error(err instanceof ApiError ? err.detail : "Could not save that authority.");
+      toast.error(apiErrorMessage(err, "Could not save that authority."));
     },
   });
 

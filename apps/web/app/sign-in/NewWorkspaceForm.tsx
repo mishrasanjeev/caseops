@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { bootstrapCompany } from "@/lib/api/auth";
-import { ApiError } from "@/lib/api/config";
+import { apiErrorMessage } from "@/lib/api/config";
 import { storeSession } from "@/lib/session";
 
 const schema = z.object({
@@ -66,7 +66,7 @@ export function NewWorkspaceForm() {
     },
     onError: (err) => {
       const message =
-        err instanceof ApiError ? err.detail : "Could not create the workspace. Please try again.";
+        apiErrorMessage(err, "Could not create the workspace. Please try again.");
       toast.error(message);
     },
   });

@@ -28,7 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
-import { ApiError } from "@/lib/api/config";
+import { apiErrorMessage } from "@/lib/api/config";
 import { createOutsideCounselProfile } from "@/lib/api/endpoints";
 
 const schema = z.object({
@@ -104,7 +104,7 @@ export function NewCounselDialog() {
     },
     onError: (err) => {
       toast.error(
-        err instanceof ApiError ? err.detail : "Could not create counsel profile.",
+        apiErrorMessage(err, "Could not create counsel profile."),
       );
     },
   });

@@ -29,7 +29,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { ApiError } from "@/lib/api/config";
+import { apiErrorMessage } from "@/lib/api/config";
 import {
   createMatterHearing,
   listMatterReminders,
@@ -90,7 +90,7 @@ export default function MatterHearingsPage() {
       );
     },
     onError: (err) => {
-      toast.error(err instanceof ApiError ? err.detail : "Could not run court sync.");
+      toast.error(apiErrorMessage(err, "Could not run court sync."));
     },
   });
 
@@ -369,7 +369,7 @@ function ScheduleHearingDialog({ matterId }: { matterId: string }): React.JSX.El
       toast.success("Hearing scheduled.");
     },
     onError: (err) => {
-      toast.error(err instanceof ApiError ? err.detail : "Could not schedule hearing.");
+      toast.error(apiErrorMessage(err, "Could not schedule hearing."));
     },
   });
 

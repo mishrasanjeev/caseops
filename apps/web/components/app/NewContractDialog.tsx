@@ -29,7 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
-import { ApiError } from "@/lib/api/config";
+import { apiErrorMessage } from "@/lib/api/config";
 import { createContract } from "@/lib/api/endpoints";
 
 const schema = z.object({
@@ -91,7 +91,7 @@ export function NewContractDialog() {
       if (id) router.push(`/app/contracts/${id}`);
     },
     onError: (err) => {
-      toast.error(err instanceof ApiError ? err.detail : "Could not create contract.");
+      toast.error(apiErrorMessage(err, "Could not create contract."));
     },
   });
 

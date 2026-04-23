@@ -28,7 +28,7 @@ import { Button } from "@/components/ui/Button";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { ApiError } from "@/lib/api/config";
+import { apiErrorMessage, isApiErrorShape } from "@/lib/api/config";
 import {
   approveDraft,
   draftDocxUrl,
@@ -66,7 +66,7 @@ export default function MatterDraftDetailPage() {
   };
 
   const makeError = (fallback: string) => (err: unknown) => {
-    toast.error(err instanceof ApiError ? err.detail : fallback);
+    toast.error(apiErrorMessage(err, fallback));
   };
   const makeSuccess = (label: string) => async () => {
     await refreshCaches();
@@ -94,7 +94,7 @@ export default function MatterDraftDetailPage() {
     onError: (err) => {
       // RFC 7807 `type` lets us render a precise recovery message for
       // the fail-closed approve gate.
-      if (err instanceof ApiError && err.problemType === "verified_citations_required") {
+      if (isApiErrorShape(err) && err.problemType === "verified_citations_required") {
         toast.error(
           "Approve blocked — the current version has zero verified citations. Regenerate with grounded authorities first.",
         );
