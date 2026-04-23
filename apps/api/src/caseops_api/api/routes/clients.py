@@ -25,6 +25,7 @@ from caseops_api.services.clients import (
     get_client,
     list_clients,
     remove_client_from_matter,
+    unarchive_client,
     update_client,
 )
 from caseops_api.services.identity import SessionContext
@@ -95,6 +96,21 @@ async def archive_current_company_client(
     session: DbSession,
 ) -> ClientRecord:
     return archive_client(session, context=context, client_id=client_id)
+
+
+@router.post(
+    "/{client_id}/unarchive",
+    response_model=ClientRecord,
+    summary="Restore an archived client (BUG-025).",
+)
+async def unarchive_current_company_client(
+    client_id: str,
+    context: ClientArchiver,
+    session: DbSession,
+) -> ClientRecord:
+    # Same capability as archive — only the staff role-set that can
+    # archive a client can put one back. Phase B / BUG-025.
+    return unarchive_client(session, context=context, client_id=client_id)
 
 
 # ---------------------------------------------------------------

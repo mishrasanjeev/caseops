@@ -159,6 +159,79 @@ def test_client_archive_flips_is_active(client: TestClient) -> None:
     assert check.json()["is_active"] is False
 
 
+def test_client_unarchive_restores_active_flag(client: TestClient) -> None:
+    """Phase B / BUG-025 (Hari 2026-04-23) — archive must be
+    reversible. Without this every archive is permanent and the user
+    has to bug an admin to manually flip the flag in the DB."""
+    token = str(bootstrap_company(client)["access_token"])
+    cid = _mk_client(client, token).json()["id"]
+
+    # Archive then unarchive.
+    archived = client.delete(f"/api/clients/{cid}", headers=auth_headers(token))
+    assert archived.status_code == 200
+    assert archived.json()["is_active"] is False
+
+    restored = client.post(
+        f"/api/clients/{cid}/unarchive", headers=auth_headers(token),
+    )
+    assert restored.status_code == 200, restored.text
+    assert restored.json()["is_active"] is True
+
+    # The list reflects the restoration too.
+    listing = client.get("/api/clients/", headers=auth_headers(token))
+    assert listing.status_code == 200
+    found = next(c for c in listing.json()["clients"] if c["id"] == cid)
+    assert found["is_active"] is True
+
+
+def test_client_unarchive_is_idempotent_on_active_client(
+    client: TestClient,
+) -> None:
+    """Calling /unarchive on an already-active client must succeed
+    and return the client. The web UI optimistically refreshes the
+    list after the click, and a duplicate request from a double-click
+    or a stale cache should not 4xx the user."""
+    token = str(bootstrap_company(client)["access_token"])
+    cid = _mk_client(client, token).json()["id"]
+    resp = client.post(
+        f"/api/clients/{cid}/unarchive", headers=auth_headers(token),
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["is_active"] is True
+
+
+def test_client_unarchive_404s_cross_tenant(client: TestClient) -> None:
+    """Tenant isolation — restoring company B's archived client from
+    company A's session must 404, not silently flip the wrong row."""
+    token_a = str(bootstrap_company(client)["access_token"])
+    cid_a = _mk_client(client, token_a).json()["id"]
+    client.delete(f"/api/clients/{cid_a}", headers=auth_headers(token_a))
+
+    # Bootstrap a second tenant (clear cookies first — EG-001 cookie
+    # wins over bearer in get_current_context, so the multi-tenant
+    # test must drop the prior session cookie before bootstrapping).
+    client.cookies.clear()
+    resp_b = client.post(
+        "/api/bootstrap/company",
+        json={
+            "company_name": "Other LLP",
+            "company_slug": "other-unarchive",
+            "company_type": "law_firm",
+            "owner_full_name": "Other Owner",
+            "owner_email": "owner@other-unarchive.example",
+            "owner_password": "OtherStrong!234",
+        },
+    )
+    assert resp_b.status_code == 200
+    token_b = str(resp_b.json()["access_token"])
+    client.cookies.clear()
+
+    cross = client.post(
+        f"/api/clients/{cid_a}/unarchive", headers=auth_headers(token_b),
+    )
+    assert cross.status_code == 404
+
+
 # ---------------------------------------------------------------
 # Validation + uniqueness
 # ---------------------------------------------------------------

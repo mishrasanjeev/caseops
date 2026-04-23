@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Archive, ShieldCheck } from "lucide-react";
+import { ArchiveRestore, ArrowLeft, Archive, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -14,7 +14,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { apiErrorMessage } from "@/lib/api/config";
-import { archiveClient, fetchClient } from "@/lib/api/endpoints";
+import { archiveClient, fetchClient, unarchiveClient } from "@/lib/api/endpoints";
 import { useCapability } from "@/lib/capabilities";
 
 
@@ -39,6 +39,21 @@ export default function ClientProfilePage() {
     },
     onError: (err) => {
       toast.error(apiErrorMessage(err, "Could not archive."));
+    },
+  });
+
+  // Phase B / BUG-025: archive is now reversible. The button only
+  // renders when the current client is archived AND the caller has
+  // the same capability that can archive (clients:archive).
+  const unarchiveMutation = useMutation({
+    mutationFn: () => unarchiveClient(clientId),
+    onSuccess: async () => {
+      toast.success("Client restored.");
+      await queryClient.invalidateQueries({ queryKey: ["clients"] });
+      await queryClient.invalidateQueries({ queryKey: ["clients", clientId] });
+    },
+    onError: (err) => {
+      toast.error(apiErrorMessage(err, "Could not restore client."));
     },
   });
 
@@ -87,17 +102,30 @@ export default function ClientProfilePage() {
             : "Client profile"
         }
         actions={
-          canArchive && c.is_active ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={archiveMutation.isPending}
-              onClick={() => archiveMutation.mutate()}
-              data-testid="client-archive"
-            >
-              <Archive className="h-4 w-4" aria-hidden /> Archive
-            </Button>
+          canArchive ? (
+            c.is_active ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={archiveMutation.isPending}
+                onClick={() => archiveMutation.mutate()}
+                data-testid="client-archive"
+              >
+                <Archive className="h-4 w-4" aria-hidden /> Archive
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={unarchiveMutation.isPending}
+                onClick={() => unarchiveMutation.mutate()}
+                data-testid="client-unarchive"
+              >
+                <ArchiveRestore className="h-4 w-4" aria-hidden /> Restore
+              </Button>
+            )
           ) : undefined
         }
       />

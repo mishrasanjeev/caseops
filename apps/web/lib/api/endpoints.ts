@@ -1692,6 +1692,15 @@ export async function archiveClient(
   });
 }
 
+// Phase B / BUG-025 — restore an archived client.
+export async function unarchiveClient(
+  clientId: string,
+): Promise<ClientRecord> {
+  return apiRequest<ClientRecord>(`/api/clients/${clientId}/unarchive`, {
+    method: "POST",
+  });
+}
+
 export type MatterClientAssignRecord = {
   id: string;
   matter_id: string;

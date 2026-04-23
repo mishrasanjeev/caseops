@@ -286,6 +286,33 @@ def archive_client(
     )
 
 
+def unarchive_client(
+    session: Session, *, context: SessionContext, client_id: str,
+) -> ClientRecord:
+    """Reverse archive_client — flip ``is_active`` back to true.
+
+    Phase B / BUG-025 (Hari 2026-04-23): closes "no unarchive
+    functionality after archiving a client." Idempotent — calling on
+    an already-active client just no-ops the audit row and returns
+    the current record so the UI's optimistic refresh is safe.
+    """
+    client = _get_client_model(session, context=context, client_id=client_id)
+    if not client.is_active:
+        client.is_active = True
+        record_from_context(
+            session,
+            context,
+            action="client.unarchived",
+            target_type="client",
+            target_id=client.id,
+        )
+        session.commit()
+        session.refresh(client)
+    return _client_record(
+        client, matters=_matter_links_for(session, client),
+    )
+
+
 # ---------------------------------------------------------------
 # Per-matter assignment
 # ---------------------------------------------------------------
