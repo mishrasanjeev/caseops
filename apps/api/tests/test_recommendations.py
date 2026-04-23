@@ -238,8 +238,10 @@ def test_recommendation_provider_error_returns_actionable_502(
     assert response.status_code == 502, response.text
     detail = response.json()["detail"]
     # Detail must name the failure shape and tell the user what to do.
-    assert "primary model is unavailable" in detail
+    assert "primary" in detail
     assert "LLMProviderError" in detail
+    lowered = detail.lower()
+    assert "openai" in lowered or "retry" in lowered
 
 
 def test_shared_citation_credits_every_option_that_cites_it(

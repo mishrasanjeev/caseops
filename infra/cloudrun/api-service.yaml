@@ -11,7 +11,11 @@ spec:
         run.googleapis.com/cloudsql-instances: "__PROJECT_ID__:__REGION__:__CLOUD_SQL_INSTANCE__"
         run.googleapis.com/cpu-throttling: "false"
         run.googleapis.com/execution-environment: gen2
-        run.googleapis.com/secrets: "caseops-auth-secret=projects/__PROJECT_NUMBER__/secrets/caseops-auth-secret"
+        # EG-007 (2026-04-23): every sensitive runtime value flows
+        # through Secret Manager, never as a raw env value in the
+        # manifest. Auth secret + DB URL + future SendGrid /
+        # Anthropic / Pine Labs keys all use secretKeyRef.
+        run.googleapis.com/secrets: "caseops-auth-secret=projects/__PROJECT_NUMBER__/secrets/caseops-auth-secret,caseops-database-url=projects/__PROJECT_NUMBER__/secrets/caseops-database-url,caseops-openai-api-key=projects/__PROJECT_NUMBER__/secrets/caseops-openai-api-key"
     spec:
       containerConcurrency: 80
       timeoutSeconds: 900
@@ -41,12 +45,26 @@ spec:
               value: "8080"
             - name: CASEOPS_API_DOCS_ENABLED
               value: "false"
+            # EG-002 (2026-04-23): API service NEVER runs migrations
+            # in cloud/prod. Migrations run as a separate Cloud Run
+            # Job (caseops-migrate-job; see infra/cloudrun/migrate-job.yaml)
+            # invoked as a deploy step BEFORE the new API revision is
+            # cut into traffic. This avoids the multi-instance race
+            # where each starting pod tries to upgrade simultaneously.
             - name: CASEOPS_AUTO_MIGRATE
-              value: "true"
+              value: "false"
             - name: CASEOPS_PUBLIC_APP_URL
               value: "__PUBLIC_APP_URL__"
+            # EG-007: DB URL via Secret Manager. The `caseops-database-url`
+            # secret holds the full postgresql+psycopg://...
+            # connection string (including password). Rotate via
+            # `gcloud secrets versions add caseops-database-url --data-file=-`
+            # then redeploy the API service with the new secret version.
             - name: CASEOPS_DATABASE_URL
-              value: "__DATABASE_URL__"
+              valueFrom:
+                secretKeyRef:
+                  name: "caseops-database-url"
+                  key: "latest"
             - name: CASEOPS_DOCUMENT_STORAGE_BACKEND
               value: "gcs"
             - name: CASEOPS_DOCUMENT_STORAGE_GCS_BUCKET
@@ -64,6 +82,22 @@ spec:
                 secretKeyRef:
                   name: "caseops-auth-secret"
                   key: "__AUTH_SECRET_VERSION__"
+            # 402 cutover (2026-04-23): when the primary Anthropic
+            # call returns "credit balance is too low", the drafting /
+            # recommendations / hearing-pack / matter-summary /
+            # contract-intelligence services hard-cut over to OpenAI
+            # (default model `gpt-5.1`). Retrying on Haiku would hit
+            # the same wall. Rotate the key by adding a new secret
+            # version and redeploying:
+            #   gcloud secrets versions add caseops-openai-api-key \
+            #     --project=__PROJECT_ID__ --data-file=-
+            - name: CASEOPS_OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: "caseops-openai-api-key"
+                  key: "latest"
+            - name: CASEOPS_OPENAI_FALLBACK_MODEL
+              value: "gpt-5.1"
           resources:
             limits:
               cpu: "1"

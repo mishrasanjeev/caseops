@@ -25,6 +25,7 @@ dependencies = [
   "fpdf2>=2.8.4",
   "google-genai>=1.73.1",
   "anthropic>=0.96.0",
+  "openai>=2.0.0",
   "voyageai>=0.3.7",
   "fastembed>=0.4.0",
   "clamd>=1.0.2",

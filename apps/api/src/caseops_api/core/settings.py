@@ -51,6 +51,11 @@ class Settings(BaseSettings):
     auth_secret: str = Field(default=PLACEHOLDER_AUTH_SECRET, min_length=32)
     access_token_ttl_minutes: int = Field(default=120)
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
+    # EG-002 (2026-04-23): default still True for local/dev so the
+    # docker-compose stack and pytest fixtures keep their current
+    # behaviour. A model_validator below errors out when env is
+    # production/cloud AND auto_migrate stayed True — that
+    # combination is the multi-instance migration race we banned.
     auto_migrate: bool = Field(default=True)
     document_storage_backend: str = Field(default="local")
     document_storage_path: str = Field(default="./storage/documents")
@@ -103,6 +108,11 @@ class Settings(BaseSettings):
     auth_rate_limit_login_per_minute: int = Field(default=20, ge=1)
     auth_rate_limit_bootstrap_per_hour: int = Field(default=10, ge=1)
     auth_rate_limit_enabled: bool = Field(default=True)
+    # EG-004 (2026-04-23): per-session limit on expensive AI generation
+    # routes. 30/min is generous for a partner reviewing a matter and
+    # far below what runaway abuse would attempt. Bump cautiously —
+    # each call is an LLM round-trip and a tenant cost driver.
+    ai_route_rate_limit_per_minute: int = Field(default=30, ge=1)
 
     llm_provider: str = Field(default="mock")
     # Fallback model when a purpose-specific one is not set. Per-purpose
@@ -117,6 +127,14 @@ class Settings(BaseSettings):
     llm_model_metadata_extract: str | None = Field(default=None)
     llm_model_eval: str | None = Field(default=None)
     llm_api_key: str | None = Field(default=None)
+    # Hard cross-provider fallback when the primary Anthropic call
+    # returns 402 ("credit balance is too low"). Retrying on Haiku
+    # would hit the same wall, so we cut over to OpenAI instead.
+    # Wire the key via the caseops-openai-api-key Secret Manager
+    # secret in production; locally, leave unset and the fallback is
+    # silently disabled (the existing 422 message still fires).
+    openai_api_key: str | None = Field(default=None)
+    openai_fallback_model: str = Field(default="gpt-5.1")
     llm_max_output_tokens: int = Field(default=2048, ge=256)
     # Drafting warrants a bigger ceiling — full bail applications /
     # review memos can hit 8-12k output tokens. Recommendations are
@@ -218,6 +236,24 @@ class Settings(BaseSettings):
             raise ValueError(
                 "CASEOPS_AUTH_SECRET must be set to a non-placeholder value when "
                 f"CASEOPS_ENV={self.env!r}.",
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _reject_auto_migrate_in_non_local(self) -> "Settings":
+        """EG-002 (2026-04-23): production / cloud API services MUST
+        NOT auto-migrate at startup. Migrations belong in a separate
+        Cloud Run Job (caseops-migrate-job) so the multi-instance
+        race is impossible and ops gets a clean rollback boundary.
+
+        Local + dev env keeps auto_migrate=True for the docker-compose
+        flow + pytest fixtures."""
+        if is_non_local_env(self.env) and self.auto_migrate:
+            raise ValueError(
+                "CASEOPS_AUTO_MIGRATE=true is rejected when "
+                f"CASEOPS_ENV={self.env!r}. Set CASEOPS_AUTO_MIGRATE=false "
+                "and run alembic via the caseops-migrate-job Cloud Run Job "
+                "as a deploy step (see infra/cloudrun/migrate-job.yaml).",
             )
         return self
 

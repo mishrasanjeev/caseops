@@ -9,10 +9,15 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
 from caseops_api.api.dependencies import get_current_context
+from caseops_api.core.rate_limit import (
+    ai_route_rate_limit,
+    limiter,
+    tenant_aware_key,
+)
 from caseops_api.schemas.drafting_templates import (
     DraftTemplateSchema,
     DraftTemplateType,
@@ -172,7 +177,9 @@ class DraftPreviewResponse(BaseModel):
         "'[not yet specified]' instead of invented values."
     ),
 )
+@limiter.limit(ai_route_rate_limit, key_func=tenant_aware_key)
 async def post_drafting_preview(
+    request: Request,
     payload: DraftPreviewRequest,
     context: CurrentContext,
 ) -> DraftPreviewResponse:

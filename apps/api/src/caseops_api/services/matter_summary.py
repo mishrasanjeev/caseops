@@ -47,7 +47,10 @@ from caseops_api.services.llm import (
     LLMCallContext,
     LLMMessage,
     LLMProvider,
+    LLMProviderError,
+    LLMQuotaExhaustedError,
     LLMResponseFormatError,
+    OpenAIProvider,
     build_provider,
     generate_structured,
 )
@@ -109,6 +112,44 @@ def _haiku_fallback_provider() -> LLMProvider | None:
         api_key=settings.llm_api_key,
         prompt_cache=bool(getattr(settings, "llm_prompt_cache_enabled", True)),
     )
+
+
+def _openai_fallback_provider() -> LLMProvider | None:
+    from caseops_api.core.settings import get_settings
+
+    settings = get_settings()
+    if not getattr(settings, "openai_api_key", None):
+        return None
+    return OpenAIProvider(
+        model=getattr(settings, "openai_fallback_model", "gpt-5.1"),
+        api_key=settings.openai_api_key,
+    )
+
+
+def _summarise_via_openai(call, root_exc: Exception):
+    """Last-chance OpenAI cutover for matter summary. Raises 502
+    when no OpenAI key is configured or the OpenAI call also fails."""
+    openai = _openai_fallback_provider()
+    if openai is None:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=(
+                f"Could not generate matter summary: primary failed "
+                f"({type(root_exc).__name__}) and no OpenAI fallback "
+                "is configured."
+            ),
+        ) from root_exc
+    try:
+        return call(openai)
+    except (LLMProviderError, LLMResponseFormatError) as oa_exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=(
+                f"Could not generate matter summary: Anthropic "
+                f"({type(root_exc).__name__}) and OpenAI fallback "
+                f"({type(oa_exc).__name__}) both failed. {oa_exc}"
+            ),
+        ) from oa_exc
 
 
 def _load_matter_context(session: Session, matter: Matter) -> str:
@@ -268,29 +309,34 @@ def generate_matter_summary(
 
     try:
         parsed, _completion = _call(llm)
+    except LLMQuotaExhaustedError as quota_exc:
+        # Hard cutover when Anthropic returns 402 ("credit balance is
+        # too low"). Haiku would 402 too, so jump straight to OpenAI.
+        logger.warning(
+            "matter summary: primary %s quota exhausted; cutting over to OpenAI",
+            getattr(llm, "model", "<unknown>"),
+        )
+        parsed, _completion = _summarise_via_openai(_call, quota_exc)
     except LLMResponseFormatError as exc:
         # Same fallback pattern as services.recommendations — one retry
         # with Haiku when the primary returned malformed JSON.
         fallback = _haiku_fallback_provider()
         if fallback is None:
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=str(exc),
-            ) from exc
-        logger.warning(
-            "matter summary: primary LLM %s returned invalid JSON; retrying Haiku",
-            getattr(llm, "model", "<unknown>"),
-        )
-        try:
-            parsed, _completion = _call(fallback)
-        except LLMResponseFormatError as retry_exc:
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=(
-                    f"Both primary and Haiku fallback returned invalid "
-                    f"JSON. Primary: {exc}. Fallback: {retry_exc}"
-                ),
-            ) from retry_exc
+            parsed, _completion = _summarise_via_openai(_call, exc)
+        else:
+            logger.warning(
+                "matter summary: primary LLM %s returned invalid JSON; retrying Haiku",
+                getattr(llm, "model", "<unknown>"),
+            )
+            try:
+                parsed, _completion = _call(fallback)
+            except LLMQuotaExhaustedError as quota_exc:
+                logger.warning(
+                    "matter summary: Haiku fallback hit quota wall; cutting over to OpenAI",
+                )
+                parsed, _completion = _summarise_via_openai(_call, quota_exc)
+            except LLMResponseFormatError as retry_exc:
+                parsed, _completion = _summarise_via_openai(_call, retry_exc)
 
     return MatterExecutiveSummary(
         overview=parsed.overview,

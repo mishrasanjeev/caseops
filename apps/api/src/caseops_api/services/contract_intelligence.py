@@ -54,6 +54,8 @@ from caseops_api.services.llm import (
     LLMCallContext,
     LLMMessage,
     LLMProviderError,
+    LLMQuotaExhaustedError,
+    OpenAIProvider,
     build_provider,
     generate_structured,
 )
@@ -83,30 +85,68 @@ def _structured_with_retry(
     typically clear within a second, and one retry covers the common
     case without doubling latency on the happy path.
     """
-    try:
+    def _call(p):
         return generate_structured(
-            provider, schema=schema, messages=messages, context=context,
+            p, schema=schema, messages=messages, context=context,
             temperature=temperature, max_tokens=max_tokens, session=session,
         )
+    try:
+        return _call(provider)
+    except LLMQuotaExhaustedError as quota_exc:
+        # Hard cutover when Anthropic 402s — retrying same provider would
+        # 402 again. Cross-provider OpenAI fallback if configured.
+        logger.warning(
+            "%s: Anthropic quota exhausted; cutting over to OpenAI",
+            feature,
+        )
+        return _contract_via_openai(_call, quota_exc, feature)
     except LLMProviderError as exc:
         logger.warning(
             "%s: provider failed (%s: %s); retrying once",
             feature, type(exc).__name__, exc,
         )
         try:
-            return generate_structured(
-                provider, schema=schema, messages=messages, context=context,
-                temperature=temperature, max_tokens=max_tokens, session=session,
-            )
+            return _call(provider)
+        except LLMQuotaExhaustedError as quota_exc:
+            return _contract_via_openai(_call, quota_exc, feature)
         except LLMProviderError as retry_exc:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=(
-                    f"Could not {feature}: the model is unavailable "
-                    f"({type(retry_exc).__name__}: {retry_exc}). Please "
-                    "retry in a minute, or contact support if this persists."
-                ),
-            ) from retry_exc
+            return _contract_via_openai(_call, retry_exc, feature)
+
+
+def _openai_fallback_provider():
+    from caseops_api.core.settings import get_settings
+
+    settings = get_settings()
+    if not getattr(settings, "openai_api_key", None):
+        return None
+    return OpenAIProvider(
+        model=getattr(settings, "openai_fallback_model", "gpt-5.1"),
+        api_key=settings.openai_api_key,
+    )
+
+
+def _contract_via_openai(call, root_exc: Exception, feature: str):
+    openai = _openai_fallback_provider()
+    if openai is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"Could not {feature}: primary failed "
+                f"({type(root_exc).__name__}: {root_exc}) and no OpenAI "
+                "fallback is configured. Please retry, or contact support."
+            ),
+        ) from root_exc
+    try:
+        return call(openai)
+    except LLMProviderError as oa_exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"Could not {feature}: Anthropic ({type(root_exc).__name__}) "
+                f"and OpenAI fallback ({type(oa_exc).__name__}: {oa_exc}) "
+                "both failed. Please retry."
+            ),
+        ) from oa_exc
 
 
 # ---------------------------------------------------------------------------

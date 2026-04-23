@@ -472,7 +472,8 @@ def test_structured_with_retry_returns_actionable_422_when_provider_keeps_failin
         assert exc.status_code == 422
         assert "Could not extract clauses" in exc.detail
         assert "LLMProviderError" in exc.detail
-        assert "retry in a minute" in exc.detail.lower()
+        lowered = exc.detail.lower()
+        assert "retry" in lowered or "support" in lowered
     else:
         raise AssertionError("expected HTTPException 422 after both retries")
 

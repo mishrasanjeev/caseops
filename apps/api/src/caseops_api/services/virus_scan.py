@@ -14,19 +14,21 @@ Design:
   accepting persistence. A positive match raises HTTPException(400).
 - When ``CASEOPS_CLAMAV_HOST`` is NOT set, scanning is skipped —
   local dev stays fast and no daemon is required.
-- When the daemon is configured but unreachable we log a warning and
-  fail closed (raise HTTPException(503)). Better to reject an upload
-  than to store a potentially infected one.
+- EG-003 (2026-04-23): production / cloud envs default ``required=true``
+  so an upload route fail-closes when the scanner isn't wired.
+  Set ``CASEOPS_CLAMAV_REQUIRED=false`` to opt-out (e.g. a staging
+  env that intentionally doesn't run a scanner). When the scanner
+  IS wired but unreachable we already fail-closed; this just closes
+  the "no scanner configured at all" hole that was the EG-003 gap.
 
 Env vars:
   CASEOPS_CLAMAV_HOST       — daemon host (e.g., 127.0.0.1 or a sidecar)
   CASEOPS_CLAMAV_PORT       — TCP port (default 3310)
   CASEOPS_CLAMAV_TIMEOUT_S  — socket timeout in seconds (default 30)
-  CASEOPS_CLAMAV_REQUIRED   — "true" to make scan mandatory; default false
-                              (false = skip when host is unset; required
-                              only changes behaviour when host IS set AND
-                              we can't reach it — fail-closed always when
-                              required=true).
+  CASEOPS_CLAMAV_REQUIRED   — "true" to require scanning; defaults to
+                              "true" automatically in production/cloud
+                              env, "false" otherwise. Explicit values
+                              always win.
 
 Dependency: ``clamd>=1.0.2`` — the actively maintained client.
 """
@@ -56,11 +58,32 @@ def _is_truthy(value: str | None) -> bool:
     return (value or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _is_falsy(value: str | None) -> bool:
+    return (value or "").strip().lower() in {"0", "false", "no", "off"}
+
+
+def _required_default_for_env() -> bool:
+    """EG-003: production / cloud envs require scanning by default.
+    Reuses the same NON_LOCAL_ENVS allow-list the auth-secret guard
+    uses so the policy is consistent across security controls.
+    """
+    from caseops_api.core.settings import is_non_local_env
+
+    return is_non_local_env(os.environ.get("CASEOPS_ENV"))
+
+
 def _config_from_env() -> tuple[str | None, int, float, bool]:
     host = os.environ.get("CASEOPS_CLAMAV_HOST", "").strip() or None
     port = int(os.environ.get("CASEOPS_CLAMAV_PORT", "3310"))
     timeout_s = float(os.environ.get("CASEOPS_CLAMAV_TIMEOUT_S", "30"))
-    required = _is_truthy(os.environ.get("CASEOPS_CLAMAV_REQUIRED"))
+    required_raw = os.environ.get("CASEOPS_CLAMAV_REQUIRED")
+    if _is_truthy(required_raw):
+        required = True
+    elif _is_falsy(required_raw):
+        required = False
+    else:
+        # Unset → fall back to the env-aware default.
+        required = _required_default_for_env()
     return host, port, timeout_s, required
 
 
@@ -77,8 +100,19 @@ def scan_file_for_viruses(path: Path | str) -> ScanResult:
     Does not raise; the caller decides how to react. See ``reject_if_infected``
     for the HTTP-raising helper used by upload routes.
     """
-    host, port, timeout_s, _required = _config_from_env()
+    host, port, timeout_s, required = _config_from_env()
     if host is None:
+        # EG-003: when the scanner is required (default in
+        # production/cloud), an unset host is an "error" not a
+        # "skipped" — reject_if_infected will turn it into a 503.
+        # Outside non-local env, keep the legacy "skipped" path so
+        # local dev stays fast.
+        if required:
+            return ScanResult(
+                status="error",
+                signature=None,
+                detail="CASEOPS_CLAMAV_HOST not set in a required-scan environment",
+            )
         return ScanResult(status="skipped", signature=None)
 
     try:

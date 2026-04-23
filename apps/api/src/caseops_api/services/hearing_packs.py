@@ -50,6 +50,8 @@ from caseops_api.services.llm import (
     LLMMessage,
     LLMProvider,
     LLMProviderError,
+    LLMQuotaExhaustedError,
+    OpenAIProvider,
     build_provider,
     generate_structured,
     max_tokens_for_purpose,
@@ -83,6 +85,48 @@ def _haiku_fallback_provider() -> LLMProvider | None:
         api_key=settings.llm_api_key,
         prompt_cache=bool(getattr(settings, "llm_prompt_cache_enabled", True)),
     )
+
+
+def _openai_fallback_provider() -> LLMProvider | None:
+    """Cross-provider hard cutover for Anthropic 402 events. Mirrors
+    services.drafting._openai_fallback_provider."""
+    from caseops_api.core.settings import get_settings
+
+    settings = get_settings()
+    if not getattr(settings, "openai_api_key", None):
+        return None
+    return OpenAIProvider(
+        model=getattr(settings, "openai_fallback_model", "gpt-5.1"),
+        api_key=settings.openai_api_key,
+    )
+
+
+def _assemble_pack_via_openai(invoke, root_exc: Exception):
+    """Last-chance OpenAI cutover for hearing-pack assembly. Either
+    succeeds or raises a 422 with an actionable detail."""
+    openai = _openai_fallback_provider()
+    if openai is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"Could not assemble a hearing pack: the primary model "
+                f"failed ({type(root_exc).__name__}) and no OpenAI "
+                "fallback is configured. Please retry in a minute, or "
+                "contact support if this persists."
+            ),
+        ) from root_exc
+    try:
+        return invoke(openai)
+    except LLMProviderError as oa_exc:
+        logger.warning("Hearing pack OpenAI fallback also failed: %s", oa_exc)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"Could not assemble a hearing pack: Anthropic "
+                f"({type(root_exc).__name__}) and the OpenAI fallback "
+                f"({type(oa_exc).__name__}) both failed. Please retry."
+            ),
+        ) from oa_exc
 
 
 class _LLMItem(BaseModel):
@@ -382,6 +426,12 @@ def generate_hearing_pack(
 
     try:
         response, completion = _invoke(llm)
+    except LLMQuotaExhaustedError as quota_exc:
+        logger.warning(
+            "Hearing pack primary %s quota exhausted; cutting over to OpenAI",
+            getattr(llm, "model", "<unknown>"),
+        )
+        response, completion = _assemble_pack_via_openai(_invoke, quota_exc)
     except LLMProviderError as exc:
         # Ram-BUG-001 (2026-04-22): catching only the format-error
         # child let Anthropic 503 / overload escape and surface as a
@@ -396,25 +446,17 @@ def generate_hearing_pack(
         )
         fallback = _haiku_fallback_provider()
         if fallback is None:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=(
-                    f"Could not assemble a hearing pack: the primary model "
-                    f"is unavailable ({type(exc).__name__}) and no Haiku "
-                    "fallback is configured. Please retry in a minute."
-                ),
-            ) from exc
-        try:
-            response, completion = _invoke(fallback)
-        except LLMProviderError as retry_exc:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=(
-                    f"Could not assemble a hearing pack: both primary and "
-                    f"Haiku fallback failed ({type(retry_exc).__name__}). "
-                    "Please retry in a minute."
-                ),
-            ) from retry_exc
+            response, completion = _assemble_pack_via_openai(_invoke, exc)
+        else:
+            try:
+                response, completion = _invoke(fallback)
+            except LLMQuotaExhaustedError as quota_exc:
+                logger.warning(
+                    "Hearing pack Haiku fallback hit quota wall; cutting over to OpenAI",
+                )
+                response, completion = _assemble_pack_via_openai(_invoke, quota_exc)
+            except LLMProviderError as retry_exc:
+                response, completion = _assemble_pack_via_openai(_invoke, retry_exc)
 
     model_run = _write_model_run(
         session,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Request, UploadFile
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
@@ -10,6 +10,11 @@ from caseops_api.api.dependencies import (
     DbSession,
     get_current_context,
     require_capability,
+)
+from caseops_api.core.rate_limit import (
+    ai_route_rate_limit,
+    limiter,
+    tenant_aware_key,
 )
 from caseops_api.schemas.billing import (
     InvoiceCreateRequest,
@@ -321,7 +326,9 @@ async def get_current_company_matter_summary(
         "'Regenerate' button."
     ),
 )
+@limiter.limit(ai_route_rate_limit, key_func=tenant_aware_key)
 async def post_current_company_matter_summary_regenerate(
+    request: Request,
     matter_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -852,7 +859,9 @@ async def download_current_company_matter_attachment(
     response_model=HearingPackRecord,
     summary="Generate a hearing pack for this hearing",
 )
+@limiter.limit(ai_route_rate_limit, key_func=tenant_aware_key)
 async def post_current_company_matter_hearing_pack(
+    request: Request,
     matter_id: str,
     hearing_id: str,
     payload: HearingPackGenerateRequest,
@@ -1005,7 +1014,9 @@ async def get_current_company_matter_draft(
         "Finalized drafts refuse regeneration with 409."
     ),
 )
+@limiter.limit(ai_route_rate_limit, key_func=tenant_aware_key)
 async def post_current_company_matter_draft_generate(
+    request: Request,
     matter_id: str,
     draft_id: str,
     payload: DraftGenerateRequest,

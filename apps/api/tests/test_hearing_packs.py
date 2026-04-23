@@ -262,6 +262,7 @@ def test_hearing_pack_provider_error_returns_actionable_422(
     )
     assert resp.status_code == 422, resp.text
     detail = resp.json()["detail"]
-    assert "primary model is unavailable" in detail
+    assert "primary model" in detail
     assert "LLMProviderError" in detail
-    assert "retry in a minute" in detail.lower()
+    lowered = detail.lower()
+    assert "retry" in lowered or "support" in lowered

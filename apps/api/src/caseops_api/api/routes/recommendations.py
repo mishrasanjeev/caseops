@@ -2,12 +2,17 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from caseops_api.api.dependencies import (
     DbSession,
     get_current_context,
     require_capability,
+)
+from caseops_api.core.rate_limit import (
+    ai_route_rate_limit,
+    limiter,
+    tenant_aware_key,
 )
 from caseops_api.db.models import Recommendation
 from caseops_api.schemas.recommendations import (
@@ -104,7 +109,9 @@ async def list_recommendations(
     response_model=RecommendationRecord,
     summary="Generate a recommendation for a matter",
 )
+@limiter.limit(ai_route_rate_limit, key_func=tenant_aware_key)
 async def create_recommendation(
+    request: Request,
     matter_id: str,
     payload: RecommendationGenerateRequest,
     context: RecommendationGenerator,

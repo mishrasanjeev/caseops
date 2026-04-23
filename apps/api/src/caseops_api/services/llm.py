@@ -39,6 +39,17 @@ class LLMResponseFormatError(LLMProviderError):
     """Raised when the provider returned text but it did not validate."""
 
 
+class LLMQuotaExhaustedError(LLMProviderError):
+    """Raised when the upstream provider rejects the call because the
+    account has run out of credits / paid quota (Anthropic 402
+    "credit balance is too low", OpenAI 429 "insufficient_quota").
+
+    The drafting / recommendations / hearing-pack / matter-summary
+    services treat this as a hard signal to cut over to a different
+    provider entirely — retrying on the same provider's cheaper model
+    (Haiku) would hit the same wall."""
+
+
 @dataclass(frozen=True)
 class LLMMessage:
     role: str  # "system" | "user" | "assistant"
@@ -437,6 +448,10 @@ class AnthropicProvider:
         try:
             response = self._client.messages.create(**kwargs)
         except Exception as exc:
+            if _is_quota_exhausted(exc):
+                raise LLMQuotaExhaustedError(
+                    f"Anthropic quota exhausted: {exc}",
+                ) from exc
             raise LLMProviderError(f"Anthropic call failed: {exc}") from exc
         elapsed_ms = max(1, int((time.perf_counter() - started) * 1000))
         text = "".join(
@@ -451,6 +466,101 @@ class AnthropicProvider:
             model=self.model,
             prompt_tokens=int(getattr(usage, "input_tokens", 0) or 0),
             completion_tokens=int(getattr(usage, "output_tokens", 0) or 0),
+            latency_ms=elapsed_ms,
+            raw=response,
+        )
+
+
+class OpenAIProvider:
+    """Thin adapter around the OpenAI Python SDK.
+
+    Used as a hard cross-provider fallback when Anthropic returns 402
+    (credit balance too low). Defaults to ``gpt-5.1``.
+
+    Two model-family quirks worth knowing:
+
+    - ``gpt-5.x`` reasoning models reject any temperature other than
+      the default. We omit the parameter entirely for ``gpt-5*`` so the
+      wire request never carries it, mirroring how
+      :class:`AnthropicProvider` treats Opus 4.7.
+    - The Chat Completions API now prefers ``max_completion_tokens``
+      over the legacy ``max_tokens``. We send the new field; the SDK
+      maps it correctly for older models too.
+    """
+
+    name = "openai"
+
+    _NO_TEMPERATURE_PREFIXES: tuple[str, ...] = (
+        "gpt-5",
+        "o1",
+        "o3",
+    )
+
+    def __init__(
+        self,
+        *,
+        model: str,
+        api_key: str,
+        timeout_seconds: float = 60.0,
+        max_retries: int = 2,
+    ) -> None:
+        try:
+            import openai  # type: ignore[import-not-found]
+        except ImportError as exc:
+            raise LLMProviderError(
+                "The 'openai' package is not installed. Run "
+                "'uv add openai' and set CASEOPS_LLM_PROVIDER=openai "
+                "(or configure OpenAI as a fallback).",
+            ) from exc
+        self._client = openai.OpenAI(
+            api_key=api_key,
+            timeout=timeout_seconds,
+            max_retries=max_retries,
+        )
+        self.model = model
+
+    def _model_rejects_temperature(self) -> bool:
+        name = (self.model or "").lower()
+        return any(name.startswith(p) for p in self._NO_TEMPERATURE_PREFIXES)
+
+    def generate(
+        self,
+        messages: list[LLMMessage],
+        *,
+        temperature: float = 0.2,
+        max_tokens: int = 1024,
+    ) -> LLMCompletion:
+        oai_messages = [
+            {"role": m.role, "content": m.content} for m in messages
+        ]
+        kwargs: dict[str, Any] = {
+            "model": self.model,
+            "messages": oai_messages,
+            "max_completion_tokens": max_tokens,
+        }
+        if not self._model_rejects_temperature():
+            kwargs["temperature"] = temperature
+        started = time.perf_counter()
+        try:
+            response = self._client.chat.completions.create(**kwargs)
+        except Exception as exc:
+            if _is_quota_exhausted(exc):
+                raise LLMQuotaExhaustedError(
+                    f"OpenAI quota exhausted: {exc}",
+                ) from exc
+            raise LLMProviderError(f"OpenAI call failed: {exc}") from exc
+        elapsed_ms = max(1, int((time.perf_counter() - started) * 1000))
+        choice = response.choices[0] if getattr(response, "choices", None) else None
+        text = ""
+        if choice is not None and getattr(choice, "message", None) is not None:
+            text = getattr(choice.message, "content", "") or ""
+        usage = getattr(response, "usage", None)
+        return LLMCompletion(
+            text=text,
+            provider=self.name,
+            model=self.model,
+            prompt_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
+            completion_tokens=int(getattr(usage, "completion_tokens", 0) or 0),
             latency_ms=elapsed_ms,
             raw=response,
         )
@@ -598,10 +708,46 @@ def _build_inner_provider(settings: object, purpose: str | None) -> LLMProvider:
             model=model or "gemini-2.5-pro",
             api_key=settings.llm_api_key,
         )
+    if provider_name == "openai":
+        return OpenAIProvider(
+            model=model or "gpt-5.1",
+            api_key=settings.llm_api_key,
+        )
     raise LLMProviderError(
         f"Unknown CASEOPS_LLM_PROVIDER value: {provider_name!r}. "
-        "Use 'mock', 'anthropic', or 'gemini'.",
+        "Use 'mock', 'anthropic', 'openai', or 'gemini'.",
     )
+
+
+_QUOTA_EXHAUSTED_MARKERS = (
+    "credit balance is too low",
+    "insufficient_quota",
+    "exceeded your current quota",
+    "billing_hard_limit_reached",
+)
+
+
+def _is_quota_exhausted(exc: BaseException) -> bool:
+    """Best-effort sniff for "you ran out of paid credits" errors.
+
+    Sniffs both HTTP status (402 / 429-with-insufficient_quota) and
+    the rendered error message. Provider SDKs surface this differently:
+
+    - Anthropic SDK: ``BadRequestError`` (400 wrapper) carrying the
+      message ``"Your credit balance is too low to access the
+      Anthropic API."``
+    - OpenAI SDK: ``RateLimitError`` (429) with body
+      ``{"error":{"code":"insufficient_quota", ...}}``
+
+    We fall back to a substring scan of ``str(exc)`` because the SDK
+    classes are imported lazily and we don't want to add hard imports
+    just to do isinstance checks.
+    """
+    status_code = getattr(exc, "status_code", None)
+    if status_code == 402:
+        return True
+    msg = str(exc).lower()
+    return any(marker in msg for marker in _QUOTA_EXHAUSTED_MARKERS)
 
 
 def max_tokens_for_purpose(purpose: str | None) -> int:
@@ -822,9 +968,11 @@ __all__ = [
     "LLMMessage",
     "LLMProvider",
     "LLMProviderError",
+    "LLMQuotaExhaustedError",
     "LLMResponseFormatError",
     "MockProvider",
     "ModelRunWriter",
+    "OpenAIProvider",
     "PURPOSE_DRAFTING",
     "PURPOSE_EVAL",
     "PURPOSE_HEARING_PACK",

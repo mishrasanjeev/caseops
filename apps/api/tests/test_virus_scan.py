@@ -28,6 +28,12 @@ def _clear_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "CASEOPS_CLAMAV_REQUIRED",
     ):
         monkeypatch.delenv(key, raising=False)
+    # EG-003: legacy tests assume the local-dev policy (skip when
+    # host unset, fail-open on scanner errors). Anchor CASEOPS_ENV
+    # to "local" so the env-aware default of CASEOPS_CLAMAV_REQUIRED
+    # stays False for them. Tests that exercise the production
+    # fail-closed path set CASEOPS_ENV=production explicitly.
+    monkeypatch.setenv("CASEOPS_ENV", "local")
 
 
 def test_scan_skipped_when_no_host(
@@ -39,6 +45,52 @@ def test_scan_skipped_when_no_host(
     result = virus_scan.scan_file_for_viruses(file)
     assert result.status == "skipped"
     assert result.signature is None
+
+
+def test_scan_required_in_production_env_returns_error_when_host_unset(
+    monkeypatch: pytest.MonkeyPatch, tmp_path,
+) -> None:
+    """EG-003 (2026-04-23): in production / cloud env, an unset
+    CASEOPS_CLAMAV_HOST is no longer 'skipped' — it's an 'error'
+    so the upload route fail-closes with 503. Without this, an
+    accidental misconfiguration in prod would silently store
+    unscanned files."""
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("CASEOPS_ENV", "production")
+    file = tmp_path / "doc.pdf"
+    file.write_bytes(b"%PDF-1.4\n...")
+    result = virus_scan.scan_file_for_viruses(file)
+    assert result.status == "error"
+    assert "not set" in (result.detail or "")
+
+
+def test_reject_if_infected_503_in_production_when_host_unset(
+    monkeypatch: pytest.MonkeyPatch, tmp_path,
+) -> None:
+    """EG-003: the wrapper helper turns the 'error' into a 503 with
+    actionable detail so the upload route doesn't accept the file."""
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("CASEOPS_ENV", "production")
+    file = tmp_path / "doc.pdf"
+    file.write_bytes(b"%PDF-1.4\n...")
+    with pytest.raises(HTTPException) as exc_info:
+        virus_scan.reject_if_infected(file, filename="doc.pdf")
+    assert exc_info.value.status_code == 503
+    assert "Virus scan is required" in str(exc_info.value.detail)
+
+
+def test_scan_required_explicit_false_overrides_prod_default(
+    monkeypatch: pytest.MonkeyPatch, tmp_path,
+) -> None:
+    """Explicit CASEOPS_CLAMAV_REQUIRED=false wins over the
+    env-aware default — useful for staging without a scanner."""
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("CASEOPS_ENV", "production")
+    monkeypatch.setenv("CASEOPS_CLAMAV_REQUIRED", "false")
+    file = tmp_path / "doc.pdf"
+    file.write_bytes(b"%PDF-1.4\n...")
+    result = virus_scan.scan_file_for_viruses(file)
+    assert result.status == "skipped"
 
 
 def test_scan_clean_when_daemon_says_ok(

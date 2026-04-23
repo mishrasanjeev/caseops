@@ -1,0 +1,61 @@
+apiVersion: run.googleapis.com/v1
+kind: Job
+metadata:
+  name: caseops-migrate-job
+  annotations:
+    # EG-002 (2026-04-23): schema migrations live in their own
+    # Cloud Run Job, NOT inside the API service's startup. This
+    # prevents the multi-instance migration race where each
+    # starting pod tries to alembic upgrade simultaneously, and
+    # gives ops a clean rollback boundary (the migration ran or
+    # didn't; the API is the next, separate decision).
+    #
+    # Deploy order (mandatory):
+    #   1. Build the new image:
+    #      gcloud builds submit apps/api --tag <repo>:$SHA
+    #   2. Update + execute the migrate Job:
+    #      gcloud run jobs update caseops-migrate-job --image=<repo>:$SHA --region=__REGION__
+    #      gcloud run jobs execute caseops-migrate-job --region=__REGION__ --wait
+    #   3. ONLY IF the Job exits 0 — deploy the API service revision:
+    #      gcloud run deploy caseops-api --image=<repo>:$SHA --region=__REGION__ --no-traffic --tag=h$SHA
+    #      (then smoke + cut traffic per the staleness sweep)
+    run.googleapis.com/cloudsql-instances: "__PROJECT_ID__:__REGION__:__CLOUD_SQL_INSTANCE__"
+spec:
+  template:
+    spec:
+      template:
+        spec:
+          serviceAccountName: "__SERVICE_ACCOUNT__"
+          maxRetries: 1
+          timeoutSeconds: 600
+          containers:
+            - image: "__API_IMAGE__"
+              # Use the venv binary directly to bypass `uv run`'s
+              # implicit sync (no .exe locks in a one-shot container,
+              # but consistent with verify-backend.sh's bypass rule).
+              command:
+                - "python"
+                - "-m"
+                - "alembic"
+                - "upgrade"
+                - "head"
+              env:
+                - name: CASEOPS_ENV
+                  value: "cloud"
+                - name: CASEOPS_DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: "caseops-database-url"
+                      key: "latest"
+                # auth_secret is required by Settings validator under
+                # cloud/prod even though alembic doesn't read it.
+                - name: CASEOPS_AUTH_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: "caseops-auth-secret"
+                      key: "__AUTH_SECRET_VERSION__"
+              workingDir: "/app"
+              resources:
+                limits:
+                  cpu: "1"
+                  memory: "512Mi"

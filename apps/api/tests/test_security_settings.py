@@ -47,9 +47,58 @@ def test_non_placeholder_auth_secret_allowed_in_production(
 ) -> None:
     monkeypatch.setenv("CASEOPS_ENV", "production")
     monkeypatch.setenv("CASEOPS_AUTH_SECRET", "real-rotated-production-secret-32bytes+")
+    # EG-002: prod requires explicit auto-migrate opt-out.
+    monkeypatch.setenv("CASEOPS_AUTO_MIGRATE", "false")
     settings = Settings()
     assert settings.env == "production"
     assert settings.auth_secret != PLACEHOLDER_AUTH_SECRET
+
+
+@pytest.mark.parametrize("env", ["staging", "production", "prod", "cloud", "gke"])
+def test_auto_migrate_rejected_in_non_local(
+    monkeypatch: pytest.MonkeyPatch, env: str,
+) -> None:
+    """EG-002 (2026-04-23): production / cloud API services MUST NOT
+    auto-migrate at startup. The validator rejects the combination
+    so a fresh deploy that forgets to set CASEOPS_AUTO_MIGRATE=false
+    fails fast at boot instead of starting a multi-instance migration
+    race in prod.
+    """
+    monkeypatch.setenv("CASEOPS_ENV", env)
+    monkeypatch.setenv(
+        "CASEOPS_AUTH_SECRET", "real-rotated-production-secret-32bytes+",
+    )
+    monkeypatch.setenv("CASEOPS_AUTO_MIGRATE", "true")
+    with pytest.raises(ValidationError) as exc_info:
+        Settings()
+    assert "CASEOPS_AUTO_MIGRATE" in str(exc_info.value)
+    assert "caseops-migrate-job" in str(exc_info.value)
+
+
+def test_auto_migrate_allowed_in_local(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Local + dev keep the existing pytest / docker-compose flow:
+    auto_migrate=True is fine because there's exactly one instance."""
+    monkeypatch.setenv("CASEOPS_ENV", "local")
+    monkeypatch.setenv(
+        "CASEOPS_AUTH_SECRET", PLACEHOLDER_AUTH_SECRET,
+    )
+    monkeypatch.setenv("CASEOPS_AUTO_MIGRATE", "true")
+    settings = Settings()
+    assert settings.auto_migrate is True
+
+
+def test_auto_migrate_false_allowed_everywhere(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The explicit opt-out is always accepted, no matter the env."""
+    monkeypatch.setenv("CASEOPS_ENV", "production")
+    monkeypatch.setenv(
+        "CASEOPS_AUTH_SECRET", "real-rotated-production-secret-32bytes+",
+    )
+    monkeypatch.setenv("CASEOPS_AUTO_MIGRATE", "false")
+    settings = Settings()
+    assert settings.env == "production"
+    assert settings.auto_migrate is False
 
 
 def test_local_env_auto_augments_dev_cors_origins(
@@ -84,6 +133,7 @@ def test_production_env_does_not_augment_cors_origins(
     monkeypatch.setenv("CASEOPS_ENV", "production")
     monkeypatch.setenv("CASEOPS_AUTH_SECRET", "real-rotated-production-secret-32bytes+")
     monkeypatch.setenv("CASEOPS_CORS_ORIGINS", '["https://app.caseops.ai"]')
+    monkeypatch.setenv("CASEOPS_AUTO_MIGRATE", "false")
     settings = Settings()
     assert settings.cors_origins == ["https://app.caseops.ai"]
 
@@ -99,5 +149,6 @@ def test_cloud_env_does_not_augment_cors_origins(
     monkeypatch.setenv("CASEOPS_ENV", env)
     monkeypatch.setenv("CASEOPS_AUTH_SECRET", "real-rotated-secret-not-the-placeholder")
     monkeypatch.setenv("CASEOPS_CORS_ORIGINS", '["https://app.caseops.ai"]')
+    monkeypatch.setenv("CASEOPS_AUTO_MIGRATE", "false")
     settings = Settings()
     assert settings.cors_origins == ["https://app.caseops.ai"]

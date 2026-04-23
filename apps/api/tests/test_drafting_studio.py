@@ -391,9 +391,12 @@ def test_generate_draft_provider_error_returns_actionable_422(
     )
     assert resp.status_code == 422, resp.text
     detail = resp.json()["detail"]
-    assert "primary model is unavailable" in detail
+    assert "primary model" in detail
     assert "LLMProviderError" in detail
-    assert "retry in a minute" in detail.lower()
+    # Either retry-with-time-window or support contact must be present
+    # so the user always has a next step.
+    lowered = detail.lower()
+    assert "retry" in lowered or "support" in lowered
 
 
 def test_create_draft_stepper_facts_passthrough(client: TestClient) -> None:
