@@ -3,6 +3,8 @@ import { API_BASE_URL } from "./config";
 import {
   type AuthContext,
   type AuthSession,
+  type CalendarEventKind,
+  type CalendarEventListResponse,
   type ContractsList,
   type DecisionKind,
   type Draft,
@@ -17,6 +19,7 @@ import {
   type RecommendationType,
   authContext,
   authSession,
+  calendarEventListResponse,
   contractsList,
   draft,
   draftList,
@@ -1725,4 +1728,19 @@ export async function unassignClientFromMatter(input: {
     `/api/matters/${input.matterId}/clients/${input.clientId}`,
     { method: "DELETE" },
   );
+}
+
+// Phase B / J08 / M08 — unified calendar feed across hearings,
+// tasks, and matter_deadlines.
+export async function fetchCalendarEvents(input: {
+  from: string; // ISO yyyy-mm-dd
+  to: string;   // ISO yyyy-mm-dd
+  kinds?: CalendarEventKind[];
+}): Promise<CalendarEventListResponse> {
+  const params = new URLSearchParams({ from: input.from, to: input.to });
+  for (const k of input.kinds ?? []) params.append("kinds", k);
+  const data = await apiRequest<unknown>(
+    `/api/calendar/events?${params.toString()}`,
+  );
+  return calendarEventListResponse.parse(data);
 }

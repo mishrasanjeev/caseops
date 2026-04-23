@@ -2,6 +2,7 @@
 
 import {
   Briefcase,
+  CalendarDays,
   ChevronsRight,
   Contact,
   FileSignature,
@@ -44,6 +45,9 @@ const NAV: NavItem[] = [
     requiresCapability: "intake:submit",
   },
   { href: "/app/hearings", label: "Hearings", icon: Gavel, section: "work" },
+  // Phase B / J08 / M08 — unified view across hearings + tasks +
+  // matter_deadlines. Closes BUG-029.
+  { href: "/app/calendar", label: "Calendar", icon: CalendarDays, section: "work" },
   { href: "/app/research", label: "Research", icon: LibraryBig, section: "intel" },
   { href: "/app/drafting", label: "Drafting", icon: FileSignature, section: "intel" },
   {

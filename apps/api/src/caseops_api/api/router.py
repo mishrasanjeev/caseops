@@ -6,6 +6,7 @@ from caseops_api.api.routes import (
     auth,
     authorities,
     bootstrap,
+    calendar,
     clients,
     companies,
     contracts,
@@ -45,6 +46,9 @@ api_router.include_router(courts.router, prefix="/courts", tags=["courts"])
 api_router.include_router(intake.router, prefix="/intake", tags=["intake"])
 api_router.include_router(teams.router, prefix="/teams", tags=["teams"])
 api_router.include_router(clients.router, prefix="/clients", tags=["clients"])
+# Phase B / J08 / M08 — unified calendar feed across hearings,
+# tasks, and the generic matter_deadlines table.
+api_router.include_router(calendar.router, prefix="/calendar", tags=["calendar"])
 # Per-matter client-assignment endpoints mount under /matters/... to
 # keep the URL shape consistent with the rest of the matter surface.
 api_router.include_router(

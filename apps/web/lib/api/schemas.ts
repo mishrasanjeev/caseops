@@ -399,3 +399,28 @@ export type Contract = z.infer<typeof contract>;
 export type ContractsList = z.infer<typeof contractsList>;
 export type OutsideCounsel = z.infer<typeof outsideCounsel>;
 export type OutsideCounselWorkspace = z.infer<typeof outsideCounselWorkspace>;
+
+// Phase B / J08 / M08 — unified calendar feed.
+export const calendarEventKind = z.enum(["hearing", "task", "deadline"]);
+
+export const calendarEventRecord = z.object({
+  id: z.string(),
+  kind: calendarEventKind,
+  occurs_on: z.string(), // ISO yyyy-mm-dd
+  title: z.string(),
+  matter_id: z.string(),
+  matter_title: z.string(),
+  matter_code: z.string(),
+  status: z.string().nullable().optional(),
+  detail: z.string().nullable().optional(),
+});
+
+export const calendarEventListResponse = z.object({
+  range_from: z.string(),
+  range_to: z.string(),
+  events: z.array(calendarEventRecord),
+});
+
+export type CalendarEventKind = z.infer<typeof calendarEventKind>;
+export type CalendarEventRecord = z.infer<typeof calendarEventRecord>;
+export type CalendarEventListResponse = z.infer<typeof calendarEventListResponse>;
