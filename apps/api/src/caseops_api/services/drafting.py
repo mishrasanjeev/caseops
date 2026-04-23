@@ -645,8 +645,8 @@ def generate_draft_version(
     try:
         response, completion = _invoke(llm)
     except (LLMProviderError, ValidationError) as exc:
-        # Broadened from LLMResponseFormatError (2026-04-22, Hari/Ram
-        # bug batch III): Anthropic 503s / httpx timeouts / connection
+        # Broadened from LLMResponseFormatError (Hari-III-BUG-019 +
+        # Ram-BUG-007, 2026-04-22): Anthropic 503s / httpx timeouts / connection
         # errors are wrapped in LLMProviderError (the parent), NOT the
         # format-error child. Catching only the child let 503s escape
         # past the Haiku retry and surface as opaque 500s — users saw

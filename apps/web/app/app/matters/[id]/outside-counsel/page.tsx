@@ -47,7 +47,9 @@ import { useCapability } from "@/lib/capabilities";
 import { useMatterWorkspace } from "@/lib/use-matter-workspace";
 
 /**
- * Per-matter Outside Counsel view (BUG-019 Codex fix 2026-04-21).
+ * Per-matter Outside Counsel view (Hari-II-BUG-019 Codex fix
+ * 2026-04-21). Disambiguates from the Hari III sheet's BUG-019
+ * (drafting 503) — always use the sheet prefix when referencing.
  *
  * Previous versions redirected to the workspace list, which Codex
  * (correctly) demoted to "Partial" — the redirect is a band-aid, not

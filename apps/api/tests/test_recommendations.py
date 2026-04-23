@@ -198,7 +198,7 @@ def test_generate_recommendation_refuses_when_no_verified_citations(
 def test_recommendation_provider_error_returns_actionable_502(
     client: TestClient, monkeypatch,
 ) -> None:
-    """Ram-BUG-007 / Hari-BUG-020 (2026-04-22): a 503 / overload from
+    """Ram-BUG-007 / Hari-III-BUG-020 (2026-04-22): a 503 / overload from
     Anthropic was wrapped as ``LLMProviderError`` (parent of the
     format-error subclass we used to catch). The narrow ``except
     LLMResponseFormatError`` let it escape the Haiku-fallback branch

@@ -1,7 +1,11 @@
 /**
- * BUG-019 Codex fix 2026-04-21: the per-matter outside-counsel route
- * is no longer a redirect. It renders the actual Linked Counsel card
- * with KPIs + assignments + an assignment dialog.
+ * Hari-II-BUG-019 Codex fix 2026-04-21: the per-matter
+ * outside-counsel route is no longer a redirect. It renders the
+ * actual Linked Counsel card with KPIs + assignments + an
+ * assignment dialog. Bug-ID namespace note: the Hari III sheet
+ * (2026-04-22) numbers a different bug as "BUG-019" (drafting
+ * 503) — always use the Hari-II / Hari-III prefix when
+ * cross-referencing.
  */
 import { expect, request, test } from "@playwright/test";
 import type { APIRequestContext } from "@playwright/test";
@@ -147,7 +151,7 @@ test.describe("Per-matter Outside Counsel", () => {
     const matterResp = await api.post(`${apiBaseUrl}/api/matters/`, {
       headers,
       data: {
-        title: "BUG-019 per-matter counsel",
+        title: "Hari-II-BUG-019 per-matter counsel",
         matter_code: unique("MOC").toUpperCase(),
         practice_area: "civil",
         forum_level: "high_court",

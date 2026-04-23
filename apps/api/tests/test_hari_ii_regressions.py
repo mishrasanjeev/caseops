@@ -565,11 +565,13 @@ def test_payment_config_requires_auth(client: TestClient) -> None:
 
 
 # ---------------------------------------------------------------
-# BUG-019 Codex fix — per-matter outside-counsel page is no longer a
-# redirect; the frontend file renders real KPI cards + assignments.
-# Backend stays unchanged (workspace endpoint already carries
-# assignments), but we pin the frontend regression here because the
-# Playwright spec lives in the e2e suite.
+# Hari-II-BUG-019 Codex fix — per-matter outside-counsel page is no
+# longer a redirect; the frontend file renders real KPI cards +
+# assignments. Backend stays unchanged (workspace endpoint already
+# carries assignments), but we pin the frontend regression here
+# because the Playwright spec lives in the e2e suite.
+# Note: the Hari III sheet (2026-04-22) numbers a different bug as
+# "BUG-019" (drafting 503) — see test_drafting_studio.py for that.
 # ---------------------------------------------------------------
 
 

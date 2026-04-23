@@ -339,8 +339,14 @@ def test_generate_increments_revision_and_keeps_history(client: TestClient) -> N
 def test_generate_draft_provider_error_returns_actionable_422(
     client: TestClient, monkeypatch,
 ) -> None:
-    """Strict Ledger #7 (2026-04-22) — mirrors the recommendations
-    regression for the drafting endpoint. AnthropicProvider wraps
+    """Hari-III-BUG-019 + Strict Ledger #7 (2026-04-22) — mirrors
+    the recommendations regression for the drafting endpoint. The
+    Hari III sheet numbers this drafting bug as 'BUG-019'; the
+    Hari II sheet numbered an outside-counsel bug as 'BUG-019'
+    (see test_hari_ii_regressions.py). Always use the
+    Hari-II / Hari-III prefix when cross-referencing.
+
+    AnthropicProvider wraps
     503 / httpx timeout in ``LLMProviderError`` (parent of
     ``LLMResponseFormatError``). Before commit 4104265 the drafting
     service caught only the format-error child; 503s escaped past

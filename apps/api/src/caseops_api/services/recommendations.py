@@ -525,7 +525,8 @@ def generate_recommendation(
         parsed, completion = _invoke(llm)
     except LLMProviderError as exc:
         # Broadened from LLMResponseFormatError (2026-04-22, Ram-007 /
-        # Hari-020 bug batch III): Anthropic 503s / httpx timeouts are
+        # Hari-III-BUG-020 + Ram-BUG-007, 2026-04-22):
+        # Anthropic 503s / httpx timeouts are
         # wrapped in LLMProviderError — the format-error child
         # doesn't catch them, so 503s escaped past Haiku retry and
         # surfaced as opaque 500s. Catching the parent means every

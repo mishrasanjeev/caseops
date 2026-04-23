@@ -227,10 +227,15 @@ test.describe("Hari II bug regressions", () => {
 
 
   // --------------------------------------------------------------
-  // BUG-019 — per-matter outside-counsel route now renders a real
-  // page (was a redirect; Codex demoted the redirect to Partial).
+  // Hari-II-BUG-019 — per-matter outside-counsel route now renders
+  // a real page (was a redirect; Codex demoted the redirect to
+  // Partial). NOTE on bug-ID namespace: the Hari III sheet
+  // (2026-04-22) numbers a different bug as "BUG-019" (drafting
+  // 503). Tag every in-code reference with the sheet prefix
+  // (Hari-II-* vs Hari-III-*) so a future search lands on the
+  // right fix.
   // --------------------------------------------------------------
-  test("BUG-019: /app/matters/{id}/outside-counsel renders per-matter page", async ({
+  test("Hari-II-BUG-019: /app/matters/{id}/outside-counsel renders per-matter page", async ({
     page,
   }) => {
     const api = await request.newContext();
