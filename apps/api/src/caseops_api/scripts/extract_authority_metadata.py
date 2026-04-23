@@ -65,17 +65,32 @@ MAX_PARTIES = 6
 #   CASEOPS_LAYER2_DAILY_USD_CAP=0   # disable cap entirely (unsafe)
 #   CASEOPS_LAYER2_DAILY_USD_CAP=200 # raise to $200
 #
-# Anthropic public Opus pricing per million tokens (no prompt-cache
-# discount applied — the cap is conservative on purpose). Update
-# these constants if Anthropic changes pricing.
-_OPUS_USD_PER_M_INPUT = 15.0
-_OPUS_USD_PER_M_OUTPUT = 75.0
-# Sonnet / Haiku rates roughly an order of magnitude lower; the
-# default model for this purpose is Haiku per
-# CASEOPS_LLM_MODEL_METADATA_EXTRACT, but the live corpus sweep
-# uses Opus. Falling back to Opus rates means the cap is on the
-# safe side regardless of actual model.
+# Anthropic public per-million-token pricing as of 2026-04-23.
+# Update these if Anthropic changes pricing OR if the corpus sweep
+# starts using prompt caching write/read tiers (which it does — but
+# we deliberately apply the FULL rate so the cap is conservative;
+# real bill is at most this estimate, never higher).
+#
+# Keyed by a model-prefix so future variants (claude-haiku-4-6,
+# claude-opus-4-7-mini, etc.) match the closest family. ``default``
+# is Opus rates so an unknown model never under-counts.
+_PRICE_TABLE: dict[str, tuple[float, float]] = {
+    "claude-haiku-4":  (1.0,   5.0),    # $1/M in, $5/M out
+    "claude-sonnet-4": (3.0,   15.0),   # $3/M in, $15/M out
+    "claude-opus-4":   (15.0,  75.0),   # $15/M in, $75/M out
+}
+_DEFAULT_RATES = (15.0, 75.0)  # Opus — conservative default
 _DEFAULT_DAILY_USD_CAP = 100.0
+
+
+def _rates_for(model: str | None) -> tuple[float, float]:
+    """Pick the price tuple whose key prefixes ``model``. Defaults to
+    Opus rates so an unknown model never under-counts the spend."""
+    name = (model or "").lower()
+    for prefix, rates in _PRICE_TABLE.items():
+        if name.startswith(prefix):
+            return rates
+    return _DEFAULT_RATES
 _HALT_FLAG = threading.Event()
 # Re-check the cap every N completed extractions so a runaway cannot
 # overshoot by more than a few seconds of throughput.
@@ -103,18 +118,26 @@ def _layer2_daily_cap_usd() -> float:
 
 def _spend_last_24h_usd(session) -> float:
     """Sum tokens from model_runs for purpose='metadata_extract' in
-    the last 24 hours and convert to USD at Opus rates. Returns 0.0
-    if the query fails (DB blip should not crash the cap check)."""
+    the last 24 hours and convert to USD using **per-model rates**.
+    Earlier revisions assumed Opus rates uniformly; with the sweep
+    now running on Haiku that would fire the $100 cap at only ~$7
+    of real spend. Returns 0.0 if the query fails (DB blip should
+    not crash the cap check)."""
     try:
-        row = session.execute(text(
-            "SELECT COALESCE(SUM(prompt_tokens), 0) AS pin, "
+        rows = session.execute(text(
+            "SELECT model, "
+            "       COALESCE(SUM(prompt_tokens), 0) AS pin, "
             "       COALESCE(SUM(completion_tokens), 0) AS cout "
             "FROM model_runs WHERE purpose = :purpose "
-            "AND created_at > NOW() - INTERVAL '24 hours'"
-        ), {"purpose": "metadata_extract"}).one()
-        in_usd = (row.pin or 0) * _OPUS_USD_PER_M_INPUT / 1_000_000
-        out_usd = (row.cout or 0) * _OPUS_USD_PER_M_OUTPUT / 1_000_000
-        return in_usd + out_usd
+            "AND created_at > NOW() - INTERVAL '24 hours' "
+            "GROUP BY model"
+        ), {"purpose": "metadata_extract"}).all()
+        total = 0.0
+        for r in rows:
+            in_rate, out_rate = _rates_for(r.model)
+            total += (r.pin or 0) * in_rate / 1_000_000
+            total += (r.cout or 0) * out_rate / 1_000_000
+        return total
     except Exception as exc:  # noqa: BLE001 — cap is best-effort
         logger.warning("daily-cap query failed (ignoring): %s", exc)
         return 0.0
