@@ -333,13 +333,11 @@ async def post_current_company_matter_summary_regenerate(
     context: CurrentContext,
     session: DbSession,
 ) -> MatterExecutiveSummary:
-    # The service currently computes on demand every call — there's no
-    # persisted cache yet. The POST shape is in place so the web UI can
-    # wire a distinct button now; when we add `Matter.executive_summary`
-    # JSONB caching (Q-follow-up), the GET returns the cached value and
-    # this POST invalidates + recomputes.
+    # EG-005 (2026-04-23): the service caches on the matter row.
+    # GET / DOCX / PDF reuse the cached payload; this POST forces a
+    # fresh LLM call and overwrites the cache.
     return generate_matter_summary(
-        session, context=context, matter_id=matter_id
+        session, context=context, matter_id=matter_id, force_refresh=True
     )
 
 

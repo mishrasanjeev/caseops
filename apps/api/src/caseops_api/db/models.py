@@ -5,6 +5,7 @@ from enum import StrEnum
 from uuid import uuid4
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     Date,
     DateTime,
@@ -461,6 +462,24 @@ class Matter(Base):
         ForeignKey("teams.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
+    )
+    # EG-005 (2026-04-23) — cached executive summary so every GET /
+    # DOCX / PDF on the summary endpoint stops costing a Haiku call.
+    # ``executive_summary_json`` holds the serialised
+    # MatterExecutiveSummary; ``generated_at`` lets the cache decide
+    # if a stale entry is still acceptable; ``model_run_id`` ties the
+    # cache row back to the LLM call that produced it for audit.
+    executive_summary_json: Mapped[dict | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )
+    executive_summary_generated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    executive_summary_model_run_id: Mapped[str | None] = mapped_column(
+        ForeignKey("model_runs.id", ondelete="SET NULL"),
+        nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

@@ -148,8 +148,8 @@ def stub_summary(monkeypatch: pytest.MonkeyPatch) -> None:
     so we're testing the export path, not the LLM-JSON contract
     (already covered by Q5 tests)."""
 
-    def _fake(session, *, context, matter_id, provider=None):
-        _ = provider
+    def _fake(session, *, context, matter_id, provider=None, force_refresh=False):
+        _ = provider, force_refresh
         # Still enforce tenancy — the real service does this via
         # ``_get_matter_model``; we mirror that so cross-tenant tests
         # continue to see a 404.
@@ -358,3 +358,189 @@ def test_summary_regenerate_route_404s_cross_tenant(
         f"/api/matters/{matter_id_a}/summary/regenerate", headers=headers_b,
     )
     assert resp_b.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# EG-005 (2026-04-23) — caching contract: GET / DOCX / PDF reuse the
+# cached payload, POST regenerate forces a refresh, every refresh
+# leaves a ModelRun audit row.
+# ---------------------------------------------------------------------------
+
+
+def test_summary_caches_after_first_call_and_skips_llm_on_second(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The first GET /summary should call ``generate_matter_summary``;
+    the second GET should hit the cached row and skip the LLM. Codex
+    enterprise audit gap EG-005 — without caching, every cockpit
+    refresh + every export costs another Haiku round-trip."""
+    from caseops_api.services import matter_summary as summary_mod
+    from tests.test_auth_company import auth_headers, bootstrap_company
+
+    bootstrap = bootstrap_company(client)
+    headers = auth_headers(str(bootstrap["access_token"]))
+
+    resp = client.post(
+        "/api/matters",
+        json={
+            "matter_code": "EG5-CACHE-001",
+            "title": "Cache hit smoke",
+            "practice_area": "Civil",
+            "forum_level": "high_court",
+        },
+        headers=headers,
+    )
+    matter_id = resp.json()["id"]
+
+    real_generate = summary_mod.generate_matter_summary
+    call_log: list[bool] = []
+
+    def _spy(session, *, context, matter_id, provider=None, force_refresh=False):
+        call_log.append(force_refresh)
+        # Stub the LLM call by patching build_provider so we never
+        # touch Anthropic. The real generate_matter_summary still runs
+        # — including its cache read/write.
+        return real_generate(
+            session,
+            context=context,
+            matter_id=matter_id,
+            provider=_StubLLM(),
+            force_refresh=force_refresh,
+        )
+
+    monkeypatch.setattr(
+        "caseops_api.api.routes.matters.generate_matter_summary", _spy
+    )
+
+    # First GET — cache miss, should compute.
+    r1 = client.get(f"/api/matters/{matter_id}/summary", headers=headers)
+    assert r1.status_code == 200, r1.text
+
+    # Second GET — cache hit, must NOT have called the LLM stub
+    # (we'll assert by counting StubLLM invocations).
+    r2 = client.get(f"/api/matters/{matter_id}/summary", headers=headers)
+    assert r2.status_code == 200
+    assert r1.json()["overview"] == r2.json()["overview"]
+
+    # The route is called twice; the LLM stub is called only once
+    # (first GET). Cache hit invariant.
+    assert _StubLLM.call_count == 1
+
+    # POST regenerate forces a fresh LLM call, increments the counter.
+    r3 = client.post(
+        f"/api/matters/{matter_id}/summary/regenerate", headers=headers,
+    )
+    assert r3.status_code == 200
+    assert _StubLLM.call_count == 2
+    assert call_log[-1] is True  # regenerate sets force_refresh=True
+
+    # Subsequent GET is back to cache (counter stays at 2).
+    r4 = client.get(f"/api/matters/{matter_id}/summary", headers=headers)
+    assert r4.status_code == 200
+    assert _StubLLM.call_count == 2
+
+
+def test_summary_call_writes_model_run_audit_row(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every uncached summary call must persist a ModelRun row with
+    purpose='matter_summary' so AI spend is auditable. Without this,
+    summary calls were invisible to the cost-per-tenant view."""
+    from sqlalchemy import select
+
+    from caseops_api.db.models import ModelRun
+    from caseops_api.db.session import get_session_factory
+    from caseops_api.services import matter_summary as summary_mod
+    from tests.test_auth_company import auth_headers, bootstrap_company
+
+    bootstrap = bootstrap_company(client)
+    headers = auth_headers(str(bootstrap["access_token"]))
+
+    resp = client.post(
+        "/api/matters",
+        json={
+            "matter_code": "EG5-AUDIT-001",
+            "title": "Audit smoke",
+            "practice_area": "Civil",
+            "forum_level": "high_court",
+        },
+        headers=headers,
+    )
+    matter_id = resp.json()["id"]
+
+    real_generate = summary_mod.generate_matter_summary
+
+    def _with_stub(session, *, context, matter_id, provider=None, force_refresh=False):
+        return real_generate(
+            session,
+            context=context,
+            matter_id=matter_id,
+            provider=_StubLLM(),
+            force_refresh=force_refresh,
+        )
+
+    monkeypatch.setattr(
+        "caseops_api.api.routes.matters.generate_matter_summary", _with_stub
+    )
+
+    r = client.get(f"/api/matters/{matter_id}/summary", headers=headers)
+    assert r.status_code == 200, r.text
+
+    factory = get_session_factory()
+    with factory() as session:
+        runs = list(
+            session.scalars(
+                select(ModelRun).where(ModelRun.purpose == "matter_summary")
+            )
+        )
+    assert len(runs) == 1
+    run = runs[0]
+    assert run.status == "ok"
+    assert run.matter_id == matter_id
+    assert run.company_id is not None
+    assert run.actor_membership_id is not None
+    # Token counts come from the stub's LLMCompletion.
+    assert run.prompt_tokens == 100
+    assert run.completion_tokens == 30
+
+
+class _StubLLM:
+    """Module-level stub LLM for the cache + audit tests. Counts
+    invocations so the cache assertions can prove the LLM was skipped
+    on cached reads."""
+
+    name = "stub"
+    model = "stub-summary-model"
+    call_count: int = 0
+
+    def __init__(self) -> None:
+        # Reset on first construction in each test by inspecting the
+        # call stack would be brittle; instead, the tests reset
+        # explicitly via the class attribute below.
+        pass
+
+    def generate(self, *, messages, temperature, max_tokens):
+        _ = messages, temperature, max_tokens
+        type(self).call_count += 1
+        from caseops_api.services.llm import LLMCompletion
+
+        return LLMCompletion(
+            provider=self.name,
+            model=self.model,
+            text=(
+                '{"overview":"stub overview","key_facts":["fact a"],'
+                '"timeline":[{"date":"2026-04-01","label":"event"}],'
+                '"legal_issues":["issue a"],'
+                '"sections_cited":["BNS s.303"]}'
+            ),
+            prompt_tokens=100,
+            completion_tokens=30,
+            latency_ms=20,
+        )
+
+
+@pytest.fixture(autouse=True)
+def _reset_stub_llm_counter() -> None:
+    """Module-scoped class counter; reset before each test so the
+    assertion totals are per-test, not cumulative across the file."""
+    _StubLLM.call_count = 0

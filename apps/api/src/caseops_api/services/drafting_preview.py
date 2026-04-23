@@ -7,35 +7,61 @@ draft for immediate feedback.
 
 Design notes:
 
-- Uses Haiku (`purpose="metadata_extract"` provider) — fast + cheap.
+- Uses Haiku (``purpose="metadata_extract"`` provider) — fast + cheap.
   A full-generation step still goes through the drafting service
   with Sonnet / Opus; this is a preview, not the final draft.
 - Accepts partial ``facts`` — the Pydantic facts model's fields are
   declared as required, but the preview should not gate on that.
-  We wrap the input in a ``dict`` + JSON-serialise so the LLM gets
-  the current state regardless of completeness.
 - Returns plain text, not structured JSON — the preview is rendered
   verbatim; no parsing needed.
-- Budget: ~400 tokens out → ~$0.002/request. Cheap enough that the
-  stepper can call on every completed step.
+
+EG-006 (2026-04-23) hardening:
+
+- The call now flows through the same tenant-AI-policy gate the
+  recommendations / drafting / hearing-pack services apply via
+  ``generate_structured``. A tenant whose admin has restricted Haiku
+  no longer leaks via the preview path.
+- Every successful call writes a ``ModelRun`` row so preview spend is
+  auditable next to the rest of AI usage. Failed calls also persist a
+  ``ModelRun`` with ``status="error"``.
+- Anthropic 402 ("credit balance is too low") triggers a hard cutover
+  to OpenAI ``gpt-5.1`` — same pattern as the other AI services.
+- The 502 response no longer interpolates the raw exception text into
+  ``detail`` (Codex 2026-04-19 finding #6 — "no internal exception
+  strings in user-visible errors"). The full traceback is logged; the
+  user sees an actionable, redacted message.
 """
 from __future__ import annotations
 
+import hashlib
 import json
+import logging
 from dataclasses import dataclass
 
 from fastapi import HTTPException, status
+from sqlalchemy.orm import Session
 
+from caseops_api.db.models import ModelRun
 from caseops_api.schemas.drafting_templates import DraftTemplateType
 from caseops_api.services.drafting_prompts import get_prompt_parts
+from caseops_api.services.identity import SessionContext
 from caseops_api.services.llm import (
+    AnthropicProvider,
+    LLMCompletion,
     LLMMessage,
     LLMProvider,
+    LLMProviderError,
+    LLMQuotaExhaustedError,
+    OpenAIProvider,
     build_provider,
 )
 
+logger = logging.getLogger(__name__)
+
+PURPOSE = "drafting_preview"
 _PREVIEW_MAX_TOKENS = 900
 _PREVIEW_TEMPERATURE = 0.15
+_HAIKU_FALLBACK_MODEL = "claude-haiku-4-5-20251001"
 
 
 @dataclass(frozen=True)
@@ -48,21 +74,50 @@ class DraftPreview:
     completion_tokens: int
 
 
+def _haiku_fallback_provider() -> LLMProvider | None:
+    from caseops_api.core.settings import get_settings
+
+    settings = get_settings()
+    if (settings.llm_provider or "").lower() != "anthropic":
+        return None
+    return AnthropicProvider(
+        model=_HAIKU_FALLBACK_MODEL,
+        api_key=settings.llm_api_key,
+        prompt_cache=bool(getattr(settings, "llm_prompt_cache_enabled", True)),
+    )
+
+
+def _openai_fallback_provider() -> LLMProvider | None:
+    from caseops_api.core.settings import get_settings
+
+    settings = get_settings()
+    if not getattr(settings, "openai_api_key", None):
+        return None
+    return OpenAIProvider(
+        model=getattr(settings, "openai_fallback_model", "gpt-5.1"),
+        api_key=settings.openai_api_key,
+    )
+
+
 def generate_step_preview(
     *,
     template_type: DraftTemplateType,
     facts: dict,
     step_group: str | None = None,
     provider: LLMProvider | None = None,
+    session: Session | None = None,
+    context: SessionContext | None = None,
 ) -> DraftPreview:
     """Emit a short (~400 word) partial draft reflecting ``facts`` so far.
 
-    Callers should treat the response as illustrative — it's driven
-    by whatever fields the user has filled. A still-empty required
-    field appears as "[not yet specified]" rather than a guess.
+    When ``session`` + ``context`` are supplied (the production path
+    from ``/api/drafting/preview``), the call is gated by the tenant
+    AI policy and a ``ModelRun`` row is persisted for audit. Tests
+    that omit those parameters skip the policy gate and the audit
+    write — the original pure-function behaviour is preserved for
+    fixtures.
     """
     parts = get_prompt_parts(template_type)
-
     llm = provider or _default_preview_provider()
 
     preview_instruction = (
@@ -87,18 +142,60 @@ def generate_step_preview(
         LLMMessage(role="system", content=parts.system),
         LLMMessage(role="user", content=user_msg),
     ]
+    prompt_hash = _prompt_hash(messages)
+
+    # EG-006: gate every preview call by the tenant AI policy. The
+    # production routes always pass session + context.company_id so
+    # this branch is the live path; tests that omit them skip the
+    # check (DEFAULT_POLICY allows everything anyway).
+    if session is not None and context is not None and context.company.id:
+        from caseops_api.services.tenant_ai_policy import (
+            is_model_allowed,
+            resolve_tenant_policy,
+        )
+
+        policy = resolve_tenant_policy(session, company_id=context.company.id)
+        if not is_model_allowed(policy, purpose=PURPOSE, model=llm.model):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    f"Drafting preview model {llm.model!r} is blocked "
+                    f"by your workspace AI policy. Ask your workspace "
+                    "admin to allow this model for drafting previews."
+                ),
+            )
 
     try:
-        completion = llm.generate(
-            messages=messages,
-            temperature=_PREVIEW_TEMPERATURE,
-            max_tokens=_PREVIEW_MAX_TOKENS,
+        completion = _invoke_with_cutover(llm, messages)
+    except HTTPException:
+        # _invoke_with_cutover already raised an actionable, redacted
+        # 4xx/5xx — record the failure for audit, then re-raise.
+        if session is not None and context is not None:
+            _write_model_run(
+                session,
+                context=context,
+                completion=None,
+                prompt_hash=prompt_hash,
+                model_hint=llm.model,
+                provider_hint=getattr(llm, "name", "unknown"),
+                status_label="error",
+                error="preview_provider_failed",
+            )
+            session.commit()
+        raise
+
+    if session is not None and context is not None:
+        _write_model_run(
+            session,
+            context=context,
+            completion=completion,
+            prompt_hash=prompt_hash,
+            model_hint=completion.model,
+            provider_hint=completion.provider,
+            status_label="ok",
+            error=None,
         )
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Drafting preview failed: {exc}",
-        ) from exc
+        session.commit()
 
     return DraftPreview(
         template_type=template_type.value,
@@ -108,6 +205,132 @@ def generate_step_preview(
         prompt_tokens=completion.prompt_tokens,
         completion_tokens=completion.completion_tokens,
     )
+
+
+def _invoke_with_cutover(
+    primary: LLMProvider,
+    messages: list[LLMMessage],
+) -> LLMCompletion:
+    """Run the preview through the configured provider and apply the
+    cross-provider cutover ladder used by the rest of the AI services.
+
+    Returns the successful ``LLMCompletion`` or raises ``HTTPException``
+    with a redacted, actionable detail. The raw exception is always
+    logged at WARN with full repr so we can still debug from prod logs.
+    """
+
+    def _run(p: LLMProvider) -> LLMCompletion:
+        return p.generate(
+            messages=messages,
+            temperature=_PREVIEW_TEMPERATURE,
+            max_tokens=_PREVIEW_MAX_TOKENS,
+        )
+
+    try:
+        return _run(primary)
+    except LLMQuotaExhaustedError as quota_exc:
+        logger.warning(
+            "Preview primary %s quota exhausted; cutting over to OpenAI",
+            getattr(primary, "model", "<unknown>"),
+        )
+        return _preview_via_openai(_run, quota_exc)
+    except LLMProviderError as exc:
+        logger.warning(
+            "Preview primary %s failed (%s); trying Haiku fallback",
+            getattr(primary, "model", "<unknown>"),
+            type(exc).__name__,
+        )
+        haiku = _haiku_fallback_provider()
+        if haiku is None:
+            return _preview_via_openai(_run, exc)
+        try:
+            return _run(haiku)
+        except LLMQuotaExhaustedError as quota_exc:
+            return _preview_via_openai(_run, quota_exc)
+        except LLMProviderError as retry_exc:
+            return _preview_via_openai(_run, retry_exc)
+
+
+def _preview_via_openai(
+    run, root_exc: Exception
+) -> LLMCompletion:
+    """Cross-provider hard cutover. Returns the OpenAI completion or
+    raises a redacted 502."""
+    openai = _openai_fallback_provider()
+    if openai is None:
+        # Don't echo the raw exception into ``detail`` — log it and
+        # show the user something actionable.
+        logger.warning(
+            "Preview unavailable, no OpenAI fallback configured. "
+            "Underlying error: %r",
+            root_exc,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=(
+                "Drafting preview is temporarily unavailable. Please "
+                "retry in a minute, or contact support if this persists."
+            ),
+        ) from root_exc
+    try:
+        return run(openai)
+    except LLMProviderError as oa_exc:
+        logger.warning(
+            "Preview OpenAI fallback also failed. Underlying errors: "
+            "primary=%r openai=%r",
+            root_exc,
+            oa_exc,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=(
+                "Drafting preview is temporarily unavailable. Please "
+                "retry in a minute, or contact support if this persists."
+            ),
+        ) from oa_exc
+
+
+def _write_model_run(
+    session: Session,
+    *,
+    context: SessionContext,
+    completion: LLMCompletion | None,
+    prompt_hash: str,
+    model_hint: str,
+    provider_hint: str,
+    status_label: str,
+    error: str | None,
+) -> ModelRun:
+    """Persist a ``ModelRun`` audit row for the preview call. Mirrors
+    ``services.drafting._write_model_run`` so the existing audit /
+    export pipeline picks the row up automatically."""
+    run = ModelRun(
+        company_id=context.company.id,
+        matter_id=None,  # preview is pre-draft; no matter scope yet
+        actor_membership_id=context.membership.id,
+        purpose=PURPOSE,
+        provider=completion.provider if completion else provider_hint,
+        model=completion.model if completion else model_hint,
+        prompt_hash=prompt_hash,
+        prompt_tokens=completion.prompt_tokens if completion else 0,
+        completion_tokens=completion.completion_tokens if completion else 0,
+        latency_ms=completion.latency_ms if completion else 0,
+        status=status_label,
+        error=error,
+    )
+    session.add(run)
+    session.flush()
+    return run
+
+
+def _prompt_hash(messages: list[LLMMessage]) -> str:
+    h = hashlib.sha256()
+    for m in messages:
+        h.update(m.role.encode("utf-8"))
+        h.update(b"\x00")
+        h.update(m.content.encode("utf-8"))
+        h.update(b"\x00")
+    return h.hexdigest()
 
 
 def _default_preview_provider() -> LLMProvider:
@@ -123,5 +346,6 @@ def _default_preview_provider() -> LLMProvider:
 
 __all__ = [
     "DraftPreview",
+    "PURPOSE",
     "generate_step_preview",
 ]

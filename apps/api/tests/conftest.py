@@ -41,6 +41,14 @@ def client(
 ) -> Generator[TestClient]:
     database_path = tmp_path / "caseops-test.db"
     storage_path = tmp_path / "documents"
+    # EG-003 (2026-04-23) — pin the test process to "local" env.
+    # ``services.virus_scan._required_default_for_env`` reads
+    # ``CASEOPS_ENV`` straight from ``os.environ`` (not the cached
+    # Settings), so without this the strict ``is_non_local_env``
+    # allow-list treats a bare test environment as non-local,
+    # defaults ``CLAMAV_REQUIRED=True``, and 503s every attachment
+    # upload because no scanner is configured.
+    monkeypatch.setenv("CASEOPS_ENV", "local")
     monkeypatch.setenv("CASEOPS_DATABASE_URL", f"sqlite+pysqlite:///{database_path.as_posix()}")
     monkeypatch.setenv("CASEOPS_AUTH_SECRET", "test-secret-should-be-at-least-32-bytes")
     monkeypatch.setenv("CASEOPS_PUBLIC_APP_URL", "http://testserver")

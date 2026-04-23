@@ -1,10 +1,7 @@
 """Matter executive summary — AI-generated case overview (Sprint Q5).
 
 Given a matter, produce a structured summary: overview, key facts,
-timeline, legal issues, statutes cited. Computed on demand via the
-existing LLM pipeline; the persistence of generated summaries is a
-follow-up (would live on a new ``Matter.executive_summary`` JSONB
-column plus a regeneration button).
+timeline, legal issues, statutes cited.
 
 Design choices:
 
@@ -15,13 +12,24 @@ Design choices:
   attached-document text (first 4 k chars each, capped at 6 sources),
   hearings, and latest 3 draft versions. Skips any empty field.
 - Returns a typed Pydantic model so the web can render stable tiles.
-- Budget: one LLM call per request. At ~$0.006 Haiku × ~30 summaries
-  per active user per week ≈ $0.20 / user / month. Order-of-magnitude
-  cheap.
 - Holds PRD §6.3 grounding rule: every statute / authority the
   summary cites must trace to a doc attached to the matter. No
   hallucinated precedents — we ask the model for only `sections_cited`
   (statutes) on the matter's own docs, not external citations.
+
+EG-005 (2026-04-23) hardening:
+
+- The structured summary is cached on the matter row
+  (``Matter.executive_summary_json``). GET reads the cache; POST
+  ``…/regenerate`` forces a refresh. DOCX / PDF exports reuse the
+  cache too — no extra LLM spend on format conversion. Closes the
+  4x-LLM-call cost on a single user session that opened the
+  cockpit + exported both formats.
+- Every LLM call writes a ``ModelRun`` audit row via
+  ``generate_structured(on_model_run=...)``. Cached responses also
+  link back to that ``ModelRun`` via
+  ``Matter.executive_summary_model_run_id`` so spend traces from the
+  summary tile back to the call that produced it.
 """
 from __future__ import annotations
 
@@ -40,6 +48,7 @@ from caseops_api.db.models import (
     Matter,
     MatterAttachment,
     MatterHearing,
+    ModelRun,
 )
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.llm import (
@@ -275,14 +284,30 @@ def generate_matter_summary(
     context: SessionContext,
     matter_id: str,
     provider: LLMProvider | None = None,
+    force_refresh: bool = False,
 ) -> MatterExecutiveSummary:
-    """Produce a fresh executive summary for a matter.
+    """Produce an executive summary for a matter.
 
-    Uses Haiku by default for cost + JSON reliability. The caller's
-    matter must be tenant-scoped — ``_get_matter_model`` raises 404
-    when the matter does not belong to the caller's company.
+    EG-005 (2026-04-23): unless ``force_refresh=True``, this returns
+    the cached summary from ``Matter.executive_summary_json`` when one
+    is present. The POST ``…/regenerate`` route passes
+    ``force_refresh=True`` to invalidate; GET / DOCX / PDF routes use
+    the cache. Uses Haiku by default for cost + JSON reliability. The
+    caller's matter must be tenant-scoped — ``_get_matter_model``
+    raises 404 when the matter does not belong to the caller's
+    company.
     """
     matter = _get_matter_model(session, context=context, matter_id=matter_id)
+
+    # Cache hit short-circuit. We trust any cached payload regardless
+    # of age — invalidation is explicit (POST regenerate). A future
+    # revision can add a TTL or matter-mutation hook; for now an
+    # explicit refresh button is the user contract.
+    if not force_refresh and matter.executive_summary_json is not None:
+        cached = _summary_from_cache_payload(matter.executive_summary_json)
+        if cached is not None:
+            return cached
+
     dossier = _load_matter_context(session, matter)
     messages = [
         LLMMessage(role="system", content=_SYSTEM_PROMPT),
@@ -296,6 +321,28 @@ def generate_matter_summary(
         purpose="matter_summary",
     )
 
+    # Capture the LLM call for audit. ``generate_structured`` invokes
+    # this exactly once per successful provider call so we can pin the
+    # cache row to a specific ModelRun.
+    captured_run: list[ModelRun] = []
+
+    def _on_model_run(completion, _ctx, _msgs) -> None:
+        run = ModelRun(
+            company_id=context.company.id,
+            matter_id=matter.id,
+            actor_membership_id=context.membership.id,
+            purpose="matter_summary",
+            provider=completion.provider,
+            model=completion.model,
+            prompt_tokens=completion.prompt_tokens,
+            completion_tokens=completion.completion_tokens,
+            latency_ms=completion.latency_ms,
+            status="ok",
+        )
+        session.add(run)
+        session.flush()
+        captured_run.append(run)
+
     def _call(p: LLMProvider) -> Any:
         return generate_structured(
             p,
@@ -305,6 +352,7 @@ def generate_matter_summary(
             context=call_ctx,
             temperature=0.0,
             max_tokens=4096,
+            on_model_run=_on_model_run,
         )
 
     try:
@@ -337,8 +385,20 @@ def generate_matter_summary(
                 parsed, _completion = _summarise_via_openai(_call, quota_exc)
             except LLMResponseFormatError as retry_exc:
                 parsed, _completion = _summarise_via_openai(_call, retry_exc)
+    except LLMProviderError as exc:
+        # Broadened from LLMResponseFormatError-only (mirrors the fix
+        # that landed in services.drafting / services.recommendations
+        # on 2026-04-22): Anthropic 503 / overload / httpx timeouts
+        # surface as the parent class. Without this branch the
+        # endpoint 500'd opaquely instead of triggering the cutover.
+        logger.warning(
+            "matter summary: primary %s upstream failure (%s); cutting over to OpenAI",
+            getattr(llm, "model", "<unknown>"),
+            type(exc).__name__,
+        )
+        parsed, _completion = _summarise_via_openai(_call, exc)
 
-    return MatterExecutiveSummary(
+    summary = MatterExecutiveSummary(
         overview=parsed.overview,
         key_facts=parsed.key_facts,
         timeline=parsed.timeline,
@@ -346,6 +406,48 @@ def generate_matter_summary(
         sections_cited=parsed.sections_cited,
         generated_at=datetime.now(UTC),
     )
+
+    # EG-005: persist to cache so subsequent GET / DOCX / PDF calls
+    # skip the LLM. The cache columns + FK to model_runs are added by
+    # alembic 20260423_0001_matter_summary_cache. Explicit commit
+    # because the FastAPI ``DbSession`` dependency does not auto-commit
+    # on success — the same pattern services.drafting +
+    # services.recommendations use after writing their ModelRun rows.
+    matter.executive_summary_json = _summary_to_cache_payload(summary)
+    matter.executive_summary_generated_at = summary.generated_at
+    if captured_run:
+        matter.executive_summary_model_run_id = captured_run[-1].id
+    session.flush()
+    session.commit()
+
+    return summary
+
+
+def _summary_to_cache_payload(summary: MatterExecutiveSummary) -> dict:
+    """Serialise the typed summary to a JSON-safe dict for storage in
+    ``Matter.executive_summary_json``. ``model_dump(mode='json')``
+    handles datetime + nested timeline events without us hand-rolling
+    the conversion."""
+    return summary.model_dump(mode="json")
+
+
+def _summary_from_cache_payload(payload: Any) -> MatterExecutiveSummary | None:
+    """Inverse of ``_summary_to_cache_payload``. Returns ``None`` if
+    the payload is missing the schema-required ``generated_at`` field
+    so a half-written cache entry can't blow up the GET endpoint."""
+    if not isinstance(payload, dict):
+        return None
+    try:
+        return MatterExecutiveSummary.model_validate(payload)
+    except Exception:  # noqa: BLE001
+        # A schema mismatch (older cached version, e.g.) means the
+        # cache is unusable — fall back to recomputing rather than
+        # raising at the user. The recompute path will overwrite the
+        # bad payload.
+        logger.warning(
+            "matter summary: cached payload failed schema validation; recomputing"
+        )
+        return None
 
 
 __all__ = [

@@ -12,7 +12,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
-from caseops_api.api.dependencies import get_current_context
+from caseops_api.api.dependencies import DbSession, get_current_context
 from caseops_api.core.rate_limit import (
     ai_route_rate_limit,
     limiter,
@@ -182,8 +182,8 @@ async def post_drafting_preview(
     request: Request,
     payload: DraftPreviewRequest,
     context: CurrentContext,
+    session: DbSession,
 ) -> DraftPreviewResponse:
-    _ = context
     try:
         template = DraftTemplateType(payload.template_type)
     except ValueError as exc:
@@ -192,10 +192,15 @@ async def post_drafting_preview(
             detail=f"Unknown drafting template '{payload.template_type}'.",
         ) from exc
 
+    # EG-006: pass session + context so the preview goes through the
+    # tenant AI policy gate and persists a ModelRun audit row, just
+    # like the drafting / recommendations / hearing-pack endpoints.
     preview = generate_step_preview(
         template_type=template,
         facts=payload.facts,
         step_group=payload.step_group,
+        session=session,
+        context=context,
     )
     return _preview_to_response(preview)
 
