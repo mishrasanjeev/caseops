@@ -424,3 +424,44 @@ export const calendarEventListResponse = z.object({
 export type CalendarEventKind = z.infer<typeof calendarEventKind>;
 export type CalendarEventRecord = z.infer<typeof calendarEventRecord>;
 export type CalendarEventListResponse = z.infer<typeof calendarEventListResponse>;
+
+// Phase B / J12 / M11 — communications log.
+export const communicationDirection = z.enum(["outbound", "inbound"]);
+export const communicationChannel = z.enum([
+  "email", "sms", "phone", "meeting", "note",
+]);
+export const communicationStatus = z.enum([
+  "logged", "queued", "sent", "delivered", "opened", "bounced", "failed",
+]);
+
+export const communicationRecord = z.object({
+  id: z.string(),
+  company_id: z.string(),
+  matter_id: z.string().nullable(),
+  client_id: z.string().nullable(),
+  direction: communicationDirection,
+  channel: communicationChannel,
+  subject: z.string().nullable(),
+  body: z.string(),
+  recipient_name: z.string().nullable(),
+  recipient_email: z.string().nullable(),
+  recipient_phone: z.string().nullable(),
+  status: communicationStatus,
+  occurred_at: z.string(),
+  delivered_at: z.string().nullable(),
+  opened_at: z.string().nullable(),
+  external_message_id: z.string().nullable(),
+  created_by_membership_id: z.string().nullable(),
+  created_at: z.string(),
+});
+
+export const communicationListResponse = z.object({
+  matter_id: z.string(),
+  communications: z.array(communicationRecord),
+});
+
+export type CommunicationDirection = z.infer<typeof communicationDirection>;
+export type CommunicationChannel = z.infer<typeof communicationChannel>;
+export type CommunicationStatus = z.infer<typeof communicationStatus>;
+export type CommunicationRecord = z.infer<typeof communicationRecord>;
+export type CommunicationListResponse = z.infer<typeof communicationListResponse>;

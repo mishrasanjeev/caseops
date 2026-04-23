@@ -178,6 +178,14 @@ CAPABILITY_ROLES: dict[str, frozenset[MembershipRole]] = {
     "clients:create": _ALL_FEE_EARNERS,
     "clients:edit": _ALL_FEE_EARNERS,
     "clients:archive": _STAFF,
+    # --- communications log (Phase B / J12 / M11) ---
+    # Anyone authenticated can read a matter's communication history
+    # (same bar as matters themselves). Write access is fee-earner-
+    # gated — paralegals included so they can log a client call —
+    # but viewers stay read-only. Slice 2 will keep the same gate
+    # for the SendGrid send action.
+    "communications:view": _ALL_AUTHENTICATED,
+    "communications:write": _ALL_FEE_EARNERS,
 }
 
 

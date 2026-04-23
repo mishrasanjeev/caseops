@@ -87,7 +87,10 @@ export type Capability =
   | "clients:view"
   | "clients:create"
   | "clients:edit"
-  | "clients:archive";
+  | "clients:archive"
+  // communications log (Phase B / J12 / M11)
+  | "communications:view"
+  | "communications:write";
 
 // Baseline caps for a fee-earner (owner / admin / partner / member).
 // Paralegals inherit most of these but lose a small, explicit set.
@@ -107,6 +110,11 @@ const FEE_EARNER: Capability[] = [
   "clients:view",
   "clients:create",
   "clients:edit",
+  // communications (Phase B M11 slice 1) — fee-earners can log a
+  // call/email/meeting against a matter. Read access is widened
+  // to viewers via VIEWER_CAPS below.
+  "communications:view",
+  "communications:write",
 ];
 
 // Creator caps — paralegals can NOT create matters/contracts or run
@@ -157,6 +165,7 @@ const VIEWER_CAPS: ReadonlySet<Capability> = new Set<Capability>([
   "authorities:search",
   "intake:submit",
   "clients:view",
+  "communications:view",
 ]);
 
 const PARALEGAL_CAPS: ReadonlySet<Capability> = new Set<Capability>([

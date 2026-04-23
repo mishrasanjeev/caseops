@@ -3222,3 +3222,95 @@ class TeamMembership(Base):
 
     team: Mapped[Team] = relationship(back_populates="memberships")
     membership: Mapped[CompanyMembership] = relationship()
+
+
+# ---------------------------------------------------------------
+# Phase B / J12 / M11 — communications log
+# ---------------------------------------------------------------
+
+
+class CommunicationDirection(StrEnum):
+    OUTBOUND = "outbound"
+    INBOUND = "inbound"
+
+
+class CommunicationChannel(StrEnum):
+    EMAIL = "email"
+    SMS = "sms"
+    PHONE = "phone"
+    MEETING = "meeting"
+    NOTE = "note"
+
+
+class CommunicationStatus(StrEnum):
+    """Lifecycle covers both the manual-log path (slice 1, terminal
+    at LOGGED) and the future SendGrid pipeline (slice 2: queued →
+    sent → delivered / opened / bounced / failed)."""
+
+    LOGGED = "logged"
+    QUEUED = "queued"
+    SENT = "sent"
+    DELIVERED = "delivered"
+    OPENED = "opened"
+    BOUNCED = "bounced"
+    FAILED = "failed"
+
+
+class Communication(Base):
+    """One row per recorded communication event with a client or
+    matter contact. Slice 1 supports manual logging via the
+    matter cockpit's Communications tab; slice 2 will add the
+    SendGrid send + template + delivery webhook on the same row."""
+
+    __tablename__ = "communications"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    matter_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=True, index=True,
+    )
+    client_id: Mapped[str | None] = mapped_column(
+        ForeignKey("clients.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+    direction: Mapped[str] = mapped_column(
+        String(12), nullable=False, default=CommunicationDirection.OUTBOUND,
+    )
+    channel: Mapped[str] = mapped_column(String(20), nullable=False)
+    subject: Mapped[str | None] = mapped_column(String(400), nullable=True)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    recipient_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    recipient_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    recipient_phone: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default=CommunicationStatus.LOGGED,
+    )
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow,
+    )
+    delivered_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
+    opened_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
+    external_message_id: Mapped[str | None] = mapped_column(
+        String(120), nullable=True,
+    )
+    metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False,
+    )

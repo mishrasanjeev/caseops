@@ -5,6 +5,10 @@ import {
   type AuthSession,
   type CalendarEventKind,
   type CalendarEventListResponse,
+  type CommunicationChannel,
+  type CommunicationDirection,
+  type CommunicationListResponse,
+  type CommunicationRecord,
   type ContractsList,
   type DecisionKind,
   type Draft,
@@ -20,6 +24,8 @@ import {
   authContext,
   authSession,
   calendarEventListResponse,
+  communicationListResponse,
+  communicationRecord,
   contractsList,
   draft,
   draftList,
@@ -1752,4 +1758,34 @@ export async function fetchCalendarEvents(input: {
     `/api/calendar/events?${params.toString()}`,
   );
   return calendarEventListResponse.parse(data);
+}
+
+// Phase B / J12 / M11 — communications log endpoints.
+export async function fetchMatterCommunications(
+  matterId: string,
+): Promise<CommunicationListResponse> {
+  const data = await apiRequest<unknown>(
+    `/api/matters/${matterId}/communications`,
+  );
+  return communicationListResponse.parse(data);
+}
+
+export async function createMatterCommunication(input: {
+  matterId: string;
+  channel: CommunicationChannel;
+  body: string;
+  direction?: CommunicationDirection;
+  subject?: string | null;
+  recipient_name?: string | null;
+  recipient_email?: string | null;
+  recipient_phone?: string | null;
+  occurred_at?: string | null;
+  client_id?: string | null;
+}): Promise<CommunicationRecord> {
+  const { matterId, ...rest } = input;
+  const data = await apiRequest<unknown>(
+    `/api/matters/${matterId}/communications`,
+    { method: "POST", body: rest },
+  );
+  return communicationRecord.parse(data);
 }

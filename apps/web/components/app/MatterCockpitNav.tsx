@@ -16,6 +16,8 @@ export function MatterCockpitNav({ matterId }: { matterId: string }) {
     { href: `${base}/drafts`, label: "Drafts" },
     { href: `${base}/hearings`, label: "Hearings" },
     { href: `${base}/recommendations`, label: "Recommendations" },
+    // Phase B / J12 / M11 — communications log.
+    { href: `${base}/communications`, label: "Communications" },
     { href: `${base}/billing`, label: "Billing" },
     { href: `${base}/audit`, label: "Audit" },
   ];

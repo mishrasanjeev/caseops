@@ -30,6 +30,9 @@ PUBLIC_MUTATING_ROUTES: set[tuple[str, str]] = {
     # every authenticated user may extend their own session. Hard-expired
     # tokens fall through to 401 and the web client redirects to sign-in.
     ("POST", "/api/auth/refresh"),
+    # EG-001 (2026-04-23) — logout clears the session cookie.
+    # Anyone may log themselves out; idempotent server-side.
+    ("POST", "/api/auth/logout"),
     ("POST", "/api/bootstrap/company"),
     # Pine Labs payment notifications — their own signature is the
     # auth layer; the handler enforces cross-tenant + idempotency.
