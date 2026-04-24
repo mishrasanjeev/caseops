@@ -83,6 +83,49 @@ def client(
 
     app = create_application()
     with TestClient(app) as test_client:
+        # 2026-04-24 (CI breakage from EG-001 cookie-first auth +
+        # TestClient cookie persistence). The starlette TestClient
+        # persists every Set-Cookie across requests, and
+        # ``get_current_context`` prefers the cookie when both a
+        # cookie and a Bearer header arrive. Tenant-isolation tests
+        # bootstrap two tenants (each setting a session cookie),
+        # then issue Bearer-authed cross-tenant calls — expecting
+        # the bearer to take effect, but the persisted cookie wins
+        # and silently routes the request to whichever tenant
+        # bootstrapped LAST. Result: tenant A appears to see tenant
+        # B's matters in test_tenant_isolation, and 9 other tests
+        # fail similarly.
+        #
+        # Fix at the conftest layer: any request that carries an
+        # explicit ``Authorization: Bearer`` header strips the
+        # cookie jar so the bearer alone decides identity. This
+        # mirrors REAL CLIENT BEHAVIOR — a CLI / SDK that sends
+        # bearer auth never carries the web session cookie. Routes
+        # that need the cookie pathway (every test that intentionally
+        # doesn't send Authorization) are unaffected.
+        original_request = test_client.request
+
+        def request_with_auth_aware_cookies(method, url, **kwargs):
+            headers = kwargs.get("headers") or {}
+            auth_header = (
+                headers.get("Authorization")
+                or headers.get("authorization")
+                or ""
+            )
+            if isinstance(auth_header, str) and auth_header.startswith(
+                "Bearer "
+            ):
+                # Pop the cookie jar for this single request only.
+                saved = list(test_client.cookies.jar)
+                test_client.cookies.clear()
+                try:
+                    return original_request(method, url, **kwargs)
+                finally:
+                    for cookie in saved:
+                        test_client.cookies.jar.set_cookie(cookie)
+            return original_request(method, url, **kwargs)
+
+        test_client.request = request_with_auth_aware_cookies  # type: ignore[method-assign]
         yield test_client
 
     get_settings.cache_clear()

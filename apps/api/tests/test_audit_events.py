@@ -110,7 +110,12 @@ def test_audit_export_is_admin_only(client: TestClient) -> None:
         headers=auth_headers(token),
     )
     assert allowed.status_code == 200, allowed.text
-    # Without a token we hit the auth layer first (401).
+    # Without a token we hit the auth layer first (401). Clear the
+    # bootstrap cookie so the anon request actually has zero auth
+    # state — TestClient persists Set-Cookie across requests, and
+    # the conftest's bearer-aware cookie strip only fires when the
+    # Authorization header is set.
+    client.cookies.clear()
     anon = client.get("/api/admin/audit/export")
     assert anon.status_code == 401
 
