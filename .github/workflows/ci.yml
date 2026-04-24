@@ -36,9 +36,26 @@ jobs:
         working-directory: apps/api
         run: uv run ruff check src tests
 
-      - name: Pytest
+      - name: Pytest with coverage (P1-001 per-area gates)
         working-directory: apps/api
-        run: uv run pytest -q
+        run: uv run pytest -q --cov=caseops_api --cov-report=json:coverage.json --cov-report=term
+
+      - name: Coverage gate (per-area thresholds)
+        working-directory: apps/api
+        # scripts/coverage_gate.py reads coverage.json + asserts each
+        # tracked module is at or above its 2026-04-24 baseline.
+        # Update baselines in scripts/coverage_gate.py only when the
+        # module gains real test coverage; never ratchet down to make
+        # CI green.
+        run: uv run python ../../scripts/coverage_gate.py coverage.json
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-coverage
+          path: apps/api/coverage.json
+          retention-days: 14
 
   web:
     name: Web (typecheck + vitest + build)
