@@ -79,10 +79,10 @@ test.describe("Prod smoke (2026-04-24 sweep)", () => {
     await expect(
       page.getByRole("heading", { name: /clients/i }),
     ).toBeVisible();
-    // Smoke spec asserts the surface, not data — primary action visible:
-    await expect(
-      page.getByRole("button", { name: /new client|add client/i }).first(),
-    ).toBeVisible();
+    // Use the stable data-testid (button label changed in the past).
+    await expect(page.getByTestId("new-client-open")).toBeVisible({
+      timeout: 15_000,
+    });
   });
 
   test("research has Saved-research link and the page renders empty state (BUG-030)", async ({
