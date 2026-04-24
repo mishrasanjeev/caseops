@@ -111,4 +111,25 @@ test.describe("Prod smoke (2026-04-24 sweep)", () => {
       page.getByRole("heading", { name: /email templates/i }),
     ).toBeVisible();
   });
+
+  test("portal sign-in renders + verify-with-no-token surfaces error (Phase C-1)", async ({
+    page,
+  }) => {
+    // Public portal surfaces must render without an /app session.
+    // Use a fresh context to avoid carrying the internal cookie.
+    await page.context().clearCookies();
+    await page.goto("/portal/sign-in");
+    await expect(
+      page.getByRole("heading", { name: /sign in to your workspace portal/i }),
+    ).toBeVisible();
+    await expect(
+      page.getByLabel(/workspace handle/i),
+    ).toBeVisible();
+    await expect(page.getByTestId("portal-signin-submit")).toBeVisible();
+
+    // Verify-with-no-token: the page should render an explicit "no
+    // token" hint rather than 500.
+    await page.goto("/portal/verify");
+    await expect(page.getByText(/no token in url/i)).toBeVisible();
+  });
 });
