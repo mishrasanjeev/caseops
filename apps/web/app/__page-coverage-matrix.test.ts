@@ -66,6 +66,10 @@ const ALLOWED_UNTESTED = new Set<string>([
   "app/matters/[id]/drafts/new/page.tsx",
   "app/outside-counsel/page.tsx",
   "app/recommendations/page.tsx",
+  // Phase C-2 (2026-04-24): the matter detail page lives at
+  // /portal/matters/[id] and has its own page.test.tsx alongside.
+  // No waiver needed; included here so the matrix's drift check
+  // isn't surprised when the page lands.
 ]);
 
 function* findPages(dir: string): Generator<string> {

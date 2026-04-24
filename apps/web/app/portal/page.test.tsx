@@ -4,11 +4,14 @@ import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { sessionMock, logoutMock, replaceMock } = vi.hoisted(() => ({
-  sessionMock: vi.fn(),
-  logoutMock: vi.fn(),
-  replaceMock: vi.fn(),
-}));
+const { sessionMock, logoutMock, replaceMock, mattersMock } = vi.hoisted(
+  () => ({
+    sessionMock: vi.fn(),
+    logoutMock: vi.fn(),
+    replaceMock: vi.fn(),
+    mattersMock: vi.fn(),
+  }),
+);
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: replaceMock, push: vi.fn() }),
@@ -17,6 +20,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/api/portal", () => ({
   fetchPortalSession: sessionMock,
   logoutPortal: logoutMock,
+  fetchPortalMatters: mattersMock,
 }));
 
 import PortalLandingPage from "@/app/portal/page";
@@ -36,9 +40,11 @@ describe("PortalLandingPage", () => {
     sessionMock.mockReset();
     logoutMock.mockReset();
     replaceMock.mockReset();
+    mattersMock.mockReset();
+    mattersMock.mockResolvedValue({ matters: [] });
   });
 
-  it("renders signed-in greeting + grants list", async () => {
+  it("renders signed-in greeting + matters list (C-2)", async () => {
     sessionMock.mockResolvedValue({
       portal_user: {
         id: "pu-1",
@@ -48,14 +54,19 @@ describe("PortalLandingPage", () => {
         role: "client",
         last_signed_in_at: null,
       },
-      grants: [
+      grants: [],
+    });
+    mattersMock.mockResolvedValue({
+      matters: [
         {
-          id: "g-1",
-          matter_id: "matter-abc12345",
-          role: "client",
-          scope_json: null,
-          granted_at: "2026-04-24T00:00:00Z",
-          revoked_at: null,
+          id: "m-1",
+          title: "Bail Application — State v Kumar",
+          matter_code: "BAIL-001",
+          status: "active",
+          practice_area: "criminal",
+          forum_level: "high_court",
+          court_name: "Delhi High Court",
+          next_hearing_on: null,
         },
       ],
     });
@@ -63,11 +74,13 @@ describe("PortalLandingPage", () => {
     await waitFor(() =>
       expect(screen.getByText(/welcome, test/i)).toBeInTheDocument(),
     );
-    expect(screen.getByTestId("portal-grant-g-1")).toBeInTheDocument();
-    expect(screen.getByText(/matter matter-a/i)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByTestId("portal-matter-m-1")).toBeInTheDocument(),
+    );
+    expect(screen.getByText(/Bail Application/)).toBeInTheDocument();
   });
 
-  it("shows the empty state when no grants exist", async () => {
+  it("shows the empty state when no matters exist (C-2)", async () => {
     sessionMock.mockResolvedValue({
       portal_user: {
         id: "pu-2",
@@ -79,6 +92,7 @@ describe("PortalLandingPage", () => {
       },
       grants: [],
     });
+    mattersMock.mockResolvedValue({ matters: [] });
     render(withClient(<PortalLandingPage />));
     await waitFor(() =>
       expect(screen.getByText(/no matters yet/i)).toBeInTheDocument(),
