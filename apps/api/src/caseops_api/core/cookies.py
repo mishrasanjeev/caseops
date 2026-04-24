@@ -15,9 +15,23 @@ read it and echo the value as the ``X-CSRF-Token`` header on
 state-changing requests. The pairing (cookie + header) defeats CSRF
 because a cross-origin attacker can cause the cookie to be sent (with
 ``SameSite=Lax``) but cannot read the cookie's value to set the header.
+
+BUG-011 (2026-04-24, Ram) cross-subdomain cookie scope:
+
+The web app is served from ``caseops.ai`` and the API from
+``api.caseops.ai``. Without an explicit ``Domain=`` on Set-Cookie,
+the browser scopes the cookie to the request host (api.caseops.ai)
+and ``document.cookie`` on caseops.ai cannot read it. The web client
+needs to read the CSRF cookie to echo it as the X-CSRF-Token header
+on every mutating request — when the cookie is invisible, every
+mutating request lands without the header and the CSRF middleware
+returns 403 "Missing CSRF token." Setting ``Domain=.caseops.ai``
+in production widens the scope to the parent domain so both
+subdomains can read it. Local dev (no parent domain) skips Domain.
 """
 from __future__ import annotations
 
+import os
 import secrets
 
 from starlette.responses import Response
@@ -42,6 +56,22 @@ def _cookie_secure(env: str | None) -> bool:
     return is_non_local_env(env)
 
 
+def _cookie_domain(env: str | None) -> str | None:
+    """BUG-011 fix. Returns the parent domain to set on Set-Cookie so
+    both api.caseops.ai (server) and caseops.ai (web client) can see
+    the cookie. Local dev returns None (host-only cookie on
+    localhost). Operators can override via CASEOPS_COOKIE_DOMAIN —
+    necessary if the parent domain ever changes (e.g. a custom
+    enterprise white-label like example-firm.caseops.ai needs
+    Domain=.example-firm.caseops.ai)."""
+    explicit = os.environ.get("CASEOPS_COOKIE_DOMAIN", "").strip()
+    if explicit:
+        return explicit
+    if not is_non_local_env(env):
+        return None
+    return ".caseops.ai"
+
+
 def issue_session_cookies(
     response: Response,
     *,
@@ -57,6 +87,7 @@ def issue_session_cookies(
     never outlive its session.
     """
     secure = _cookie_secure(env)
+    domain = _cookie_domain(env)
     # Session token. HttpOnly so JS cannot read it; Lax SameSite so
     # cross-site navigations (e.g. inbound email link to caseops.ai)
     # still send it but cross-site forms / fetches do not.
@@ -68,6 +99,7 @@ def issue_session_cookies(
         secure=secure,
         samesite="lax",
         path="/",
+        domain=domain,
     )
     # CSRF token. JS-readable so the web client can echo it as a
     # request header. The cookie alone is meaningless without the
@@ -81,15 +113,18 @@ def issue_session_cookies(
         secure=secure,
         samesite="lax",
         path="/",
+        domain=domain,
     )
 
 
 def clear_session_cookies(response: Response, *, env: str | None) -> None:
     """Wipe the session + CSRF cookies on ``response``. Called from
-    /api/auth/logout. We mirror the original Secure flag so the
-    browser actually overwrites the cookie (a Set-Cookie with a
-    different Secure value is treated as a different cookie)."""
+    /api/auth/logout. We mirror the original Secure flag AND Domain
+    so the browser actually overwrites the cookie (a Set-Cookie with
+    a different Secure or Domain value is treated as a different
+    cookie and leaves the original behind)."""
     secure = _cookie_secure(env)
+    domain = _cookie_domain(env)
     for name in (SESSION_COOKIE, CSRF_COOKIE):
         response.set_cookie(
             key=name,
@@ -99,6 +134,7 @@ def clear_session_cookies(response: Response, *, env: str | None) -> None:
             secure=secure,
             samesite="lax",
             path="/",
+            domain=domain,
         )
 
 
@@ -118,6 +154,7 @@ def issue_portal_session_cookie(
     env: str | None,
 ) -> None:
     secure = _cookie_secure(env)
+    domain = _cookie_domain(env)
     response.set_cookie(
         key=PORTAL_SESSION_COOKIE,
         value=access_token,
@@ -126,11 +163,13 @@ def issue_portal_session_cookie(
         secure=secure,
         samesite="lax",
         path="/",
+        domain=domain,
     )
 
 
 def clear_portal_session_cookie(response: Response, *, env: str | None) -> None:
     secure = _cookie_secure(env)
+    domain = _cookie_domain(env)
     response.set_cookie(
         key=PORTAL_SESSION_COOKIE,
         value="",
@@ -139,6 +178,7 @@ def clear_portal_session_cookie(response: Response, *, env: str | None) -> None:
         secure=secure,
         samesite="lax",
         path="/",
+        domain=domain,
     )
 
 

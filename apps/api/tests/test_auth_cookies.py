@@ -17,6 +17,88 @@ from caseops_api.core.cookies import CSRF_COOKIE, CSRF_HEADER, SESSION_COOKIE
 from tests.test_auth_company import auth_headers, bootstrap_company
 
 
+def test_cookies_set_parent_domain_in_non_local_env(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    """BUG-011 regression (2026-04-24, Ram). Web app on caseops.ai +
+    API on api.caseops.ai => cookies must be scoped to .caseops.ai
+    so document.cookie on the web origin can read the JS-readable
+    CSRF cookie. Without this, every mutating request lands without
+    X-CSRF-Token and the CSRF middleware returns 403 across the
+    entire app.
+
+    Local env keeps host-only cookies (no Domain) so localhost dev
+    isn't affected.
+    """
+    from caseops_api.core import cookies as cookies_module
+    from caseops_api.core import settings as settings_module
+
+    bootstrap = bootstrap_company(client)
+    settings_module.get_settings.cache_clear()
+    monkeypatch.setattr(
+        cookies_module,
+        "_cookie_secure",
+        lambda env: False,  # don't require Secure for the in-memory test
+    )
+    monkeypatch.setattr(
+        cookies_module,
+        "_cookie_domain",
+        lambda env: ".caseops.ai",  # what prod _cookie_domain returns
+    )
+    client.cookies.clear()
+    resp = client.post(
+        "/api/auth/login",
+        json={
+            "email": bootstrap["user"]["email"],
+            "password": "FoundersPass123!",
+            "company_slug": bootstrap["company"]["slug"],
+        },
+    )
+    assert resp.status_code == 200
+    set_cookie = "\n".join(resp.headers.get_list("set-cookie")).lower()
+    assert "domain=.caseops.ai" in set_cookie, (
+        "Set-Cookie must carry Domain=.caseops.ai in non-local env "
+        "so caseops.ai (web) and api.caseops.ai (api) can both read "
+        f"the cookies. Got:\n{set_cookie}"
+    )
+
+
+def test_cookies_omit_domain_in_local_env(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    """Inverse of the above: in LOCAL env, no Domain so the cookie
+    stays host-only on localhost. Setting Domain=localhost (or any
+    Domain on a non-public TLD) would make the browser reject it."""
+    from caseops_api.core import cookies as cookies_module
+    from caseops_api.core import settings as settings_module
+
+    bootstrap = bootstrap_company(client)
+    settings_module.get_settings.cache_clear()
+    monkeypatch.setattr(
+        cookies_module, "_cookie_secure", lambda env: False,
+    )
+    monkeypatch.setattr(
+        cookies_module, "_cookie_domain", lambda env: None,
+    )
+    client.cookies.clear()
+    resp = client.post(
+        "/api/auth/login",
+        json={
+            "email": bootstrap["user"]["email"],
+            "password": "FoundersPass123!",
+            "company_slug": bootstrap["company"]["slug"],
+        },
+    )
+    assert resp.status_code == 200
+    set_cookie = "\n".join(resp.headers.get_list("set-cookie")).lower()
+    assert "domain=" not in set_cookie, (
+        "Local env Set-Cookie must omit Domain so the cookie stays "
+        f"host-only. Got:\n{set_cookie}"
+    )
+
+
 def test_login_sets_session_and_csrf_cookies(client: TestClient) -> None:
     """The login route must set ``caseops_session`` (HttpOnly) and
     ``caseops_csrf`` (JS-readable) cookies. Without both, the web

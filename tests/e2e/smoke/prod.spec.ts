@@ -112,6 +112,26 @@ test.describe("Prod smoke (2026-04-24 sweep)", () => {
     ).toBeVisible();
   });
 
+  test("dashboard does not horizontally scroll on mobile (BUG-012)", async ({
+    page,
+  }) => {
+    // 360px is the most common Android viewport. Anything wider
+    // than viewport here = horizontal scroll. The strict-audit
+    // QG-UI-013 mandates mobile layout proof for every app page;
+    // this is the canonical anchor for the dashboard.
+    await page.setViewportSize({ width: 360, height: 800 });
+    await page.goto("/app");
+    await page.waitForLoadState("networkidle");
+    const overflow = await page.evaluate(() => ({
+      scroll: document.documentElement.scrollWidth,
+      client: document.documentElement.clientWidth,
+    }));
+    expect(
+      overflow.scroll,
+      `Horizontal scroll: scrollWidth=${overflow.scroll} > clientWidth=${overflow.client}`,
+    ).toBeLessThanOrEqual(overflow.client + 1);
+  });
+
   test("portal sign-in renders + verify-with-no-token surfaces error (Phase C-1)", async ({
     page,
   }) => {

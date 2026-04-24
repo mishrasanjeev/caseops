@@ -32,7 +32,7 @@ const baseURL = process.env.BASE_URL ?? "https://caseops.ai";
 
 export default defineConfig({
   testDir: path.join("tests", "e2e", "smoke"),
-  testMatch: [/prod\.spec\.ts/],
+  testMatch: [/prod\.spec\.ts/, /bug\d+-.*\.spec\.ts/],
   fullyParallel: false,
   workers: 1,
   retries: 0,
