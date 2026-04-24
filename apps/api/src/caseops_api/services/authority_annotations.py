@@ -206,9 +206,42 @@ def delete_annotation(
     session.commit()
 
 
+def list_tenant_annotations(
+    session: Session,
+    *,
+    context: SessionContext,
+    include_archived: bool = False,
+    limit: int = 200,
+) -> list[tuple[AuthorityAnnotation, AuthorityDocument]]:
+    """BUG-030 (Hari 2026-04-23): every annotation this tenant has
+    saved, joined with the authority doc preview the UI needs to
+    render the saved-research history page. Newest-first, capped at
+    ``limit`` so a runaway tenant cannot pull tens of thousands of
+    rows in one call.
+
+    Returns ``(annotation, authority)`` tuples so the route layer
+    can flatten them into a typed response without a second
+    fetch-by-id round trip per row.
+    """
+    stmt = (
+        select(AuthorityAnnotation, AuthorityDocument)
+        .join(
+            AuthorityDocument,
+            AuthorityDocument.id == AuthorityAnnotation.authority_document_id,
+        )
+        .where(AuthorityAnnotation.company_id == context.company.id)
+        .order_by(AuthorityAnnotation.created_at.desc())
+        .limit(max(1, min(limit, 500)))
+    )
+    if not include_archived:
+        stmt = stmt.where(AuthorityAnnotation.is_archived.is_(False))
+    return [(ann, auth) for ann, auth in session.execute(stmt).all()]
+
+
 __all__ = [
     "create_annotation",
     "delete_annotation",
     "list_annotations",
+    "list_tenant_annotations",
     "update_annotation",
 ]

@@ -21,6 +21,8 @@ from caseops_api.schemas.authorities import (
     AuthoritySearchRequest,
     AuthoritySearchResponse,
     AuthoritySourceListResponse,
+    SavedAnnotationListResponse,
+    SavedAuthorityAnnotationRecord,
 )
 from caseops_api.services.authorities import (
     get_authority_corpus_stats,
@@ -33,6 +35,7 @@ from caseops_api.services.authority_annotations import (
     create_annotation,
     delete_annotation,
     list_annotations,
+    list_tenant_annotations,
     update_annotation,
 )
 from caseops_api.services.identity import SessionContext
@@ -211,3 +214,53 @@ async def delete_authority_annotation(
     session: DbSession,
 ) -> None:
     delete_annotation(session, context=context, annotation_id=annotation_id)
+
+
+@router.get(
+    "/annotations",
+    response_model=SavedAnnotationListResponse,
+    summary="List every annotation this tenant has saved across the corpus",
+    description=(
+        "Saved-research history (BUG-030). Returns the calling tenant's "
+        "annotations joined with authority preview fields so the UI can "
+        "render the history page in one round trip. Newest first, capped "
+        "server-side at 500 rows."
+    ),
+    tags=["authorities"],
+)
+async def get_saved_annotations(
+    context: CurrentContext,
+    session: DbSession,
+    include_archived: Annotated[bool, Query()] = False,
+    limit: Annotated[int, Query(ge=1, le=500)] = 200,
+) -> SavedAnnotationListResponse:
+    pairs = list_tenant_annotations(
+        session,
+        context=context,
+        include_archived=include_archived,
+        limit=limit,
+    )
+    return SavedAnnotationListResponse(
+        annotations=[
+            SavedAuthorityAnnotationRecord(
+                id=ann.id,
+                authority_document_id=ann.authority_document_id,
+                created_by_membership_id=ann.created_by_membership_id,
+                kind=ann.kind,
+                title=ann.title,
+                body=ann.body,
+                is_archived=ann.is_archived,
+                created_at=ann.created_at,
+                updated_at=ann.updated_at,
+                authority_court_name=auth.court_name,
+                authority_forum_level=auth.forum_level,
+                authority_document_type=auth.document_type,
+                authority_title=auth.title,
+                authority_neutral_citation=auth.neutral_citation,
+                authority_case_reference=auth.case_reference,
+                authority_decision_date=auth.decision_date,
+                authority_summary=auth.summary,
+            )
+            for ann, auth in pairs
+        ]
+    )

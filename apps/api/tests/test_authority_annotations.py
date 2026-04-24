@@ -105,6 +105,14 @@ def test_tenant_can_create_list_update_archive_and_delete(
 
 
 def _bootstrap(client: TestClient, *, slug: str, email: str) -> dict:
+    # EG-001 (2026-04-23) made cookies win over bearer headers in
+    # ``get_current_context``. The Starlette TestClient persists cookies
+    # across requests, which means a second bootstrap silently
+    # overwrites the first tenant's cookie — and any later
+    # ``Authorization: Bearer ...`` call would be misrouted to whichever
+    # tenant happened to bootstrap last. Clear cookies before AND after
+    # bootstrap so tenant-isolation tests rely on the bearer header alone.
+    client.cookies.clear()
     resp = client.post(
         "/api/bootstrap/company",
         json={
@@ -117,6 +125,7 @@ def _bootstrap(client: TestClient, *, slug: str, email: str) -> dict:
         },
     )
     assert resp.status_code == 200, resp.text
+    client.cookies.clear()
     return resp.json()
 
 
@@ -200,3 +209,109 @@ def test_unknown_authority_returns_404(client: TestClient) -> None:
         headers=auth_headers(token),
     )
     assert resp.status_code == 404
+
+
+def test_saved_annotations_history_view_is_tenant_isolated(
+    client: TestClient,
+) -> None:
+    """BUG-030: GET /api/authorities/annotations returns the calling
+    tenant's annotations joined with authority preview, never another
+    tenant's rows."""
+    auth_a = _seed_authority("Saved-history A v Other")
+    auth_b = _seed_authority("Saved-history B v Other")
+
+    boot_a = _bootstrap(client, slug="saved-a", email="saved-a@example.com")
+    token_a = str(boot_a["access_token"])
+    boot_b = _bootstrap(client, slug="saved-b", email="saved-b@example.com")
+    token_b = str(boot_b["access_token"])
+
+    # A saves on both authorities, B saves on auth_b
+    for auth_id, kind, title in [
+        (auth_a, "note", "A on A"),
+        (auth_b, "flag", "A on B"),
+    ]:
+        resp = client.post(
+            f"/api/authorities/documents/{auth_id}/annotations",
+            headers=auth_headers(token_a),
+            json={"kind": kind, "title": title},
+        )
+        assert resp.status_code == 201, resp.text
+
+    resp = client.post(
+        f"/api/authorities/documents/{auth_b}/annotations",
+        headers=auth_headers(token_b),
+        json={"kind": "tag", "title": "B on B"},
+    )
+    assert resp.status_code == 201, resp.text
+
+    # A sees both of A's saves, with embedded authority preview
+    resp = client.get(
+        "/api/authorities/annotations", headers=auth_headers(token_a)
+    )
+    assert resp.status_code == 200, resp.text
+    rows_a = resp.json()["annotations"]
+    titles_a = sorted(r["title"] for r in rows_a)
+    assert titles_a == ["A on A", "A on B"]
+    for r in rows_a:
+        assert r["authority_court_name"] == "Delhi High Court"
+        assert r["authority_forum_level"] == "high_court"
+        assert r["authority_document_type"] == "judgment"
+        assert r["authority_neutral_citation"] == "2024:DHC:1111"
+        assert r["authority_decision_date"] == "2024-06-01"
+
+    # B sees only B's save — no leakage of A's annotations
+    resp = client.get(
+        "/api/authorities/annotations", headers=auth_headers(token_b)
+    )
+    assert resp.status_code == 200
+    rows_b = resp.json()["annotations"]
+    assert [r["title"] for r in rows_b] == ["B on B"]
+
+
+def test_saved_annotations_default_hides_archived_and_orders_newest_first(
+    client: TestClient,
+) -> None:
+    boot = bootstrap_company(client)
+    token = str(boot["access_token"])
+    auth_id = _seed_authority("Order + archive v History")
+
+    # Two saves; archive the older one
+    first = client.post(
+        f"/api/authorities/documents/{auth_id}/annotations",
+        headers=auth_headers(token),
+        json={"kind": "note", "title": "Older"},
+    )
+    assert first.status_code == 201
+    older_id = first.json()["id"]
+
+    second = client.post(
+        f"/api/authorities/documents/{auth_id}/annotations",
+        headers=auth_headers(token),
+        json={"kind": "flag", "title": "Newer"},
+    )
+    assert second.status_code == 201
+    newer_id = second.json()["id"]
+
+    archive = client.patch(
+        f"/api/authorities/annotations/{older_id}",
+        headers=auth_headers(token),
+        json={"is_archived": True},
+    )
+    assert archive.status_code == 200
+
+    # Default: archived hidden, newest-first
+    resp = client.get(
+        "/api/authorities/annotations", headers=auth_headers(token)
+    )
+    assert resp.status_code == 200
+    ids = [r["id"] for r in resp.json()["annotations"]]
+    assert ids == [newer_id]
+
+    # include_archived=true brings the older one back, newest-first preserved
+    resp = client.get(
+        "/api/authorities/annotations?include_archived=true",
+        headers=auth_headers(token),
+    )
+    assert resp.status_code == 200
+    ids = [r["id"] for r in resp.json()["annotations"]]
+    assert ids == [newer_id, older_id]

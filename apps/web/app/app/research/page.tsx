@@ -9,6 +9,7 @@ import {
   Search,
   SlidersHorizontal,
 } from "lucide-react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -144,6 +145,14 @@ export default function ResearchPage() {
           statsQuery.data
             ? `Searching ${statsQuery.data.document_count.toLocaleString()} judgments across SC + HCs. Every result links to source.`
             : "Hybrid retrieval across statutes, judgments, and your own precedents — every answer cited and traceable."
+        }
+        actions={
+          <Link href="/app/research/saved">
+            <Button variant="outline" size="sm" data-testid="research-open-saved">
+              <Bookmark className="mr-1 h-3.5 w-3.5" />
+              Saved research
+            </Button>
+          </Link>
         }
       />
 

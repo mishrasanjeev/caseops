@@ -1318,6 +1318,41 @@ export async function createAuthorityAnnotation(input: {
   );
 }
 
+// BUG-030: saved-research history (annotation joined with the
+// authority preview the list view needs to render in one round trip).
+export type SavedAuthorityAnnotation = {
+  id: string;
+  authority_document_id: string;
+  created_by_membership_id: string | null;
+  kind: "note" | "flag" | "tag";
+  title: string;
+  body: string | null;
+  is_archived: boolean;
+  created_at: string;
+  updated_at: string;
+  authority_court_name: string;
+  authority_forum_level: AuthorityForumLevel;
+  authority_document_type: AuthorityDocumentType;
+  authority_title: string;
+  authority_neutral_citation: string | null;
+  authority_case_reference: string | null;
+  authority_decision_date: string | null;
+  authority_summary: string;
+};
+
+export async function fetchSavedAuthorityAnnotations(input?: {
+  includeArchived?: boolean;
+  limit?: number;
+}): Promise<{ annotations: SavedAuthorityAnnotation[] }> {
+  const params = new URLSearchParams();
+  if (input?.includeArchived) params.set("include_archived", "true");
+  if (input?.limit) params.set("limit", String(input.limit));
+  const qs = params.toString();
+  return apiRequest<{ annotations: SavedAuthorityAnnotation[] }>(
+    qs ? `/api/authorities/annotations?${qs}` : "/api/authorities/annotations",
+  );
+}
+
 // --- Sprint 5 BG-011: contract intelligence + redline ---
 
 export type ContractIntelligenceSummary = {

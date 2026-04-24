@@ -168,3 +168,30 @@ class AuthorityAnnotationUpdateRequest(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=255)
     body: str | None = Field(default=None, max_length=8000)
     is_archived: bool | None = None
+
+
+class SavedAuthorityAnnotationRecord(BaseModel):
+    """An annotation joined with the authority preview the saved-research
+    history view needs to render a row without a second fetch (BUG-030)."""
+
+    id: str
+    authority_document_id: str
+    created_by_membership_id: str | None
+    kind: AuthorityAnnotationKindLiteral
+    title: str
+    body: str | None
+    is_archived: bool
+    created_at: datetime
+    updated_at: datetime
+    authority_court_name: str
+    authority_forum_level: AuthorityForumLevelLiteral
+    authority_document_type: AuthorityDocumentTypeLiteral
+    authority_title: str
+    authority_neutral_citation: str | None
+    authority_case_reference: str | None
+    authority_decision_date: date | None
+    authority_summary: str
+
+
+class SavedAnnotationListResponse(BaseModel):
+    annotations: list[SavedAuthorityAnnotationRecord]
