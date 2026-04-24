@@ -112,6 +112,15 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Next build (reused by `next start` in playwright webServer)
+        # NEXT_PUBLIC_* are baked at build time. Playwright opens pages on
+        # http://127.0.0.1:3100 and the e2e API runs on http://127.0.0.1:8000.
+        # Without this env, Next defaults the client bundle to
+        # http://localhost:8000 — which means Set-Cookie scopes to host
+        # `localhost` and JS on host `127.0.0.1` cannot read the
+        # caseops_csrf cookie, so every mutating request fails CSRF.
+        # Locally the same bug is masked by apps/web/.env.local.
+        env:
+          NEXT_PUBLIC_API_BASE_URL: http://127.0.0.1:8000
         run: npm run build:web
 
       - name: Playwright (app config)
