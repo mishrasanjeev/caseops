@@ -112,6 +112,62 @@ test.describe("Prod smoke (2026-04-24 sweep)", () => {
     ).toBeVisible();
   });
 
+  test("authenticated mutating fetch from caseops.ai carries cookie + CSRF (BUG-011)", async ({
+    page,
+  }) => {
+    // BUG-011 anchor: when the cookies are scoped to api.caseops.ai
+    // only, document.cookie on caseops.ai cannot see the CSRF
+    // cookie, the web client sends no X-CSRF-Token header, and the
+    // CSRF middleware returns 403 on every mutation. We assert the
+    // fix by reading document.cookie from inside the web origin
+    // (must include caseops_csrf) AND by issuing a mutating fetch
+    // with credentials:'include' against the API and confirming
+    // it does NOT come back with "Missing CSRF token".
+    await page.goto("/app");
+    const cookies = await page.evaluate(() => document.cookie);
+    expect(
+      cookies,
+      `document.cookie on caseops.ai must contain caseops_csrf. Got: ${cookies}`,
+    ).toContain("caseops_csrf");
+
+    const result = await page.evaluate(async () => {
+      const csrf = document.cookie
+        .split(";")
+        .map((c) => c.trim())
+        .find((c) => c.startsWith("caseops_csrf="))
+        ?.split("=", 2)[1];
+      const resp = await fetch("https://api.caseops.ai/api/intake/", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": csrf ?? "",
+        },
+        body: JSON.stringify({}),
+      });
+      let detail = "";
+      try {
+        const body = await resp.json();
+        detail = body?.detail ?? "";
+      } catch {
+        /* ignore */
+      }
+      return { status: resp.status, detail, hasCsrf: Boolean(csrf) };
+    });
+    expect(
+      result.hasCsrf,
+      "Web origin could not read caseops_csrf cookie",
+    ).toBe(true);
+    // We expect the request to be REJECTED by validation (empty
+    // body) — but NOT by CSRF. A 403 with "Missing CSRF token" is
+    // BUG-011. Anything else (400, 422) means the CSRF check
+    // passed.
+    expect(
+      result.detail.toLowerCase(),
+      `Got CSRF rejection — BUG-011 has regressed: ${JSON.stringify(result)}`,
+    ).not.toContain("csrf");
+  });
+
   test("dashboard does not horizontally scroll on mobile (BUG-012)", async ({
     page,
   }) => {
