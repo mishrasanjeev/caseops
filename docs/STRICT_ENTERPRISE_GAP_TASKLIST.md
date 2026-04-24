@@ -12,14 +12,15 @@ Status legend:
 - `Missing`
 - `Stale-doc`
 
-Current overall verdict (2026-04-24): `GO with caveat`. EG-001 (HttpOnly
-cookies + double-submit CSRF) and EG-004 (per-route AI rate limits) closed
-and live in prod (revision `caseops-api-00042-zlj`, commit `fbb6a29`).
-Remaining stop-ship gaps before unconditional `GO`: EG-002 (auto-migrate
-at startup), EG-003 (ClamAV not wired in Cloud Run), EG-005/006 (matter
-summary + draft preview model-run governance), EG-007 / WTD-8.5 (full
-secret-management rollout). P1-009 backup/restore drill is the immediate
-hardening item underway 2026-04-24.
+Current overall verdict (2026-04-24): `GO with caveat`. Closed and live
+in prod: EG-001 (HttpOnly cookies + double-submit CSRF), EG-002 (auto-
+migrate off + canonical deploy-prod.sh script with migrate-job gate),
+EG-004 (per-route AI rate limits), P1-009 (backup/restore drill).
+Remaining stop-ship gaps before unconditional `GO`: EG-003 (ClamAV not
+wired in Cloud Run), EG-005/006 (matter summary + draft preview
+model-run governance), EG-007 / WTD-8.5 (full secret-management
+rollout — DB URL is via Secret Manager but rotation evidence + other
+sensitive env aren't fully managed yet).
 
 ## Strict Repo Quality Audit (2026-04-24) — P0 status
 
@@ -115,13 +116,18 @@ submission, time entries) intentionally next; not landed today.
   `POST /api/portal/auth/request-link` returned 200 (auth path
   exempt as designed).
 
-- `EG-002` `Partially implemented` Deploy-time migration safety.
-  Evidence: `apps/api/src/caseops_api/main.py:17-22`,
-  `infra/cloudrun/api-service.yaml:44-45`,
-  `apps/api/src/caseops_api/core/settings.py:54`.
-  Gap: the live API service still auto-runs DB migrations on startup.
-  Close when: schema migration becomes a separate controlled job or release
-  step, and runtime services start with `CASEOPS_AUTO_MIGRATE=false`.
+- `EG-002` `Implemented` Deploy-time migration safety
+  (closed 2026-04-24).
+  Evidence: live `caseops-api` service has `CASEOPS_AUTO_MIGRATE=false`
+  (verified via `gcloud run services describe`); manifest
+  `infra/cloudrun/api-service.yaml:48-55` declares the policy with the
+  EG-002 anchor comment; separate `caseops-migrate-job` Cloud Run Job
+  runs `python -m alembic upgrade head` on the same image as the API;
+  `scripts/deploy-prod.sh` (added 2026-04-24) is the canonical deploy
+  path and enforces order: build → migrate-job → api → web →
+  staleness sweep. Migrate-job re-bumped to `caseops-api:fbb6a29` and
+  executed cleanly (`caseops-migrate-job-nxbkc`, no-op since alembic
+  already at `20260424_0001`).
 
 - `EG-003` `Partially implemented` Malware scanning enforcement.
   Evidence: `apps/api/src/caseops_api/services/virus_scan.py:80-82`,
