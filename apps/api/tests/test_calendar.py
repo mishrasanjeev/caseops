@@ -314,6 +314,40 @@ def test_calendar_ics_export_shape_is_rfc5545(client: TestClient) -> None:
     assert "SUMMARY:[HEARING] Ical hearing" in body
 
 
+def test_ics_openapi_media_type_matches_runtime_header(
+    client: TestClient,
+) -> None:
+    """QG-CAL-002 (P0-003, 2026-04-24). The OpenAPI schema must
+    declare the ICS route as text/calendar (not text/plain), and the
+    actual runtime response header must agree with the schema. A
+    drift between the two breaks generated clients (which trust
+    OpenAPI) for every consumer."""
+    schema = client.get("/openapi.json").json()
+    op = schema["paths"]["/api/calendar/events.ics"]["get"]
+    content = op["responses"]["200"]["content"]
+    declared = list(content.keys())
+    assert any(c.startswith("text/calendar") for c in declared), (
+        f"OpenAPI declares wrong media type for ICS: {declared}"
+    )
+
+    bootstrap = bootstrap_company(client)
+    headers = auth_headers(str(bootstrap["access_token"]))
+    today = date.today()
+    resp = client.get(
+        "/api/calendar/events.ics",
+        headers=headers,
+        params={
+            "from": today.isoformat(),
+            "to": (today + timedelta(days=1)).isoformat(),
+        },
+    )
+    assert resp.status_code == 200
+    runtime_ctype = resp.headers["content-type"]
+    assert runtime_ctype.startswith("text/calendar"), (
+        f"Runtime header drift: {runtime_ctype}"
+    )
+
+
 def test_calendar_rejects_oversize_range_400(client: TestClient) -> None:
     """The 92-day cap protects the API from a UI bug or scraper that
     asks for "show me all events ever" — that query would dump the

@@ -29,6 +29,11 @@ dependencies = [
   "voyageai>=0.3.7",
   "fastembed>=0.4.0",
   "clamd>=1.0.2",
+  # P0-004 (2026-04-24): cryptography is REQUIRED for SendGrid
+  # webhook signature verification. Previously imported at use-time
+  # with a try/except that silently fail-opened on ImportError;
+  # making it an explicit top-level dep removes that footgun.
+  "cryptography>=42.0.0",
 ]
 
 [project.optional-dependencies]

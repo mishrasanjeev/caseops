@@ -48,27 +48,10 @@ fi
 # Sanity import check — fails loudly if a top-level runtime dep is
 # missing from the venv. This catches the exact symptom that bit
 # Codex's verification on 2026-04-22 (ModuleNotFoundError: slowapi).
-"$VENV_PY" -c "
-import sys
-import importlib.util
-# Keep this list aligned with apps/api/pyproject.toml ``dependencies``.
-# Module names use the import path (not the distribution name) — e.g.
-# fpdf2 -> fpdf, python-docx -> docx, google-cloud-storage -> google.
-# We list every top-level runtime dep so a partial sync surfaces here
-# instead of mid-pytest as a confusing ImportError.
-required = [
-    'fastapi', 'sqlalchemy', 'alembic', 'pydantic', 'pydantic_settings',
-    'slowapi', 'httpx', 'voyageai', 'anthropic', 'fpdf', 'docx',
-    'google.cloud.storage', 'jwt', 'pdfminer', 'PIL', 'fastembed',
-    'boto3', 'clamd',
-]
-missing = [m for m in required if importlib.util.find_spec(m) is None]
-if missing:
-    print('[verify-backend] FATAL — missing runtime deps in venv:', missing, file=sys.stderr)
-    print('[verify-backend] Fix: uv sync --frozen --no-install-project', file=sys.stderr)
-    sys.exit(2)
-print('[verify-backend] venv has all required runtime deps')
-"
+# QG-REL-001/-002 (P0-002, 2026-04-24): the bash and PowerShell
+# variants now share the same Python sanity check via
+# ``scripts/_backend_sanity_check.py`` so the two stay in lockstep.
+"$VENV_PY" "$REPO_ROOT/scripts/_backend_sanity_check.py"
 
 echo "[verify-backend] running ruff"
 "$VENV_RUFF" check src tests

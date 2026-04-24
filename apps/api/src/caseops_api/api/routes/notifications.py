@@ -26,7 +26,7 @@ from caseops_api.api.dependencies import (
     get_current_context,
     require_capability,
 )
-from caseops_api.core.settings import get_settings
+from caseops_api.core.settings import get_settings, is_non_local_env
 from caseops_api.db.models import HearingReminder
 from caseops_api.services.communications import (
     apply_sendgrid_communication_event,
@@ -88,21 +88,50 @@ class WebhookAckResponse(BaseModel):
 # ---------------------------------------------------------------
 
 
+class WebhookConfigError(Exception):
+    """Raised when the SendGrid webhook cannot be safely verified
+    AND the env doesn't permit the unverified fallback. The route
+    layer translates this into a 503 so a misconfigured prod cannot
+    silently accept unsigned events."""
+
+
+def _is_local_env() -> bool:
+    return not is_non_local_env(get_settings().env)
+
+
 def _verify_sendgrid_signature(
     body: bytes,
     signature: str | None,
     timestamp: str | None,
     public_key_b64: str | None,
 ) -> bool:
-    """Verify SendGrid's ECDSA-signed webhook. Disabled when no
-    public key is configured (UAT / initial rollout); logged loudly
-    so ops can't forget to wire it."""
+    """Verify SendGrid's ECDSA-signed webhook.
+
+    P0-004 (2026-04-24, QG-NOTIF-003/-004) — fail closed outside
+    local/test:
+
+    - In local/test env, an unconfigured public key downgrades to
+      "skip + warn" so dev work doesn't need a real ECDSA key.
+    - In every other env (dev / staging / production), the absence
+      of either ``CASEOPS_SENDGRID_WEBHOOK_PUBLIC_KEY`` or the
+      ``cryptography`` library raises ``WebhookConfigError`` so the
+      route returns 503. Silent fail-open is gone.
+    """
+    local = _is_local_env()
     if not public_key_b64:
-        logger.warning(
-            "SendGrid webhook signature check SKIPPED — set "
-            "CASEOPS_SENDGRID_WEBHOOK_PUBLIC_KEY to enforce.",
+        if local:
+            logger.warning(
+                "SendGrid webhook signature check SKIPPED in local env — "
+                "set CASEOPS_SENDGRID_WEBHOOK_PUBLIC_KEY to enforce.",
+            )
+            return True
+        logger.error(
+            "SendGrid webhook signature key MISSING in non-local env — "
+            "rejecting webhook to prevent silent fail-open.",
         )
-        return True
+        raise WebhookConfigError(
+            "SendGrid webhook public key is not configured."
+        )
     if not signature or not timestamp:
         return False
     try:
@@ -111,9 +140,20 @@ def _verify_sendgrid_signature(
         from cryptography.exceptions import InvalidSignature
         from cryptography.hazmat.primitives import hashes, serialization
         from cryptography.hazmat.primitives.asymmetric import ec
-    except ImportError:  # pragma: no cover — cryptography already in tree
-        logger.warning("cryptography lib unavailable; skipping sig check")
-        return True
+    except ImportError as exc:
+        if local:
+            logger.warning(
+                "cryptography lib unavailable in local env; "
+                "skipping sig check",
+            )
+            return True
+        logger.error(
+            "cryptography lib unavailable in non-local env — "
+            "rejecting webhook to prevent silent fail-open.",
+        )
+        raise WebhookConfigError(
+            "cryptography lib is required to verify SendGrid signatures."
+        ) from exc
     try:
         key_der = base64.b64decode(public_key_b64)
         public_key = serialization.load_der_public_key(key_der)
@@ -138,9 +178,23 @@ async def sendgrid_events(
 ) -> WebhookAckResponse:
     body = await request.body()
     settings = get_settings()
-    if not _verify_sendgrid_signature(
-        body, signature, timestamp, settings.sendgrid_webhook_public_key,
-    ):
+    try:
+        valid = _verify_sendgrid_signature(
+            body, signature, timestamp, settings.sendgrid_webhook_public_key,
+        )
+    except WebhookConfigError as exc:
+        # P0-004: fail closed when prod isn't configured to verify.
+        # 503 because the request is well-formed; the SERVER is
+        # missing config required to process it safely.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "SendGrid webhook verification is not available in this "
+                "environment. Configure CASEOPS_SENDGRID_WEBHOOK_PUBLIC_KEY "
+                "and the cryptography dependency."
+            ),
+        ) from exc
+    if not valid:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="SendGrid webhook signature verification failed.",

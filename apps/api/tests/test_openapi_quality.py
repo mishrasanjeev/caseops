@@ -72,6 +72,12 @@ def test_every_api_route_returns_json_or_file(client: TestClient) -> None:
         "application/pdf",
         "application/octet-stream",
         "application/x-ndjson",
+        # P0-003 (2026-04-24, FT-043 + QG-CAL-002): the calendar feed
+        # is RFC 5545 iCalendar. The route advertises both with and
+        # without the charset parameter depending on FastAPI version
+        # so accept both.
+        "text/calendar",
+        "text/calendar; charset=utf-8",
     }
     for path, method, op in _iter_operations(schema):
         if not path.startswith("/api/") or path in EXEMPT_PATHS:

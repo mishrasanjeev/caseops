@@ -18,7 +18,6 @@ import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { API_BASE_URL } from "@/lib/api/config";
-import { getStoredToken } from "@/lib/session";
 import { useCapability } from "@/lib/capabilities";
 
 function sinceIsoOrNull(local: string): string | null {
@@ -48,11 +47,12 @@ export default function AdminPage() {
   const [busy, setBusy] = useState(false);
 
   async function handleDownload() {
-    const token = getStoredToken();
-    if (!token) {
-      toast.error("Your session expired. Sign in again.");
-      return;
-    }
+    // P0-001 (2026-04-24): EG-001 cookie migration removed the
+    // localStorage token, but this page still bearer-fetched and
+    // threw "Your session expired" even when the cookie session was
+    // perfectly valid. Use credentials: "include" so the browser
+    // sends the HttpOnly session cookie. GET so no CSRF header
+    // needed (CSRF middleware exempts GET/HEAD/OPTIONS).
     setBusy(true);
     try {
       const params = new URLSearchParams();
@@ -66,8 +66,17 @@ export default function AdminPage() {
         `${API_BASE_URL}/api/admin/audit/export` +
         (params.toString() ? `?${params.toString()}` : "");
       const resp = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+        headers: { Accept: "*/*" },
       });
+      if (resp.status === 401) {
+        throw new Error("Sign in again to export the audit trail.");
+      }
+      if (resp.status === 403) {
+        throw new Error(
+          "Your role does not include audit:export — ask the workspace owner.",
+        );
+      }
       if (!resp.ok) {
         let detail = "Could not export the audit trail.";
         try {

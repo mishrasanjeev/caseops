@@ -10,7 +10,7 @@ from datetime import date, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import Response
 
 from caseops_api.api.dependencies import DbSession, get_current_context
 from caseops_api.schemas.calendar import (
@@ -22,6 +22,19 @@ from caseops_api.services.calendar import (
     render_events_as_ical,
 )
 from caseops_api.services.identity import SessionContext
+
+
+class ICalendarResponse(Response):
+    """RFC 5545 iCalendar response. P0-003 (2026-04-24): the prior
+    implementation used ``response_class=PlainTextResponse`` which
+    forced FastAPI to declare ``text/plain`` in OpenAPI even though
+    the runtime response set ``text/calendar`` on the wire.
+    Subclassing ``Response`` with the correct ``media_type`` keeps
+    OpenAPI and the wire header in sync, which test_openapi_quality
+    asserts."""
+
+    media_type = "text/calendar; charset=utf-8"
+
 
 router = APIRouter()
 CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
@@ -94,7 +107,7 @@ async def list_calendar_events(
 
 @router.get(
     "/events.ics",
-    response_class=PlainTextResponse,
+    response_class=ICalendarResponse,
     summary="Download / subscribe to the calendar as iCalendar (FT-043).",
 )
 async def list_calendar_events_ical(
@@ -103,7 +116,7 @@ async def list_calendar_events_ical(
     range_from: Annotated[date, Query(alias="from")],
     range_to: Annotated[date, Query(alias="to")],
     kinds: Annotated[list[CalendarEventKind] | None, Query()] = None,
-) -> PlainTextResponse:
+) -> ICalendarResponse:
     """Return the same event feed as :func:`list_calendar_events` but
     wire-formatted as RFC 5545 vCalendar. Google Calendar / Outlook
     / Apple Calendar all accept this as a subscribable URL so users
@@ -132,9 +145,8 @@ async def list_calendar_events_ical(
     body = render_events_as_ical(
         events, calendar_name=f"CaseOps — {context.company.name}",
     )
-    return PlainTextResponse(
+    return ICalendarResponse(
         content=body,
-        media_type="text/calendar; charset=utf-8",
         headers={
             # Content-Disposition so a browser "download" button
             # yields a nicely-named .ics file, while subscribe-by-
