@@ -3,7 +3,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { Suspense, useEffect, useRef } from "react";
 
 import { Button } from "@/components/ui/Button";
 import {
@@ -16,7 +16,19 @@ import {
 import { apiErrorMessage } from "@/lib/api/config";
 import { verifyPortalMagicLink } from "@/lib/api/portal";
 
+// Next.js requires useSearchParams() to be inside a Suspense boundary
+// so the page can statically render the shell while the client reads
+// the URL token. Without this the prod build (Turbopack) errors with
+// "useSearchParams() should be wrapped in a suspense boundary".
 export default function PortalVerifyPage() {
+  return (
+    <Suspense fallback={<VerifyShell loading />}>
+      <PortalVerifyInner />
+    </Suspense>
+  );
+}
+
+function PortalVerifyInner() {
   const params = useSearchParams();
   const token = params?.get("token") ?? "";
   const router = useRouter();
@@ -75,6 +87,31 @@ export default function PortalVerifyPage() {
               {mutation.isPending ? "Verifying" : "Loading workspace"}
             </p>
           )}
+        </CardContent>
+      </Card>
+    </main>
+  );
+}
+
+function VerifyShell({ loading }: { loading: boolean }) {
+  return (
+    <main className="flex min-h-screen flex-col items-center justify-center bg-[var(--color-bg)] px-6">
+      <Card className="w-full max-w-md">
+        <CardHeader>
+          <CardTitle as="h1" className="text-lg">
+            Verifying your sign-in link
+          </CardTitle>
+          <CardDescription>
+            One-time, single-use, expires in 30 minutes.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <p className="flex items-center gap-2 text-sm text-[var(--color-ink-2)]">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading
+            </p>
+          ) : null}
         </CardContent>
       </Card>
     </main>
