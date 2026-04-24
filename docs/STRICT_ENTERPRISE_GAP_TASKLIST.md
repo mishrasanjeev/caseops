@@ -12,8 +12,14 @@ Status legend:
 - `Missing`
 - `Stale-doc`
 
-Current overall verdict (2026-04-23): `NO-GO` for claiming "enterprise-grade,
-hardened, ready to scale" without caveat.
+Current overall verdict (2026-04-24): `GO with caveat`. EG-001 (HttpOnly
+cookies + double-submit CSRF) and EG-004 (per-route AI rate limits) closed
+and live in prod (revision `caseops-api-00042-zlj`, commit `fbb6a29`).
+Remaining stop-ship gaps before unconditional `GO`: EG-002 (auto-migrate
+at startup), EG-003 (ClamAV not wired in Cloud Run), EG-005/006 (matter
+summary + draft preview model-run governance), EG-007 / WTD-8.5 (full
+secret-management rollout). P1-009 backup/restore drill is the immediate
+hardening item underway 2026-04-24.
 
 ## Strict Repo Quality Audit (2026-04-24) — P0 status
 
@@ -58,8 +64,11 @@ P1 status after commit `8466911`:
 - `P1-007` `Implemented` AI route governance gate enforces rate limits for
   `/api/ai/*` and `/api/recommendations/*` mutations.
 - `P1-008` `Implemented` Upload size cap and abuse tests landed.
-- `P1-009` `Partially implemented` Runbook exists, but backup/restore drill
-  evidence against a clean environment has not been re-run in this session.
+- `P1-009` `Implemented` Backup/restore drill executed end-to-end against a
+  throwaway clone in `asia-south1` on 2026-04-24. RTO 7 min for the 200 GB
+  corpus; row counts, alembic version, pgvector + HNSW indexes all parity with
+  prod. Evidence: `docs/RESTORE_DRILL_2026-04-24.md`. Follow-on gaps tracked:
+  cross-region backup export and application-level cutover drill.
 - `P1-010` `Implemented` OpenAPI client drift gate is wired into CI.
 
 The original `QG-*` entries below are retained as audit history; this section
@@ -91,13 +100,20 @@ submission, time entries) intentionally next; not landed today.
 
 ## Stop-Ship Control Gaps
 
-- `EG-001` `Missing` Browser bearer-token hardening.
-  Evidence: `apps/web/lib/session.ts:5-48`, `apps/web/next.config.ts:3-8`.
-  Gap: access tokens still live in `localStorage`, so any successful XSS sink
-  becomes a session-exfiltration event.
-  Close when: browser auth moves to HttpOnly/SameSite cookies or an equivalent
-  opaque session transport, the CSRF story is explicit, and the localStorage
-  token path is removed.
+- `EG-001` `Implemented` Browser bearer-token hardening (closed
+  2026-04-24, deployed in revision `caseops-api-00042-zlj` on commit
+  `fbb6a29`).
+  Evidence: `apps/web/lib/session.ts:35-37` — `getStoredToken()`
+  always returns `null`; HttpOnly `caseops_session` + JS-readable
+  `caseops_csrf` cookies issued by `apps/api/src/caseops_api/core/cookies.py`
+  with `Domain=.caseops.ai` (BUG-011 fix) and matching CSRF
+  middleware in `apps/api/src/caseops_api/core/csrf.py`. Phase C-2
+  (commit `65e8873`) extended the same double-submit pattern to
+  the portal surface (`PORTAL_CSRF_COOKIE` + `X-Portal-CSRF-Token`).
+  Live prod smoke 2026-04-24: `POST /api/portal/matters/.../communications`
+  without `X-Portal-CSRF-Token` returned 403 "Missing CSRF token.";
+  `POST /api/portal/auth/request-link` returned 200 (auth path
+  exempt as designed).
 
 - `EG-002` `Partially implemented` Deploy-time migration safety.
   Evidence: `apps/api/src/caseops_api/main.py:17-22`,
@@ -119,17 +135,18 @@ submission, time entries) intentionally next; not landed today.
   Close when: the production path has a real scanner wired, enforced, audited,
   and fail-closed.
 
-- `EG-004` `Missing` Authenticated abuse controls for expensive AI routes.
-  Evidence: rate limits are present only at
-  `apps/api/src/caseops_api/api/routes/auth.py:21-23` and
-  `apps/api/src/caseops_api/api/routes/bootstrap.py:14-20`, while expensive
-  generation paths remain unthrottled at
-  `apps/api/src/caseops_api/api/routes/matters.py:298-400` and
-  `apps/api/src/caseops_api/api/routes/drafting.py:165-193`.
-  Gap: authenticated users can repeatedly hit AI-heavy routes without route
-  class limits, tenant budgets, or cost guardrails.
-  Close when: expensive endpoints have route or tenant-aware throttles and the
-  strongest practical regression coverage.
+- `EG-004` `Implemented` Authenticated abuse controls for expensive AI routes
+  (closed 2026-04-24 via P1-007).
+  Evidence: `ai_route_rate_limit` + `tenant_aware_key` from
+  `apps/api/src/caseops_api/core/rate_limit.py` are wired on every
+  AI-mutating endpoint:
+  `apps/api/src/caseops_api/api/routes/matters.py:329,860,1015`,
+  `apps/api/src/caseops_api/api/routes/drafting.py:180`,
+  `apps/api/src/caseops_api/api/routes/ai.py:69,90,111,132,156,179,202,221`,
+  `apps/api/src/caseops_api/api/routes/recommendations.py:13`.
+  Closure was tracked separately as P1-007 in this same ledger.
+  Tenant-budget caps (cost-aware, not just request-rate) remain
+  open as a follow-on under EG-005 / EG-006 model-run governance.
 
 - `EG-005` `Partially implemented` Matter summary governance.
   Evidence: `apps/api/src/caseops_api/services/matter_summary.py:231-302`,
@@ -227,7 +244,11 @@ submission, time entries) intentionally next; not landed today.
 - `WTD-7.4` `Missing` Statute, Section, Issue, and Relief model.
   Evidence: `docs/WORK_TO_BE_DONE.md:547-550`.
 
-- `WTD-8.3` `Missing` Backup, restore, and tenant-export drill evidence.
+- `WTD-8.3` `Partially implemented` Backup + restore drill closed
+  2026-04-24 (see P1-009 above and `docs/RESTORE_DRILL_2026-04-24.md`).
+  Remaining sub-items: cross-region backup export, per-tenant export
+  drill (right-to-erasure / portability), application-level cutover
+  drill (Cloud Run flip onto a restored instance).
   Evidence: `docs/WORK_TO_BE_DONE.md:576-582`.
 
 - `WTD-8.4` `Partially implemented` Full CI/CD.
@@ -359,6 +380,24 @@ submission, time entries) intentionally next; not landed today.
   wired into CI.
   Evidence: `.github/workflows/security.yml`,
   `docs/CODEX_REVIEW_PACK_2026-04-24.md`.
+
+## 2026-04-24 Product-Scope Queue Additions
+
+- `BAAD-001` `Missing` Bench-aware appeal drafting is not wired end to end.
+  Judge profiles and matter bench-match exist, but the drafting pipeline does
+  not yet provide an appeal-specific template, does not build a tenant-safe
+  bench strategy context, and does not inject cited judge or bench history into
+  appeal drafts.
+  Evidence: `apps/api/src/caseops_api/api/routes/courts.py`,
+  `apps/api/src/caseops_api/services/bench_matcher.py`,
+  `apps/api/src/caseops_api/services/drafting.py`,
+  `apps/api/src/caseops_api/schemas/drafting_templates.py`,
+  `docs/BENCH_AWARE_APPEAL_DRAFTING_TASKLIST_2026-04-24.md`.
+  Required closure: implement `appeal_memorandum`,
+  `GET /api/matters/{matter_id}/bench-strategy-context`, drafting integration,
+  UI review of context quality, and backend/frontend/E2E/security tests. The
+  feature must stay evidence-backed and must not introduce judge favorability
+  scoring or outcome prediction.
 
 ## Claude Discipline
 
