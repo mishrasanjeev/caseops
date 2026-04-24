@@ -64,3 +64,59 @@ def decode_access_token(token: str) -> dict[str, str]:
         "role": str(payload["role"]),
         "issued_at": str(payload["iat"]),
     }
+
+
+# ---------------------------------------------------------------
+# Phase C-1 (2026-04-24) — portal session tokens.
+#
+# A separate codec from create_access_token / decode_access_token
+# because portal sessions carry portal_user_id + company_id only,
+# never a Membership identity. Mixing the two payload shapes in one
+# codec invites the wrong dependency reading the wrong claim and
+# silently authorising a portal user as an internal Membership.
+# ---------------------------------------------------------------
+
+PORTAL_SESSION_TTL_MINUTES = 60 * 24 * 7  # 7 days
+PORTAL_TOKEN_KIND = "portal_session"
+
+
+def create_portal_session_token(
+    *, portal_user_id: str, company_id: str, role: str
+) -> str:
+    settings = get_settings()
+    issued_at = datetime.now(UTC)
+    payload = {
+        "kind": PORTAL_TOKEN_KIND,
+        "sub": portal_user_id,
+        "company_id": company_id,
+        "role": role,
+        "iat": issued_at,
+        "exp": issued_at + timedelta(minutes=PORTAL_SESSION_TTL_MINUTES),
+    }
+    return jwt.encode(payload, settings.auth_secret, algorithm="HS256")
+
+
+def decode_portal_session_token(token: str) -> dict[str, str]:
+    settings = get_settings()
+    try:
+        payload = jwt.decode(token, settings.auth_secret, algorithms=["HS256"])
+    except InvalidTokenError as exc:
+        raise TokenValidationError("Invalid portal session token.") from exc
+
+    if payload.get("kind") != PORTAL_TOKEN_KIND:
+        # Reject internal-session JWTs presented to the portal endpoint
+        # so a stolen /app token cannot satisfy /api/portal/* auth.
+        raise TokenValidationError("Token is not a portal session.")
+
+    required_claims = {"sub", "company_id", "role", "iat"}
+    if not required_claims.issubset(payload):
+        raise TokenValidationError(
+            "Portal session token is missing required claims.",
+        )
+
+    return {
+        "portal_user_id": str(payload["sub"]),
+        "company_id": str(payload["company_id"]),
+        "role": str(payload["role"]),
+        "issued_at": str(payload["iat"]),
+    }

@@ -58,6 +58,14 @@ PUBLIC_MUTATING_ROUTES: set[tuple[str, str]] = {
     # (SendGrid is a third party), so a role/capability guard would
     # reject every legitimate event.
     ("POST", "/api/webhooks/sendgrid/events"),
+    # Phase C-1 (2026-04-24, MOD-TS-014) — portal sign-in surface.
+    # request-link is intentionally unauthenticated and returns the
+    # same response on hit/miss to defeat email enumeration.
+    ("POST", "/api/portal/auth/request-link"),
+    # verify-link consumes a one-time token; the token IS the auth.
+    ("POST", "/api/portal/auth/verify-link"),
+    # logout clears the portal session cookie; idempotent.
+    ("POST", "/api/portal/auth/logout"),
 }
 
 

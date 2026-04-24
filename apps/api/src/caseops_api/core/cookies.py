@@ -102,10 +102,53 @@ def clear_session_cookies(response: Response, *, env: str | None) -> None:
         )
 
 
+# Phase C-1 (2026-04-24) — Portal session cookie. DELIBERATELY a
+# different name from SESSION_COOKIE so the same browser on the same
+# domain can hold both an internal /app session and a /portal session
+# at once without either accidentally satisfying the other surface's
+# auth check. The portal dependency only ever reads PORTAL_SESSION_COOKIE.
+PORTAL_SESSION_COOKIE = "caseops_portal_session"
+
+
+def issue_portal_session_cookie(
+    response: Response,
+    *,
+    access_token: str,
+    ttl_seconds: int,
+    env: str | None,
+) -> None:
+    secure = _cookie_secure(env)
+    response.set_cookie(
+        key=PORTAL_SESSION_COOKIE,
+        value=access_token,
+        max_age=ttl_seconds,
+        httponly=True,
+        secure=secure,
+        samesite="lax",
+        path="/",
+    )
+
+
+def clear_portal_session_cookie(response: Response, *, env: str | None) -> None:
+    secure = _cookie_secure(env)
+    response.set_cookie(
+        key=PORTAL_SESSION_COOKIE,
+        value="",
+        max_age=0,
+        httponly=True,
+        secure=secure,
+        samesite="lax",
+        path="/",
+    )
+
+
 __all__ = [
     "CSRF_COOKIE",
     "CSRF_HEADER",
+    "PORTAL_SESSION_COOKIE",
     "SESSION_COOKIE",
+    "clear_portal_session_cookie",
     "clear_session_cookies",
+    "issue_portal_session_cookie",
     "issue_session_cookies",
 ]

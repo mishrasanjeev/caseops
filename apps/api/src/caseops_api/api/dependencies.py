@@ -1,16 +1,22 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
+from datetime import UTC
+from datetime import datetime as _datetime
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
-from caseops_api.core.cookies import SESSION_COOKIE
+from caseops_api.core.cookies import PORTAL_SESSION_COOKIE, SESSION_COOKIE
 from caseops_api.core.observability import set_tenant_context
-from caseops_api.core.security import TokenValidationError, decode_access_token
-from caseops_api.db.models import MembershipRole
+from caseops_api.core.security import (
+    TokenValidationError,
+    decode_access_token,
+    decode_portal_session_token,
+)
+from caseops_api.db.models import MembershipRole, PortalUser
 from caseops_api.db.session import get_db_session
 from caseops_api.services.identity import SessionContext, get_session_context
 
@@ -198,6 +204,11 @@ CAPABILITY_ROLES: dict[str, frozenset[MembershipRole]] = {
     # collected the pack and the reviewer who approves it.
     "clients:kyc_submit": _ALL_FEE_EARNERS,
     "clients:kyc_review": _STAFF,
+    # Phase C-1 (2026-04-24, MOD-TS-014). Inviting an external party
+    # into the workspace is a workspace-admin act — same gate as
+    # company:manage_users. Listing/revoking grants follows the same.
+    "portal:invite": _OWNER_ADMIN,
+    "portal:manage_grants": _OWNER_ADMIN,
 }
 
 
@@ -257,3 +268,56 @@ def list_capabilities(roles: Iterable[MembershipRole]) -> list[str]:
     """Helper for sanity checks / tests."""
     role_set = frozenset(roles)
     return sorted(cap for cap, rs in CAPABILITY_ROLES.items() if role_set & rs)
+
+
+# ---------------------------------------------------------------
+# Phase C-1 (2026-04-24, MOD-TS-014) — portal user dependency.
+#
+# Portal sessions ride on a SEPARATE cookie (PORTAL_SESSION_COOKIE) so
+# the same browser can hold both a /app session and a /portal session
+# without either accidentally satisfying the other surface's auth. This
+# dependency reads ONLY the portal cookie and decodes ONLY portal-kind
+# JWTs — an internal /app session token presented here will be rejected
+# at the JWT-kind check inside ``decode_portal_session_token``.
+# ---------------------------------------------------------------
+
+
+def get_current_portal_user(
+    request: Request,
+    session: DbSession,
+) -> PortalUser:
+    cookie_token = request.cookies.get(PORTAL_SESSION_COOKIE)
+    if not cookie_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Sign in to the portal to continue.",
+        )
+    try:
+        claims = decode_portal_session_token(cookie_token)
+    except TokenValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(exc),
+        ) from exc
+
+    portal_user = session.get(PortalUser, claims["portal_user_id"])
+    if portal_user is None or not portal_user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Portal user is no longer active.",
+        )
+
+    # Honour ``sessions_valid_after`` so a workspace owner can revoke
+    # portal access immediately and a stale cookie cannot keep working.
+    if portal_user.sessions_valid_after is not None:
+        issued_at_raw = int(claims["issued_at"])
+        issued_at = _datetime.fromtimestamp(issued_at_raw, tz=UTC)
+        valid_after = portal_user.sessions_valid_after
+        if valid_after.tzinfo is None:
+            valid_after = valid_after.replace(tzinfo=UTC)
+        if issued_at < valid_after:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Portal session was revoked. Sign in again.",
+            )
+    return portal_user

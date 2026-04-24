@@ -21,6 +21,7 @@ from caseops_api.api.routes import (
     notifications,
     outside_counsel,
     payments,
+    portal,
     recommendations,
     teams,
 )
@@ -71,4 +72,12 @@ api_router.include_router(
 )
 api_router.include_router(
     notifications.webhook_router, prefix="/webhooks", tags=["webhooks"],
+)
+# Phase C-1 (2026-04-24, MOD-TS-014) — portal scaffold.
+# /api/portal/auth/* + /api/portal/me are the external surface
+# (PortalUser session); /api/admin/portal/invitations is the
+# internal owner-driven invite endpoint.
+api_router.include_router(portal.router, prefix="/portal", tags=["portal"])
+api_router.include_router(
+    portal.admin_router, prefix="/admin", tags=["portal-admin"],
 )

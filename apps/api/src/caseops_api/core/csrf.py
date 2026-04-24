@@ -50,6 +50,16 @@ _EXEMPT_PATHS = frozenset({
 _EXEMPT_PREFIXES = (
     # Catches any path under /api/webhooks/* if added in the future.
     "/api/webhooks/",
+    # Phase C-1 (2026-04-24, MOD-TS-014). The portal surface uses a
+    # SEPARATE session cookie + SameSite=Lax, no shared state with the
+    # internal /app session. CSRF defence-in-depth via a portal-side
+    # double-submit token will land in C-2 once the portal write
+    # endpoints exist; for the C-1 sign-in flow there are no
+    # state-changing endpoints worth CSRF-locking yet (request-link
+    # has no auth context to forge against, verify-link consumes a
+    # one-time token, logout is harmless). Revisit when /portal write
+    # endpoints land.
+    "/api/portal/",
 )
 # Provider-signed webhooks (PineLabs, SendGrid event hooks, etc.)
 # have their own integrity check; CSRF would only break them. The

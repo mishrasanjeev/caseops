@@ -3385,3 +3385,147 @@ class EmailTemplate(Base):
             name="uq_email_templates_company_name",
         ),
     )
+
+
+# ---------------------------------------------------------------
+# MOD-TS-014 — Portal persona model (Phase C-1, 2026-04-24)
+# ---------------------------------------------------------------
+
+
+class PortalUserRole(StrEnum):
+    CLIENT = "client"
+    OUTSIDE_COUNSEL = "outside_counsel"
+
+
+class PortalUser(Base):
+    """A non-Membership identity scoped to one tenant.
+
+    Distinct from ``CompanyMembership``: portal users never inherit a
+    role-based capability and never get a /app session. Their access is
+    gated entirely through ``MatterPortalGrant`` rows.
+    """
+
+    __tablename__ = "portal_users"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id", "email", name="uq_portal_user_company_email",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4()),
+    )
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    email: Mapped[str] = mapped_column(String(320), nullable=False)
+    full_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[str] = mapped_column(String(32), nullable=False)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True,
+    )
+    sessions_valid_after: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
+    invited_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False,
+    )
+    last_signed_in_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
+
+    company: Mapped[Company] = relationship()
+    magic_links: Mapped[list[PortalMagicLink]] = relationship(
+        back_populates="portal_user", cascade="all, delete-orphan",
+    )
+    grants: Mapped[list[MatterPortalGrant]] = relationship(
+        back_populates="portal_user", cascade="all, delete-orphan",
+    )
+
+
+class PortalMagicLink(Base):
+    """One-shot, hash-only magic-link token bound to a PortalUser.
+
+    The plaintext token is returned to the caller exactly once (when
+    the link is generated for AutoMail dispatch); only the SHA-256
+    hash lives in the DB so a hot dump cannot replay sessions.
+    """
+
+    __tablename__ = "portal_magic_links"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4()),
+    )
+    portal_user_id: Mapped[str] = mapped_column(
+        ForeignKey("portal_users.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    token_hash: Mapped[str] = mapped_column(
+        String(64), nullable=False, unique=True,
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True,
+    )
+    consumed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
+    requested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False,
+    )
+    requested_ip: Mapped[str | None] = mapped_column(
+        String(64), nullable=True,
+    )
+    requested_user_agent: Mapped[str | None] = mapped_column(
+        String(255), nullable=True,
+    )
+
+    portal_user: Mapped[PortalUser] = relationship(back_populates="magic_links")
+
+
+class MatterPortalGrant(Base):
+    """Explicit per-matter scope for a PortalUser.
+
+    Without a live (non-revoked) grant for a given matter, the
+    PortalUser sees nothing on it — even if the matter belongs to the
+    PortalUser's company. The role on the grant must match the parent
+    PortalUser's role; service code enforces this.
+    """
+
+    __tablename__ = "matter_portal_grants"
+    __table_args__ = (
+        UniqueConstraint(
+            "portal_user_id", "matter_id",
+            name="uq_matter_portal_grant_user_matter",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4()),
+    )
+    portal_user_id: Mapped[str] = mapped_column(
+        ForeignKey("portal_users.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    role: Mapped[str] = mapped_column(String(32), nullable=False)
+    scope_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    granted_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    granted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False,
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
+
+    portal_user: Mapped[PortalUser] = relationship(back_populates="grants")

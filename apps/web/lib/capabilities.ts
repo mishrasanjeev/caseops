@@ -95,7 +95,10 @@ export type Capability =
   | "email_templates:manage"
   // KYC lifecycle (Phase B M11 slice 3 — US-037)
   | "clients:kyc_submit"
-  | "clients:kyc_review";
+  | "clients:kyc_review"
+  // Phase C-1 (2026-04-24, MOD-TS-014) — portal admin
+  | "portal:invite"
+  | "portal:manage_grants";
 
 // Baseline caps for a fee-earner (owner / admin / partner / member).
 // Paralegals inherit most of these but lose a small, explicit set.
@@ -169,6 +172,10 @@ const GOVERNANCE: Capability[] = [
   "teams:manage",
   // Email templates editor sits next to Teams admin.
   "email_templates:manage",
+  // Phase C-1 (2026-04-24, MOD-TS-014) — invite + manage portal users.
+  // Owner/admin only — same gate as company:manage_users.
+  "portal:invite",
+  "portal:manage_grants",
 ];
 
 // Owner-only caps.
