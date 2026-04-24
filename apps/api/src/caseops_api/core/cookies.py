@@ -145,6 +145,16 @@ def clear_session_cookies(response: Response, *, env: str | None) -> None:
 # auth check. The portal dependency only ever reads PORTAL_SESSION_COOKIE.
 PORTAL_SESSION_COOKIE = "caseops_portal_session"
 
+# Codex H1 (2026-04-24): portal CSRF — paired cookie + header for the
+# C-2 write endpoints (POST /api/portal/matters/{id}/communications,
+# /kyc, and any future portal mutations). Same double-submit pattern
+# as the internal CSRF gate but on a separate cookie name so the two
+# surfaces don't collide. The portal CSRF cookie is JS-readable
+# (HttpOnly=False) so the web client can echo it as
+# ``X-Portal-CSRF-Token``.
+PORTAL_CSRF_COOKIE = "caseops_portal_csrf"
+PORTAL_CSRF_HEADER = "X-Portal-CSRF-Token"
+
 
 def issue_portal_session_cookie(
     response: Response,
@@ -165,16 +175,13 @@ def issue_portal_session_cookie(
         path="/",
         domain=domain,
     )
-
-
-def clear_portal_session_cookie(response: Response, *, env: str | None) -> None:
-    secure = _cookie_secure(env)
-    domain = _cookie_domain(env)
+    # Codex H1: paired CSRF cookie. Same TTL as the session so a
+    # stale CSRF token can never outlive its session.
     response.set_cookie(
-        key=PORTAL_SESSION_COOKIE,
-        value="",
-        max_age=0,
-        httponly=True,
+        key=PORTAL_CSRF_COOKIE,
+        value=secrets.token_urlsafe(32),
+        max_age=ttl_seconds,
+        httponly=False,
         secure=secure,
         samesite="lax",
         path="/",
@@ -182,9 +189,30 @@ def clear_portal_session_cookie(response: Response, *, env: str | None) -> None:
     )
 
 
+def clear_portal_session_cookie(response: Response, *, env: str | None) -> None:
+    secure = _cookie_secure(env)
+    domain = _cookie_domain(env)
+    for name, http_only in (
+        (PORTAL_SESSION_COOKIE, True),
+        (PORTAL_CSRF_COOKIE, False),
+    ):
+        response.set_cookie(
+            key=name,
+            value="",
+            max_age=0,
+            httponly=http_only,
+            secure=secure,
+            samesite="lax",
+            path="/",
+            domain=domain,
+        )
+
+
 __all__ = [
     "CSRF_COOKIE",
     "CSRF_HEADER",
+    "PORTAL_CSRF_COOKIE",
+    "PORTAL_CSRF_HEADER",
     "PORTAL_SESSION_COOKIE",
     "SESSION_COOKIE",
     "clear_portal_session_cookie",

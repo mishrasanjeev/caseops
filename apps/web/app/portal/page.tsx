@@ -82,7 +82,7 @@ export default function PortalLandingPage() {
         }
         description={
           portalUser
-            ? `Signed in as ${portalUser.email} (${roleLabel}). Phase C-2 and C-3 will add the matter, comms, and document surfaces — for now this page confirms your portal session is live.`
+            ? `Signed in as ${portalUser.email} (${roleLabel}). Tap a matter below to see status, hearings, communications, and KYC.`
             : "Loading your portal session…"
         }
         actions={

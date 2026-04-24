@@ -4,11 +4,58 @@
  * The portal surface lives at /portal/* on the web side and talks to
  * /api/portal/* on the API side. Reuses the existing ``apiRequest``
  * because it already runs ``credentials: 'include'`` and the browser
- * sends every cookie regardless of name. CSRF is intentionally not
- * enforced server-side for /api/portal/* (see core/csrf.py) so the
- * helpers here never need to read a CSRF cookie.
+ * sends every cookie regardless of name.
+ *
+ * Codex H1 (2026-04-24): portal MUTATIONS now require a paired
+ * portal-CSRF token (caseops_portal_csrf cookie + X-Portal-CSRF-Token
+ * header). The portal sign-in surface (request-link / verify-link /
+ * logout) stays exempt server-side. Helpers below add the header on
+ * POST/PUT/PATCH/DELETE; reads stay header-free.
  */
+import { API_BASE_URL } from "@/lib/api/config";
 import { apiRequest } from "@/lib/api/client";
+
+const PORTAL_CSRF_COOKIE = "caseops_portal_csrf";
+const PORTAL_CSRF_HEADER = "X-Portal-CSRF-Token";
+
+function readPortalCsrfCookie(): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie
+    .split(";")
+    .map((c) => c.trim())
+    .find((c) => c.startsWith(`${PORTAL_CSRF_COOKIE}=`));
+  if (!match) return null;
+  return decodeURIComponent(match.slice(PORTAL_CSRF_COOKIE.length + 1));
+}
+
+async function portalMutate<T>(path: string, body: unknown): Promise<T> {
+  const csrf = readPortalCsrfCookie();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (csrf) headers[PORTAL_CSRF_HEADER] = csrf;
+  const resp = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    credentials: "include",
+    headers,
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) {
+    let detail = "Portal request failed.";
+    try {
+      const data = await resp.json();
+      if (data?.detail) detail = data.detail;
+    } catch {
+      /* ignore */
+    }
+    throw Object.assign(new Error(detail), {
+      name: "ApiError",
+      detail,
+      status: resp.status,
+      data: null,
+    });
+  }
+  if (resp.status === 204) return undefined as T;
+  return (await resp.json()) as T;
+}
 
 export type PortalUserRole = "client" | "outside_counsel";
 
@@ -114,9 +161,9 @@ export async function postPortalMatterReply(
   matterId: string,
   body: string,
 ): Promise<PortalCommunication> {
-  return apiRequest<PortalCommunication>(
+  return portalMutate<PortalCommunication>(
     `/api/portal/matters/${matterId}/communications`,
-    { method: "POST", body: { body } },
+    { body },
   );
 }
 
@@ -138,18 +185,35 @@ export async function fetchPortalMatterHearings(
   );
 }
 
+export type PortalMatterClient = {
+  id: string;
+  name: string;
+  client_type: string;
+  kyc_status: string;
+  kyc_submitted_at: string | null;
+};
+
+export async function fetchPortalMatterClients(
+  matterId: string,
+): Promise<{ clients: PortalMatterClient[] }> {
+  return apiRequest<{ clients: PortalMatterClient[] }>(
+    `/api/portal/matters/${matterId}/clients`,
+  );
+}
+
 export type PortalKycDocument = { name: string; note?: string | null };
 
 export async function submitPortalMatterKyc(
   matterId: string,
+  clientId: string,
   documents: PortalKycDocument[],
 ): Promise<{
   matter_id: string;
-  affected_client_ids: string[];
+  client_id: string;
   submitted_at: string;
 }> {
-  return apiRequest(
+  return portalMutate(
     `/api/portal/matters/${matterId}/kyc`,
-    { method: "POST", body: { documents } },
+    { client_id: clientId, documents },
   );
 }

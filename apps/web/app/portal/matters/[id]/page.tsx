@@ -33,6 +33,7 @@ import { Textarea } from "@/components/ui/Textarea";
 import { apiErrorMessage } from "@/lib/api/config";
 import {
   fetchPortalMatter,
+  fetchPortalMatterClients,
   fetchPortalMatterCommunications,
   fetchPortalMatterHearings,
   postPortalMatterReply,
@@ -361,9 +362,20 @@ function KycCard({ matterId }: { matterId: string }) {
     { name: "PAN", note: "" },
     { name: "Aadhaar", note: "" },
   ]);
+  const [clientId, setClientId] = useState<string>("");
   const [submittedAt, setSubmittedAt] = useState<string | null>(null);
+  const clientsQuery = useQuery({
+    queryKey: ["portal", "matter", matterId, "clients"],
+    queryFn: () => fetchPortalMatterClients(matterId),
+    enabled: matterId.length > 0,
+  });
+  const clients = clientsQuery.data?.clients ?? [];
+  // Auto-pick when there's exactly one client linked.
+  if (clients.length === 1 && clientId === "") {
+    setClientId(clients[0].id);
+  }
   const mutation = useMutation({
-    mutationFn: () => submitPortalMatterKyc(matterId, docs),
+    mutationFn: () => submitPortalMatterKyc(matterId, clientId, docs),
     onSuccess: (result) => {
       setSubmittedAt(result.submitted_at);
       toast.success("KYC submitted. The firm will review.");
@@ -382,6 +394,25 @@ function KycCard({ matterId }: { matterId: string }) {
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
+        {clients.length > 1 ? (
+          <div>
+            <Label htmlFor="portal-kyc-client">For client</Label>
+            <select
+              id="portal-kyc-client"
+              className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm w-full"
+              value={clientId}
+              onChange={(e) => setClientId(e.target.value)}
+              data-testid="portal-kyc-client-picker"
+            >
+              <option value="">Select a client…</option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} ({c.kyc_status})
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
         {docs.map((d, i) => (
           <div key={i} className="flex flex-col gap-2 md:flex-row">
             <div className="md:w-1/3">
@@ -429,7 +460,9 @@ function KycCard({ matterId }: { matterId: string }) {
           <Button
             type="button"
             disabled={
-              mutation.isPending || docs.every((d) => d.name.trim() === "")
+              mutation.isPending ||
+              clientId === "" ||
+              docs.every((d) => d.name.trim() === "")
             }
             onClick={() => mutation.mutate()}
             data-testid="portal-kyc-submit"

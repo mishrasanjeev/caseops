@@ -109,16 +109,53 @@ def get_granted_matter(
     return matter
 
 
+def list_matter_clients_for_portal(
+    session: Session, *, portal_user: PortalUser, matter_id: str
+) -> list[Client]:
+    """Codex M3 (2026-04-24) — used by the web KYC form to render a
+    picker for multi-client matters. Returns every Client linked to
+    the matter that the portal user is granted on; same 404 shape on
+    missing grant so listing never leaks existence."""
+    _matter, _grant = _assert_grant(
+        session, portal_user=portal_user, matter_id=matter_id, role="client",
+    )
+    from caseops_api.db.models import MatterClientAssignment
+
+    return list(
+        session.execute(
+            select(Client)
+            .join(
+                MatterClientAssignment,
+                MatterClientAssignment.client_id == Client.id,
+            )
+            .where(
+                MatterClientAssignment.matter_id == matter_id,
+                Client.company_id == portal_user.company_id,
+            )
+            .order_by(Client.name.asc())
+        ).scalars().all()
+    )
+
+
 def list_matter_communications(
     session: Session, *, portal_user: PortalUser, matter_id: str
 ) -> list[Communication]:
     """Communications visible to the portal user. Read-only; comms
     written by the firm with ``metadata_json.portal_visible=False``
-    are excluded so privileged internal notes never leak."""
+    are excluded so privileged internal notes never leak.
+
+    Codex H2 (2026-04-24): the docstring claimed visibility filtering
+    but the query didn't enforce it. We now post-filter in Python
+    rather than via a JSON-path predicate so the same query works
+    on SQLite tests + Postgres prod without provider-specific JSON
+    operators. The default is INCLUDE — only an explicit
+    ``portal_visible=False`` excludes a row, so legacy comms
+    without metadata stay readable.
+    """
     _matter, _grant = _assert_grant(
         session, portal_user=portal_user, matter_id=matter_id, role="client",
     )
-    return list(
+    rows = list(
         session.scalars(
             select(Communication)
             .where(
@@ -126,9 +163,18 @@ def list_matter_communications(
                 Communication.company_id == portal_user.company_id,
             )
             .order_by(Communication.occurred_at.desc())
-            .limit(200)
+            .limit(500)
         )
     )
+    visible: list[Communication] = []
+    for row in rows:
+        meta = row.metadata_json or {}
+        if isinstance(meta, dict) and meta.get("portal_visible") is False:
+            continue
+        visible.append(row)
+        if len(visible) >= 200:
+            break
+    return visible
 
 
 class PortalReplyOutOfScope(HTTPException):
@@ -240,43 +286,53 @@ def submit_matter_kyc(
     *,
     portal_user: PortalUser,
     matter_id: str,
+    client_id: str,
     documents: list[dict] | None = None,
     request_ip: str | None = None,
-) -> tuple[Matter, list[Client]]:
-    """Mark KYC as 'submitted' on every Client linked to this matter.
-    Stores the submitted docs metadata + audit row. Verify/reject
-    is the firm's responsibility via the existing internal route."""
+) -> tuple[Matter, Client]:
+    """Mark KYC as PENDING for ONE explicit client linked to this
+    matter. Stores the submitted docs metadata + audit row.
+    Verify/reject is the firm's responsibility via the existing
+    internal route.
+
+    Codex M3 (2026-04-24): the previous version overwrote KYC for
+    every client linked to the matter. On a multi-client matter
+    (corporate-defence / multi-party) one portal user could alter a
+    co-client's KYC state. The route now requires an explicit
+    ``client_id`` and we authorise per-client: the client must be
+    linked to the matter the portal user has a grant on. Any other
+    client_id (foreign matter, foreign tenant, unlinked) returns
+    404 — same shape as missing-grant so a probe cannot enumerate.
+    """
     matter, _grant = _assert_grant(
         session, portal_user=portal_user, matter_id=matter_id, role="client",
     )
-    # Find clients on this matter via the matter_client_assignments
-    # join. (The model is MatterClientAssignment, not MatterClient —
-    # the table tracks who assigned the client to which matter.)
     from caseops_api.db.models import MatterClientAssignment
 
-    rows = session.execute(
+    target = session.execute(
         select(Client)
         .join(
             MatterClientAssignment,
             MatterClientAssignment.client_id == Client.id,
         )
-        .where(MatterClientAssignment.matter_id == matter_id)
-    ).scalars().all()
-    if not rows:
+        .where(
+            MatterClientAssignment.matter_id == matter_id,
+            Client.id == client_id,
+            Client.company_id == portal_user.company_id,
+        )
+    ).scalars().first()
+    if target is None:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail=(
-                "No client is linked to this matter. Ask the firm to "
-                "attach you as a client first."
+                "Client not found for this matter, or you are not "
+                "authorised to submit KYC for them."
             ),
         )
     now = datetime.now(UTC)
-    affected: list[Client] = []
-    for client in rows:
-        client.kyc_status = ClientKycStatus.PENDING
-        client.kyc_submitted_at = now
-        client.kyc_documents_json = documents or []
-        affected.append(client)
+    target.kyc_status = ClientKycStatus.PENDING
+    target.kyc_submitted_at = now
+    target.kyc_documents_json = documents or []
     session.flush()
     record_audit(
         session,
@@ -284,25 +340,26 @@ def submit_matter_kyc(
         actor_type=AuditActorType.SYSTEM,
         actor_label=f"portal:{portal_user.email}",
         action="portal.kyc.submitted",
-        target_type="matter",
-        target_id=matter_id,
+        target_type="client",
+        target_id=target.id,
         matter_id=matter_id,
         result=AuditResult.SUCCESS,
         metadata={
             "portal_user_id": portal_user.id,
-            "client_ids": [c.id for c in affected],
+            "client_id": target.id,
             "doc_count": len(documents or []),
         },
         ip=request_ip,
         commit=True,
     )
-    return matter, affected
+    return matter, target
 
 
 __all__ = [
     "PortalReplyOutOfScope",
     "get_granted_matter",
     "list_granted_matters",
+    "list_matter_clients_for_portal",
     "list_matter_communications",
     "list_matter_hearings_for_portal",
     "post_matter_reply",

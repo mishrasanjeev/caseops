@@ -33,7 +33,12 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from caseops_api.core.cookies import CSRF_COOKIE, CSRF_HEADER
+from caseops_api.core.cookies import (
+    CSRF_COOKIE,
+    CSRF_HEADER,
+    PORTAL_CSRF_COOKIE,
+    PORTAL_CSRF_HEADER,
+)
 
 # State-changing methods. GET / HEAD / OPTIONS / TRACE are exempt by
 # RFC and by browser convention.
@@ -50,16 +55,14 @@ _EXEMPT_PATHS = frozenset({
 _EXEMPT_PREFIXES = (
     # Catches any path under /api/webhooks/* if added in the future.
     "/api/webhooks/",
-    # Phase C-1 (2026-04-24, MOD-TS-014). The portal surface uses a
-    # SEPARATE session cookie + SameSite=Lax, no shared state with the
-    # internal /app session. CSRF defence-in-depth via a portal-side
-    # double-submit token will land in C-2 once the portal write
-    # endpoints exist; for the C-1 sign-in flow there are no
-    # state-changing endpoints worth CSRF-locking yet (request-link
-    # has no auth context to forge against, verify-link consumes a
-    # one-time token, logout is harmless). Revisit when /portal write
-    # endpoints land.
-    "/api/portal/",
+    # Codex H1 (2026-04-24): narrowed from /api/portal/ to
+    # /api/portal/auth/. The portal sign-in surface (request-link,
+    # verify-link, logout) has no cookie yet (request-link / verify
+    # both run pre-auth) or is harmless (logout). EVERY OTHER
+    # /api/portal/* mutation now goes through the portal CSRF gate
+    # in ``_portal_csrf_check`` below — which checks the paired
+    # caseops_portal_csrf cookie + X-Portal-CSRF-Token header.
+    "/api/portal/auth/",
 )
 # Provider-signed webhooks (PineLabs, SendGrid event hooks, etc.)
 # have their own integrity check; CSRF would only break them. The
@@ -98,10 +101,32 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         auth_header = request.headers.get("authorization", "")
         if auth_header.startswith("Bearer "):
             return await call_next(request)
-        # Cookie-auth path → require the matching CSRF header. Both
-        # values must be present AND equal.
-        cookie_value = request.cookies.get(CSRF_COOKIE, "")
-        header_value = request.headers.get(CSRF_HEADER, "")
+
+        # Codex H1: portal mutations use a separate cookie + header
+        # pair so the two surfaces don't collide. Route to the right
+        # gate based on path.
+        if request.url.path.startswith("/api/portal/"):
+            return await self._check_pair(
+                request, call_next,
+                cookie_name=PORTAL_CSRF_COOKIE,
+                header_name=PORTAL_CSRF_HEADER,
+            )
+        return await self._check_pair(
+            request, call_next,
+            cookie_name=CSRF_COOKIE,
+            header_name=CSRF_HEADER,
+        )
+
+    async def _check_pair(
+        self,
+        request: Request,
+        call_next,
+        *,
+        cookie_name: str,
+        header_name: str,
+    ) -> Response:
+        cookie_value = request.cookies.get(cookie_name, "")
+        header_value = request.headers.get(header_name, "")
         if not cookie_value or not header_value:
             return _csrf_failure("Missing CSRF token.")
         # Constant-time compare so an attacker cannot infer the cookie

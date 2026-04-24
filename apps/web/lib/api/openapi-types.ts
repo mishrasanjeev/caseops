@@ -2238,6 +2238,109 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/portal/matters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List matters this portal user has been granted access to */
+        get: operations["get_portal_matters_api_portal_matters_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/portal/matters/{matter_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Detail of one matter the portal user has been granted */
+        get: operations["get_portal_matter_api_portal_matters__matter_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/portal/matters/{matter_id}/clients": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List clients linked to this matter (for the KYC picker) */
+        get: operations["get_portal_matter_clients_api_portal_matters__matter_id__clients_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/portal/matters/{matter_id}/communications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Communications visible to the portal user on this matter */
+        get: operations["get_portal_matter_communications_api_portal_matters__matter_id__communications_get"];
+        put?: never;
+        /** Reply to the firm — lands in the internal Communications log */
+        post: operations["post_portal_matter_reply_api_portal_matters__matter_id__communications_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/portal/matters/{matter_id}/hearings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read-only list of hearings on this matter */
+        get: operations["get_portal_matter_hearings_api_portal_matters__matter_id__hearings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/portal/matters/{matter_id}/kyc": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Submit KYC documents for the clients on this matter */
+        post: operations["post_portal_matter_kyc_api_portal_matters__matter_id__kyc_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/portal/me": {
         parameters: {
             query?: never;
@@ -6170,6 +6273,33 @@ export interface components {
             /** Installed */
             installed: number;
         };
+        /** PortalCommunicationListResponse */
+        PortalCommunicationListResponse: {
+            /** Communications */
+            communications: components["schemas"]["PortalCommunicationRecord"][];
+        };
+        /** PortalCommunicationRecord */
+        PortalCommunicationRecord: {
+            /** Body */
+            body: string;
+            /** Channel */
+            channel: string;
+            /**
+             * Direction
+             * @enum {string}
+             */
+            direction: "inbound" | "outbound";
+            /** Id */
+            id: string;
+            /** Occurred At */
+            occurred_at: string;
+            /** Posted By Portal User */
+            posted_by_portal_user: boolean;
+            /** Status */
+            status: string;
+            /** Subject */
+            subject: string | null;
+        };
         /** PortalGrantRecord */
         PortalGrantRecord: {
             /** Granted At */
@@ -6189,6 +6319,28 @@ export interface components {
             scope_json: {
                 [key: string]: unknown;
             } | null;
+        };
+        /** PortalHearingListResponse */
+        PortalHearingListResponse: {
+            /** Hearings */
+            hearings: components["schemas"]["PortalHearingRecord"][];
+        };
+        /** PortalHearingRecord */
+        PortalHearingRecord: {
+            /** Forum Name */
+            forum_name: string;
+            /** Hearing On */
+            hearing_on: string;
+            /** Id */
+            id: string;
+            /** Judge Name */
+            judge_name: string | null;
+            /** Outcome Note */
+            outcome_note: string | null;
+            /** Purpose */
+            purpose: string;
+            /** Status */
+            status: string;
         };
         /** PortalInvitePayload */
         PortalInvitePayload: {
@@ -6229,6 +6381,76 @@ export interface components {
             /** Grants */
             grants: components["schemas"]["PortalGrantRecord"][];
             portal_user: components["schemas"]["PortalUserRecord"];
+        };
+        /** PortalKycDocument */
+        PortalKycDocument: {
+            /** Name */
+            name: string;
+            /** Note */
+            note?: string | null;
+        };
+        /** PortalKycSubmitPayload */
+        PortalKycSubmitPayload: {
+            /** Client Id */
+            client_id: string;
+            /** Documents */
+            documents?: components["schemas"]["PortalKycDocument"][];
+        };
+        /** PortalKycSubmitResponse */
+        PortalKycSubmitResponse: {
+            /** Client Id */
+            client_id: string;
+            /** Matter Id */
+            matter_id: string;
+            /** Submitted At */
+            submitted_at: string;
+        };
+        /** PortalMatterClientListResponse */
+        PortalMatterClientListResponse: {
+            /** Clients */
+            clients: components["schemas"]["PortalMatterClientRecord"][];
+        };
+        /** PortalMatterClientRecord */
+        PortalMatterClientRecord: {
+            /** Client Type */
+            client_type: string;
+            /** Id */
+            id: string;
+            /** Kyc Status */
+            kyc_status: string;
+            /** Kyc Submitted At */
+            kyc_submitted_at: string | null;
+            /** Name */
+            name: string;
+        };
+        /** PortalMatterListResponse */
+        PortalMatterListResponse: {
+            /** Matters */
+            matters: components["schemas"]["PortalMatterRecord"][];
+        };
+        /** PortalMatterRecord */
+        PortalMatterRecord: {
+            /** Court Name */
+            court_name: string | null;
+            /** Forum Level */
+            forum_level: string | null;
+            /** Id */
+            id: string;
+            /** Matter Code */
+            matter_code: string | null;
+            /** Next Hearing On */
+            next_hearing_on: string | null;
+            /** Practice Area */
+            practice_area: string | null;
+            /** Status */
+            status: string;
+            /** Title */
+            title: string;
+        };
+        /** PortalReplyPayload */
+        PortalReplyPayload: {
+            /** Body */
+            body: string;
         };
         /** PortalRequestLinkPayload */
         PortalRequestLinkPayload: {
@@ -11358,6 +11580,220 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PortalSessionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_portal_matters_api_portal_matters_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalMatterListResponse"];
+                };
+            };
+        };
+    };
+    get_portal_matter_api_portal_matters__matter_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalMatterRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_portal_matter_clients_api_portal_matters__matter_id__clients_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalMatterClientListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_portal_matter_communications_api_portal_matters__matter_id__communications_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalCommunicationListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_portal_matter_reply_api_portal_matters__matter_id__communications_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortalReplyPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalCommunicationRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_portal_matter_hearings_api_portal_matters__matter_id__hearings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalHearingListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_portal_matter_kyc_api_portal_matters__matter_id__kyc_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortalKycSubmitPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalKycSubmitResponse"];
                 };
             };
             /** @description Validation Error */

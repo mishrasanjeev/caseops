@@ -10,6 +10,7 @@ const {
   hearingsMock,
   replyMock,
   kycMock,
+  clientsMock,
   paramsMock,
 } = vi.hoisted(() => ({
   matterMock: vi.fn(),
@@ -17,6 +18,7 @@ const {
   hearingsMock: vi.fn(),
   replyMock: vi.fn(),
   kycMock: vi.fn(),
+  clientsMock: vi.fn(),
   paramsMock: vi.fn(() => ({ id: "matter-abc" })),
 }));
 
@@ -28,6 +30,7 @@ vi.mock("@/lib/api/portal", () => ({
   fetchPortalMatter: matterMock,
   fetchPortalMatterCommunications: commsMock,
   fetchPortalMatterHearings: hearingsMock,
+  fetchPortalMatterClients: clientsMock,
   postPortalMatterReply: replyMock,
   submitPortalMatterKyc: kycMock,
 }));
@@ -66,6 +69,18 @@ describe("PortalMatterDetailPage", () => {
     hearingsMock.mockReset();
     replyMock.mockReset();
     kycMock.mockReset();
+    clientsMock.mockReset();
+    clientsMock.mockResolvedValue({
+      clients: [
+        {
+          id: "c-1",
+          name: "Test Client",
+          client_type: "individual",
+          kyc_status: "not_started",
+          kyc_submitted_at: null,
+        },
+      ],
+    });
   });
 
   it("renders the matter overview with title + status + court", async () => {
@@ -135,8 +150,10 @@ describe("PortalMatterDetailPage", () => {
     await user.click(screen.getByRole("tab", { name: /kyc/i }));
     await user.click(screen.getByTestId("portal-kyc-submit"));
     await waitFor(() => expect(kycMock).toHaveBeenCalled());
-    const [callMatterId, callDocs] = kycMock.mock.calls[0];
+    const [callMatterId, callClientId, callDocs] = kycMock.mock.calls[0];
     expect(callMatterId).toBe("matter-abc");
+    // Single linked client → auto-picked.
+    expect(callClientId).toBe("c-1");
     expect(Array.isArray(callDocs)).toBe(true);
   });
 

@@ -53,6 +53,7 @@ from caseops_api.services.portal_mailer import (
 from caseops_api.services.portal_matters import (
     get_granted_matter,
     list_granted_matters,
+    list_matter_clients_for_portal,
     list_matter_communications,
     list_matter_hearings_for_portal,
     post_matter_reply,
@@ -196,6 +197,10 @@ class PortalKycDocument(BaseModel):
 
 
 class PortalKycSubmitPayload(BaseModel):
+    # Codex M3 (2026-04-24): explicit client_id is mandatory so a
+    # portal user on a multi-client matter cannot inadvertently (or
+    # maliciously) reset a co-client's KYC state.
+    client_id: str = Field(min_length=10, max_length=64)
     documents: list[PortalKycDocument] = Field(
         default_factory=list, max_length=20,
     )
@@ -203,8 +208,20 @@ class PortalKycSubmitPayload(BaseModel):
 
 class PortalKycSubmitResponse(BaseModel):
     matter_id: str
-    affected_client_ids: list[str]
+    client_id: str
     submitted_at: str
+
+
+class PortalMatterClientRecord(BaseModel):
+    id: str
+    name: str
+    client_type: str
+    kyc_status: str
+    kyc_submitted_at: str | None
+
+
+class PortalMatterClientListResponse(BaseModel):
+    clients: list[PortalMatterClientRecord]
 
 
 # ---------- helpers ----------
@@ -559,6 +576,36 @@ async def get_portal_matter_hearings(
     )
 
 
+@router.get(
+    "/matters/{matter_id}/clients",
+    response_model=PortalMatterClientListResponse,
+    summary="List clients linked to this matter (for the KYC picker)",
+)
+async def get_portal_matter_clients(
+    matter_id: str,
+    portal_user: CurrentPortalUser,
+    session: DbSession,
+) -> PortalMatterClientListResponse:
+    rows = list_matter_clients_for_portal(
+        session, portal_user=portal_user, matter_id=matter_id,
+    )
+    return PortalMatterClientListResponse(
+        clients=[
+            PortalMatterClientRecord(
+                id=c.id,
+                name=c.name,
+                client_type=c.client_type,
+                kyc_status=str(c.kyc_status),
+                kyc_submitted_at=(
+                    c.kyc_submitted_at.isoformat()
+                    if c.kyc_submitted_at else None
+                ),
+            )
+            for c in rows
+        ]
+    )
+
+
 @router.post(
     "/matters/{matter_id}/kyc",
     response_model=PortalKycSubmitResponse,
@@ -572,22 +619,20 @@ async def post_portal_matter_kyc(
     request: Request,
     session: DbSession,
 ) -> PortalKycSubmitResponse:
-    matter, affected = submit_matter_kyc(
+    matter, target = submit_matter_kyc(
         session,
         portal_user=portal_user,
         matter_id=matter_id,
+        client_id=payload.client_id,
         documents=[d.model_dump() for d in payload.documents],
         request_ip=request.client.host if request.client else None,
     )
-    submitted_at = max(
-        (c.kyc_submitted_at for c in affected if c.kyc_submitted_at),
-        default=None,
-    )
     return PortalKycSubmitResponse(
         matter_id=matter.id,
-        affected_client_ids=[c.id for c in affected],
+        client_id=target.id,
         submitted_at=(
-            submitted_at.isoformat() if submitted_at else ""
+            target.kyc_submitted_at.isoformat()
+            if target.kyc_submitted_at else ""
         ),
     )
 
