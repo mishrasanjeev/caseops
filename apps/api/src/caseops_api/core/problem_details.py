@@ -64,6 +64,11 @@ PROBLEM_TYPE_MAP: list[tuple[int, str, str]] = [
     (422, "no usable items", "llm_output_invalid"),
     # 401 / 403.
     (401, "Missing bearer token", "missing_bearer_token"),
+    # EG-001 (2026-04-23) widened the auth dependency to accept either
+    # a cookie or a bearer token; the missing-credentials message now
+    # mentions both. Keep the same machine-readable slug so existing
+    # clients keep matching.
+    (401, "Missing session cookie or bearer token", "missing_bearer_token"),
     (401, "Invalid", "invalid_token"),
     (401, "expired", "invalid_token"),
     (403, "Requires role", "role_required"),
