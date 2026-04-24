@@ -178,12 +178,36 @@ def verify_upload(
                 "contradict its extension."
             ),
         )
-    # Size: we can't size-check the stream without consuming it.
-    # The persister writes to a temp file and rejects zero-byte; the
-    # outer route enforces the hard cap via `Content-Length` when the
-    # client sends one. We expose max_bytes to callers that wrap this
-    # with a size-aware reader.
-    _ = max_bytes
+
+    # Size enforcement (P1-008, 2026-04-24, QG-UPL-002). The previous
+    # implementation exposed ``max_bytes`` but never enforced it,
+    # leaving every upload route vulnerable to a 5GB-PDF DoS that
+    # filled disk before the persister had a chance to react. Read
+    # the stream in 1 MiB chunks counting bytes; abort the moment we
+    # cross the cap; seek back to 0 so the persister still sees the
+    # full body.
+    _CHUNK = 1024 * 1024
+    seen = 0
+    while True:
+        chunk = stream.read(_CHUNK)
+        if not chunk:
+            break
+        seen += len(chunk)
+        if seen > max_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=(
+                    f"Upload exceeds the {max_bytes // (1024 * 1024)} MiB "
+                    "limit for this surface."
+                ),
+            )
+    try:
+        stream.seek(0)
+    except (AttributeError, OSError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Upload stream must be seekable after size check.",
+        ) from exc
 
 
 __all__ = [
