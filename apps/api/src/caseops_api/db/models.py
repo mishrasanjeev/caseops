@@ -14,6 +14,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    false,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -114,6 +115,7 @@ class MatterCourtSyncJobStatus(StrEnum):
 
 class InvoiceStatus(StrEnum):
     DRAFT = "draft"
+    NEEDS_REVIEW = "needs_review"
     ISSUED = "issued"
     PARTIALLY_PAID = "partially_paid"
     PAID = "paid"
@@ -447,6 +449,14 @@ class Matter(Base):
     # the company-level role can see it. Ethical walls always apply
     # regardless of this flag.
     restricted_access: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Phase C-3 (MOD-TS-016): when False (default), an outside-counsel
+    # portal user only sees their OWN work-product, time entries, and
+    # invoice submissions on this matter. When True, every OC on the
+    # matter sees every other OC's submissions. Internal users (firm
+    # side) always see everything regardless of this flag.
+    oc_cross_visibility_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false(),
+    )
     # PRD §7.1: nullable FK to the master Court table. `court_name`
     # stays as the freeform fallback for courts we haven't catalogued
     # yet, so old matters keep working without a data backfill.
@@ -1011,6 +1021,11 @@ class MatterAttachment(Base):
         nullable=True,
         index=True,
     )
+    submitted_by_portal_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("portal_users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
     storage_key: Mapped[str] = mapped_column(String(500), unique=True, nullable=False)
     content_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -1087,6 +1102,11 @@ class MatterTimeEntry(Base):
         nullable=True,
         index=True,
     )
+    submitted_by_portal_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("portal_users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     work_date: Mapped[date] = mapped_column(Date, nullable=False)
     description: Mapped[str] = mapped_column(String(500), nullable=False)
     duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -1132,6 +1152,11 @@ class MatterInvoice(Base):
     )
     issued_by_membership_id: Mapped[str | None] = mapped_column(
         ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    submitted_by_portal_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("portal_users.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )

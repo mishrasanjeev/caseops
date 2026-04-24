@@ -18,7 +18,16 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
 from pydantic import BaseModel, EmailStr, Field
 
 from caseops_api.api.dependencies import (
@@ -58,6 +67,16 @@ from caseops_api.services.portal_matters import (
     list_matter_hearings_for_portal,
     post_matter_reply,
     submit_matter_kyc,
+)
+from caseops_api.services.portal_outside_counsel import (
+    get_oc_assigned_matter,
+    list_oc_assigned_matters,
+    list_oc_invoices,
+    list_oc_time_entries,
+    list_oc_work_product,
+    submit_oc_invoice,
+    submit_oc_time_entry,
+    upload_oc_work_product,
 )
 
 router = APIRouter()
@@ -634,6 +653,308 @@ async def post_portal_matter_kyc(
             target.kyc_submitted_at.isoformat()
             if target.kyc_submitted_at else ""
         ),
+    )
+
+
+# ---------- Phase C-3 (MOD-TS-016) outside-counsel routes ----------
+
+
+class PortalOcWorkProductRecord(BaseModel):
+    id: str
+    original_filename: str
+    content_type: str | None = None
+    size_bytes: int
+    submitted_by_portal_user_id: str | None = None
+    created_at: str
+
+
+class PortalOcWorkProductListResponse(BaseModel):
+    items: list[PortalOcWorkProductRecord]
+
+
+class PortalOcInvoiceLineItemPayload(BaseModel):
+    description: str = Field(min_length=1, max_length=500)
+    amount_minor: int = Field(ge=0)
+
+
+class PortalOcInvoiceSubmitPayload(BaseModel):
+    invoice_number: str = Field(min_length=1, max_length=80)
+    issued_on: str = Field(description="ISO date YYYY-MM-DD")
+    due_on: str | None = None
+    currency: str = Field(default="INR", max_length=8)
+    line_items: list[PortalOcInvoiceLineItemPayload] = Field(min_length=1)
+    notes: str | None = None
+
+
+class PortalOcInvoiceRecord(BaseModel):
+    id: str
+    invoice_number: str
+    status: str
+    currency: str
+    subtotal_amount_minor: int
+    total_amount_minor: int
+    issued_on: str
+    due_on: str | None = None
+    submitted_by_portal_user_id: str | None = None
+    created_at: str
+
+
+class PortalOcInvoiceListResponse(BaseModel):
+    invoices: list[PortalOcInvoiceRecord]
+
+
+class PortalOcTimeEntrySubmitPayload(BaseModel):
+    work_date: str = Field(description="ISO date YYYY-MM-DD")
+    description: str = Field(min_length=1, max_length=500)
+    duration_minutes: int = Field(gt=0, le=24 * 60)
+    billable: bool = True
+    rate_currency: str = Field(default="INR", max_length=8)
+    rate_amount_minor: int | None = Field(default=None, ge=0)
+
+
+class PortalOcTimeEntryRecord(BaseModel):
+    id: str
+    work_date: str
+    description: str
+    duration_minutes: int
+    billable: bool
+    rate_currency: str
+    rate_amount_minor: int | None = None
+    total_amount_minor: int
+    submitted_by_portal_user_id: str | None = None
+    created_at: str
+
+
+class PortalOcTimeEntryListResponse(BaseModel):
+    entries: list[PortalOcTimeEntryRecord]
+
+
+def _oc_attachment_record(a) -> PortalOcWorkProductRecord:
+    return PortalOcWorkProductRecord(
+        id=a.id,
+        original_filename=a.original_filename,
+        content_type=a.content_type,
+        size_bytes=a.size_bytes,
+        submitted_by_portal_user_id=a.submitted_by_portal_user_id,
+        created_at=a.created_at.isoformat(),
+    )
+
+
+def _oc_invoice_record(inv) -> PortalOcInvoiceRecord:
+    return PortalOcInvoiceRecord(
+        id=inv.id,
+        invoice_number=inv.invoice_number,
+        status=str(inv.status),
+        currency=inv.currency,
+        subtotal_amount_minor=inv.subtotal_amount_minor,
+        total_amount_minor=inv.total_amount_minor,
+        issued_on=inv.issued_on.isoformat(),
+        due_on=inv.due_on.isoformat() if inv.due_on else None,
+        submitted_by_portal_user_id=inv.submitted_by_portal_user_id,
+        created_at=inv.created_at.isoformat(),
+    )
+
+
+def _oc_time_entry_record(t) -> PortalOcTimeEntryRecord:
+    return PortalOcTimeEntryRecord(
+        id=t.id,
+        work_date=t.work_date.isoformat(),
+        description=t.description,
+        duration_minutes=t.duration_minutes,
+        billable=t.billable,
+        rate_currency=t.rate_currency,
+        rate_amount_minor=t.rate_amount_minor,
+        total_amount_minor=t.total_amount_minor,
+        submitted_by_portal_user_id=t.submitted_by_portal_user_id,
+        created_at=t.created_at.isoformat(),
+    )
+
+
+def _parse_iso_date(value: str, *, field: str):
+    from datetime import date as _date
+    try:
+        return _date.fromisoformat(value)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"{field} must be ISO date (YYYY-MM-DD).",
+        ) from exc
+
+
+@router.get(
+    "/oc/matters",
+    response_model=PortalMatterListResponse,
+    summary="List matters this outside-counsel portal user is assigned to",
+    tags=["portal"],
+)
+async def get_oc_matters(
+    portal_user: CurrentPortalUser,
+    session: DbSession,
+) -> PortalMatterListResponse:
+    pairs = list_oc_assigned_matters(session, portal_user=portal_user)
+    return PortalMatterListResponse(
+        matters=[_matter_record(m) for _g, m in pairs],
+    )
+
+
+@router.get(
+    "/oc/matters/{matter_id}",
+    response_model=PortalMatterRecord,
+    summary="Detail of one assigned matter",
+    tags=["portal"],
+)
+async def get_oc_matter(
+    matter_id: str,
+    portal_user: CurrentPortalUser,
+    session: DbSession,
+) -> PortalMatterRecord:
+    matter = get_oc_assigned_matter(
+        session, portal_user=portal_user, matter_id=matter_id,
+    )
+    return _matter_record(matter)
+
+
+@router.post(
+    "/oc/matters/{matter_id}/work-product",
+    response_model=PortalOcWorkProductRecord,
+    status_code=status.HTTP_201_CREATED,
+    summary="Upload work product (virus-scanned, OC-isolated)",
+    tags=["portal"],
+)
+async def post_oc_work_product(
+    matter_id: str,
+    file: Annotated[UploadFile, File(...)],
+    portal_user: CurrentPortalUser,
+    request: Request,
+    session: DbSession,
+) -> PortalOcWorkProductRecord:
+    attachment = upload_oc_work_product(
+        session,
+        portal_user=portal_user,
+        matter_id=matter_id,
+        filename=file.filename or "upload.bin",
+        content_type=file.content_type,
+        stream=file.file,
+        request_ip=request.client.host if request.client else None,
+    )
+    return _oc_attachment_record(attachment)
+
+
+@router.get(
+    "/oc/matters/{matter_id}/work-product",
+    response_model=PortalOcWorkProductListResponse,
+    summary="List work product visible to this OC portal user",
+    tags=["portal"],
+)
+async def get_oc_work_product(
+    matter_id: str,
+    portal_user: CurrentPortalUser,
+    session: DbSession,
+) -> PortalOcWorkProductListResponse:
+    rows = list_oc_work_product(
+        session, portal_user=portal_user, matter_id=matter_id,
+    )
+    return PortalOcWorkProductListResponse(
+        items=[_oc_attachment_record(a) for a in rows],
+    )
+
+
+@router.post(
+    "/oc/matters/{matter_id}/invoices",
+    response_model=PortalOcInvoiceRecord,
+    status_code=status.HTTP_201_CREATED,
+    summary="Submit an invoice (lands in firm billing inbox as needs_review)",
+    tags=["portal"],
+)
+async def post_oc_invoice(
+    matter_id: str,
+    payload: PortalOcInvoiceSubmitPayload,
+    portal_user: CurrentPortalUser,
+    request: Request,
+    session: DbSession,
+) -> PortalOcInvoiceRecord:
+    issued = _parse_iso_date(payload.issued_on, field="issued_on")
+    due = _parse_iso_date(payload.due_on, field="due_on") if payload.due_on else None
+    invoice = submit_oc_invoice(
+        session,
+        portal_user=portal_user,
+        matter_id=matter_id,
+        invoice_number=payload.invoice_number,
+        issued_on=issued,
+        due_on=due,
+        currency=payload.currency,
+        line_items=[li.model_dump() for li in payload.line_items],
+        notes=payload.notes,
+        request_ip=request.client.host if request.client else None,
+    )
+    return _oc_invoice_record(invoice)
+
+
+@router.get(
+    "/oc/matters/{matter_id}/invoices",
+    response_model=PortalOcInvoiceListResponse,
+    summary="List invoices visible to this OC portal user",
+    tags=["portal"],
+)
+async def get_oc_invoices(
+    matter_id: str,
+    portal_user: CurrentPortalUser,
+    session: DbSession,
+) -> PortalOcInvoiceListResponse:
+    rows = list_oc_invoices(
+        session, portal_user=portal_user, matter_id=matter_id,
+    )
+    return PortalOcInvoiceListResponse(
+        invoices=[_oc_invoice_record(i) for i in rows],
+    )
+
+
+@router.post(
+    "/oc/matters/{matter_id}/time-entries",
+    response_model=PortalOcTimeEntryRecord,
+    status_code=status.HTTP_201_CREATED,
+    summary="Submit a time entry (firm reviews + attaches to invoice later)",
+    tags=["portal"],
+)
+async def post_oc_time_entry(
+    matter_id: str,
+    payload: PortalOcTimeEntrySubmitPayload,
+    portal_user: CurrentPortalUser,
+    request: Request,
+    session: DbSession,
+) -> PortalOcTimeEntryRecord:
+    work_date = _parse_iso_date(payload.work_date, field="work_date")
+    entry = submit_oc_time_entry(
+        session,
+        portal_user=portal_user,
+        matter_id=matter_id,
+        work_date=work_date,
+        description=payload.description,
+        duration_minutes=payload.duration_minutes,
+        billable=payload.billable,
+        rate_currency=payload.rate_currency,
+        rate_amount_minor=payload.rate_amount_minor,
+        request_ip=request.client.host if request.client else None,
+    )
+    return _oc_time_entry_record(entry)
+
+
+@router.get(
+    "/oc/matters/{matter_id}/time-entries",
+    response_model=PortalOcTimeEntryListResponse,
+    summary="List time entries visible to this OC portal user",
+    tags=["portal"],
+)
+async def get_oc_time_entries(
+    matter_id: str,
+    portal_user: CurrentPortalUser,
+    session: DbSession,
+) -> PortalOcTimeEntryListResponse:
+    rows = list_oc_time_entries(
+        session, portal_user=portal_user, matter_id=matter_id,
+    )
+    return PortalOcTimeEntryListResponse(
+        entries=[_oc_time_entry_record(t) for t in rows],
     )
 
 

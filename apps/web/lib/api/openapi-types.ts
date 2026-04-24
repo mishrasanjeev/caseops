@@ -2358,6 +2358,94 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/portal/oc/matters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List matters this outside-counsel portal user is assigned to */
+        get: operations["get_oc_matters_api_portal_oc_matters_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/portal/oc/matters/{matter_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Detail of one assigned matter */
+        get: operations["get_oc_matter_api_portal_oc_matters__matter_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/portal/oc/matters/{matter_id}/invoices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List invoices visible to this OC portal user */
+        get: operations["get_oc_invoices_api_portal_oc_matters__matter_id__invoices_get"];
+        put?: never;
+        /** Submit an invoice (lands in firm billing inbox as needs_review) */
+        post: operations["post_oc_invoice_api_portal_oc_matters__matter_id__invoices_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/portal/oc/matters/{matter_id}/time-entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List time entries visible to this OC portal user */
+        get: operations["get_oc_time_entries_api_portal_oc_matters__matter_id__time_entries_get"];
+        put?: never;
+        /** Submit a time entry (firm reviews + attaches to invoice later) */
+        post: operations["post_oc_time_entry_api_portal_oc_matters__matter_id__time_entries_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/portal/oc/matters/{matter_id}/work-product": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List work product visible to this OC portal user */
+        get: operations["get_oc_work_product_api_portal_oc_matters__matter_id__work_product_get"];
+        put?: never;
+        /** Upload work product (virus-scanned, OC-isolated) */
+        post: operations["post_oc_work_product_api_portal_oc_matters__matter_id__work_product_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/recommendations/{recommendation_id}/decisions": {
         parameters: {
             query?: never;
@@ -2955,6 +3043,11 @@ export interface components {
         };
         /** Body_post_current_company_matter_attachment_api_matters__matter_id__attachments_post */
         Body_post_current_company_matter_attachment_api_matters__matter_id__attachments_post: {
+            /** File */
+            file: string;
+        };
+        /** Body_post_oc_work_product_api_portal_oc_matters__matter_id__work_product_post */
+        Body_post_oc_work_product_api_portal_oc_matters__matter_id__work_product_post: {
             /** File */
             file: string;
         };
@@ -6446,6 +6539,134 @@ export interface components {
             status: string;
             /** Title */
             title: string;
+        };
+        /** PortalOcInvoiceLineItemPayload */
+        PortalOcInvoiceLineItemPayload: {
+            /** Amount Minor */
+            amount_minor: number;
+            /** Description */
+            description: string;
+        };
+        /** PortalOcInvoiceListResponse */
+        PortalOcInvoiceListResponse: {
+            /** Invoices */
+            invoices: components["schemas"]["PortalOcInvoiceRecord"][];
+        };
+        /** PortalOcInvoiceRecord */
+        PortalOcInvoiceRecord: {
+            /** Created At */
+            created_at: string;
+            /** Currency */
+            currency: string;
+            /** Due On */
+            due_on?: string | null;
+            /** Id */
+            id: string;
+            /** Invoice Number */
+            invoice_number: string;
+            /** Issued On */
+            issued_on: string;
+            /** Status */
+            status: string;
+            /** Submitted By Portal User Id */
+            submitted_by_portal_user_id?: string | null;
+            /** Subtotal Amount Minor */
+            subtotal_amount_minor: number;
+            /** Total Amount Minor */
+            total_amount_minor: number;
+        };
+        /** PortalOcInvoiceSubmitPayload */
+        PortalOcInvoiceSubmitPayload: {
+            /**
+             * Currency
+             * @default INR
+             */
+            currency: string;
+            /** Due On */
+            due_on?: string | null;
+            /** Invoice Number */
+            invoice_number: string;
+            /**
+             * Issued On
+             * @description ISO date YYYY-MM-DD
+             */
+            issued_on: string;
+            /** Line Items */
+            line_items: components["schemas"]["PortalOcInvoiceLineItemPayload"][];
+            /** Notes */
+            notes?: string | null;
+        };
+        /** PortalOcTimeEntryListResponse */
+        PortalOcTimeEntryListResponse: {
+            /** Entries */
+            entries: components["schemas"]["PortalOcTimeEntryRecord"][];
+        };
+        /** PortalOcTimeEntryRecord */
+        PortalOcTimeEntryRecord: {
+            /** Billable */
+            billable: boolean;
+            /** Created At */
+            created_at: string;
+            /** Description */
+            description: string;
+            /** Duration Minutes */
+            duration_minutes: number;
+            /** Id */
+            id: string;
+            /** Rate Amount Minor */
+            rate_amount_minor?: number | null;
+            /** Rate Currency */
+            rate_currency: string;
+            /** Submitted By Portal User Id */
+            submitted_by_portal_user_id?: string | null;
+            /** Total Amount Minor */
+            total_amount_minor: number;
+            /** Work Date */
+            work_date: string;
+        };
+        /** PortalOcTimeEntrySubmitPayload */
+        PortalOcTimeEntrySubmitPayload: {
+            /**
+             * Billable
+             * @default true
+             */
+            billable: boolean;
+            /** Description */
+            description: string;
+            /** Duration Minutes */
+            duration_minutes: number;
+            /** Rate Amount Minor */
+            rate_amount_minor?: number | null;
+            /**
+             * Rate Currency
+             * @default INR
+             */
+            rate_currency: string;
+            /**
+             * Work Date
+             * @description ISO date YYYY-MM-DD
+             */
+            work_date: string;
+        };
+        /** PortalOcWorkProductListResponse */
+        PortalOcWorkProductListResponse: {
+            /** Items */
+            items: components["schemas"]["PortalOcWorkProductRecord"][];
+        };
+        /** PortalOcWorkProductRecord */
+        PortalOcWorkProductRecord: {
+            /** Content Type */
+            content_type?: string | null;
+            /** Created At */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Original Filename */
+            original_filename: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Submitted By Portal User Id */
+            submitted_by_portal_user_id?: string | null;
         };
         /** PortalReplyPayload */
         PortalReplyPayload: {
@@ -11823,6 +12044,255 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PortalSessionResponse"];
+                };
+            };
+        };
+    };
+    get_oc_matters_api_portal_oc_matters_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalMatterListResponse"];
+                };
+            };
+        };
+    };
+    get_oc_matter_api_portal_oc_matters__matter_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalMatterRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_oc_invoices_api_portal_oc_matters__matter_id__invoices_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalOcInvoiceListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_oc_invoice_api_portal_oc_matters__matter_id__invoices_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortalOcInvoiceSubmitPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalOcInvoiceRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_oc_time_entries_api_portal_oc_matters__matter_id__time_entries_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalOcTimeEntryListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_oc_time_entry_api_portal_oc_matters__matter_id__time_entries_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortalOcTimeEntrySubmitPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalOcTimeEntryRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_oc_work_product_api_portal_oc_matters__matter_id__work_product_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalOcWorkProductListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_oc_work_product_api_portal_oc_matters__matter_id__work_product_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_post_oc_work_product_api_portal_oc_matters__matter_id__work_product_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalOcWorkProductRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
