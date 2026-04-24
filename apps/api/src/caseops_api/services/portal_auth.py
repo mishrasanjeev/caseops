@@ -53,12 +53,12 @@ def request_magic_link(
     email: str,
     request_ip: str | None = None,
     user_agent: str | None = None,
-) -> str | None:
+) -> tuple[str | None, PortalUser | None]:
     """Generate + persist a magic link for (company_slug, email).
 
-    Returns the plaintext token on hit, ``None`` on miss. Callers
-    MUST translate ``None`` into the same outward response as a hit
-    so an attacker cannot probe for valid emails.
+    Returns ``(token, portal_user)`` on hit, ``(None, None)`` on miss.
+    Callers MUST translate the miss into the same outward response as
+    a hit so an attacker cannot probe for valid emails OR slugs.
 
     The plaintext is returned exactly once; only the hash lives in
     the DB. AutoMail embeds the plaintext in the link sent to the
@@ -66,13 +66,13 @@ def request_magic_link(
     """
     email_norm = (email or "").strip().lower()
     if not email_norm:
-        return None
+        return None, None
 
     company = session.scalars(
         select(Company).where(Company.slug == company_slug.strip().lower())
     ).first()
     if company is None:
-        return None
+        return None, None
 
     portal_user = session.scalars(
         select(PortalUser).where(
@@ -82,7 +82,7 @@ def request_magic_link(
         )
     ).first()
     if portal_user is None:
-        return None
+        return None, None
 
     token = _generate_token()
     link = PortalMagicLink(
@@ -94,7 +94,8 @@ def request_magic_link(
     )
     session.add(link)
     session.commit()
-    return token
+    session.refresh(portal_user)
+    return token, portal_user
 
 
 class InvalidMagicLink(HTTPException):

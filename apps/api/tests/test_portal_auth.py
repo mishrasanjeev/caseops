@@ -412,6 +412,309 @@ def test_me_without_portal_cookie_returns_401(client: TestClient) -> None:
     assert resp.status_code == 401
 
 
+# ----- C-1 hardening (2026-04-24): the gates the user wants ---------
+
+
+def test_request_link_for_unknown_company_slug_still_returns_200(
+    client: TestClient,
+) -> None:
+    """Enumeration defence MUST cover company_slug too — not just
+    email. Otherwise an attacker probes for valid workspace handles."""
+    client.cookies.clear()
+    resp = client.post(
+        "/api/portal/auth/request-link",
+        json={
+            "company_slug": "ghost-firm-9999",
+            "email": "anyone@example.com",
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["delivered"] is True
+    assert body.get("debug_token") is None
+
+
+def test_invite_requires_admin_capability(client: TestClient) -> None:
+    """portal:invite is owner/admin only. A partner / member call
+    must 403."""
+    boot = _bootstrap_workspace(
+        client, slug="cap-firm", email="firm@cap.example",
+    )
+    owner_token = str(boot["access_token"])
+    matter_id = _seed_matter(boot["company"]["id"], code="M-CAP-1")
+
+    # Add a non-admin membership directly (no UI for this in C-1).
+    Session = get_session_factory()
+    from caseops_api.db.models import (
+        CompanyMembership,
+        MembershipRole,
+        User,
+    )
+    with Session() as session:
+        user = User(
+            email="partner@cap.example",
+            full_name="Partner User",
+            password_hash="dummy",
+            is_active=True,
+        )
+        session.add(user)
+        session.flush()
+        partner = CompanyMembership(
+            company_id=boot["company"]["id"],
+            user_id=user.id,
+            role=MembershipRole.PARTNER.value,
+            is_active=True,
+        )
+        session.add(partner)
+        session.commit()
+        partner_membership_id = partner.id
+
+    # Sign in the partner and try to invite — must 403.
+    from caseops_api.core.security import create_access_token
+    partner_jwt = create_access_token(
+        user_id=user.id,
+        company_id=boot["company"]["id"],
+        membership_id=partner_membership_id,
+        role=MembershipRole.PARTNER.value,
+    )
+    resp = client.post(
+        "/api/admin/portal/invitations",
+        headers=auth_headers(partner_jwt),
+        json={
+            "email": "denied@example.com",
+            "full_name": "Denied",
+            "role": "client",
+            "matter_ids": [matter_id],
+        },
+    )
+    assert resp.status_code == 403, resp.text
+    # The owner can still invite — sanity that the gate isn't broken.
+    ok = client.post(
+        "/api/admin/portal/invitations",
+        headers=auth_headers(owner_token),
+        json={
+            "email": "ok@example.com",
+            "full_name": "OK Client",
+            "role": "client",
+            "matter_ids": [matter_id],
+        },
+    )
+    assert ok.status_code == 201
+
+
+def test_invite_with_empty_matter_ids_returns_400(client: TestClient) -> None:
+    boot = _bootstrap_workspace(
+        client, slug="empty-matter", email="firm@empty.example",
+    )
+    token = str(boot["access_token"])
+    resp = client.post(
+        "/api/admin/portal/invitations",
+        headers=auth_headers(token),
+        json={
+            "email": "client@empty.example",
+            "full_name": "Empty Scope",
+            "role": "client",
+            "matter_ids": [],
+        },
+    )
+    assert resp.status_code == 400
+
+
+def test_invite_with_unknown_role_returns_422(client: TestClient) -> None:
+    boot = _bootstrap_workspace(
+        client, slug="bad-role", email="firm@bad.example",
+    )
+    token = str(boot["access_token"])
+    matter_id = _seed_matter(boot["company"]["id"], code="M-BR-1")
+    resp = client.post(
+        "/api/admin/portal/invitations",
+        headers=auth_headers(token),
+        json={
+            "email": "client@bad.example",
+            "full_name": "Bad Role",
+            "role": "admin",  # not in {client, outside_counsel}
+            "matter_ids": [matter_id],
+        },
+    )
+    assert resp.status_code == 422
+
+
+def test_logout_clears_portal_cookie_and_is_idempotent(
+    client: TestClient,
+) -> None:
+    boot = _bootstrap_workspace(
+        client, slug="logout-firm", email="firm@logout.example",
+    )
+    token = str(boot["access_token"])
+    matter_id = _seed_matter(boot["company"]["id"], code="M-LO-1")
+    invite = client.post(
+        "/api/admin/portal/invitations",
+        headers=auth_headers(token),
+        json={
+            "email": "client@logout.example",
+            "full_name": "Logout Client",
+            "role": "client",
+            "matter_ids": [matter_id],
+        },
+    ).json()
+    client.cookies.clear()
+    verify = client.post(
+        "/api/portal/auth/verify-link",
+        json={"token": invite["debug_token"]},
+    )
+    assert verify.status_code == 200
+    assert client.cookies.get("caseops_portal_session")
+
+    # First logout returns 204 and clears the cookie.
+    out = client.post("/api/portal/auth/logout")
+    assert out.status_code == 204
+    # Second logout (no cookie) is still 204 — idempotent.
+    client.cookies.clear()
+    out2 = client.post("/api/portal/auth/logout")
+    assert out2.status_code == 204
+
+
+def test_forged_portal_cookie_is_rejected(client: TestClient) -> None:
+    """A garbage cookie value must not satisfy /api/portal/me."""
+    client.cookies.clear()
+    client.cookies.set("caseops_portal_session", "not-a-real-jwt")
+    resp = client.get("/api/portal/me")
+    assert resp.status_code == 401
+
+
+def test_internal_session_cookie_is_rejected_by_portal(
+    client: TestClient,
+) -> None:
+    """FT-071 inverse: an internal /app session JWT placed in the
+    PORTAL cookie must NOT satisfy /api/portal/me."""
+    boot = _bootstrap_workspace(
+        client, slug="inv-firm", email="firm@inv.example",
+    )
+    internal_jwt = str(boot["access_token"])
+    client.cookies.clear()
+    client.cookies.set("caseops_portal_session", internal_jwt)
+    resp = client.get("/api/portal/me")
+    assert resp.status_code == 401
+
+
+def test_sessions_valid_after_invalidates_existing_session(
+    client: TestClient,
+) -> None:
+    """Setting PortalUser.sessions_valid_after to now must reject
+    any session JWT issued before that timestamp on the next request."""
+    boot = _bootstrap_workspace(
+        client, slug="rev-firm", email="firm@rev.example",
+    )
+    token = str(boot["access_token"])
+    matter_id = _seed_matter(boot["company"]["id"], code="M-SV-1")
+    invite = client.post(
+        "/api/admin/portal/invitations",
+        headers=auth_headers(token),
+        json={
+            "email": "client@rev.example",
+            "full_name": "Revocation Client",
+            "role": "client",
+            "matter_ids": [matter_id],
+        },
+    ).json()
+    client.cookies.clear()
+    verify = client.post(
+        "/api/portal/auth/verify-link",
+        json={"token": invite["debug_token"]},
+    )
+    assert verify.status_code == 200
+    assert client.get("/api/portal/me").status_code == 200
+
+    # Bump sessions_valid_after by a comfortable margin (10s) to
+    # account for clock granularity between the JWT iat and now().
+    from datetime import timedelta
+
+    Session = get_session_factory()
+    with Session() as session:
+        portal_user = session.get(PortalUser, invite["portal_user"]["id"])
+        portal_user.sessions_valid_after = datetime.now(UTC) + timedelta(
+            seconds=10
+        )
+        session.commit()
+
+    resp = client.get("/api/portal/me")
+    assert resp.status_code == 401
+
+
+def test_invite_writes_audit_event(client: TestClient) -> None:
+    """portal.invited audit row must land for every successful invite."""
+    boot = _bootstrap_workspace(
+        client, slug="audit-firm", email="firm@audit.example",
+    )
+    token = str(boot["access_token"])
+    matter_id = _seed_matter(boot["company"]["id"], code="M-AUD-1")
+    invite = client.post(
+        "/api/admin/portal/invitations",
+        headers=auth_headers(token),
+        json={
+            "email": "client@audit.example",
+            "full_name": "Audit Client",
+            "role": "client",
+            "matter_ids": [matter_id],
+        },
+    )
+    assert invite.status_code == 201
+    portal_user_id = invite.json()["portal_user"]["id"]
+
+    Session = get_session_factory()
+    from caseops_api.db.models import AuditEvent
+    with Session() as session:
+        rows = (
+            session.query(AuditEvent)
+            .filter(
+                AuditEvent.action == "portal.invited",
+                AuditEvent.target_id == portal_user_id,
+            )
+            .all()
+        )
+        assert len(rows) == 1
+        assert rows[0].company_id == boot["company"]["id"]
+
+
+def test_verify_writes_audit_event(client: TestClient) -> None:
+    """portal.signed_in audit row must land on each successful verify."""
+    boot = _bootstrap_workspace(
+        client, slug="audit-v-firm", email="firm@audit-v.example",
+    )
+    token = str(boot["access_token"])
+    matter_id = _seed_matter(boot["company"]["id"], code="M-AUDV-1")
+    invite = client.post(
+        "/api/admin/portal/invitations",
+        headers=auth_headers(token),
+        json={
+            "email": "client@audit-v.example",
+            "full_name": "Audit V",
+            "role": "client",
+            "matter_ids": [matter_id],
+        },
+    ).json()
+
+    client.cookies.clear()
+    verify = client.post(
+        "/api/portal/auth/verify-link",
+        json={"token": invite["debug_token"]},
+    )
+    assert verify.status_code == 200
+
+    Session = get_session_factory()
+    from caseops_api.db.models import AuditEvent
+    with Session() as session:
+        rows = (
+            session.query(AuditEvent)
+            .filter(
+                AuditEvent.action == "portal.signed_in",
+                AuditEvent.target_id == invite["portal_user"]["id"],
+            )
+            .all()
+        )
+        assert len(rows) == 1
+
+
 # ----- silence pyflakes for the imported PortalUser symbol ------
 _ = PortalUser
 _ = bootstrap_company

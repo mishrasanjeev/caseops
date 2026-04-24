@@ -84,6 +84,15 @@ def tenant_aware_key(request: Request) -> str:
     return "ip:" + proxy_aware_remote_address(request)
 
 
+def portal_request_link_rate_limit() -> str:
+    """Phase C-1 hardening (2026-04-24). Defends the magic-link
+    request endpoint against email-enumeration timing attacks AND
+    against simple flood: ten requests per minute per peer-IP is
+    plenty for a real portal user fat-fingering their email a few
+    times, but stops a script harvesting addresses."""
+    return f"{get_settings().auth_rate_limit_login_per_minute}/minute"
+
+
 def ai_route_rate_limit() -> str:
     """Per-session limit on expensive AI generation routes (drafting
     generate, hearing-pack assemble, recommendations, matter
