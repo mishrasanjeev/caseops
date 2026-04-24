@@ -2,12 +2,17 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from caseops_api.api.dependencies import (
     DbSession,
     get_current_context,
     require_capability,
+)
+from caseops_api.core.rate_limit import (
+    ai_route_rate_limit,
+    limiter,
+    tenant_aware_key,
 )
 from caseops_api.schemas.ai import (
     ContractReviewGenerateRequest,
@@ -61,7 +66,9 @@ ContractRuleManager = Annotated[
     response_model=MatterBriefResponse,
     summary="Generate a matter summary or hearing preparation brief",
 )
+@limiter.limit(ai_route_rate_limit, key_func=tenant_aware_key)
 async def generate_current_company_matter_brief(
+    request: Request,
     matter_id: str,
     payload: MatterBriefGenerateRequest,
     context: AIGenerator,
@@ -80,7 +87,9 @@ async def generate_current_company_matter_brief(
     response_model=MatterDocumentReviewResponse,
     summary="Generate a structured matter document review from uploaded files",
 )
+@limiter.limit(ai_route_rate_limit, key_func=tenant_aware_key)
 async def generate_current_company_matter_document_review(
+    request: Request,
     matter_id: str,
     payload: MatterDocumentReviewGenerateRequest,
     context: AIGenerator,
@@ -99,7 +108,9 @@ async def generate_current_company_matter_document_review(
     response_model=MatterDocumentSearchResponse,
     summary="Search uploaded matter documents for relevant snippets",
 )
+@limiter.limit(ai_route_rate_limit, key_func=tenant_aware_key)
 async def search_current_company_matter_documents(
+    request: Request,
     matter_id: str,
     payload: MatterDocumentSearchRequest,
     context: AIGenerator,
@@ -118,7 +129,9 @@ async def search_current_company_matter_documents(
     response_model=ContractReviewResponse,
     summary="Generate a contract intake review from workspace data and uploaded documents",
 )
+@limiter.limit(ai_route_rate_limit, key_func=tenant_aware_key)
 async def generate_current_company_contract_review(
+    request: Request,
     contract_id: str,
     payload: ContractReviewGenerateRequest,
     context: AIGenerator,
@@ -140,7 +153,9 @@ async def generate_current_company_contract_review(
     response_model=ClauseExtractionResponse,
     summary="Auto-extract clauses from the contract's uploaded text",
 )
+@limiter.limit(ai_route_rate_limit, key_func=tenant_aware_key)
 async def extract_current_company_contract_clauses(
+    request: Request,
     contract_id: str,
     context: ContractEditor,
     session: DbSession,
@@ -161,7 +176,9 @@ async def extract_current_company_contract_clauses(
     response_model=ObligationExtractionResponse,
     summary="Auto-extract obligations (payments, notices, renewals) from the contract",
 )
+@limiter.limit(ai_route_rate_limit, key_func=tenant_aware_key)
 async def extract_current_company_contract_obligations(
+    request: Request,
     contract_id: str,
     context: ContractEditor,
     session: DbSession,
@@ -182,7 +199,9 @@ async def extract_current_company_contract_obligations(
     response_model=PlaybookInstallResponse,
     summary="Install the default Indian-commercial playbook onto this contract",
 )
+@limiter.limit(ai_route_rate_limit, key_func=tenant_aware_key)
 async def install_default_playbook(
+    request: Request,
     contract_id: str,
     context: ContractRuleManager,
     session: DbSession,
@@ -199,7 +218,9 @@ async def install_default_playbook(
     response_model=PlaybookComparisonResponse,
     summary="Compare extracted clauses against this contract's playbook rules",
 )
+@limiter.limit(ai_route_rate_limit, key_func=tenant_aware_key)
 async def compare_contract_playbook(
+    request: Request,
     contract_id: str,
     context: AIGenerator,
     session: DbSession,

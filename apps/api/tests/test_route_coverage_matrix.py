@@ -154,3 +154,25 @@ def test_authenticated_routes_have_a_401_test_anchor(
         "test corpus must reference 401 status anywhere — current 0 "
         "matches means every auth path is silently untested."
     )
+
+
+def test_ai_routes_governance_anchor_exists(client: TestClient) -> None:
+    """QG-AI-001 (P1-007, 2026-04-24): the suite must contain a
+    governance anchor for AI/recommendation routes. Per-route
+    rate-limit enforcement lives in
+    ``test_ai_route_governance.py::test_ai_routes_have_rate_limits``
+    which inspects the source decorator stack. This umbrella check
+    just guarantees that file exists and references the prefix; if
+    someone deletes it, this fails so the audit gap doesn't quietly
+    return."""
+    anchor = TESTS_ROOT / "test_ai_route_governance.py"
+    assert anchor.exists(), (
+        "test_ai_route_governance.py must exist — it enforces "
+        "QG-AI-001 per-route rate-limit coverage. If you must "
+        "remove it, add an equivalent gate AND update this anchor."
+    )
+    text = anchor.read_text(encoding="utf-8")
+    assert "/api/ai/" in text and "/api/recommendations/" in text, (
+        "test_ai_route_governance.py must continue to enforce both "
+        "AI and recommendation prefixes."
+    )
