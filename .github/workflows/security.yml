@@ -1,0 +1,177 @@
+# P1-005 (2026-04-24, QG-SEC-001/-002/-003/-004) — supply-chain
+# security gates. CodeQL covers SAST in codeql.yml; this workflow
+# covers the remaining gaps from the audit:
+#
+# - npm audit (JS dep vulnerabilities)
+# - pip-audit / OSV equivalent (Python dep vulnerabilities)
+# - gitleaks secret scan on every PR
+# - license allow-list check
+#
+# Each job is a separate GitHub job so failures attribute clearly
+# in the PR check list. None depend on Pine Labs / Anthropic /
+# Voyage credentials.
+
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Daily at 04:30 UTC so newly-disclosed CVEs surface within 24h
+    # even on a quiet weekend without any PRs.
+    - cron: "30 4 * * *"
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  npm-audit:
+    name: npm audit (high+critical)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+      - run: npm ci --ignore-scripts
+      # --audit-level high blocks high + critical; moderate findings
+      # surface in the log for triage but don't fail the build.
+      - run: npm audit --audit-level=high
+
+  pip-audit:
+    name: pip-audit (high+critical)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+      - name: Set up Python
+        run: uv python install 3.13
+      - name: Sync API deps
+        working-directory: apps/api
+        run: uv sync --frozen --no-install-project
+      - name: Install pip-audit
+        run: uv tool install pip-audit
+      # PyPA's pip-audit reads pyproject + the resolved venv. We use
+      # the lock-derived venv so the scan matches what gets shipped.
+      # Strict mode fails on any unresolved advisory.
+      - name: Run pip-audit
+        working-directory: apps/api
+        run: |
+          uv tool run pip-audit \
+            --strict \
+            --vulnerability-service osv \
+            --requirement <(uv pip freeze)
+
+  gitleaks:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # GITLEAKS_LICENSE only needed for org-level scanning — we
+          # use the free per-repo path. Default config catches AWS
+          # keys, GitHub PATs, Stripe keys, generic high-entropy
+          # strings, and Anthropic / OpenAI / SendGrid keys.
+
+  license-allowlist:
+    name: License allow-list
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+      - run: npm ci --ignore-scripts
+      # license-checker enumerates every transitive package's license.
+      # CaseOps's CLAUDE.md allow-list: MIT, Apache-2.0, BSD-2-Clause,
+      # BSD-3-Clause, ISC, PostgreSQL, Python-2.0, Unlicense, CC0-1.0,
+      # 0BSD, BlueOak-1.0.0. AGPL/SSPL/BSL/BUSL block.
+      - name: Check JS licenses
+        run: |
+          npx --yes license-checker --production --json --excludePrivatePackages \
+            --onlyAllow "MIT;Apache-2.0;BSD-2-Clause;BSD-3-Clause;ISC;PostgreSQL;Python-2.0;Unlicense;CC0-1.0;0BSD;BlueOak-1.0.0;CC-BY-4.0;CC-BY-3.0;Apache 2.0" \
+            > license-report.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: js-license-report
+          path: license-report.json
+
+  openapi-client-drift:
+    name: OpenAPI -> generated client clean diff (QG-API-012, P1-010)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+      - name: Set up Python
+        run: uv python install 3.13
+      - name: Sync API deps
+        working-directory: apps/api
+        run: uv sync --frozen --no-install-project
+      - name: Install openapi-typescript
+        run: npm install --no-save openapi-typescript@^7
+      - name: Dump current OpenAPI from FastAPI app
+        run: uv --directory apps/api run --no-sync python ../../scripts/dump_openapi.py /tmp/openapi.json
+      - name: Regenerate web/lib/api/openapi-types.ts
+        run: npx openapi-typescript /tmp/openapi.json --output apps/web/lib/api/openapi-types.ts
+      - name: Fail if regenerated types differ from committed types
+        run: |
+          if ! git diff --quiet -- apps/web/lib/api/openapi-types.ts; then
+            echo "::error::apps/web/lib/api/openapi-types.ts is stale. Run 'npm run gen:api-types --workspace @caseops/web' (or scripts/dump_openapi.py + openapi-typescript) and commit the regenerated file."
+            git --no-pager diff -- apps/web/lib/api/openapi-types.ts
+            exit 1
+          fi
+
+  manifest-no-literal-secrets:
+    name: Cloud Run manifests use secret refs (QG-OPS-006)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject literal secrets in infra/cloudrun
+        # Any env var named *_SECRET / *_KEY / *_TOKEN / *_PASSWORD
+        # whose value is a plain string (not a secretKeyRef) breaks
+        # the build. Allows valueFrom: secretKeyRef and explicit
+        # placeholders matching ${...}.
+        run: |
+          set -euo pipefail
+          fail=0
+          if [ -d infra/cloudrun ]; then
+            while IFS= read -r match; do
+              if [ -n "$match" ]; then
+                echo "::error::Literal secret in Cloud Run manifest: $match"
+                fail=1
+              fi
+            done < <(grep -REn '^\s*value:\s*"?[A-Za-z0-9/+=_-]{20,}"?\s*$' infra/cloudrun/ \
+              | grep -E '_(SECRET|KEY|TOKEN|PASSWORD)' || true)
+          fi
+          exit $fail
