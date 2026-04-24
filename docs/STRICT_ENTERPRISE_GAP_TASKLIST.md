@@ -40,8 +40,54 @@ closed in commit `161c384`:
   on every E2E pass; Pine Labs payment-link path is provider-gated
   for UAT/release sign-off only.
 
-P1-001 through P1-010 from the same audit remain open and are tracked
-below as `QG-*` gaps.
+P1 status after commit `8466911`:
+
+- `P1-001` `Implemented` Per-area coverage gate is wired into CI through
+  `scripts/coverage_gate.py`.
+- `P1-002` `Partially implemented` API route coverage matrix is enforced for
+  new routes, with 16 dated baseline waivers in
+  `apps/api/tests/test_route_coverage_matrix.py`.
+- `P1-003` `Partially implemented` Frontend page coverage matrix is enforced
+  for new pages, with 20 dated baseline waivers in
+  `apps/web/app/__page-coverage-matrix.test.ts`.
+- `P1-004` `Implemented` Mobile and axe sweeps cover the smoke surfaces.
+- `P1-005` `Implemented` Security CI gates cover dependency advisories,
+  gitleaks, license allow-list, and Cloud Run secret-reference checks.
+- `P1-006` `Missing` Postgres-backed DB validation tests remain deferred until
+  CI has a Postgres service container.
+- `P1-007` `Implemented` AI route governance gate enforces rate limits for
+  `/api/ai/*` and `/api/recommendations/*` mutations.
+- `P1-008` `Implemented` Upload size cap and abuse tests landed.
+- `P1-009` `Partially implemented` Runbook exists, but backup/restore drill
+  evidence against a clean environment has not been re-run in this session.
+- `P1-010` `Implemented` OpenAPI client drift gate is wired into CI.
+
+The original `QG-*` entries below are retained as audit history; this section
+is the current closure status.
+
+## Phase C-2 (2026-04-24, MOD-TS-015) — client portal matter surface
+
+`Implemented` in commit `b0965e9`:
+
+- Six new endpoints under `/api/portal/*` gated by a live
+  `MatterPortalGrant` (role='client') scope check + cookie-based
+  `get_current_portal_user` dependency.
+- Web pages `/portal` (matter list) + `/portal/matters/[id]`
+  (Overview / Comms / Hearings / KYC tabs).
+- 14 backend tests in `apps/api/tests/test_portal_matters.py` cover
+  tenant isolation, no-grant 404, cross-tenant 404, can_reply gate
+  (403), audit row written on reply + KYC submit, hearings list,
+  outside-counsel role denied, unauthenticated 401.
+- 5 web vitest cases on the matter detail + 4 updated on the
+  landing page.
+- Role-guards sweep + route coverage matrix updated to whitelist
+  the new portal-cookie-auth pattern.
+- AutoMail magic-link send (Phase C-1) already routes invitations
+  to real email; portal users sign in, see their matters, click
+  in, reply, submit KYC end-to-end.
+
+Phase C-3 (outside-counsel portal — work-product upload, invoice
+submission, time entries) intentionally next; not landed today.
 
 ## Stop-Ship Control Gaps
 
@@ -302,14 +348,17 @@ below as `QG-*` gaps.
   Evidence: `tests/e2e/billing-payment.spec.ts:43-46`,
   `docs/STRICT_REPO_QUALITY_AUDIT_2026-04-24.md`.
 
-- `QG-P1-001` `Missing` Exhaustive generated API route and frontend page
-  coverage ledgers are absent, despite `157` OpenAPI operations and `43` Next
-  page routes.
-  Evidence: `docs/STRICT_REPO_QUALITY_AUDIT_2026-04-24.md`.
+- `QG-P1-001` `Partially implemented` Generated API route and frontend page
+  coverage ledgers now exist and fail on new unclassified surfaces, but 16 API
+  and 20 page baseline waivers remain real test gaps.
+  Evidence: `apps/api/tests/test_route_coverage_matrix.py`,
+  `apps/web/app/__page-coverage-matrix.test.ts`,
+  `docs/CODEX_REVIEW_PACK_2026-04-24.md`.
 
-- `QG-P1-002` `Missing` Security scanning and dependency/license gates are not
-  strict enough for release-grade sign-off.
-  Evidence: `docs/STRICT_REPO_QUALITY_AUDIT_2026-04-24.md`.
+- `QG-P1-002` `Implemented` Security scanning and dependency/license gates are
+  wired into CI.
+  Evidence: `.github/workflows/security.yml`,
+  `docs/CODEX_REVIEW_PACK_2026-04-24.md`.
 
 ## Claude Discipline
 
