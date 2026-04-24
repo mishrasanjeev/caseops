@@ -50,6 +50,14 @@ from caseops_api.services.portal_mailer import (
     portal_verify_url,
     send_portal_magic_link,
 )
+from caseops_api.services.portal_matters import (
+    get_granted_matter,
+    list_granted_matters,
+    list_matter_communications,
+    list_matter_hearings_for_portal,
+    post_matter_reply,
+    submit_matter_kyc,
+)
 
 router = APIRouter()
 admin_router = APIRouter()
@@ -129,6 +137,74 @@ class PortalInviteResponse(BaseModel):
     portal_user: PortalUserRecord
     grants: list[PortalGrantRecord]
     debug_token: str | None = None  # NON-prod only.
+
+
+# ---------- Phase C-2 (MOD-TS-015) — client portal matter surface ----------
+
+
+class PortalMatterRecord(BaseModel):
+    id: str
+    title: str
+    matter_code: str | None
+    status: str
+    practice_area: str | None
+    forum_level: str | None
+    court_name: str | None
+    next_hearing_on: str | None
+
+
+class PortalMatterListResponse(BaseModel):
+    matters: list[PortalMatterRecord]
+
+
+class PortalCommunicationRecord(BaseModel):
+    id: str
+    direction: Literal["inbound", "outbound"]
+    channel: str
+    subject: str | None
+    body: str
+    occurred_at: str
+    status: str
+    posted_by_portal_user: bool
+
+
+class PortalCommunicationListResponse(BaseModel):
+    communications: list[PortalCommunicationRecord]
+
+
+class PortalReplyPayload(BaseModel):
+    body: str = Field(min_length=1, max_length=8000)
+
+
+class PortalHearingRecord(BaseModel):
+    id: str
+    hearing_on: str  # date YYYY-MM-DD
+    forum_name: str
+    judge_name: str | None
+    purpose: str
+    status: str
+    outcome_note: str | None
+
+
+class PortalHearingListResponse(BaseModel):
+    hearings: list[PortalHearingRecord]
+
+
+class PortalKycDocument(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    note: str | None = Field(default=None, max_length=400)
+
+
+class PortalKycSubmitPayload(BaseModel):
+    documents: list[PortalKycDocument] = Field(
+        default_factory=list, max_length=20,
+    )
+
+
+class PortalKycSubmitResponse(BaseModel):
+    matter_id: str
+    affected_client_ids: list[str]
+    submitted_at: str
 
 
 # ---------- helpers ----------
@@ -341,6 +417,178 @@ async def get_portal_me(
                 session, portal_user_id=portal_user.id,
             )
         ],
+    )
+
+
+# ---------- C-2 (MOD-TS-015) — client portal matter surface ----------
+
+
+def _matter_record(matter) -> PortalMatterRecord:
+    return PortalMatterRecord(
+        id=matter.id,
+        title=matter.title,
+        matter_code=matter.matter_code,
+        status=str(matter.status),
+        practice_area=matter.practice_area,
+        forum_level=matter.forum_level,
+        court_name=matter.court_name,
+        next_hearing_on=(
+            matter.next_hearing_on.isoformat()
+            if matter.next_hearing_on else None
+        ),
+    )
+
+
+def _comm_record(comm) -> PortalCommunicationRecord:
+    posted_by_portal = bool(
+        comm.metadata_json and comm.metadata_json.get("portal_user_id")
+    )
+    return PortalCommunicationRecord(
+        id=comm.id,
+        direction=comm.direction,
+        channel=comm.channel,
+        subject=comm.subject,
+        body=comm.body,
+        occurred_at=comm.occurred_at.isoformat(),
+        status=comm.status,
+        posted_by_portal_user=posted_by_portal,
+    )
+
+
+def _hearing_record(hearing) -> PortalHearingRecord:
+    return PortalHearingRecord(
+        id=hearing.id,
+        hearing_on=hearing.hearing_on.isoformat(),
+        forum_name=hearing.forum_name,
+        judge_name=hearing.judge_name,
+        purpose=hearing.purpose,
+        status=str(hearing.status),
+        outcome_note=hearing.outcome_note,
+    )
+
+
+@router.get(
+    "/matters",
+    response_model=PortalMatterListResponse,
+    summary="List matters this portal user has been granted access to",
+)
+async def get_portal_matters(
+    portal_user: CurrentPortalUser,
+    session: DbSession,
+) -> PortalMatterListResponse:
+    pairs = list_granted_matters(
+        session, portal_user=portal_user, role="client",
+    )
+    return PortalMatterListResponse(
+        matters=[_matter_record(m) for _g, m in pairs],
+    )
+
+
+@router.get(
+    "/matters/{matter_id}",
+    response_model=PortalMatterRecord,
+    summary="Detail of one matter the portal user has been granted",
+)
+async def get_portal_matter(
+    matter_id: str,
+    portal_user: CurrentPortalUser,
+    session: DbSession,
+) -> PortalMatterRecord:
+    matter = get_granted_matter(
+        session, portal_user=portal_user, matter_id=matter_id,
+    )
+    return _matter_record(matter)
+
+
+@router.get(
+    "/matters/{matter_id}/communications",
+    response_model=PortalCommunicationListResponse,
+    summary="Communications visible to the portal user on this matter",
+)
+async def get_portal_matter_communications(
+    matter_id: str,
+    portal_user: CurrentPortalUser,
+    session: DbSession,
+) -> PortalCommunicationListResponse:
+    rows = list_matter_communications(
+        session, portal_user=portal_user, matter_id=matter_id,
+    )
+    return PortalCommunicationListResponse(
+        communications=[_comm_record(c) for c in rows],
+    )
+
+
+@router.post(
+    "/matters/{matter_id}/communications",
+    response_model=PortalCommunicationRecord,
+    status_code=status.HTTP_201_CREATED,
+    summary="Reply to the firm — lands in the internal Communications log",
+)
+async def post_portal_matter_reply(
+    matter_id: str,
+    payload: PortalReplyPayload,
+    portal_user: CurrentPortalUser,
+    request: Request,
+    session: DbSession,
+) -> PortalCommunicationRecord:
+    comm = post_matter_reply(
+        session,
+        portal_user=portal_user,
+        matter_id=matter_id,
+        body=payload.body,
+        request_ip=request.client.host if request.client else None,
+    )
+    return _comm_record(comm)
+
+
+@router.get(
+    "/matters/{matter_id}/hearings",
+    response_model=PortalHearingListResponse,
+    summary="Read-only list of hearings on this matter",
+)
+async def get_portal_matter_hearings(
+    matter_id: str,
+    portal_user: CurrentPortalUser,
+    session: DbSession,
+) -> PortalHearingListResponse:
+    hearings = list_matter_hearings_for_portal(
+        session, portal_user=portal_user, matter_id=matter_id,
+    )
+    return PortalHearingListResponse(
+        hearings=[_hearing_record(h) for h in hearings],
+    )
+
+
+@router.post(
+    "/matters/{matter_id}/kyc",
+    response_model=PortalKycSubmitResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Submit KYC documents for the clients on this matter",
+)
+async def post_portal_matter_kyc(
+    matter_id: str,
+    payload: PortalKycSubmitPayload,
+    portal_user: CurrentPortalUser,
+    request: Request,
+    session: DbSession,
+) -> PortalKycSubmitResponse:
+    matter, affected = submit_matter_kyc(
+        session,
+        portal_user=portal_user,
+        matter_id=matter_id,
+        documents=[d.model_dump() for d in payload.documents],
+        request_ip=request.client.host if request.client else None,
+    )
+    submitted_at = max(
+        (c.kyc_submitted_at for c in affected if c.kyc_submitted_at),
+        default=None,
+    )
+    return PortalKycSubmitResponse(
+        matter_id=matter.id,
+        affected_client_ids=[c.id for c in affected],
+        submitted_at=(
+            submitted_at.isoformat() if submitted_at else ""
+        ),
     )
 
 

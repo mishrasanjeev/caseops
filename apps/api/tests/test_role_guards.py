@@ -66,6 +66,14 @@ PUBLIC_MUTATING_ROUTES: set[tuple[str, str]] = {
     ("POST", "/api/portal/auth/verify-link"),
     # logout clears the portal session cookie; idempotent.
     ("POST", "/api/portal/auth/logout"),
+    # Phase C-2 (2026-04-24, MOD-TS-015) — client portal mutations.
+    # These ride on get_current_portal_user (cookie-based) + a
+    # MatterPortalGrant scope check; require_capability would be the
+    # wrong gate because PortalUser is intentionally NOT a Membership
+    # (D1 in PHASE_C_KICKOFF_2026-04-24.md). Per-route auth is
+    # exercised by tests/test_portal_matters.py.
+    ("POST", "/api/portal/matters/{matter_id}/communications"),
+    ("POST", "/api/portal/matters/{matter_id}/kyc"),
 }
 
 
