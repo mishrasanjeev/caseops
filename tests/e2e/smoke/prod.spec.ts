@@ -18,6 +18,7 @@
  * smoke pass, not a coverage suite. The goal is "did the page render
  * a server-rendered shell" + "is the primary action reachable".
  */
+import AxeBuilder from "@axe-core/playwright";
 import { expect, request as pwRequest, test } from "@playwright/test";
 
 const STAMP = `${Date.now()}-${Math.floor(Math.random() * 1e6).toString(36)}`;
@@ -26,25 +27,44 @@ const EMAIL = `smoke+${STAMP}@example.com`;
 const PASSWORD = "SmokePass1234!";
 const API_BASE = process.env.API_BASE_URL ?? "https://api.caseops.ai";
 
-test.describe.configure({ mode: "serial" });
+test.describe.configure({ mode: "serial", timeout: 180_000 });
 
 test.describe("Prod smoke (2026-04-24 sweep)", () => {
+  // Bootstrap can take up to two 30s sleeps if the rate limit
+  // bucket is exhausted, so allow 2 minutes for the hook itself.
   test.beforeAll(async () => {
     // The marketing domain (caseops.ai) does not expose /api/* —
     // those live on the api.* subdomain. Use a one-off request
     // context pointed there so the bootstrap call lands.
     const ctx = await pwRequest.newContext({ baseURL: API_BASE });
-    const resp = await ctx.post("/api/bootstrap/company", {
-      data: {
-        company_name: `Smoke ${STAMP}`,
-        company_slug: SLUG,
-        company_type: "law_firm",
-        owner_full_name: "Smoke Owner",
-        owner_email: EMAIL,
-        owner_password: PASSWORD,
-      },
-    });
-    expect(resp.status(), `bootstrap failed: ${await resp.text()}`).toBe(200);
+    // Bootstrap rate limit is 10/hour per IP. If a previous smoke
+    // run within the same hour exhausted the bucket, retry up to
+    // twice with a backoff so CI doesn't fail on a transient quota
+    // shared across runners.
+    let lastStatus = 0;
+    let lastBody = "";
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) await new Promise((r) => setTimeout(r, 30_000));
+      const resp = await ctx.post("/api/bootstrap/company", {
+        data: {
+          company_name: `Smoke ${STAMP}`,
+          company_slug: SLUG,
+          company_type: "law_firm",
+          owner_full_name: "Smoke Owner",
+          owner_email: EMAIL,
+          owner_password: PASSWORD,
+        },
+      });
+      lastStatus = resp.status();
+      if (lastStatus === 200) break;
+      lastBody = await resp.text();
+      // 429 only worth retrying — 4xx body errors are deterministic.
+      if (lastStatus !== 429) break;
+    }
+    expect(
+      lastStatus,
+      `bootstrap failed after retries (${lastStatus}): ${lastBody}`,
+    ).toBe(200);
     await ctx.dispose();
   });
 
@@ -207,5 +227,101 @@ test.describe("Prod smoke (2026-04-24 sweep)", () => {
     // token" hint rather than 500.
     await page.goto("/portal/verify");
     await expect(page.getByText(/no token in url/i)).toBeVisible();
+  });
+
+  // ---------------------------------------------------------------------
+  // P1-004 (2026-04-24, QG-UI-013/-015) — broader mobile + a11y sweep.
+  // Single test that loops over every authenticated surface, sets a
+  // 360x800 viewport, asserts no horizontal scroll, then runs an axe
+  // scan and asserts zero serious/critical violations. One test
+  // instead of one-per-surface so the sign-in cost is paid once.
+  // ---------------------------------------------------------------------
+  const SURFACES_FOR_MOBILE_A11Y = [
+    "/app",
+    "/app/calendar",
+    "/app/clients",
+    "/app/research",
+    "/app/research/saved",
+    "/app/admin/email-templates",
+  ];
+
+  test("every smoke surface fits 360px mobile + has zero serious/critical axe violations (P1-004)", async ({
+    page,
+  }) => {
+    test.setTimeout(180_000);
+    await page.setViewportSize({ width: 360, height: 800 });
+
+    const failures: string[] = [];
+    for (const path of SURFACES_FOR_MOBILE_A11Y) {
+      await page.goto(path, { waitUntil: "networkidle" });
+      const overflow = await page.evaluate(() => ({
+        scroll: document.documentElement.scrollWidth,
+        client: document.documentElement.clientWidth,
+      }));
+      if (overflow.scroll > overflow.client + 1) {
+        failures.push(
+          `${path}: horizontal scroll (scrollWidth=${overflow.scroll} > clientWidth=${overflow.client})`,
+        );
+      }
+      const axe = await new AxeBuilder({ page })
+        .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+        .analyze();
+      const blockers = axe.violations.filter(
+        (v) => v.impact === "serious" || v.impact === "critical",
+      );
+      if (blockers.length > 0) {
+        failures.push(
+          `${path}: ${blockers.length} serious/critical axe violations (${blockers.map((v) => v.id).join(", ")})`,
+        );
+      }
+    }
+    expect(
+      failures,
+      `P1-004 mobile + a11y sweep failed:\n  ${failures.join("\n  ")}`,
+    ).toEqual([]);
+  });
+
+});
+
+// Public surfaces (no auth, no bootstrap) — separate describe so the
+// bootstrap rate limit on /api/bootstrap/company doesn't gate this
+// pass. P1-004 requires every public surface to pass mobile + axe.
+test.describe("Prod smoke — public surfaces (P1-004)", () => {
+  const PUBLIC_SURFACES = ["/", "/sign-in", "/portal/sign-in"];
+
+  test("public surfaces fit 360px mobile + have zero serious/critical axe violations", async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await page.setViewportSize({ width: 360, height: 800 });
+
+    const failures: string[] = [];
+    for (const path of PUBLIC_SURFACES) {
+      await page.goto(path, { waitUntil: "networkidle" });
+      const overflow = await page.evaluate(() => ({
+        scroll: document.documentElement.scrollWidth,
+        client: document.documentElement.clientWidth,
+      }));
+      if (overflow.scroll > overflow.client + 1) {
+        failures.push(
+          `${path}: horizontal scroll (scrollWidth=${overflow.scroll} > clientWidth=${overflow.client})`,
+        );
+      }
+      const axe = await new AxeBuilder({ page })
+        .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+        .analyze();
+      const blockers = axe.violations.filter(
+        (v) => v.impact === "serious" || v.impact === "critical",
+      );
+      if (blockers.length > 0) {
+        failures.push(
+          `${path}: ${blockers.length} serious/critical axe violations (${blockers.map((v) => v.id).join(", ")})`,
+        );
+      }
+    }
+    expect(
+      failures,
+      `P1-004 public-surface sweep failed:\n  ${failures.join("\n  ")}`,
+    ).toEqual([]);
   });
 });

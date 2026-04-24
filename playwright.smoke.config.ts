@@ -37,6 +37,12 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   reporter: [["list"]],
+  // P1-004 (2026-04-24): the bootstrap rate limit (10/hour per IP)
+  // can force a beforeAll retry with up to two 30s sleeps. Default
+  // 30s hook timeout is too tight; raise to 3 minutes globally.
+  timeout: 180_000,
+  expect: { timeout: 15_000 },
+  globalTimeout: 0,
   use: {
     baseURL,
     headless: true,
