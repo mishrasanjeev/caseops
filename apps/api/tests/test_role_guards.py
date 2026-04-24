@@ -74,6 +74,15 @@ PUBLIC_MUTATING_ROUTES: set[tuple[str, str]] = {
     # exercised by tests/test_portal_matters.py.
     ("POST", "/api/portal/matters/{matter_id}/communications"),
     ("POST", "/api/portal/matters/{matter_id}/kyc"),
+    # Phase C-3 (2026-04-25, MOD-TS-016) — outside-counsel portal
+    # mutations. Same justification as the C-2 entries above:
+    # get_current_portal_user + role='outside_counsel' grant gate
+    # in services/portal_outside_counsel._assert_oc_grant. Per-route
+    # auth is exercised by tests/test_portal_outside_counsel.py
+    # (FT-074, FT-075, role gate, tenant iso, CSRF, cross-counsel iso).
+    ("POST", "/api/portal/oc/matters/{matter_id}/work-product"),
+    ("POST", "/api/portal/oc/matters/{matter_id}/invoices"),
+    ("POST", "/api/portal/oc/matters/{matter_id}/time-entries"),
 }
 
 
