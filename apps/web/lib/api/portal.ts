@@ -217,3 +217,151 @@ export async function submitPortalMatterKyc(
     { client_id: clientId, documents },
   );
 }
+
+// ---------- Phase C-3 (MOD-TS-016) — outside-counsel portal helpers ----------
+
+async function portalMultipartPost<T>(path: string, form: FormData): Promise<T> {
+  const csrf = readPortalCsrfCookie();
+  const headers: Record<string, string> = {};
+  if (csrf) headers[PORTAL_CSRF_HEADER] = csrf;
+  const resp = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    credentials: "include",
+    headers,
+    body: form,
+  });
+  if (!resp.ok) {
+    let detail = "Portal request failed.";
+    try {
+      const data = await resp.json();
+      if (data?.detail) detail = data.detail;
+    } catch {
+      /* ignore */
+    }
+    throw Object.assign(new Error(detail), {
+      name: "ApiError",
+      detail,
+      status: resp.status,
+      data: null,
+    });
+  }
+  return (await resp.json()) as T;
+}
+
+export async function fetchPortalOcMatters(): Promise<{ matters: PortalMatter[] }> {
+  return apiRequest<{ matters: PortalMatter[] }>("/api/portal/oc/matters");
+}
+
+export async function fetchPortalOcMatter(matterId: string): Promise<PortalMatter> {
+  return apiRequest<PortalMatter>(`/api/portal/oc/matters/${matterId}`);
+}
+
+export type PortalOcWorkProduct = {
+  id: string;
+  original_filename: string;
+  content_type: string | null;
+  size_bytes: number;
+  submitted_by_portal_user_id: string | null;
+  created_at: string;
+};
+
+export async function fetchPortalOcWorkProduct(
+  matterId: string,
+): Promise<{ items: PortalOcWorkProduct[] }> {
+  return apiRequest<{ items: PortalOcWorkProduct[] }>(
+    `/api/portal/oc/matters/${matterId}/work-product`,
+  );
+}
+
+export async function uploadPortalOcWorkProduct(
+  matterId: string,
+  file: File,
+): Promise<PortalOcWorkProduct> {
+  const form = new FormData();
+  form.append("file", file);
+  return portalMultipartPost<PortalOcWorkProduct>(
+    `/api/portal/oc/matters/${matterId}/work-product`,
+    form,
+  );
+}
+
+export type PortalOcInvoiceLineItem = {
+  description: string;
+  amount_minor: number;
+};
+
+export type PortalOcInvoice = {
+  id: string;
+  invoice_number: string;
+  status: string;
+  currency: string;
+  subtotal_amount_minor: number;
+  total_amount_minor: number;
+  issued_on: string;
+  due_on: string | null;
+  submitted_by_portal_user_id: string | null;
+  created_at: string;
+};
+
+export async function fetchPortalOcInvoices(
+  matterId: string,
+): Promise<{ invoices: PortalOcInvoice[] }> {
+  return apiRequest<{ invoices: PortalOcInvoice[] }>(
+    `/api/portal/oc/matters/${matterId}/invoices`,
+  );
+}
+
+export async function submitPortalOcInvoice(
+  matterId: string,
+  payload: {
+    invoice_number: string;
+    issued_on: string;
+    due_on?: string | null;
+    currency: string;
+    line_items: PortalOcInvoiceLineItem[];
+    notes?: string | null;
+  },
+): Promise<PortalOcInvoice> {
+  return portalMutate<PortalOcInvoice>(
+    `/api/portal/oc/matters/${matterId}/invoices`,
+    payload,
+  );
+}
+
+export type PortalOcTimeEntry = {
+  id: string;
+  work_date: string;
+  description: string;
+  duration_minutes: number;
+  billable: boolean;
+  rate_currency: string;
+  rate_amount_minor: number | null;
+  total_amount_minor: number;
+  submitted_by_portal_user_id: string | null;
+  created_at: string;
+};
+
+export async function fetchPortalOcTimeEntries(
+  matterId: string,
+): Promise<{ entries: PortalOcTimeEntry[] }> {
+  return apiRequest<{ entries: PortalOcTimeEntry[] }>(
+    `/api/portal/oc/matters/${matterId}/time-entries`,
+  );
+}
+
+export async function submitPortalOcTimeEntry(
+  matterId: string,
+  payload: {
+    work_date: string;
+    description: string;
+    duration_minutes: number;
+    billable: boolean;
+    rate_currency: string;
+    rate_amount_minor?: number | null;
+  },
+): Promise<PortalOcTimeEntry> {
+  return portalMutate<PortalOcTimeEntry>(
+    `/api/portal/oc/matters/${matterId}/time-entries`,
+    payload,
+  );
+}
