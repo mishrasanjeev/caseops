@@ -1171,6 +1171,29 @@ export async function fetchJudgeProfile(judgeId: string): Promise<JudgeProfile> 
   return apiRequest(`/api/courts/judges/${judgeId}`);
 }
 
+// Slice D admin surface (MOD-TS-001-E, 2026-04-25 follow-up).
+// Read-only listing of every judge alias for the admin audit page.
+export type JudgeAliasRecord = {
+  id: string;
+  judge_id: string;
+  judge_full_name: string;
+  court_id: string;
+  court_short_name: string;
+  alias_text: string;
+  source: string;
+  created_at: string;
+};
+
+export type JudgeAliasListResponse = {
+  aliases: JudgeAliasRecord[];
+  judge_count: number;
+  alias_count: number;
+};
+
+export async function listJudgeAliases(): Promise<JudgeAliasListResponse> {
+  return apiRequest("/api/courts/judges/aliases");
+}
+
 // --- Sprint 8c BG-026: teams + team scoping ---
 
 export type TeamKind = "team" | "department" | "practice_area";

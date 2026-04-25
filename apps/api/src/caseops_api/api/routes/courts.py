@@ -22,6 +22,7 @@ from caseops_api.db.models import (
     AuthorityDocumentChunk,
     Court,
     Judge,
+    JudgeAlias,
     JudgeAppointment,
     Matter,
 )
@@ -309,6 +310,90 @@ class JudgeProfileResponse(BaseModel):
     # the per-HC scraper runs). UI shows "Career history not yet
     # recorded" when empty.
     career: list[JudgeAppointmentRecord] = Field(default_factory=list)
+
+
+# Slice D admin surface (MOD-TS-001-E, 2026-04-25 follow-up). Per
+# PRD §6 answer 4 — same slice as the alias backfill. Read-only v1
+# so a workspace admin can audit the matcher without DB access.
+#
+# Declared BEFORE the /judges/{judge_id} catch-all so FastAPI's
+# in-order matching picks "aliases" as a literal segment. Without
+# this, GET /judges/aliases routes to get_judge_profile with
+# judge_id="aliases" and 404s.
+class JudgeAliasRecord(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    judge_id: str
+    judge_full_name: str
+    court_id: str
+    court_short_name: str
+    alias_text: str
+    source: str
+    created_at: str
+
+
+class JudgeAliasListResponse(BaseModel):
+    aliases: list[JudgeAliasRecord]
+    judge_count: int
+    alias_count: int
+
+
+@router.get(
+    "/judges/aliases",
+    response_model=JudgeAliasListResponse,
+    summary=(
+        "Read-only listing of every judge alias in the catalog, with "
+        "the source that contributed it. Powers the /app/admin/"
+        "judge-aliases admin page."
+    ),
+)
+def list_judge_aliases(
+    context: CurrentContext,
+    session: DbSession,
+) -> JudgeAliasListResponse:
+    _ = context  # auth-gated, no per-tenant scoping (catalog is global)
+    rows = list(
+        session.execute(
+            select(
+                JudgeAlias.id,
+                JudgeAlias.judge_id,
+                Judge.full_name.label("judge_full_name"),
+                Judge.court_id,
+                Court.short_name.label("court_short_name"),
+                JudgeAlias.alias_text,
+                JudgeAlias.source,
+                JudgeAlias.created_at,
+            )
+            .join(Judge, Judge.id == JudgeAlias.judge_id)
+            .join(Court, Court.id == Judge.court_id)
+            .order_by(
+                Court.short_name,
+                Judge.full_name,
+                JudgeAlias.alias_text,
+            )
+        ).all()
+    )
+    judge_ids: set[str] = set()
+    aliases: list[JudgeAliasRecord] = []
+    for row in rows:
+        judge_ids.add(row.judge_id)
+        aliases.append(
+            JudgeAliasRecord(
+                id=row.id,
+                judge_id=row.judge_id,
+                judge_full_name=row.judge_full_name,
+                court_id=row.court_id,
+                court_short_name=row.court_short_name,
+                alias_text=row.alias_text,
+                source=row.source,
+                created_at=row.created_at.isoformat(),
+            )
+        )
+    return JudgeAliasListResponse(
+        aliases=aliases,
+        judge_count=len(judge_ids),
+        alias_count=len(aliases),
+    )
 
 
 # Declared BEFORE the catch-all /{court_id} route so FastAPI's
