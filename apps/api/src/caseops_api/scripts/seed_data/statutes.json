@@ -1,0 +1,156 @@
+[
+  {
+    "id": "constitution-india",
+    "short_name": "Constitution",
+    "long_name": "The Constitution of India",
+    "enacted_year": 1950,
+    "source_url": "https://www.indiacode.nic.in/handle/123456789/15240",
+    "sections": [
+      {"section_number": "Article 14", "section_label": "Equality before law", "section_url": "https://www.indiacode.nic.in/show-data?actid=AC_CEN_4_1_00031_195000_1517807325951&orderno=21"},
+      {"section_number": "Article 19", "section_label": "Protection of certain rights regarding freedom of speech, etc."},
+      {"section_number": "Article 20", "section_label": "Protection in respect of conviction for offences"},
+      {"section_number": "Article 21", "section_label": "Protection of life and personal liberty"},
+      {"section_number": "Article 22", "section_label": "Protection against arrest and detention in certain cases"},
+      {"section_number": "Article 32", "section_label": "Remedies for enforcement of rights conferred by this Part (writs)"},
+      {"section_number": "Article 136", "section_label": "Special leave to appeal by the Supreme Court"},
+      {"section_number": "Article 141", "section_label": "Law declared by Supreme Court to be binding on all courts"},
+      {"section_number": "Article 142", "section_label": "Enforcement of decrees and orders of Supreme Court"},
+      {"section_number": "Article 226", "section_label": "Power of High Courts to issue certain writs"},
+      {"section_number": "Article 227", "section_label": "Power of superintendence over all courts by the High Court"}
+    ]
+  },
+  {
+    "id": "bnss-2023",
+    "short_name": "BNSS",
+    "long_name": "Bharatiya Nagarik Suraksha Sanhita, 2023",
+    "enacted_year": 2023,
+    "source_url": "https://www.indiacode.nic.in/handle/123456789/20062",
+    "sections": [
+      {"section_number": "Section 35", "section_label": "When police may arrest without warrant"},
+      {"section_number": "Section 41", "section_label": "Notice of appearance before police officer (formerly CrPC s.41A)"},
+      {"section_number": "Section 64", "section_label": "Form of summons"},
+      {"section_number": "Section 173", "section_label": "Information in cognizable cases"},
+      {"section_number": "Section 175", "section_label": "Police officer's power to investigate cognizable case"},
+      {"section_number": "Section 187", "section_label": "Procedure when investigation cannot be completed in 24 hours"},
+      {"section_number": "Section 193", "section_label": "Report of police officer on completion of investigation"},
+      {"section_number": "Section 215", "section_label": "Prosecution for offences against the State and for criminal conspiracy"},
+      {"section_number": "Section 223", "section_label": "Examination of complainant"},
+      {"section_number": "Section 227", "section_label": "Discharge of accused"},
+      {"section_number": "Section 248", "section_label": "Acquittal or conviction"},
+      {"section_number": "Section 320", "section_label": "Compounding of offences"},
+      {"section_number": "Section 437", "section_label": "When bail may be taken in cases of non-bailable offence"},
+      {"section_number": "Section 480", "section_label": "Anticipatory bail"},
+      {"section_number": "Section 482", "section_label": "Saving of inherent powers of High Court (quashing of FIR)"},
+      {"section_number": "Section 483", "section_label": "Special powers of High Court regarding bail"},
+      {"section_number": "Section 528", "section_label": "Inherent powers of High Court (formerly CrPC s.482)"}
+    ]
+  },
+  {
+    "id": "bns-2023",
+    "short_name": "BNS",
+    "long_name": "Bharatiya Nyaya Sanhita, 2023",
+    "enacted_year": 2023,
+    "source_url": "https://www.indiacode.nic.in/handle/123456789/20063",
+    "sections": [
+      {"section_number": "Section 63", "section_label": "Rape (formerly IPC s.375/376)"},
+      {"section_number": "Section 64", "section_label": "Punishment for rape"},
+      {"section_number": "Section 100", "section_label": "Culpable homicide"},
+      {"section_number": "Section 101", "section_label": "Murder"},
+      {"section_number": "Section 103", "section_label": "Punishment for murder (formerly IPC s.302)"},
+      {"section_number": "Section 105", "section_label": "Punishment for culpable homicide not amounting to murder (formerly IPC s.304)"},
+      {"section_number": "Section 117", "section_label": "Voluntarily causing grievous hurt (formerly IPC s.325)"},
+      {"section_number": "Section 137", "section_label": "Kidnapping"},
+      {"section_number": "Section 303", "section_label": "Theft (formerly IPC s.378/379)"},
+      {"section_number": "Section 309", "section_label": "Robbery"},
+      {"section_number": "Section 318", "section_label": "Cheating (formerly IPC s.420)"},
+      {"section_number": "Section 326", "section_label": "Forgery (formerly IPC s.463)"},
+      {"section_number": "Section 351", "section_label": "Criminal intimidation (formerly IPC s.503)"},
+      {"section_number": "Section 356", "section_label": "Defamation (formerly IPC s.499)"}
+    ]
+  },
+  {
+    "id": "bsa-2023",
+    "short_name": "BSA",
+    "long_name": "Bharatiya Sakshya Adhiniyam, 2023",
+    "enacted_year": 2023,
+    "source_url": "https://www.indiacode.nic.in/handle/123456789/20064",
+    "sections": [
+      {"section_number": "Section 2", "section_label": "Definitions"},
+      {"section_number": "Section 3", "section_label": "Evidence may be given of facts in issue and relevant facts"},
+      {"section_number": "Section 17", "section_label": "Confession by accused"},
+      {"section_number": "Section 27", "section_label": "How much of information received from accused may be proved"},
+      {"section_number": "Section 65", "section_label": "Cases in which secondary evidence relating to documents may be given"},
+      {"section_number": "Section 91", "section_label": "Burden of proof"},
+      {"section_number": "Section 138", "section_label": "Order of examinations (formerly IEA s.137)"}
+    ]
+  },
+  {
+    "id": "crpc-1973",
+    "short_name": "CrPC",
+    "long_name": "Code of Criminal Procedure, 1973",
+    "enacted_year": 1973,
+    "source_url": "https://www.indiacode.nic.in/handle/123456789/15272",
+    "sections": [
+      {"section_number": "Section 41", "section_label": "When police may arrest without warrant"},
+      {"section_number": "Section 41A", "section_label": "Notice of appearance before police officer (Arnesh Kumar safeguards)"},
+      {"section_number": "Section 154", "section_label": "Information in cognizable cases (FIR)"},
+      {"section_number": "Section 156", "section_label": "Police officer's power to investigate cognizable case"},
+      {"section_number": "Section 161", "section_label": "Examination of witnesses by police"},
+      {"section_number": "Section 167", "section_label": "Procedure when investigation cannot be completed in 24 hours"},
+      {"section_number": "Section 173", "section_label": "Report of police officer on completion of investigation"},
+      {"section_number": "Section 200", "section_label": "Examination of complainant"},
+      {"section_number": "Section 202", "section_label": "Postponement of issue of process"},
+      {"section_number": "Section 227", "section_label": "Discharge of accused"},
+      {"section_number": "Section 313", "section_label": "Power to examine the accused"},
+      {"section_number": "Section 354", "section_label": "Language and contents of judgment"},
+      {"section_number": "Section 357", "section_label": "Order to pay compensation"},
+      {"section_number": "Section 437", "section_label": "When bail may be taken in case of non-bailable offence"},
+      {"section_number": "Section 438", "section_label": "Anticipatory bail (Sushila Aggarwal line)"},
+      {"section_number": "Section 439", "section_label": "Special powers of High Court or Court of Session regarding bail"},
+      {"section_number": "Section 482", "section_label": "Saving of inherent powers of High Court (quashing of FIR)"}
+    ]
+  },
+  {
+    "id": "ipc-1860",
+    "short_name": "IPC",
+    "long_name": "Indian Penal Code, 1860",
+    "enacted_year": 1860,
+    "source_url": "https://www.indiacode.nic.in/handle/123456789/2263",
+    "sections": [
+      {"section_number": "Section 34", "section_label": "Acts done by several persons in furtherance of common intention"},
+      {"section_number": "Section 84", "section_label": "Act of a person of unsound mind"},
+      {"section_number": "Section 120B", "section_label": "Punishment of criminal conspiracy"},
+      {"section_number": "Section 149", "section_label": "Every member of unlawful assembly guilty of offence committed in prosecution of common object"},
+      {"section_number": "Section 299", "section_label": "Culpable homicide"},
+      {"section_number": "Section 302", "section_label": "Punishment for murder"},
+      {"section_number": "Section 304", "section_label": "Punishment for culpable homicide not amounting to murder"},
+      {"section_number": "Section 304B", "section_label": "Dowry death"},
+      {"section_number": "Section 307", "section_label": "Attempt to murder"},
+      {"section_number": "Section 323", "section_label": "Voluntarily causing hurt"},
+      {"section_number": "Section 325", "section_label": "Voluntarily causing grievous hurt"},
+      {"section_number": "Section 354", "section_label": "Assault on woman with intent to outrage modesty"},
+      {"section_number": "Section 376", "section_label": "Punishment for rape"},
+      {"section_number": "Section 379", "section_label": "Punishment for theft"},
+      {"section_number": "Section 392", "section_label": "Punishment for robbery"},
+      {"section_number": "Section 420", "section_label": "Cheating and dishonestly inducing delivery of property"},
+      {"section_number": "Section 498A", "section_label": "Husband or relative of husband subjecting woman to cruelty"},
+      {"section_number": "Section 506", "section_label": "Punishment for criminal intimidation"}
+    ]
+  },
+  {
+    "id": "ni-act-1881",
+    "short_name": "NI Act",
+    "long_name": "Negotiable Instruments Act, 1881",
+    "enacted_year": 1881,
+    "source_url": "https://www.indiacode.nic.in/handle/123456789/2189",
+    "sections": [
+      {"section_number": "Section 138", "section_label": "Dishonour of cheque for insufficiency, etc., of funds"},
+      {"section_number": "Section 139", "section_label": "Presumption in favour of holder"},
+      {"section_number": "Section 141", "section_label": "Offences by companies"},
+      {"section_number": "Section 142", "section_label": "Cognizance of offences"},
+      {"section_number": "Section 143", "section_label": "Power of court to try cases summarily"},
+      {"section_number": "Section 143A", "section_label": "Power to direct interim compensation"},
+      {"section_number": "Section 147", "section_label": "Offences to be compoundable"}
+    ]
+  }
+]

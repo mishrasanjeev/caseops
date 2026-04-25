@@ -231,27 +231,22 @@ text is verifiable at the cited URL.
 
 ---
 
-## 8. Open questions for the user
+## 8. User answers (received 2026-04-25)
 
-Before implementation starts, please confirm:
-
-1. **Act priority order.** Slice S1 ships 6 central acts. Is the
-   order BNSS → BNS → BSA → CrPC → IPC → Constitution right? Should
-   NI Act 1881 (cheque bounce) jump in v1 or wait for v2?
-2. **State acts.** Slice S1 explicitly excludes state acts (Maharashtra
-   Land Revenue Code, Tamil Nadu Buildings Lease Act, etc.). Is
-   that OK for v1?
-3. **Bare-text license confidence.** indiacode.nic.in is the official
-   GoI source; section text is public domain. Any reason to source
-   from elsewhere (Manupatra, SCC Online compilations)?
-4. **Drafting prompt cost.** Slice S4 injects bare text into the
-   prompt. A typical appeal cites ~5 sections; bare texts vary
-   widely (Section 482 CrPC is short; Article 226 Constitution + its
-   tests is long). Cap per-section at ~600 chars to stay within
-   ~10% of court-scoped baseline cost?
-5. **Rollout order.** S1 → S2 → S3 → S4 as written, or do you want
-   S4 (drafting integration) first using a hand-curated 10-section
-   seed, then backfill the rest?
+1. **Act priority order.** Confirmed BNSS → BNS → BSA → CrPC → IPC →
+   Constitution. **NI Act 1881 added to v1** because cheque-bounce
+   notices are already a shipped drafting template (`MOD-TS-012`)
+   and Section 138 NI Act citations dominate that flow. **7 acts in v1.**
+2. **State acts.** Confirmed out of v1 — central acts only.
+3. **Bare-text source.** Confirmed indiacode.nic.in (Government of
+   India's official Acts repository, CC0). No third-party
+   compilations.
+4. **Drafting prompt cost.** Cap per-section bare-text at **600
+   chars** (truncate with ellipsis + section_url for the lawyer to
+   click through). Keeps the prompt addition under ~10% of the
+   court-scoped baseline.
+5. **Rollout order.** Confirmed S1 → S2 → S3 → S4. Foundation-up so
+   each downstream slice has real DB rows to read.
 
 ---
 
@@ -259,4 +254,4 @@ Before implementation starts, please confirm:
 
 | Reviewer | Date | Decision |
 |---|---|---|
-| (user) | _pending_ | _pending — answer §8 questions to unblock implementation_ |
+| mishra.sanjeev@gmail.com | 2026-04-25 | **Approved** — implementation kicks off immediately on Slice S1 (schema + 7 act seed). |

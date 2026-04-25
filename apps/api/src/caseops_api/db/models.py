@@ -2873,6 +2873,140 @@ class JudgeAppointment(Base):
     )
 
 
+class Statute(Base):
+    """MOD-TS-017 (Slice S1, 2026-04-25). Master act roster — one row
+    per Indian Act we ship a structured-section catalog for. v1: 7
+    central acts (BNSS, BNS, BSA, CrPC, IPC, Constitution, NI Act).
+    """
+
+    __tablename__ = "statutes"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    short_name: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    long_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    enacted_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    jurisdiction: Mapped[str] = mapped_column(String(64), nullable=False, default="india")
+    source_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False,
+    )
+
+
+class StatuteSection(Base):
+    """One Section / Article / Order-Rule under an Act. section_text
+    nullable so the seed can ship section numbers + labels first;
+    bare text fetched lazily by the enrich script."""
+
+    __tablename__ = "statute_sections"
+    __table_args__ = (
+        UniqueConstraint(
+            "statute_id", "section_number",
+            name="uq_statute_sections_unique",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4()),
+    )
+    statute_id: Mapped[str] = mapped_column(
+        ForeignKey("statutes.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    section_number: Mapped[str] = mapped_column(String(64), nullable=False)
+    section_label: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    section_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    section_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    parent_section_id: Mapped[str | None] = mapped_column(
+        ForeignKey("statute_sections.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False,
+    )
+
+
+class MatterStatuteReference(Base):
+    """Matter → StatuteSection link with relevance label."""
+
+    __tablename__ = "matter_statute_references"
+    __table_args__ = (
+        UniqueConstraint(
+            "matter_id", "section_id", "relevance",
+            name="uq_matter_statute_references_unique",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4()),
+    )
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    section_id: Mapped[str] = mapped_column(
+        ForeignKey("statute_sections.id", ondelete="RESTRICT"),
+        nullable=False, index=True,
+    )
+    # 'cited' (we rely on it) | 'opposing' (other side relies on it)
+    # | 'context' (in scope but not load-bearing). Free string so we
+    # can extend without a migration.
+    relevance: Mapped[str] = mapped_column(String(32), nullable=False, default="cited")
+    added_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False,
+    )
+
+
+class AuthorityStatuteReference(Base):
+    """AuthorityDocument → StatuteSection link populated by Slice S3's
+    resolver (services/statute_resolver.py walks
+    AuthorityDocument.sections_cited_json + writes structured FKs)."""
+
+    __tablename__ = "authority_statute_references"
+    __table_args__ = (
+        UniqueConstraint(
+            "authority_id", "section_id",
+            name="uq_authority_statute_references_unique",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4()),
+    )
+    authority_id: Mapped[str] = mapped_column(
+        ForeignKey("authority_documents.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    section_id: Mapped[str] = mapped_column(
+        ForeignKey("statute_sections.id", ondelete="RESTRICT"),
+        nullable=False, index=True,
+    )
+    occurrence_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    source: Mapped[str] = mapped_column(String(64), nullable=False, default="layer2_extract")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False,
+    )
+
+
 class EvaluationRun(Base):
     """One invocation of a named evaluation suite against one model
     configuration. Aggregate counts land here; per-case detail lives
