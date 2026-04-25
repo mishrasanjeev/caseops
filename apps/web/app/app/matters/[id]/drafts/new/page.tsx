@@ -23,6 +23,11 @@ const KNOWN_TEMPLATE_TYPES: ReadonlySet<DraftTemplateType> = new Set([
   "affidavit",
   "criminal_complaint",
   "civil_suit",
+  // BAAD-001 (Sprint P5, 2026-04-25). Without this entry the
+  // appeal-memorandum template card 404s into the stepper — the
+  // entire BAAD UI (BenchContextCard + AppealStrengthPanel) is
+  // dead code from a user's perspective.
+  "appeal_memorandum",
 ]);
 
 function isKnownTemplateType(value: string | null): value is DraftTemplateType {

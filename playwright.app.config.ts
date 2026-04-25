@@ -25,6 +25,8 @@ export default defineConfig({
     /query-states\.spec\.ts/,
     /personas\.spec\.ts/,
     /drafting\.spec\.ts/,
+    /baad-appeal\.spec\.ts/,
+    /oc-portal\.spec\.ts/,
     /bootstrap-and-upload\.spec\.ts/,
     /m2-polish\.spec\.ts/,
     /intake\.spec\.ts/,
