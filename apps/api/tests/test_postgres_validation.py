@@ -112,14 +112,18 @@ def _seed_company(session: Session) -> str:
 
 
 def _seed_matter(session: Session, company_id: str) -> str:
+    """Raw-SQL seed: every NOT NULL column without a server_default
+    must be supplied explicitly. Python-side `default=` on the
+    SQLAlchemy model doesn't fire when we bypass the ORM."""
     matter_id = str(uuid4())
     session.execute(
         text(
             "INSERT INTO matters "
             "(id, company_id, title, matter_code, client_name, status, "
-            "practice_area, forum_level, restricted_access, created_at, updated_at) "
-            "VALUES (:id, :co, 'Test Matter', :code, 'Test Client', 'active', "
-            "'commercial', 'high_court', false, :ts, :ts)"
+            "practice_area, forum_level, is_active, restricted_access, "
+            "created_at, updated_at) "
+            "VALUES (:id, :co, 'Test Matter', :code, 'Test Client', "
+            "'active', 'commercial', 'high_court', true, false, :ts, :ts)"
         ),
         {
             "id": matter_id,
@@ -231,10 +235,10 @@ def test_portal_user_fk_set_null_on_delete_propagates(pg_engine):
             text(
                 "INSERT INTO matters "
                 "(id, company_id, title, matter_code, client_name, status, "
-                "practice_area, forum_level, restricted_access, "
+                "practice_area, forum_level, is_active, restricted_access, "
                 "created_at, updated_at) "
                 "VALUES (:id, :co, 'M', :code, 'C', 'active', 'commercial', "
-                "'high_court', false, :ts, :ts)"
+                "'high_court', true, false, :ts, :ts)"
             ),
             {
                 "id": matter_id,
@@ -321,10 +325,10 @@ def test_jsonb_column_roundtrip_preserves_nested_dict(pg_engine):
             text(
                 "INSERT INTO matters "
                 "(id, company_id, title, matter_code, client_name, status, "
-                "practice_area, forum_level, restricted_access, "
+                "practice_area, forum_level, is_active, restricted_access, "
                 "executive_summary_json, created_at, updated_at) "
                 "VALUES (:id, :co, 'M', :code, 'C', 'active', 'commercial', "
-                "'high_court', false, CAST(:j AS json), :ts, :ts)"
+                "'high_court', true, false, CAST(:j AS json), :ts, :ts)"
             ),
             {
                 "id": matter_id,
@@ -358,10 +362,10 @@ def test_unique_constraint_on_invoice_line_item_time_entry(pg_engine):
             text(
                 "INSERT INTO matters "
                 "(id, company_id, title, matter_code, client_name, status, "
-                "practice_area, forum_level, restricted_access, "
+                "practice_area, forum_level, is_active, restricted_access, "
                 "created_at, updated_at) "
                 "VALUES (:id, :co, 'M', :code, 'C', 'active', 'commercial', "
-                "'high_court', false, :ts, :ts)"
+                "'high_court', true, false, :ts, :ts)"
             ),
             {
                 "id": matter_id,
@@ -452,10 +456,10 @@ def test_oc_cross_visibility_server_default_inserts_false(pg_engine):
             text(
                 "INSERT INTO matters "
                 "(id, company_id, title, matter_code, client_name, status, "
-                "practice_area, forum_level, restricted_access, "
+                "practice_area, forum_level, is_active, restricted_access, "
                 "created_at, updated_at) "
                 "VALUES (:id, :co, 'M', :code, 'C', 'active', 'commercial', "
-                "'high_court', false, :ts, :ts)"
+                "'high_court', true, false, :ts, :ts)"
             ),
             {
                 "id": matter_id,
