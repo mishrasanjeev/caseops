@@ -40,6 +40,10 @@ class DraftTemplateType(StrEnum):
     AFFIDAVIT = "affidavit"
     CRIMINAL_COMPLAINT = "criminal_complaint"
     CIVIL_SUIT = "civil_suit"
+    # BAAD-001 (Sprint P5, 2026-04-25). Appeal memorandum: the
+    # bench-aware drafting flow's anchor template. Covers HC appeals
+    # under Letters Patent / civil + criminal appellate-side practice.
+    APPEAL_MEMORANDUM = "appeal_memorandum"
 
 
 DraftTemplateTypeLiteral = Literal[
@@ -51,6 +55,7 @@ DraftTemplateTypeLiteral = Literal[
     "affidavit",
     "criminal_complaint",
     "civil_suit",
+    "appeal_memorandum",
 ]
 
 
@@ -199,6 +204,38 @@ class CivilSuitFacts(_TemplateFactsBase):
     is_commercial_suit: bool = False
     court_name: str = Field(min_length=2, max_length=255)
     facts_brief: str = Field(min_length=80, max_length=6000)
+
+
+class AppealMemorandumFacts(_TemplateFactsBase):
+    """BAAD-001 (Sprint P5, 2026-04-25) — appeal memorandum.
+
+    Field set per the bench-aware appeal drafting brief
+    (`docs/BENCH_AWARE_APPEAL_DRAFTING_TASKLIST_2026-04-24.md`).
+    Captures everything the prompt needs to frame an evidence-backed
+    appeal — and crucially captures the appeal court so the bench
+    strategy context service can fetch the right judge / bench history.
+    """
+
+    appellant_name: str = Field(min_length=2, max_length=255)
+    respondent_name: str = Field(min_length=2, max_length=255)
+    impugned_order_summary: str = Field(min_length=40, max_length=4000)
+    impugned_order_date: str = Field(
+        min_length=10,
+        max_length=10,
+        description="ISO date of the impugned order (yyyy-mm-dd).",
+    )
+    lower_forum_name: str = Field(min_length=2, max_length=255)
+    appeal_court_name: str = Field(
+        min_length=2,
+        max_length=255,
+        description="Forum the appeal will be filed in (HC division, SC, etc.).",
+    )
+    questions_of_law: list[str] = Field(default_factory=list, max_length=20)
+    grounds_brief: str = Field(min_length=80, max_length=6000)
+    interim_relief_sought: str | None = Field(default=None, max_length=2000)
+    delay_condonation_needed: bool = False
+    delay_condonation_days: int | None = Field(default=None, ge=0, le=10000)
+    record_references: str | None = Field(default=None, max_length=4000)
 
 
 class DraftTemplateSchema(BaseModel):
@@ -442,6 +479,81 @@ _CIVIL_SUIT_FIELDS: list[DraftingFieldSpec] = [
 ]
 
 
+_APPEAL_FIELDS: list[DraftingFieldSpec] = [
+    DraftingFieldSpec(name="appellant_name", label="Appellant's full name"),
+    DraftingFieldSpec(name="respondent_name", label="Respondent's full name"),
+    DraftingFieldSpec(
+        name="impugned_order_summary",
+        label="What the impugned order said",
+        kind="text",
+        help_text="Brief summary of the lower forum's order being appealed.",
+        step_group="impugned",
+    ),
+    DraftingFieldSpec(
+        name="impugned_order_date",
+        label="Date of impugned order",
+        kind="date",
+        step_group="impugned",
+    ),
+    DraftingFieldSpec(
+        name="lower_forum_name",
+        label="Lower forum (court that passed the order)",
+        step_group="impugned",
+    ),
+    DraftingFieldSpec(
+        name="appeal_court_name",
+        label="Appeal court (where this appeal will be filed)",
+        help_text=(
+            "Used by bench strategy context to surface this court's prior "
+            "decisions on similar issues."
+        ),
+        step_group="impugned",
+    ),
+    DraftingFieldSpec(
+        name="questions_of_law",
+        label="Questions of law raised",
+        kind="string",
+        help_text="One per line — keep each tight and answerable.",
+        required=False,
+        step_group="grounds",
+    ),
+    DraftingFieldSpec(
+        name="grounds_brief",
+        label="Grounds of appeal",
+        kind="text",
+        step_group="grounds",
+    ),
+    DraftingFieldSpec(
+        name="interim_relief_sought",
+        label="Interim relief sought (stay, status quo, etc.)",
+        kind="text",
+        required=False,
+        step_group="relief",
+    ),
+    DraftingFieldSpec(
+        name="delay_condonation_needed",
+        label="Delay condonation required?",
+        kind="boolean",
+        required=False,
+        step_group="limitation",
+    ),
+    DraftingFieldSpec(
+        name="delay_condonation_days",
+        label="Days of delay (if condonation needed)",
+        kind="number",
+        required=False,
+        step_group="limitation",
+    ),
+    DraftingFieldSpec(
+        name="record_references",
+        label="Record references (page nos. of the impugned order, exhibits)",
+        kind="text",
+        required=False,
+        step_group="record",
+    ),
+]
+
+
 # ---------------------------------------------------------------
 # Registry — the template route reads this; nothing else should.
 # ---------------------------------------------------------------
@@ -538,6 +650,22 @@ _register(
     fields=_CIVIL_SUIT_FIELDS,
     facts_model=CivilSuitFacts,
 )
+_register(
+    DraftTemplateType.APPEAL_MEMORANDUM,
+    display_name="Appeal Memorandum",
+    summary=(
+        "Memorandum of appeal against an order of a lower forum. The "
+        "drafting service injects bench strategy context (cited prior "
+        "judgments from the appeal court) when available."
+    ),
+    statutory_basis=[
+        "CPC Order XLI (civil appeals)",
+        "BNSS s.415-431 (criminal appeals)",
+        "Letters Patent (HC division benches)",
+    ],
+    fields=_APPEAL_FIELDS,
+    facts_model=AppealMemorandumFacts,
+)
 
 
 def get_template_schema(template_type: DraftTemplateType) -> DraftTemplateSchema:
@@ -561,6 +689,7 @@ def list_template_schemas() -> list[DraftTemplateSchema]:
 __all__ = [
     "AffidavitFacts",
     "AnticipatoryBailFacts",
+    "AppealMemorandumFacts",
     "BailFacts",
     "ChequeBounceNoticeFacts",
     "CivilSuitFacts",

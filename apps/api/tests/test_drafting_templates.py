@@ -41,7 +41,10 @@ def test_registry_has_one_entry_per_template_type() -> None:
     types_in_registry = {s.template_type for s in schemas}
     expected = {t.value for t in DraftTemplateType}
     assert types_in_registry == expected
-    assert len(schemas) == 8
+    # 9 templates after BAAD-001 (Sprint P5, 2026-04-25) added
+    # APPEAL_MEMORANDUM. Update this count + the route test below
+    # in lockstep when a new template lands.
+    assert len(schemas) == 9
 
 
 def test_every_template_has_fields_and_step_groups() -> None:
@@ -204,7 +207,8 @@ def test_facts_model_mapping_matches_enum() -> None:
 # ---------------------------------------------------------------
 
 
-def test_list_templates_route_returns_all_eight(client: TestClient) -> None:
+def test_list_templates_route_returns_all_nine(client: TestClient) -> None:
+    """9 templates after BAAD-001 added APPEAL_MEMORANDUM."""
     from tests.test_auth_company import auth_headers, bootstrap_company
 
     bootstrap = bootstrap_company(client)
@@ -214,7 +218,7 @@ def test_list_templates_route_returns_all_eight(client: TestClient) -> None:
     resp = client.get("/api/drafting/templates", headers=headers)
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert len(body["templates"]) == 8
+    assert len(body["templates"]) == 9
     types = {t["template_type"] for t in body["templates"]}
     assert types == {t.value for t in DraftTemplateType}
 

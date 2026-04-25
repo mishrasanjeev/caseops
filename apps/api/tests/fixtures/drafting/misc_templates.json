@@ -76,6 +76,31 @@
           "must_pass_rules": ["criminal_complaint_missing_statute"]
         }
       ]
+    },
+    "appeal_memorandum": {
+      "scenarios": [
+        {
+          "key": "civil-appeal-cpc-order-xli",
+          "facts": {
+            "matter_id": "appeal-fixture-civil",
+            "appellant_name": "Sunrise Constructions Pvt Ltd",
+            "respondent_name": "State of Maharashtra",
+            "impugned_order_summary": "The Sessions Court rejected the appellant's application for stay on the recovery proceedings, holding that no prima facie case for stay was made out and that the balance of convenience lay with the respondent revenue authority.",
+            "impugned_order_date": "2026-03-12",
+            "lower_forum_name": "Sessions Court, Pune",
+            "appeal_court_name": "Bombay High Court",
+            "questions_of_law": [
+              "Whether the Sessions Court erred in declining stay despite the demand exceeding the assessed liability by 38%.",
+              "Whether the balance of convenience requires deposit of the disputed component pending appeal."
+            ],
+            "grounds_brief": "1. The Sessions Court overlooked the appellant's documented payment of the undisputed component of the demand. 2. The court mis-read Annexure D-2 (statutory acknowledgement). 3. The court applied the wrong test for stay under CPC Order XLI Rule 5 by demanding security for the entire demand rather than the disputed portion. 4. No reasoned finding was recorded on irreparable injury despite the appellant placing on record bank-statement evidence of liquidity strain.",
+            "interim_relief_sought": "Stay of recovery proceedings pending hearing of this appeal, conditional on deposit of the undisputed component already paid.",
+            "delay_condonation_needed": false,
+            "record_references": "Impugned order at pp. 14-19 of paper-book; Annexure D-2 at p. 47; bank statements at pp. 81-93."
+          },
+          "must_pass_rules": []
+        }
+      ]
     }
   }
 }

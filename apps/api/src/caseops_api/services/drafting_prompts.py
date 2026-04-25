@@ -299,6 +299,59 @@ _CIVIL_SUIT = PromptParts(
 )
 
 
+_APPEAL_MEMORANDUM = PromptParts(
+    system=(
+        "You are drafting a memorandum of appeal against the order of a "
+        "lower forum. This is the bench-aware appeal flow: the calling "
+        "service may inject a `bench_strategy_context` block listing "
+        "indexed prior judgments from this appeal court / bench on "
+        "comparable issues. Use that context to frame grounds and select "
+        "authorities — but never to predict outcomes or score the bench.\n"
+        "REQUIRED STRUCTURE (in order):\n"
+        " 1. Cause title naming the appeal court, appellant, and "
+        "respondent. Style as 'In the Matter of ...' if appropriate to "
+        "the forum.\n"
+        " 2. Particulars of the impugned order: lower forum, order date, "
+        "case number, brief operative content. Quote sparingly — "
+        "summarise.\n"
+        " 3. Limitation paragraph: state the prescribed period and the "
+        "computation. If `delay_condonation_needed=true`, raise the "
+        "condonation prayer here with sufficient cause framing.\n"
+        " 4. Questions of law (numbered).\n"
+        " 5. Grounds of appeal — number each ground, keep tight. "
+        "Where a question implicates a precedent identified in the "
+        "bench strategy context, cite it with neutral attribution: "
+        "\"in the indexed decisions provided, the bench emphasised X\". "
+        "Never write 'the judge prefers' or 'the bench tends to'.\n"
+        " 6. Interim relief paragraph (only if `interim_relief_sought` is "
+        "non-empty). Frame as a short, standalone prayer.\n"
+        " 7. Prayer clause: relief sought from the appeal court.\n"
+        " 8. Verification + appellant signature block.\n"
+        "ABSOLUTE RULES:\n"
+        " - Do NOT score, predict, or characterise judicial preference. "
+        "Phrase every bench-history reference as evidence: \"in the "
+        "indexed decisions provided, ...\". No 'tends to', 'usually', "
+        "'is favourable to', or similar language.\n"
+        " - Do NOT invent lower-court findings, dates, or page references "
+        "that aren't in the supplied facts.\n"
+        " - If `bench_strategy_context` is empty or sparse, draft "
+        "without it and add a short note in the grounds section: "
+        "'Bench-history context was not available; grounds rest on "
+        "general appellate principles and the cited authorities only.'\n"
+        " - Cite BNSS sections first for criminal appeals, CPC Order XLI "
+        "for civil. Cross-reference CrPC only as a historical bracket.\n"
+        " - If limitation is on the edge (delay_condonation_needed=true) "
+        "AND no record of sufficient cause is supplied, refuse to draft "
+        "the condonation paragraph and ask the user to supply the "
+        "factual basis for delay first."
+    ),
+    focus=(
+        "Memorandum of appeal — bench-aware framing with cited prior "
+        "judgments; no judicial favorability claims"
+    ),
+)
+
+
 _REGISTRY: dict[DraftTemplateType, PromptParts] = {
     DraftTemplateType.BAIL: _BAIL,
     DraftTemplateType.ANTICIPATORY_BAIL: _ANTICIPATORY_BAIL,
@@ -308,6 +361,7 @@ _REGISTRY: dict[DraftTemplateType, PromptParts] = {
     DraftTemplateType.AFFIDAVIT: _AFFIDAVIT,
     DraftTemplateType.CRIMINAL_COMPLAINT: _CRIMINAL_COMPLAINT,
     DraftTemplateType.CIVIL_SUIT: _CIVIL_SUIT,
+    DraftTemplateType.APPEAL_MEMORANDUM: _APPEAL_MEMORANDUM,
 }
 
 
