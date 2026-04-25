@@ -117,10 +117,17 @@ jobs:
       - name: Pytest -m postgres
         working-directory: apps/api
         env:
-          # conftest.py reads this. _ensure_migrations runs alembic
-          # upgrade head against this URL on first test collection.
-          # No password in the URL — trust auth on the service container.
+          # conftest.pg_engine reads CASEOPS_TEST_POSTGRES_URL.
+          # alembic/env.py reads CASEOPS_DATABASE_URL via
+          # get_settings().database_url and overwrites whatever the
+          # alembic Config object had set. Both must point at the
+          # same DB — otherwise alembic upgrade head connects to a
+          # different URL than the test fixtures (and either fails or
+          # migrates the wrong database).
+          # Trust auth on the service container removes the password
+          # from both URLs.
           CASEOPS_TEST_POSTGRES_URL: postgresql+psycopg://caseops@127.0.0.1:5432/caseops_test
+          CASEOPS_DATABASE_URL: postgresql+psycopg://caseops@127.0.0.1:5432/caseops_test
           CASEOPS_ENV: ci
           CASEOPS_AUTH_SECRET: pg-validation-secret-at-least-32-bytes
         run: uv run pytest -q -m postgres tests/test_postgres_validation.py
