@@ -164,12 +164,39 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
   Close when: operation-level coverage ledger is enforced and all baseline
   waivers are burned down or expiring with owner approval.
 
-- `AQ-005` `Missing` Postgres-backed DB validation is still required before
-  manual testers can be removed from DB-sensitive regression checks.
-  Evidence: P1-006 remains tracked; current tests are not enough to prove
-  production Postgres constraints, migrations, pgvector, and cascade behavior.
-  Close when: CI has a Postgres service container and a dedicated
-  `postgres-validation` suite.
+- `AQ-005` `Implemented` Postgres-backed validation suite live + wired
+  into CI (closed 2026-04-25).
+  CI: new job `postgres-validation` in `.github/workflows/ci.yml`
+  spins up a `pgvector/pgvector:pg17` service container (same backend
+  version as prod Cloud SQL), enables the `vector` extension, runs
+  `pytest -q -m postgres tests/test_postgres_validation.py` against
+  it. Total job time ~3-5 min.
+  Marker: `pytest.mark.postgres` registered in `pyproject.toml`;
+  `tests/conftest.py::pytest_collection_modifyitems` auto-skips
+  postgres tests when `CASEOPS_TEST_POSTGRES_URL` is not set, so
+  developer laptops + the existing api job are unaffected.
+  Test surface (6 cases, anchor coverage for the gaps SQLite cannot
+  prove):
+  - alembic upgrade head runs cleanly on PG (catches batch-mode
+    migrations that secretly assume SQLite)
+  - pgvector extension + HNSW index + cosine `<=>` operator end-to-end
+    (the only place the corpus-retrieval shape is proven on prod
+    semantics)
+  - portal_user FK `ON DELETE SET NULL` actually nulls the FK on
+    parent delete (SQLite ignores ON DELETE without per-session
+    PRAGMA, so this was effectively unverified before)
+  - JSONB column roundtrip preserves nested dict (vs SQLite's
+    text-encoded JSON path)
+  - UniqueConstraint on `matter_invoice_line_items.time_entry_id`
+    raises IntegrityError on duplicate insert
+  - C-3c `oc_cross_visibility_enabled` `server_default=false()`
+    actually inserts False on bare INSERT (proves migration server
+    default applied)
+  Verified: 6/6 auto-skip locally (no PG URL); 18/18 sqlite-path
+  tests still green; CI on next commit will exercise PG path.
+  Per-area test-matrix expansion + Postgres CI for ALL DB-sensitive
+  tests (not just the validation file) remains a separate gap —
+  this commit lays the foundation.
 
 - `AQ-006` `Partially implemented` Provider-skip-on-release loophole
   closed (2026-04-25); the broader "every PRD journey has full

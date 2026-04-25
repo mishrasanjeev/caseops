@@ -104,6 +104,14 @@ testpaths = ["tests"]
 # loops stay fast. Codex 2026-04-20 test-suite gap audit asked for
 # coverage tooling as a baseline before we set thresholds. Thresholds
 # will be added in a follow-up once we have ~2 weeks of baseline data.
+# AQ-005 (2026-04-25): `postgres` marker for tests that need a real
+# Postgres + pgvector backend. The default test run skips them
+# (SQLite is fine for the bulk of suite). The dedicated CI job
+# (`postgres-validation` in .github/workflows/ci.yml) sets
+# CASEOPS_TEST_POSTGRES_URL and runs `pytest -m postgres`.
+markers = [
+  "postgres: requires a live Postgres + pgvector backend (set CASEOPS_TEST_POSTGRES_URL)",
+]
 
 [tool.coverage.run]
 source = ["src/caseops_api"]

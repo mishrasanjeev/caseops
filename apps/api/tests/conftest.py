@@ -34,6 +34,47 @@ def _reset_settings_and_engine_caches_after_test() -> Generator[None]:
     clear_engine_cache()
 
 
+# AQ-005 (2026-04-25): Postgres-backed validation. Tests carrying
+# @pytest.mark.postgres need a live Postgres + pgvector. The
+# `postgres-validation` CI job (.github/workflows/ci.yml) sets
+# CASEOPS_TEST_POSTGRES_URL and a service container provides PG 17 +
+# pgvector. Local devs can run too: spin up a sidecar with
+#   docker run -d -p 5433:5432 -e POSTGRES_PASSWORD=test \
+#     pgvector/pgvector:pg17
+# and `export CASEOPS_TEST_POSTGRES_URL=postgresql+psycopg://postgres:test@127.0.0.1:5433/postgres`.
+def _postgres_url() -> str | None:
+    url = os.environ.get("CASEOPS_TEST_POSTGRES_URL", "").strip()
+    return url or None
+
+
+def pytest_collection_modifyitems(config, items):  # type: ignore[no-untyped-def]
+    """Auto-skip @pytest.mark.postgres tests when no PG URL is set."""
+    if _postgres_url() is not None:
+        return
+    skip_pg = pytest.mark.skip(
+        reason="CASEOPS_TEST_POSTGRES_URL not set; skipping Postgres-backed tests."
+    )
+    for item in items:
+        if "postgres" in item.keywords:
+            item.add_marker(skip_pg)
+
+
+@pytest.fixture
+def pg_engine():
+    """SQLAlchemy engine pointed at the per-job Postgres service. Caller
+    is expected to drop + recreate any state it needs; we do NOT auto-
+    truncate so a single test can keep state across yields if it wants.
+    Returns a fresh engine per test (cheap; the service container is
+    persistent across the job).
+    """
+    url = _postgres_url()
+    assert url is not None, "@pytest.mark.postgres tests must set CASEOPS_TEST_POSTGRES_URL"
+    from sqlalchemy import create_engine
+    engine = create_engine(url, future=True)
+    yield engine
+    engine.dispose()
+
+
 @pytest.fixture
 def client(
     tmp_path: Path,
