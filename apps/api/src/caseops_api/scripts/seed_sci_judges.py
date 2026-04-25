@@ -128,10 +128,15 @@ def main() -> int:
         with get_session_factory()() as session:
             inserted, updated = _seed(session)
     except FileNotFoundError as exc:
-        logger.error("%s", exc)
+        logger.error("seed file missing: %s", exc)
         return 1
-    except (ValueError, json.JSONDecodeError) as exc:
-        logger.error("malformed seed file: %s", exc)
+    except json.JSONDecodeError as exc:
+        logger.error("seed file is not valid JSON: %s", exc)
+        return 1
+    except ValueError as exc:
+        # ValueError covers both an empty/wrong-shape seed list AND
+        # pydantic ValidationError. Don't conflate them — log the type.
+        logger.error("%s: %s", type(exc).__name__, exc)
         return 1
     except RuntimeError as exc:
         logger.error("%s", exc)
