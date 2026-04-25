@@ -18,7 +18,14 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
-import { ShieldCheck, Gavel, BookOpenCheck, Info } from "lucide-react";
+import {
+  AlertTriangle,
+  BookOpenCheck,
+  Gavel,
+  Info,
+  ShieldCheck,
+  Target,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/Badge";
 import {
@@ -167,6 +174,67 @@ export function BenchContextCard({ matterId }: { matterId: string }) {
             ) : null}
           </>
         )}
+
+        {/* Slice C (MOD-TS-001-D, 2026-04-25). Bench-specific block —
+            authorities authored by the SPECIFIC bench scheduled to
+            hear the next listing. Per PRD §2.1, advocate-bias
+            selection: items tagged `practice_area` were chosen
+            because they support the matter's practice area. */}
+        {ctx.bench_specific_authorities &&
+        ctx.bench_specific_authorities.length > 0 ? (
+          <Section title="Specific bench (next hearing) — selected to support your case">
+            <ul
+              className="flex flex-col gap-2 text-sm"
+              data-testid="bench-context-specific-list"
+            >
+              {ctx.bench_specific_authorities.map((a) => (
+                <li
+                  key={a.id}
+                  className="flex items-start gap-2 rounded-md border border-[var(--color-line)] bg-white px-3 py-2"
+                  data-testid={`bench-context-specific-${a.id}`}
+                >
+                  <Target
+                    className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-brand-600)]"
+                    aria-hidden
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium text-[var(--color-ink)]">
+                      {a.title}
+                    </div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-[var(--color-mute)]">
+                      {a.decision_date ? <span>{a.decision_date}</span> : null}
+                      {a.case_reference ? (
+                        <span className="font-mono">· {a.case_reference}</span>
+                      ) : null}
+                      {a.neutral_citation ? (
+                        <span className="font-mono">
+                          · {a.neutral_citation}
+                        </span>
+                      ) : null}
+                      {a.relevance === "practice_area" ? (
+                        <Badge tone="brand">practice-area match</Badge>
+                      ) : null}
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </Section>
+        ) : ctx.bench_specific_limitation_note ? (
+          <p
+            className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900"
+            data-testid="bench-context-specific-note"
+          >
+            <AlertTriangle
+              className="mt-0.5 h-3.5 w-3.5 shrink-0"
+              aria-hidden
+            />
+            <span>
+              <strong>Specific bench (next hearing):</strong>{" "}
+              {ctx.bench_specific_limitation_note}
+            </span>
+          </p>
+        ) : null}
 
         {ctx.drafting_cautions.length > 0 ? (
           <Section title="Cautions surfaced in the draft summary">

@@ -4,7 +4,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Request, UploadFile
 from fastapi.responses import FileResponse, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from sqlalchemy import select
 
 from caseops_api.api.dependencies import (
     DbSession,
@@ -606,6 +607,21 @@ class BenchContextCitedAuthorityResponse(BaseModel):
     occurrences: int
 
 
+class BenchSpecificAuthorityResponse(BaseModel):
+    """Slice C (MOD-TS-001-D) — authority authored by the SPECIFIC
+    bench resolved for the matter's next listing."""
+
+    id: str
+    title: str
+    decision_date: str | None
+    case_reference: str | None
+    neutral_citation: str | None
+    bench_name: str | None
+    forum_level: str | None
+    matched_judge_ids: list[str]
+    relevance: str  # 'practice_area' | 'general'
+
+
 class BenchStrategyContextResponse(BaseModel):
     matter_id: str
     court_name: str | None
@@ -618,6 +634,15 @@ class BenchStrategyContextResponse(BaseModel):
     authorities_frequently_cited: list[BenchContextCitedAuthorityResponse]
     drafting_cautions: list[str]
     unsupported_gaps: list[str]
+    # Slice C (MOD-TS-001-D, 2026-04-25). Bench-specific block.
+    bench_specific_authorities: list[BenchSpecificAuthorityResponse] = (
+        Field(default_factory=list)
+    )
+    bench_specific_limitation_note: str | None = None
+    # Echo of the resolved next-listing ID so the UI knows which
+    # listing the bench-specific block was anchored to. None when the
+    # caller didn't pass one or when no upcoming listing exists.
+    next_listing_id: str | None = None
 
 
 @router.get(
@@ -636,8 +661,25 @@ async def get_current_company_matter_bench_strategy_context(
     judge_limit: int = 5,
     authority_limit: int = 12,
 ) -> BenchStrategyContextResponse:
+    from datetime import date as _date
+
+    from caseops_api.db.models import Matter, MatterCauseListEntry
     from caseops_api.services.bench_strategy_context import (
         build_bench_strategy_context,
+    )
+
+    # Resolve the matter's next upcoming listing so the service can
+    # pull bench-specific authorities (Slice C). Tenancy is enforced
+    # inside build_bench_strategy_context (matter scoped to caller's
+    # company); we only read the listing_id here.
+    next_listing_id = session.scalar(
+        select(MatterCauseListEntry.id)
+        .join(Matter, Matter.id == MatterCauseListEntry.matter_id)
+        .where(MatterCauseListEntry.matter_id == matter_id)
+        .where(Matter.company_id == context.company.id)
+        .where(MatterCauseListEntry.listing_date >= _date.today())
+        .order_by(MatterCauseListEntry.listing_date.asc())
+        .limit(1)
     )
 
     ctx = build_bench_strategy_context(
@@ -646,6 +688,7 @@ async def get_current_company_matter_bench_strategy_context(
         matter_id=matter_id,
         judge_limit=judge_limit,
         authority_limit=authority_limit,
+        next_listing_id=next_listing_id,
     )
     return BenchStrategyContextResponse(
         matter_id=ctx.matter_id,
@@ -698,6 +741,22 @@ async def get_current_company_matter_bench_strategy_context(
         ],
         drafting_cautions=list(ctx.drafting_cautions),
         unsupported_gaps=list(ctx.unsupported_gaps),
+        bench_specific_authorities=[
+            BenchSpecificAuthorityResponse(
+                id=ba.id,
+                title=ba.title,
+                decision_date=ba.decision_date,
+                case_reference=ba.case_reference,
+                neutral_citation=ba.neutral_citation,
+                bench_name=ba.bench_name,
+                forum_level=ba.forum_level,
+                matched_judge_ids=list(ba.matched_judge_ids),
+                relevance=ba.relevance,
+            )
+            for ba in (ctx.bench_specific_authorities or [])
+        ],
+        bench_specific_limitation_note=ctx.bench_specific_limitation_note,
+        next_listing_id=next_listing_id,
     )
 
 

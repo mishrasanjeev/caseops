@@ -534,6 +534,59 @@ def _build_messages(
             parts.append("Unsupported gaps (do not assert these as patterns):")
             for g in gaps[:5]:  # cap to keep prompt small
                 parts.append(f"- {g}")
+
+        # Slice C (MOD-TS-001-D, 2026-04-25). Bench-specific block —
+        # authorities authored by the SPECIFIC bench resolved for the
+        # next listing. Additive on top of the court-scoped block
+        # above. Per PRD §2.1 advocate-bias: these citations were
+        # selected to support the matter's practice area. The LLM
+        # is instructed to cite at least one bench-specific authority
+        # when the block is non-empty.
+        bench_specific = getattr(
+            bench_context, "bench_specific_authorities", []
+        ) or []
+        bs_note = getattr(
+            bench_context, "bench_specific_limitation_note", None,
+        )
+        if bench_specific:
+            parts.append("")
+            parts.append("=== BENCH-SPECIFIC HISTORY (next hearing's bench) ===")
+            parts.append(
+                "These authorities were authored by the SPECIFIC bench "
+                "scheduled to hear this appeal. They were selected to "
+                "support the present grounds (citation selection is "
+                "editorial advocacy — the lawyer's duty-to-court "
+                "applies to adverse-authority disclosures). Cite at "
+                "least one of these in the appeal memorandum and "
+                "explain how its reasoning supports the present case. "
+                "Use evidence phrasing only — never 'this bench tends "
+                "to', 'usually grants', or any outcome-prediction "
+                "language."
+            )
+            for ba in bench_specific:
+                cite_bits = [getattr(ba, "title", "")]
+                ref = getattr(ba, "case_reference", None)
+                cit = getattr(ba, "neutral_citation", None)
+                date_iso = getattr(ba, "decision_date", None)
+                if cit:
+                    cite_bits.append(f"({cit})")
+                elif ref:
+                    cite_bits.append(f"({ref})")
+                if date_iso:
+                    cite_bits.append(f"[{date_iso}]")
+                relevance = getattr(ba, "relevance", "general")
+                tag = "[practice-area match] " if relevance == "practice_area" else ""
+                parts.append(
+                    f"- {tag}{' '.join(cite_bits)} — id={getattr(ba, 'id', '?')}"
+                )
+        elif bs_note:
+            parts.append("")
+            parts.append("=== BENCH-SPECIFIC HISTORY (next hearing's bench) ===")
+            parts.append(f"NOT AVAILABLE: {bs_note}")
+            parts.append(
+                "Draft using the COURT HISTORY CONTEXT above; do not "
+                "invent specific-bench citations."
+            )
         # Useful side-effect: this block is captured by `_prompt_hash`,
         # so the audit trail in ModelRun shows whether bench context
         # was active for a given generation.
@@ -796,14 +849,34 @@ def generate_draft_version(
     # failure NEVER blocks the draft itself — we'd rather ship the
     # plain appeal than fail the request because, e.g., judges_json
     # is malformed on a single authority.
+    #
+    # Slice C (MOD-TS-001-D, 2026-04-25): also pass next_listing_id
+    # so build_bench_strategy_context can pull authorities authored
+    # by the SPECIFIC bench scheduled to hear the appeal — and apply
+    # advocate-bias selection to favour citations that support the
+    # matter's practice area. When no upcoming listing exists, the
+    # bench-specific block degrades to a limitation note + the
+    # existing court-scoped context.
     bench_context = None
     if draft.template_type == "appeal_memorandum":
         try:
+            from datetime import date as _date
+
+            from caseops_api.db.models import MatterCauseListEntry
             from caseops_api.services.bench_strategy_context import (
                 build_bench_strategy_context,
             )
+
+            next_listing_id = session.scalar(
+                select(MatterCauseListEntry.id)
+                .where(MatterCauseListEntry.matter_id == matter.id)
+                .where(MatterCauseListEntry.listing_date >= _date.today())
+                .order_by(MatterCauseListEntry.listing_date.asc())
+                .limit(1)
+            )
             bench_context = build_bench_strategy_context(
                 session=session, context=context, matter_id=matter.id,
+                next_listing_id=next_listing_id,
             )
         except Exception as exc:  # noqa: BLE001 — fall back to plain
             logger.warning(

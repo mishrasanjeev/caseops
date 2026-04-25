@@ -159,6 +159,21 @@ export type BenchContextCitedAuthority = {
   occurrences: number;
 };
 
+export type BenchSpecificAuthority = {
+  id: string;
+  title: string;
+  decision_date: string | null;
+  case_reference: string | null;
+  neutral_citation: string | null;
+  bench_name: string | null;
+  forum_level: string | null;
+  matched_judge_ids: string[];
+  // 'practice_area' = selected because it matches the matter's
+  // practice area (advocate-bias positive selection per PRD §2.1).
+  // 'general' = on-bench but not specifically aligned.
+  relevance: "practice_area" | "general";
+};
+
 export type BenchStrategyContext = {
   matter_id: string;
   court_name: string | null;
@@ -171,6 +186,12 @@ export type BenchStrategyContext = {
   authorities_frequently_cited: BenchContextCitedAuthority[];
   drafting_cautions: string[];
   unsupported_gaps: string[];
+  // Slice C (MOD-TS-001-D, 2026-04-25). Bench-specific block.
+  // Empty when no upcoming listing exists OR the listing's bench
+  // hasn't been resolved (judges_json IS NULL).
+  bench_specific_authorities?: BenchSpecificAuthority[];
+  bench_specific_limitation_note?: string | null;
+  next_listing_id?: string | null;
 };
 
 export async function fetchBenchStrategyContext(
