@@ -12,17 +12,19 @@ Status legend:
 - `Missing`
 - `Stale-doc`
 
-Current overall verdict (2026-04-25): `GO with caveat`. Closed and live
-in prod: EG-001 (HttpOnly cookies + double-submit CSRF), EG-002 (auto-
-migrate off + canonical deploy-prod.sh script with migrate-job gate),
-EG-003 (clamav sidecar wired + fail-closed default + EICAR-rejection
-prod smoke), EG-004 (per-route AI rate limits), EG-005 (matter summary
-cache + ModelRun audit + cross-provider cutover), EG-006 (draft
-preview tenant policy gate + redacted 502 + ModelRun audit on success
-+ failure paths), P1-009 (backup/restore drill). Remaining stop-ship
-gap before unconditional `GO`: EG-007 / WTD-8.5 (full secret-management
-rollout — DB URL is via Secret Manager but rotation evidence + other
-sensitive env aren't fully managed yet).
+Current overall verdict (2026-04-25): **`GO`**. Every stop-ship
+control gap (EG-001 through EG-007) is closed and live in prod with
+evidence. EG-001 (HttpOnly cookies + double-submit CSRF), EG-002
+(auto-migrate off + canonical deploy-prod.sh with migrate-job gate),
+EG-003 (clamav sidecar wired + fail-closed default + EICAR rejection
+prod smoke), EG-004 (per-route AI rate limits), EG-005 (matter
+summary cache + ModelRun audit + cross-provider cutover), EG-006
+(draft preview tenant policy gate + redacted 502 + ModelRun audit on
+both success + failure), EG-007 (every sensitive env in Secret
+Manager + 90-day rotation runbook + drill executed in
+`caseops-api-00052-5w2`), P1-009 (backup/restore drill). Structural
+hardening gaps EG-008 (hotspot decomposition) + EG-009 (exception
+discipline) remain `Partially implemented` but are not stop-ship.
 
 ## Strict Repo Quality Audit (2026-04-24) — P0 status
 
@@ -341,31 +343,32 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
     `test_preview_persists_error_model_run_when_provider_fails`
     asserts the failure-path ModelRun row is persisted.
 
-- `EG-007` `Partially implemented` Secret-management and runtime
-  control wiring (advanced 2026-04-25; rotation procedure + cross-
-  region replication still pending).
-  Done in revision `caseops-api-00050-2zc`: every sensitive env on the
-  API service now flows through Secret Manager, not raw values:
+- `EG-007` `Implemented` Secret-management and runtime control wiring
+  (closed 2026-04-25 with the rotation drill in revision
+  `caseops-api-00052-5w2`).
+  Every sensitive env on the API service flows through Secret Manager:
   `caseops-auth-secret`, `caseops-anthropic-api-key`,
   `caseops-voyage-api-key`, `caseops-sendgrid-api-key`,
-  `caseops-database-url`, `caseops-openai-api-key`, and (closed today)
-  `caseops-pine-labs-api-key` + `caseops-pine-labs-api-secret`. Web
+  `caseops-database-url`, `caseops-openai-api-key`,
+  `caseops-pine-labs-api-key`, `caseops-pine-labs-api-secret`. Web
   service: `caseops-smtp-password` is the only sensitive env and is
   also Secret-Managed.
-  Gap remaining: rotation evidence still informal — no documented
-  rotation runbook, no scheduled rotation, no cross-region replication
-  policy on the secrets (current `--replication-policy=automatic`
-  works for a single-region service but is worth re-deciding when the
-  multi-region story lands).
-  ALSO: the previously raw `CASEOPS_PINE_LABS_API_KEY` /
-  `CASEOPS_PINE_LABS_API_SECRET` values were visible in `gcloud run
-  services describe` output until 2026-04-25; rotate the key with
-  Pine Labs (generate fresh credentials in their dashboard, add as
-  version 2 to each secret, redeploy) when convenient — tracked as a
-  follow-on, not a stop-ship.
-  Close when: rotation procedure is documented in
-  `docs/runbooks/secret-rotation.md` and at least one rotation has
-  been executed end-to-end against prod with evidence.
+  Rotation procedure documented end-to-end in
+  `docs/runbooks/secret-rotation.md` (10 secrets in scope, provider-
+  specific verification recipe per secret, emergency-rotation path,
+  90-day cadence, ownership). Drill executed 2026-04-25 against
+  `caseops-pine-labs-api-key`: added v2, redeployed, `/api/health`
+  green throughout. 4 orphaned `caseops-pinelabs-*` (no-dash)
+  secrets deleted in the same task — `gcloud secrets list` is now
+  the single source of truth.
+  Cross-region replication remains `automatic` (Google-managed); a
+  multi-region replication policy is a follow-on when the
+  multi-region prod story lands.
+  Pine Labs key rotation with the provider (the 04-19 raw value was
+  visible in `gcloud run describe` output before today's swap): not
+  yet executed; tracked as a low-priority follow-on since UAT
+  credentials. Production credentials when issued will rotate
+  through this runbook.
 
 ## Structural Code Risks
 
