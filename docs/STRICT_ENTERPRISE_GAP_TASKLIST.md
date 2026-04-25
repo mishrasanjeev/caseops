@@ -99,6 +99,68 @@ is the current closure status.
 Phase C-3 (outside-counsel portal — work-product upload, invoice
 submission, time entries) intentionally next; not landed today.
 
+## Automated QA And Coverage Audit (2026-04-25)
+
+Current verdict: `NO-GO` for eliminating manual testers today.
+
+Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
+
+- `AQ-001` `Partially implemented` Backend overall coverage is too low and a
+  fresh full coverage run did not complete locally within 15 minutes.
+  Evidence: existing `apps/api/coverage.json` shows `41.54%` line coverage and
+  `9.99%` branch coverage; full `pytest --cov=caseops_api` timed out after
+  904 seconds without producing `coverage-audit-2026-04-25.json`. Per-area
+  gates pass for 9 files only.
+  Close when: full backend coverage completes reliably in CI, artifacts are
+  uploaded, and ratcheting thresholds cover high-risk routes and services.
+
+- `AQ-002` `Partially implemented` Frontend coverage gate is now
+  reliable (closed 2026-04-25). Root cause: form/dialog tests that
+  type ~30+ characters with `userEvent` finished comfortably on a
+  bare run (~1.5 s) but crossed the 5000 ms default under v8 coverage
+  instrumentation on Linux. Fix: `apps/web/vitest.config.ts`
+  `testTimeout: 15_000` — leaves headroom without hiding real flakes;
+  anything >15 s is genuinely broken, not slow. Per-describe
+  timeouts also documented on the two anchor tests
+  (`NewWorkspaceForm.test.tsx`, `NewContractDialog.test.tsx`).
+  Verified: full `npm run test:coverage --workspace @caseops/web`
+  passes 142/142, coverage summary stmts 30.31% / branch 22.89% /
+  lines 31.83%.
+  Remaining sub-items keep this `Partially implemented`: CI does
+  not yet upload the coverage artifact; thresholds are not yet
+  enforced (no fail-on-regression gate); `coverage-summary.json` is
+  not produced (only text/html/lcov reporters wired). Close when
+  CI uploads the artifact + a threshold ratchet rejects regressions
+  below the current baseline.
+
+- `AQ-003` `Partially implemented` Page-level UI coverage is not exhaustive.
+  Evidence: 46 frontend pages, 16 sibling `page.test.tsx` files, 30 pages
+  without direct page tests. `apps/web/app/__page-coverage-matrix.test.ts`
+  blocks new unclassified pages but leaves baseline waivers.
+  Close when: app pages have sibling page tests and marketing pages have SEO,
+  CTA, mobile, keyboard, and no-404 automation.
+
+- `AQ-004` `Partially implemented` API route matrix is too shallow.
+  Evidence: route/OpenAPI gates pass, but 16 `ALLOWED_UNTESTED` backend route
+  waivers remain and the current matrix proves route references, not every
+  required happy/negative/auth/authz/tenant/audit/rate-limit category.
+  Close when: operation-level coverage ledger is enforced and all baseline
+  waivers are burned down or expiring with owner approval.
+
+- `AQ-005` `Missing` Postgres-backed DB validation is still required before
+  manual testers can be removed from DB-sensitive regression checks.
+  Evidence: P1-006 remains tracked; current tests are not enough to prove
+  production Postgres constraints, migrations, pgvector, and cascade behavior.
+  Close when: CI has a Postgres service container and a dedicated
+  `postgres-validation` suite.
+
+- `AQ-006` `Partially implemented` E2E coverage does not fully replace manual
+  UAT.
+  Evidence: Playwright lists 66 tests in 19 files, but provider paths can skip
+  without release/UAT credentials and browser diversity is limited.
+  Close when: every PRD-critical journey has happy, negative, empty, error,
+  authz, and mobile automation, and release/UAT jobs fail on provider skips.
+
 ## Stop-Ship Control Gaps
 
 - `EG-001` `Implemented` Browser bearer-token hardening (closed

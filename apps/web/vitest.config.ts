@@ -16,6 +16,14 @@ export default defineConfig({
     setupFiles: ["./vitest.setup.ts"],
     css: false,
     include: ["components/**/*.test.{ts,tsx}", "app/**/*.test.{ts,tsx}", "lib/**/*.test.{ts,tsx}"],
+    // AQ-002 (2026-04-25): default per-test timeout was 5000ms.
+    // Form / dialog tests that type ~30+ characters with userEvent
+    // sit under 2 s on a bare run but cross 5 s under v8 coverage
+    // instrumentation on Linux runners (NewWorkspaceForm,
+    // NewContractDialog, etc.). Bumping the floor to 15 s leaves
+    // headroom without papering over real flakes — anything that
+    // takes >15 s is genuinely broken, not just slow.
+    testTimeout: 15_000,
     // Coverage config — v8 provider. Codex 2026-04-20 test-suite gap
     // audit asked for coverage tooling before we set thresholds.
     // Thresholds will be added once we have a baseline; for now the

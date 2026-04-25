@@ -32,7 +32,11 @@ function withClient(children: ReactNode) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
-describe("NewContractDialog", () => {
+// AQ-002 (2026-04-25): the success path types ~30+ characters with
+// userEvent then awaits async chains. Bare run is well under 5 s;
+// v8-coverage instrumentation pushes it past the default 5000ms
+// timeout intermittently. 15 s leaves headroom without hiding flakes.
+describe("NewContractDialog", { timeout: 15_000 }, () => {
   beforeEach(() => {
     createMock.mockReset();
     toastSuccess.mockReset();

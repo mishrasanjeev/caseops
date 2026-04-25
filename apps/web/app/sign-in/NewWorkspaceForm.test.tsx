@@ -38,7 +38,14 @@ function withClient(children: ReactNode) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
-describe("NewWorkspaceForm", () => {
+// AQ-002 (2026-04-25): every test in this file types ~60 characters
+// across 5 form fields with userEvent. Under v8 coverage, each
+// keystroke gets instrumented and the cumulative cost exceeds the
+// 5000ms default. The bare run completes in ~1.5 s per test; the
+// coverage run sits between 5 s and 8 s on Linux runners. Bumping the
+// per-describe timeout to 15 s leaves headroom without papering over
+// real flakes.
+describe("NewWorkspaceForm", { timeout: 15_000 }, () => {
   beforeEach(() => {
     bootstrapCompanyMock.mockReset();
     storeSessionMock.mockReset();
