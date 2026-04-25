@@ -16,11 +16,13 @@ Current overall verdict (2026-04-25): `GO with caveat`. Closed and live
 in prod: EG-001 (HttpOnly cookies + double-submit CSRF), EG-002 (auto-
 migrate off + canonical deploy-prod.sh script with migrate-job gate),
 EG-003 (clamav sidecar wired + fail-closed default + EICAR-rejection
-prod smoke), EG-004 (per-route AI rate limits), P1-009 (backup/restore
-drill). Remaining stop-ship gaps before unconditional `GO`: EG-005/006
-(matter summary + draft preview model-run governance), EG-007 /
-WTD-8.5 (full secret-management rollout — DB URL is via Secret Manager
-but rotation evidence + other sensitive env aren't fully managed yet).
+prod smoke), EG-004 (per-route AI rate limits), EG-005 (matter summary
+cache + ModelRun audit + cross-provider cutover), EG-006 (draft
+preview tenant policy gate + redacted 502 + ModelRun audit on success
++ failure paths), P1-009 (backup/restore drill). Remaining stop-ship
+gap before unconditional `GO`: EG-007 / WTD-8.5 (full secret-management
+rollout — DB URL is via Secret Manager but rotation evidence + other
+sensitive env aren't fully managed yet).
 
 ## Strict Repo Quality Audit (2026-04-24) — P0 status
 
@@ -283,27 +285,61 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
   Tenant-budget caps (cost-aware, not just request-rate) remain
   open as a follow-on under EG-005 / EG-006 model-run governance.
 
-- `EG-005` `Partially implemented` Matter summary governance.
-  Evidence: `apps/api/src/caseops_api/services/matter_summary.py:231-302`,
-  `apps/api/src/caseops_api/api/routes/matters.py:298-400`,
-  `apps/api/src/caseops_api/services/llm.py:626-673`.
-  Gap: matter summaries are generated on demand for GET and export, there is no
-  persisted cache, no `ModelRun` writer is passed, and fallback only handles
-  malformed JSON rather than wider provider failures.
-  Close when: summary generation is cached or explicitly regenerated, model runs
-  are audited, provider-failure handling matches other AI surfaces, and exports
-  do not silently trigger redundant LLM work.
+- `EG-005` `Implemented` Matter summary governance (closed
+  2026-04-25 via stale-doc re-look — code shipped earlier; ledger had
+  not been re-graded).
+  Evidence:
+  - **Cache:** `Matter.executive_summary_json` column added in
+    migration `20260423_0001`; `services/matter_summary.py:306-309`
+    short-circuits and returns the cached payload unless the caller
+    passes `force_refresh=True`. The POST `…/regenerate` route is the
+    only caller that invalidates; GET / DOCX / PDF use the cache.
+  - **ModelRun audit:** `_on_model_run` callback at
+    `services/matter_summary.py:329-344` writes a `ModelRun` row per
+    successful LLM call (provider, model, prompt+completion tokens,
+    latency, tenant, matter, actor membership, status='ok'). Wired
+    via `generate_structured(..., on_model_run=_on_model_run)`.
+  - **Provider-failure handling:** broadened to catch
+    `LLMQuotaExhaustedError` (Anthropic 402 → straight to OpenAI),
+    `LLMResponseFormatError` (malformed JSON → Haiku retry → OpenAI),
+    and the parent `LLMProviderError` (503/overload/timeouts → OpenAI
+    cutover) — `services/matter_summary.py:360-398`.
+  - **Test coverage:** `test_matter_summary_export.py
+    ::test_summary_caches_after_first_call_and_skips_llm_on_second`
+    proves the second GET hits the cache and never invokes the LLM
+    stub; companion tests verify POST regenerate forces a fresh call
+    and writes a ModelRun audit row each time.
 
-- `EG-006` `Partially implemented` Draft preview governance.
-  Evidence: `apps/api/src/caseops_api/services/drafting_preview.py:51-121`,
-  `apps/api/src/caseops_api/api/routes/drafting.py:165-193`,
-  `apps/api/src/caseops_api/services/tenant_ai_policy.py:9-11`,
-  `apps/api/src/caseops_api/services/llm.py:636-673`.
-  Gap: preview calls `llm.generate(...)` directly, does not persist a
-  `ModelRun`, does not reuse the structured-call policy path, and returns raw
-  exception detail in a 502.
-  Close when: preview uses the same tenant policy and audit discipline as other
-  AI paths and redacts provider or internal exception text.
+- `EG-006` `Implemented` Draft preview governance (closed
+  2026-04-25 via stale-doc re-look — code shipped earlier; ledger had
+  not been re-graded).
+  Evidence:
+  - **Tenant AI policy gate:** `services/drafting_preview.py:151-166`
+    calls `is_model_allowed(policy, purpose='drafting_preview',
+    model=llm.model)` and raises HTTP 403 with an actionable message
+    when the tenant's `tenant_ai_policy` blocks the model.
+  - **ModelRun audit:** `_write_model_run` is invoked on BOTH the
+    success path (`services/drafting_preview.py:187-198`, status='ok')
+    AND the failure path (`drafting_preview.py:173-184`, status='error',
+    error='preview_provider_failed') — preview failures are now
+    visible in the audit dashboard.
+  - **Provider-failure handling:** `_invoke_with_cutover`
+    (`drafting_preview.py:210-251`) is the same Haiku → OpenAI
+    cutover ladder used by the structured AI services
+    (recommendations / matter_summary). `LLMQuotaExhaustedError` cuts
+    straight to OpenAI; `LLMProviderError` tries Haiku first.
+  - **Redacted 502:** `_preview_via_openai` (`drafting_preview.py:254-274`)
+    logs the raw exception at WARN with full repr but returns an
+    actionable, redacted user-visible detail ("Drafting preview is
+    temporarily unavailable. Please retry in a minute, or contact
+    support if this persists.") — no provider name, no exception
+    class, no internal trace markers leak.
+  - **Test coverage:** `test_drafting_preview.py
+    ::test_preview_redacts_provider_error_in_502` asserts the user-
+    visible detail does NOT contain `LLMProviderError`, `Anthropic`,
+    or a planted `SECRET_INTERNAL_TRACE_xyz` substring;
+    `test_preview_persists_error_model_run_when_provider_fails`
+    asserts the failure-path ModelRun row is persisted.
 
 - `EG-007` `Partially implemented` Secret-management and runtime control wiring.
   Evidence: `infra/cloudrun/api-service.yaml:14`,
