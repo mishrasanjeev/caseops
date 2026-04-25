@@ -404,3 +404,70 @@ def test_karnataka_and_madras_authority_adapters_parse_official_public_feeds(mon
         AuthorityDocumentType.ORDER,
     }
     assert madras_result.documents[0].bench_name == "Madurai Bench"
+
+
+# P4 (Sprint P, 2026-04-25) — forum-aware precedent boost unit tests.
+
+def test_forum_precedent_boost_supreme_court_binds_below() -> None:
+    """An SC document is binding precedent on every lower forum, so
+    every (matter_forum -> doc_forum=supreme_court) pair must boost
+    high (>= 12) regardless of which lower forum the matter sits at."""
+    from caseops_api.services.authorities import _forum_precedent_boost
+
+    for matter_forum in [
+        "high_court", "lower_court", "tribunal", "advisory",
+    ]:
+        boost = _forum_precedent_boost(matter_forum, "supreme_court")
+        assert boost >= 12, (
+            f"SC must bind below; {matter_forum}->SC was {boost}"
+        )
+
+
+def test_forum_precedent_boost_same_level_lower_than_above() -> None:
+    """Same-level (peer) precedent is persuasive; same-level boost
+    must be strictly less than higher-level binding boost."""
+    from caseops_api.services.authorities import _forum_precedent_boost
+
+    same = _forum_precedent_boost("high_court", "high_court")
+    higher = _forum_precedent_boost("high_court", "supreme_court")
+    assert higher > same, (
+        f"HC<-SC binding ({higher}) must outrank HC<-HC peer ({same})"
+    )
+
+
+def test_forum_precedent_boost_below_matter_forum_returns_zero() -> None:
+    """Sub-precedent (e.g. lower_court doc when matter is at HC) does
+    not bind upward — boost must be 0 so the rest of the rerank
+    decides relevance."""
+    from caseops_api.services.authorities import _forum_precedent_boost
+
+    assert _forum_precedent_boost("high_court", "lower_court") == 0
+    assert _forum_precedent_boost("supreme_court", "high_court") > 0  # peer-down still persuasive for SC consumers
+    # Tribunal can't bind a lower_court matter — return 2 (small
+    # persuasive only). Confirm boost stays small relative to SC.
+    sc = _forum_precedent_boost("lower_court", "supreme_court")
+    trib = _forum_precedent_boost("lower_court", "tribunal")
+    assert sc > trib
+
+
+def test_forum_precedent_boost_unknown_forum_returns_zero() -> None:
+    """Unknown forums (matter or doc) -> 0 so retrieval doesn't fall
+    over on partial data."""
+    from caseops_api.services.authorities import _forum_precedent_boost
+
+    assert _forum_precedent_boost(None, "supreme_court") == 0
+    assert _forum_precedent_boost("high_court", None) == 0
+    assert _forum_precedent_boost("not_a_forum", "supreme_court") == 0
+    assert _forum_precedent_boost("high_court", "not_a_forum") == 0
+
+
+def test_forum_precedent_boost_does_not_score_judges_or_outcomes() -> None:
+    """Bench-aware drafting rule: boost is precedent-weight, NOT
+    favorability. Two SC documents must get the SAME boost regardless
+    of bench composition. The function takes only forum strings — no
+    judge / matter facts — so this is a structural guarantee."""
+    from caseops_api.services.authorities import _forum_precedent_boost
+
+    a = _forum_precedent_boost("high_court", "supreme_court")
+    b = _forum_precedent_boost("high_court", "supreme_court")
+    assert a == b

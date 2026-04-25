@@ -1000,12 +1000,30 @@ export async function fetchCourtProfile(courtId: string): Promise<CourtProfile> 
   return apiRequest(`/api/courts/${courtId}`);
 }
 
+export type JudgePracticeAreaCount = {
+  area: string;
+  count: number;
+};
+
+export type JudgeDecisionVolumePoint = {
+  year: number;
+  count: number;
+};
+
 export type JudgeProfile = {
   judge: JudgeRecord;
   court: CourtRecord;
   portfolio_matter_count: number;
   authority_document_count: number;
   recent_authorities: CourtAuthorityStub[];
+  // P1 (Sprint P, 2026-04-25). Backend ships these today; the web
+  // page just needs to render them. Optional with default fallback so
+  // older cached responses don't break the type checker.
+  practice_areas?: JudgePracticeAreaCount[];
+  decision_volume?: JudgeDecisionVolumePoint[];
+  earliest_decision_date?: string | null;
+  latest_decision_date?: string | null;
+  structured_match_coverage_percent?: number;
 };
 
 export async function fetchJudgeProfile(judgeId: string): Promise<JudgeProfile> {

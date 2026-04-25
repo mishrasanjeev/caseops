@@ -55,6 +55,80 @@ from caseops_api.services.retrieval import RetrievalCandidate, rank_candidates
 from caseops_api.services.retrieval_normalisers import build_query_variants
 
 
+# P4 (Sprint P, 2026-04-25). Forum-aware precedent boost. Indian
+# court hierarchy (highest precedential weight first):
+#   supreme_court > high_court > lower_court / tribunal > advisory
+# The score boosts encode precedent value, not "how good the doc is":
+# an SC judgment is BINDING precedent on every lower forum, so we
+# boost SC docs strongly when the matter sits at HC / lower_court /
+# tribunal. HC-on-HC is a same-level peer (persuasive). Below the
+# matter's own level adds nothing — sub-precedent doesn't bind up.
+# Returns 0 when either forum is unknown so the rest of the rerank
+# (court_name match, citation overlap, etc.) still drives the score.
+_FORUM_PRECEDENT_BOOSTS: dict[str, dict[str, int]] = {
+    "supreme_court": {
+        "supreme_court": 12,  # binding self-reference
+        "high_court": 4,
+        "lower_court": 0,
+        "tribunal": 0,
+        "arbitration": 0,
+    },
+    "high_court": {
+        "supreme_court": 12,  # binding from above
+        "high_court": 8,      # same level (was the existing exact boost)
+        "lower_court": 0,
+        "tribunal": 0,
+        "arbitration": 0,
+    },
+    "lower_court": {
+        "supreme_court": 12,
+        "high_court": 8,
+        "lower_court": 4,
+        "tribunal": 2,
+        "arbitration": 0,
+    },
+    "tribunal": {
+        "supreme_court": 12,
+        "high_court": 6,
+        "tribunal": 6,
+        "lower_court": 0,
+        "arbitration": 0,
+    },
+    "arbitration": {
+        "supreme_court": 6,
+        "arbitration": 8,
+        "high_court": 4,
+        "lower_court": 0,
+        "tribunal": 0,
+    },
+    "advisory": {
+        "supreme_court": 12,
+        "high_court": 6,
+        "advisory": 4,
+        "lower_court": 0,
+        "tribunal": 0,
+        "arbitration": 0,
+    },
+}
+
+
+def _forum_precedent_boost(
+    matter_forum: str | None, doc_forum: str | None
+) -> int:
+    """Score boost for a `doc_forum` document when the matter is at
+    `matter_forum`. Bigger = more relevant per Indian court hierarchy.
+    Unknown forums (either side) → 0. Bench-aware drafting rule: this
+    is precedent-weight, NOT favorability. Boosting SC over HC says
+    "SC is binding"; it does not score the judge or predict outcomes.
+    """
+    if not matter_forum or not doc_forum:
+        return 0
+    table = _FORUM_PRECEDENT_BOOSTS.get(matter_forum.lower())
+    if table is None:
+        return 0
+    return table.get(doc_forum.lower(), 0)
+
+
 def _require_admin(context: SessionContext) -> None:
     if context.membership.role not in {MembershipRole.OWNER, MembershipRole.ADMIN}:
         raise HTTPException(
@@ -576,8 +650,14 @@ def search_authority_catalog(
         adjusted_score = result.score
         if court_name and document.court_name == court_name:
             adjusted_score += 16
-        if forum_level and document.forum_level == forum_level:
-            adjusted_score += 8
+        # P4 (2026-04-25): forum-aware precedent boost — replaces the
+        # old exact-match `+8 if forum_level == forum_level` with a
+        # hierarchy-aware boost that also rewards binding precedent
+        # (e.g. SC docs when the matter is at HC/lower_court/tribunal).
+        # Falls back to 0 when either forum is unknown.
+        adjusted_score += _forum_precedent_boost(
+            forum_level, document.forum_level
+        )
         if document_type and document.document_type == document_type:
             adjusted_score += 8
         document_ref_tokens = set(

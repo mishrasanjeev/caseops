@@ -1,7 +1,15 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Briefcase, Gavel, LibraryBig } from "lucide-react";
+import {
+  ArrowLeft,
+  BarChart3,
+  Briefcase,
+  CalendarRange,
+  Gavel,
+  LibraryBig,
+  ShieldCheck,
+} from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
@@ -64,7 +72,7 @@ export default function JudgeProfilePage() {
         description={profile.judge.current_position ?? "Active judge"}
       />
 
-      <section className="grid gap-4 md:grid-cols-2">
+      <section className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
         <KpiCard
           icon={Briefcase}
           label="Your matters before this judge"
@@ -72,10 +80,61 @@ export default function JudgeProfilePage() {
         />
         <KpiCard
           icon={LibraryBig}
-          label="Authorities citing this judge"
+          label="Authorities indexed"
           value={profile.authority_document_count.toLocaleString()}
         />
+        <KpiCard
+          icon={CalendarRange}
+          label="Tenure (decisions)"
+          value={
+            profile.earliest_decision_date && profile.latest_decision_date
+              ? `${profile.earliest_decision_date.slice(0, 4)} – ${profile.latest_decision_date.slice(0, 4)}`
+              : "—"
+          }
+        />
+        <KpiCard
+          icon={ShieldCheck}
+          label="Structured match"
+          value={
+            profile.structured_match_coverage_percent !== undefined
+              ? `${profile.structured_match_coverage_percent}%`
+              : "—"
+          }
+        />
       </section>
+
+      {profile.practice_areas && profile.practice_areas.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Practice areas decided</CardTitle>
+            <CardDescription>
+              How the judgments where this judge sat split across the practice
+              areas we recognise. Buckets are derived from the sections cited
+              in each judgment — a heuristic, not an outcome claim.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <PracticeAreaBars items={profile.practice_areas} />
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {profile.decision_volume && profile.decision_volume.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-4 w-4" aria-hidden /> Decision volume by year
+            </CardTitle>
+            <CardDescription>
+              Indexed decisions per calendar year. Helps spot tenure breaks and
+              workload changes; does not imply trend, preference, or outcome.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <DecisionVolumeBars points={profile.decision_volume} />
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>
@@ -150,5 +209,71 @@ function KpiCard({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+
+function PracticeAreaBars({
+  items,
+}: {
+  items: { area: string; count: number }[];
+}) {
+  const max = Math.max(...items.map((i) => i.count), 1);
+  return (
+    <ul className="flex flex-col gap-2" data-testid="judge-practice-area-bars">
+      {items.map((it) => {
+        const pct = Math.max(2, Math.round((it.count / max) * 100));
+        return (
+          <li key={it.area} className="flex items-center gap-3 text-sm">
+            <span className="w-44 shrink-0 text-[var(--color-ink-2)]">
+              {it.area}
+            </span>
+            <div className="relative h-2 flex-1 overflow-hidden rounded bg-[var(--color-bg)]">
+              <div
+                className="h-2 rounded bg-[var(--color-brand-700)]"
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+            <span className="tabular w-10 shrink-0 text-right text-xs text-[var(--color-mute)]">
+              {it.count}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+
+function DecisionVolumeBars({
+  points,
+}: {
+  points: { year: number; count: number }[];
+}) {
+  const max = Math.max(...points.map((p) => p.count), 1);
+  return (
+    <div
+      className="flex h-32 items-end gap-1"
+      data-testid="judge-decision-volume-bars"
+    >
+      {points.map((p) => {
+        const h = Math.max(4, Math.round((p.count / max) * 100));
+        return (
+          <div
+            key={p.year}
+            className="flex flex-1 flex-col items-center gap-1"
+            title={`${p.year}: ${p.count} decisions`}
+          >
+            <div
+              className="w-full rounded-t bg-[var(--color-brand-700)]"
+              style={{ height: `${h}%` }}
+            />
+            <span className="tabular text-[10px] text-[var(--color-mute)]">
+              {String(p.year).slice(-2)}
+            </span>
+          </div>
+        );
+      })}
+    </div>
   );
 }
