@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  BookOpenCheck,
   Briefcase,
   CalendarDays,
   ChevronsRight,
@@ -72,6 +73,7 @@ const NAV: NavItem[] = [
   },
   { href: "/app/portfolio", label: "Portfolio", icon: PanelsTopLeft, section: "intel" },
   { href: "/app/courts", label: "Courts", icon: Gavel, section: "intel" },
+  { href: "/app/statutes", label: "Statutes", icon: BookOpenCheck, section: "intel" },
   {
     href: "/app/admin",
     label: "Admin",

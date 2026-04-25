@@ -23,6 +23,7 @@ from caseops_api.api.routes import (
     payments,
     portal,
     recommendations,
+    statutes,
     teams,
 )
 
@@ -46,6 +47,10 @@ api_router.include_router(ai.router, prefix="/ai", tags=["ai"])
 api_router.include_router(recommendations.router, tags=["recommendations"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
 api_router.include_router(courts.router, prefix="/courts", tags=["courts"])
+# MOD-TS-017 Slice S2 (2026-04-25) — bare-acts read API powering
+# /app/statutes browser. Read-only in v1; matter reference + drafting
+# prompt extension lands in Slice S4.
+api_router.include_router(statutes.router, prefix="/statutes", tags=["statutes"])
 api_router.include_router(intake.router, prefix="/intake", tags=["intake"])
 api_router.include_router(teams.router, prefix="/teams", tags=["teams"])
 api_router.include_router(clients.router, prefix="/clients", tags=["clients"])

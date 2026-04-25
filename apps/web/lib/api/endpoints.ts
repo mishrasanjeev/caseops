@@ -1171,6 +1171,78 @@ export async function fetchJudgeProfile(judgeId: string): Promise<JudgeProfile> 
   return apiRequest(`/api/courts/judges/${judgeId}`);
 }
 
+// MOD-TS-017 Slice S2 (2026-04-25) — bare-acts browser API.
+export type StatuteRecord = {
+  id: string;
+  short_name: string;
+  long_name: string;
+  enacted_year: number | null;
+  jurisdiction: string;
+  source_url: string | null;
+  is_active?: boolean;
+};
+
+export type StatuteListItem = {
+  id: string;
+  short_name: string;
+  long_name: string;
+  enacted_year: number | null;
+  jurisdiction: string;
+  source_url: string | null;
+  section_count: number;
+};
+
+export type StatuteListResponse = {
+  statutes: StatuteListItem[];
+  total_section_count: number;
+};
+
+export type StatuteSectionRecord = {
+  id: string;
+  statute_id: string;
+  section_number: string;
+  section_label: string | null;
+  section_text: string | null;
+  section_url: string | null;
+  parent_section_id: string | null;
+  ordinal: number;
+};
+
+export type StatuteSectionsListResponse = {
+  statute: StatuteRecord;
+  sections: StatuteSectionRecord[];
+};
+
+export type StatuteSectionDetailResponse = {
+  statute: StatuteRecord;
+  section: StatuteSectionRecord;
+  parent_section: StatuteSectionRecord | null;
+  child_sections: StatuteSectionRecord[];
+};
+
+export async function listStatutes(): Promise<StatuteListResponse> {
+  return apiRequest("/api/statutes/");
+}
+
+export async function fetchStatute(statuteId: string): Promise<StatuteRecord> {
+  return apiRequest(`/api/statutes/${statuteId}`);
+}
+
+export async function listStatuteSections(
+  statuteId: string,
+): Promise<StatuteSectionsListResponse> {
+  return apiRequest(`/api/statutes/${statuteId}/sections`);
+}
+
+export async function fetchStatuteSection(
+  statuteId: string,
+  sectionNumber: string,
+): Promise<StatuteSectionDetailResponse> {
+  return apiRequest(
+    `/api/statutes/${statuteId}/sections/${encodeURIComponent(sectionNumber)}`,
+  );
+}
+
 // Slice D admin surface (MOD-TS-001-E, 2026-04-25 follow-up).
 // Read-only listing of every judge alias for the admin audit page.
 export type JudgeAliasRecord = {
