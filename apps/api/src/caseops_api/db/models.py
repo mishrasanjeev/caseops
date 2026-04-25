@@ -2762,6 +2762,64 @@ class Judge(Base):
     )
 
 
+class JudgeAppointment(Base):
+    """Career history per judge — every court a judge has served on.
+
+    MOD-TS-001-B (Slice A, 2026-04-25). The Judge.court_id FK only
+    captures the current appointment; this table captures the full
+    timeline so a judge profile page can render the elevations + prior
+    courts. Source-attributed per the bench-aware drafting hard rules
+    (no rows without source_url).
+    """
+
+    __tablename__ = "judge_appointments"
+    __table_args__ = (
+        UniqueConstraint(
+            "judge_id",
+            "court_id",
+            "role",
+            "start_date",
+            name="uq_judge_appointments_unique",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4()),
+    )
+    judge_id: Mapped[str] = mapped_column(
+        ForeignKey("judges.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    court_id: Mapped[str] = mapped_column(
+        ForeignKey("courts.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    # Free string rather than enum so HCs can introduce roles
+    # ("acting_chief_justice", "additional_judge") without a migration.
+    # Loader / backfill code is responsible for normalising input.
+    role: Mapped[str] = mapped_column(String(64), nullable=False)
+    start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # Active appointment = end_date IS NULL. The seeder leaves NULL on
+    # the current appointment row + sets a real date on prior rows
+    # when the source provides one.
+    end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    source_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    source_evidence_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+
 class EvaluationRun(Base):
     """One invocation of a named evaluation suite against one model
     configuration. Aggregate counts land here; per-case detail lives

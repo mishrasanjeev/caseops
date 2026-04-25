@@ -22,6 +22,7 @@ from caseops_api.db.models import (
     AuthorityDocumentChunk,
     Court,
     Judge,
+    JudgeAppointment,
     Matter,
 )
 from caseops_api.services.identity import SessionContext
@@ -267,6 +268,21 @@ class DecisionVolumePoint(BaseModel):
     count: int
 
 
+class JudgeAppointmentRecord(BaseModel):
+    """Slice A (MOD-TS-001-B) — one row of a judge's career timeline."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    court_id: str
+    court_name: str  # populated by the route from a Court join
+    role: str
+    start_date: str | None
+    end_date: str | None
+    source_url: str | None
+    source_evidence_text: str | None
+
+
 class JudgeProfileResponse(BaseModel):
     judge: JudgeRecord
     court: CourtRecord
@@ -287,6 +303,12 @@ class JudgeProfileResponse(BaseModel):
     # Transparency: what share of the authority-count comes from
     # structured Layer-2 matches (vs. the bench_name ILIKE fallback).
     structured_match_coverage_percent: int = 0
+    # Slice A (MOD-TS-001-B, 2026-04-25). Career history per
+    # judge_appointments table, oldest-first. Empty array when no
+    # career data has been backfilled yet (e.g. an HC judge before
+    # the per-HC scraper runs). UI shows "Career history not yet
+    # recorded" when empty.
+    career: list[JudgeAppointmentRecord] = Field(default_factory=list)
 
 
 # Declared BEFORE the catch-all /{court_id} route so FastAPI's
@@ -405,6 +427,33 @@ def get_judge_profile(
         session, judge_filter=authority_filter, limit=8
     )
 
+    # Slice A (MOD-TS-001-B): career timeline. Join JudgeAppointment
+    # to Court for the human-readable court_name. Sort oldest-first;
+    # NULL start_date sorts last so a backfilled-without-date HC stint
+    # appears before the dated SC elevation when we know one but not
+    # the other. Caller decides how to render — typically reversed for
+    # display.
+    career_rows = list(
+        session.execute(
+            select(
+                JudgeAppointment.id,
+                JudgeAppointment.court_id,
+                Court.name.label("court_name"),
+                JudgeAppointment.role,
+                JudgeAppointment.start_date,
+                JudgeAppointment.end_date,
+                JudgeAppointment.source_url,
+                JudgeAppointment.source_evidence_text,
+            )
+            .join(Court, Court.id == JudgeAppointment.court_id)
+            .where(JudgeAppointment.judge_id == judge.id)
+            .order_by(
+                JudgeAppointment.start_date.is_(None),
+                JudgeAppointment.start_date,
+            )
+        ).all()
+    )
+
     return JudgeProfileResponse(
         judge=JudgeRecord.model_validate(judge),
         court=CourtRecord.model_validate(court),
@@ -426,6 +475,19 @@ def get_judge_profile(
         decision_volume=[
             DecisionVolumePoint(year=int(yr), count=int(cnt))
             for yr, cnt in volume_rows
+        ],
+        career=[
+            JudgeAppointmentRecord(
+                id=row.id,
+                court_id=row.court_id,
+                court_name=row.court_name,
+                role=row.role,
+                start_date=row.start_date.isoformat() if row.start_date else None,
+                end_date=row.end_date.isoformat() if row.end_date else None,
+                source_url=row.source_url,
+                source_evidence_text=row.source_evidence_text,
+            )
+            for row in career_rows
         ],
         earliest_decision_date=earliest.isoformat() if earliest else None,
         latest_decision_date=latest.isoformat() if latest else None,

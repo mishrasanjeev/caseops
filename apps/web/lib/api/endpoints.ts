@@ -1115,6 +1115,17 @@ export type JudgeDecisionVolumePoint = {
   count: number;
 };
 
+export type JudgeAppointmentRecord = {
+  id: string;
+  court_id: string;
+  court_name: string;
+  role: string;
+  start_date: string | null;
+  end_date: string | null;
+  source_url: string | null;
+  source_evidence_text: string | null;
+};
+
 export type JudgeProfile = {
   judge: JudgeRecord;
   court: CourtRecord;
@@ -1129,6 +1140,10 @@ export type JudgeProfile = {
   earliest_decision_date?: string | null;
   latest_decision_date?: string | null;
   structured_match_coverage_percent?: number;
+  // Slice A (MOD-TS-001-B, 2026-04-25). Career timeline; oldest first.
+  // Empty array when no career has been backfilled yet (e.g. an HC
+  // judge before the per-HC scraper runs).
+  career?: JudgeAppointmentRecord[];
 };
 
 export async function fetchJudgeProfile(judgeId: string): Promise<JudgeProfile> {

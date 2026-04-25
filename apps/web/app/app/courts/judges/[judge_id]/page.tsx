@@ -6,8 +6,10 @@ import {
   BarChart3,
   Briefcase,
   CalendarRange,
+  ExternalLink,
   Gavel,
   LibraryBig,
+  Milestone,
   ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
@@ -102,6 +104,69 @@ export default function JudgeProfilePage() {
           }
         />
       </section>
+
+      <Card data-testid="judge-career-card">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Milestone className="h-4 w-4" aria-hidden /> Career
+          </CardTitle>
+          <CardDescription>
+            Every court this judge has served on, oldest first. Sourced from
+            the official profile pages — click any source link to verify.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {profile.career && profile.career.length > 0 ? (
+            <ol
+              className="flex flex-col gap-3"
+              data-testid="judge-career-timeline"
+            >
+              {profile.career.map((appt) => (
+                <li
+                  key={appt.id}
+                  className="flex flex-col gap-1 rounded-md border border-[var(--color-line)] bg-white p-3"
+                  data-testid={`judge-career-row-${appt.id}`}
+                >
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <div className="text-sm font-semibold text-[var(--color-ink)]">
+                      {appt.court_name}
+                    </div>
+                    <div className="text-xs text-[var(--color-mute)] tabular">
+                      {appt.start_date ?? "—"} →{" "}
+                      {appt.end_date ?? (appt.start_date ? "present" : "—")}
+                    </div>
+                  </div>
+                  <div className="text-xs uppercase tracking-wide text-[var(--color-mute-2)]">
+                    {appt.role.replace(/_/g, " ")}
+                  </div>
+                  {appt.source_evidence_text ? (
+                    <div className="mt-1 text-xs text-[var(--color-mute)]">
+                      “{appt.source_evidence_text}”
+                    </div>
+                  ) : null}
+                  {appt.source_url ? (
+                    <a
+                      href={appt.source_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-1 inline-flex items-center gap-1 text-xs text-[var(--color-brand-600)] hover:underline"
+                    >
+                      Source
+                      <ExternalLink className="h-3 w-3" aria-hidden />
+                    </a>
+                  ) : null}
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <EmptyState
+              icon={Milestone}
+              title="Career history not yet recorded"
+              description="No appointments have been backfilled for this judge. Career data is added as we scrape each court's profile pages."
+            />
+          )}
+        </CardContent>
+      </Card>
 
       {profile.practice_areas && profile.practice_areas.length > 0 ? (
         <Card>
