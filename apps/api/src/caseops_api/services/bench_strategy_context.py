@@ -51,6 +51,7 @@ from caseops_api.db.models import (
     Court,
     Judge,
     Matter,
+    MatterCauseListEntry,
 )
 from caseops_api.services.bench_matcher import (
     BenchSuggestion,
@@ -140,6 +141,36 @@ class CitedAuthority:
 
 
 @dataclass(frozen=True)
+class BenchSpecificAuthority:
+    """Slice C (MOD-TS-001-D, 2026-04-25) — an authority authored by
+    the SPECIFIC bench scheduled to hear the next listing on the
+    matter. Distinct from `similar_authorities` (court-scoped) so the
+    drafting prompt can render a 'BENCH-SPECIFIC HISTORY' block
+    separate from the broader 'COURT HISTORY' block.
+
+    Advocate-bias selection (per PRD §2.1, user memory
+    feedback_user_bias_in_recommendations.md): authorities are
+    selected to SUPPORT the matter's practice area when possible,
+    not balanced like a neutral encyclopedia. Output remains
+    citation-grounded and evidence-phrased — no favorability copy.
+    """
+
+    id: str
+    title: str
+    decision_date: str | None
+    case_reference: str | None
+    neutral_citation: str | None
+    bench_name: str | None
+    forum_level: str | None
+    # Which of the bench's resolved judges authored / sat on this.
+    matched_judge_ids: tuple[str, ...]
+    # 'practice_area' = the matter's practice area appears in
+    #     authority title or summary (advocate-bias positive selection).
+    # 'general' = on-bench but not specifically aligned to the matter.
+    relevance: str
+
+
+@dataclass(frozen=True)
 class BenchStrategyContext:
     matter_id: str
     court_name: str | None
@@ -153,6 +184,17 @@ class BenchStrategyContext:
     authorities_frequently_cited: list[CitedAuthority] = field(default_factory=list)
     drafting_cautions: list[str] = field(default_factory=list)
     unsupported_gaps: list[str] = field(default_factory=list)
+    # Slice C (MOD-TS-001-D, 2026-04-25). Authorities authored by the
+    # SPECIFIC bench resolved for the matter's next listing. Empty
+    # when no `next_listing_id` was passed, the listing has no
+    # resolved judges_json, or no authorities matched.
+    bench_specific_authorities: list[BenchSpecificAuthority] = field(
+        default_factory=list,
+    )
+    # Human-readable note when bench-specific lookup was attempted
+    # but couldn't deliver — drafting service surfaces this so the
+    # user knows the fallback is intentional, not a silent gap.
+    bench_specific_limitation_note: str | None = None
 
 
 # Recurring legal-test phrases we look for in each authority's
@@ -199,12 +241,21 @@ def build_bench_strategy_context(
     matter_id: str,
     judge_limit: int = 5,
     authority_limit: int = _DEFAULT_AUTHORITY_LIMIT,
+    next_listing_id: str | None = None,
+    bench_specific_limit: int = 5,
 ) -> BenchStrategyContext:
     """Build the BenchStrategyContext for the calling tenant's matter.
 
     Tenancy: the matter must belong to `context.company.id` — foreign
     matters raise 404 (same shape as other matter endpoints).
     Pure-read; no DB writes.
+
+    Slice C (MOD-TS-001-D, 2026-04-25): when ``next_listing_id`` is
+    passed AND that listing has resolved ``judges_json`` (Slice B),
+    the response's ``bench_specific_authorities`` field is populated
+    with up to ``bench_specific_limit`` (default 5) authorities
+    authored by THOSE specific judges. Advocate-bias selection
+    favours the matter's practice area when present (per PRD §2.1).
     """
     matter = session.scalar(
         select(Matter)
@@ -267,6 +318,16 @@ def build_bench_strategy_context(
         candidate_count=len(judge_candidates),
     )
 
+    # Slice C (MOD-TS-001-D): bench-specific authorities for the
+    # next listing. Empty when no listing_id passed or resolution
+    # failed; the limitation note explains why.
+    bench_specific, bench_specific_note = _resolve_bench_specific_authorities(
+        session=session,
+        matter=matter,
+        next_listing_id=next_listing_id,
+        limit=bench_specific_limit,
+    )
+
     return BenchStrategyContext(
         matter_id=matter.id,
         court_name=court_name,
@@ -280,7 +341,168 @@ def build_bench_strategy_context(
         authorities_frequently_cited=authorities_cited,
         drafting_cautions=drafting_cautions,
         unsupported_gaps=unsupported_gaps,
+        bench_specific_authorities=bench_specific,
+        bench_specific_limitation_note=bench_specific_note,
     )
+
+
+def _resolve_bench_specific_authorities(
+    *,
+    session: Session,
+    matter: Matter,
+    next_listing_id: str | None,
+    limit: int,
+) -> tuple[list[BenchSpecificAuthority], str | None]:
+    """Slice C helper. Pull authorities authored by the SPECIFIC bench
+    resolved for ``next_listing_id`` (Slice B output). Apply advocate-
+    bias selection: prefer authorities whose title or summary mentions
+    the matter's practice area.
+
+    Returns ``(authorities, limitation_note_or_None)``. The note is
+    only set when a lookup was attempted but couldn't deliver — so
+    the calling drafting service can render it to the user instead of
+    silently producing a court-only draft.
+    """
+    if not next_listing_id:
+        return [], None
+    listing = session.scalar(
+        select(MatterCauseListEntry).where(
+            MatterCauseListEntry.id == next_listing_id,
+            MatterCauseListEntry.matter_id == matter.id,
+        )
+    )
+    if listing is None:
+        return [], (
+            "Could not load the next listing for this matter; "
+            "bench-specific context skipped."
+        )
+    if not listing.judges_json:
+        return [], (
+            "The next listing's bench has not been resolved yet "
+            "(scripts/resolve-cause-list-benches-job has not run "
+            "or the bench string did not match the high-quality "
+            "confidence floor). Drafting falls back to court-scoped "
+            "context."
+        )
+    import json as _json
+
+    try:
+        resolved = _json.loads(listing.judges_json)
+    except (ValueError, TypeError):
+        return [], "Resolved bench JSON was malformed; falling back."
+    judge_ids = [r["judge_id"] for r in resolved if r.get("judge_id")]
+    if not judge_ids:
+        return [], (
+            "The next listing's bench resolved to zero judges (likely "
+            "because the bench string didn't pass the high-quality "
+            "confidence floor). Drafting falls back to court-scoped "
+            "context."
+        )
+
+    # Pull each judge's full_name to query authorities by it. The
+    # judges_json blob already has matched_alias but we want the
+    # canonical Judge.full_name for the AuthorityDocument.judges_json
+    # ILIKE / bench_name fallback.
+    judges = list(
+        session.scalars(
+            select(Judge).where(Judge.id.in_(judge_ids))
+        ).all()
+    )
+    if not judges:
+        return [], (
+            "Resolved judge IDs no longer exist in the catalog "
+            "(stale resolution). Re-run the bench resolver."
+        )
+
+    # Build the OR filter — any authority whose judges_json or
+    # bench_name mentions any of the bench's judges.
+    name_filters = []
+    for j in judges:
+        stripped = _strip_honorific(j.full_name)
+        json_pattern = f'%"{stripped}%'
+        bench_pattern = f"%{stripped}%"
+        name_filters.append(AuthorityDocument.judges_json.ilike(json_pattern))
+        name_filters.append(AuthorityDocument.bench_name.ilike(bench_pattern))
+    rows = list(
+        session.execute(
+            select(
+                AuthorityDocument.id,
+                AuthorityDocument.title,
+                AuthorityDocument.summary,
+                AuthorityDocument.decision_date,
+                AuthorityDocument.case_reference,
+                AuthorityDocument.neutral_citation,
+                AuthorityDocument.bench_name,
+                AuthorityDocument.judges_json,
+                AuthorityDocument.forum_level,
+            )
+            .where(or_(*name_filters))
+            .order_by(AuthorityDocument.decision_date.desc().nulls_last())
+            # Pull a generous candidate set so advocate-bias has
+            # room to filter; we trim to `limit` after scoring.
+            .limit(max(limit * 4, 20))
+        ).all()
+    )
+    if not rows:
+        return [], (
+            "The bench has no indexed authorities in the corpus yet — "
+            "the appellate draft must rely on court-scoped citations "
+            "instead. This is a corpus coverage gap, not a drafting "
+            "failure."
+        )
+
+    # Advocate-bias selection: when the matter has a practice_area,
+    # prefer authorities whose title or summary mentions it. Per the
+    # PRD §2.1 truth table this is allowed AND required — selecting
+    # supporting citations is what the lawyer wants.
+    practice_needle = (matter.practice_area or "").lower().strip()
+    judge_id_by_full_name = {j.full_name: j.id for j in judges}
+
+    def _matched_ids_for(row) -> tuple[str, ...]:
+        # Identify which of the bench's judges this authority touches
+        # by name. Cheap string scan; structured Layer-2 not required.
+        out: list[str] = []
+        haystack = (row.judges_json or "") + " " + (row.bench_name or "")
+        for full_name, jid in judge_id_by_full_name.items():
+            stripped = _strip_honorific(full_name)
+            if stripped and stripped.lower() in haystack.lower():
+                out.append(jid)
+        return tuple(out) if out else tuple(judge_id_by_full_name.values())
+
+    scored: list[tuple[int, BenchSpecificAuthority]] = []
+    for row in rows:
+        matched_ids = _matched_ids_for(row)
+        relevance = "general"
+        score = 0
+        if practice_needle:
+            haystack = " ".join(
+                filter(None, [row.title or "", row.summary or ""])
+            ).lower()
+            if practice_needle in haystack:
+                relevance = "practice_area"
+                score += 10
+        # Boost recency.
+        if row.decision_date:
+            score += min(5, (row.decision_date.year - 2000) // 5)
+        scored.append(
+            (
+                -score,  # negative for descending sort
+                BenchSpecificAuthority(
+                    id=row.id,
+                    title=row.title,
+                    decision_date=row.decision_date.isoformat()
+                    if row.decision_date else None,
+                    case_reference=row.case_reference,
+                    neutral_citation=row.neutral_citation,
+                    bench_name=row.bench_name,
+                    forum_level=row.forum_level,
+                    matched_judge_ids=matched_ids,
+                    relevance=relevance,
+                ),
+            )
+        )
+    scored.sort(key=lambda pair: pair[0])
+    return [b for _s, b in scored[:limit]], None
 
 
 # ---------- internal helpers ----------
