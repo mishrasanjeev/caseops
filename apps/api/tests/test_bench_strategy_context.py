@@ -378,3 +378,180 @@ def test_bench_strategy_context_is_pure_read(client: TestClient) -> None:
         assert m2.updated_at.replace(tzinfo=None) == before.replace(tzinfo=None)
 
 
+
+
+# ---------- BAAD-001 slice 3 — drafting integration smoke ----------
+# Pure-unit checks that _build_messages reacts correctly to a
+# bench_context. We don't run the LLM (mock provider in conftest);
+# we just verify the prompt block shape so any regression to the
+# integration path is caught at unit level.
+
+def test_build_messages_injects_bench_context_for_appeal(
+    client: TestClient,
+) -> None:
+    """When draft.template_type=='appeal_memorandum' AND a non-trivial
+    bench_context is supplied, the user message must carry the
+    'BENCH HISTORY CONTEXT' header + a confidence label."""
+    from caseops_api.services.drafting import _build_messages
+    from caseops_api.services.bench_strategy_context import BenchStrategyContext
+
+    boot = bootstrap_company(client, slug_seed="baad-build-1")
+    Session = get_session_factory()
+    with Session() as session:
+        m = _seed_matter(
+            session, company_id=boot["company"]["id"], code="BAAD-B-1",
+        )
+
+    class _Draft:
+        template_type = "appeal_memorandum"
+        title = "Appeal — Test"
+        draft_type = "appeal"
+        facts_json = None
+
+    ctx = BenchStrategyContext(
+        matter_id=m.id,
+        court_name="Bombay High Court",
+        bench_match=None,
+        context_quality="medium",
+        structured_match_coverage_percent=55,
+    )
+    msgs = _build_messages(
+        matter=m, draft=_Draft(), retrieved=[], focus_note=None,
+        bench_context=ctx,
+    )
+    user = next(x for x in msgs if x.role == "user").content
+    assert "BENCH HISTORY CONTEXT" in user
+    assert "Match confidence: medium" in user
+
+
+def test_build_messages_low_quality_emits_fallback_directive(
+    client: TestClient,
+) -> None:
+    """When context_quality is 'low' or 'none', the prompt MUST tell
+    the model to draft without bench-specific framing — bench-aware
+    drafting weak-evidence-fallback rule."""
+    from caseops_api.services.drafting import _build_messages
+    from caseops_api.services.bench_strategy_context import BenchStrategyContext
+
+    boot = bootstrap_company(client, slug_seed="baad-build-2")
+    Session = get_session_factory()
+    with Session() as session:
+        m = _seed_matter(
+            session, company_id=boot["company"]["id"], code="BAAD-B-2",
+        )
+
+    class _Draft:
+        template_type = "appeal_memorandum"
+        title = "Appeal — Test"
+        draft_type = "appeal"
+        facts_json = None
+
+    ctx = BenchStrategyContext(
+        matter_id=m.id, court_name=None, bench_match=None,
+        context_quality="low", structured_match_coverage_percent=0,
+    )
+    user = next(x for x in _build_messages(
+        matter=m, draft=_Draft(), retrieved=[], focus_note=None,
+        bench_context=ctx,
+    ) if x.role == "user").content
+    assert "DO NOT cite bench-specific tendencies" in user
+    assert "limitation note" in user.lower()
+
+
+def test_build_messages_does_not_inject_bench_context_for_other_templates(
+    client: TestClient,
+) -> None:
+    """A bail draft passes through _build_messages with bench_context=
+    something — we MUST NOT inject the bench block. Only appeal_memorandum
+    consumes it."""
+    from caseops_api.services.drafting import _build_messages
+    from caseops_api.services.bench_strategy_context import BenchStrategyContext
+
+    boot = bootstrap_company(client, slug_seed="baad-build-3")
+    Session = get_session_factory()
+    with Session() as session:
+        m = _seed_matter(
+            session, company_id=boot["company"]["id"], code="BAAD-B-3",
+        )
+
+    class _Draft:
+        template_type = "bail"  # NOT appeal
+        title = "Bail Test"
+        draft_type = "bail"
+        facts_json = None
+
+    ctx = BenchStrategyContext(
+        matter_id=m.id, court_name=None, bench_match=None,
+        context_quality="high", structured_match_coverage_percent=80,
+    )
+    user = next(x for x in _build_messages(
+        matter=m, draft=_Draft(), retrieved=[], focus_note=None,
+        bench_context=ctx,
+    ) if x.role == "user").content
+    assert "BENCH HISTORY CONTEXT" not in user
+
+
+def test_build_messages_has_no_favorability_phrasing(
+    client: TestClient,
+) -> None:
+    """Structural check: the prompt itself does not contain any
+    favorability language that the model could echo back. The block
+    instructs the model TO USE evidence phrasing, but never asserts
+    a tendency."""
+    from caseops_api.services.drafting import _build_messages
+    from caseops_api.services.bench_strategy_context import (
+        BenchStrategyContext,
+        RecurringTest,
+        PracticeAreaPattern,
+    )
+
+    boot = bootstrap_company(client, slug_seed="baad-build-4")
+    Session = get_session_factory()
+    with Session() as session:
+        m = _seed_matter(
+            session, company_id=boot["company"]["id"], code="BAAD-B-4",
+        )
+
+    class _Draft:
+        template_type = "appeal_memorandum"
+        title = "Appeal — Test"
+        draft_type = "appeal"
+        facts_json = None
+
+    ctx = BenchStrategyContext(
+        matter_id=m.id, court_name="BHC", bench_match=None,
+        context_quality="high", structured_match_coverage_percent=70,
+        recurring_tests=[
+            RecurringTest(
+                phrase="balance of convenience",
+                occurrences=4,
+                sample_authority_ids=("a1", "a2", "a3"),
+            ),
+        ],
+        practice_area_patterns=[
+            PracticeAreaPattern(
+                area="Civil / Contract",
+                authority_count=5,
+                sample_authority_ids=("a4", "a5"),
+            ),
+        ],
+    )
+    user = next(x for x in _build_messages(
+        matter=m, draft=_Draft(), retrieved=[], focus_note=None,
+        bench_context=ctx,
+    ) if x.role == "user").content
+    # The prompt MUST contain the negative instruction (telling the
+    # model not to use favorability phrases) AND the positive
+    # evidence-phrasing anchor (showing the required formulation).
+    # Both checks together prove the prompt actively guards against
+    # favorability claims.
+    assert "REQUIRED PHRASING" in user, (
+        "BAAD evidence-phrasing anchor missing from prompt"
+    )
+    assert "in the indexed decisions provided" in user, (
+        "Required attribution phrasing missing"
+    )
+    # Negative instruction must explicitly enumerate forbidden phrases.
+    assert "NEVER write 'this judge prefers'" in user, (
+        "Negative instruction against favorability not in prompt"
+    )

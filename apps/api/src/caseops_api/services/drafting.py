@@ -306,8 +306,23 @@ def _build_messages(
     draft: Draft,
     retrieved: list[AuthorityDocument],
     focus_note: str | None,
+    bench_context: object = None,  # BenchStrategyContext | None — late import
 ) -> list[LLMMessage]:
-    system = (
+    # BAAD-001 slice 3 (Sprint P5, 2026-04-25). Per-template prompt
+    # wiring + bench-strategy-context injection. Two changes vs the
+    # generic-prompt-only path that shipped before:
+    #   (a) When `draft.template_type` resolves to one of the registered
+    #       templates in services.drafting_prompts, append that
+    #       template's specialised system instructions to the generic
+    #       absolute-rules block. This makes the Sprint R2 per-template
+    #       prompts actually take effect (they were registered but
+    #       never imported here).
+    #   (b) When `bench_context` is non-empty AND the template is
+    #       appeal_memorandum, inject a `BENCH HISTORY CONTEXT` block
+    #       below the AUTHORITIES block. The block is constrained to
+    #       cited authorities only; we never hand the LLM a doctrine
+    #       phrase without the supporting authority IDs.
+    base_system = (
         "You are drafting a legal document for an Indian litigation "
         "matter.\n\n"
         "Output strictly valid JSON shaped as "
@@ -338,6 +353,25 @@ def _build_messages(
         "document (cause-title, parties, facts, grounds, prayer, "
         "verification as applicable to the draft type) — not an outline."
     )
+
+    # Per-template prompt addition (BAAD-001 slice 3 wiring).
+    template_system_addendum = ""
+    if draft.template_type:
+        try:
+            from caseops_api.schemas.drafting_templates import DraftTemplateType
+            from caseops_api.services.drafting_prompts import get_prompt_parts
+
+            tt = DraftTemplateType(draft.template_type)
+            template_parts = get_prompt_parts(tt)
+            template_system_addendum = (
+                "\n\n=== TEMPLATE-SPECIFIC INSTRUCTIONS ===\n"
+                + template_parts.system
+            )
+        except (KeyError, ValueError):
+            # Unknown template → fall back to generic prompt only.
+            pass
+
+    system = base_system + template_system_addendum
 
     parts: list[str] = [_STATUTE_GUIDANCE, ""]
     parts.append("=== MATTER RECORD (only source of facts) ===")
@@ -421,6 +455,89 @@ def _build_messages(
             "sources. Use `[citation needed]` anchors where authority "
             "should appear."
         )
+
+    # BAAD-001 slice 3: bench history context block. Only injected when
+    # the caller passed a usable BenchStrategyContext AND the template
+    # is appeal_memorandum. We tolerate `bench_context` being any
+    # truthy object with the expected fields (duck-typed) so this stays
+    # decoupled from the import.
+    if (
+        bench_context is not None
+        and getattr(draft, "template_type", None) == "appeal_memorandum"
+    ):
+        ctx_quality = getattr(bench_context, "context_quality", "none")
+        coverage_pct = getattr(
+            bench_context, "structured_match_coverage_percent", 0
+        )
+        cited_authorities = getattr(bench_context, "similar_authorities", []) or []
+        recurring_tests = getattr(bench_context, "recurring_tests", []) or []
+        practice_patterns = getattr(
+            bench_context, "practice_area_patterns", []
+        ) or []
+        cautions = getattr(bench_context, "drafting_cautions", []) or []
+        gaps = getattr(bench_context, "unsupported_gaps", []) or []
+
+        parts.append("")
+        parts.append("=== BENCH HISTORY CONTEXT ===")
+        parts.append(f"Match confidence: {ctx_quality}")
+        parts.append(f"Structured-match coverage: {coverage_pct}%")
+        if ctx_quality in ("low", "none"):
+            parts.append(
+                "BENCH CONTEXT IS LOW/NONE — DO NOT cite bench-specific "
+                "tendencies. Draft using general appellate principles + "
+                "the AUTHORITIES block above. Add a one-sentence "
+                "limitation note in the grounds section: 'Bench-history "
+                "context was sparse for this matter; the grounds rest "
+                "on general appellate principles and the cited "
+                "authorities only.'"
+            )
+        else:
+            # Surface ONLY what's supported by >= 3 indexed authorities.
+            # The bench_strategy_context service already enforces the
+            # floor; we re-surface it here for the LLM.
+            if practice_patterns:
+                parts.append("Practice-area concentration (each backed by "
+                             ">=3 indexed decisions; cite the supporting "
+                             "authorities by ID when relying on the pattern):")
+                for p in practice_patterns:
+                    samples = ", ".join(getattr(p, "sample_authority_ids", ()))
+                    parts.append(
+                        f"- {getattr(p, 'area', '?')} "
+                        f"({getattr(p, 'authority_count', 0)} decisions) — "
+                        f"sample IDs: {samples}"
+                    )
+            if recurring_tests:
+                parts.append("Recurring legal tests in this bench's indexed "
+                             "decisions (cite the supporting authorities; "
+                             "use evidence phrasing only):")
+                for t in recurring_tests:
+                    samples = ", ".join(getattr(t, "sample_authority_ids", ()))
+                    parts.append(
+                        f"- '{getattr(t, 'phrase', '?')}' "
+                        f"({getattr(t, 'occurrences', 0)}x) — "
+                        f"sample IDs: {samples}"
+                    )
+            parts.append(
+                "REQUIRED PHRASING when relying on bench history: 'in the "
+                "indexed decisions provided, the bench emphasised X' or "
+                "'the supplied authorities show that on similar facts the "
+                "bench has Y'. NEVER write 'this judge prefers', 'this "
+                "bench is favourable to', 'usually grants', 'tends to', "
+                "or any reputation/outcome-prediction language. Every "
+                "bench-history observation MUST cite at least one of the "
+                "supplied sample-IDs."
+            )
+        if cautions:
+            parts.append("Cautions to surface in the draft summary:")
+            for c in cautions:
+                parts.append(f"- {c}")
+        if gaps:
+            parts.append("Unsupported gaps (do not assert these as patterns):")
+            for g in gaps[:5]:  # cap to keep prompt small
+                parts.append(f"- {g}")
+        # Useful side-effect: this block is captured by `_prompt_hash`,
+        # so the audit trail in ModelRun shows whether bench context
+        # was active for a given generation.
 
     parts.append("")
     parts.append(
@@ -674,7 +791,32 @@ def generate_draft_version(
 
     retrieved_docs = _retrieve_for_draft(session, matter, focus_note)
 
-    messages = _build_messages(matter, draft, retrieved_docs, focus_note)
+    # BAAD-001 slice 3 (Sprint P5): build bench strategy context for
+    # appeal drafts. Pure-read service; tenancy enforced via
+    # `context.company.id`. Wrapped in try/except so a context-build
+    # failure NEVER blocks the draft itself — we'd rather ship the
+    # plain appeal than fail the request because, e.g., judges_json
+    # is malformed on a single authority.
+    bench_context = None
+    if draft.template_type == "appeal_memorandum":
+        try:
+            from caseops_api.services.bench_strategy_context import (
+                build_bench_strategy_context,
+            )
+            bench_context = build_bench_strategy_context(
+                session=session, context=context, matter_id=matter.id,
+            )
+        except Exception as exc:  # noqa: BLE001 — fall back to plain
+            logger.warning(
+                "Bench context build failed for matter %s; falling back "
+                "to plain appeal draft: %s",
+                matter.id, exc,
+            )
+
+    messages = _build_messages(
+        matter, draft, retrieved_docs, focus_note,
+        bench_context=bench_context,
+    )
     prompt_hash = _prompt_hash(messages)
     # Drafting routes to the per-purpose drafting model (Opus-class
     # when configured); metadata extraction and recommendations pick

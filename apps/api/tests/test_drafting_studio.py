@@ -473,8 +473,10 @@ def test_generate_draft_uses_stepper_facts_in_prompt(client: TestClient) -> None
     original_build = drafting_service._build_messages
     captured: dict[str, str] = {}
 
-    def _spy(matter, draft, retrieved, focus_note):
-        msgs = original_build(matter, draft, retrieved, focus_note)
+    def _spy(matter, draft, retrieved, focus_note, **kwargs):
+        # **kwargs accepts the bench_context BAAD-001 slice 3 added
+        # to _build_messages without breaking this test's spy.
+        msgs = original_build(matter, draft, retrieved, focus_note, **kwargs)
         captured["user"] = next(m.content for m in msgs if m.role == "user")
         return msgs
 
