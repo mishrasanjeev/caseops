@@ -341,17 +341,31 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
     `test_preview_persists_error_model_run_when_provider_fails`
     asserts the failure-path ModelRun row is persisted.
 
-- `EG-007` `Partially implemented` Secret-management and runtime control wiring.
-  Evidence: `infra/cloudrun/api-service.yaml:14`,
-  `infra/cloudrun/api-service.yaml:48-49`,
-  `infra/cloudrun/api-service.yaml:62-66`,
-  `docs/WORK_TO_BE_DONE.md:590-595`.
-  Gap: auth secret is secret-managed, but DB connectivity and the rest of the
-  sensitive runtime surface are not fully wired through a single managed-secret
-  policy with rotation evidence.
-  Close when: all production secrets use Secret Manager or an equivalent managed
-  store, rotation is documented, and runtime manifests stop embedding raw
-  secret values.
+- `EG-007` `Partially implemented` Secret-management and runtime
+  control wiring (advanced 2026-04-25; rotation procedure + cross-
+  region replication still pending).
+  Done in revision `caseops-api-00050-2zc`: every sensitive env on the
+  API service now flows through Secret Manager, not raw values:
+  `caseops-auth-secret`, `caseops-anthropic-api-key`,
+  `caseops-voyage-api-key`, `caseops-sendgrid-api-key`,
+  `caseops-database-url`, `caseops-openai-api-key`, and (closed today)
+  `caseops-pine-labs-api-key` + `caseops-pine-labs-api-secret`. Web
+  service: `caseops-smtp-password` is the only sensitive env and is
+  also Secret-Managed.
+  Gap remaining: rotation evidence still informal — no documented
+  rotation runbook, no scheduled rotation, no cross-region replication
+  policy on the secrets (current `--replication-policy=automatic`
+  works for a single-region service but is worth re-deciding when the
+  multi-region story lands).
+  ALSO: the previously raw `CASEOPS_PINE_LABS_API_KEY` /
+  `CASEOPS_PINE_LABS_API_SECRET` values were visible in `gcloud run
+  services describe` output until 2026-04-25; rotate the key with
+  Pine Labs (generate fresh credentials in their dashboard, add as
+  version 2 to each secret, redeploy) when convenient — tracked as a
+  follow-on, not a stop-ship.
+  Close when: rotation procedure is documented in
+  `docs/runbooks/secret-rotation.md` and at least one rotation has
+  been executed end-to-end against prod with evidence.
 
 ## Structural Code Risks
 
