@@ -75,8 +75,25 @@ jobs:
       - name: Web typecheck
         run: npm run typecheck:web
 
-      - name: Vitest (component tests)
-        run: npm run test:web
+      - name: Vitest with coverage (AQ-002 reliability + threshold ratchet)
+        # AQ-002 (2026-04-25): replaced the bare `test:web` step with
+        # the coverage variant. testTimeout=15_000 + thresholds wired
+        # in apps/web/vitest.config.ts make this stable on Linux
+        # runners. Failing this step is the gate — do not weaken
+        # thresholds to make CI green; raise them only when real tests
+        # cover more lines.
+        run: npm run test:coverage --workspace @caseops/web
+
+      - name: Upload web coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-coverage
+          path: |
+            apps/web/coverage/coverage-summary.json
+            apps/web/coverage/lcov.info
+          retention-days: 14
+          if-no-files-found: warn
 
       - name: Next build
         run: npm run build:web

@@ -114,24 +114,24 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
   Close when: full backend coverage completes reliably in CI, artifacts are
   uploaded, and ratcheting thresholds cover high-risk routes and services.
 
-- `AQ-002` `Partially implemented` Frontend coverage gate is now
-  reliable (closed 2026-04-25). Root cause: form/dialog tests that
-  type ~30+ characters with `userEvent` finished comfortably on a
-  bare run (~1.5 s) but crossed the 5000 ms default under v8 coverage
-  instrumentation on Linux. Fix: `apps/web/vitest.config.ts`
-  `testTimeout: 15_000` — leaves headroom without hiding real flakes;
-  anything >15 s is genuinely broken, not slow. Per-describe
-  timeouts also documented on the two anchor tests
-  (`NewWorkspaceForm.test.tsx`, `NewContractDialog.test.tsx`).
+- `AQ-002` `Implemented` Frontend coverage gate is reliable + wired
+  end-to-end into CI (closed 2026-04-25).
+  Reliability fix: form/dialog tests that type ~30+ characters with
+  `userEvent` finished under 2 s on a bare run but crossed the
+  5000 ms default under v8 coverage on Linux. `apps/web/vitest.config.ts`
+  `testTimeout: 15_000` leaves headroom without hiding real flakes.
+  Reporters: added `json-summary` so CI can upload a stable shape
+  alongside `text`, `html`, `lcov`.
+  Thresholds: `lines: 31`, `statements: 30`, `branches: 22` —
+  rounded down from today's baseline (31.83 / 30.31 / 22.89 / 25.28).
+  Updated only when real tests lift coverage; never ratcheted down
+  to make CI green.
+  CI: `.github/workflows/ci.yml` `web` job now runs
+  `npm run test:coverage` instead of `npm run test:web` and uploads
+  `apps/web/coverage/{coverage-summary.json,lcov.info}` as a
+  `web-coverage` artifact (retention 14 days).
   Verified: full `npm run test:coverage --workspace @caseops/web`
-  passes 142/142, coverage summary stmts 30.31% / branch 22.89% /
-  lines 31.83%.
-  Remaining sub-items keep this `Partially implemented`: CI does
-  not yet upload the coverage artifact; thresholds are not yet
-  enforced (no fail-on-regression gate); `coverage-summary.json` is
-  not produced (only text/html/lcov reporters wired). Close when
-  CI uploads the artifact + a threshold ratchet rejects regressions
-  below the current baseline.
+  passes 142/142, summary file produced, thresholds clear.
 
 - `AQ-003` `Partially implemented` Page-level UI coverage is not exhaustive.
   Evidence: 46 frontend pages, 16 sibling `page.test.tsx` files, 30 pages

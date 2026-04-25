@@ -31,7 +31,11 @@ export default defineConfig({
     // CI so the number is visible.
     coverage: {
       provider: "v8",
-      reporter: ["text", "html", "lcov"],
+      // AQ-002 sub-item (2026-04-25): json-summary added so CI can
+      // upload coverage-summary.json as an artifact and the gh-pages
+      // / dashboard scrapers downstream can parse a stable shape.
+      reporter: ["text", "html", "lcov", "json-summary"],
+      reportsDirectory: "./coverage",
       include: ["app/**/*.{ts,tsx}", "components/**/*.{ts,tsx}", "lib/**/*.{ts,tsx}"],
       exclude: [
         "**/*.test.{ts,tsx}",
@@ -42,6 +46,18 @@ export default defineConfig({
         "app/**/page.tsx",
         "lib/api/openapi-types.ts",
       ],
+      // AQ-002 sub-item (2026-04-25): non-regression gate at today's
+      // baseline minus a small buffer. Today: stmts 30.31% / branches
+      // 22.89% / lines 31.83%. Floor here is rounded down so the
+      // ordinary noise of a single unrelated edit can't trip CI, but
+      // a real regression (e.g. deleting a tested module) will. Update
+      // these in the SAME commit that lifts coverage; do NOT ratchet
+      // down to make CI green.
+      thresholds: {
+        lines: 31,
+        statements: 30,
+        branches: 22,
+      },
     },
   },
 });
