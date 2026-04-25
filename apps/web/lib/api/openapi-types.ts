@@ -1452,6 +1452,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matters/{matter_id}/bench-strategy-context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Evidence-cited bench history context for the matter. Read-only. Used by the appeal-drafting flow + UI context card. No favorability scoring. */
+        get: operations["get_current_company_matter_bench_strategy_context_api_matters__matter_id__bench_strategy_context_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matters/{matter_id}/clients": {
         parameters: {
             query?: never;
@@ -3000,6 +3017,61 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** BenchContextCitableAuthorityResponse */
+        BenchContextCitableAuthorityResponse: {
+            /** Bench Name */
+            bench_name: string | null;
+            /** Case Reference */
+            case_reference: string | null;
+            /** Decision Date */
+            decision_date: string | null;
+            /** Forum Level */
+            forum_level: string | null;
+            /** Id */
+            id: string;
+            /** Neutral Citation */
+            neutral_citation: string | null;
+            /** Structured Match */
+            structured_match: boolean;
+            /** Title */
+            title: string;
+        };
+        /** BenchContextCitedAuthorityResponse */
+        BenchContextCitedAuthorityResponse: {
+            /** Citation */
+            citation: string;
+            /** Occurrences */
+            occurrences: number;
+        };
+        /** BenchContextJudgeCandidateResponse */
+        BenchContextJudgeCandidateResponse: {
+            /** Fallback Authority Count */
+            fallback_authority_count: number;
+            /** Full Name */
+            full_name: string;
+            /** Judge Id */
+            judge_id: string;
+            /** Structured Authority Count */
+            structured_authority_count: number;
+        };
+        /** BenchContextPracticeAreaPatternResponse */
+        BenchContextPracticeAreaPatternResponse: {
+            /** Area */
+            area: string;
+            /** Authority Count */
+            authority_count: number;
+            /** Sample Authority Ids */
+            sample_authority_ids: string[];
+        };
+        /** BenchContextRecurringTestResponse */
+        BenchContextRecurringTestResponse: {
+            /** Occurrences */
+            occurrences: number;
+            /** Phrase */
+            phrase: string;
+            /** Sample Authority Ids */
+            sample_authority_ids: string[];
+        };
         /** BenchMatchJudge */
         BenchMatchJudge: {
             /** Current Position */
@@ -3035,6 +3107,31 @@ export interface components {
             reasoning: string[];
             /** Suggested Judges */
             suggested_judges: components["schemas"]["BenchMatchJudge"][];
+        };
+        /** BenchStrategyContextResponse */
+        BenchStrategyContextResponse: {
+            /** Authorities Frequently Cited */
+            authorities_frequently_cited: components["schemas"]["BenchContextCitedAuthorityResponse"][];
+            /** Context Quality */
+            context_quality: string;
+            /** Court Name */
+            court_name: string | null;
+            /** Drafting Cautions */
+            drafting_cautions: string[];
+            /** Judge Candidates */
+            judge_candidates: components["schemas"]["BenchContextJudgeCandidateResponse"][];
+            /** Matter Id */
+            matter_id: string;
+            /** Practice Area Patterns */
+            practice_area_patterns: components["schemas"]["BenchContextPracticeAreaPatternResponse"][];
+            /** Recurring Tests */
+            recurring_tests: components["schemas"]["BenchContextRecurringTestResponse"][];
+            /** Similar Authorities */
+            similar_authorities: components["schemas"]["BenchContextCitableAuthorityResponse"][];
+            /** Structured Match Coverage Percent */
+            structured_match_coverage_percent: number;
+            /** Unsupported Gaps */
+            unsupported_gaps: string[];
         };
         /** Body_post_current_company_contract_attachment_api_contracts__contract_id__attachments_post */
         Body_post_current_company_contract_attachment_api_contracts__contract_id__attachments_post: {
@@ -4282,7 +4379,7 @@ export interface components {
              * Template Type
              * @enum {string}
              */
-            template_type: "bail" | "anticipatory_bail" | "divorce_petition" | "property_dispute_notice" | "cheque_bounce_notice" | "affidavit" | "criminal_complaint" | "civil_suit";
+            template_type: "bail" | "anticipatory_bail" | "divorce_petition" | "property_dispute_notice" | "cheque_bounce_notice" | "affidavit" | "criminal_complaint" | "civil_suit" | "appeal_memorandum";
         };
         /** DraftTemplateSummary */
         DraftTemplateSummary: {
@@ -10227,6 +10324,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BenchMatchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_current_company_matter_bench_strategy_context_api_matters__matter_id__bench_strategy_context_get: {
+        parameters: {
+            query?: {
+                judge_limit?: number;
+                authority_limit?: number;
+            };
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenchStrategyContextResponse"];
                 };
             };
             /** @description Validation Error */

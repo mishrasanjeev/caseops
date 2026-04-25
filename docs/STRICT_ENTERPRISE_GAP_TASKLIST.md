@@ -508,21 +508,50 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
 
 ## 2026-04-24 Product-Scope Queue Additions
 
-- `BAAD-001` `Missing` Bench-aware appeal drafting is not wired end to end.
-  Judge profiles and matter bench-match exist, but the drafting pipeline does
-  not yet provide an appeal-specific template, does not build a tenant-safe
-  bench strategy context, and does not inject cited judge or bench history into
-  appeal drafts.
-  Evidence: `apps/api/src/caseops_api/api/routes/courts.py`,
-  `apps/api/src/caseops_api/services/bench_matcher.py`,
-  `apps/api/src/caseops_api/services/drafting.py`,
-  `apps/api/src/caseops_api/schemas/drafting_templates.py`,
-  `docs/BENCH_AWARE_APPEAL_DRAFTING_TASKLIST_2026-04-24.md`.
-  Required closure: implement `appeal_memorandum`,
-  `GET /api/matters/{matter_id}/bench-strategy-context`, drafting integration,
-  UI review of context quality, and backend/frontend/E2E/security tests. The
-  feature must stay evidence-backed and must not introduce judge favorability
-  scoring or outcome prediction.
+- `BAAD-001` `Implemented` Bench-aware appeal drafting wired end to end
+  (closed 2026-04-25 across 4 commits + 1 doc closure).
+  Slices shipped:
+  1. **Template** (`2b72b0c`) — `DraftTemplateType.APPEAL_MEMORANDUM`,
+     `AppealMemorandumFacts`, `_APPEAL_FIELDS`, `_APPEAL_MEMORANDUM`
+     prompt + golden fixture.
+  2. **Bench strategy context service** (`708587f`) — pure-read
+     `services/bench_strategy_context.py` with structured judges_json
+     match + bench_name fallback, citable-authorities preference,
+     practice-area pattern derivation suppressed below 3-supporting-
+     authority floor, drafting cautions, unsupported gaps, 4-level
+     `context_quality` scoring.
+  3. **Drafting integration + per-template prompt wiring** (`4a2191d`)
+     — `_build_messages` now appends per-template prompt addendum
+     for ALL nine templates (turning on the Sprint R2 prompts that
+     were registered but never imported); `generate_draft_version`
+     calls `build_bench_strategy_context` for `appeal_memorandum`
+     and injects a `BENCH HISTORY CONTEXT` block; explicit positive
+     evidence-phrasing anchor + enumerated negative instruction
+     against favorability phrases; falls back gracefully to plain
+     appeal draft if context build raises.
+  4. **API endpoint + UI** (this commit) — new
+     `GET /api/matters/{matter_id}/bench-strategy-context` route
+     (auth + tenancy gated, 404 on cross-tenant); new
+     `BenchContextCard` component in
+     `apps/web/components/drafting/BenchContextCard.tsx` rendered
+     by `DraftingStepper` only when template is appeal_memorandum;
+     pattern detail hidden + amber limitation note shown when
+     quality is low/none.
+  Bench-aware drafting hard rules verified:
+  - No favorability copy in service surface, prompt, or UI (4
+    structural tests across both layers).
+  - REQUIRED PHRASING anchor present in prompt; enumerated NEVER
+    WRITE list of forbidden phrases verified by
+    `test_build_messages_has_no_favorability_phrasing`.
+  - Weak-evidence path (low/none quality) emits limitation note and
+    suppresses pattern claims at both prompt and UI layers.
+  - Tenant-isolation: cross-tenant matter returns 404 (route test
+    `test_bench_strategy_context_route_404_on_cross_tenant`).
+  Test surface: 14 backend tests in
+  `apps/api/tests/test_bench_strategy_context.py` (service + route +
+  drafting integration); 3 vitest cases in
+  `apps/web/components/drafting/BenchContextCard.test.tsx`. Plus
+  73-test drafting-suite green after the per-template prompt wiring.
 
 ## Claude Discipline
 

@@ -119,6 +119,68 @@ export async function setMatterOcCrossVisibility(
   return matter.parse(data);
 }
 
+
+// BAAD-001 slice 4 (Sprint P5, 2026-04-25). Bench strategy context
+// for the appeal-drafting flow. Read-only; auth + tenancy gated by
+// the matters route. Used by the BenchContextCard component on the
+// drafting stepper.
+export type BenchContextJudgeCandidate = {
+  judge_id: string;
+  full_name: string;
+  structured_authority_count: number;
+  fallback_authority_count: number;
+};
+
+export type BenchContextCitableAuthority = {
+  id: string;
+  title: string;
+  decision_date: string | null;
+  case_reference: string | null;
+  neutral_citation: string | null;
+  bench_name: string | null;
+  forum_level: string | null;
+  structured_match: boolean;
+};
+
+export type BenchContextPracticeAreaPattern = {
+  area: string;
+  authority_count: number;
+  sample_authority_ids: string[];
+};
+
+export type BenchContextRecurringTest = {
+  phrase: string;
+  occurrences: number;
+  sample_authority_ids: string[];
+};
+
+export type BenchContextCitedAuthority = {
+  citation: string;
+  occurrences: number;
+};
+
+export type BenchStrategyContext = {
+  matter_id: string;
+  court_name: string | null;
+  structured_match_coverage_percent: number;
+  context_quality: "none" | "low" | "medium" | "high";
+  judge_candidates: BenchContextJudgeCandidate[];
+  similar_authorities: BenchContextCitableAuthority[];
+  practice_area_patterns: BenchContextPracticeAreaPattern[];
+  recurring_tests: BenchContextRecurringTest[];
+  authorities_frequently_cited: BenchContextCitedAuthority[];
+  drafting_cautions: string[];
+  unsupported_gaps: string[];
+};
+
+export async function fetchBenchStrategyContext(
+  matterId: string,
+): Promise<BenchStrategyContext> {
+  return apiRequest<BenchStrategyContext>(
+    `/api/matters/${matterId}/bench-strategy-context`,
+  );
+}
+
 // Strict Ledger #5 (BUG-013 in-app visibility, 2026-04-22):
 // per-matter reminder rows the matter cockpit Hearings tab shows
 // alongside each hearing. Mirrors the admin notifications data
@@ -1540,7 +1602,9 @@ export type DraftTemplateType =
   | "cheque_bounce_notice"
   | "affidavit"
   | "criminal_complaint"
-  | "civil_suit";
+  | "civil_suit"
+  // BAAD-001 (Sprint P5, 2026-04-25). Bench-aware appeal drafting.
+  | "appeal_memorandum";
 
 export type DraftingFieldKind =
   | "string"

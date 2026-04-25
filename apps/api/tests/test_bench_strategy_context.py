@@ -555,3 +555,58 @@ def test_build_messages_has_no_favorability_phrasing(
     assert "NEVER write 'this judge prefers'" in user, (
         "Negative instruction against favorability not in prompt"
     )
+
+
+# ---------- BAAD-001 slice 4 — route smoke ----------
+
+def test_bench_strategy_context_route_returns_200_and_quality(
+    client: TestClient,
+) -> None:
+    """GET /api/matters/{matter_id}/bench-strategy-context — auth +
+    tenancy verified by the existing matter routes; this test pins
+    the response shape and proves the route exists for the route
+    coverage matrix."""
+    boot = bootstrap_company(client, slug_seed="baad-route-1")
+    token = str(boot["access_token"])
+    Session = get_session_factory()
+    with Session() as session:
+        m = _seed_matter(
+            session, company_id=boot["company"]["id"], code="BAAD-R-1",
+        )
+    resp = client.get(
+        f"/api/matters/{m.id}/bench-strategy-context",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["matter_id"] == m.id
+    assert body["context_quality"] in ("none", "low", "medium", "high")
+    # The four list fields must always be present (possibly empty)
+    for key in (
+        "judge_candidates",
+        "similar_authorities",
+        "practice_area_patterns",
+        "recurring_tests",
+        "drafting_cautions",
+        "unsupported_gaps",
+    ):
+        assert isinstance(body[key], list), key
+
+
+def test_bench_strategy_context_route_404_on_cross_tenant(
+    client: TestClient,
+) -> None:
+    """Tenant A's matter is invisible to tenant B (404, no leak)."""
+    boot_a = bootstrap_company(client, slug_seed="baad-route-a")
+    boot_b = bootstrap_company(client, slug_seed="baad-route-b")
+    Session = get_session_factory()
+    with Session() as session:
+        m = _seed_matter(
+            session, company_id=boot_a["company"]["id"], code="BAAD-R-X",
+        )
+    token_b = str(boot_b["access_token"])
+    resp = client.get(
+        f"/api/matters/{m.id}/bench-strategy-context",
+        headers={"Authorization": f"Bearer {token_b}"},
+    )
+    assert resp.status_code == 404

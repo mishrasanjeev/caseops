@@ -569,6 +569,138 @@ async def get_current_company_matter_bench_match(
     return _bench_suggestion_to_response(dc)
 
 
+# BAAD-001 slice 4 (Sprint P5, 2026-04-25). Bench strategy context
+# read endpoint. Same auth + tenancy gate as the rest of /api/matters.
+class BenchContextCitableAuthorityResponse(BaseModel):
+    id: str
+    title: str
+    decision_date: str | None
+    case_reference: str | None
+    neutral_citation: str | None
+    bench_name: str | None
+    forum_level: str | None
+    structured_match: bool
+
+
+class BenchContextJudgeCandidateResponse(BaseModel):
+    judge_id: str
+    full_name: str
+    structured_authority_count: int
+    fallback_authority_count: int
+
+
+class BenchContextPracticeAreaPatternResponse(BaseModel):
+    area: str
+    authority_count: int
+    sample_authority_ids: list[str]
+
+
+class BenchContextRecurringTestResponse(BaseModel):
+    phrase: str
+    occurrences: int
+    sample_authority_ids: list[str]
+
+
+class BenchContextCitedAuthorityResponse(BaseModel):
+    citation: str
+    occurrences: int
+
+
+class BenchStrategyContextResponse(BaseModel):
+    matter_id: str
+    court_name: str | None
+    structured_match_coverage_percent: int
+    context_quality: str
+    judge_candidates: list[BenchContextJudgeCandidateResponse]
+    similar_authorities: list[BenchContextCitableAuthorityResponse]
+    practice_area_patterns: list[BenchContextPracticeAreaPatternResponse]
+    recurring_tests: list[BenchContextRecurringTestResponse]
+    authorities_frequently_cited: list[BenchContextCitedAuthorityResponse]
+    drafting_cautions: list[str]
+    unsupported_gaps: list[str]
+
+
+@router.get(
+    "/{matter_id}/bench-strategy-context",
+    response_model=BenchStrategyContextResponse,
+    summary=(
+        "Evidence-cited bench history context for the matter. "
+        "Read-only. Used by the appeal-drafting flow + UI context "
+        "card. No favorability scoring."
+    ),
+)
+async def get_current_company_matter_bench_strategy_context(
+    matter_id: str,
+    context: CurrentContext,
+    session: DbSession,
+    judge_limit: int = 5,
+    authority_limit: int = 12,
+) -> BenchStrategyContextResponse:
+    from caseops_api.services.bench_strategy_context import (
+        build_bench_strategy_context,
+    )
+
+    ctx = build_bench_strategy_context(
+        session=session,
+        context=context,
+        matter_id=matter_id,
+        judge_limit=judge_limit,
+        authority_limit=authority_limit,
+    )
+    return BenchStrategyContextResponse(
+        matter_id=ctx.matter_id,
+        court_name=ctx.court_name,
+        structured_match_coverage_percent=ctx.structured_match_coverage_percent,
+        context_quality=ctx.context_quality,
+        judge_candidates=[
+            BenchContextJudgeCandidateResponse(
+                judge_id=j.judge_id,
+                full_name=j.full_name,
+                structured_authority_count=j.structured_authority_count,
+                fallback_authority_count=j.fallback_authority_count,
+            )
+            for j in ctx.judge_candidates
+        ],
+        similar_authorities=[
+            BenchContextCitableAuthorityResponse(
+                id=a.id,
+                title=a.title,
+                decision_date=a.decision_date,
+                case_reference=a.case_reference,
+                neutral_citation=a.neutral_citation,
+                bench_name=a.bench_name,
+                forum_level=a.forum_level,
+                structured_match=a.structured_match,
+            )
+            for a in ctx.similar_authorities
+        ],
+        practice_area_patterns=[
+            BenchContextPracticeAreaPatternResponse(
+                area=p.area,
+                authority_count=p.authority_count,
+                sample_authority_ids=list(p.sample_authority_ids),
+            )
+            for p in ctx.practice_area_patterns
+        ],
+        recurring_tests=[
+            BenchContextRecurringTestResponse(
+                phrase=t.phrase,
+                occurrences=t.occurrences,
+                sample_authority_ids=list(t.sample_authority_ids),
+            )
+            for t in ctx.recurring_tests
+        ],
+        authorities_frequently_cited=[
+            BenchContextCitedAuthorityResponse(
+                citation=c.citation, occurrences=c.occurrences,
+            )
+            for c in ctx.authorities_frequently_cited
+        ],
+        drafting_cautions=list(ctx.drafting_cautions),
+        unsupported_gaps=list(ctx.unsupported_gaps),
+    )
+
+
 def _bench_suggestion_to_response(dc: BenchSuggestionDC) -> BenchMatchResponse:
     return BenchMatchResponse(
         court_id=dc.court_id,
