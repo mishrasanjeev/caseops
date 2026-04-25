@@ -85,4 +85,19 @@ HEALTH=$(curl -sf https://api.caseops.ai/api/health || echo '{"status":"FAIL"}')
 echo "  health=${HEALTH}"
 echo "  api=${LIVE_API_TAG} web=${LIVE_WEB_TAG} (matches HEAD ${TAG})"
 
+# EG-003 regression guard. The clamav sidecar was wired via
+# scripts/eg003-apply-clamav.sh on 2026-04-25. `gcloud run deploy
+# --image` preserves multi-container shape, but a future
+# `gcloud run services replace` from a stale YAML or a manual
+# `gcloud run services update --remove-env-vars` could silently drop
+# it. If the sidecar is missing, fail the deploy script — the operator
+# must re-run scripts/eg003-apply-clamav.sh before the deploy is
+# considered safe.
+SIDECAR_PRESENT=$(gcloud run services describe caseops-api --region "${REGION}" --format='value(spec.template.spec.containers[].name)' | tr ';' '\n' | grep -c '^clamav$' || true)
+if [[ "${SIDECAR_PRESENT}" != "1" ]]; then
+  echo "EG-003 REGRESSION: clamav sidecar missing from caseops-api. Run scripts/eg003-apply-clamav.sh and redeploy."
+  exit 1
+fi
+echo "  EG-003 clamav sidecar present."
+
 echo "=== deploy-prod.sh — DONE ${TAG} ==="

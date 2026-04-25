@@ -12,15 +12,15 @@ Status legend:
 - `Missing`
 - `Stale-doc`
 
-Current overall verdict (2026-04-24): `GO with caveat`. Closed and live
+Current overall verdict (2026-04-25): `GO with caveat`. Closed and live
 in prod: EG-001 (HttpOnly cookies + double-submit CSRF), EG-002 (auto-
 migrate off + canonical deploy-prod.sh script with migrate-job gate),
-EG-004 (per-route AI rate limits), P1-009 (backup/restore drill).
-Remaining stop-ship gaps before unconditional `GO`: EG-003 (ClamAV not
-wired in Cloud Run), EG-005/006 (matter summary + draft preview
-model-run governance), EG-007 / WTD-8.5 (full secret-management
-rollout — DB URL is via Secret Manager but rotation evidence + other
-sensitive env aren't fully managed yet).
+EG-003 (clamav sidecar wired + fail-closed default + EICAR-rejection
+prod smoke), EG-004 (per-route AI rate limits), P1-009 (backup/restore
+drill). Remaining stop-ship gaps before unconditional `GO`: EG-005/006
+(matter summary + draft preview model-run governance), EG-007 /
+WTD-8.5 (full secret-management rollout — DB URL is via Secret Manager
+but rotation evidence + other sensitive env aren't fully managed yet).
 
 ## Strict Repo Quality Audit (2026-04-24) — P0 status
 
@@ -248,17 +248,27 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
   executed cleanly (`caseops-migrate-job-nxbkc`, no-op since alembic
   already at `20260424_0001`).
 
-- `EG-003` `Partially implemented` Malware scanning enforcement.
-  Evidence: `apps/api/src/caseops_api/services/virus_scan.py:80-82`,
-  `apps/api/src/caseops_api/services/virus_scan.py:153-169`,
-  `apps/api/src/caseops_api/services/matters.py:1300-1305`,
-  `apps/api/src/caseops_api/services/contracts.py:826-831`,
-  `infra/cloudrun/api-service.yaml:35-66`.
-  Gap: uploads skip scanning when ClamAV is unset and fail open when the
-  scanner errors unless `CASEOPS_CLAMAV_REQUIRED=true`; Cloud Run manifests do
-  not wire the scanner.
-  Close when: the production path has a real scanner wired, enforced, audited,
-  and fail-closed.
+- `EG-003` `Implemented` Malware scanning enforcement (closed
+  2026-04-25, deployed in revision `caseops-api-00049-m6c`).
+  Evidence: `scripts/eg003-apply-clamav.sh` wires
+  `clamav/clamav:1.4` as a Cloud Run multi-container sidecar
+  (1 CPU / 1.5 GiB), adds `CASEOPS_CLAMAV_HOST=127.0.0.1` +
+  `CASEOPS_CLAMAV_PORT=3310` env vars to the API container, removes
+  the prior `CASEOPS_CLAMAV_REQUIRED=false` override (env-aware
+  default = `true` in cloud env now wins), and adds the
+  `run.googleapis.com/container-dependencies={"api":["clamav"]}`
+  annotation so the API waits for clamd startup probe to pass.
+  `scripts/deploy-prod.sh` now fails the deploy if the sidecar is
+  missing post-deploy (regression guard).
+  Live prod smoke 2026-04-25: an EICAR test-file upload to
+  `POST /api/matters/{matter_id}/attachments` returned HTTP 400 with
+  `"Upload 'eicar.txt' matched virus signature 'Eicar-Test-Signature'.
+  Refusing to store the file."` — proves real clamd in the sidecar +
+  signature DB + `reject_if_infected` wired end to end.
+  Cost: idle stays $0 (`minScale=0`); per-request adds ~$0.00007/sec
+  while clamav shares the request lifecycle. First upload after a
+  cold start incurs ~30-60s while clamd loads signatures; if that
+  becomes a UX complaint, flip `minScale=1` (~$30-50/mo).
 
 - `EG-004` `Implemented` Authenticated abuse controls for expensive AI routes
   (closed 2026-04-24 via P1-007).
