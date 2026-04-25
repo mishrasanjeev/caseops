@@ -32,16 +32,17 @@ const ALLOWED_UNTESTED = new Set<string>([
   "solo-lawyers/page.tsx",
   "page.tsx", // root marketing landing
   // App pages — REAL gaps. TODO 2026-04-24 add per-page vitest.
+  // AQ-003 batch-1 (2026-04-25): the 5 highest-traffic lawyer-daily
+  // pages now have sibling page.test.tsx files (matters list,
+  // drafting, recommendations, hearings, clients) — entries removed.
   "app/page.tsx",
   "app/admin/notifications/page.tsx",
   "app/admin/teams/page.tsx",
-  "app/clients/page.tsx",
   "app/clients/[id]/page.tsx",
   "app/contracts/page.tsx",
   "app/contracts/[id]/page.tsx",
   "app/courts/page.tsx",
   "app/intake/page.tsx",
-  "app/matters/page.tsx",
   "app/matters/[id]/page.tsx",
   "app/matters/[id]/billing/page.tsx",
   "app/matters/[id]/communications/page.tsx",
@@ -56,16 +57,15 @@ const ALLOWED_UNTESTED = new Set<string>([
   // sign-in is tested via SignInForm.test.tsx + NewWorkspaceForm.test.tsx
   "sign-in/page.tsx",
   // Additional gaps surfaced 2026-04-24 baseline:
+  // (drafting / hearings / recommendations entries dropped 2026-04-25
+  // by AQ-003 batch-1.)
   "app/admin/email-templates/page.tsx",
   "app/courts/judges/[judge_id]/page.tsx",
   "app/courts/[id]/page.tsx",
-  "app/drafting/page.tsx",
-  "app/hearings/page.tsx",
   "app/matters/[id]/audit/page.tsx",
   "app/matters/[id]/documents/[attachment_id]/view/page.tsx",
   "app/matters/[id]/drafts/new/page.tsx",
   "app/outside-counsel/page.tsx",
-  "app/recommendations/page.tsx",
   // Phase C-2 (2026-04-24): the matter detail page lives at
   // /portal/matters/[id] and has its own page.test.tsx alongside.
   // No waiver needed; included here so the matrix's drift check
