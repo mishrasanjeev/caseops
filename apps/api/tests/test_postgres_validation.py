@@ -62,19 +62,27 @@ pytestmark = pytest.mark.postgres
 
 
 @pytest.fixture(scope="module", autouse=True)
-def _ensure_migrations(pg_engine):
+def _ensure_migrations():
     """Run alembic upgrade head once before any pg test executes.
-    Idempotent: alembic skips already-applied revisions. We point
-    alembic at the same DSN our pg_engine uses so the migration
-    target IS the test target.
+    Idempotent: alembic skips already-applied revisions.
+
+    Module-scoped → cannot depend on `pg_engine` (function-scoped).
+    Reads CASEOPS_TEST_POSTGRES_URL directly so alembic targets the
+    same DB the per-test pg_engine fixture binds to.
     """
+    url = os.environ.get("CASEOPS_TEST_POSTGRES_URL", "").strip()
+    if not url:
+        # Tests will be skipped at collection-time (see conftest); we
+        # still let the fixture run so module-scope teardown works.
+        yield
+        return
     from alembic import command
     from alembic.config import Config
 
     project_root = Path(__file__).resolve().parents[1]
     cfg = Config(str(project_root / "alembic.ini"))
     cfg.set_main_option("script_location", str(project_root / "alembic"))
-    cfg.set_main_option("sqlalchemy.url", str(pg_engine.url))
+    cfg.set_main_option("sqlalchemy.url", url)
     command.upgrade(cfg, "head")
     yield
 
