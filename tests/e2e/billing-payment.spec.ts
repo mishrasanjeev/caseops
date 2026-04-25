@@ -23,6 +23,7 @@ import type { APIRequestContext } from "@playwright/test";
 
 import { apiBaseUrl } from "./support/env";
 import { plusDays } from "./support/helpers";
+import { requireProviderCredentialOrSkip } from "./support/provider-gating";
 
 const PASSWORD = "BillingPass123!";
 
@@ -133,15 +134,17 @@ test.describe("Matter billing — invoice (default E2E)", () => {
 
 // ---------- Pine Labs provider path (UAT/release only) ----------
 
-const PINE_LABS_KEY_PRESENT = Boolean(process.env.CASEOPS_PINE_LABS_API_KEY);
-
 test.describe("Matter billing — Pine Labs payment link (provider-gated)", () => {
   test.setTimeout(120_000);
 
-  test.skip(
-    !PINE_LABS_KEY_PRESENT,
-    "Pine Labs sandbox key not provisioned; provider-gated for UAT/release sign-off only.",
-  );
+  // AQ-006 (2026-04-25): under CASEOPS_RELEASE_MODE=true, missing
+  // credentials FAIL the test instead of silently skipping. Default
+  // (laptop, normal PR CI) keeps the existing skip behavior. See
+  // tests/e2e/support/provider-gating.ts for the contract.
+  requireProviderCredentialOrSkip(test, {
+    provider: "Pine Labs",
+    envVar: "CASEOPS_PINE_LABS_API_KEY",
+  });
 
   test("create invoice + payment link, payment link reachable", async ({
     page,

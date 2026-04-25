@@ -171,12 +171,25 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
   Close when: CI has a Postgres service container and a dedicated
   `postgres-validation` suite.
 
-- `AQ-006` `Partially implemented` E2E coverage does not fully replace manual
-  UAT.
-  Evidence: Playwright lists 66 tests in 19 files, but provider paths can skip
-  without release/UAT credentials and browser diversity is limited.
-  Close when: every PRD-critical journey has happy, negative, empty, error,
-  authz, and mobile automation, and release/UAT jobs fail on provider skips.
+- `AQ-006` `Partially implemented` Provider-skip-on-release loophole
+  closed (2026-04-25); the broader "every PRD journey has full
+  matrix coverage" sub-item remains.
+  Provider-skip fix: new helper
+  `tests/e2e/support/provider-gating.ts` exports
+  `requireProviderCredentialOrSkip(test, { provider, envVar,
+  alsoRequire? })`. Default mode (laptop, normal PR CI) keeps the
+  existing `test.skip` behavior. Under `CASEOPS_RELEASE_MODE=true`
+  the same helper throws at describe-load with a loud
+  `[CASEOPS_RELEASE_MODE=true] <Provider> credential(s) missing: ...`
+  message — the spec fails instead of silently skipping. Applied to
+  Pine Labs in `billing-payment.spec.ts`. Verified both branches
+  locally on 2026-04-25 (default = 1 passed + 1 skipped; release-no-key
+  = throws with the documented message).
+  Browser diversity + every-PRD-journey full matrix coverage are
+  separate sub-items that keep this `Partially implemented`. Wire
+  `CASEOPS_RELEASE_MODE=true` in a release-only CI job (or release
+  runbook step) to actually exercise the gate; the gate exists but
+  no automation sets the flag yet.
 
 ## Stop-Ship Control Gaps
 
