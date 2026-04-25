@@ -70,11 +70,20 @@ jobs:
     services:
       postgres:
         # pgvector-on-pg17 image — same backend version as prod Cloud SQL.
+        # CI-only: POSTGRES_HOST_AUTH_METHOD=trust skips password auth
+        # for in-network clients. The container is ephemeral + only
+        # listens on the runner's localhost — no real-world exposure.
+        # The earlier md5-auth setup (POSTGRES_PASSWORD=caseops_test)
+        # worked for psql but psycopg failed with "password
+        # authentication failed for user caseops" via the SQLAlchemy
+        # URL — likely an interaction with how psycopg negotiates
+        # auth methods against this image's pg_hba.conf. trust mode
+        # sidesteps the negotiation entirely.
         image: pgvector/pgvector:pg17
         env:
           POSTGRES_USER: caseops
-          POSTGRES_PASSWORD: caseops_test
           POSTGRES_DB: caseops_test
+          POSTGRES_HOST_AUTH_METHOD: trust
         ports:
           - 5432:5432
         options: >-
@@ -98,11 +107,10 @@ jobs:
         run: uv sync --all-extras --dev
 
       - name: Enable pgvector extension on the test DB
-        env:
-          PGPASSWORD: caseops_test
         run: |
           # The pgvector image preinstalls the extension binary but each
           # database has to opt-in with CREATE EXTENSION. Idempotent.
+          # No password needed — POSTGRES_HOST_AUTH_METHOD=trust above.
           sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
           psql -h 127.0.0.1 -U caseops -d caseops_test -c "CREATE EXTENSION IF NOT EXISTS vector;"
 
@@ -111,7 +119,8 @@ jobs:
         env:
           # conftest.py reads this. _ensure_migrations runs alembic
           # upgrade head against this URL on first test collection.
-          CASEOPS_TEST_POSTGRES_URL: postgresql+psycopg://caseops:caseops_test@127.0.0.1:5432/caseops_test
+          # No password in the URL — trust auth on the service container.
+          CASEOPS_TEST_POSTGRES_URL: postgresql+psycopg://caseops@127.0.0.1:5432/caseops_test
           CASEOPS_ENV: ci
           CASEOPS_AUTH_SECRET: pg-validation-secret-at-least-32-bytes
         run: uv run pytest -q -m postgres tests/test_postgres_validation.py
