@@ -9,6 +9,7 @@ import {
   RefreshCw,
   ScrollText,
 } from "lucide-react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -272,13 +273,41 @@ export default function MatterHearingsPage() {
                 <li
                   key={entry.id}
                   className="flex items-center justify-between gap-3 rounded-lg border border-[var(--color-line)] bg-[var(--color-bg)] px-3 py-2"
+                  data-testid={`cause-list-entry-${entry.id}`}
                 >
                   <div>
                     <div className="text-sm font-medium text-[var(--color-ink)]">
                       Item {entry.item_number ?? "—"}
                     </div>
                     <div className="text-xs text-[var(--color-mute)]">
-                      {entry.bench_name ?? "—"} · {entry.listing_date ?? "—"}
+                      {/* Slice B (MOD-TS-001-C, 2026-04-25). Render
+                          resolved_bench as clickable per-judge links
+                          when populated; fall back to the free-text
+                          bench_name otherwise. */}
+                      {entry.resolved_bench && entry.resolved_bench.length > 0 ? (
+                        <span data-testid="cause-list-bench-resolved">
+                          {entry.resolved_bench.map((m, i) => (
+                            <span key={m.judge_id}>
+                              {i > 0 ? " · " : ""}
+                              <Link
+                                href={`/app/courts/judges/${m.judge_id}`}
+                                className="text-[var(--color-brand-600)] hover:underline"
+                                title={
+                                  m.confidence === "initial_surname"
+                                    ? "Resolved via initial+surname match"
+                                    : "Exact alias match"
+                                }
+                              >
+                                {m.matched_alias || "judge"}
+                              </Link>
+                            </span>
+                          ))}
+                        </span>
+                      ) : (
+                        <span>{entry.bench_name ?? "—"}</span>
+                      )}
+                      {" · "}
+                      {entry.listing_date ?? "—"}
                     </div>
                   </div>
                   <StatusBadge status={entry.stage ?? "unknown"} />

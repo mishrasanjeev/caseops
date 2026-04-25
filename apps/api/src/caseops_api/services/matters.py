@@ -60,6 +60,7 @@ from caseops_api.schemas.matters import (
     MatterUpdateRequest,
     MatterWorkspaceMembership,
     MatterWorkspaceResponse,
+    ResolvedBenchMember,
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.document_jobs import (
@@ -161,6 +162,39 @@ def _activity_record(activity: MatterActivity) -> MatterActivityRecord:
     )
 
 
+def _parse_resolved_bench(judges_json: str | None):
+    """Slice B (MOD-TS-001-C, 2026-04-25). Decode the resolver's JSON
+    blob to a list of ResolvedBenchMember rows for the API response.
+    Returns None when the resolver hasn't processed the row yet
+    (judges_json IS NULL); empty list when it processed but no judge
+    cleared the floor; populated list otherwise."""
+    if judges_json is None:
+        return None
+    import json as _json
+
+    try:
+        parsed = _json.loads(judges_json)
+    except (ValueError, TypeError):
+        return []
+    if not isinstance(parsed, list):
+        return []
+    out = []
+    for item in parsed:
+        if not isinstance(item, dict):
+            continue
+        jid = item.get("judge_id")
+        if not jid:
+            continue
+        out.append(
+            ResolvedBenchMember(
+                judge_id=str(jid),
+                matched_alias=str(item.get("matched_alias") or ""),
+                confidence=str(item.get("confidence") or "exact"),
+            )
+        )
+    return out
+
+
 def _cause_list_entry_record(entry: MatterCauseListEntry) -> MatterCauseListEntryRecord:
     return MatterCauseListEntryRecord(
         id=entry.id,
@@ -177,6 +211,7 @@ def _cause_list_entry_record(entry: MatterCauseListEntry) -> MatterCauseListEntr
         source_reference=entry.source_reference,
         synced_at=entry.synced_at,
         created_at=entry.created_at,
+        resolved_bench=_parse_resolved_bench(entry.judges_json),
     )
 
 

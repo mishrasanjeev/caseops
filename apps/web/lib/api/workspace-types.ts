@@ -107,12 +107,23 @@ export type WorkspaceCourtOrder = {
   source?: string | null;
 };
 
+export type WorkspaceResolvedBenchMember = {
+  judge_id: string;
+  matched_alias: string;
+  confidence: string; // 'exact' | 'initial_surname'
+};
+
 export type WorkspaceCauseListEntry = {
   id: string;
   listing_date?: string | null;
   bench_name?: string | null;
   item_number?: string | null;
   stage?: string | null;
+  // Slice B (MOD-TS-001-C, 2026-04-25). Bench resolved into Judge
+  // FK rows by services.bench_resolver. null = resolver hasn't
+  // processed this row yet; [] = processed but no high-quality
+  // match; populated array = clickable per-judge links.
+  resolved_bench?: WorkspaceResolvedBenchMember[] | null;
 };
 
 export type WorkspaceResponse = {

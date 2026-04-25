@@ -275,6 +275,17 @@ class MatterCourtSyncImportRequest(BaseModel):
     orders: list[MatterCourtOrderSyncItem] = Field(default_factory=list, max_length=10)
 
 
+class ResolvedBenchMember(BaseModel):
+    """Slice B (MOD-TS-001-C, 2026-04-25). One member of a resolved
+    bench — surfaces on /app/matters/{id}/hearings as a clickable
+    link to the judge profile. judge_id is the canonical Judge.id;
+    matched_alias preserves the original spelling for display."""
+
+    judge_id: str
+    matched_alias: str
+    confidence: str  # 'exact' | 'initial_surname'
+
+
 class MatterCauseListEntryRecord(BaseModel):
     id: str
     matter_id: str
@@ -290,6 +301,12 @@ class MatterCauseListEntryRecord(BaseModel):
     source_reference: str | None
     synced_at: datetime
     created_at: datetime
+    # Slice B (MOD-TS-001-C, 2026-04-25). Bench resolved into
+    # canonical Judge FK rows by services.bench_resolver. NULL when
+    # the resolver hasn't processed this row yet; [] when processed
+    # but no judge cleared the high-quality confidence floor; populated
+    # when at least one judge resolved.
+    resolved_bench: list[ResolvedBenchMember] | None = None
 
 
 class MatterCourtOrderRecord(BaseModel):
