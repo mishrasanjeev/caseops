@@ -95,14 +95,16 @@ def _seed_company(session: Session) -> str:
     session.execute(
         text(
             "INSERT INTO companies "
-            "(id, name, slug, company_type, tenant_key, is_active, created_at) "
-            "VALUES (:id, :n, :s, 'law_firm', :tk, true, :ts)"
+            "(id, name, slug, company_type, tenant_key, is_active, "
+            "timezone, created_at) "
+            "VALUES (:id, :n, :s, 'law_firm', :tk, true, :tz, :ts)"
         ),
         {
             "id": company_id,
             "n": f"PG Test Co {company_id[:8]}",
             "s": f"pgco-{company_id[:8]}",
             "tk": company_id,
+            "tz": "Asia/Kolkata",
             "ts": datetime.now(UTC),
         },
     )
