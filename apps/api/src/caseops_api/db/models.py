@@ -845,6 +845,13 @@ class MatterCauseListEntry(Base):
     listing_date: Mapped[date] = mapped_column(Date, nullable=False)
     forum_name: Mapped[str] = mapped_column(String(255), nullable=False)
     bench_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Slice B (MOD-TS-001-C, 2026-04-25). JSON array of resolved
+    # bench members produced by services.bench_resolver. Shape:
+    #   [{"judge_id": "...", "matched_alias": "...", "confidence": "..."}, ...]
+    # NULL = not yet processed by the resolver. "[]" = processed but
+    # no judge in the catalog matched at the high-quality floor —
+    # surfaces in the ops dashboard for review.
+    judges_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     courtroom: Mapped[str | None] = mapped_column(String(120), nullable=True)
     item_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
     stage: Mapped[str | None] = mapped_column(String(255), nullable=True)
