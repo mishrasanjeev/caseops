@@ -106,8 +106,13 @@ const platformMoves = [
   },
   {
     icon: Briefcase,
-    title: "Outside counsel coordination",
-    body: "Manage counsel briefs, budgets and spend against the same matter portfolio where outcomes are tracked.",
+    title: "Outside counsel coordination + portal — shipped",
+    body: "Manage counsel briefs, budgets and spend on the same matter portfolio. Briefed counsel get a magic-link login at /portal/oc — assigned matters, work-product upload, invoice submission, time entries — gated by MatterPortalGrant with audit on every action.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Client portal + KYC — shipped",
+    body: "Each client gets their own /portal view of the matter with Comms, Hearings and KYC tabs. Magic-link auth on a separate cookie scope; matter-grant scoping; full audit trail on KYC + reply state.",
   },
   {
     icon: Users,
@@ -336,8 +341,13 @@ export default function LawFirmPitchPage() {
               />
               <PitchCard
                 icon={Sparkles}
-                title="AI as a system feature"
-                body="Generation sits inside the workflow. The product is the operating system, not a chatbot pane bolted onto it."
+                title="Bench-aware appeal drafting — shipped"
+                body="When the matter has an upcoming listing, the appeal-memorandum draft pulls authorities authored by THAT specific bench (court-scoped via the resolver) and prefers ones aligned with the matter's practice area. No win/lose copy; advocate-bias citation selection."
+              />
+              <PitchCard
+                icon={BookOpen}
+                title="Statute model + verbatim quoting — shipped"
+                body="7 central acts catalogued (BNSS / BNS / BSA / CrPC / IPC / Constitution / NI Act, 91 sections). Attach sections to a matter as cited / opposing / context; the prompt receives bare text and quotes verbatim."
               />
               <PitchCard
                 icon={Lock}

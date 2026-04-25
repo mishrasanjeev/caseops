@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import {
   Activity,
   BadgeCheck,
+  BookOpenText,
   Briefcase,
   ClipboardCheck,
   FileSearch,
@@ -148,8 +149,8 @@ export default function GeneralCounselsPage() {
             />
             <PitchCard
               icon={ShieldCheck}
-              title="AI policy scaffold"
-              body="Tenant-scoped AI policy table in the data model; runtime enforcement ships in Sprint M. Until then, provider selection is set per deployment, not per tenant."
+              title="AI policy + ModelRun audit — shipped"
+              body="Tenant-scoped tenant_ai_policy gate enforced at runtime on the structured-call path (matter summary, draft preview, recommendations, hearing pack). Every LLM call writes a ModelRun audit row with provider/model/tokens/latency/status — visible per matter."
             />
           </div>
 
@@ -228,6 +229,21 @@ export default function GeneralCounselsPage() {
               title="Realisation by firm"
               body="See billed, collected and aging per counsel. Compare realisation rates across firms before the next brief."
             />
+            <PitchCard
+              icon={Landmark}
+              title="Outside-counsel portal — shipped"
+              body="Every briefed firm gets a magic-link login at /portal/oc — see assigned matters, upload work product, submit invoices, log time. Scope-gated by MatterPortalGrant; the GC sees every action on the audit trail."
+            />
+            <PitchCard
+              icon={ShieldCheck}
+              title="Client portal + KYC — shipped"
+              body="The client gets their own /portal view of the matter (Overview, Comms, Hearings, KYC tabs). KYC submit + GC review + audit on every state transition. Built on the same Phase C portal scaffold; no second auth system to operate."
+            />
+            <PitchCard
+              icon={BookOpenText}
+              title="Statutes attached to the matter"
+              body="Mark which BNSS / BNS / CrPC / IPC / Constitution sections the matter relies on; the appeal-memorandum draft receives the bare text and quotes verbatim instead of paraphrasing. 91 sections live across 7 central acts."
+            />
           </div>
           <div className="mt-8 grid gap-4 rounded-2xl border border-[var(--color-line)] bg-white p-6 md:grid-cols-[1fr_1fr] md:p-8">
             <div>
@@ -285,7 +301,7 @@ export default function GeneralCounselsPage() {
           tone="ink"
           eyebrow="Risk, audit and AI posture"
           title="Control is built in, not bolted on."
-          description="The standard a GC should expect — some shipped today, some on a dated roadmap: tenant isolation by construction (shipped), matter-level ethical walls (shipped), audit on every sensitive action (shipped), AI policy enforcement (Sprint M)."
+          description="The standard a GC should expect — all shipped: tenant isolation by construction, matter-level ethical walls, audit on every sensitive action, AI policy enforcement at runtime, ClamAV malware scanning fail-closed in prod, every sensitive env in Secret Manager with a documented rotation runbook. Overall enterprise verdict: GO."
         >
           <div className="grid gap-5 md:grid-cols-2">
             <div className="grid gap-3">
@@ -310,8 +326,8 @@ export default function GeneralCounselsPage() {
               <ReviewRow
                 inverse
                 icon={BadgeCheck}
-                title="AI policy — Sprint M"
-                body="Tenant-scoped AI policy table exists; runtime enforcement ships in Sprint M. Until then, provider selection is set per deployment."
+                title="AI policy enforced at runtime"
+                body="Tenant-scoped tenant_ai_policy gate runs on every structured AI call (matter summary, draft preview, recommendations, hearing pack). Blocked-model attempts return HTTP 403 with the specific model that was rejected, and a ModelRun audit row records the refusal."
               />
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/5 p-6">

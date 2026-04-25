@@ -27,6 +27,8 @@ const sections: { id: string; title: string }[] = [
   { id: "documents", title: "Documents and indexing" },
   { id: "drafting", title: "Drafting with citations" },
   { id: "hearings", title: "Hearing preparation" },
+  { id: "bench-strategy", title: "Bench-aware appeal drafting" },
+  { id: "statutes", title: "Statutes (BNSS / BNS / CrPC / IPC / Constitution / NI Act)" },
   { id: "research", title: "Research and authorities" },
   { id: "contracts", title: "Contracts and playbooks" },
   { id: "recommendations", title: "Recommendations" },
@@ -435,11 +437,98 @@ export default function GuidePage() {
                       is traceable back to a matter document or a named authority.
                     </li>
                   </ul>
-                  <Callout title="Cause-list sync">
-                    Workspaces in Delhi, Bombay, Karnataka and Telangana can opt in to
-                    automatic morning cause-list ingest. A flagged matter means the cause
-                    list shows a listing CaseOps did not expect from your records — a fast
-                    prompt to refresh the pack.
+                  <Callout title="Cause-list sync — manual today, automated incrementally">
+                    Cause-list entries land in <code>matter_cause_list_entries</code>{" "}
+                    today via the per-matter sync API (paste / import / nightly job
+                    for the courts that have a wired adapter). The bench resolver
+                    normalises free-text rosters like &quot;Justice X &amp; Justice Y&quot;
+                    into clickable judge profiles using the high-quality confidence
+                    floor — no silent guesses. Per-court automated scrapers (Bombay,
+                    Karnataka, Madras, Telangana, Patna and others) ship as each
+                    court&apos;s PRD lands. Today&apos;s judge catalog covers the
+                    Supreme Court (31 sitting judges) and the Delhi High Court (32
+                    sitting judges) with source-attributed bios.
+                  </Callout>
+                </Section>
+
+                <Section id="bench-strategy" title="6A · Bench-aware appeal drafting">
+                  <p>
+                    When you generate an{" "}
+                    <strong>appeal_memorandum</strong> draft for a matter that has
+                    an upcoming listing, CaseOps doesn&apos;t just pull authorities
+                    from the court at large — it pulls authorities authored by{" "}
+                    <strong>the specific bench scheduled to hear the appeal</strong>{" "}
+                    and prefers ones that align with the matter&apos;s practice area.
+                    The advocate-bias selection is editorial: the system surfaces
+                    the citations that support your grounds. Adverse-authority
+                    duties to the court remain yours.
+                  </p>
+                  <ul className="mt-3 space-y-2 text-[15px]">
+                    <li>
+                      <strong>Career timeline</strong> on every judge profile —{" "}
+                      <code>/app/courts/judges/&#123;id&#125;</code> shows every
+                      court the judge has served on, with source-attributed
+                      evidence.
+                    </li>
+                    <li>
+                      <strong>Bench resolver</strong> on the matter hearings tab
+                      — &quot;Justice X &amp; Justice Y&quot; renders as clickable
+                      links to each judge&apos;s profile.
+                    </li>
+                    <li>
+                      <strong>Appeal Strength panel</strong> on the appeal stepper
+                      flags per-ground citation coverage and weak-evidence paths.
+                    </li>
+                  </ul>
+                  <Callout tone="warn" title="No win/lose / probability / favourability copy">
+                    Bench-aware drafting is a hard rule: no &quot;this bench tends
+                    to&quot;, no &quot;winnable&quot;, no &quot;chance of
+                    success&quot;. Selection of supporting citations is allowed and
+                    required — that&apos;s what advocates do — but the system
+                    never claims an outcome.
+                  </Callout>
+                </Section>
+
+                <Section id="statutes" title="6B · Statutes (BNSS, BNS, CrPC, IPC, NI Act, Constitution)">
+                  <p>
+                    Visit <code>/app/statutes</code> to browse the structured
+                    catalog of central Indian Acts. v1 ships with 7 acts and 91
+                    sections, each with a source link to{" "}
+                    <a
+                      href="https://www.indiacode.nic.in"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      indiacode.nic.in
+                    </a>{" "}
+                    — the Government of India&apos;s official Acts repository
+                    (public domain).
+                  </p>
+                  <ul className="mt-3 space-y-2 text-[15px]">
+                    <li>
+                      <strong>Attach to a matter.</strong> The Statutes sub-tab on
+                      the matter cockpit lets you mark which sections this matter
+                      cites, opposes, or holds in context.
+                    </li>
+                    <li>
+                      <strong>Fed into drafting.</strong> When you generate an
+                      appeal-memorandum draft, the prompt receives the bare text
+                      of each attached section. The LLM is instructed to{" "}
+                      <strong>quote verbatim</strong> instead of paraphrasing.
+                    </li>
+                    <li>
+                      <strong>BNSS vs BNS unambiguous.</strong> The structured
+                      reference makes the act explicit, so &quot;Section 483
+                      BNSS&quot; (bail) is never confused with &quot;Section 483
+                      BNS&quot;.
+                    </li>
+                  </ul>
+                  <Callout title="Bare text indexing">
+                    Section number + label + source URL ship with the catalog
+                    today. Bare text for the most-litigated sections is being
+                    enriched from indiacode.nic.in; until a section&apos;s text is
+                    indexed, the prompt and UI surface the source URL so you can
+                    verify directly.
                   </Callout>
                 </Section>
 

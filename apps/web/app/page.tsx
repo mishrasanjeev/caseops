@@ -40,7 +40,7 @@ const faqJsonLd = {
       name: "How does CaseOps avoid hallucinated citations?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Legal knowledge lives in retrieval and source systems, not the model. Every substantive answer is grounded in statutes, judgments, or your own precedents with inline citations, assumptions, missing facts, and confidence. Weak-evidence prompts return an explicit refusal.",
+        text: "Legal knowledge lives in retrieval and source systems, not the model. Every substantive answer is grounded in statutes, judgments, or your own precedents with inline citations, assumptions, missing facts, and confidence. The structured statute model (BNSS, BNS, BSA, CrPC, IPC, Constitution, NI Act) feeds bare text into appeal drafts so the LLM quotes verbatim instead of paraphrasing. Weak-evidence prompts return an explicit refusal.",
       },
     },
     {
@@ -48,7 +48,15 @@ const faqJsonLd = {
       name: "What courts and jurisdictions are covered?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Lower courts, High Courts, and the Supreme Court are in scope from the first release. Delhi NCR, Maharashtra, Karnataka, and Telangana are priority rollouts.",
+        text: "Lower courts, High Courts, and the Supreme Court are in scope. Today's judge catalog: 31 sitting Supreme Court judges plus 32 sitting Delhi High Court judges with career history sourced from official sites. Bombay, Karnataka, Madras, Telangana and Patna High Courts are catalog-seeded; per-court judge data and cause-list scrapers ship as each court's PRD lands.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "Does the appeal draft consider which bench will hear it?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Yes. When a matter has an upcoming listing whose bench is resolved against our judge catalog, the appeal-memorandum draft pulls authorities authored by THAT specific bench and prefers ones aligned with the matter's practice area. Selection of supporting citations is editorial advocacy; the system never claims a win/loss probability or judge tendency.",
       },
     },
     {

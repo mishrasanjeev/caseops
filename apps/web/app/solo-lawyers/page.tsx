@@ -47,6 +47,7 @@ const slides = [
   { id: "ai-angle", label: "AI angle" },
   { id: "diary", label: "Diary" },
   { id: "drafting", label: "Drafting" },
+  { id: "appeals", label: "Appeals" },
   { id: "research", label: "Research" },
   { id: "billing", label: "Billing" },
   { id: "pricing", label: "Pricing" },
@@ -184,13 +185,13 @@ export default function SoloLawyersPage() {
           tone="brand"
           eyebrow="Case diary + hearings"
           title="Morning opens with the day already compiled."
-          description="Sign in. See today's listings, pending compliances and matters pulled from the last cause-list sync (one click to re-run; automated nightly sync ships soon). One-click hearing pack for the matters you are arguing, with chronology and last order already pinned."
+          description="Sign in. See today's listings as soon as they're imported into your matter record. One-click hearing pack for the matters you are arguing — chronology and last order already pinned. The bench-name resolver links each scheduled judge to their profile (Supreme Court + Delhi HC live; other High Courts as their judge data lands)."
         >
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
             <PitchCard
               icon={Gavel}
-              title="Cause-list sync"
-              body="Delhi, Bombay, Karnataka and Telangana supported on day one. Mismatches flagged before you leave home."
+              title="Cause-list import — manual today, automated incrementally"
+              body="Today: cause-list entries are imported per matter (paste / API / nightly job for the courts that have a wired adapter). The bench resolver normalises 'Justice X & Justice Y' rosters into clickable judge profiles with the high-quality confidence floor. Per-HC automated scrapers ship as each court's PRD lands."
             />
             <PitchCard
               icon={Layers}
@@ -247,8 +248,41 @@ export default function SoloLawyersPage() {
         </Slide>
 
         <Slide
-          id="research"
+          id="appeals"
           index="06"
+          tone="light"
+          eyebrow="Appeals + bench-aware drafting"
+          title="The appeal cites the bench that's actually hearing it."
+          description="When the matter has an upcoming listing, the appeal-memorandum draft pulls authorities authored by THAT specific bench (not just the court at large) and prefers ones that match the practice area. Section 482 BNSS quoted verbatim from the bare-acts catalog. Argument completeness flagged per ground — never win/lose prediction."
+        >
+          <div className="grid gap-4 md:grid-cols-4">
+            <MetricCard value="63" label="Judges live" note="31 SC + 32 Delhi HC sitting bench, with career history and indexed authorities." />
+            <MetricCard value="91" label="Statute sections" note="BNSS, BNS, BSA, CrPC, IPC, Constitution, NI Act — bare text + clickable indiacode.nic.in source." />
+            <MetricCard value="269" label="Judge aliases" note="Tolerant matcher resolves 'A.K. Sikri' to the canonical judge row, no ILIKE fragility." />
+            <MetricCard value="0%" label="Favorability score" note="Bench-aware drafting hard rule: no win/lose/probability/tendency language. Anywhere." />
+          </div>
+          <div className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+            <PitchCard
+              icon={Gavel}
+              title="Bench-specific authorities"
+              body="When the next listing's bench is resolved, BAAD injects up to 5 authorities authored by that bench, picked to support the matter's practice area. Limitation note when the bench can't be resolved — never silent."
+            />
+            <PitchCard
+              icon={BookOpenText}
+              title="Statute model with verbatim quoting"
+              body="7 central acts catalogued. Attach sections to a matter as 'cited' / 'opposing' / 'context'; the prompt receives the bare text so the LLM quotes verbatim instead of paraphrasing."
+            />
+            <PitchCard
+              icon={BadgeCheck}
+              title="Argument completeness, not outcome prediction"
+              body="The Appeal Strength panel flags per-ground citation coverage and weak-evidence paths. The advocate decides; the system never claims a win probability."
+            />
+          </div>
+        </Slide>
+
+        <Slide
+          id="research"
+          index="07"
           tone="brand"
           eyebrow="Research"
           title="The same corpus the big firms are retrieving against."
@@ -281,7 +315,7 @@ export default function SoloLawyersPage() {
 
         <Slide
           id="billing"
-          index="07"
+          index="08"
           tone="ink"
           eyebrow="Billing + recoveries"
           title="The payment link goes out with the invoice."
@@ -323,7 +357,7 @@ export default function SoloLawyersPage() {
 
         <Slide
           id="pricing"
-          index="08"
+          index="09"
           tone="light"
           eyebrow="Pricing"
           title="Priced for a practice of one."
@@ -389,7 +423,7 @@ export default function SoloLawyersPage() {
 
         <Slide
           id="contact"
-          index="09"
+          index="10"
           tone="ink"
           eyebrow="Contact"
           title="Write to the founder."
