@@ -1243,6 +1243,56 @@ export async function fetchStatuteSection(
   );
 }
 
+// Slice S4 (MOD-TS-017, 2026-04-25) — matter statute references.
+export type MatterStatuteReferenceRecord = {
+  id: string;
+  matter_id: string;
+  section_id: string;
+  statute_id: string;
+  statute_short_name: string;
+  section_number: string;
+  section_label: string | null;
+  section_url: string | null;
+  relevance: "cited" | "opposing" | "context";
+  notes: string | null;
+  created_at: string;
+};
+
+export type MatterStatuteReferenceListResponse = {
+  matter_id: string;
+  references: MatterStatuteReferenceRecord[];
+};
+
+export async function listMatterStatuteReferences(
+  matterId: string,
+): Promise<MatterStatuteReferenceListResponse> {
+  return apiRequest(`/api/matters/${matterId}/statute-references`);
+}
+
+export async function addMatterStatuteReference(
+  matterId: string,
+  payload: {
+    section_id: string;
+    relevance?: "cited" | "opposing" | "context";
+    notes?: string;
+  },
+): Promise<MatterStatuteReferenceRecord> {
+  return apiRequest(`/api/matters/${matterId}/statute-references`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteMatterStatuteReference(
+  matterId: string,
+  referenceId: string,
+): Promise<void> {
+  await apiRequest(
+    `/api/matters/${matterId}/statute-references/${referenceId}`,
+    { method: "DELETE" },
+  );
+}
+
 // Slice D admin surface (MOD-TS-001-E, 2026-04-25 follow-up).
 // Read-only listing of every judge alias for the admin audit page.
 export type JudgeAliasRecord = {

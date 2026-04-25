@@ -22,10 +22,16 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 
 from caseops_api.api.dependencies import DbSession, get_current_context
-from caseops_api.db.models import Statute, StatuteSection
+from caseops_api.db.models import (
+    Matter,
+    MatterStatuteReference,
+    Statute,
+    StatuteSection,
+)
 from caseops_api.services.identity import SessionContext
 
 router = APIRouter()
+matter_scoped_router = APIRouter()
 CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
 
 
@@ -245,3 +251,217 @@ def get_statute_section(
             StatuteSectionRecord.model_validate(c) for c in children
         ],
     )
+
+
+# ---------------------------------------------------------------------
+# Slice S4 (MOD-TS-017, 2026-04-25): matter statute references.
+#
+# Mounted under /api/matters/{matter_id}/... so the URL shape stays
+# consistent with the rest of the matter cockpit. Tenancy enforced
+# via Matter.company_id == context.company.id (foreign matter → 404).
+# ---------------------------------------------------------------------
+
+
+class MatterStatuteReferenceRecord(BaseModel):
+    id: str
+    matter_id: str
+    section_id: str
+    statute_id: str
+    statute_short_name: str
+    section_number: str
+    section_label: str | None
+    section_url: str | None
+    relevance: str  # 'cited' | 'opposing' | 'context'
+    notes: str | None
+    created_at: str
+
+
+class MatterStatuteReferenceListResponse(BaseModel):
+    matter_id: str
+    references: list[MatterStatuteReferenceRecord]
+
+
+class MatterStatuteReferenceCreateRequest(BaseModel):
+    section_id: str
+    relevance: str = "cited"
+    notes: str | None = None
+
+
+def _serialise_matter_ref(
+    ref: MatterStatuteReference,
+    section: StatuteSection,
+    statute: Statute,
+) -> MatterStatuteReferenceRecord:
+    return MatterStatuteReferenceRecord(
+        id=ref.id,
+        matter_id=ref.matter_id,
+        section_id=ref.section_id,
+        statute_id=statute.id,
+        statute_short_name=statute.short_name,
+        section_number=section.section_number,
+        section_label=section.section_label,
+        section_url=section.section_url,
+        relevance=ref.relevance,
+        notes=ref.notes,
+        created_at=ref.created_at.isoformat(),
+    )
+
+
+def _scoped_matter_or_404(
+    session, *, matter_id: str, company_id: str,
+) -> Matter:
+    matter = session.scalar(
+        select(Matter)
+        .where(Matter.id == matter_id)
+        .where(Matter.company_id == company_id)
+    )
+    if matter is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Matter not found.",
+        )
+    return matter
+
+
+@matter_scoped_router.get(
+    "/{matter_id}/statute-references",
+    response_model=MatterStatuteReferenceListResponse,
+    summary=(
+        "List statute references attached to a matter. Joins to "
+        "StatuteSection + Statute so the UI can render section "
+        "metadata without extra round-trips."
+    ),
+)
+def list_matter_statute_references(
+    matter_id: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> MatterStatuteReferenceListResponse:
+    matter = _scoped_matter_or_404(
+        session, matter_id=matter_id, company_id=context.company.id,
+    )
+    rows = list(
+        session.execute(
+            select(MatterStatuteReference, StatuteSection, Statute)
+            .join(
+                StatuteSection,
+                StatuteSection.id == MatterStatuteReference.section_id,
+            )
+            .join(Statute, Statute.id == StatuteSection.statute_id)
+            .where(MatterStatuteReference.matter_id == matter.id)
+            .order_by(
+                Statute.short_name,
+                StatuteSection.ordinal,
+                StatuteSection.section_number,
+            )
+        ).all()
+    )
+    return MatterStatuteReferenceListResponse(
+        matter_id=matter.id,
+        references=[
+            _serialise_matter_ref(ref, section, statute)
+            for ref, section, statute in rows
+        ],
+    )
+
+
+@matter_scoped_router.post(
+    "/{matter_id}/statute-references",
+    response_model=MatterStatuteReferenceRecord,
+    status_code=status.HTTP_201_CREATED,
+    summary=(
+        "Attach a statute section to a matter. Idempotent on the "
+        "uq_matter_statute_references_unique constraint — re-posting "
+        "the same (section_id, relevance) tuple returns the existing "
+        "row instead of erroring."
+    ),
+)
+def add_matter_statute_reference(
+    matter_id: str,
+    payload: MatterStatuteReferenceCreateRequest,
+    context: CurrentContext,
+    session: DbSession,
+) -> MatterStatuteReferenceRecord:
+    matter = _scoped_matter_or_404(
+        session, matter_id=matter_id, company_id=context.company.id,
+    )
+    section = session.scalar(
+        select(StatuteSection).where(
+            StatuteSection.id == payload.section_id,
+            StatuteSection.is_active.is_(True),
+        )
+    )
+    if section is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Statute section {payload.section_id!r} not found.",
+        )
+    statute = session.scalar(
+        select(Statute).where(Statute.id == section.statute_id)
+    )
+    if statute is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Parent statute for this section is missing.",
+        )
+
+    relevance = (payload.relevance or "cited").strip().lower()
+    if relevance not in {"cited", "opposing", "context"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "relevance must be one of 'cited' | 'opposing' | 'context'."
+            ),
+        )
+    existing = session.scalar(
+        select(MatterStatuteReference).where(
+            MatterStatuteReference.matter_id == matter.id,
+            MatterStatuteReference.section_id == section.id,
+            MatterStatuteReference.relevance == relevance,
+        )
+    )
+    if existing is not None:
+        return _serialise_matter_ref(existing, section, statute)
+
+    ref = MatterStatuteReference(
+        matter_id=matter.id,
+        section_id=section.id,
+        relevance=relevance,
+        added_by_membership_id=context.membership.id,
+        notes=payload.notes,
+    )
+    session.add(ref)
+    session.commit()
+    session.refresh(ref)
+    return _serialise_matter_ref(ref, section, statute)
+
+
+@matter_scoped_router.delete(
+    "/{matter_id}/statute-references/{reference_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Remove a statute reference from a matter.",
+)
+def delete_matter_statute_reference(
+    matter_id: str,
+    reference_id: str,
+    context: CurrentContext,
+    session: DbSession,
+):
+    matter = _scoped_matter_or_404(
+        session, matter_id=matter_id, company_id=context.company.id,
+    )
+    ref = session.scalar(
+        select(MatterStatuteReference).where(
+            MatterStatuteReference.id == reference_id,
+            MatterStatuteReference.matter_id == matter.id,
+        )
+    )
+    if ref is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Statute reference not found on this matter.",
+        )
+    session.delete(ref)
+    session.commit()
+    from fastapi import Response
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

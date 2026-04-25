@@ -307,6 +307,7 @@ def _build_messages(
     retrieved: list[AuthorityDocument],
     focus_note: str | None,
     bench_context: object = None,  # BenchStrategyContext | None — late import
+    statute_refs: list[dict] | None = None,
 ) -> list[LLMMessage]:
     # BAAD-001 slice 3 (Sprint P5, 2026-04-25). Per-template prompt
     # wiring + bench-strategy-context injection. Two changes vs the
@@ -454,6 +455,61 @@ def _build_messages(
             "`missing authorities` in the summary rather than inventing "
             "sources. Use `[citation needed]` anchors where authority "
             "should appear."
+        )
+
+    # MOD-TS-017 Slice S4 (2026-04-25). When the matter has attached
+    # statute references (Matter -> StatuteSection via
+    # matter_statute_references), inject a STATUTORY TEXT block so
+    # the LLM can quote the bare section text verbatim instead of
+    # paraphrasing. Per PRD §2.1 advocate-bias: cited / opposing /
+    # context relevance is preserved so the draft can argue for /
+    # distinguish each section appropriately. PRD §6 answer 4: cap
+    # bare text at 600 chars per section to keep the prompt within
+    # ~10% of the court-scoped baseline cost.
+    if statute_refs:
+        parts.append("")
+        parts.append("=== STATUTORY TEXT (verbatim — quote, don't paraphrase) ===")
+        parts.append(
+            "These statute sections were attached to the matter by the "
+            "lawyer. Cite them inline using the canonical form "
+            "'Section X of <Act>' and quote the bare text verbatim "
+            "when relying on a section's wording. The 'relevance' tag "
+            "tells you whose argument the section supports:"
+        )
+        parts.append(
+            "  - 'cited' = our argument relies on this section"
+        )
+        parts.append(
+            "  - 'opposing' = the other side relies on this; "
+            "address it / distinguish it"
+        )
+        parts.append(
+            "  - 'context' = in scope but not load-bearing"
+        )
+        for ref in statute_refs[:20]:  # cap at 20 sections per draft
+            short = ref.get("statute_short_name", "?")
+            num = ref.get("section_number", "?")
+            label = ref.get("section_label") or ""
+            relevance = ref.get("relevance", "cited")
+            url = ref.get("section_url") or ""
+            text = ref.get("section_text") or ""
+            text_excerpt = (text[:600] + "…") if len(text) > 600 else text
+            parts.append(
+                f"\n[{relevance}] {short} {num}"
+                f"{' — ' + label if label else ''}"
+            )
+            if text_excerpt:
+                parts.append(f"  bare text: {text_excerpt}")
+            else:
+                parts.append(
+                    f"  bare text not yet indexed; verify at: {url}"
+                    if url else
+                    "  bare text not yet indexed; refer to indiacode.nic.in"
+                )
+        parts.append(
+            "\nREQUIRED PHRASING when quoting: 'Section X of the <long "
+            "name>, <year> provides: \"<verbatim quote>\"'. NEVER "
+            "paraphrase a quoted statutory provision."
         )
 
     # BAAD-001 slice 3: bench history context block. Only injected when
@@ -885,9 +941,44 @@ def generate_draft_version(
                 matter.id, exc,
             )
 
+    # MOD-TS-017 Slice S4 (2026-04-25): pull matter's attached statute
+    # references so the prompt can carry bare section text for verbatim
+    # quoting. Wrapped so a stat-fetch failure NEVER blocks the draft.
+    statute_refs: list[dict] = []
+    try:
+        from caseops_api.db.models import MatterStatuteReference as _MSR
+        from caseops_api.db.models import Statute as _Statute
+        from caseops_api.db.models import StatuteSection as _StatuteSection
+
+        rows = session.execute(
+            select(_MSR, _StatuteSection, _Statute)
+            .join(_StatuteSection, _StatuteSection.id == _MSR.section_id)
+            .join(_Statute, _Statute.id == _StatuteSection.statute_id)
+            .where(_MSR.matter_id == matter.id)
+            .order_by(_Statute.short_name, _StatuteSection.ordinal)
+        ).all()
+        statute_refs = [
+            {
+                "statute_short_name": statute.short_name,
+                "section_number": section.section_number,
+                "section_label": section.section_label,
+                "section_text": section.section_text,
+                "section_url": section.section_url,
+                "relevance": ref.relevance,
+            }
+            for ref, section, statute in rows
+        ]
+    except Exception as exc:  # noqa: BLE001 — degrade to no statute block
+        logger.warning(
+            "Statute refs fetch failed for matter %s; draft proceeds "
+            "without STATUTORY TEXT block: %s",
+            matter.id, exc,
+        )
+
     messages = _build_messages(
         matter, draft, retrieved_docs, focus_note,
         bench_context=bench_context,
+        statute_refs=statute_refs,
     )
     prompt_hash = _prompt_hash(messages)
     # Drafting routes to the per-purpose drafting model (Opus-class
