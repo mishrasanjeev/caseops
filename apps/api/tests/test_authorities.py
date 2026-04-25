@@ -442,7 +442,8 @@ def test_forum_precedent_boost_below_matter_forum_returns_zero() -> None:
     from caseops_api.services.authorities import _forum_precedent_boost
 
     assert _forum_precedent_boost("high_court", "lower_court") == 0
-    assert _forum_precedent_boost("supreme_court", "high_court") > 0  # peer-down still persuasive for SC consumers
+    # peer-down still persuasive for SC consumers
+    assert _forum_precedent_boost("supreme_court", "high_court") > 0
     # Tribunal can't bind a lower_court matter — return 2 (small
     # persuasive only). Confirm boost stays small relative to SC.
     sc = _forum_precedent_boost("lower_court", "supreme_court")

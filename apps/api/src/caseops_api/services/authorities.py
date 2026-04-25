@@ -54,7 +54,6 @@ from caseops_api.services.identity import SessionContext
 from caseops_api.services.retrieval import RetrievalCandidate, rank_candidates
 from caseops_api.services.retrieval_normalisers import build_query_variants
 
-
 # P4 (Sprint P, 2026-04-25). Forum-aware precedent boost. Indian
 # court hierarchy (highest precedential weight first):
 #   supreme_court > high_court > lower_court / tribunal > advisory

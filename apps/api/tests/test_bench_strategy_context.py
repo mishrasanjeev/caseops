@@ -17,7 +17,7 @@ Covers:
 from __future__ import annotations
 
 import json
-from datetime import UTC, date, datetime
+from datetime import date
 from uuid import uuid4
 
 import pytest
@@ -38,6 +38,8 @@ from caseops_api.services.bench_strategy_context import (
     build_bench_strategy_context,
 )
 from caseops_api.services.identity import SessionContext
+
+
 def bootstrap_company(client: TestClient, *, slug_seed: str) -> dict:
     """Local bootstrap helper that supports unique slug per call so a
     single test can spin up two tenants for the isolation case. The
@@ -393,7 +395,6 @@ def test_build_messages_injects_bench_context_for_appeal(
     bench_context is supplied, the user message must carry the
     'BENCH HISTORY CONTEXT' header + a confidence label."""
     from caseops_api.services.drafting import _build_messages
-    from caseops_api.services.bench_strategy_context import BenchStrategyContext
 
     boot = bootstrap_company(client, slug_seed="baad-build-1")
     Session = get_session_factory()
@@ -431,7 +432,6 @@ def test_build_messages_low_quality_emits_fallback_directive(
     the model to draft without bench-specific framing — bench-aware
     drafting weak-evidence-fallback rule."""
     from caseops_api.services.drafting import _build_messages
-    from caseops_api.services.bench_strategy_context import BenchStrategyContext
 
     boot = bootstrap_company(client, slug_seed="baad-build-2")
     Session = get_session_factory()
@@ -465,7 +465,6 @@ def test_build_messages_does_not_inject_bench_context_for_other_templates(
     something — we MUST NOT inject the bench block. Only appeal_memorandum
     consumes it."""
     from caseops_api.services.drafting import _build_messages
-    from caseops_api.services.bench_strategy_context import BenchStrategyContext
 
     boot = bootstrap_company(client, slug_seed="baad-build-3")
     Session = get_session_factory()
@@ -498,12 +497,11 @@ def test_build_messages_has_no_favorability_phrasing(
     favorability language that the model could echo back. The block
     instructs the model TO USE evidence phrasing, but never asserts
     a tendency."""
-    from caseops_api.services.drafting import _build_messages
     from caseops_api.services.bench_strategy_context import (
-        BenchStrategyContext,
-        RecurringTest,
         PracticeAreaPattern,
+        RecurringTest,
     )
+    from caseops_api.services.drafting import _build_messages
 
     boot = bootstrap_company(client, slug_seed="baad-build-4")
     Session = get_session_factory()

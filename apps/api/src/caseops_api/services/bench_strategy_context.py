@@ -58,7 +58,6 @@ from caseops_api.services.bench_matcher import (
 )
 from caseops_api.services.identity import SessionContext
 
-
 # Honorific stripper duplicated from `api/routes/courts.py` so this
 # service stays route-independent. Both must update together if the
 # pattern grows. ((Same regex; tested upstream.))

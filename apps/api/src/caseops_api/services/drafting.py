@@ -469,7 +469,6 @@ def _build_messages(
         coverage_pct = getattr(
             bench_context, "structured_match_coverage_percent", 0
         )
-        cited_authorities = getattr(bench_context, "similar_authorities", []) or []
         recurring_tests = getattr(bench_context, "recurring_tests", []) or []
         practice_patterns = getattr(
             bench_context, "practice_area_patterns", []

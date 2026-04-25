@@ -54,7 +54,6 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-
 pytestmark = pytest.mark.postgres
 
 
@@ -76,8 +75,9 @@ def _ensure_migrations():
         # still let the fixture run so module-scope teardown works.
         yield
         return
-    from alembic import command
     from alembic.config import Config
+
+    from alembic import command
 
     project_root = Path(__file__).resolve().parents[1]
     cfg = Config(str(project_root / "alembic.ini"))
