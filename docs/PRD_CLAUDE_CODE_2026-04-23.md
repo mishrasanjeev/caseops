@@ -162,7 +162,8 @@ mapping is:
 
 | Audit ID | Spreadsheet module | PRD coverage | Corrected current status | Reconciliation note |
 | --- | --- | --- | --- | --- |
-| `MOD-TS-001` | JudgeProfile | `J06`, `M05`, `US-014/015`, `FT-023/024` | `Partial` | Judge and court surfaces exist, but deeper analytics, bench strategy, and tribunal depth are still incomplete. |
+| `MOD-TS-001` | JudgeProfile | `J06`, `M05`, `US-014/015`, `FT-023/024` | `Implemented` | Judge profile + bench match + bench strategy context + bench-aware appeal drafting all shipped 2026-04-25 (Sprint P1+P3+P4+P5/BAAD-001). MOD-TS-001-A "Appeal Strength Analyzer" is the queued sub-feature; P2 sci.gov.in supplement is formally deferred (low marginal value vs corpus coverage). |
+| `MOD-TS-001-A` | Appeal Strength Analyzer | `J06`, `J07`, `J09`, `M05`, `M06`, `M07`, `US-014/015/017/018/021/027`, `FT-024B/031B` | `Queued` | Per-ground argument-completeness analysis on an appeal-memorandum draft (or matter facts when no draft yet): citation coverage, supporting-authority strength (SC > HC > lower), bench-history support, weak-evidence path highlighted, concrete edit suggestions ("add SC authority on Order XLI Rule 5", "drop ground 4", "strengthen with [Y]"). Frame as **argument completeness**, NOT outcome prediction. Bench-aware drafting hard rules apply: no "win/lose/chance/probability/favourable/tendency" language anywhere in the surface (asserted by a structural test). Reuses the existing `bench_strategy_context` service for bench data; no new judge analytics. |
 | `MOD-TS-002` | OCR Extractor | `J04`, `M03`, `US-007/009`, `FT-011/012` | `Partial` | OCR exists, but broader parser coverage and production quality gating are still incomplete. |
 | `MOD-TS-003` | Legal Translator | `J16`, `M17`, `US-048/049`, `FT-067/068` | `Missing` | This really is still missing as a product surface. |
 | `MOD-TS-004` | Case Summary | `J03A`, `M16`, `US-046/047`, `FT-016-019`, `FT-065/066` | `Shipped` | Summary generation and export exist now, but the roadmap still calls for caching and stronger resilience. |
@@ -492,11 +493,15 @@ Happy path:
    type patterns.
 3. User can match a matter to likely benches or judge surfaces.
 4. Strategy recommendations can incorporate bench-aware context.
+5. Appeal drafting can consume cited judge or bench history when the evidence
+   is strong enough and must fall back cleanly when it is not.
 
 Failure and edge rules:
 
 - no judge analytics claim without benchmarked support
 - judge and bench intelligence must stay evidence-backed, not reputation gossip
+- bench-aware drafting must cite the specific judgments it relies on and must
+  never become judge favorability or outcome prediction
 - tribunal coverage must be first-class once added, not hacked through court
   enums only
 
@@ -1000,6 +1005,10 @@ Production ingestion order:
   legal drafting errors.
 - `US-018` As a reviewer, I want every generated draft to show citations,
   findings, and version history before approval.
+- `US-018A` As a litigator on an appeal, I want to see which grounds in
+  my draft are well-supported by cited authorities and which are weak,
+  with concrete suggestions to strengthen the weak ones — framed as
+  argument completeness, not outcome prediction.
 - `US-019` As a high-volume user, I want a reusable template library.
 - `US-020` As a collections or notice team, I want batch notice generation with
   prefilled data.
@@ -1127,6 +1136,8 @@ Production ingestion order:
 - `FT-022` Query normalization improves citation or bench retrieval.
 - `FT-023` Judge profile page loads recent authorities and matter context.
 - `FT-024` Bench-match endpoint returns a scoped match explanation.
+- `FT-024A` Bench strategy context endpoint returns cited prior-judgment
+  patterns for the same judge or likely bench.
 - `FT-025` Draft template list route returns available templates.
 - `FT-026` Draft stepper preview renders partial draft safely.
 - `FT-027` Draft generation persists a new version.
@@ -1134,6 +1145,16 @@ Production ingestion order:
 - `FT-029` Draft approve fails closed without verified citations.
 - `FT-030` Draft finalize locks future mutations.
 - `FT-031` Each of the 8 draft types generates with the right schema.
+- `FT-024B` Appeal-strength analyzer endpoint returns per-ground
+  citation coverage + supporting authorities + concrete edit
+  suggestions; cross-tenant matter returns 404; structural test
+  asserts the response contains no win/lose/probability/favourable/
+  tendency language.
+- `FT-031B` Appeal-strength UI panel renders green/amber/red per
+  ground + the suggestion list; weak-evidence path is visually
+  distinct and labelled as such.
+- `FT-031A` Appeal draft generation consumes bench strategy context when
+  available and refuses unsupported judge-tendency claims.
 - `FT-032` Template-based draft start path uses saved template metadata.
 - `FT-033` Batch notice generation produces isolated outputs per recipient.
 - `FT-034` Recommendations list route returns prior recommendations.

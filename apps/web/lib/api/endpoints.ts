@@ -181,6 +181,49 @@ export async function fetchBenchStrategyContext(
   );
 }
 
+
+// MOD-TS-001-A (Sprint P, 2026-04-25). Appeal Strength Analyzer.
+// Per-ground argument-completeness analysis on an appeal_memorandum
+// draft. Frame: argument completeness, NOT outcome prediction.
+
+export type AppealStrengthAuthorityRef = {
+  citation: string;
+  resolved_authority_id: string | null;
+  title: string | null;
+  forum_level: string | null;
+  strength_label: "binding" | "peer" | "persuasive" | "unknown";
+};
+
+export type AppealStrengthGround = {
+  ordinal: number;
+  summary: string;
+  citation_coverage: "supported" | "partial" | "uncited";
+  supporting_authorities: AppealStrengthAuthorityRef[];
+  bench_history_match_count: number;
+  suggestions: string[];
+};
+
+export type AppealStrengthReport = {
+  matter_id: string;
+  draft_id: string | null;
+  overall_strength: "strong" | "moderate" | "weak";
+  bench_context_quality: "none" | "low" | "medium" | "high";
+  has_draft: boolean;
+  ground_assessments: AppealStrengthGround[];
+  weak_evidence_paths: string[];
+  recommended_edits: string[];
+};
+
+export async function fetchAppealStrength(
+  matterId: string,
+  draftId?: string,
+): Promise<AppealStrengthReport> {
+  const qs = draftId ? `?draft_id=${encodeURIComponent(draftId)}` : "";
+  return apiRequest<AppealStrengthReport>(
+    `/api/matters/${matterId}/appeal-strength${qs}`,
+  );
+}
+
 // Strict Ledger #5 (BUG-013 in-app visibility, 2026-04-22):
 // per-matter reminder rows the matter cockpit Hearings tab shows
 // alongside each hearing. Mirrors the admin notifications data

@@ -508,6 +508,43 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
 
 ## 2026-04-24 Product-Scope Queue Additions
 
+- `MOD-TS-001-A` `Implemented` Appeal Strength Analyzer (closed
+  2026-04-25). Per-ground argument-completeness analysis on an
+  appeal_memorandum draft. Pure-read; no LLM call; deterministic.
+  Frame is **argument completeness, NOT outcome prediction** — the
+  no-favorability rule from the bench-aware drafting skill is enforced
+  structurally:
+  - `_FORBIDDEN_PATTERN` (word-boundary regex) gates EVERY string the
+    analyzer emits in `suggestions`, `weak_evidence_paths`,
+    `recommended_edits`. Forbidden tokens: win, lose, loss, winnable,
+    winnability, favourable, favorable, favour, favor, tendency,
+    tends to, usually grants, usually rules, probability, chance of
+    success, likely to succeed, predict, prediction, outcome.
+  - In-service `_check_phrase` raises AssertionError on any leak;
+    the structural unit test in `tests/test_appeal_strength.py
+    ::test_no_favorability_language_anywhere_in_output` scans the
+    full surface independently.
+  Service: `services/appeal_strength.py`
+    - parses numbered grounds from the draft body via regex
+    - per-ground citation coverage: supported / partial / uncited
+    - resolves inline citations against bench_strategy_context
+      authorities first, then a wider DB lookup
+    - tags authority strength: binding (SC) / peer (HC) /
+      persuasive (lower / tribunal / arbitration / advisory) / unknown
+    - rolls up to overall_strength: strong / moderate / weak
+    - emits actionable suggestions per ground ("add SC authority",
+      "drop the unsupported sub-proposition")
+  Route: `GET /api/matters/{matter_id}/appeal-strength?draft_id=...`
+  with cross-tenant 404; auth gated by the matters router.
+  Web: `AppealStrengthPanel` rendered alongside `BenchContextCard` on
+  the appeal-memorandum drafting flow. Per-ground rows with green/
+  amber/red tone, weak-evidence-paths section, recommended-edits list.
+  Tests: 8 backend unit + route + structural-no-favorability + 2
+  vitest cases (no-draft note + per-ground rendering with the same
+  no-favorability sweep at the rendered surface).
+  PRD: `MOD-TS-001-A` row added with journey/module/US/FT mapping;
+  US-018A added; FT-024B + FT-031B added.
+
 - `BAAD-001` `Implemented` Bench-aware appeal drafting wired end to end
   (closed 2026-04-25 across 4 commits + 1 doc closure).
   Slices shipped:

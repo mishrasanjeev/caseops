@@ -701,6 +701,94 @@ async def get_current_company_matter_bench_strategy_context(
     )
 
 
+# MOD-TS-001-A (Sprint P, 2026-04-25). Appeal Strength Analyzer.
+# Per-ground argument-completeness analysis. Frame is "argument
+# completeness", NOT outcome prediction. No win/lose/probability/
+# favourable/tendency language — enforced structurally in the service.
+class AppealStrengthAuthorityRefResponse(BaseModel):
+    citation: str
+    resolved_authority_id: str | None = None
+    title: str | None = None
+    forum_level: str | None = None
+    strength_label: str  # binding | peer | persuasive | unknown
+
+
+class AppealStrengthGroundResponse(BaseModel):
+    ordinal: int
+    summary: str
+    citation_coverage: str  # supported | partial | uncited
+    supporting_authorities: list[AppealStrengthAuthorityRefResponse]
+    bench_history_match_count: int
+    suggestions: list[str]
+
+
+class AppealStrengthReportResponse(BaseModel):
+    matter_id: str
+    draft_id: str | None = None
+    overall_strength: str  # strong | moderate | weak
+    bench_context_quality: str
+    has_draft: bool
+    ground_assessments: list[AppealStrengthGroundResponse]
+    weak_evidence_paths: list[str]
+    recommended_edits: list[str]
+
+
+@router.get(
+    "/{matter_id}/appeal-strength",
+    response_model=AppealStrengthReportResponse,
+    summary=(
+        "Per-ground argument-completeness analysis for an appeal "
+        "draft. Frame: argument completeness, not outcome prediction. "
+        "Strict no-favorability rule applies."
+    ),
+)
+async def get_current_company_matter_appeal_strength(
+    matter_id: str,
+    context: CurrentContext,
+    session: DbSession,
+    draft_id: str | None = None,
+) -> AppealStrengthReportResponse:
+    from caseops_api.services.appeal_strength import (
+        analyze_appeal_strength,
+    )
+
+    rep = analyze_appeal_strength(
+        session=session,
+        context=context,
+        matter_id=matter_id,
+        draft_id=draft_id,
+    )
+    return AppealStrengthReportResponse(
+        matter_id=rep.matter_id,
+        draft_id=rep.draft_id,
+        overall_strength=rep.overall_strength,
+        bench_context_quality=rep.bench_context_quality,
+        has_draft=rep.has_draft,
+        ground_assessments=[
+            AppealStrengthGroundResponse(
+                ordinal=g.ordinal,
+                summary=g.summary,
+                citation_coverage=g.citation_coverage,
+                supporting_authorities=[
+                    AppealStrengthAuthorityRefResponse(
+                        citation=ref.citation,
+                        resolved_authority_id=ref.resolved_authority_id,
+                        title=ref.title,
+                        forum_level=ref.forum_level,
+                        strength_label=ref.strength_label,
+                    )
+                    for ref in g.supporting_authorities
+                ],
+                bench_history_match_count=g.bench_history_match_count,
+                suggestions=list(g.suggestions),
+            )
+            for g in rep.ground_assessments
+        ],
+        weak_evidence_paths=list(rep.weak_evidence_paths),
+        recommended_edits=list(rep.recommended_edits),
+    )
+
+
 def _bench_suggestion_to_response(dc: BenchSuggestionDC) -> BenchMatchResponse:
     return BenchMatchResponse(
         court_id=dc.court_id,

@@ -1332,6 +1332,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matters/{matter_id}/appeal-strength": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Per-ground argument-completeness analysis for an appeal draft. Frame: argument completeness, not outcome prediction. Strict no-favorability rule applies. */
+        get: operations["get_current_company_matter_appeal_strength_api_matters__matter_id__appeal_strength_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matters/{matter_id}/attachments": {
         parameters: {
             query?: never;
@@ -2630,6 +2647,53 @@ export interface components {
             page: number;
             /** Quoted Text */
             quoted_text?: string | null;
+        };
+        /** AppealStrengthAuthorityRefResponse */
+        AppealStrengthAuthorityRefResponse: {
+            /** Citation */
+            citation: string;
+            /** Forum Level */
+            forum_level?: string | null;
+            /** Resolved Authority Id */
+            resolved_authority_id?: string | null;
+            /** Strength Label */
+            strength_label: string;
+            /** Title */
+            title?: string | null;
+        };
+        /** AppealStrengthGroundResponse */
+        AppealStrengthGroundResponse: {
+            /** Bench History Match Count */
+            bench_history_match_count: number;
+            /** Citation Coverage */
+            citation_coverage: string;
+            /** Ordinal */
+            ordinal: number;
+            /** Suggestions */
+            suggestions: string[];
+            /** Summary */
+            summary: string;
+            /** Supporting Authorities */
+            supporting_authorities: components["schemas"]["AppealStrengthAuthorityRefResponse"][];
+        };
+        /** AppealStrengthReportResponse */
+        AppealStrengthReportResponse: {
+            /** Bench Context Quality */
+            bench_context_quality: string;
+            /** Draft Id */
+            draft_id?: string | null;
+            /** Ground Assessments */
+            ground_assessments: components["schemas"]["AppealStrengthGroundResponse"][];
+            /** Has Draft */
+            has_draft: boolean;
+            /** Matter Id */
+            matter_id: string;
+            /** Overall Strength */
+            overall_strength: string;
+            /** Recommended Edits */
+            recommended_edits: string[];
+            /** Weak Evidence Paths */
+            weak_evidence_paths: string[];
         };
         /**
          * AuditExportAsyncRequest
@@ -10066,6 +10130,39 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_current_company_matter_appeal_strength_api_matters__matter_id__appeal_strength_get: {
+        parameters: {
+            query?: {
+                draft_id?: string | null;
+            };
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppealStrengthReportResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

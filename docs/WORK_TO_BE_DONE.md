@@ -12,6 +12,15 @@
 > Hari + Ram bug sheets, mobile-responsive proof, contract-extraction
 > success-path coverage, and the per-matter in-app reminder strip all
 > live in production at HEAD `a44ea31`.
+>
+> Enterprise-readiness and scale audits must also update
+> [`docs/STRICT_ENTERPRISE_GAP_TASKLIST.md`](./STRICT_ENTERPRISE_GAP_TASKLIST.md).
+> This file is a planning backlog, not closure evidence.
+>
+> The unified execution PRD for Claude work now lives at
+> [`docs/PRD_CLAUDE_CODE_2026-04-23.md`](./PRD_CLAUDE_CODE_2026-04-23.md).
+> Use that for merged product scope, journey detail, test mapping, and
+> source-data rules.
 
 ---
 
@@ -74,7 +83,23 @@ This document enumerates the work needed to close these gaps, in priority order,
 
 ### 1.2 Authority corpus — vector embedding status
 
-All ingested judgments have had every chunk embedded with **`BAAI/bge-small-en-v1.5`** padded to 1024 dimensions; every row is stored in Postgres `pgvector` with an HNSW cosine index. The same column accepts Voyage `voyage-3-law` and Gemini `text-embedding-005` without a schema change — a model swap is a re-embedding, not a re-ingestion (matter text is already persisted).
+Every chunk still lands in Postgres `pgvector` with an HNSW cosine index and a
+shared `vector(1024)` column, so a model change is a re-embedding pass, not a
+re-ingestion. However, the old **`BAAI/bge-small-en-v1.5`** baseline is no
+longer the production truth for CaseOps.
+
+**Current production standard (GCP, 2026-04-23):**
+
+- production embeddings use **Voyage `voyage-4-large`**
+- production-quality corpus cleanup and eval loops use **Anthropic-backed**
+  high-reliability normalization where required
+- production retrieval keeps reranking enabled where the retrieval path
+  supports it
+- no vector slice should be called production-ready below the **4.8+/5** corpus
+  quality bar
+
+`BAAI/bge-small-en-v1.5` remains relevant only as a local/dev or offline
+fallback. It should not be described as the current production embedding model.
 
 **Completed as of 2026-04-18** — 2 436 documents, 36 510 chunks, all embedded:
 
@@ -105,12 +130,19 @@ SC coverage by year (selection): 2014 ×53, 2016 ×13, 2018 ×15, 2019 ×15, 202
 
 Estimated total: ~475,000 documents / ~10 M chunks at current chunk size. Operator-run; not a session-sized task — budget ~500 GB S3 egress and 50–150 GPU-hours on a consumer GPU (or ~12 hours on FastEmbed-CPU per 10 k docs for the smallest model). CLI is already in place: `caseops-ingest-corpus --from-s3 --court hc --year 2015 --year 2016 ... --hc-courts delhi,bombay,karnataka,madras,telangana`, and `--court sc --year 2015 --year ...` for the SC tarballs. Disk is streamed through a soft cap of `CASEOPS_CORPUS_INGEST_MAX_WORKDIR_MB` (default 500 MB).
 
-**Quality tiers** (in descending retrieval quality, ascending cost):
+**Quality tiers** (in descending expected production usefulness, then cost):
 
-1. **Voyage `voyage-3-law`** — legal-specific, strongest retrieval. Paid API. Re-embed once (~$300–500 on the planned full corpus).
-2. **Google `gemini-embedding-001` / `text-embedding-005`** — strong general, pairs cleanly with Gemini LLMs. Free tier + paid.
-3. **`BAAI/bge-large-en-v1.5`** — free, local, better than current baseline. ~900 MB model.
-4. **`BAAI/bge-small-en-v1.5`** *(current)* — free, local, fast. Good enough for dev + demos.
+1. **Voyage `voyage-4-large`** — current production standard and default
+   enterprise-quality path.
+2. **Voyage `voyage-3-law`** — legal-tuned challenger. Keep as a benchmarked
+   option, not the default production claim unless it wins on measured quality
+   and cost.
+3. **Google `gemini-embedding-001` / `text-embedding-005`** — strong general
+   alternative where Gemini-aligned stacks are preferred.
+4. **`BAAI/bge-large-en-v1.5`** — free, local, stronger offline fallback than
+   `bge-small`.
+5. **`BAAI/bge-small-en-v1.5`** — free, local, fast; acceptable for dev,
+   smoke tests, and offline demos, but not the current production truth.
 
 A model swap is a one-shot `UPDATE … SET embedding_* = NULL` + re-embed pass. The corpus text stays put.
 
@@ -310,7 +342,7 @@ Without this, the PRD's central promise does not exist.
 
 - **Landed:**
   - Alembic `20260417_0003` enables pgvector on Postgres and adds `embedding_vector vector(1024)` on `authority_document_chunks` with a cosine HNSW index. SQLite tests fall back to a JSON column so the pipeline has a uniform shape.
-  - `services/embeddings.py` — provider Protocol + Mock (default, deterministic, offline) + FastEmbed (local, Apache-2.0, ~250 MB) + Voyage (`voyage-3-law`) + Gemini (`text-embedding-005`) adapters behind runtime imports. `CASEOPS_EMBEDDING_PROVIDER` / `MODEL` / `API_KEY` / `DIMENSIONS` config.
+  - `services/embeddings.py` — provider Protocol + Mock (default, deterministic, offline) + FastEmbed (local, Apache-2.0, ~250 MB) + Voyage (current default `voyage-4-large`, with model swaps still supported) + Gemini (`text-embedding-005`) adapters behind runtime imports. `CASEOPS_EMBEDDING_PROVIDER` / `MODEL` / `API_KEY` / `DIMENSIONS` config.
   - `services/corpus_ingest.py` + `caseops-ingest-corpus` CLI stream the public Indian HC and SC buckets (boto3 unsigned). Downloads a batch, ingests, deletes each PDF after its chunks land, enforces a soft disk cap (`CASEOPS_CORPUS_INGEST_MAX_WORKDIR_MB`, default 500 MB). Canonical-key dedup lets re-runs skip already-indexed documents.
   - `services/retrieval.py` accepts `query_vector`; when present and candidate chunks carry embeddings, blends cosine similarity with the existing lexical score (60/40 vector/lexical). Falls back cleanly to pure lexical when no embeddings exist yet.
   - `docker-compose.yml` Postgres runs `CREATE EXTENSION vector` on first boot via `infra/postgres/init/00-extensions.sql` and gains a healthcheck.
@@ -824,11 +856,15 @@ read-only surfaces (`/api/courts/{id}`, `/api/courts/judges/{id}`,
   - Guardrail: no favorability / outcome prediction surfaces. PRD
     §10.6 forbids "black-box favorability scoring".
 
-- **P2 — SC judge supplement (1 day).**
-  - One-off scrape of `sci.gov.in` judge roster → enrich `Judge`
-    rows with `joined_at`, `retired_at`, `designation_history`.
-  - No HC scraping in this phase (24 HCs, wildly heterogeneous
-    DOM; derive from our own corpus instead).
+- **P2 — SC judge supplement (DEFERRED 2026-04-25).**
+  - Originally: one-off scrape of `sci.gov.in` judge roster → enrich
+    `Judge` rows with `joined_at`, `retired_at`,
+    `designation_history`.
+  - Deferred because the prod corpus already covers SC decisions
+    deeply enough to drive judge profile + bench strategy context
+    without external scrape. The scrape would add tenure metadata
+    only; brittle DOM parsing for marginal value. Revisit if a real
+    use case (e.g. tenure-based filtering on the UI) emerges.
 
 - **P3 — case-to-court matching (1-2 weeks).**
   - Given `(matter.practice_area, matter.forum_level,
@@ -848,6 +884,23 @@ read-only surfaces (`/api/courts/{id}`, `/api/courts/judges/{id}`,
   - Implemented as a filter + scorer inside the existing retrieval
     path (`services/authorities.search_authority_catalog`) — no new
     top-level surface.
+
+- **P5 — bench-aware appeal drafting integration (queued 2026-04-24).**
+  - Queue ID: `BAAD-001`.
+  - Detailed task brief:
+    `docs/BENCH_AWARE_APPEAL_DRAFTING_TASKLIST_2026-04-24.md`.
+  - Current truth: judge profiles and bench-match exist, but appeal drafting
+    does not yet consume judge or bench history.
+  - Build an `appeal_memorandum` draft template, a tenant-safe
+    `GET /api/matters/{id}/bench-strategy-context` endpoint, and drafting
+    integration that injects only cited bench-history context into appeal
+    generation.
+  - Product line: evidence-backed framing only. No judge favorability scoring,
+    outcome prediction, reputation claims, or uncited "judge tendency" copy.
+  - Done when a lawyer can start an appeal draft from a matter, review the
+    assigned judge or likely bench's relevant prior judgments, generate with or
+    without bench context, and see citations plus context-quality warnings in
+    the draft review flow.
 
 External data posture: derive from our 17.5 k-doc corpus as primary;
 `sci.gov.in` as optional supplement for SC. Do not license Manupatra /

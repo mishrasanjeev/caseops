@@ -10,6 +10,7 @@ import type { FieldValues, Resolver } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
+import { AppealStrengthPanel } from "@/components/drafting/AppealStrengthPanel";
 import { BenchContextCard } from "@/components/drafting/BenchContextCard";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -274,7 +275,10 @@ function StepperInner({ matterId, template, suggestions, onSubmitted }: InnerPro
       </header>
 
       {template.template_type === "appeal_memorandum" && matterId ? (
-        <BenchContextCard matterId={matterId} />
+        <>
+          <BenchContextCard matterId={matterId} />
+          <AppealStrengthPanel matterId={matterId} />
+        </>
       ) : null}
 
       <StepperBreadcrumbs
