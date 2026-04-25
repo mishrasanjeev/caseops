@@ -55,6 +55,10 @@ export const matter = z.object({
   description: z.string().nullable().optional(),
   next_hearing_on: z.string().nullable().optional(),
   assignee_membership_id: z.string().nullable().optional(),
+  // Phase C-3c (MOD-TS-016, 2026-04-25). Per-matter outside-counsel
+  // cross-visibility flag. Defaults False on read (backend's DB
+  // default) so legacy matters without the column don't break.
+  oc_cross_visibility_enabled: z.boolean().optional().default(false),
   created_at: z.string(),
   updated_at: z.string().optional(),
 });

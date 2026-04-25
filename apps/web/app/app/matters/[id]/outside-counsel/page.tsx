@@ -42,6 +42,7 @@ import { apiErrorMessage } from "@/lib/api/config";
 import {
   createOutsideCounselAssignment,
   fetchOutsideCounselWorkspace,
+  setMatterOcCrossVisibility,
 } from "@/lib/api/endpoints";
 import { useCapability } from "@/lib/capabilities";
 import { useMatterWorkspace } from "@/lib/use-matter-workspace";
@@ -136,6 +137,14 @@ export default function PerMatterOutsideCounselPage() {
           value={formatMoney(totalSpend, currency)}
         />
       </section>
+
+      <CrossVisibilityCard
+        matterId={matterId}
+        canManage={canManage}
+        currentValue={
+          matterData?.matter.oc_cross_visibility_enabled ?? false
+        }
+      />
 
       <Card>
         <CardHeader>
@@ -424,4 +433,77 @@ function formatMoney(minor: number, currency = "INR"): string {
     currency,
     minimumFractionDigits: 0,
   }).format(minor / 100);
+}
+
+
+function CrossVisibilityCard({
+  matterId,
+  canManage,
+  currentValue,
+}: {
+  matterId: string;
+  canManage: boolean;
+  currentValue: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: (next: boolean) => setMatterOcCrossVisibility(matterId, next),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["matters", matterId, "workspace"],
+      });
+      toast.success("Cross-counsel visibility updated.");
+    },
+    onError: (err) => {
+      toast.error(apiErrorMessage(err, "Could not update visibility."));
+    },
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle as="h2" className="text-base">
+          Cross-counsel visibility
+        </CardTitle>
+        <CardDescription>
+          When OFF (default), each outside counsel sees only their own
+          work product, time entries, and invoice submissions on this
+          matter. Turn ON to let every OC on the matter see every other
+          OC&apos;s submissions.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="flex items-center justify-between gap-3 rounded-md border border-[var(--color-line)] px-3 py-2">
+          <div className="flex flex-col">
+            <span className="text-sm font-medium text-[var(--color-ink)]">
+              {currentValue ? "Cross-visibility ON" : "Cross-visibility OFF (default)"}
+            </span>
+            <span className="text-xs text-[var(--color-mute)]">
+              {currentValue
+                ? "Every OC on this matter sees every other OC's submissions."
+                : "Each OC sees only their own submissions."}
+            </span>
+          </div>
+          <label className="inline-flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={currentValue}
+              disabled={!canManage || mutation.isPending}
+              onChange={(e) => mutation.mutate(e.target.checked)}
+              data-testid="matter-oc-cross-visibility-toggle"
+              className="h-4 w-4"
+            />
+            <span className="text-sm text-[var(--color-ink-2)]">
+              {currentValue ? "On" : "Off"}
+            </span>
+          </label>
+        </div>
+        {!canManage ? (
+          <p className="mt-2 text-xs text-[var(--color-mute)]">
+            Only owners and admins can change this setting.
+          </p>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
 }

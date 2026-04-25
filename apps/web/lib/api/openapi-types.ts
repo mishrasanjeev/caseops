@@ -5737,6 +5737,11 @@ export interface components {
             matter_code: string;
             /** Next Hearing On */
             next_hearing_on: string | null;
+            /**
+             * Oc Cross Visibility Enabled
+             * @default false
+             */
+            oc_cross_visibility_enabled: boolean;
             /** Opposing Party */
             opposing_party: string | null;
             /** Practice Area */
@@ -5870,6 +5875,8 @@ export interface components {
             judge_name?: string | null;
             /** Next Hearing On */
             next_hearing_on?: string | null;
+            /** Oc Cross Visibility Enabled */
+            oc_cross_visibility_enabled?: boolean | null;
             /** Opposing Party */
             opposing_party?: string | null;
             /** Practice Area */

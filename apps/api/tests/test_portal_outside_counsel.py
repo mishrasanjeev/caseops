@@ -377,6 +377,87 @@ def test_revoking_grant_blocks_further_oc_calls(client: TestClient) -> None:
 # ---------- audit ----------
 
 
+def test_admin_can_toggle_oc_cross_visibility_via_matter_patch(
+    client: TestClient,
+) -> None:
+    """C-3c: workspace owner flips Matter.oc_cross_visibility_enabled
+    via the same PATCH /api/matters/{id} an internal user uses for
+    every other matter field. The OC list endpoints honour the new
+    value on the next request — proving the toggle is fully wired
+    end-to-end (not just persisted)."""
+    boot = _bootstrap(client, slug="c3c-toggle", email="c3c@firm.example")
+    owner_token = str(boot["access_token"])
+    matter_id = _seed_matter(boot["company"]["id"], code="C3C-TOGGLE-1")
+
+    # OC #1 uploads (default oc_cross_visibility_enabled=False).
+    _, debug1 = _invite_oc_portal_user(
+        client, owner_token, matter_id, email="oc1@toggle.example",
+    )
+    _verify_and_session(client, debug1)
+    pdf = b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\ntrailer<<>>\n%%EOF"
+    client.post(
+        f"/api/portal/oc/matters/{matter_id}/work-product",
+        files={"file": ("oc1.pdf", pdf, "application/pdf")},
+        headers=_portal_csrf_headers(client),
+    )
+
+    # OC #2 cannot see OC #1's upload yet (default iso).
+    client.cookies.clear()
+    _, debug2 = _invite_oc_portal_user(
+        client, owner_token, matter_id, email="oc2@toggle.example",
+    )
+    _verify_and_session(client, debug2)
+    before = client.get(
+        f"/api/portal/oc/matters/{matter_id}/work-product"
+    ).json()["items"]
+    assert before == []
+
+    # Owner flips the toggle via PATCH. Bearer-authed call — conftest
+    # strips cookies for this call but the portal cookies stay in the
+    # client jar so OC #2's next call re-uses the same session
+    # (magic-link tokens are single-use, so we cannot re-verify).
+    resp = client.patch(
+        f"/api/matters/{matter_id}",
+        headers=auth_headers(owner_token),
+        json={"oc_cross_visibility_enabled": True},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["oc_cross_visibility_enabled"] is True
+
+    # OC #2 (same session) now sees OC #1's upload.
+    after = client.get(
+        f"/api/portal/oc/matters/{matter_id}/work-product"
+    ).json()["items"]
+    assert len(after) == 1
+    assert after[0]["original_filename"] == "oc1.pdf"
+
+
+def test_matter_record_default_oc_cross_visibility_is_false(
+    client: TestClient,
+) -> None:
+    """A freshly-created matter must have oc_cross_visibility_enabled
+    default to False so OC isolation is the safe default."""
+    boot = _bootstrap(
+        client, slug="c3c-default", email="c3c-d@firm.example",
+    )
+    token = str(boot["access_token"])
+    resp = client.post(
+        "/api/matters/",
+        headers=auth_headers(token),
+        json={
+            "title": "Default-iso matter",
+            "matter_code": "C3C-DEF-1",
+            "client_name": "Default Client",
+            "opposing_party": "Default Opposition",
+            "status": "intake",
+            "practice_area": "commercial",
+            "forum_level": "high_court",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["oc_cross_visibility_enabled"] is False
+
+
 def test_oc_invoice_submit_writes_audit_row(client: TestClient) -> None:
     boot = _bootstrap(client, slug="c3-audit", email="c3-audit@firm.example")
     token = str(boot["access_token"])

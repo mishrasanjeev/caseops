@@ -12,6 +12,10 @@ export type WorkspaceMatter = {
   description?: string | null;
   next_hearing_on?: string | null;
   team_id?: string | null;
+  // Phase C-3c (MOD-TS-016, 2026-04-25). Default false — present on
+  // every fresh server but optional here so legacy cached responses
+  // without the field don't fail the type check.
+  oc_cross_visibility_enabled?: boolean;
 };
 
 export type WorkspaceHearing = {

@@ -105,6 +105,20 @@ export async function fetchMatter(matterId: string): Promise<Matter> {
   return matter.parse(data);
 }
 
+// Phase C-3c (MOD-TS-016, 2026-04-25): toggle the per-matter
+// outside-counsel cross-visibility flag. Backend gates on
+// matters:edit capability and writes an audit row.
+export async function setMatterOcCrossVisibility(
+  matterId: string,
+  enabled: boolean,
+): Promise<Matter> {
+  const data = await apiRequest<unknown>(`/api/matters/${matterId}`, {
+    method: "PATCH",
+    body: { oc_cross_visibility_enabled: enabled },
+  });
+  return matter.parse(data);
+}
+
 // Strict Ledger #5 (BUG-013 in-app visibility, 2026-04-22):
 // per-matter reminder rows the matter cockpit Hearings tab shows
 // alongside each hearing. Mirrors the admin notifications data

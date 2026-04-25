@@ -74,6 +74,12 @@ class MatterUpdateRequest(BaseModel):
     # Sprint 8c: optional team assignment. Pass null to detach; omit
     # the field to leave unchanged.
     team_id: str | None = None
+    # Phase C-3c (MOD-TS-016, 2026-04-25): per-matter cross-counsel
+    # visibility flag. When True, every outside-counsel portal user
+    # on this matter sees every other OC's submitted work product,
+    # invoices, and time entries. Default False — each OC sees only
+    # their own.
+    oc_cross_visibility_enabled: bool | None = None
 
 
 class MatterRecord(BaseModel):
@@ -124,6 +130,9 @@ class MatterRecord(BaseModel):
     next_hearing_on: date | None
     is_active: bool
     team_id: str | None = None
+    # Phase C-3c (MOD-TS-016, 2026-04-25). See MatterUpdateRequest for
+    # semantics. Read-side default mirrors the DB default (False).
+    oc_cross_visibility_enabled: bool = False
     created_at: datetime
     updated_at: datetime
 
