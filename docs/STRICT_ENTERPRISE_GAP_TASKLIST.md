@@ -105,14 +105,31 @@ Current verdict: `NO-GO` for eliminating manual testers today.
 
 Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
 
-- `AQ-001` `Partially implemented` Backend overall coverage is too low and a
-  fresh full coverage run did not complete locally within 15 minutes.
-  Evidence: existing `apps/api/coverage.json` shows `41.54%` line coverage and
-  `9.99%` branch coverage; full `pytest --cov=caseops_api` timed out after
-  904 seconds without producing `coverage-audit-2026-04-25.json`. Per-area
-  gates pass for 9 files only.
-  Close when: full backend coverage completes reliably in CI, artifacts are
-  uploaded, and ratcheting thresholds cover high-risk routes and services.
+- `AQ-001` `Partially implemented` Backend coverage runs reliably +
+  artifact uploaded; threshold ratchet is the remaining work
+  (revisited 2026-04-25).
+  Two corrections vs the original audit:
+  1. The "41.54% line / 9.99% branch" figure was a stale per-area
+     `coverage.json` artifact, not the full coverage run. Actual
+     full-suite **TOTAL coverage is 81%** (line) per a fresh local
+     run on 2026-04-25 — `779 passed, 11 skipped, 1643.85s` on
+     Windows; CI Linux baseline is `665.26s` (11m 5s) per the green
+     run on 6af7560.
+  2. The "904 s timeout" was an audit-script wrapper budget, not a
+     real hang. Nothing in the suite is wedged. Codex's wrapper
+     just needs a more generous timeout (1500 s for Linux CI parity,
+     1800-2400 s for Windows local).
+  Slowest 20 cases are all SETUP time (5-11 s each), driven by
+  conftest fixture cost re-running per test. Per-session or
+  per-class fixture scope would shave ~120-200 s — flagged for
+  follow-on but not stop-ship.
+  Remaining sub-items keep this `Partially implemented`: backend
+  coverage thresholds are not yet enforced (the CI step runs
+  `--cov` but does not gate on a regression floor — we only have
+  the per-area gates from `scripts/coverage_gate.py` covering 9
+  files, not the 81% total). Close when CI either fails-on-regression
+  for total coverage or the per-area gate is expanded across the
+  full surface.
 
 - `AQ-002` `Implemented` Frontend coverage gate is reliable + wired
   end-to-end into CI (closed 2026-04-25).
