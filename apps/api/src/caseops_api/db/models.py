@@ -2762,6 +2762,52 @@ class Judge(Base):
     )
 
 
+class JudgeAlias(Base):
+    """Slice D (MOD-TS-001-E, 2026-04-25) — alternate spellings for a
+    judge's name so the bench-name resolver can match
+    'Justice A.K. Sikri' to 'Justice Adarsh Kumar Sikri'. Replaces
+    the prior ILIKE-on-judges_json fragility.
+
+    alias_text is the human-friendly form; alias_normalised is
+    lowercase + punctuation-stripped + collapsed-whitespace for
+    O(1) lookup.
+    """
+
+    __tablename__ = "judge_aliases"
+    __table_args__ = (
+        UniqueConstraint(
+            "judge_id", "alias_normalised",
+            name="uq_judge_aliases_unique",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4()),
+    )
+    judge_id: Mapped[str] = mapped_column(
+        ForeignKey("judges.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    alias_text: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    alias_normalised: Mapped[str] = mapped_column(
+        String(255), nullable=False, index=True,
+    )
+    # One of: sci_gov_in, hc_scrape, manual, auto_extract.
+    source: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+
 class JudgeAppointment(Base):
     """Career history per judge — every court a judge has served on.
 
