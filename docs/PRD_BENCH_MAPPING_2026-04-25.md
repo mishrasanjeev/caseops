@@ -68,6 +68,36 @@ caseops-prd-execution skill apply. This PRD does **not** introduce:
 If a slice below appears to violate any of these rules, the slice is
 wrong and must be rewritten before merge.
 
+### 2.1 Advocate-bias selection IS in scope (per user memory)
+
+The user has explicitly asserted (memory
+`feedback_user_bias_in_recommendations.md`, 2026-04-20, reaffirmed
+2026-04-25 during this PRD's review):
+
+> *"We need to favor the users by giving them draft appeal or hearing
+> material with citations and proof based on bench/court they are
+> going to appear. Without favoring this is not possible to do."*
+
+Reconciliation with §2:
+
+| Pattern | Verdict | Why |
+|---|---|---|
+| Selecting authorities from the bench that **support** the user's grounds of appeal | ✅ allowed and required | This is what every advocate does. CaseOps is a tool for the user's side, not a neutral encyclopedia. |
+| Citing a precedent and explaining how it advances the user's case | ✅ allowed | Evidence-grounded, transparent, verifiable. |
+| Skipping authorities that hurt the user's case (no requirement to be balanced like Wikipedia) | ✅ allowed | Per the user-bias memory; the lawyer is responsible for adverse-authority duties to the court, not us. |
+| "This bench has held [supporting principle], cite: [judgment]" | ✅ allowed | Evidence-phrased, verifiable. |
+| "This bench grants 67% of bail applications" | ❌ forbidden | Favorability statistic — banned by bench-aware drafting rules and PRD §10.6. |
+| "This bench tends to be liberal on bail" | ❌ forbidden | Tendency claim without per-judgment citation. |
+| "You have a 70% chance of winning" | ❌ forbidden | Outcome prediction. |
+| Including the strongest cases from the bench AND quietly omitting the weakest | ✅ allowed | Citation selection is editorial; it's how advocates draft. |
+| Suppressing a citation we know goes against the user without a flag | ⚠️ contested | Better behaviour: tag adverse-authority hits as "Adverse — review before cite" rather than silently drop. Slice C MUST surface these so the lawyer makes the duty-to-court call. |
+
+The structural no-favorability test sweep stays in place — it scans
+for the forbidden token list (win, lose, favourable, tendency,
+probability, predict, outcome). Advocate-bias selection works WITHIN
+that constraint by choosing which evidence-phrased citations make it
+into the prompt, not by writing favorability copy.
+
 ---
 
 ## 3. Slices
@@ -369,27 +399,31 @@ This PRD is implemented when:
 
 ---
 
-## 6. Open questions for the user
+## 6. User answers (received 2026-04-25)
 
-Before implementation starts, please confirm:
-
-1. **Backfill source for HC career history.** Slice A backfills SC
-   from the existing `parent_high_court` JSON field. For HC judges
-   (Delhi today, others later), do we want me to scrape per-judge
-   profile pages now, or defer HC career history to when each HC
-   scraper lands?
-2. **Bench-resolution confidence floor.** Slice B's resolver leaves
-   a row unresolved when only a single common surname matches. Is
-   "initial + surname OR full name" the right floor, or should we
-   be stricter (e.g. require court-scope match AND initial overlap)?
-3. **Bench-specific cost ceiling.** Slice C extends the appeal-draft
-   prompt by ~5 authorities. ~20% per-draft cost bump. Acceptable,
-   or should we cap tighter?
-4. **Alias admin surface.** Slice D could ship without an admin UI
-   (just the table + backfill). Want the admin page in the same
-   slice or as a follow-up?
-5. **Rollout order.** A → B → C → D as written, or A + D first
-   (foundation), then B + C in a second pass?
+1. **Backfill source for HC career history.** **In parallel.** Scrape
+   per-judge profile pages on Delhi HC alongside the SC backfill,
+   not deferred. Other 5 HCs: when their sitting-judges scraper
+   lands, the per-judge enrichment runs in the same job.
+2. **Bench-resolution confidence floor.** **High quality.** Better
+   to leave a listing unresolved than to mismatch. Resolver requires
+   either (a) initial + surname AND court-scope match, or (b) full
+   name AND court-scope match. Single surname alone (even
+   court-scoped) is insufficient. Unmatched listings surface in an
+   ops dashboard, not silently auto-resolved.
+3. **Bench-specific cost ceiling.** **Claude's call.** Implementation
+   keeps the prompt addition tight (≤ 5 bench-specific authorities,
+   each ≤ 800 chars) and measures actual cost vs the court-scoped
+   baseline in the first 100 production drafts. If the per-draft
+   cost rises >25% over baseline, drop the cap to 3 authorities.
+4. **Alias admin surface.** **Same slice.** Slice D ships with both
+   the table + backfill AND the admin page (`/app/admin/judge-aliases`).
+5. **Rollout order.** **A + B + C + D in parallel.** Per the user's
+   "ship them all" intent. Implementation reality: A, B, D have
+   independent schemas/services and can land in parallel commits;
+   C depends on B (bench resolution) AND D (tolerant matcher), so
+   C lands after B + D's PRs merge. Net session sequence: A and D
+   in parallel → B → C.
 
 ---
 
@@ -419,10 +453,9 @@ Per `.claude/skills/caseops-prd-execution/SKILL.md`:
 
 | Reviewer | Date | Decision |
 |---|---|---|
-| (user) | _pending_ | _pending_ |
+| mishra.sanjeev@gmail.com | 2026-04-25 | **Approved** — implementation may proceed per §6 answers (A + D parallel → B → C). Advocate-bias selection per §2.1 is mandatory, not optional. |
 
-When approved: update
+Implementation kicks off immediately on Slices A + D. Will update
 `docs/PRD_CLAUDE_CODE_2026-04-23.md` §6 module table to add the four
-new MOD-TS-001-B/C/D/E rows with `Queued` status, then begin
-implementation per Slice A → ... order (or revised order from §6
-question 5).
+new MOD-TS-001-B/C/D/E rows with `In progress` status as each lands
+in main.
