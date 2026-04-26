@@ -271,6 +271,80 @@ def _send_via_sendgrid(
     )
 
 
+# MOD-TS-007 (2026-04-26) — SMS via Twilio. Gated by
+# ``CASEOPS_TWILIO_ENABLED=true`` so the default deployment never
+# burns money on a test SMS. Required env when enabled:
+#   CASEOPS_TWILIO_ACCOUNT_SID
+#   CASEOPS_TWILIO_AUTH_TOKEN
+#   CASEOPS_TWILIO_FROM_NUMBER
+#
+# Cost discipline: each SMS costs ~₹0.50–₹2.00 in India depending on
+# length + alphanumeric sender registration. The reminder worker still
+# respects the per-hearing/per-channel uniqueness constraint, so this
+# never doubles the bill on a retry.
+def _twilio_sms_configured() -> bool:
+    settings = get_settings()
+    return bool(
+        getattr(settings, "twilio_enabled", False)
+        and getattr(settings, "twilio_account_sid", None)
+        and getattr(settings, "twilio_auth_token", None)
+        and getattr(settings, "twilio_from_number", None)
+    )
+
+
+def _send_via_twilio_sms(
+    *, to_phone: str, body: str,
+) -> tuple[bool, str | None, str | None]:
+    """Return ``(success, provider_message_id, error)``.
+
+    Twilio's Messages API. Uses httpx directly + basic-auth rather
+    than the SDK to keep the install footprint small. Truncates body
+    at 1500 chars (Twilio caps at 1600 for concatenated SMS in India).
+    """
+    import httpx
+
+    settings = get_settings()
+    sid = settings.twilio_account_sid
+    token = settings.twilio_auth_token
+    from_number = settings.twilio_from_number
+    payload = {
+        "From": from_number,
+        "To": to_phone,
+        "Body": body[:1500],
+    }
+    response = httpx.post(
+        f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages.json",
+        auth=(sid, token),
+        data=payload,
+        timeout=20,
+    )
+    if response.status_code in (200, 201):
+        try:
+            msg_id = response.json().get("sid")
+        except Exception:  # noqa: BLE001
+            msg_id = None
+        return True, msg_id, None
+    return (
+        False,
+        None,
+        f"twilio {response.status_code}: {response.text[:200]}",
+    )
+
+
+def _whatsapp_configured() -> bool:
+    """WhatsApp via Meta Cloud API. Requires Meta-approved templates
+    so this stays a hard 'not configured' until both
+    ``CASEOPS_WHATSAPP_ENABLED=true`` and the per-deployment template
+    name + access token + phone-number-id env vars land."""
+    settings = get_settings()
+    return bool(
+        getattr(settings, "whatsapp_enabled", False)
+        and getattr(settings, "whatsapp_access_token", None)
+        and getattr(settings, "whatsapp_phone_number_id", None)
+        and getattr(settings, "whatsapp_template_name", None)
+    )
+
+
 def run_reminder_worker(
     session: Session,
     *,
@@ -312,7 +386,13 @@ def run_reminder_worker(
     due = [r for r in due_raw if _as_utc(r.scheduled_for) <= now]
 
     enabled = settings.hearing_reminders_enabled
+    # Per-channel provider status. The auto-mode "live?" decision uses
+    # email's status as the canonical signal (back-compat with the
+    # pre-multichannel behaviour); per-row dispatch checks the
+    # channel-specific provider before sending.
     provider_ok = _sendgrid_configured()
+    sms_provider_ok = _twilio_sms_configured()
+    whatsapp_provider_ok = _whatsapp_configured()
     if mode == "auto":
         effective_live = enabled and provider_ok
     elif mode == "dry_run":
@@ -333,19 +413,37 @@ def run_reminder_worker(
         "effective_live": effective_live,
         "enabled_flag": enabled,
         "provider_configured": provider_ok,
+        "sms_provider_configured": sms_provider_ok,
+        "whatsapp_provider_configured": whatsapp_provider_ok,
         "due_count": len(due),
         "sent": 0,
         "would_send": 0,
         "failed": 0,
         "skipped_missing_email": 0,
+        "skipped_missing_phone": 0,
+        "skipped_provider_disabled": 0,
     }
 
     for r in due:
+        # Channel-specific recipient validation. Email needs an email;
+        # SMS / WhatsApp need a phone. Missing-recipient is FAILED so
+        # the dashboard surfaces it (operator must add a phone before
+        # the worker can send).
         if r.channel == HearingReminderChannel.EMAIL and not r.recipient_email:
             r.status = HearingReminderStatus.FAILED
             r.last_error = "no recipient email on reminder row"
             r.updated_at = now
             report["skipped_missing_email"] += 1
+            continue
+        if r.channel in (
+            HearingReminderChannel.SMS, HearingReminderChannel.WHATSAPP,
+        ) and not r.recipient_phone:
+            r.status = HearingReminderStatus.FAILED
+            r.last_error = (
+                f"no recipient phone on reminder row (channel={r.channel})"
+            )
+            r.updated_at = now
+            report["skipped_missing_phone"] += 1
             continue
 
         hearing = session.get(MatterHearing, r.hearing_id)
@@ -369,9 +467,11 @@ def run_reminder_worker(
         if not effective_live:
             report["would_send"] += 1
             logger.info(
-                "hearing_reminders: would send id=%s to=%s subject=%r"
-                " (mode=%s enabled=%s provider_ok=%s)",
-                r.id, r.recipient_email, subject, mode, enabled, provider_ok,
+                "hearing_reminders: would send id=%s channel=%s to=%s "
+                "subject=%r (mode=%s enabled=%s provider_ok=%s)",
+                r.id, r.channel,
+                r.recipient_email or r.recipient_phone, subject, mode,
+                enabled, provider_ok,
             )
             # Leave status at QUEUED so live-flip later drains the
             # backlog. Update last_error so the dashboard shows
@@ -380,13 +480,61 @@ def run_reminder_worker(
             r.updated_at = now
             continue
 
-        success, msg_id, err = _send_via_sendgrid(
-            to_email=r.recipient_email or "",
-            subject=subject,
-            html=html,
-            plaintext=plaintext,
-        )
-        r.provider = "sendgrid"
+        # Channel-aware dispatch. Per-channel provider check happens
+        # here (not at the top of the loop) so EMAIL rows still send
+        # even if SMS/WhatsApp aren't wired — channels degrade
+        # independently.
+        if r.channel == HearingReminderChannel.EMAIL:
+            success, msg_id, err = _send_via_sendgrid(
+                to_email=r.recipient_email or "",
+                subject=subject,
+                html=html,
+                plaintext=plaintext,
+            )
+            r.provider = "sendgrid"
+        elif r.channel == HearingReminderChannel.SMS:
+            if not sms_provider_ok:
+                # SMS adapter disabled or unconfigured. Don't burn
+                # money, don't fail the row — leave QUEUED so a
+                # later live-flip drains the backlog.
+                report["skipped_provider_disabled"] += 1
+                r.last_error = (
+                    "SMS provider disabled (set CASEOPS_TWILIO_ENABLED=true "
+                    "and provide CASEOPS_TWILIO_ACCOUNT_SID + "
+                    "CASEOPS_TWILIO_AUTH_TOKEN + CASEOPS_TWILIO_FROM_NUMBER)"
+                )
+                r.updated_at = now
+                continue
+            success, msg_id, err = _send_via_twilio_sms(
+                to_phone=r.recipient_phone or "",
+                body=plaintext,
+            )
+            r.provider = "twilio"
+        elif r.channel == HearingReminderChannel.WHATSAPP:
+            # WhatsApp Cloud API requires Meta-approved templates +
+            # tenant-level template name. Stub stays "not configured"
+            # until the deployment opts in. Leave QUEUED so the
+            # operator can flip the env var later without losing rows.
+            report["skipped_provider_disabled"] += 1
+            r.last_error = (
+                "WhatsApp provider disabled (set CASEOPS_WHATSAPP_ENABLED=true "
+                "with CASEOPS_WHATSAPP_ACCESS_TOKEN + "
+                "CASEOPS_WHATSAPP_PHONE_NUMBER_ID + "
+                "CASEOPS_WHATSAPP_TEMPLATE_NAME after Meta template approval)"
+            )
+            r.updated_at = now
+            continue
+        else:
+            # IN_APP or unknown channel — handled by the in-app
+            # reminders surface, not this worker.
+            report["skipped_provider_disabled"] += 1
+            r.last_error = (
+                f"channel {r.channel!r} is not handled by the email/SMS "
+                "worker"
+            )
+            r.updated_at = now
+            continue
+
         r.updated_at = now
         if success:
             r.status = HearingReminderStatus.SENT

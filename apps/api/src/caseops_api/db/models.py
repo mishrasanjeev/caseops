@@ -696,6 +696,11 @@ class MatterHearing(Base):
 class HearingReminderChannel(StrEnum):
     EMAIL = "email"
     SMS = "sms"
+    # MOD-TS-007 (2026-04-26) — WhatsApp via Meta Cloud API. Adapter
+    # returns "provider not configured" until CASEOPS_WHATSAPP_ENABLED=true
+    # AND template approval is in place. Solo-lawyer pitch surfaces it
+    # as a roadmap channel; today only EMAIL + SMS are wired.
+    WHATSAPP = "whatsapp"
     IN_APP = "in_app"
 
 

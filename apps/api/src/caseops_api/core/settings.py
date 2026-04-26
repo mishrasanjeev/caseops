@@ -101,7 +101,30 @@ class Settings(BaseSettings):
     # doesn't verify — keeping an attacker from forging "delivered"
     # events against our tenants.
     sendgrid_webhook_public_key: str | None = Field(default=None)
-    # Twilio / MSG91 come in a follow-up; keep the keys optional.
+
+    # MOD-TS-007 (2026-04-26) — SMS via Twilio. Disabled by default
+    # so a fresh deployment never burns money on a test SMS. Flip
+    # CASEOPS_TWILIO_ENABLED=true and provide all three other env
+    # vars to wire the channel; the worker still respects the
+    # per-hearing/per-channel uniqueness constraint so retries don't
+    # duplicate billable messages.
+    twilio_enabled: bool = Field(default=False)
+    twilio_account_sid: str | None = Field(default=None)
+    twilio_auth_token: str | None = Field(default=None)
+    twilio_from_number: str | None = Field(default=None)
+
+    # MOD-TS-007 (2026-04-26) — WhatsApp via Meta Cloud API. Disabled
+    # by default; needs Meta-approved templates per deployment so
+    # the integration can send transactional reminders without
+    # 24-hour-window restrictions. Flip CASEOPS_WHATSAPP_ENABLED=true
+    # plus all three other env vars to wire it.
+    whatsapp_enabled: bool = Field(default=False)
+    whatsapp_access_token: str | None = Field(default=None)
+    whatsapp_phone_number_id: str | None = Field(default=None)
+    whatsapp_template_name: str | None = Field(default=None)
+    # MSG91 / other Indian SMS providers can land via the same
+    # adapter pattern — Twilio first because the developer-experience
+    # is well-documented and the SDK isn't required (basic-auth POST).
     msg91_auth_key: str | None = Field(default=None)
     msg91_sender_id: str | None = Field(default=None)
 
