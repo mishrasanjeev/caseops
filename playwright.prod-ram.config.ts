@@ -12,10 +12,12 @@ const candidates = [
 ];
 const browserExecutablePath = candidates.find((c) => fs.existsSync(c));
 
+const RAM_STORAGE_STATE = "tests/e2e/.auth/ram-storage.json";
+
 export default defineConfig({
   testDir: "tests/e2e",
-  testMatch: /ram-batch-2026-04-26-prod\.spec\.ts$/,
-  timeout: 60_000,
+  testMatch: /(ram-batch-2026-04-26-prod\.spec\.ts|ram-auth\.setup\.ts)$/,
+  timeout: 120_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,
   workers: 1,
@@ -28,9 +30,21 @@ export default defineConfig({
   },
   projects: [
     {
+      name: "setup",
+      testMatch: /ram-auth\.setup\.ts$/,
+      use: {
+        launchOptions: browserExecutablePath
+          ? { executablePath: browserExecutablePath }
+          : undefined,
+      },
+    },
+    {
       name: "prod-chromium",
+      dependencies: ["setup"],
+      testMatch: /ram-batch-2026-04-26-prod\.spec\.ts$/,
       use: {
         ...devices["Desktop Chrome"],
+        storageState: RAM_STORAGE_STATE,
         launchOptions: browserExecutablePath
           ? { executablePath: browserExecutablePath }
           : undefined,

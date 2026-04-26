@@ -72,6 +72,105 @@ not upgrade the verdict.
 - "Fixed" before a Playwright probe (or equivalent end-user-visible workflow
   run) on the **deployed production surface** PASSES with real credentials.
 
+## Brutal Honest Testing — No Manual QA Dependence (added 2026-04-26 PM)
+
+**This rule binds every CaseOps bug fix, feature ship, refactor, and
+release sign-off. It is non-negotiable.**
+
+The repo MUST NOT depend on a human (Ram, Hari, Mishra, anyone) clicking
+through a workflow to discover whether it's broken. Every shipped change
+needs automated end-user-visible proof against the **deployed
+production surface**, written by the agent that shipped the change,
+committed to `tests/e2e/`, and runnable on demand.
+
+### What "brutal honest testing" means
+
+1. **End-user verification, not developer-internal verification.** A
+   curl that returns 422 in 83 seconds is NOT "fixed" if a lawyer in
+   the UI sees a broken page. Type-checks, vitest with mocked wrappers,
+   build success, deploy-script exit 0, job-log "updated=N" lines —
+   none of these are end-user proof. They are necessary but not
+   sufficient.
+
+2. **Per-deliverable verdict honesty.** Every bug-fix verdict in any
+   deliverable (spreadsheet, status update, commit message, memory
+   entry, release sign-off, hand-off to user) MUST be paired with the
+   exact proof artifact that satisfied the verdict. Allowed phrasing:
+   "Properly fixed (tests/e2e/X.spec.ts:Y PASSED on commit SHA Z)".
+   Forbidden phrasing: "Properly fixed", "Looks good", "Should work
+   now", "Tests pass" without naming WHICH tests against WHICH
+   environment.
+
+3. **Skipped is not verified.** A test that `test.skip()`s due to
+   capability gates, missing tenant data, or environment block is at
+   most `Inconclusive`. Document the skip reason and lower confidence
+   IN THE DELIVERABLE. Do not silently upgrade.
+
+4. **Sister-test attribution.** When a base-primitive fix is verified
+   on a sister surface but not the originally-reported one, the verdict
+   names the sister surface explicitly: "Properly fixed at the base
+   primitive (verified via tests/e2e/X.spec.ts:sister-test-Y)". Do not
+   imply the original surface itself was probed.
+
+5. **No "done by user" sign-off.** It is forbidden to write "user can
+   verify in UI" or "should work — please confirm" as the closure.
+   The agent that shipped the change is responsible for proving it
+   works before the deliverable goes to the user. If the agent cannot
+   prove it (capability-blocked, env-blocked, provider-blocked), the
+   verdict is `Inconclusive` and the deliverable says so.
+
+### Mandatory pre-deliverable checklist
+
+Before any deliverable goes to the user with a "fixed" claim, the
+agent MUST be able to answer YES to all of these:
+
+- [ ] Is there a Playwright spec in `tests/e2e/` that exercises the
+      reported workflow on the deployed surface, signed in as a
+      representative user?
+- [ ] Did that spec PASS on the deployed commit SHA?
+- [ ] Is the spec committed (not one-shot manual)?
+- [ ] If the spec skipped, is the verdict downgraded to `Inconclusive`
+      with the skip reason recorded?
+- [ ] Is the verdict in the deliverable paired with the exact proof
+      artifact (spec path + line + commit)?
+
+If any answer is NO, the verdict is at most `Inconclusive`.
+
+### What about new features (not bug fixes)?
+
+The same rule binds new feature work. A shipped feature without a
+prod-Playwright spec exercising the user-visible workflow is at most
+`Inconclusive`, never `Done`. The feature flag, the migration, the
+backend route, the frontend page — all four can be green individually
+while the user-visible workflow is broken at an integration seam.
+
+### What about backend-only / job-log-passing changes?
+
+Backend job changes (seed jobs, migrations, ingest scripts) often
+"prove themselves" via job logs (`updated=N`, exit 0). That's
+necessary but NOT sufficient. The test:
+
+- Does the change have a user-facing payoff? (e.g., seed-statutes →
+  lawyers see hand-curated section text)
+- If YES, the user-facing payoff MUST be probed in prod. Otherwise the
+  verdict is `Inconclusive` for the user-facing payoff, even if the
+  backend job ran cleanly.
+
+### Anchor incident (2026-04-26 PM)
+
+I shipped 7+ bug fixes today and the statute-completeness loop, then
+told the user "all done". The user replied: "Have you done honestly
+brutal testing?" Brutal audit:
+- 3 bugs Playwright-verified on prod (PASSED): BUG-017, BUG-020, BUG-022
+- 1 bug verified via sister-primitive only: BUG-018 (skipped on Ram's tenant)
+- 1 bug verified by curl-not-504: BUG-015 (no end-user workflow probe)
+- 3 bugs vitest-mocks-only: BUG-016, BUG-019, BUG-021
+- 1 backend loop verified by job-log only: statute completeness
+- 0 of these were paired with the exact proof artifact in the original
+  deliverable
+
+This rule exists because that pattern is unacceptable.
+
 ## Playwright-on-Prod Verification Rule (added 2026-04-26)
 
 **Mandatory before marking any bug "Properly fixed" in any deliverable**
