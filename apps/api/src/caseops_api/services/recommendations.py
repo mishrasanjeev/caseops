@@ -571,6 +571,19 @@ def generate_recommendation(
     _stage("validate_type")
     matter = _load_matter(session, context=context, matter_id=matter_id)
     _stage("load_matter")
+    # BUG-015 deep dive: prior reproductions showed _gather_authorities
+    # hangs for 5+ minutes under heavy concurrent corpus INSERT load
+    # (citation extraction + EN sweep TITLES both writing
+    # authority_document_chunks rows, contending with the HNSW vector
+    # query). Apply a per-statement timeout so retrieval fails fast
+    # with an actionable 503 instead of consuming Cloud Run's 300s
+    # request budget. Postgres SET LOCAL only affects this transaction.
+    from sqlalchemy import text as _sa_text
+    try:
+        session.execute(_sa_text("SET LOCAL statement_timeout = '60000'"))
+    except Exception:
+        # SQLite tests etc. — no-op
+        pass
     retrieved = _gather_authorities(
         session,
         query=_build_retrieval_query(matter, rec_type),
