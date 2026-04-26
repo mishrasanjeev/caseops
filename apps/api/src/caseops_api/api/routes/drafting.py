@@ -35,6 +35,7 @@ from caseops_api.services.drafting_suggestions import (
     get_template_suggestions,
 )
 from caseops_api.services.identity import SessionContext
+from caseops_api.services.template_recommender import recommend_templates
 
 router = APIRouter()
 CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
@@ -50,6 +51,22 @@ class DraftTemplateSummary(BaseModel):
 
 class DraftTemplatesListResponse(BaseModel):
     templates: list[DraftTemplateSummary]
+
+
+class TemplateRecommendationResponse(BaseModel):
+    """Format-to-forum recommendation surfaced on /app/matters/{id}/
+    drafts/new above the catch-all template grid (PRD §16.3
+    strategic differentiation)."""
+
+    template_type: str
+    relevance: str  # 'primary' | 'secondary'
+    reason: str
+
+
+class TemplateRecommendationsResponse(BaseModel):
+    forum_level: str
+    practice_area: str | None
+    recommendations: list[TemplateRecommendationResponse]
 
 
 @router.get(
@@ -78,6 +95,43 @@ async def list_drafting_templates(
             )
         )
     return DraftTemplatesListResponse(templates=summaries)
+
+
+# Format-to-forum template recommender (PRD §16.3, 2026-04-26).
+# Pure-function wrapper over services/template_recommender; no DB
+# read, no LLM call. Caller passes (forum_level, practice_area)
+# from the matter cockpit; UI ranks the response above the catch-all
+# template grid.
+@router.get(
+    "/templates/recommend",
+    response_model=TemplateRecommendationsResponse,
+    summary=(
+        "Format-to-forum template recommendations. Pure-function; "
+        "no LLM. Used by /app/matters/{id}/drafts/new to highlight "
+        "1-2 primary templates above the catch-all grid."
+    ),
+)
+async def get_template_recommendations(
+    forum_level: str,
+    context: CurrentContext,
+    practice_area: str | None = None,
+) -> TemplateRecommendationsResponse:
+    _ = context  # auth-gated; matrix is global (no per-tenant scope)
+    recs = recommend_templates(
+        forum_level=forum_level, practice_area=practice_area,
+    )
+    return TemplateRecommendationsResponse(
+        forum_level=forum_level,
+        practice_area=practice_area,
+        recommendations=[
+            TemplateRecommendationResponse(
+                template_type=r.template_type.value,
+                relevance=r.relevance,
+                reason=r.reason,
+            )
+            for r in recs
+        ],
+    )
 
 
 @router.get(

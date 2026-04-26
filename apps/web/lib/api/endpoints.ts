@@ -1897,6 +1897,32 @@ export async function listDraftingTemplates(): Promise<DraftTemplateSummary[]> {
   return data.templates;
 }
 
+// Format-to-forum recommender (PRD §16.3, 2026-04-26).
+export type TemplateRecommendation = {
+  template_type: string;
+  relevance: "primary" | "secondary";
+  reason: string;
+};
+
+export type TemplateRecommendationsResponse = {
+  forum_level: string;
+  practice_area: string | null;
+  recommendations: TemplateRecommendation[];
+};
+
+export async function fetchTemplateRecommendations(args: {
+  forum_level: string;
+  practice_area?: string | null;
+}): Promise<TemplateRecommendationsResponse> {
+  const params = new URLSearchParams({ forum_level: args.forum_level });
+  if (args.practice_area) {
+    params.set("practice_area", args.practice_area);
+  }
+  return apiRequest<TemplateRecommendationsResponse>(
+    `/api/drafting/templates/recommend?${params.toString()}`,
+  );
+}
+
 export async function fetchDraftingTemplate(
   templateType: string,
 ): Promise<DraftTemplateSchema> {

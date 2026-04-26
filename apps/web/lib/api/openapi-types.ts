@@ -1085,6 +1085,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/drafting/templates/recommend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Format-to-forum template recommendations. Pure-function; no LLM. Used by /app/matters/{id}/drafts/new to highlight 1-2 primary templates above the catch-all grid. */
+        get: operations["get_template_recommendations_api_drafting_templates_recommend_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/drafting/templates/{template_type}": {
         parameters: {
             query?: never;
@@ -7564,6 +7581,29 @@ export interface components {
             /** Name */
             name?: string | null;
         };
+        /**
+         * TemplateRecommendationResponse
+         * @description Format-to-forum recommendation surfaced on /app/matters/{id}/
+         *     drafts/new above the catch-all template grid (PRD §16.3
+         *     strategic differentiation).
+         */
+        TemplateRecommendationResponse: {
+            /** Reason */
+            reason: string;
+            /** Relevance */
+            relevance: string;
+            /** Template Type */
+            template_type: string;
+        };
+        /** TemplateRecommendationsResponse */
+        TemplateRecommendationsResponse: {
+            /** Forum Level */
+            forum_level: string;
+            /** Practice Area */
+            practice_area: string | null;
+            /** Recommendations */
+            recommendations: components["schemas"]["TemplateRecommendationResponse"][];
+        };
         /** TemplateSuggestionsResponse */
         TemplateSuggestionsResponse: {
             /** Fields */
@@ -9918,6 +9958,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DraftTemplatesListResponse"];
+                };
+            };
+        };
+    };
+    get_template_recommendations_api_drafting_templates_recommend_get: {
+        parameters: {
+            query: {
+                forum_level: string;
+                practice_area?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemplateRecommendationsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
