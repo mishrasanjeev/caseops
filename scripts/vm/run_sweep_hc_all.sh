@@ -84,9 +84,16 @@ for court in "${HC_LIST[@]}"; do
       log "SKIP $label (already rated >=$FLOOR in prior run)"
       continue
     fi
+    # --limit 20000 (vs prior 2000): the prior cap meant we re-listed
+    # the SAME first 2000 S3 keys per (court, year) every run. With
+    # 9,224 HC docs already in DB across 24 HCs × 16 years, most
+    # (court, year) buckets have docs already. The 2000-cap halted
+    # growth long before reaching un-ingested docs. 20000 lets the
+    # ingester actually walk the full year's listing and discover
+    # genuinely new docs.
     run_bucket_with_floor_halt "$label" \
       --from-s3 --court hc --hc-courts "$court" --year "$year" \
-      --min-chars 4000 --limit 2000 --language-suffix EN
+      --min-chars 4000 --limit 20000 --language-suffix EN
   done
 done
 
