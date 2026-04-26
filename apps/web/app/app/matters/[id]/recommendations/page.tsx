@@ -71,6 +71,16 @@ export default function MatterRecommendationsPage() {
   const matterId = params.id;
   const queryClient = useQueryClient();
   const [pendingType, setPendingType] = useState<RecommendationType | null>(null);
+  // BUG-016 (Ram 2026-04-26): the backend returns actionable 422 detail
+  // when citation grounding fails ("Add more detail to the matter
+  // description ... or check corpus coverage before retrying.") but
+  // the prior UI only flashed it as a 5-second toast. Persist the last
+  // failure as a Card on the page so the user can re-read the
+  // guidance and act on it.
+  const [lastError, setLastError] = useState<{
+    type: RecommendationType;
+    message: string;
+  } | null>(null);
 
   const query = useQuery({
     queryKey: ["matters", matterId, "recommendations"],
@@ -81,25 +91,29 @@ export default function MatterRecommendationsPage() {
   const generateMutation = useMutation({
     mutationFn: (type: RecommendationType) =>
       generateRecommendation({ matterId, type }),
-    onMutate: (type) => setPendingType(type),
+    onMutate: (type) => {
+      setPendingType(type);
+      setLastError(null); // clear stale guidance when retrying
+    },
     onSettled: () => setPendingType(null),
     onSuccess: async () => {
       await queryClient.invalidateQueries({
         queryKey: ["matters", matterId, "recommendations"],
       });
+      setLastError(null);
       toast.success("Recommendation ready for review");
     },
-    onError: (err) => {
+    onError: (err, type) => {
       // BUG-012 Hari 2026-04-21: previously we hard-coded "Refused on
       // purpose" for EVERY 422 and discarded the backend's actionable
-      // detail. The backend distinguishes (a) retrieval returned zero
-      // authorities — widen the matter description or expand the
-      // corpus — from (b) the model produced citations but none were
-      // verifiable. Surface that text so the user knows which lever
-      // to pull.
-      toast.error(
-        apiErrorMessage(err, "Could not generate a recommendation."),
+      // detail. Surface the backend's actionable text.
+      // BUG-016 Ram 2026-04-26: also persist as a Card (below) so the
+      // guidance doesn't disappear with the toast.
+      const message = apiErrorMessage(
+        err, "Could not generate a recommendation.",
       );
+      setLastError({ type, message });
+      toast.error(message);
     },
   });
 
@@ -122,6 +136,40 @@ export default function MatterRecommendationsPage() {
 
   return (
     <div className="flex flex-col gap-5">
+      {lastError ? (
+        <Card
+          className="border-amber-300 bg-amber-50"
+          data-testid="recommendation-last-error"
+        >
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base text-amber-900">
+              <XCircle className="h-4 w-4" aria-hidden />
+              {TYPE_LABEL[lastError.type]} generation needs more grounding
+            </CardTitle>
+            <CardDescription className="text-amber-800">
+              {lastError.message}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              data-testid="recommendation-retry-from-banner"
+              onClick={() => generateMutation.mutate(lastError.type)}
+              disabled={generateMutation.isPending}
+            >
+              Try again
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setLastError(null)}
+              data-testid="recommendation-dismiss-banner"
+            >
+              Dismiss
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
       <Card>
         <CardHeader className="flex-row items-start justify-between gap-4">
           <div>

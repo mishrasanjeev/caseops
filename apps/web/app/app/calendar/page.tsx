@@ -253,6 +253,39 @@ export default function CalendarPage() {
         />
       ) : null}
 
+      {/* BUG-019 (Ram 2026-04-26): when the tenant has zero events
+          across the visible window the per-cell "No events" hints
+          read as broken UI. Render an explicit, actionable banner
+          ABOVE the grid so a fresh tenant understands the calendar
+          will populate from hearings + tasks + deadlines on its
+          matters. The grid still renders below so the user sees the
+          date layout immediately and confirms the calendar is alive. */}
+      {!query.isPending && !query.isError && (query.data?.events ?? []).length === 0 ? (
+        <div
+          className="flex flex-col gap-2 rounded-[var(--radius-md)] border border-[var(--color-line)] bg-[var(--color-bg-2)] px-4 py-3 text-sm text-[var(--color-ink-2)]"
+          data-testid="calendar-empty-state"
+        >
+          <div className="font-medium text-[var(--color-ink)]">
+            No events on the calendar yet
+          </div>
+          <div className="text-xs text-[var(--color-mute)]">
+            The calendar populates from hearings, tasks, and deadlines
+            attached to your matters. Open a matter to schedule a
+            hearing or set a deadline — it will appear here within
+            seconds.
+          </div>
+          <div>
+            <Link
+              href="/app/matters"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--color-brand-700)] underline-offset-4 hover:underline"
+            >
+              Open Matters
+              <ChevronRight className="h-3 w-3" aria-hidden />
+            </Link>
+          </div>
+        </div>
+      ) : null}
+
       {view === "month" ? (
         <MonthView
           monthStart={startOfMonth(cursor)}

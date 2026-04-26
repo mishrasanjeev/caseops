@@ -347,6 +347,36 @@ export default function ResearchPage() {
   );
 }
 
+/**
+ * BUG-021 (Ram 2026-04-26): detect snippets where OCR has degraded
+ * to mojibake. Heuristics:
+ *  - high % of replacement chars (U+FFFD)
+ *  - high % of control / non-printable / box-drawing chars
+ *  - very short single-letter density (broken-ligature OCR pattern)
+ * Tuned conservatively — false positives are worse than false
+ * negatives because we hide the snippet entirely.
+ */
+function isGarbledSnippet(text: string | null | undefined): boolean {
+  if (!text) return false;
+  if (text.length < 40) return false;
+  // Replacement char (U+FFFD) is an unambiguous OCR/decoding failure.
+  const replacementChars = (text.match(/\uFFFD/g) ?? []).length;
+  if (replacementChars / text.length > 0.02) return true;
+  // Box-drawing / private-use / weird-symbol density.
+  const oddChars =
+    (text.match(/[\u2500-\u259F\uE000-\uF8FF\u2630-\u2BFF]/g) ?? []).length;
+  if (oddChars / text.length > 0.05) return true;
+  // Single-letter density: when broken-ligature OCR fragments words
+  // into individual letters separated by spaces (e.g. "T h e c o u r t").
+  // Count tokens of length 1 vs total tokens.
+  const tokens = text.split(/\s+/).filter(Boolean);
+  if (tokens.length >= 20) {
+    const singletons = tokens.filter((t) => t.length === 1).length;
+    if (singletons / tokens.length > 0.4) return true;
+  }
+  return false;
+}
+
 function AuthorityCard({
   result,
   saved,
@@ -389,9 +419,27 @@ function AuthorityCard({
               {result.summary}
             </p>
           ) : null}
-          <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-[var(--color-ink-2)]">
-            {result.snippet}
-          </p>
+          {/* BUG-021 (Ram 2026-04-26): older HC PDFs in our corpus
+              have low-quality OCR producing mojibake (replacement
+              chars, control bytes, mixed-script garbage). Rendering
+              raw makes the result look broken. Detect garbled
+              snippets and render an actionable placeholder instead.
+              The corpus-side fix (rapidocr re-ingest) is queued
+              separately. */}
+          {isGarbledSnippet(result.snippet) ? (
+            <p
+              className="mt-2 rounded-[var(--radius-md)] border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"
+              data-testid="research-result-garbled"
+            >
+              The source PDF text isn&apos;t legible enough to preview
+              here (low-quality OCR on the original). Open the source
+              link below to read the authoritative text.
+            </p>
+          ) : (
+            <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-[var(--color-ink-2)]">
+              {result.snippet}
+            </p>
+          )}
           {result.matched_terms.length > 0 ? (
             <div className="mt-2 flex flex-wrap gap-1">
               {result.matched_terms.slice(0, 8).map((term) => (
