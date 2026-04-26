@@ -96,6 +96,57 @@ test.describe("Ram batch 2026-04-26 — prod verification of c58305b fixes", () 
   });
 
 
+  test("BUG-015 (REOPEN, Critical): POST /api/matters/{id}/recommendations does NOT 504", async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(240_000); // LLM call takes 30-60s warm; allow headroom
+    await signIn(page);
+    const matterIds = await allMatterIds(page);
+    if (matterIds.length === 0) {
+      test.skip(true, "Tenant has no matters via API.");
+      return;
+    }
+    // Use the matter most likely to succeed end-to-end (Salman Khan
+    // has a rich description that gives retrieval enough to ground on).
+    const matterId =
+      matterIds.find((m) => m === "9fcf975a-3dbc-482d-9d4a-8f196916bcc4") ??
+      matterIds[0];
+
+    const cookies = await page.context().cookies();
+    const cookieHeader = cookies
+      .filter((c) => c.domain.includes("caseops.ai"))
+      .map((c) => `${c.name}=${c.value}`)
+      .join("; ");
+    const csrfCookie = cookies.find((c) => c.name === "caseops_csrf");
+    const headers: Record<string, string> = {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      Cookie: cookieHeader,
+    };
+    if (csrfCookie) headers["X-CSRF-Token"] = csrfCookie.value;
+
+    const resp = await request.post(
+      `${PROD_API_BASE_URL}/api/matters/${matterId}/recommendations`,
+      {
+        headers,
+        data: { type: "authority" },
+        timeout: 200_000,
+      },
+    );
+    const status = resp.status();
+    // The bug was 504 at exactly 300s. Any non-504 outcome means the
+    // bounded-timeout fix is working. We tolerate:
+    //   200/201 — generation succeeded
+    //   422 — citation grounding rejected (BUG-016 path; separate)
+    //   429 — rate-limited (also success: not a hang)
+    //   502 — Anthropic upstream failure surfaced as 502 (also success:
+    //         not a hang)
+    expect.soft(status).not.toBe(504);
+    expect.soft(status).not.toBe(0); // 0 = no response (curl HTTP 000)
+    expect([200, 201, 422, 429, 502]).toContain(status);
+  });
+
   test("BUG-022: Topbar dropdown does NOT render Profile / Workspace settings placeholders", async ({
     page,
   }) => {
