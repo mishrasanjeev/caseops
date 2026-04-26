@@ -137,10 +137,17 @@ def _persist_alias(session, judge_id: str, alias_text: str) -> None:
         return
     session.execute(
         text(
-            "INSERT INTO judge_aliases (id, judge_id, alias_text, alias_normalised, created_at) "
-            "VALUES (:id, :j, :a, :n, NOW()) ON CONFLICT DO NOTHING"
+            "INSERT INTO judge_aliases "
+            "(id, judge_id, alias_text, alias_normalised, source, created_at, updated_at) "
+            "VALUES (:id, :j, :a, :n, :src, NOW(), NOW()) ON CONFLICT DO NOTHING"
         ),
-        {"id": str(uuid4()), "j": judge_id, "a": alias_text[:255], "n": norm[:255]},
+        {
+            "id": str(uuid4()),
+            "j": judge_id,
+            "a": alias_text[:255],
+            "n": norm[:255],
+            "src": "corpus_extract",
+        },
     )
 
 
