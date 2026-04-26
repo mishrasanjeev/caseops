@@ -83,6 +83,8 @@ class StatuteSectionRecord(BaseModel):
     section_number: str
     section_label: str | None
     section_text: str | None
+    section_text_source: str | None = None
+    is_provisional: bool = False
     section_url: str | None
     parent_section_id: str | None
     ordinal: int

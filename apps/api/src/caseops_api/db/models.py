@@ -2958,6 +2958,15 @@ class StatuteSection(Base):
     section_number: Mapped[str] = mapped_column(String(64), nullable=False)
     section_label: Mapped[str | None] = mapped_column(String(500), nullable=True)
     section_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    section_text_source: Mapped[str | None] = mapped_column(
+        String(32), nullable=True,
+    )
+    section_text_fetched_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
+    is_provisional: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false(),
+    )
     section_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     parent_section_id: Mapped[str | None] = mapped_column(
         ForeignKey("statute_sections.id", ondelete="CASCADE"),

@@ -9,7 +9,12 @@
  * source URL so the lawyer can verify the bare text directly.
  */
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ExternalLink, FileText } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  ExternalLink,
+  FileText,
+} from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
@@ -25,6 +30,30 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { fetchStatuteSection } from "@/lib/api/endpoints";
+
+function SourceBadge({ source }: { source: string | null | undefined }) {
+  if (!source) return null;
+  const label =
+    source === "indiacode_scrape"
+      ? "indiacode"
+      : source === "haiku_generated"
+        ? "AI-generated"
+        : source === "manual"
+          ? "manual"
+          : source;
+  const tone =
+    source === "haiku_generated"
+      ? "border-amber-300 bg-amber-50 text-amber-900"
+      : "border-[var(--color-line)] bg-[var(--color-bg-2)] text-[var(--color-mute-2)]";
+  return (
+    <span
+      data-testid={`statute-section-source-${source}`}
+      className={`ml-1 inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${tone}`}
+    >
+      {label}
+    </span>
+  );
+}
 
 export default function StatuteSectionDetailPage() {
   const params = useParams<{
@@ -95,13 +124,32 @@ export default function StatuteSectionDetailPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileText className="h-4 w-4" aria-hidden /> Bare text
+            <SourceBadge source={section.section_text_source} />
           </CardTitle>
           <CardDescription>
-            Sourced from indiacode.nic.in (Government of India, public
-            domain). Verify at the source link above.
+            {section.section_text_source === "haiku_generated"
+              ? "AI-generated reproduction of the section text. Verify at the official source link above before relying on it in any submission."
+              : "Sourced from indiacode.nic.in (Government of India, public domain). Verify at the source link above."}
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {section.is_provisional ? (
+            <div
+              className="mb-4 flex items-start gap-2 rounded-[var(--radius-md)] border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"
+              data-testid="statute-section-provisional-warning"
+            >
+              <AlertTriangle
+                className="mt-0.5 h-3.5 w-3.5 shrink-0"
+                aria-hidden
+              />
+              <span>
+                <strong className="font-semibold">Provisional:</strong>{" "}
+                AI-generated, not authoritative. Verify against the
+                official source before citing in pleadings or
+                submissions.
+              </span>
+            </div>
+          ) : null}
           {section.section_text ? (
             <pre
               className="whitespace-pre-wrap text-sm text-[var(--color-ink)]"
