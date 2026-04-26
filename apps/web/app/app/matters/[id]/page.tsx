@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 
 import { CounselRecommendationsCard } from "@/components/app/CounselRecommendationsCard";
+import { BenchStrategyPanel } from "@/components/matter/BenchStrategyPanel";
 import {
   Card,
   CardContent,
@@ -77,6 +78,8 @@ export default function MatterOverviewPage() {
       </Card>
 
       <CounselRecommendationsCard matterId={data.matter.id} />
+
+      <BenchStrategyPanel matterId={data.matter.id} />
 
       {/* BUG-011 (Hari 2026-04-22 reopen): hide the "Last court order"
           card on matters with no order yet, mirroring the Open tasks

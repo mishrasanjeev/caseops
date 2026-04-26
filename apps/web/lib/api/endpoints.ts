@@ -203,6 +203,53 @@ export async function fetchBenchStrategyContext(
 }
 
 
+// MOD-TS-018 (2026-04-26). Bench-Strategy Phase 4 panel.
+// Surfaces L-A/L-B/L-C analysis layers as a tenant-scoped read.
+// Citation-grounded view first; predictive surfaces (judge tendencies)
+// land when L-E (outcome classification) ships.
+
+export type BenchStrategyAuthority = {
+  authority_id: string;
+  title: string | null;
+  citation_count: number;
+  last_year: number | null;
+  sample_judgment_id: string | null;
+};
+
+export type BenchStrategyStatute = {
+  statute_section_id: string;
+  statute_id: string;
+  section_number: string;
+  section_label: string | null;
+  citation_count: number;
+  last_year: number | null;
+  sample_judgment_id: string | null;
+};
+
+export type BenchStrategy = {
+  matter_id: string;
+  bench_judge_ids: string[];
+  total_decisions_indexed: number;
+  evidence_quality: "strong" | "partial" | "weak" | "insufficient" | string;
+  top_authorities: BenchStrategyAuthority[];
+  top_statute_sections: BenchStrategyStatute[];
+  disclaimer: string;
+};
+
+export async function fetchBenchStrategy(
+  matterId: string,
+  opts?: { authorityLimit?: number; statuteLimit?: number },
+): Promise<BenchStrategy> {
+  const params = new URLSearchParams();
+  if (opts?.authorityLimit) params.set("authority_limit", String(opts.authorityLimit));
+  if (opts?.statuteLimit) params.set("statute_limit", String(opts.statuteLimit));
+  const qs = params.toString();
+  return apiRequest<BenchStrategy>(
+    `/api/matters/${matterId}/bench-strategy${qs ? `?${qs}` : ""}`,
+  );
+}
+
+
 // MOD-TS-001-A (Sprint P, 2026-04-25). Appeal Strength Analyzer.
 // Per-ground argument-completeness analysis on an appeal_memorandum
 // draft. Frame: argument completeness, NOT outcome prediction.

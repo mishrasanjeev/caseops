@@ -1503,6 +1503,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matters/{matter_id}/bench-strategy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Bench-strategy panel data for the matter (MOD-TS-018). Returns top authorities + top statute sections that the matter's bench has cited, plus an evidence_quality chip and a not-legal-advice disclaimer. Tenant-scoped via matter_id. */
+        get: operations["get_current_company_matter_bench_strategy_api_matters__matter_id__bench_strategy_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matters/{matter_id}/bench-strategy-context": {
         parameters: {
             query?: never;
@@ -3334,6 +3351,19 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** BenchStrategyAuthorityResponse */
+        BenchStrategyAuthorityResponse: {
+            /** Authority Id */
+            authority_id: string;
+            /** Citation Count */
+            citation_count: number;
+            /** Last Year */
+            last_year: number | null;
+            /** Sample Judgment Id */
+            sample_judgment_id: string | null;
+            /** Title */
+            title: string | null;
+        };
         /** BenchStrategyContextResponse */
         BenchStrategyContextResponse: {
             /** Authorities Frequently Cited */
@@ -3364,6 +3394,40 @@ export interface components {
             structured_match_coverage_percent: number;
             /** Unsupported Gaps */
             unsupported_gaps: string[];
+        };
+        /** BenchStrategyResponse */
+        BenchStrategyResponse: {
+            /** Bench Judge Ids */
+            bench_judge_ids: string[];
+            /** Disclaimer */
+            disclaimer: string;
+            /** Evidence Quality */
+            evidence_quality: string;
+            /** Matter Id */
+            matter_id: string;
+            /** Top Authorities */
+            top_authorities: components["schemas"]["BenchStrategyAuthorityResponse"][];
+            /** Top Statute Sections */
+            top_statute_sections: components["schemas"]["BenchStrategyStatuteResponse"][];
+            /** Total Decisions Indexed */
+            total_decisions_indexed: number;
+        };
+        /** BenchStrategyStatuteResponse */
+        BenchStrategyStatuteResponse: {
+            /** Citation Count */
+            citation_count: number;
+            /** Last Year */
+            last_year: number | null;
+            /** Sample Judgment Id */
+            sample_judgment_id: string | null;
+            /** Section Label */
+            section_label: string | null;
+            /** Section Number */
+            section_number: string;
+            /** Statute Id */
+            statute_id: string;
+            /** Statute Section Id */
+            statute_section_id: string;
         };
         /** Body_post_current_company_contract_attachment_api_contracts__contract_id__attachments_post */
         Body_post_current_company_contract_attachment_api_contracts__contract_id__attachments_post: {
@@ -10861,6 +10925,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BenchMatchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_current_company_matter_bench_strategy_api_matters__matter_id__bench_strategy_get: {
+        parameters: {
+            query?: {
+                authority_limit?: number;
+                statute_limit?: number;
+            };
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenchStrategyResponse"];
                 };
             };
             /** @description Validation Error */
