@@ -182,6 +182,165 @@ def test_haiku_unavailable_refusal_leaves_row_null(
     assert sec.is_provisional is False
 
 
+def test_kanoon_scrape_finds_section_in_akoma_ntoso_html(
+    client: TestClient,
+) -> None:
+    """Kanoon serves bare-act HTML with Akoma Ntoso markup
+    (`<section class="akn-section" id="section_300">`). The kanoon
+    scraper extracts the text by id and persists with
+    source=indiankanoon, is_provisional=False."""
+    factory = get_session_factory()
+    with factory() as session:
+        st, sec = _seed_statute_and_section(session, sec_no="300")
+        sec_id = sec.id
+
+    body = (
+        "<html><body>"
+        "<section class='akn-section' id='section_299'>"
+        "<span class='akn-num'>299.</span> Culpable homicide. "
+        "Whoever causes death by doing an act with the intention of "
+        "causing death is said to commit culpable homicide."
+        "</section>"
+        "<section class='akn-section' id='section_300'>"
+        "<span class='akn-num'>300.</span> Murder. "
+        "Except in the cases hereinafter excepted, culpable homicide "
+        "is murder, if the act by which the death is caused is done "
+        "with the intention of causing death, "
+        "<section class='akn-paragraph' id='section_300.Secondly'>"
+        "Secondly. If it is done with the intention of causing such "
+        "bodily injury as the offender knows to be likely to cause "
+        "the death of the person."
+        "</section>"
+        "</section>"
+        "<section class='akn-section' id='section_301'>"
+        "<span class='akn-num'>301.</span> Culpable homicide by "
+        "causing death of person other than person whose death was "
+        "intended."
+        "</section>"
+        "</body></html>"
+    )
+    fake_resp = _FakeResp(status_code=200, text=body)
+
+    # Bypass the cache for the test
+    se._kanoon_cache.clear()
+    # Add the test statute to the kanoon doc-id map
+    se._KANOON_ACT_DOC_IDS["ipc-1860"] = "1569253"
+
+    with factory() as session:
+        with patch.object(se.httpx, "Client") as mock_client_cls:
+            client_inst = MagicMock()
+            client_inst.get.return_value = fake_resp
+            client_inst.__enter__.return_value = client_inst
+            client_inst.__exit__.return_value = False
+            mock_client_cls.return_value = client_inst
+
+            sec = session.get(StatuteSection, sec_id)
+            st = session.get(Statute, "ipc-1860")
+            result = se.enrich_section(session, sec, statute=st)
+
+    assert result.source == se.SOURCE_KANOON
+    assert result.is_provisional is False
+    assert "Murder" in result.section_text
+    assert "Secondly" in result.section_text  # nested paragraph captured
+    # Did not bleed in section 299 or 301
+    assert "Culpable homicide by causing" not in result.section_text
+    with factory() as session:
+        sec = session.get(StatuteSection, sec_id)
+    assert sec.section_text_source == se.SOURCE_KANOON
+    assert sec.is_provisional is False
+
+
+def test_kanoon_section_not_found_falls_through(client: TestClient) -> None:
+    """If kanoon doesn't have the section in its rendering (rare), the
+    orchestrator must fall through to indiacode → Haiku."""
+    factory = get_session_factory()
+    with factory() as session:
+        st, sec = _seed_statute_and_section(session, sec_no="999")
+        sec_id = sec.id
+
+    body = (
+        "<html><body>"
+        "<section class='akn-section' id='section_300'>Murder text</section>"
+        "</body></html>"
+    )
+    fake_resp = _FakeResp(status_code=200, text=body)
+    se._kanoon_cache.clear()
+    se._KANOON_ACT_DOC_IDS["ipc-1860"] = "1569253"
+
+    with factory() as session:
+        with patch.object(se.httpx, "Client") as mock_client_cls:
+            client_inst = MagicMock()
+            client_inst.get.return_value = fake_resp
+            client_inst.__enter__.return_value = client_inst
+            client_inst.__exit__.return_value = False
+            mock_client_cls.return_value = client_inst
+            with patch.object(
+                se, "haiku_generate_section_text",
+                return_value=(None, "haiku_refused"),
+            ):
+                sec = session.get(StatuteSection, sec_id)
+                st = session.get(Statute, "ipc-1860")
+                result = se.enrich_section(session, sec, statute=st)
+    # Section 999 doesn't exist on kanoon page → kanoon returns None
+    # → indiacode also fails (mocked client returns the same body which
+    # also lacks section 999 in indiacode-style heading) → Haiku path
+    # invoked → refused → row stays NULL.
+    assert result.source is None
+
+
+def test_kanoon_disabled_when_doc_id_missing(client: TestClient) -> None:
+    """Acts not in _KANOON_ACT_DOC_IDS skip kanoon and proceed to
+    indiacode/Haiku."""
+    factory = get_session_factory()
+    with factory() as session:
+        # Custom statute_id not in the kanoon map
+        st = Statute(
+            id="custom-act-9999",
+            short_name="CUSTOM",
+            long_name="A custom act not on kanoon",
+            enacted_year=2026,
+            jurisdiction="india",
+            source_url="https://example.test/handle/1/2",
+            is_active=True,
+        )
+        session.add(st)
+        session.commit()
+        sec = StatuteSection(
+            statute_id="custom-act-9999",
+            section_number="1",
+            section_label="Definitions",
+            is_active=True,
+            ordinal=1,
+        )
+        session.add(sec)
+        session.commit()
+        sec_id = sec.id
+
+    se._kanoon_cache.clear()
+    # Verify custom-act-9999 NOT in the doc-id map
+    assert "custom-act-9999" not in se._KANOON_ACT_DOC_IDS
+    fake_resp = _FakeResp(status_code=404, text="not found")
+
+    with factory() as session:
+        with patch.object(se.httpx, "Client") as mock_client_cls:
+            client_inst = MagicMock()
+            client_inst.get.return_value = fake_resp
+            client_inst.__enter__.return_value = client_inst
+            client_inst.__exit__.return_value = False
+            mock_client_cls.return_value = client_inst
+            with patch.object(
+                se, "haiku_generate_section_text",
+                return_value=(None, "haiku_refused"),
+            ):
+                sec = session.get(StatuteSection, sec_id)
+                st = session.get(Statute, "custom-act-9999")
+                result = se.enrich_section(
+                    session, sec, statute=st, allow_haiku=False,
+                )
+    # Kanoon skipped (no doc id), indiacode 404, haiku disabled → None
+    assert result.source is None
+
+
 def test_no_haiku_flag_skips_fallback_when_scrape_fails(
     client: TestClient,
 ) -> None:

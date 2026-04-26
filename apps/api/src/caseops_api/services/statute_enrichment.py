@@ -45,8 +45,32 @@ from caseops_api.services.llm import (
 logger = logging.getLogger(__name__)
 
 SOURCE_INDIACODE = "indiacode_scrape"
+SOURCE_KANOON = "indiankanoon"
 SOURCE_HAIKU = "haiku_generated"
 SOURCE_MANUAL = "manual"
+
+# Indian Kanoon doc IDs for the 7 Acts in our seed catalog. Kanoon
+# serves the full bare-act HTML at https://indiankanoon.org/doc/<id>/
+# with Akoma-Ntoso-style markup (`<section class="akn-section"
+# id="section_300">`), which makes per-section extraction reliable.
+#
+# These IDs were resolved by searching kanoon's `/search/?type=acts`
+# on 2026-04-26. They're stable identifiers; if a future re-numbering
+# happens, the search step can be re-run.
+_KANOON_ACT_DOC_IDS: dict[str, str] = {
+    "ipc-1860": "1569253",
+    "crpc-1973": "445276",
+    "constitution-india": "237570",
+    "bnss-2023": "91117739",
+    "bns-2023": "149679501",
+    "bsa-2023": "70224818",
+    "ni-act-1881": "1132672",
+}
+
+# Per-Act parsed-HTML cache. Each Act's full bare-text page is ~200KB
+# to 1.6MB — fetch once per backfill run, parse all sections from
+# the cached tree. Keys are statute_id; values are lxml etree roots.
+_kanoon_cache: dict[str, object] = {}
 
 _SCRAPE_TIMEOUT_S = 15.0
 _SCRAPE_USER_AGENT = (
@@ -68,6 +92,101 @@ class EnrichmentResult:
     source: str | None  # SOURCE_* constant or None on full failure
     is_provisional: bool
     notes: str | None = None  # operator-facing diagnostic
+
+
+def _fetch_kanoon_act_html(
+    statute_id: str,
+    *,
+    client: httpx.Client | None = None,
+) -> object | None:
+    """Fetch + parse the full kanoon bare-act HTML for ``statute_id``.
+
+    Cached per process so repeat per-section calls during one backfill
+    run hit the network once per Act.
+    """
+    if statute_id in _kanoon_cache:
+        return _kanoon_cache[statute_id]
+    doc_id = _KANOON_ACT_DOC_IDS.get(statute_id)
+    if not doc_id:
+        return None
+    own_client = client is None
+    if own_client:
+        client = httpx.Client(
+            timeout=_SCRAPE_TIMEOUT_S,
+            headers={"User-Agent": _SCRAPE_USER_AGENT},
+            follow_redirects=True,
+        )
+    try:
+        url = f"https://indiankanoon.org/doc/{doc_id}/"
+        try:
+            resp = client.get(url)
+        except httpx.HTTPError as exc:
+            logger.info(
+                "kanoon fetch network error for %s: %s", statute_id, exc,
+            )
+            return None
+        if resp.status_code >= 400:
+            logger.info(
+                "kanoon fetch HTTP %s for %s", resp.status_code, statute_id,
+            )
+            return None
+        try:
+            from lxml import html as lxml_html
+        except ImportError:
+            logger.warning("lxml not installed — kanoon scraper disabled")
+            return None
+        try:
+            tree = lxml_html.fromstring(resp.text)
+        except Exception as exc:
+            logger.info("kanoon HTML parse failed for %s: %s", statute_id, exc)
+            return None
+        _kanoon_cache[statute_id] = tree
+        return tree
+    finally:
+        if own_client and client is not None:
+            client.close()
+
+
+def scrape_kanoon_section(
+    statute: Statute,
+    section: StatuteSection,
+    *,
+    client: httpx.Client | None = None,
+) -> str | None:
+    """Find one section's bare text in the cached kanoon HTML.
+
+    Kanoon uses ``<section class="akn-section" id="section_300">``
+    wrappers. We pick that element by id, take its text content, and
+    apply the same length / sanity filters as the indiacode scraper.
+
+    Returns None on any failure (missing doc, missing section, body
+    too short). The orchestrator falls through to the next provider.
+    """
+    tree = _fetch_kanoon_act_html(statute.id, client=client)
+    if tree is None:
+        return None
+    target = section.section_number.strip().rstrip(".")
+    # Try a few id variants kanoon uses for different acts:
+    # - "section_300"
+    # - "section_300A"   (e.g. NI Act has 138A, 142A)
+    # - case-sensitive
+    candidates = [target, target.upper(), target.lower()]
+    matched = None
+    for cand in candidates:
+        # XPath for the section wrapper
+        nodes = tree.xpath(f"//section[@id='section_{cand}']")
+        if nodes:
+            matched = nodes[0]
+            break
+    if matched is None:
+        return None
+    # Extract text content, strip nested element noise, collapse
+    # whitespace.
+    text = " ".join(matched.itertext())
+    text = re.sub(r"\s+", " ", text).strip()
+    if len(text) < 40:
+        return None
+    return text[:8000]
 
 
 def scrape_indiacode_section(
@@ -295,6 +414,29 @@ def enrich_section(
                 notes=f"statute_id={section.statute_id} not found",
             )
 
+    # Try Indian Kanoon first — indiacode.nic.in blocks even headless
+    # browsers (Akamai-style anti-bot returning 227-byte denied pages),
+    # so kanoon's bare-act HTML is the practical authoritative source.
+    # Kanoon's text is sourced from official acts; the lawyer can
+    # cross-verify against indiacode via section.section_url.
+    scraped = scrape_kanoon_section(
+        statute, section, client=http_client,
+    )
+    if scraped:
+        section.section_text = scraped
+        section.section_text_source = SOURCE_KANOON
+        section.section_text_fetched_at = datetime.now(UTC)
+        section.is_provisional = False
+        session.add(section)
+        session.commit()
+        return EnrichmentResult(
+            section_text=scraped, source=SOURCE_KANOON,
+            is_provisional=False, notes="kanoon_scrape_ok",
+        )
+
+    # Fallback to indiacode (currently bot-blocked, but kept so we can
+    # remove the fallback when indiacode lifts the block or we switch
+    # to a JS-capable scraper).
     scraped = scrape_indiacode_section(
         statute, section, client=http_client,
     )
