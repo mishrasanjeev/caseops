@@ -50,6 +50,21 @@ def test_is_real_name_rejects_role_only_strings() -> None:
     assert _is_real_name("Honble") is False
 
 
+def test_is_real_name_rejects_layer2_extraction_placeholders() -> None:
+    """Layer-2 metadata extraction occasionally emits placeholders
+    that look like names but aren't. The Apr 2026-04-26 backfill leaked
+    one ("Hon'ble [Judge name not provided in text]") through; the
+    bracketed-placeholder pattern catches it now."""
+    assert _is_real_name("Hon'ble [Judge name not provided in text]") is False
+    assert _is_real_name("[Judge name not provided in text]") is False
+    assert _is_real_name("[Name not available]") is False
+    assert _is_real_name("Justice [Name not specified]") is False
+    assert _is_real_name("Judge name not provided") is False
+    # Real-looking names are still allowed
+    assert _is_real_name("Yashwant Varma") is True
+    assert _is_real_name("V. Kameswar Rao") is True
+
+
 def test_is_real_name_requires_two_tokens_with_letters() -> None:
     """A single-token entry is almost always a parser artefact
     (a court name fragment, a punctuation residue, etc.)."""

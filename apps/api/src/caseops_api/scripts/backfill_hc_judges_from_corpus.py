@@ -70,6 +70,10 @@ _NON_NAME_PATTERNS = [
     re.compile(r"^the\s+court$", re.IGNORECASE),
     re.compile(r"^coram$", re.IGNORECASE),
     re.compile(r"^honble.*$", re.IGNORECASE),  # e.g. "honble" alone
+    # Layer-2 extraction placeholders that look like names but aren't:
+    # "[Judge name not provided in text]", "[Name not available]", etc.
+    re.compile(r"\[.*(name|judge).*\]", re.IGNORECASE),
+    re.compile(r"name\s+not\s+(provided|available|specified)", re.IGNORECASE),
 ]
 
 _MIN_NAME_TOKENS = 2  # require at least first + surname after honorific strip
@@ -102,7 +106,7 @@ def _is_real_name(candidate: str) -> bool:
     if not candidate:
         return False
     for pat in _NON_NAME_PATTERNS:
-        if pat.match(candidate):
+        if pat.search(candidate):
             return False
     tokens = [t for t in re.split(r"\s+", candidate) if t]
     if len(tokens) < _MIN_NAME_TOKENS:
