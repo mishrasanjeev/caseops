@@ -760,6 +760,94 @@ async def get_current_company_matter_bench_strategy_context(
     )
 
 
+# MOD-TS-018 (2026-04-26). Bench-Strategy Phase 4 read endpoint.
+# Surfaces L-A/L-B/L-C analysis layers as a tenant-scoped per-matter
+# read. Citation-grounded view first; predictive layer (judge tendencies
+# + predicted_disposition) lands when L-E ships.
+
+class BenchStrategyAuthorityResponse(BaseModel):
+    authority_id: str
+    title: str | None
+    citation_count: int
+    last_year: int | None
+    sample_judgment_id: str | None
+
+
+class BenchStrategyStatuteResponse(BaseModel):
+    statute_section_id: str
+    statute_id: str
+    section_number: str
+    section_label: str | None
+    citation_count: int
+    last_year: int | None
+    sample_judgment_id: str | None
+
+
+class BenchStrategyResponse(BaseModel):
+    matter_id: str
+    bench_judge_ids: list[str]
+    total_decisions_indexed: int
+    evidence_quality: str
+    top_authorities: list[BenchStrategyAuthorityResponse]
+    top_statute_sections: list[BenchStrategyStatuteResponse]
+    disclaimer: str
+
+
+@router.get(
+    "/{matter_id}/bench-strategy",
+    response_model=BenchStrategyResponse,
+    summary=(
+        "Bench-strategy panel data for the matter (MOD-TS-018). "
+        "Returns top authorities + top statute sections that the "
+        "matter's bench has cited, plus an evidence_quality chip and "
+        "a not-legal-advice disclaimer. Tenant-scoped via matter_id."
+    ),
+)
+async def get_current_company_matter_bench_strategy(
+    matter_id: str,
+    context: CurrentContext,
+    session: DbSession,
+    authority_limit: int = 10,
+    statute_limit: int = 10,
+) -> BenchStrategyResponse:
+    from caseops_api.services.bench_strategy import build_bench_strategy
+
+    payload = build_bench_strategy(
+        session=session,
+        matter_id=matter_id,
+        company_id=context.company.id,
+        authority_limit=authority_limit,
+        statute_limit=statute_limit,
+    )
+    return BenchStrategyResponse(
+        matter_id=payload.matter_id,
+        bench_judge_ids=list(payload.bench_judge_ids),
+        total_decisions_indexed=payload.total_decisions_indexed,
+        evidence_quality=payload.evidence_quality,
+        top_authorities=[
+            BenchStrategyAuthorityResponse(
+                authority_id=a.authority_id, title=a.title,
+                citation_count=a.citation_count, last_year=a.last_year,
+                sample_judgment_id=a.sample_judgment_id,
+            )
+            for a in payload.top_authorities
+        ],
+        top_statute_sections=[
+            BenchStrategyStatuteResponse(
+                statute_section_id=s.statute_section_id,
+                statute_id=s.statute_id,
+                section_number=s.section_number,
+                section_label=s.section_label,
+                citation_count=s.citation_count,
+                last_year=s.last_year,
+                sample_judgment_id=s.sample_judgment_id,
+            )
+            for s in payload.top_statute_sections
+        ],
+        disclaimer=payload.disclaimer,
+    )
+
+
 # MOD-TS-001-A (Sprint P, 2026-04-25). Appeal Strength Analyzer.
 # Per-ground argument-completeness analysis. Frame is "argument
 # completeness", NOT outcome prediction. No win/lose/probability/
