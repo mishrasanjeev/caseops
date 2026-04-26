@@ -697,11 +697,48 @@ def _build_inner_provider(settings: object, purpose: str | None) -> LLMProvider:
         raise LLMProviderError(
             f"CASEOPS_LLM_API_KEY must be set when CASEOPS_LLM_PROVIDER={provider_name!r}.",
         )
+    # BUG-015 (Ram 2026-04-26 Critical reopen): the recommendations
+    # endpoint hung for the full Cloud Run 300-second timeout (504),
+    # surfacing in the browser as "Could not reach the workspace API".
+    # Cloud Run access logs confirmed: every recommendation POST
+    # returned 504 at 300.0006s. Worst-case Anthropic call with the
+    # default timeout=60s + max_retries=2 = up to 180s per provider;
+    # times Sonnet primary + Haiku fallback + OpenAI fallback = ~9 min.
+    # Cap the per-purpose worst case so the handler fits inside Cloud
+    # Run's 300s budget with headroom for citation-verification + DB.
+    per_purpose_timeout: dict[str, float] = {
+        PURPOSE_RECOMMENDATIONS: 30.0,
+        PURPOSE_HEARING_PACK: 30.0,
+        PURPOSE_METADATA_EXTRACT: 30.0,
+        # Drafting can legitimately need longer responses (full appeal
+        # memorandum, 8K output tokens) — keep its budget generous.
+        PURPOSE_DRAFTING: 90.0,
+        PURPOSE_EVAL: 60.0,
+    }
+    per_purpose_retries: dict[str, int] = {
+        PURPOSE_RECOMMENDATIONS: 1,
+        PURPOSE_HEARING_PACK: 1,
+        PURPOSE_METADATA_EXTRACT: 1,
+        PURPOSE_DRAFTING: 2,
+        PURPOSE_EVAL: 2,
+    }
+    timeout_for_purpose = per_purpose_timeout.get(purpose or "", 60.0)
+    retries_for_purpose = per_purpose_retries.get(purpose or "", 2)
     if provider_name == "anthropic":
         return AnthropicProvider(
-            model=model or "claude-opus-4-7",
+            # 2026-04-26 cost-discipline default: Haiku, not Opus.
+            # In prod every purpose sets a per-purpose model via env
+            # (CASEOPS_LLM_MODEL_DRAFTING=claude-opus-4-7, etc.), so
+            # this safety-net only fires when neither the per-purpose
+            # override nor the global CASEOPS_LLM_MODEL is set. Per
+            # `feedback_corpus_spend_audit`: prefer the cheap default;
+            # callers that genuinely need Opus already set it
+            # explicitly.
+            model=model or "claude-haiku-4-5-20251001",
             api_key=settings.llm_api_key,
             prompt_cache=bool(getattr(settings, "llm_prompt_cache_enabled", True)),
+            timeout_seconds=timeout_for_purpose,
+            max_retries=retries_for_purpose,
         )
     if provider_name == "gemini":
         return GeminiProvider(
