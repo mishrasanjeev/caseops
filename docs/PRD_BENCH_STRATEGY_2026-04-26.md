@@ -29,10 +29,10 @@ The build remains blocked until this PRD is approved. Data-source list approved 
 
 ## 3. Hard rules (carry-over from `caseops-prd-execution`)
 
-1. **No favorability scoring**, win/loss prediction, judge tendency claims, reputation labels.
-2. **Evidence phrasing only** — "in the indexed decisions provided, the bench emphasized X with N citations".
+1. **No favorability scoring**, We should not follow this - we need to support our user in predicitng,  win/loss prediction, judge tendency claims, reputation labels.
+2. **Evidence phrasing only** — "in the indexed decisions provided, the bench emphasized X with N citations". You can go ahead with whatever help can be given to the users. 
 3. **Weak-evidence fallback** — when a bench has < 5 indexed decisions on a topic, render a visible "limited bench history" note and degrade to normal drafting recommendations.
-4. **Advocate-bias allowed and required** — per `feedback_user_bias_in_recommendations`, citation selection actively favors the user's matter side.
+4. **Advocate-bias allowed and required** — per `feedback_user_bias_in_recommendations`, citation selection actively favors the user's matter side. This is must. Favor the user to the best possible extent.
 5. **Tenant isolation** — every bench-strategy query is tenant-scoped; cross-tenant joins forbidden.
 6. **No third-party / paid data** — `livelaw.in`, `barandbench.com`, `indianjudges.com`, Manupatra, SCC Online are out for V1.
 7. **Citation-grounded only** — every claim in the response cites a row in `authorities` or `statute_sections`.
@@ -86,20 +86,24 @@ Bench-strategy is fundamentally an **analysis-on-existing-corpus** feature. No n
 3. L-B: per-judge citation network table + nightly aggregation job.
 4. L-C: per-judge statute focus table + nightly aggregation job.
 5. L-D: Layer-3 headnote / issue / ratio extraction pipeline (Haiku, $10/court/day cap).
-6. Bench-strategy API — `GET /api/matters/{matter_id}/bench-strategy?bench_id=X` returns:
-   - `top_authorities`: list of `(authority_id, citation_count, most_recent_year, sample_snippet)` ranked by advocate-bias scoring (per `bench_strategy_context.py` extension)
+6. **L-E: Outcome-classification + per-judge tendency layer** (per the user's 2026-04-26 PRD edits to §3 — predictions, judge tendency, reputation labels are explicitly authorized to support the user). Uses Layer-3 extracted `holding` field + a follow-up Haiku pass to label each decision as `petitioner_won` / `respondent_won` / `partially_allowed` / `dismissed_at_threshold` / `remanded` / `interim`. Aggregates into a `judge_outcome_tendency` table with `(judge_id, matter_type, side, outcome_count, total_decisions, sample_judgment_ids)`. Per-court daily Anthropic cap **$10/court/day** (shared with L-D).
+7. Bench-strategy API — `GET /api/matters/{matter_id}/bench-strategy?bench_id=X` returns:
+   - `top_authorities`: list of `(authority_id, citation_count, most_recent_year, sample_snippet)` ranked by advocate-bias scoring (per `bench_strategy_context.py` extension) — favors the user's matter side
    - `top_statute_sections`: same shape, scoped to statutes
    - `argument_frames`: list of `(issue_label, sample_judgment_id, ratio_summary, count)` from L-D
-   - `evidence_quality`: enum {`strong` (≥20 indexed decisions), `partial` (5-19), `weak` (<5)} — UI uses this for the limitation note
-7. Web UI: Bench-Strategy panel in matter cockpit, sibling of `BenchContextCard`. Renders `evidence_quality` chip prominently.
+   - `judge_tendencies`: list per judge in the bench: `(judge_id, judge_name, side_match_rate, sample_size, top_winning_arguments, top_losing_arguments, sample_judgment_ids)` from L-E. **`side_match_rate` is the % of decisions where the bench ruled for the user's matter side on similar matter_type — NOT a generic "win rate"; it is matter-specific and citation-grounded.** Always accompanied by `sample_size` so the UI can render a confidence chip (`high`: ≥20, `medium`: 10-19, `low`: 5-9, `insufficient`: <5).
+   - `predicted_disposition`: enum + confidence band: `{petitioner_favorable, respondent_favorable, mixed, insufficient_evidence}` + `confidence: {high, medium, low}`. Insufficient_evidence when total bench history on similar matter_type is <5.
+   - `evidence_quality`: enum {`strong` (≥20 indexed decisions), `partial` (5-19), `weak` (<5)} — UI uses this for the limitation note alongside the prediction confidence chip
+8. Web UI: Bench-Strategy panel in matter cockpit, sibling of `BenchContextCard`. Renders `evidence_quality` + prediction chip + judge tendency table prominently. Every prediction has a "based on N decisions" link that opens the source `sample_judgment_ids`.
+9. **Liability disclaimer** rendered with every prediction surface: "Statistical analysis based on indexed decisions only. Not legal advice. Verify with primary sources before relying in any submission." Surface-level + per-API response field `disclaimer`.
 
 **Out of V1, deferred to V2:**
 - NJDG pendency context ("this bench is overloaded → expect short hearing")
-- Cross-tenant trend analysis (privacy concern)
-- Predictive scoring / favorability inference (HARD REJECT, never)
-- Live integration with drafting "missed citations" panel
+- Cross-tenant trend analysis (privacy concern; opt-in mechanism + consent design needed first)
+- Live integration with drafting "missed citations" panel (Phase 5)
 - Paid headnote feed integration
-- Per-judge "argument framings that succeed" (requires outcome classification at scale; defer)
+- Per-bench inter-judge dynamic modeling (when judges in a bench have divergent tendencies)
+- Auto-generated argument templates from winning patterns (separate AI feature, defer)
 
 ## 6. User Stories
 
@@ -110,6 +114,8 @@ Bench-strategy is fundamentally an **analysis-on-existing-corpus** feature. No n
 | BS-US-003 | As a draft author against a HC bench with sparse indexed coverage (<5 decisions), I want the bench-strategy panel to render a clear "limited bench history" note instead of speculating. |
 | BS-US-004 | As a tenant admin, I want bench-strategy panels for matter A in tenant T1 to never include data derived from matter B in tenant T2. |
 | BS-US-005 | As a litigator on the petitioner side of an appeal, I want bench-strategy authorities ranked to favor the petitioner's typical framings (per `feedback_user_bias_in_recommendations`). |
+| BS-US-006 | As a litigator preparing for a hearing before a known bench, I want a per-judge tendency surface — "Justice X has ruled for petitioner in N of M similar `bail_application` matters in the indexed corpus" — with a one-click drill-down to the supporting judgments, so I can plan my strategy and emphasis. |
+| BS-US-007 | As a litigator, I want a per-bench `predicted_disposition` chip (`petitioner_favorable` / `respondent_favorable` / `mixed` / `insufficient_evidence`) with a visible confidence band, so I can calibrate my expectations. The chip must be backed by sample-decision links and a "not legal advice" disclaimer. |
 
 ## 7. Functional Tests
 
@@ -119,7 +125,9 @@ Bench-strategy is fundamentally an **analysis-on-existing-corpus** feature. No n
 | BS-FT-002 | Weak-evidence path: bench with <5 decisions returns `evidence_quality=weak` + the limitation note string in the response. |
 | BS-FT-003 | Tenant isolation: `bench_strategy(matter_id=M_T1, bench_id=B)` does not surface annotations / attachments from tenant T2. |
 | BS-FT-004 | Citation verification: every authority_id in the response resolves to a non-null `authorities` row. |
-| BS-FT-005 | No-favorability assertion: response body does not contain any of the forbidden phrases (`win rate`, `more likely to`, `tendency`, `usually grants`, `usually denies`, `historically rules`). Asserted via regex over JSON serialization. |
+| BS-FT-005 | **Prediction quality bars**: `judge_tendencies[].sample_size` is always present; `predicted_disposition.confidence=high` requires ≥20 indexed decisions for the bench on similar `matter_type`; `medium` ≥10; `low` ≥5; `insufficient_evidence` <5. The API never returns `confidence=high` with `sample_size<20`. |
+| BS-FT-005a | **Sample-judgment evidence**: every `judge_tendencies` row carries non-empty `sample_judgment_ids` (max 5) so the UI can deep-link to the supporting decisions. A row without samples is a contract violation. |
+| BS-FT-005b | **Disclaimer presence**: every API response that includes `judge_tendencies` or `predicted_disposition` also includes the `disclaimer` field with the standard "not legal advice" copy. UI tests assert it is rendered visibly (not display:none). |
 | BS-FT-006 | Advocate-bias: when matter side = "petitioner" + bench has decisions favoring petitioner-side framings on the cited topic, those authorities rank above neutral ones. |
 | BS-FT-007 | L-D refusal: a Layer-3 extraction call where Haiku replies UNAVAILABLE leaves `authority_documents.layer3_extract` NULL; bench-strategy degrades gracefully (no fabricated argument_frames). |
 | BS-FT-008 | Web UI renders `evidence_quality=weak` chip when API returns `weak`; renders citation links that open the source authority page. |
