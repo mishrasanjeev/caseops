@@ -79,6 +79,11 @@ def _haiku_fallback_provider() -> LLMProvider | None:
 
     Returns None when the primary provider isn't Anthropic — Gemini /
     mock don't have the Sonnet-specific defect this guards against.
+
+    BUG-015 (Ram 2026-04-26): tightened timeouts to match the
+    PURPOSE_RECOMMENDATIONS budget in services/llm._build_inner_provider
+    so the full primary→Haiku→OpenAI fallback chain stays inside
+    Cloud Run's 300s request budget.
     """
     settings = get_settings()
     if (settings.llm_provider or "").lower() != "anthropic":
@@ -87,19 +92,27 @@ def _haiku_fallback_provider() -> LLMProvider | None:
         model=_HAIKU_FALLBACK_MODEL,
         api_key=settings.llm_api_key,
         prompt_cache=bool(getattr(settings, "llm_prompt_cache_enabled", True)),
+        timeout_seconds=30.0,
+        max_retries=1,
     )
 
 
 def _openai_fallback_provider() -> LLMProvider | None:
     """Cross-provider hard cutover for Anthropic 402 events. Mirrors
     services.drafting._openai_fallback_provider; see that module for
-    rationale."""
+    rationale.
+
+    BUG-015 (Ram 2026-04-26): same tighter timeout + retry budget as
+    the Haiku fallback so the chain fits inside Cloud Run's 300s.
+    """
     settings = get_settings()
     if not getattr(settings, "openai_api_key", None):
         return None
     return OpenAIProvider(
         model=getattr(settings, "openai_fallback_model", "gpt-5.1"),
         api_key=settings.openai_api_key,
+        timeout_seconds=30.0,
+        max_retries=1,
     )
 
 
