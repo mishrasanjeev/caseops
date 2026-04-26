@@ -28,6 +28,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import time
 from dataclasses import dataclass
 
 from fastapi import HTTPException, status
@@ -547,18 +548,41 @@ def generate_recommendation(
     rec_type: str,
     provider: LLMProvider | None = None,
 ) -> Recommendation:
+    # BUG-015 (Ram 2026-04-26 Critical reopen) deep dive: prior fix
+    # attempts (per-purpose timeout, fallback constructors) did NOT
+    # close the bug — Playwright still hits 504 Gateway Timeout at
+    # Cloud Run's 300s. Add per-stage timing logs so the next failure
+    # reproduction reveals where the time actually goes (retrieval?
+    # LLM call? citation verification? DB persist?).
+    _t0 = time.perf_counter()
+    _t = _t0
+    def _stage(name: str) -> None:
+        nonlocal _t
+        now = time.perf_counter()
+        logger.warning(
+            "BUG015_TIMING %s rec_type=%s matter_id=%s stage=%s "
+            "stage_ms=%.0f total_ms=%.0f",
+            "[generate_recommendation]", rec_type, matter_id, name,
+            (now - _t) * 1000, (now - _t0) * 1000,
+        )
+        _t = now
+
     _validate_type(rec_type)
+    _stage("validate_type")
     matter = _load_matter(session, context=context, matter_id=matter_id)
+    _stage("load_matter")
     retrieved = _gather_authorities(
         session,
         query=_build_retrieval_query(matter, rec_type),
         forum_level=matter.forum_level,
         matter=matter,
     )
+    _stage("gather_authorities")
 
     llm = provider or build_provider(purpose=PURPOSE_RECOMMENDATIONS)
     messages = _build_prompt(rec_type=rec_type, matter=matter, authorities=retrieved)
     prompt_hash = _prompt_hash(messages)
+    _stage("build_prompt")
 
     settings = get_settings()
     _call_context = LLMCallContext(
@@ -580,6 +604,7 @@ def generate_recommendation(
 
     try:
         parsed, completion = _invoke(llm)
+        _stage(f"llm_primary({getattr(llm, 'model', '?')})")
     except LLMQuotaExhaustedError as quota_exc:
         # Hard cutover: Anthropic returned 402 ("credit balance is too
         # low"). Haiku would hit the same wall, so go straight to the
@@ -590,6 +615,7 @@ def generate_recommendation(
             getattr(llm, "model", "<unknown>"),
         )
         parsed, completion = _generate_recommendation_via_openai(_invoke, quota_exc)
+        _stage("llm_openai_fallback_after_quota")
     except LLMProviderError as exc:
         # Broadened from LLMResponseFormatError (2026-04-22, Ram-007 /
         # Hari-III-BUG-020 + Ram-BUG-007, 2026-04-22):
@@ -611,6 +637,7 @@ def generate_recommendation(
             )
             try:
                 parsed, completion = _invoke(fallback)
+                _stage("llm_haiku_fallback")
             except LLMQuotaExhaustedError as quota_exc:
                 logger.warning(
                     "recommendation %s: Haiku fallback hit quota wall; "
@@ -620,12 +647,15 @@ def generate_recommendation(
                 parsed, completion = _generate_recommendation_via_openai(
                     _invoke, quota_exc
                 )
+                _stage("llm_openai_fallback_after_haiku_quota")
             except LLMProviderError as retry_exc:
                 parsed, completion = _generate_recommendation_via_openai(
                     _invoke, retry_exc
                 )
+                _stage("llm_openai_fallback_after_haiku_error")
 
     cleaned_options, report = _filter_and_verify_options(parsed.options, retrieved)
+    _stage("filter_and_verify")
     total_verified_citations = sum(
         len(opt.supporting_citations) for opt in cleaned_options
     )
