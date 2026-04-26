@@ -91,7 +91,23 @@ def resolve_listing_bench(
     matter = session.scalar(
         select(Matter).where(Matter.id == entry.matter_id)
     )
-    if matter is None or not matter.court_id:
+    # Court scope: prefer matter.court_id; fall back to looking up an
+    # active Court whose name matches the listing's forum_name. This
+    # makes the docstring's promise real and lets matters created with
+    # only court_name (no court_id) still resolve their bench.
+    court_id_for_scope: str | None = matter.court_id if matter else None
+    if court_id_for_scope is None and matter is not None and entry.forum_name:
+        from caseops_api.db.models import Court
+        court_lookup = session.scalar(
+            select(Court).where(
+                Court.name == entry.forum_name.strip(),
+                Court.is_active.is_(True),
+            )
+        )
+        if court_lookup is not None:
+            court_id_for_scope = court_lookup.id
+
+    if court_id_for_scope is None:
         # No reliable court scope — skip resolution; the row stays
         # marked unprocessed (judges_json IS NULL) and the ops
         # dashboard surfaces it.
@@ -104,7 +120,7 @@ def resolve_listing_bench(
         results = match_candidates(
             session,
             raw_text=candidate,
-            court_id=matter.court_id,
+            court_id=court_id_for_scope,
         )
         if not results:
             unmatched.append(candidate)

@@ -134,6 +134,74 @@ def test_court_sync_import_resolves_judges_inline(client: TestClient) -> None:
     assert "Inline TestJudge" in row[0] or judge_id in row[0]
 
 
+def test_court_sync_import_resolves_judges_when_court_id_falls_back_to_forum_name(
+    client: TestClient,
+) -> None:
+    """Bench resolver must fall back to forum_name → Court lookup when
+    matter.court_id is NULL. Real lawyer flow: matter created with
+    court_name only, no court_id set yet, then a listing is imported.
+    Without the fallback, judges_json stays NULL and bench-strategy
+    shows 'insufficient' even when the judge IS in our catalogue."""
+    forum_name = "Test High Court Fallback"
+    judge_full_name = "Fallback TestJudge"
+    session_factory = get_session_factory()
+    with session_factory() as session:
+        _, judge_id = _seed_court_and_judge(session, forum_name, judge_full_name)
+
+    bootstrap_payload = bootstrap_company(client)
+    token = str(bootstrap_payload["access_token"])
+
+    matter_resp = client.post(
+        "/api/matters/",
+        headers=auth_headers(token),
+        json={
+            "title": "Fallback bench test",
+            "matter_code": "FALLBACK-2026-001",
+            "client_name": "TestClient Co.",
+            "practice_area": "Commercial Litigation",
+            "forum_level": "high_court",
+            "status": "active",
+            "court_name": forum_name,
+        },
+    )
+    assert matter_resp.status_code == 200, matter_resp.text
+    matter_id = matter_resp.json()["id"]
+    # NOTE: deliberately NOT setting court_id — that's the bug we test.
+
+    sync_resp = client.post(
+        f"/api/matters/{matter_id}/court-sync/import",
+        headers=auth_headers(token),
+        json={
+            "source": "manual",
+            "summary": "Listing where matter has no court_id, only court_name.",
+            "cause_list_entries": [
+                {
+                    "listing_date": "2026-05-10",
+                    "forum_name": forum_name,
+                    "bench_name": f"Justice {judge_full_name}",
+                }
+            ],
+            "orders": [],
+        },
+    )
+    assert sync_resp.status_code == 200, sync_resp.text
+
+    with session_factory() as session:
+        row = session.execute(
+            text(
+                "SELECT judges_json FROM matter_cause_list_entries "
+                "WHERE matter_id = :mid"
+            ),
+            {"mid": matter_id},
+        ).fetchone()
+    assert row is not None
+    assert row[0] is not None, (
+        "judges_json should be populated even when matter.court_id is NULL "
+        "— the resolver must fall back to forum_name → Court lookup"
+    )
+    assert judge_full_name in row[0] or judge_id in row[0]
+
+
 def test_court_sync_import_with_unknown_judge_does_not_break_import(
     client: TestClient,
 ) -> None:
