@@ -1209,22 +1209,24 @@ def _persist_court_sync_import(
     session.add(sync_run)
     session.flush()
 
+    new_listing_ids: list[str] = []
     for item in cause_list_entries:
-        session.add(
-            MatterCauseListEntry(
-                matter_id=matter.id,
-                sync_run_id=sync_run.id,
-                listing_date=item.listing_date,
-                forum_name=item.forum_name.strip(),
-                bench_name=item.bench_name.strip() if item.bench_name else None,
-                courtroom=item.courtroom.strip() if item.courtroom else None,
-                item_number=item.item_number.strip() if item.item_number else None,
-                stage=item.stage.strip() if item.stage else None,
-                notes=item.notes.strip() if item.notes else None,
-                source=source,
-                source_reference=item.source_reference.strip() if item.source_reference else None,
-            )
+        new_entry = MatterCauseListEntry(
+            matter_id=matter.id,
+            sync_run_id=sync_run.id,
+            listing_date=item.listing_date,
+            forum_name=item.forum_name.strip(),
+            bench_name=item.bench_name.strip() if item.bench_name else None,
+            courtroom=item.courtroom.strip() if item.courtroom else None,
+            item_number=item.item_number.strip() if item.item_number else None,
+            stage=item.stage.strip() if item.stage else None,
+            notes=item.notes.strip() if item.notes else None,
+            source=source,
+            source_reference=item.source_reference.strip() if item.source_reference else None,
         )
+        session.add(new_entry)
+        session.flush()
+        new_listing_ids.append(new_entry.id)
 
     for item in orders:
         session.add(
@@ -1260,6 +1262,27 @@ def _persist_court_sync_import(
         ),
     )
     session.add(sync_run)
+
+    # MOD-TS-018 (2026-04-26 PM): resolve the bench inline for each
+    # newly-imported listing so /matters/{id}/bench-strategy can
+    # surface L-B aggregates immediately. Without this, judges_json
+    # stays NULL until the periodic resolve_cause_list_benches.py
+    # job runs (next scheduled wake) and the bench-strategy panel
+    # shows "insufficient" even though the data is in L-B.
+    # Failures are logged + tolerated — the periodic job will retry.
+    if new_listing_ids:
+        from caseops_api.services.bench_resolver import resolve_listing_bench
+
+        for listing_id in new_listing_ids:
+            try:
+                resolve_listing_bench(session, listing_id=listing_id)
+            except Exception:  # noqa: BLE001
+                logger.warning(
+                    "bench_resolver: failed for listing_id=%s; "
+                    "leaving judges_json NULL for periodic retry",
+                    listing_id,
+                )
+
     return sync_run
 
 
