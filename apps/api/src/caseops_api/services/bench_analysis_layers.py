@@ -239,7 +239,7 @@ def refresh_judge_statute_focus(
             "  NOW() "
             "FROM judge_decision_index jdi "
             "JOIN authority_statute_references asr "
-            "  ON asr.authority_document_id = jdi.authority_document_id "
+            "  ON asr.authority_id = jdi.authority_document_id "
             "GROUP BY jdi.judge_id, asr.section_id"
         )
     )
