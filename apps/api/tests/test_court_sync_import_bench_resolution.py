@@ -202,6 +202,79 @@ def test_court_sync_import_resolves_judges_when_court_id_falls_back_to_forum_nam
     assert judge_full_name in row[0] or judge_id in row[0]
 
 
+def test_bench_strategy_reads_dict_shaped_judges_json_after_inline_resolution(
+    client: TestClient,
+) -> None:
+    """End-to-end: lawyer creates matter → imports listing with known
+    judge → GET /bench-strategy returns populated bench_judge_ids.
+
+    Regression guard for the bug where _resolve_bench_judge_ids
+    iterated judges_json expecting string names but the resolver
+    writes dicts ({judge_id, matched_alias, confidence}). All dicts
+    were skipped → bench_judge_ids stayed [] → panel showed
+    'insufficient' even after the inline resolver fired.
+
+    Skipped on SQLite — build_bench_strategy uses Postgres-only ANY()
+    in the judge_decision_index count + L-B/L-C aggregate queries."""
+    session_factory = get_session_factory()
+    with session_factory() as session:
+        if session.bind.dialect.name != "postgresql":
+            import pytest
+            pytest.skip("build_bench_strategy uses Postgres-only ANY() syntax")
+    forum_name = "Test High Court Endto"
+    judge_full_name = "Endto TestJudge"
+    with session_factory() as session:
+        _, judge_id = _seed_court_and_judge(session, forum_name, judge_full_name)
+
+    bootstrap_payload = bootstrap_company(client)
+    token = str(bootstrap_payload["access_token"])
+
+    matter_resp = client.post(
+        "/api/matters/",
+        headers=auth_headers(token),
+        json={
+            "title": "End-to-end bench strategy test",
+            "matter_code": "ENDTO-2026-001",
+            "client_name": "TestClient Co.",
+            "practice_area": "Commercial Litigation",
+            "forum_level": "high_court",
+            "status": "active",
+            "court_name": forum_name,
+        },
+    )
+    assert matter_resp.status_code == 200, matter_resp.text
+    matter_id = matter_resp.json()["id"]
+
+    sync_resp = client.post(
+        f"/api/matters/{matter_id}/court-sync/import",
+        headers=auth_headers(token),
+        json={
+            "source": "manual",
+            "summary": "End-to-end bench-strategy probe.",
+            "cause_list_entries": [
+                {
+                    "listing_date": "2026-05-20",
+                    "forum_name": forum_name,
+                    "bench_name": f"Justice {judge_full_name}",
+                }
+            ],
+            "orders": [],
+        },
+    )
+    assert sync_resp.status_code == 200, sync_resp.text
+
+    bs_resp = client.get(
+        f"/api/matters/{matter_id}/bench-strategy",
+        headers=auth_headers(token),
+    )
+    assert bs_resp.status_code == 200, bs_resp.text
+    bs = bs_resp.json()
+    assert judge_id in bs["bench_judge_ids"], (
+        f"bench_strategy must extract judge_id from dict-shaped judges_json. "
+        f"Got bench_judge_ids={bs['bench_judge_ids']!r} expected to contain {judge_id!r}"
+    )
+
+
 def test_court_sync_import_with_unknown_judge_does_not_break_import(
     client: TestClient,
 ) -> None:

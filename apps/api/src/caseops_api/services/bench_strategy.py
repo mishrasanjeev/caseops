@@ -78,9 +78,11 @@ def _resolve_bench_judge_ids(
 ) -> list[str]:
     """Resolve the matter's most-recent listing → bench judges.
 
-    Reads the same matter_cause_list_entries.judges_json that
-    backfill_hc_judges_from_corpus + bench_resolver use, then maps
-    to judge_ids via judge_aliases.
+    Reads matter_cause_list_entries.judges_json which the resolver
+    populates as a list of dicts:
+      [{"judge_id": "...", "matched_alias": "...", "confidence": "..."}]
+    Falls back to re-resolving free-text names via judge_aliases when
+    the entry is a string (legacy backfill rows).
     """
     # Tenant-scoped: matter_id must belong to the company.
     rows = session.execute(
@@ -99,29 +101,35 @@ def _resolve_bench_judge_ids(
     if not rows:
         return []
     judges_raw, court_id = rows[0], rows[1]
-    if not court_id:
-        return []
     import json
     try:
-        names = (
+        entries = (
             judges_raw if isinstance(judges_raw, list)
             else json.loads(judges_raw)
         )
     except Exception:
         return []
-    if not isinstance(names, list):
+    if not isinstance(entries, list):
         return []
-    from caseops_api.services.judge_aliases import match_candidates
     judge_ids: list[str] = []
     seen: set[str] = set()
-    for name in names:
-        if not isinstance(name, str):
-            continue
-        matches = match_candidates(session, raw_text=name, court_id=court_id)
-        if not matches:
-            continue
-        jid = matches[0].judge_id
-        if jid not in seen:
+    for entry in entries:
+        jid: str | None = None
+        if isinstance(entry, dict):
+            # New format: judge_id already canonicalised by resolver.
+            raw = entry.get("judge_id")
+            if isinstance(raw, str):
+                jid = raw
+        elif isinstance(entry, str) and court_id:
+            # Legacy format: free-text judge name. Re-resolve via the
+            # alias matcher; needs matter.court_id for scope.
+            from caseops_api.services.judge_aliases import match_candidates
+            matches = match_candidates(
+                session, raw_text=entry, court_id=court_id,
+            )
+            if matches:
+                jid = matches[0].judge_id
+        if jid and jid not in seen:
             seen.add(jid)
             judge_ids.append(jid)
     return judge_ids
