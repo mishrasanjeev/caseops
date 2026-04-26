@@ -983,6 +983,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/courts/judges/aliases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read-only listing of every judge alias in the catalog, with the source that contributed it. Powers the /app/admin/judge-aliases admin page. */
+        get: operations["list_judge_aliases_api_courts_judges_aliases_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/courts/judges/{judge_id}": {
         parameters: {
             query?: never;
@@ -1887,6 +1904,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matters/{matter_id}/statute-references": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List statute references attached to a matter. Joins to StatuteSection + Statute so the UI can render section metadata without extra round-trips. */
+        get: operations["list_matter_statute_references_api_matters__matter_id__statute_references_get"];
+        put?: never;
+        /** Attach a statute section to a matter. Idempotent on the uq_matter_statute_references_unique constraint — re-posting the same (section_id, relevance) tuple returns the existing row instead of erroring. */
+        post: operations["add_matter_statute_reference_api_matters__matter_id__statute_references_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/{matter_id}/statute-references/{reference_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove a statute reference from a matter. */
+        delete: operations["delete_matter_statute_reference_api_matters__matter_id__statute_references__reference_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matters/{matter_id}/summary": {
         parameters: {
             query?: never;
@@ -2491,6 +2543,74 @@ export interface paths {
         put?: never;
         /** Record an accept/reject/edit decision on a recommendation */
         post: operations["create_decision_api_recommendations__recommendation_id__decisions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/statutes/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List every Act in the catalog with a denormalised section_count. Powers /app/statutes index. */
+        get: operations["list_statutes_api_statutes__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/statutes/{statute_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One Act's metadata (without the full section list). */
+        get: operations["get_statute_api_statutes__statute_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/statutes/{statute_id}/sections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Sections under an Act, ordered by ordinal. */
+        get: operations["list_statute_sections_api_statutes__statute_id__sections_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/statutes/{statute_id}/sections/{section_number}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One section detail. Includes parent + child rows when section is hierarchical (e.g. Section 173(8)). */
+        get: operations["get_statute_section_api_statutes__statute_id__sections__section_number__get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3172,10 +3292,39 @@ export interface components {
             /** Suggested Judges */
             suggested_judges: components["schemas"]["BenchMatchJudge"][];
         };
+        /**
+         * BenchSpecificAuthorityResponse
+         * @description Slice C (MOD-TS-001-D) — authority authored by the SPECIFIC
+         *     bench resolved for the matter's next listing.
+         */
+        BenchSpecificAuthorityResponse: {
+            /** Bench Name */
+            bench_name: string | null;
+            /** Case Reference */
+            case_reference: string | null;
+            /** Decision Date */
+            decision_date: string | null;
+            /** Forum Level */
+            forum_level: string | null;
+            /** Id */
+            id: string;
+            /** Matched Judge Ids */
+            matched_judge_ids: string[];
+            /** Neutral Citation */
+            neutral_citation: string | null;
+            /** Relevance */
+            relevance: string;
+            /** Title */
+            title: string;
+        };
         /** BenchStrategyContextResponse */
         BenchStrategyContextResponse: {
             /** Authorities Frequently Cited */
             authorities_frequently_cited: components["schemas"]["BenchContextCitedAuthorityResponse"][];
+            /** Bench Specific Authorities */
+            bench_specific_authorities?: components["schemas"]["BenchSpecificAuthorityResponse"][];
+            /** Bench Specific Limitation Note */
+            bench_specific_limitation_note?: string | null;
             /** Context Quality */
             context_quality: string;
             /** Court Name */
@@ -3186,6 +3335,8 @@ export interface components {
             judge_candidates: components["schemas"]["BenchContextJudgeCandidateResponse"][];
             /** Matter Id */
             matter_id: string;
+            /** Next Listing Id */
+            next_listing_id?: string | null;
             /** Practice Area Patterns */
             practice_area_patterns: components["schemas"]["BenchContextPracticeAreaPatternResponse"][];
             /** Recurring Tests */
@@ -5114,10 +5265,62 @@ export interface components {
              */
             updated_at: string;
         };
+        /** JudgeAliasListResponse */
+        JudgeAliasListResponse: {
+            /** Alias Count */
+            alias_count: number;
+            /** Aliases */
+            aliases: components["schemas"]["JudgeAliasRecord"][];
+            /** Judge Count */
+            judge_count: number;
+        };
+        /** JudgeAliasRecord */
+        JudgeAliasRecord: {
+            /** Alias Text */
+            alias_text: string;
+            /** Court Id */
+            court_id: string;
+            /** Court Short Name */
+            court_short_name: string;
+            /** Created At */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Judge Full Name */
+            judge_full_name: string;
+            /** Judge Id */
+            judge_id: string;
+            /** Source */
+            source: string;
+        };
+        /**
+         * JudgeAppointmentRecord
+         * @description Slice A (MOD-TS-001-B) — one row of a judge's career timeline.
+         */
+        JudgeAppointmentRecord: {
+            /** Court Id */
+            court_id: string;
+            /** Court Name */
+            court_name: string;
+            /** End Date */
+            end_date: string | null;
+            /** Id */
+            id: string;
+            /** Role */
+            role: string;
+            /** Source Evidence Text */
+            source_evidence_text: string | null;
+            /** Source Url */
+            source_url: string | null;
+            /** Start Date */
+            start_date: string | null;
+        };
         /** JudgeProfileResponse */
         JudgeProfileResponse: {
             /** Authority Document Count */
             authority_document_count: number;
+            /** Career */
+            career?: components["schemas"]["JudgeAppointmentRecord"][];
             court: components["schemas"]["CourtRecord"];
             /** Decision Volume */
             decision_volume?: components["schemas"]["DecisionVolumePoint"][];
@@ -5386,6 +5589,8 @@ export interface components {
             matter_id: string;
             /** Notes */
             notes: string | null;
+            /** Resolved Bench */
+            resolved_bench?: components["schemas"]["ResolvedBenchMember"][] | null;
             /** Source */
             source: string;
             /** Source Reference */
@@ -5926,6 +6131,50 @@ export interface components {
         MatterRestrictedAccessRequest: {
             /** Restricted */
             restricted: boolean;
+        };
+        /** MatterStatuteReferenceCreateRequest */
+        MatterStatuteReferenceCreateRequest: {
+            /** Notes */
+            notes?: string | null;
+            /**
+             * Relevance
+             * @default cited
+             */
+            relevance: string;
+            /** Section Id */
+            section_id: string;
+        };
+        /** MatterStatuteReferenceListResponse */
+        MatterStatuteReferenceListResponse: {
+            /** Matter Id */
+            matter_id: string;
+            /** References */
+            references: components["schemas"]["MatterStatuteReferenceRecord"][];
+        };
+        /** MatterStatuteReferenceRecord */
+        MatterStatuteReferenceRecord: {
+            /** Created At */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Matter Id */
+            matter_id: string;
+            /** Notes */
+            notes: string | null;
+            /** Relevance */
+            relevance: string;
+            /** Section Id */
+            section_id: string;
+            /** Section Label */
+            section_label: string | null;
+            /** Section Number */
+            section_number: string;
+            /** Section Url */
+            section_url: string | null;
+            /** Statute Id */
+            statute_id: string;
+            /** Statute Short Name */
+            statute_short_name: string;
         };
         /** MatterSummaryTimelineEvent */
         MatterSummaryTimelineEvent: {
@@ -7055,6 +7304,21 @@ export interface components {
             /** Paragraph Count */
             paragraph_count: number;
         };
+        /**
+         * ResolvedBenchMember
+         * @description Slice B (MOD-TS-001-C, 2026-04-25). One member of a resolved
+         *     bench — surfaces on /app/matters/{id}/hearings as a clickable
+         *     link to the judge profile. judge_id is the canonical Judge.id;
+         *     matched_alias preserves the original spelling for display.
+         */
+        ResolvedBenchMember: {
+            /** Confidence */
+            confidence: string;
+            /** Judge Id */
+            judge_id: string;
+            /** Matched Alias */
+            matched_alias: string;
+        };
         /** SavedAnnotationListResponse */
         SavedAnnotationListResponse: {
             /** Annotations */
@@ -7115,6 +7379,83 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /**
+         * StatuteListItem
+         * @description Statute with a section_count denormalised for the list view.
+         */
+        StatuteListItem: {
+            /** Enacted Year */
+            enacted_year: number | null;
+            /** Id */
+            id: string;
+            /** Jurisdiction */
+            jurisdiction: string;
+            /** Long Name */
+            long_name: string;
+            /** Section Count */
+            section_count: number;
+            /** Short Name */
+            short_name: string;
+            /** Source Url */
+            source_url: string | null;
+        };
+        /** StatuteListResponse */
+        StatuteListResponse: {
+            /** Statutes */
+            statutes: components["schemas"]["StatuteListItem"][];
+            /** Total Section Count */
+            total_section_count: number;
+        };
+        /** StatuteRecord */
+        StatuteRecord: {
+            /** Enacted Year */
+            enacted_year: number | null;
+            /** Id */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Jurisdiction */
+            jurisdiction: string;
+            /** Long Name */
+            long_name: string;
+            /** Short Name */
+            short_name: string;
+            /** Source Url */
+            source_url: string | null;
+        };
+        /** StatuteSectionDetailResponse */
+        StatuteSectionDetailResponse: {
+            /** Child Sections */
+            child_sections?: components["schemas"]["StatuteSectionRecord"][];
+            parent_section?: components["schemas"]["StatuteSectionRecord"] | null;
+            section: components["schemas"]["StatuteSectionRecord"];
+            statute: components["schemas"]["StatuteRecord"];
+        };
+        /** StatuteSectionRecord */
+        StatuteSectionRecord: {
+            /** Id */
+            id: string;
+            /** Ordinal */
+            ordinal: number;
+            /** Parent Section Id */
+            parent_section_id: string | null;
+            /** Section Label */
+            section_label: string | null;
+            /** Section Number */
+            section_number: string;
+            /** Section Text */
+            section_text: string | null;
+            /** Section Url */
+            section_url: string | null;
+            /** Statute Id */
+            statute_id: string;
+        };
+        /** StatuteSectionsListResponse */
+        StatuteSectionsListResponse: {
+            /** Sections */
+            sections: components["schemas"]["StatuteSectionRecord"][];
+            statute: components["schemas"]["StatuteRecord"];
         };
         /** TeamCreateRequest */
         TeamCreateRequest: {
@@ -9415,6 +9756,26 @@ export interface operations {
             };
         };
     };
+    list_judge_aliases_api_courts_judges_aliases_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JudgeAliasListResponse"];
+                };
+            };
+        };
+    };
     get_judge_profile_api_courts_judges__judge_id__get: {
         parameters: {
             query?: never;
@@ -11391,6 +11752,102 @@ export interface operations {
             };
         };
     };
+    list_matter_statute_references_api_matters__matter_id__statute_references_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterStatuteReferenceListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_matter_statute_reference_api_matters__matter_id__statute_references_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MatterStatuteReferenceCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterStatuteReferenceRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_matter_statute_reference_api_matters__matter_id__statute_references__reference_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+                reference_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_current_company_matter_summary_api_matters__matter_id__summary_get: {
         parameters: {
             query?: never;
@@ -12554,6 +13011,120 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RecommendationRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_statutes_api_statutes__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatuteListResponse"];
+                };
+            };
+        };
+    };
+    get_statute_api_statutes__statute_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                statute_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatuteRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_statute_sections_api_statutes__statute_id__sections_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                statute_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatuteSectionsListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_statute_section_api_statutes__statute_id__sections__section_number__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                statute_id: string;
+                section_number: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatuteSectionDetailResponse"];
                 };
             };
             /** @description Validation Error */
