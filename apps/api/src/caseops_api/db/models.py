@@ -2262,6 +2262,116 @@ class VoyageUsage(Base):
     )
 
 
+class JudgeDecisionIndex(Base):
+    """L-A (MOD-TS-018, 2026-04-26): per-(judge, judgment) row.
+
+    Materialized so bench-strategy panels can list a judge's history
+    in O(N) joins instead of recomputing from authority_documents.
+    judges_json on every query. Refreshed by
+    services/bench_analysis_layers.refresh_judge_decision_index.
+    """
+
+    __tablename__ = "judge_decision_index"
+    __table_args__ = (
+        UniqueConstraint(
+            "judge_id", "authority_document_id",
+            name="uq_judge_decision_index_unique",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4()),
+    )
+    judge_id: Mapped[str] = mapped_column(
+        ForeignKey("judges.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    authority_document_id: Mapped[str] = mapped_column(
+        ForeignKey("authority_documents.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    role: Mapped[str] = mapped_column(String(24), default="sat_on", nullable=False)
+    year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    matched_alias: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    match_confidence: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False,
+    )
+
+
+class JudgeAuthorityAffinity(Base):
+    """L-B (MOD-TS-018, 2026-04-26): per-(judge, cited authority) row.
+
+    Powers "this bench cites X N times" surfaces in bench-strategy.
+    Refreshed nightly by services/bench_analysis_layers.
+    """
+
+    __tablename__ = "judge_authority_affinity"
+    __table_args__ = (
+        UniqueConstraint(
+            "judge_id", "cited_authority_document_id",
+            name="uq_judge_authority_affinity_unique",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4()),
+    )
+    judge_id: Mapped[str] = mapped_column(
+        ForeignKey("judges.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    cited_authority_document_id: Mapped[str] = mapped_column(
+        ForeignKey("authority_documents.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    citation_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    sample_judgment_id: Mapped[str | None] = mapped_column(
+        ForeignKey("authority_documents.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    refreshed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False,
+    )
+
+
+class JudgeStatuteFocus(Base):
+    """L-C (MOD-TS-018, 2026-04-26): per-(judge, statute_section) row.
+
+    Powers "this bench engages this statute N times" surfaces.
+    """
+
+    __tablename__ = "judge_statute_focus"
+    __table_args__ = (
+        UniqueConstraint(
+            "judge_id", "statute_section_id",
+            name="uq_judge_statute_focus_unique",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4()),
+    )
+    judge_id: Mapped[str] = mapped_column(
+        ForeignKey("judges.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    statute_section_id: Mapped[str] = mapped_column(
+        ForeignKey("statute_sections.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    citation_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    sample_judgment_id: Mapped[str | None] = mapped_column(
+        ForeignKey("authority_documents.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    refreshed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False,
+    )
+
+
 class Recommendation(Base):
     """Explainable decision-support output for a matter (PRD §11, §23.1)."""
 

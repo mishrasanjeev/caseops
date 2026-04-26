@@ -76,13 +76,18 @@ def _seed(session: Session) -> tuple[int, int, int, int]:
         for ordinal, sec in enumerate(act.get("sections", []), start=1):
             num = sec["section_number"]
             row = existing.get(num)
+            sec_text = sec.get("section_text")
+            sec_text_source = sec.get("section_text_source")
             if row is None:
                 session.add(
                     StatuteSection(
                         statute_id=act_id,
                         section_number=num,
                         section_label=sec.get("section_label"),
-                        section_text=sec.get("section_text"),
+                        section_text=sec_text,
+                        section_text_source=sec_text_source,
+                        section_text_fetched_at=now if sec_text else None,
+                        is_provisional=False,
                         section_url=sec.get("section_url") or act.get("source_url"),
                         ordinal=ordinal,
                         is_active=True,
@@ -94,6 +99,18 @@ def _seed(session: Session) -> tuple[int, int, int, int]:
                 row.section_label = sec.get("section_label") or row.section_label
                 row.section_url = sec.get("section_url") or row.section_url
                 row.ordinal = ordinal
+                # Bake-in pattern (2026-04-26): when the seed JSON has
+                # section_text from a curated scrape, persist it so a
+                # fresh deploy lands authoritative bare text without
+                # any runtime scraping. Manual edits in DB are not
+                # overwritten unless the JSON explicitly carries new
+                # text — leaving section_text out of the JSON keeps
+                # whatever's already in the DB row.
+                if sec_text:
+                    row.section_text = sec_text
+                    row.section_text_source = sec_text_source or row.section_text_source
+                    row.section_text_fetched_at = now
+                    row.is_provisional = False
                 row.updated_at = now
                 sec_upd += 1
 

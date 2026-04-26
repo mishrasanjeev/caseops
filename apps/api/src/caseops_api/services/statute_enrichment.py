@@ -165,7 +165,17 @@ def scrape_kanoon_section(
     tree = _fetch_kanoon_act_html(statute.id, client=client)
     if tree is None:
         return None
-    target = section.section_number.strip().rstrip(".")
+    raw = section.section_number.strip().rstrip(".")
+    # Strip "Section " / "Sec. " / "Article " / "Art. " / "Order "
+    # prefixes — the seed JSON uses human-friendly forms ("Section 300",
+    # "Article 14") while kanoon uses the bare number in element IDs
+    # ("section_300", "section_14"). Tolerate either input.
+    target = re.sub(
+        r"^(?:section|sec\.?|article|art\.?|order|rule)\s+",
+        "",
+        raw,
+        flags=re.IGNORECASE,
+    ).strip()
     # Try a few id variants kanoon uses for different acts:
     # - "section_300"
     # - "section_300A"   (e.g. NI Act has 138A, 142A)
@@ -180,9 +190,22 @@ def scrape_kanoon_section(
             break
     if matched is None:
         return None
-    # Extract text content, strip nested element noise, collapse
-    # whitespace.
-    text = " ".join(matched.itertext())
+    # Extract text content. Two kanoon rendering patterns:
+    # (a) IPC / NI Act / Constitution — section content nested INSIDE
+    #     the matched <section id="section_N">...</section> wrapper.
+    # (b) BNS / BNSS — the section wrapper closes immediately after
+    #     the heading; the actual subsections are SIBLINGS that follow.
+    # Handle both: take the matched element's own text, then walk
+    # following siblings and append their text until we hit the next
+    # numbered section wrapper (id matching `section_<digit>`).
+    parts: list[str] = list(matched.itertext())
+    next_numbered = re.compile(r"^section_\d", re.IGNORECASE)
+    for sib in matched.itersiblings():
+        sib_id = sib.get("id") or ""
+        if next_numbered.match(sib_id):
+            break
+        parts.extend(sib.itertext())
+    text = " ".join(parts)
     text = re.sub(r"\s+", " ", text).strip()
     if len(text) < 40:
         return None
