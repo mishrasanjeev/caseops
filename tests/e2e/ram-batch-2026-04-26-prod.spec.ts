@@ -61,6 +61,41 @@ async function allMatterIds(page: Page): Promise<string[]> {
 }
 
 test.describe("Ram batch 2026-04-26 — prod verification of c58305b fixes", () => {
+  test("AUTH-001 (user-reported 2026-04-26 PM): expired session redirects to /sign-in, not raw 401", async ({
+    page,
+    context,
+  }) => {
+    // Sign in normally so we land on /app with valid cookies.
+    await signIn(page);
+    expect(page.url()).toContain("/app");
+
+    // Simulate session expiry: clear the session cookie. The next API
+    // call from the page will get a 401 with type=missing_bearer_token,
+    // which the client must handle by trying refresh + redirecting to
+    // /sign-in (graceful) rather than throwing a raw error toast.
+    await context.clearCookies({ name: "caseops_session" });
+
+    // Trigger a portfolio fetch by navigating to /app/matters which
+    // calls listMatters() on mount.
+    await page.goto(`${PROD_BASE_URL}/app/matters`, {
+      waitUntil: "networkidle",
+    });
+
+    // Either we end up on /sign-in (the graceful redirect path) OR
+    // the page rendered the sign-in form. Both prove the auth UX
+    // didn't strand the user on a broken /app shell. The original
+    // bug surfaced the raw 401 JSON as a toast/error.
+    await page.waitForURL(/\/sign-in(\?|$)/, { timeout: 10_000 });
+    expect(page.url()).toMatch(/\/sign-in/);
+
+    // The bug also showed the raw API JSON. Assert NONE of the
+    // forbidden raw-error markers appear on the redirected page.
+    const body = await page.content();
+    expect(body).not.toContain("missing_bearer_token");
+    expect(body).not.toContain("Could not load your portfolio");
+  });
+
+
   test("BUG-022: Topbar dropdown does NOT render Profile / Workspace settings placeholders", async ({
     page,
   }) => {

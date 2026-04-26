@@ -204,10 +204,28 @@ export async function apiRequest<TResponse>(
     // browser callers; the bearer-token path also benefits when the
     // caller passed an explicit ``token`` (the refresh response will
     // include a fresh access_token in the body).
+    //
+    // 2026-04-26 (user-reported "Could not load your portfolio"):
+    // The original condition only listed "invalid_token". When the
+    // session cookie expires past its `exp` AND the browser stops
+    // sending it (or the JWT signature checks fail differently), the
+    // backend returns "missing_bearer_token" which fell through this
+    // check, surfaced as a raw 401 toast, and stranded the user on a
+    // broken /app shell. Both problemType slugs now trigger the
+    // refresh-or-redirect path. If the refresh fails AND we're in
+    // the cookie path (no explicit bearer), the second attempt will
+    // hit the same 401, _retry=true so we won't loop, and the helper
+    // below redirects to /sign-in instead of throwing into a toast.
+    const AUTH_REFRESH_TRIGGERS = new Set([
+      "invalid_token",
+      "missing_bearer_token",
+      "expired_token",
+    ]);
     if (
       !_retry &&
       response.status === 401 &&
-      problemType === "invalid_token" &&
+      problemType !== null &&
+      AUTH_REFRESH_TRIGGERS.has(problemType) &&
       !path.endsWith(REFRESH_PATH)
     ) {
       const fresh = await refreshAccessToken();
@@ -221,6 +239,24 @@ export async function apiRequest<TResponse>(
           true,
         );
       }
+    }
+    // Final fallback for browser/cookie callers: an unrecoverable 401
+    // (refresh tried + still 401, or refresh outright failed) means
+    // the session is gone. Redirect to /sign-in instead of throwing
+    // a raw 401 into whatever toast surface caught it. Per
+    // `feedback_auth_ux_basics`: every authed surface needs the
+    // graceful /sign-in redirect when refresh fails.
+    if (
+      response.status === 401 &&
+      explicitToken === undefined &&
+      typeof window !== "undefined" &&
+      !window.location.pathname.startsWith("/sign-in") &&
+      !path.endsWith(REFRESH_PATH)
+    ) {
+      const next = encodeURIComponent(
+        window.location.pathname + window.location.search,
+      );
+      window.location.assign(`/sign-in?next=${next}`);
     }
 
     throw new ApiError(
