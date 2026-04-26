@@ -208,6 +208,15 @@ class Settings(BaseSettings):
     corpus_ingest_batch_size: int = Field(default=25, ge=1, le=500)
     corpus_ingest_max_workdir_mb: int = Field(default=500, ge=32, le=20000)
     corpus_ingest_temp_root: str | None = Field(default=None)
+    # Voyage spend ledger + daily cap. After the Apr 18-26 incident
+    # ($343 over 8 days, no on-DB visibility) every embed call writes
+    # a VoyageUsage row and the next batch refuses if today's
+    # cumulative cost exceeds voyage_daily_cap_usd. Set to 0 to
+    # disable the cap; set voyage_usage_audit_enabled=false to skip
+    # writes (e.g., in offline tests where DB isn't reachable).
+    voyage_usage_audit_enabled: bool = Field(default=True)
+    voyage_daily_cap_usd: float = Field(default=20.0, ge=0.0)
+    voyage_price_per_million_tokens_usd: float = Field(default=0.18, ge=0.0)
     # OCR fallback for scanned judgment PDFs. Defaults to rapidocr (pure
     # Python, ONNX, no native binary). Set to `none` to disable.
     ocr_provider: str = Field(default="rapidocr")

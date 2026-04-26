@@ -26,11 +26,13 @@ from __future__ import annotations
 import hashlib
 import logging
 import math
+import time
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Protocol
 
 from caseops_api.core.settings import get_settings
+from caseops_api.services import voyage_usage as _voyage_usage
 
 logger = logging.getLogger(__name__)
 
@@ -263,6 +265,7 @@ class VoyageProvider:
         texts: list[str],
         *,
         input_type: str = "document",
+        purpose: str = "ingest",
     ) -> EmbeddingResult:
         """Embed a batch of texts.
 
@@ -270,6 +273,14 @@ class VoyageProvider:
         pass ``"query"`` when embedding a search query and ``"document"``
         (default) for corpus chunks. Using the wrong type costs a
         noticeable chunk of top-k recall on voyage-4 / voyage-law-2.
+
+        ``purpose`` (default ``"ingest"``) is recorded on the
+        ``VoyageUsage`` ledger row so the operator can see which code
+        path is burning tokens.
+
+        Each call is gated by ``voyage_usage.assert_under_daily_cap()``
+        and recorded in the ``voyage_usage`` table — the spend leg
+        analogue of ``ModelRun``.
 
         Automatically splits the input into sub-batches that fit under
         Voyage's per-request ceilings (120K tokens / 128 items). Large
@@ -279,6 +290,10 @@ class VoyageProvider:
             return EmbeddingResult(
                 vectors=[], provider=self.name, model=self.model, dimensions=self.dimensions
             )
+        # Cap check happens once at the top of every embed() call. The
+        # batches below all run under the same cap; if we'd race past
+        # it mid-call we'd at most overshoot by one batch.
+        _voyage_usage.assert_under_daily_cap()
 
         # Count tokens per text using voyage's own tokenizer (loaded
         # from HF on first use). `tokenize` returns one token-list per
@@ -335,6 +350,12 @@ class VoyageProvider:
         all_vectors: list[list[float]] = [None] * len(texts)  # type: ignore[list-item]
         for group in groups:
             batch_texts = [texts[i] for i in group]
+            batch_tokens = (
+                sum(per_text_tokens[i] for i in group)
+                if per_text_tokens is not None
+                else sum(max(1, len(texts[i]) // 4) for i in group)
+            )
+            t0 = time.perf_counter()
             try:
                 result = self._client.embed(
                     batch_texts,
@@ -343,7 +364,28 @@ class VoyageProvider:
                     output_dimension=self.dimensions,
                 )
             except Exception as exc:
+                _voyage_usage.record_call(
+                    purpose=purpose,
+                    model=self.model,
+                    input_type=input_type,
+                    texts_count=len(group),
+                    tokens=batch_tokens,
+                    dimensions=self.dimensions,
+                    latency_ms=int((time.perf_counter() - t0) * 1000),
+                    status="error",
+                    error=str(exc)[:500],
+                )
                 raise EmbeddingProviderError(f"Voyage embed failed: {exc}") from exc
+            _voyage_usage.record_call(
+                purpose=purpose,
+                model=self.model,
+                input_type=input_type,
+                texts_count=len(group),
+                tokens=batch_tokens,
+                dimensions=self.dimensions,
+                latency_ms=int((time.perf_counter() - t0) * 1000),
+                status="ok",
+            )
             for pos, raw in zip(group, result.embeddings, strict=False):
                 padded = _pad([float(x) for x in raw], self.dimensions)
                 all_vectors[pos] = _l2_normalize(padded)

@@ -11,6 +11,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -2219,6 +2220,39 @@ class ModelRun(Base):
     # "rejected_no_verified_citations" don't fit in 24. Kept as
     # VARCHAR rather than an enum because the taxonomy is still
     # evolving and enum migrations on Postgres are painful.
+    status: Mapped[str] = mapped_column(String(64), default="ok", nullable=False)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+
+
+class VoyageUsage(Base):
+    """Auditable record of every Voyage embedding call.
+
+    Mirror of ``ModelRun`` for the embedding-spend leg. Without this
+    table, the only spend signal was the Voyage console — which is
+    why the Apr 18-26 SC ingest burned $343 before anyone noticed.
+    """
+
+    __tablename__ = "voyage_usage"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str | None] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    purpose: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    model: Mapped[str] = mapped_column(String(120), nullable=False)
+    input_type: Mapped[str] = mapped_column(String(16), default="document", nullable=False)
+    texts_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    dimensions: Mapped[int] = mapped_column(Integer, default=1024, nullable=False)
+    cost_usd: Mapped[float] = mapped_column(Numeric(12, 6), default=0, nullable=False)
+    latency_ms: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     status: Mapped[str] = mapped_column(String(64), default="ok", nullable=False)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

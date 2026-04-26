@@ -125,25 +125,16 @@ def _year_for_doc(doc: AuthorityDocument) -> int | None:
 
 
 def _tier_for_doc(doc: AuthorityDocument) -> str:
-    """Route a document to Sonnet (high-value) or Haiku (rest).
+    """Default-route every document to Haiku.
 
-    Premium tier (Sonnet) requirements — all must hold:
-      - court is the Supreme Court of India
-      - filename year is 1980..2025 (decoded from source_reference)
-      - document is English (``_EN.pdf`` suffix)
-
-    Everything else goes to Haiku.
+    The previous Sonnet-tier promotion (SC + English + 1980-2025) was
+    burning ~$120/day during sweeps and accounted for $855 of the
+    Apr 18-26 Anthropic bill — without a measurable retrieval-quality
+    delta in the eval probes. Haiku is now the default; pass
+    ``--force-tier sonnet`` to re-enable premium routing for an
+    explicit, time-boxed run.
     """
-    court = (doc.court_name or "").lower()
-    if "supreme" not in court:
-        return "haiku"
-    year = _year_for_doc(doc)
-    if year is None or not (1980 <= year <= 2025):
-        return "haiku"
-    ref = doc.source_reference or ""
-    if "_EN.PDF" not in ref.upper():
-        return "haiku"
-    return "sonnet"
+    return "haiku"
 
 
 def _already_covered_at_tier(doc: AuthorityDocument, tier: str) -> bool:
