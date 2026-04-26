@@ -7453,6 +7453,11 @@ export interface components {
         StatuteSectionRecord: {
             /** Id */
             id: string;
+            /**
+             * Is Provisional
+             * @default false
+             */
+            is_provisional: boolean;
             /** Ordinal */
             ordinal: number;
             /** Parent Section Id */
@@ -7463,6 +7468,8 @@ export interface components {
             section_number: string;
             /** Section Text */
             section_text: string | null;
+            /** Section Text Source */
+            section_text_source?: string | null;
             /** Section Url */
             section_url: string | null;
             /** Statute Id */
