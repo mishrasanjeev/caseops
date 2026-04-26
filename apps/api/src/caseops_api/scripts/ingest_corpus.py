@@ -137,8 +137,29 @@ def _build_parser() -> argparse.ArgumentParser:
             "burn embedding credit. Default 0 (no filter)."
         ),
     )
+    parser.add_argument(
+        "--language-suffix",
+        default=None,
+        help=(
+            "Comma-separated language tags to keep (e.g. 'EN' or 'EN,HIN'). "
+            "Matches the SC filename convention "
+            "S_<year>_<vol>_<startpg>_<endpg>_<LANG>.pdf — files whose "
+            "tag is not in the list are dropped BEFORE PDF parse, saving "
+            "~30s of CPU per non-matching PDF (vs the default behaviour "
+            "of trying to OCR everything and failing). Files without a "
+            "recognisable language tag (e.g. HC WP_xxxx_of_yyyy.pdf) "
+            "always pass through. Default: no filter."
+        ),
+    )
     parser.add_argument("--verbose", "-v", action="store_true")
     return parser
+
+
+def _parse_language_suffix(value: str | None) -> tuple[str, ...] | None:
+    if not value:
+        return None
+    parts = tuple(s.strip().upper() for s in value.split(",") if s.strip())
+    return parts or None
 
 
 def _parse_years(value: str | None, single: int | None) -> list[int]:
@@ -260,6 +281,8 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
 
+    language_suffixes = _parse_language_suffix(args.language_suffix)
+
     with factory() as session:
         for year in years:
             print(f"=== {args.court}/year={year} ===")
@@ -274,6 +297,7 @@ def main(argv: list[str] | None = None) -> int:
                         temp_root=args.temp_root,
                         hc_courts=hc_courts,
                         min_chars=args.min_chars,
+                        language_suffixes=language_suffixes,
                     )
                 else:
                     summary = ingest_sc_from_s3(
@@ -283,6 +307,7 @@ def main(argv: list[str] | None = None) -> int:
                         max_workdir_mb=args.max_workdir_mb,
                         temp_root=args.temp_root,
                         min_chars=args.min_chars,
+                        language_suffixes=language_suffixes,
                     )
                 _print_summary(
                     summary,
@@ -299,6 +324,7 @@ def main(argv: list[str] | None = None) -> int:
                     limit=args.limit,
                     delete_after=not args.keep,
                     min_chars=args.min_chars,
+                    language_suffixes=language_suffixes,
                 )
                 _print_summary(
                     summary,

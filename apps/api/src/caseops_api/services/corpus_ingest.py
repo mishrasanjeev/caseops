@@ -534,6 +534,33 @@ def _apply_pgvector_batch_for_matter(
 # ---------------------------------------------------------------------------
 
 
+# SC corpus filename convention: ``S_<year>_<vol>_<startpg>_<endpg>_<LANG>.pdf``
+# where LANG ∈ {EN, HIN, BEN, TAM, TEL, KAN, MAR, GUJ, PAN, ORI, URD, ASS, MAL}.
+# HC files generally have no language tag. The matcher below extracts the
+# 2-4-letter caps suffix immediately before ``.pdf``.
+_LANG_SUFFIX_RE = re.compile(r"_([A-Z]{2,4})\.pdf$", re.IGNORECASE)
+
+
+def _matches_language_filter(
+    path: Path, allowed: tuple[str, ...] | None
+) -> bool:
+    """Return True if ``path`` should be kept under the language filter.
+
+    No filter (None / empty) → keep everything (legacy behaviour).
+    Filter set → keep files whose ``_<LANG>.pdf`` suffix matches AND files
+    that have no recognisable language tag (e.g. HC ``WP_1234_of_2019.pdf``
+    has no ``_<LANG>``, so we don't second-guess it). This means
+    ``--language-suffix EN`` on a SC tar drops all ``_HIN/_BEN/...`` PDFs
+    without breaking HC workflows that pass through untagged files.
+    """
+    if not allowed:
+        return True
+    m = _LANG_SUFFIX_RE.search(path.name)
+    if m is None:
+        return True
+    return m.group(1).upper() in {s.upper() for s in allowed}
+
+
 def ingest_local_directory(
     session: Session,
     *,
@@ -546,6 +573,7 @@ def ingest_local_directory(
     delete_after: bool = False,
     court_display: str | None = None,
     min_chars: int = 0,
+    language_suffixes: tuple[str, ...] | None = None,
 ) -> IngestionSummary:
     """Walk ``directory`` for PDFs and ingest them one at a time.
 
@@ -558,10 +586,24 @@ def ingest_local_directory(
     and other procedural filings that otherwise pollute retrieval and
     burn embedding credit. A reasoned judgment is typically ≥ 4,000
     chars (~2 pages of extracted text). Default 0 keeps legacy behaviour.
+
+    ``language_suffixes`` (e.g. ``("EN",)``) filters by the SC filename
+    language tag BEFORE PDF parse + OCR. Avoids ~30s of wasted CPU per
+    HIN/BEN/TAM PDF that would have been skipped at the OCR-unavailable
+    fallback anyway. Files without a recognisable ``_<LANG>.pdf`` suffix
+    pass through (HC convention).
     """
     embedder = embedding_provider or build_provider()
     summary = IngestionSummary()
     pdfs = sorted(p for p in directory.rglob("*.pdf") if p.is_file())
+    if language_suffixes:
+        before = len(pdfs)
+        pdfs = [p for p in pdfs if _matches_language_filter(p, language_suffixes)]
+        if before != len(pdfs):
+            logger.info(
+                "language filter %s: kept %d of %d PDFs",
+                "+".join(language_suffixes), len(pdfs), before,
+            )
     if limit is not None:
         pdfs = pdfs[:limit]
     summary.total_files = len(pdfs)
@@ -704,6 +746,7 @@ def ingest_hc_from_s3(
     embedding_provider: EmbeddingProvider | None = None,
     hc_courts: list[tuple[str, str]] | None = None,
     min_chars: int = 0,
+    language_suffixes: tuple[str, ...] | None = None,
 ) -> IngestionSummary:
     """Stream High Court judgments for a given year from S3.
 
@@ -792,6 +835,7 @@ def ingest_hc_from_s3(
                     delete_after=True,
                     court_display=scope_display,
                     min_chars=min_chars,
+                    language_suffixes=language_suffixes,
                 )
                 overall.processed_files += batch_summary.processed_files
                 overall.skipped_files += batch_summary.skipped_files
@@ -830,6 +874,7 @@ def ingest_sc_from_s3(
     embedding_provider: EmbeddingProvider | None = None,
     max_workdir_mb: int | None = None,
     min_chars: int = 0,
+    language_suffixes: tuple[str, ...] | None = None,
 ) -> IngestionSummary:
     """Stream Supreme Court tarballs for a year, extract + ingest + delete."""
     settings = get_settings()
@@ -877,6 +922,7 @@ def ingest_sc_from_s3(
                 embedding_provider=embedder,
                 delete_after=True,
                 min_chars=min_chars,
+                language_suffixes=language_suffixes,
             )
             overall.processed_files += batch_summary.processed_files
             overall.skipped_files += batch_summary.skipped_files
