@@ -420,17 +420,35 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
   `apps/web/package.json:13`,
   `apps/web/lib/api/openapi-types.ts:1`.
 
-- `WTD-7.2` `Missing` Generic task and deadline model beyond contract-only
-  obligations.
-  Evidence: `docs/WORK_TO_BE_DONE.md:534-540`.
+- `WTD-7.2` `Partially implemented` Generic task and deadline model beyond
+  contract-only obligations (re-graded 2026-04-26 from Missing — both
+  models exist; UX surfaces are the remaining gap).
+  Evidence: `apps/api/src/caseops_api/db/models.py:607` (`MatterTask`),
+  `apps/api/src/caseops_api/db/models.py:3266` (`MatterDeadline`),
+  `apps/api/src/caseops_api/services/calendar_service.py` (unified
+  feed across hearings, tasks, deadlines).
+  Remaining: matter-cockpit Tasks tab + Deadlines tab + admin
+  task templates per practice-area.
 
 - `WTD-7.3` `Partially implemented` Model-evaluation admin gate and cost rollup.
   Evidence: `docs/WORK_TO_BE_DONE.md:541-545`,
   `apps/api/src/caseops_api/db/models.py:2704`,
   `apps/api/src/caseops_api/services/evaluation.py:12-137`.
 
-- `WTD-7.4` `Missing` Statute, Section, Issue, and Relief model.
-  Evidence: `docs/WORK_TO_BE_DONE.md:547-550`.
+- `WTD-7.4` `Implemented` Statute, Section, Issue, and Relief model
+  (closed 2026-04-25 via MOD-TS-017 Slices S1+S2+S3+S4).
+  Evidence: `apps/api/alembic/versions/20260425_0004_statute_model.py`
+  (4 tables: statutes / statute_sections / matter_statute_references
+  / authority_statute_references), `apps/api/src/caseops_api/scripts/
+  seed_data/statutes.json` (7 central acts, 91 sections, indiacode.
+  nic.in source URLs), `services/statute_resolver.py` (tolerant
+  parser handling BNSS-vs-BNS substring trap, '§', 'S.', 'Article'
+  variants), 23 backend tests + 5 vitest cases. Drafting prompt
+  receives bare section text for verbatim quoting on appeal-
+  memorandum drafts. Live in prod; 7 acts / 91 sections seeded
+  via `caseops-seed-statutes` Cloud Run Job. Remaining (out of
+  v1 scope): bare-text enrichment for the long-tail sections,
+  amendment history, cross-act mapping (CrPC -> BNSS), state acts.
 
 - `WTD-8.3` `Partially implemented` Backup + restore drill closed
   2026-04-24 (see P1-009 above and `docs/RESTORE_DRILL_2026-04-24.md`).
@@ -525,44 +543,10 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
 
 ## 2026-04-24 Strict Repo Quality Audit Additions
 
-- `QG-P0-001` `Missing` Admin audit export is broken after the HttpOnly cookie
-  migration because the UI still calls `getStoredToken()` and sends a bearer
-  header even though `getStoredToken()` now always returns `null`.
-  Evidence: `apps/web/lib/session.ts:30-36`,
-  `apps/web/app/app/admin/page.tsx:51-69`,
-  `docs/STRICT_REPO_QUALITY_AUDIT_2026-04-24.md`.
-
-- `QG-P0-002` `Missing` Canonical Windows backend verification is not
-  repeatable because `scripts/verify-backend.ps1` fails to parse before lint or
-  pytest run.
-  Evidence: `scripts/verify-backend.ps1:28`,
-  `docs/STRICT_REPO_QUALITY_AUDIT_2026-04-24.md`.
-
-- `QG-P0-003` `Partially implemented` Calendar ICS route returns an ICS body but
-  OpenAPI quality verification fails because the declared response media type is
-  `text/plain`.
-  Evidence: `apps/api/src/caseops_api/api/routes/calendar.py:96-137`,
-  `tests/test_openapi_quality.py`,
-  `docs/STRICT_REPO_QUALITY_AUDIT_2026-04-24.md`.
-
-- `QG-P0-004` `Partially implemented` SendGrid webhook signature verification
-  can fail open when the public key is missing or the crypto dependency cannot
-  be imported.
-  Evidence: `apps/api/src/caseops_api/api/routes/notifications.py:101-116`,
-  `docs/STRICT_REPO_QUALITY_AUDIT_2026-04-24.md`.
-
-- `QG-P0-005` `Partially implemented` Billing E2E coverage is not clean because
-  the Pine Labs credential skip can also hide the invoice UI path from default
-  E2E verification.
-  Evidence: `tests/e2e/billing-payment.spec.ts:43-46`,
-  `docs/STRICT_REPO_QUALITY_AUDIT_2026-04-24.md`.
-
-- `QG-P1-001` `Partially implemented` Generated API route and frontend page
-  coverage ledgers now exist and fail on new unclassified surfaces, but 16 API
-  and 20 page baseline waivers remain real test gaps.
-  Evidence: `apps/api/tests/test_route_coverage_matrix.py`,
-  `apps/web/app/__page-coverage-matrix.test.ts`,
-  `docs/CODEX_REVIEW_PACK_2026-04-24.md`.
+QG-P0-001 through QG-P0-005 historical entries removed 2026-04-26 —
+all five duplicated the `P0-001` … `P0-005` entries earlier in this
+file (closed in commit `161c384`). The active per-area coverage
+ledger is `P1-002` / `P1-003` / `AQ-003` / `AQ-004` above.
 
 - `QG-P1-002` `Implemented` Security scanning and dependency/license gates are
   wired into CI.
