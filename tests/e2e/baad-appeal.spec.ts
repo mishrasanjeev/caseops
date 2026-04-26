@@ -102,7 +102,7 @@ test.describe("BAAD-001 appeal drafting + Appeal Strength (MOD-TS-001-A)", () =>
     // bug-detection: if KNOWN_TEMPLATE_TYPES is missing the entry,
     // the URL query-params but the stepper doesn't mount and the
     // next assertion fails.
-    await page.getByTestId("start-draft-appeal_memorandum").click();
+    await page.getByTestId("start-draft-appeal_memorandum").first().click();
     await page.waitForURL(
       /\/app\/matters\/[0-9a-f-]+\/drafts\/new\?type=appeal_memorandum$/,
     );
