@@ -141,6 +141,49 @@ def test_ft_s4_3_cross_tenant_matter_returns_404(client: TestClient) -> None:
     assert "matter not found" in resp.json()["detail"].lower()
 
 
+def test_delete_matter_statute_reference_removes_row_returns_204(
+    client: TestClient,
+) -> None:
+    """DELETE /matters/{id}/statute-references/{ref_id} removes the
+    row and returns 204. Re-deleting the same ref returns 404 —
+    proves the FK row is actually gone, not soft-deleted."""
+    from caseops_api.db.session import get_session_factory
+
+    token, matter_id, _ = _bootstrap_with_statutes_and_matter(client)
+    with get_session_factory()() as s:
+        section_id = s.scalar(
+            select(StatuteSection.id).where(
+                StatuteSection.statute_id == "ipc-1860",
+                StatuteSection.section_number == "Section 420",
+            )
+        )
+    create = client.post(
+        f"/api/matters/{matter_id}/statute-references",
+        json={"section_id": section_id, "relevance": "cited"},
+        headers=auth_headers(token),
+    )
+    assert create.status_code == 201
+    ref_id = create.json()["id"]
+
+    delete = client.delete(
+        f"/api/matters/{matter_id}/statute-references/{ref_id}",
+        headers=auth_headers(token),
+    )
+    assert delete.status_code == 204, delete.text
+
+    listed = client.get(
+        f"/api/matters/{matter_id}/statute-references",
+        headers=auth_headers(token),
+    )
+    assert listed.json()["references"] == []
+
+    delete_again = client.delete(
+        f"/api/matters/{matter_id}/statute-references/{ref_id}",
+        headers=auth_headers(token),
+    )
+    assert delete_again.status_code == 404
+
+
 def test_ft_s4_4_drafting_prompt_includes_statutory_text_block(
     client: TestClient,
 ) -> None:

@@ -21,7 +21,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 
-from caseops_api.api.dependencies import DbSession, get_current_context
+from caseops_api.api.dependencies import (
+    DbSession,
+    get_current_context,
+    require_capability,
+)
 from caseops_api.db.models import (
     Matter,
     MatterStatuteReference,
@@ -33,6 +37,13 @@ from caseops_api.services.identity import SessionContext
 router = APIRouter()
 matter_scoped_router = APIRouter()
 CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
+# MOD-TS-017 Slice S4 — write actions on matter statute references
+# require the matters:edit capability (same gate as other matter-
+# scoped writes). Tenant scoping inside `_scoped_matter_or_404`
+# further restricts which matter the user can touch.
+MatterEditor = Annotated[
+    SessionContext, Depends(require_capability("matters:edit"))
+]
 
 
 class StatuteRecord(BaseModel):
@@ -379,7 +390,7 @@ def list_matter_statute_references(
 def add_matter_statute_reference(
     matter_id: str,
     payload: MatterStatuteReferenceCreateRequest,
-    context: CurrentContext,
+    context: MatterEditor,
     session: DbSession,
 ) -> MatterStatuteReferenceRecord:
     matter = _scoped_matter_or_404(
@@ -444,7 +455,7 @@ def add_matter_statute_reference(
 def delete_matter_statute_reference(
     matter_id: str,
     reference_id: str,
-    context: CurrentContext,
+    context: MatterEditor,
     session: DbSession,
 ):
     matter = _scoped_matter_or_404(
