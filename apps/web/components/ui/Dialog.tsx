@@ -38,7 +38,18 @@ export const DialogContent = forwardRef<
       <DialogPrimitive.Content
         ref={ref}
         className={cn(
-          "fixed left-1/2 top-1/2 z-50 flex w-full max-w-lg -translate-x-1/2 -translate-y-1/2 flex-col gap-4 rounded-2xl border border-[var(--color-line)] bg-white p-6 shadow-[var(--shadow-lifted)]",
+          // BUG-018 + BUG-020 (Ram 2026-04-26): tall forms (Invoice,
+          // New Client, etc.) on mobile (360x800) clipped both ends
+          // because the base had no max-h + no overflow + the
+          // top-1/2 -translate-y-1/2 centering pushed the top of a
+          // tall dialog off-screen. The fix lives at the primitive so
+          // every dialog inherits the mobile-safe shape.
+          // - max-h-[90vh]: never exceed viewport
+          // - overflow-y-auto: scroll the dialog body when it does
+          // - mx-4 (mobile) → centered (sm:): on tiny screens, hug
+          //   the edges with safe gutters; from sm: revert to centered
+          //   translate-x-1/2 layout via the translate utilities
+          "fixed left-1/2 top-1/2 z-50 flex w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 flex-col gap-4 overflow-y-auto rounded-2xl border border-[var(--color-line)] bg-white p-6 shadow-[var(--shadow-lifted)] max-h-[90vh]",
           className,
         )}
         {...props}

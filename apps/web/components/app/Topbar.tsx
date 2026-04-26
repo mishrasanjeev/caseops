@@ -1,6 +1,6 @@
 "use client";
 
-import { LogOut, Menu, Search, Settings, User } from "lucide-react";
+import { LogOut, Menu, Search } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import type { FormEvent } from "react";
@@ -133,15 +133,16 @@ export function Topbar() {
           <DropdownMenuLabel className="-mt-1 truncate text-[10px] normal-case tracking-normal text-[var(--color-mute-2)]">
             {user?.email}
           </DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem disabled>
-            <User className="h-4 w-4" aria-hidden />
-            Profile
-          </DropdownMenuItem>
-          <DropdownMenuItem disabled>
-            <Settings className="h-4 w-4" aria-hidden />
-            Workspace settings
-          </DropdownMenuItem>
+          {/*
+            BUG-022 (Ram 2026-04-26): Profile and Workspace-settings
+            menu items were rendering as disabled placeholders. A
+            disabled menu row that does nothing on click is a worse
+            signal than no row at all — Ram (correctly) flagged them
+            as broken. Until the underlying /app/profile and
+            /app/admin/workspace routes ship, hide them entirely.
+            Per `feedback_fix_vs_mitigation`: no impossible actions
+            in the UI.
+          */}
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={handleSignOut} data-testid="sign-out">
             <LogOut className="h-4 w-4" aria-hidden />

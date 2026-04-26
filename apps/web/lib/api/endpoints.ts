@@ -1326,9 +1326,14 @@ export async function addMatterStatuteReference(
     notes?: string;
   },
 ): Promise<MatterStatuteReferenceRecord> {
+  // BUG-017 (Ram 2026-04-26 fix): pass the raw object — apiRequest's
+  // serializer JSON.stringifies non-FormData bodies once. The earlier
+  // `body: JSON.stringify(payload)` was double-encoding into a JSON
+  // string, which FastAPI rejected with "Input should be a valid
+  // dictionary or object" (422).
   return apiRequest(`/api/matters/${matterId}/statute-references`, {
     method: "POST",
-    body: JSON.stringify(payload),
+    body: payload,
   });
 }
 
