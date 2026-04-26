@@ -1203,6 +1203,8 @@ export type StatuteSectionRecord = {
   section_number: string;
   section_label: string | null;
   section_text: string | null;
+  section_text_source: string | null;
+  is_provisional: boolean;
   section_url: string | null;
   parent_section_id: string | null;
   ordinal: number;
