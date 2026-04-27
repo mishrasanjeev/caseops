@@ -1,7 +1,19 @@
 /**
- * Standalone Playwright config for the Ram-batch production
- * verification spec. No local webServer — points entirely at the
- * deployed caseops.ai surface so we test the EXACT bytes Ram saw.
+ * Standalone Playwright config for the prod-verification spec. No
+ * local webServer — points entirely at the deployed caseops.ai surface.
+ *
+ * Auth: signs in once via tests/e2e/setup/qa-auth.setup.ts as the
+ * dedicated CaseOps QA Bot (workspace slug: caseops-qa). Storage state
+ * is persisted to tests/e2e/.auth/qa-storage.json (gitignored). The
+ * test infra has zero dependency on real-user accounts — see
+ * feedback_dedicated_test_account_no_real_users.md.
+ *
+ * The filename keeps the historical "ram" prefix for backwards-compat
+ * with existing CI workflow references; the underlying account is the
+ * QA Bot workspace.
+ *
+ * Skips the bootstrap-qa-workspace.setup.ts file at the project level
+ * (it's a one-off; the prod workspace is already created).
  */
 import { defineConfig, devices } from "@playwright/test";
 import fs from "node:fs";
@@ -12,11 +24,11 @@ const candidates = [
 ];
 const browserExecutablePath = candidates.find((c) => fs.existsSync(c));
 
-const RAM_STORAGE_STATE = "tests/e2e/.auth/ram-storage.json";
+const QA_STORAGE_STATE = "tests/e2e/.auth/qa-storage.json";
 
 export default defineConfig({
   testDir: "tests/e2e",
-  testMatch: /(ram-batch-2026-04-26-prod\.spec\.ts|ram-auth\.setup\.ts)$/,
+  testMatch: /(ram-batch-2026-04-26-prod\.spec\.ts|qa-auth\.setup\.ts)$/,
   timeout: 120_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,
@@ -31,7 +43,7 @@ export default defineConfig({
   projects: [
     {
       name: "setup",
-      testMatch: /ram-auth\.setup\.ts$/,
+      testMatch: /qa-auth\.setup\.ts$/,
       use: {
         launchOptions: browserExecutablePath
           ? { executablePath: browserExecutablePath }
@@ -44,7 +56,7 @@ export default defineConfig({
       testMatch: /ram-batch-2026-04-26-prod\.spec\.ts$/,
       use: {
         ...devices["Desktop Chrome"],
-        storageState: RAM_STORAGE_STATE,
+        storageState: QA_STORAGE_STATE,
         launchOptions: browserExecutablePath
           ? { executablePath: browserExecutablePath }
           : undefined,

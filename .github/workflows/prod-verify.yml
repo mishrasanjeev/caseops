@@ -1,10 +1,14 @@
 name: Prod verification (Playwright)
 
 # Runs the brutal-honest prod-Playwright suite (tests/e2e/ram-batch-2026-04-26-prod.spec.ts)
-# against the LIVE caseops.ai + api.caseops.ai surface using a real test
-# user (Ram). Per .claude/skills/bug-fixing/SKILL.md "Brutal Honest Testing
-# — No Manual QA Dependence": every fix verdict must name the spec line +
-# commit SHA that proves it. This job is the canonical proof artifact.
+# against the LIVE caseops.ai + api.caseops.ai surface using the dedicated
+# CaseOps QA Bot workspace (caseops-qa). Per
+# .claude/skills/bug-fixing/SKILL.md "Brutal Honest Testing — No Manual
+# QA Dependence": every fix verdict must name the spec line + commit
+# SHA that proves it. This job is the canonical proof artifact.
+#
+# Test infra has zero dependency on real-user credentials — see
+# feedback_dedicated_test_account_no_real_users.md.
 #
 # Triggers:
 #   - on push to main: runs after a merge so newly-deployed code is
@@ -13,9 +17,10 @@ name: Prod verification (Playwright)
 #     regressions, third-party API changes) between deploys.
 #   - workflow_dispatch: manual trigger after a deploy.
 #
-# Prereq secret: RAM_TEST_PASSWORD (Ram's test account password on prod).
-# Without it the job aborts with a clear message — does NOT silently
-# skip and pass green.
+# Prereq secret: CASEOPS_QA_PASSWORD (the CaseOps QA Bot owner password
+# on prod — generated 2026-04-27 during workspace bootstrap, held only
+# in a password manager + this GitHub secret). Without it the job
+# aborts with a clear message — does NOT silently skip and pass green.
 
 on:
   push:
@@ -25,9 +30,9 @@ on:
   workflow_dispatch:
 
 concurrency:
-  # Two scheduled runs on the same prod surface contending for Ram's
-  # session would race the storageState file. Cancel in-progress to
-  # keep one run live at a time.
+  # Two scheduled runs on the same prod surface contending for the QA
+  # Bot session would race the storageState file. Cancel in-progress
+  # to keep one run live at a time.
   group: prod-verify
   cancel-in-progress: false
 
@@ -39,16 +44,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Gate on RAM_TEST_PASSWORD secret
+      - name: Gate on CASEOPS_QA_PASSWORD secret
         # Fail loudly + early if the secret is missing. Without it the
         # setup project's signIn would fail anyway, but this makes the
         # diagnosis obvious in the run log instead of buried in a
         # Playwright timeout.
         env:
-          RAM_TEST_PASSWORD: ${{ secrets.RAM_TEST_PASSWORD }}
+          CASEOPS_QA_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
         run: |
-          if [ -z "$RAM_TEST_PASSWORD" ]; then
-            echo "::error::RAM_TEST_PASSWORD secret is not configured."
+          if [ -z "$CASEOPS_QA_PASSWORD" ]; then
+            echo "::error::CASEOPS_QA_PASSWORD secret is not configured."
             echo "Add it under repo Settings → Secrets and variables → Actions."
             exit 1
           fi
@@ -66,14 +71,13 @@ jobs:
 
       - name: Run prod-Playwright suite (ram-batch)
         env:
-          RAM_TEST_PASSWORD: ${{ secrets.RAM_TEST_PASSWORD }}
-          # Optional overrides — defaults are baked into the spec
-          # (https://caseops.ai + ram@testfirm.com + test-legal). Only
-          # set these if your prod URLs / test user differ.
+          CASEOPS_QA_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
+          # Optional overrides — defaults are baked into the setup file
+          # (https://caseops.ai + qa-bot@caseops.ai + caseops-qa).
           PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
           PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
-          RAM_TEST_EMAIL: ${{ vars.RAM_TEST_EMAIL }}
-          RAM_TEST_SLUG: ${{ vars.RAM_TEST_SLUG }}
+          CASEOPS_QA_EMAIL: ${{ vars.CASEOPS_QA_EMAIL }}
+          CASEOPS_QA_SLUG: ${{ vars.CASEOPS_QA_SLUG }}
         run: npx playwright test --config=playwright.prod-ram.config.ts --reporter=list
 
       - name: Upload Playwright report on failure

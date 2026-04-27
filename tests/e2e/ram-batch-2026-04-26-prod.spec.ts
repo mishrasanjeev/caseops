@@ -24,17 +24,18 @@ import { expect, test, type Page } from "@playwright/test";
 
 const PROD_BASE_URL = process.env.PROD_BASE_URL ?? "https://caseops.ai";
 const PROD_API_BASE_URL = process.env.PROD_API_BASE_URL ?? "https://api.caseops.ai";
-const RAM_EMAIL = process.env.RAM_TEST_EMAIL ?? "ram@testfirm.com";
-const RAM_SLUG = process.env.RAM_TEST_SLUG ?? "test-legal";
-const RAM_PASSWORD = process.env.RAM_TEST_PASSWORD ?? "Test@1234567";
 
 /**
  * Authentication is handled once by the `setup` Playwright project
- * (tests/e2e/setup/ram-auth.setup.ts) which writes
- * tests/e2e/.auth/ram-storage.json; this file is loaded as
- * `storageState` for every test. So by the time a test runs, page
- * is already signed in as Ram. Tests that previously called signIn()
- * still work (it's now a no-op).
+ * (tests/e2e/setup/qa-auth.setup.ts) which writes
+ * tests/e2e/.auth/qa-storage.json; this file is loaded as `storageState`
+ * for every test. So by the time a test runs, page is already signed
+ * in as the dedicated CaseOps QA Bot (workspace slug: caseops-qa).
+ *
+ * No real-user credentials are referenced anywhere in this spec — see
+ * feedback_dedicated_test_account_no_real_users.md.
+ *
+ * Tests that previously called signIn() still work (it's now a no-op).
  */
 async function signIn(_page: Page): Promise<void> {
   // No-op — storageState handles auth. Kept as a stub for legacy test
