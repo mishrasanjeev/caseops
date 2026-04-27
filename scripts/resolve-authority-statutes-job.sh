@@ -22,6 +22,7 @@ gcloud run jobs $ACTION "${JOB}" \
   --set-env-vars "CASEOPS_ENV=cloud,CASEOPS_AUTO_MIGRATE=false" \
   --set-secrets "CASEOPS_DATABASE_URL=caseops-database-url:latest,CASEOPS_AUTH_SECRET=caseops-auth-secret:latest" \
   --set-cloudsql-instances "${SQL_INSTANCE}" \
+  --task-timeout=7200 \
   --max-retries 1 --quiet
 
 echo "--- executing job ---"
