@@ -50,13 +50,39 @@ logger = logging.getLogger("backfill_hc_judges_from_corpus")
 # (e.g. "Delhi High Court" vs "High Court of Delhi") map to one
 # court_id via a substring contains-check.
 _COURT_NAME_MATCHERS: list[tuple[str, str]] = [
+    # Order: longer-or-more-specific substrings first to avoid
+    # ambiguous matches (e.g. "kashmir" before "jammu" — though both
+    # appear together in the canonical name).
+    ("madhya pradesh", "madhya-pradesh-hc"),
+    ("andhra pradesh", "andhra-pradesh-hc"),
+    ("jammu", "jammu-kashmir-hc"),
+    ("kashmir", "jammu-kashmir-hc"),
+    ("uttarakhand", "uttarakhand-hc"),
+    ("chhattisgarh", "chhattisgarh-hc"),
+    ("himachal", "himachal-hc"),
+    ("rajasthan", "rajasthan-hc"),
+    ("meghalaya", "meghalaya-hc"),
+    ("jharkhand", "jharkhand-hc"),
+    ("manipur", "manipur-hc"),
+    ("tripura", "tripura-hc"),
+    ("orissa", "orissa-hc"),
+    ("odisha", "orissa-hc"),  # alias
+    ("gujarat", "gujarat-hc"),
+    ("kerala", "kerala-hc"),
+    ("punjab", "punjab-hc"),
+    ("sikkim", "sikkim-hc"),
     ("delhi", "delhi-hc"),
     ("bombay", "bombay-hc"),
+    ("mumbai", "bombay-hc"),  # alias
     ("madras", "madras-hc"),
+    ("chennai", "madras-hc"),  # alias
     ("karnataka", "karnataka-hc"),
+    ("bangalore", "karnataka-hc"),  # alias
     ("telangana", "telangana-hc"),
     ("allahabad", "allahabad-hc"),
     ("calcutta", "calcutta-hc"),
+    ("kolkata", "calcutta-hc"),  # alias
+    ("patna", "patna-hc"),
 ]
 
 # Patterns that look like roles/titles, not actual judge names.
