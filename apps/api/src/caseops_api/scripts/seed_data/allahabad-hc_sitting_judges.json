@@ -1,0 +1,874 @@
+[
+  {
+    "name": "Justice Arun Bhansali",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-arun-bhansali",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Mahesh Chandra Tripathi",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-mahesh-chandra-tripathi",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Arindam Sinha",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-arindam-sinha",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Rajan Roy",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-rajan-roy",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Yashwant Varma",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-yashwant-varma",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Atul Sreedharan",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-atul-sreedharan",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Tirath Singh Thakur",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-tirath-singh-thakur",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Siddhartha Varma",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-siddhartha-varma",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Sangeeta Chandra",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-sangeeta-chandra",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Saumitra Dayal Singh",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-saumitra-dayal-singh",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Shekhar B. Saraf",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-shekhar-b-saraf",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Salil Kumar Rai",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-salil-kumar-rai",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Rajesh Singh Chauhan",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-rajesh-singh-chauhan",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Irshad Ali",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-irshad-ali",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Saral Srivastava",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-saral-srivastava",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Jahangir Jamshed Munir",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-jahangir-jamshed-munir",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Rajiv Gupta",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-rajiv-gupta",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Siddharth",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-siddharth",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Ajit Kumar",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-ajit-kumar",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Rajnish Kumar",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-rajnish-kumar",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Abdul Moin",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-abdul-moin",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Rajeev Misra",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-rajeev-misra",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Chandra Dhari Singh",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-chandra-dhari-singh",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Ajay Bhanot",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-ajay-bhanot",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Neeraj Tiwari",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-neeraj-tiwari",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Manoj Bajaj",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-manoj-bajaj",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Prakash Padia",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-prakash-padia",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Alok Mathur",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-alok-mathur",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Pankaj Bhatia",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-pankaj-bhatia",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Saurabh Lavania",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-saurabh-lavania",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Vivek Varma",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-vivek-varma",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Piyush Agrawal",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-piyush-agrawal",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Saurabh Shyam Shamsherry",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-saurabh-shyam-shamsherry",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Jaspreet Singh",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-jaspreet-singh",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Rajeev Singh",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-rajeev-singh",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Manju Rani Chauhan",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-manju-rani-chauhan",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Karunesh Singh Pawar",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-karunesh-singh-pawar",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Yogendra Kumar Srivastava",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-yogendra-kumar-srivastava",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Manish Mathur",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-manish-mathur",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Rohit Ranjan Agarwal",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-rohit-ranjan-agarwal",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Rajbeer Singh",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-rajbeer-singh",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Deepak Verma",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-deepak-verma",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Gautam Chowdhary",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-gautam-chowdhary",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Dinesh Pathak",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-dinesh-pathak",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Manish Kumar",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-manish-kumar",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Samit Gopal",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-samit-gopal",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Sanjay Kumar Pachori",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-sanjay-kumar-pachori",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Subhash Chandra Sharma",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-subhash-chandra-sharma",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Chandra Kumar Rai",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-chandra-kumar-rai",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Krishan Pahal",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-krishan-pahal",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Sameer Jain",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-sameer-jain",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Ashutosh Srivastava",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-ashutosh-srivastava",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Subhash Vidyarthi",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-subhash-vidyarthi",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Brij Raj Singh",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-brij-raj-singh",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Shree Prakash Singh",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-shree-prakash-singh",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Vikas Budhwar",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-vikas-budhwar",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Vikram D Chauhan",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-vikram-d-chauhan",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Saurabh Srivastava",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-saurabh-srivastava",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Ram Manohar Narayan Mishra",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-ram-manohar-narayan-mishra",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Syed Qamar Hasan Rizvi",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-syed-qamar-hasan-rizvi",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Manish Kumar Nigam",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-manish-kumar-nigam",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Anish Kumar Gupta",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-anish-kumar-gupta",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Nand Prabha Shukla",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-nand-prabha-shukla",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Kshitij Shailendra",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-kshitij-shailendra",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Vinod Diwakar",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-vinod-diwakar",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Prashant Kumar",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-prashant-kumar",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Manjive Shukla",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-manjive-shukla",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Arun Kumar Singh Deshwal",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-arun-kumar-singh-deshwal",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Praveen Kumar Giri",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-praveen-kumar-giri",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Jitendra Kumar Sinha",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-jitendra-kumar-sinha",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Anil Kumar",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-anil-kumar",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Sandeep Jain",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-sandeep-jain",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Avnish Saxena",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-avnish-saxena",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Madan Pal Singh",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-madan-pal-singh",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Harvir Singh",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-harvir-singh",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Pramod Kumar Srivastava",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-pramod-kumar-srivastava",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Abdul Shahid",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-abdul-shahid",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Santosh Rai",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-santosh-rai",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Tej Pratap Tiwari",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-tej-pratap-tiwari",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Zafeer Ahmad",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-zafeer-ahmad",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Arun Kumar",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-arun-kumar",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Amitabh Kumar Rai",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-amitabh-kumar-rai",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Rajiv Lochan Shukla",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-rajiv-lochan-shukla",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Vivek Saran",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-vivek-saran",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Vivek Kumar Singh",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-vivek-kumar-singh",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Garima Prashad",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-garima-prashad",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Sudhanshu Chauhan",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-sudhanshu-chauhan",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Abdhesh Kumar Chaudhary",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-abdhesh-kumar-chaudhary",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Swarupama Chaturvedi",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-swarupama-chaturvedi",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Siddharth Nandan",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-siddharth-nandan",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Kunal Ravi Singh",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-kunal-ravi-singh",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Indrajeet Shukla",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-indrajeet-shukla",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Satya Veer Singh",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-satya-veer-singh",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Ajay Kumar",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-ajay-kumar",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Chawan Prakash",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-chawan-prakash",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Divesh Chandra Samant",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-divesh-chandra-samant",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Prashant Mishra",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-prashant-mishra",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Tarun Saxena",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-tarun-saxena",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Rajeev Bharti",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-rajeev-bharti",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Padam Narayan Mishra",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-padam-narayan-mishra",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Lakshmi Kant Shukla",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-lakshmi-kant-shukla",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Jai Prakash Tiwari",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-jai-prakash-tiwari",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Devendra Singh",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-devendra-singh",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Sanjiv Kumar",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-sanjiv-kumar",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Vani Ranjan Agrawal",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-vani-ranjan-agrawal",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Achal Sachdev",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-achal-sachdev",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Babita Rani",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-babita-rani",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Vinai Kumar Dwivedi",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-vinai-kumar-dwivedi",
+    "bio_text": null
+  },
+  {
+    "name": "Justice Jai Krishna Upadhyay",
+    "profile_url": null,
+    "date_of_birth": null,
+    "date_of_appointment_court": null,
+    "slug": "justice-jai-krishna-upadhyay",
+    "bio_text": null
+  }
+]
