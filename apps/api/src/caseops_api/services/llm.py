@@ -338,12 +338,21 @@ def _extract_between(text: str, start: str, end: str) -> str | None:
 
 
 def _extract_citations(text: str) -> list[str]:
-    """Pick identifiers that look like case references we embedded."""
+    """Pick identifiers that look like case references we embedded.
+
+    Supports two prompt formats:
+      Legacy:  ``- CITATION: <text>``
+      v2 (BUG-024 fix 2026-04-27): ``[N] CITATION: <text>``
+    Both formats end with the citation text after the ``CITATION:`` token.
+    """
     citations: list[str] = []
+    import re as _re
     for line in text.splitlines():
         stripped = line.strip()
-        if stripped.startswith("- CITATION:"):
-            value = stripped[len("- CITATION:") :].strip()
+        # Match either "- CITATION:" or "[N] CITATION:" prefix.
+        m = _re.match(r"^(?:-|\[\d+\])\s*CITATION:\s*(.+)$", stripped)
+        if m:
+            value = m.group(1).strip()
             if value:
                 citations.append(value)
     return citations

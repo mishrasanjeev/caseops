@@ -66,7 +66,15 @@ export function PDFViewer({
   const [matchIndex, setMatchIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const docOpts = useMemo(() => ({ url }), [url]);
+  // BUG-023 / BUG-032 (Ram + Hari 2026-04-27): the URL points at
+  // api.caseops.ai but the page loads on caseops.ai → cross-origin
+  // fetch. react-pdf's <Document> defaults to fetch without
+  // credentials, so the API returns 401 and the viewer shows
+  // "Could not load the PDF". Setting withCredentials makes the
+  // browser send the caseops_session cookie on the cross-origin
+  // request. The API's CORS config already allows credentials from
+  // the caseops.ai origin (EG-001).
+  const docOpts = useMemo(() => ({ url, withCredentials: true }), [url]);
 
   // Keyboard navigation. Scoped to the viewer container so it doesn't
   // swallow the page-wide shortcuts when the user is typing in the

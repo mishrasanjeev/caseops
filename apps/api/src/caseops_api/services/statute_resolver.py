@@ -51,12 +51,119 @@ logger = logging.getLogger(__name__)
 # Map Act-text variants to our statute_id catalog. Order matters —
 # longest needles first so 'BNSS' resolves before 'BNS' on
 # 'BNSS Section 483'.
+#
+# 2026-04-27 expansion (BUG-031): added 15 commonly-cited acts so
+# Layer-2 sections_cited_json output for these resolves to a known
+# statute_id. Before this expansion, citations to NDPS / Companies /
+# Income Tax / GST / Arbitration / Contract / etc. all returned
+# statute_id=None and were dropped from authority_statute_references,
+# starving L-C aggregates in the bench-strategy panel.
 _ACT_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    # Original 5 (priority order: longest needle first).
     (re.compile(r"\bBNSS\b", re.IGNORECASE), "bnss-2023"),
     (re.compile(r"\bBSA\b", re.IGNORECASE), "bsa-2023"),
     (re.compile(r"\bBNS\b", re.IGNORECASE), "bns-2023"),
     (re.compile(r"\bCr\.?\s*P\.?\s*C\.?\b", re.IGNORECASE), "crpc-1973"),
     (re.compile(r"\bI\.?\s*P\.?\s*C\.?\b", re.IGNORECASE), "ipc-1860"),
+    # NDPS — multiple variants (NDPS / N.D.P.S. / "Narcotic Drugs").
+    (
+        re.compile(
+            r"\b(?:N\.?D\.?P\.?S\.?(?:\s*Act)?|Narcotic\s+Drugs(?:\s+and\s+Psychotropic\s+Substances)?(?:\s+Act)?)\b",
+            re.IGNORECASE,
+        ),
+        "ndps-1985",
+    ),
+    # CGST / SGST / IGST — pick CGST as the canonical (sections align
+    # across the 3 GST Acts; matter detail typically clarifies).
+    (re.compile(r"\bC?GST(?:\s+Act)?\b", re.IGNORECASE), "gst-cgst-2017"),
+    # Income Tax Act 1961 (IT Act / IT-1961 / Income-tax Act).
+    (
+        re.compile(
+            r"\b(?:Income[-\s]?tax\s+Act|I\.?T\.?\s*Act|IT(?:-|\s+)?1961)\b",
+            re.IGNORECASE,
+        ),
+        "income-tax-1961",
+    ),
+    # Companies Act 2013 (Companies Act / Cos Act).
+    (
+        re.compile(r"\bCompanies\s+Act(?:,?\s*2013)?\b", re.IGNORECASE),
+        "companies-2013",
+    ),
+    # Arbitration & Conciliation Act 1996.
+    (
+        re.compile(
+            r"\bArbitration(?:\s+(?:and|&)\s+Conciliation)?(?:\s+Act)?(?:,?\s*1996)?\b",
+            re.IGNORECASE,
+        ),
+        "arbitration-1996",
+    ),
+    # Indian Contract Act 1872.
+    (
+        re.compile(
+            r"\b(?:Indian\s+)?Contract\s+Act(?:,?\s*1872)?\b",
+            re.IGNORECASE,
+        ),
+        "contract-1872",
+    ),
+    # Specific Relief Act 1963.
+    (
+        re.compile(r"\bSpecific\s+Relief\s+Act\b", re.IGNORECASE),
+        "specific-relief-1963",
+    ),
+    # Limitation Act 1963.
+    (re.compile(r"\bLimitation\s+Act\b", re.IGNORECASE), "limitation-1963"),
+    # Code of Civil Procedure 1908 (CPC) — order before "CPC" alone is
+    # less ambiguous than IPC because CPC is the established short form.
+    (
+        re.compile(
+            r"\bC\.?P\.?C\.?\b|\bCode\s+of\s+Civil\s+Procedure\b",
+            re.IGNORECASE,
+        ),
+        "cpc-1908",
+    ),
+    # Transfer of Property Act 1882 (TPA).
+    (
+        re.compile(
+            r"\bT\.?P\.?\s*Act\b|\bTransfer\s+of\s+Property\s+Act\b",
+            re.IGNORECASE,
+        ),
+        "transfer-of-property-1882",
+    ),
+    # Hindu Marriage Act 1955.
+    (
+        re.compile(r"\bHindu\s+Marriage\s+Act\b", re.IGNORECASE),
+        "hindu-marriage-1955",
+    ),
+    # Consumer Protection Act 2019.
+    (
+        re.compile(r"\bConsumer\s+Protection\s+Act\b", re.IGNORECASE),
+        "consumer-protection-2019",
+    ),
+    # RTI Act 2005.
+    (
+        re.compile(
+            r"\bR\.?T\.?I\.?\s*Act\b|\bRight\s+to\s+Information\s+Act\b",
+            re.IGNORECASE,
+        ),
+        "rti-2005",
+    ),
+    # Motor Vehicles Act 1988.
+    (
+        re.compile(
+            r"\bM\.?V\.?\s*Act\b|\bMotor\s+Vehicles\s+Act\b", re.IGNORECASE,
+        ),
+        "motor-vehicles-1988",
+    ),
+    # Prevention of Corruption Act 1988 (PC Act).
+    (
+        re.compile(
+            r"\bP\.?C\.?\s*Act\b|\bPrevention\s+of\s+Corruption\s+Act\b",
+            re.IGNORECASE,
+        ),
+        "prevention-of-corruption-1988",
+    ),
+    # NI Act + Constitution (kept at end — common but no priority over
+    # the more specific patterns above).
     (
         re.compile(
             r"\b(?:N\.?I\.?\s*Act|Negotiable\s+Instruments\s+Act)\b",
@@ -70,6 +177,15 @@ _ACT_PATTERNS: list[tuple[re.Pattern[str], str]] = [
             re.IGNORECASE,
         ),
         "constitution-india",
+    ),
+    # IEA — short-form often confused with court abbreviations; keep
+    # at the end after specific-act patterns.
+    (
+        re.compile(
+            r"\b(?:I\.?E\.?A\.?|Indian\s+Evidence\s+Act|Evidence\s+Act)\b",
+            re.IGNORECASE,
+        ),
+        "iea-1872",
     ),
 ]
 

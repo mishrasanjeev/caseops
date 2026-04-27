@@ -98,8 +98,15 @@ def _match_source(
         overlap = len(query & signature)
         if overlap == 0:
             continue
+        # BUG-024 (Ram 2026-04-27 reopen of BUG-015): the prior 0.7
+        # coverage floor rejected valid citations whenever the LLM
+        # paraphrased the source identifier (e.g. "M.P." vs
+        # "Madhya Pradesh", or dropping a middle name from the case
+        # title). Lowering to 0.5 + requiring overlap >= 2 tokens
+        # keeps it strict enough to fail on truly fabricated cites
+        # but tolerates model-side abbreviation/expansion.
         coverage = overlap / len(query)
-        if coverage >= 0.7 and coverage > best[0]:
+        if coverage >= 0.5 and overlap >= 2 and coverage > best[0]:
             best = (coverage, doc)
     return best[1]
 

@@ -373,18 +373,35 @@ def _build_prompt(
     authorities: list[RetrievedAuthority],
 ) -> list[LLMMessage]:
     framing = _TYPE_FRAMING.get(rec_type, _TYPE_FRAMING["authority"])
+    # BUG-024 / BUG-033 / BUG-034 (Ram + Hari 2026-04-27): explicit
+    # constraint to use the EXACT citation text from the numbered list.
+    # Prior wording ("do not invent citations") was too loose — the
+    # model would paraphrase identifiers and the verifier rejected the
+    # paraphrase as unmatched. Numbered list + "verbatim" instruction
+    # collapses ambiguity.
     system = (
         "You are CaseOps, a legal operations assistant for Indian law firms and "
         "corporate legal teams. You must respond only with JSON matching the "
         "schema described by the user. Every option must cite at least one "
-        "supporting authority from the provided list. If no authority in the "
-        "list supports the option, say so in missing_facts and reduce "
-        "confidence; do not invent citations.\n\n"
+        "supporting authority from the RETRIEVED_AUTHORITIES list below.\n\n"
+        "CITATION RULES (HARD):\n"
+        "1. Each entry in `supporting_citations` MUST be the EXACT CITATION "
+        "string from the RETRIEVED_AUTHORITIES list — copy it verbatim.\n"
+        "2. Do NOT paraphrase, abbreviate, or invent citations. If you are "
+        "unsure which authority supports your point, omit the citation and "
+        "note the gap in `missing_facts`.\n"
+        "3. If no listed authority supports an option, set "
+        "`supporting_citations: []`, lower `confidence` to \"low\", and "
+        "explain in `missing_facts`.\n\n"
         f"TASK: {framing}"
     )
+    # Numbered citations make verbatim-copy unambiguous + give the model
+    # a stable handle to reference. The verifier still matches on the
+    # full identifier text; the [N] number is just a UX cue for the
+    # model.
     authority_block = "\n".join(
-        f"- CITATION: {a.identifier}\n  EXCERPT: {a.text[:600]}"
-        for a in authorities
+        f"[{i}] CITATION: {a.identifier}\n    EXCERPT: {a.text[:600]}"
+        for i, a in enumerate(authorities, start=1)
     ) or "(no authorities retrieved)"
     user = (
         "Respond with json. Produce a CaseOps recommendation object.\n\n"

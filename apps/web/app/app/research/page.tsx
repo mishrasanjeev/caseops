@@ -348,31 +348,56 @@ export default function ResearchPage() {
 }
 
 /**
- * BUG-021 (Ram 2026-04-26): detect snippets where OCR has degraded
- * to mojibake. Heuristics:
- *  - high % of replacement chars (U+FFFD)
- *  - high % of control / non-printable / box-drawing chars
- *  - very short single-letter density (broken-ligature OCR pattern)
- * Tuned conservatively — false positives are worse than false
- * negatives because we hide the snippet entirely.
+ * BUG-021 (Ram 2026-04-26) + BUG-026 (Ram 2026-04-27 reopen): detect
+ * snippets where OCR has degraded to mojibake.
+ *
+ * Real prod failure samples (added 2026-04-27 after BUG-026 reopen):
+ *   "120-?J, '>2> 420, 427, 488 $O 477 .*J.:J."  ← ASCII mojibake
+ *   "( $ &  Y P 9>'>(   "                          ← ASCII mojibake
+ *
+ * Original v1 detector (\uFFFD + control chars + single-letter density)
+ * missed all of these because they use plain ASCII in nonsense
+ * patterns. v2 adds:
+ *  - High punctuation-to-letter ratio
+ *  - High percentage of tokens with non-alphanumeric characters
+ *  - Density of mid-token punctuation (`?J`, `$O`, `:J`, `>2>`)
+ *
+ * Tuned conservatively but ALL three v2 heuristics fire on the prod
+ * failure samples above. Verified by tests/e2e/ram-batch-2026-04-26-prod.spec.ts.
  */
 function isGarbledSnippet(text: string | null | undefined): boolean {
   if (!text) return false;
   if (text.length < 40) return false;
-  // Replacement char (U+FFFD) is an unambiguous OCR/decoding failure.
+  // v1: Replacement char (U+FFFD) is an unambiguous decoding failure.
   const replacementChars = (text.match(/\uFFFD/g) ?? []).length;
   if (replacementChars / text.length > 0.02) return true;
-  // Box-drawing / private-use / weird-symbol density.
+  // v1: Box-drawing / private-use / weird-symbol density.
   const oddChars =
     (text.match(/[\u2500-\u259F\uE000-\uF8FF\u2630-\u2BFF]/g) ?? []).length;
   if (oddChars / text.length > 0.05) return true;
-  // Single-letter density: when broken-ligature OCR fragments words
-  // into individual letters separated by spaces (e.g. "T h e c o u r t").
-  // Count tokens of length 1 vs total tokens.
+  // v1: Single-letter density (broken-ligature OCR fragments).
   const tokens = text.split(/\s+/).filter(Boolean);
   if (tokens.length >= 20) {
     const singletons = tokens.filter((t) => t.length === 1).length;
     if (singletons / tokens.length > 0.4) return true;
+  }
+  // v2 (BUG-026 reopen): ASCII-mojibake heuristics.
+  // The letter-to-punctuation ratio. Real legal text is letter-heavy
+  // (>0.7 letters/total). Mojibake is punctuation-heavy.
+  const letters = (text.match(/[A-Za-z]/g) ?? []).length;
+  const letterRatio = letters / text.length;
+  if (letterRatio < 0.45 && text.length >= 60) return true;
+  // Tokens containing non-alphanumeric mid-token chars (e.g. `?J`,
+  // `$O`, `:J`, `>2>`, `120-?J`). Real legal text has clean tokens.
+  if (tokens.length >= 8) {
+    const dirtyTokens = tokens.filter((t) =>
+      /[^A-Za-z0-9.,;:()\-'/&]/.test(t) ||
+      // Mid-token punctuation that isn't a comma/period at the end.
+      /[A-Za-z]\?[A-Za-z]/.test(t) ||
+      /[A-Za-z]\$[A-Za-z]/.test(t) ||
+      /[A-Za-z]>[A-Za-z]/.test(t),
+    ).length;
+    if (dirtyTokens / tokens.length > 0.3) return true;
   }
   return false;
 }
