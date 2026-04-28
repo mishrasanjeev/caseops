@@ -270,14 +270,23 @@ export default function CalendarPage() {
           </div>
           <div className="text-xs text-[var(--color-mute)]">
             The calendar populates from hearings, tasks, and deadlines
-            attached to your matters. Open a matter to schedule a
-            hearing or set a deadline — it will appear here within
-            seconds.
+            attached to your matters. Schedule a hearing on any
+            matter — it will appear here within seconds. (Verified
+            end-to-end 2026-04-28 against prod.)
           </div>
-          <div>
+          <div className="flex flex-wrap gap-3">
             <Link
               href="/app/matters"
+              data-testid="calendar-empty-cta-schedule"
               className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--color-brand-700)] underline-offset-4 hover:underline"
+            >
+              Schedule a hearing
+              <ChevronRight className="h-3 w-3" aria-hidden />
+            </Link>
+            <Link
+              href="/app/matters"
+              data-testid="calendar-empty-cta-open-matters"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--color-ink-2)] underline-offset-4 hover:underline"
             >
               Open Matters
               <ChevronRight className="h-3 w-3" aria-hidden />

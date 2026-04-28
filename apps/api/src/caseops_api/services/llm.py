@@ -884,21 +884,33 @@ def generate_structured[T: BaseModel](
     try:
         validated = schema.model_validate(payload)
     except ValidationError as exc:
-        # Same treatment for schema-validation failures — we still parsed
-        # SOMETHING, so surface what the keys looked like so the fix is
-        # targeted.
+        # Surface the exact pydantic field violations — listing top-level
+        # keys alone (as the prior error did) was misleading because the
+        # most common failure mode is a nested constraint (e.g.
+        # options[i].rationale exceeding max_length, or options being
+        # empty). Show first 5 errors with field path + message so prod
+        # 502s point at the actual fix.
+        violations = []
+        for err in exc.errors()[:5]:
+            loc = ".".join(str(p) for p in err.get("loc", ()))
+            violations.append(f"{loc}: {err.get('msg', err.get('type', '?'))}")
         preview_keys: Any = payload
         if isinstance(payload, dict):
             preview_keys = list(payload.keys())
+        raw_preview = (completion.text or "").strip()[:1500]
         logger.warning(
-            "generate_structured schema mismatch (%s:%s). payload keys: %s",
+            "generate_structured schema mismatch (%s:%s). violations=%s "
+            "payload_keys=%s raw[:1500]=%s",
             completion.provider,
             completion.model,
+            violations,
             preview_keys,
+            repr(raw_preview),
         )
         raise LLMResponseFormatError(
             f"{completion.provider}:{completion.model} returned JSON that did "
-            f"not match the expected schema. keys={preview_keys!r}",
+            f"not match the expected schema. violations={violations} "
+            f"keys={preview_keys!r}",
         ) from exc
     return validated, completion
 

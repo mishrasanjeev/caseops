@@ -152,20 +152,24 @@ CONFIDENCE_LEVELS = ("low", "medium", "high")
 
 
 class _LLMOption(BaseModel):
-    label: str = Field(min_length=2, max_length=400)
-    rationale: str = Field(min_length=2, max_length=4000)
+    # Bounds widened 2026-04-28 (BUG-035) — Haiku + GPT-5.1 routinely
+    # generate longer rationales and 6+ options on richly-described
+    # matters; the prior tight bounds tripped pydantic ValidationError
+    # and surfaced as 502s with no actionable detail.
+    label: str = Field(min_length=2, max_length=600)
+    rationale: str = Field(min_length=2, max_length=10000)
     confidence: str = Field(default="low")
     supporting_citations: list[str] = Field(default_factory=list)
     risk_notes: str | None = None
 
 
 class _LLMResponse(BaseModel):
-    title: str = Field(min_length=2, max_length=400)
-    options: list[_LLMOption] = Field(min_length=1, max_length=5)
+    title: str = Field(min_length=2, max_length=600)
+    options: list[_LLMOption] = Field(min_length=1, max_length=10)
     primary_recommendation_label: str | None = None
-    rationale: str = Field(min_length=2, max_length=6000)
-    assumptions: list[str] = Field(default_factory=list, max_length=20)
-    missing_facts: list[str] = Field(default_factory=list, max_length=20)
+    rationale: str = Field(min_length=2, max_length=15000)
+    assumptions: list[str] = Field(default_factory=list, max_length=50)
+    missing_facts: list[str] = Field(default_factory=list, max_length=50)
     confidence: str = "low"
     next_action: str | None = None
 
