@@ -14,9 +14,18 @@ import { test as setup, expect } from "@playwright/test";
 import path from "node:path";
 import fs from "node:fs";
 
-const PROD_BASE_URL = process.env.PROD_BASE_URL ?? "https://caseops.ai";
-const QA_OWNER_EMAIL = process.env.CASEOPS_QA_EMAIL ?? "qa-bot@caseops.ai";
-const QA_COMPANY_SLUG = process.env.CASEOPS_QA_SLUG ?? "caseops-qa";
+// `??` treats empty string as a value, so an unset GitHub repo
+// variable (which materializes as `${{ vars.PROD_BASE_URL }}` = ""
+// in the workflow) bypasses the fallback. Trim + truthy-check
+// instead so an empty/whitespace var falls back to the default.
+const env = (key: string, fallback: string): string => {
+  const v = (process.env[key] ?? "").trim();
+  return v.length > 0 ? v : fallback;
+};
+
+const PROD_BASE_URL = env("PROD_BASE_URL", "https://caseops.ai");
+const QA_OWNER_EMAIL = env("CASEOPS_QA_EMAIL", "qa-bot@caseops.ai");
+const QA_COMPANY_SLUG = env("CASEOPS_QA_SLUG", "caseops-qa");
 const QA_OWNER_PASSWORD = process.env.CASEOPS_QA_PASSWORD ?? "";
 
 export const QA_STORAGE_STATE = path.join(

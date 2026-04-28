@@ -22,8 +22,14 @@
  */
 import { expect, test, type Page } from "@playwright/test";
 
-const PROD_BASE_URL = process.env.PROD_BASE_URL ?? "https://caseops.ai";
-const PROD_API_BASE_URL = process.env.PROD_API_BASE_URL ?? "https://api.caseops.ai";
+// `??` treats empty string as a value; an unset GitHub repo variable
+// materializes as "" in the workflow. Trim + truthy-check.
+const envOr = (key: string, fallback: string): string => {
+  const v = (process.env[key] ?? "").trim();
+  return v.length > 0 ? v : fallback;
+};
+const PROD_BASE_URL = envOr("PROD_BASE_URL", "https://caseops.ai");
+const PROD_API_BASE_URL = envOr("PROD_API_BASE_URL", "https://api.caseops.ai");
 
 /**
  * Authentication is handled once by the `setup` Playwright project
