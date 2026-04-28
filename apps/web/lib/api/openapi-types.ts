@@ -1153,6 +1153,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/health/ingest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ingest-VM watchdog probe — aggregate corpus freshness
+         * @description Unauthenticated aggregate counters for the corpus.
+         *
+         *     Used by the GCP-hosted ingest-VM watchdog (scripts/cron/) to decide
+         *     whether to reset the ingest VM. Returns ONLY the global aggregates
+         *     — no tenant data, no per-document data — so it's safe to expose
+         *     without auth. The watchdog calls this hourly from a Cloud Run Job
+         *     via Cloud Scheduler.
+         */
+        get: operations["ingest_freshness_api_health_ingest_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/intake/requests": {
         parameters: {
             query?: never;
@@ -10144,6 +10170,28 @@ export interface operations {
                 content: {
                     "application/json": {
                         [key: string]: string;
+                    };
+                };
+            };
+        };
+    };
+    ingest_freshness_api_health_ingest_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number | string | null;
                     };
                 };
             };
