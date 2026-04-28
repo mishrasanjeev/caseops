@@ -43,7 +43,19 @@ LOG=${WATCHDOG_LOG:-$HOME/.cache/caseops/ingest-watchdog.log}
 ZONE=${INGEST_VM_ZONE:-asia-south1-c}
 INSTANCE=${INGEST_VM_NAME:-caseops-ingest-vm}
 PROJECT=${INGEST_VM_PROJECT:-perfect-period-305406}
-STALE_HOURS=${INGEST_STALE_HOURS:-2}
+# 2026-04-29: bumped 2 → 6 after a false-positive reset loop. The
+# `last_ingested_at` field advances only when a NEW document is
+# inserted. When the active bucket is fully deduped (e.g. hc-delhi-
+# 2018 after the 94k → 99k growth completed), the value can sit
+# untouched for hours while sweep walks the dedupe path before moving
+# to the next bucket. STALE_HOURS=2 thrashed: every hourly fire saw
+# the field stale, reset the VM, killed the dedupe walk, sweep
+# restarted from scratch, repeat. 6h gives a typical OCR-heavy bucket
+# enough headroom to either complete or hand off. Real stuck-VMs
+# (hours of zero forward motion) still get caught. Durable fix: add
+# doc_count-delta gate that compares current count to the last
+# watchdog OK entry — if doc_count moved, ingest is alive.
+STALE_HOURS=${INGEST_STALE_HOURS:-6}
 ANTILOOP_MIN=${INGEST_ANTILOOP_MIN:-60}
 
 mkdir -p "$(dirname "$LOG")"
@@ -73,15 +85,25 @@ else
 fi
 
 # 2. Compute age + decide action.
-#    The API probe is the SOLE authoritative signal. If it's not
-#    available (cookies expired, file missing, etc.) we exit silent —
-#    a stale signal could trigger a false-positive reset on a healthy
-#    VM. SSH probes were tried as a fallback but failed in 2 distinct
-#    ways on 2026-04-28 (Cloud Run → IAP key push timeouts; Workspace
-#    org rejecting SA OS Login). Standing-auth manual reset still
-#    works when the user spots a stuck VM.
+#
+# Reset gate (since 2026-04-29):
+#   - PRIMARY:   last_ingested_at < STALE_HOURS  → OK, exit.
+#   - SECONDARY: last_ingested_at >= STALE_HOURS BUT doc_count moved
+#                since the most-recent prior watchdog log entry → OK,
+#                exit. Sweep IS alive, just descending through a fully-
+#                deduped bucket where no NEW docs are inserted.
+#                Without this gate the watchdog thrashes — kills the
+#                sweep mid-bucket every cycle, and `last_ingested_at`
+#                never advances because every restart starts the same
+#                converged bucket from scratch.
+#   - ELSE:      both age AND count are stuck → real hang → reset.
+#
+# If the API signal isn't available (FALLTHROUGH), we exit silent.
+# SSH probes were tried but produced 100% false-positives on 2026-04-28
+# (Workspace org rejects SA OS Login regardless of role grant; Cloud
+# Run → IAP key push exceeds 30s on first invocation).
 if [[ -n "$FALLTHROUGH" ]]; then
-  log "WARN api_signal=${FALLTHROUGH} — exiting without action (refresh tests/e2e/.auth/qa-storage.json + push to Secret Manager to restore signal)"
+  log "WARN api_signal=${FALLTHROUGH} — exiting without action"
   exit 0
 fi
 
@@ -103,6 +125,31 @@ else:
 if (( $(echo "$AGE_HOURS < $STALE_HOURS" | bc -l) )); then
   log "OK age=${AGE_HOURS}h doc_count=$DOC_COUNT — ingest healthy"
   exit 0
+fi
+
+# Stale `last_ingested_at`. Before resetting, check whether `doc_count`
+# moved since the prior watchdog OK/ACTION entry. Read from Cloud
+# Logging — the previous run's log line (entrypoint.sh dumped it)
+# carries `doc_count=<N>`.
+# The current run's logs reach Cloud Logging only AFTER entrypoint.sh
+# dumps /tmp/watchdog.log post-exit, so a read here sees only prior
+# runs. Pick the most-recent doc_count= line.
+PRIOR_DOC_COUNT=$(gcloud logging read \
+  "resource.type=cloud_run_job AND resource.labels.job_name=caseops-ingest-watchdog" \
+  --project="$PROJECT" --limit=20 --freshness=24h \
+  --format='value(textPayload)' 2>/dev/null \
+  | grep -oE "doc_count=[0-9]+" | head -1 | cut -d= -f2)
+
+if [[ -n "$PRIOR_DOC_COUNT" ]] && [[ "$DOC_COUNT" -gt "$PRIOR_DOC_COUNT" ]]; then
+  delta=$((DOC_COUNT - PRIOR_DOC_COUNT))
+  log "OK age=${AGE_HOURS}h doc_count=${DOC_COUNT} (delta=+${delta} since last fire) — sweep alive on a converged bucket, deferring reset"
+  exit 0
+fi
+
+if [[ -n "$PRIOR_DOC_COUNT" ]]; then
+  log "STALE age=${AGE_HOURS}h doc_count=${DOC_COUNT} prior=${PRIOR_DOC_COUNT} (no growth) — proceeding to reset"
+else
+  log "STALE age=${AGE_HOURS}h doc_count=${DOC_COUNT} prior=unknown (no prior watchdog entry) — proceeding to reset"
 fi
 
 # 4. Anti-loop check: did we reset within the last $ANTILOOP_MIN min?

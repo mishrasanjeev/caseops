@@ -76,7 +76,12 @@ fi
 # accepted by the VM's google_authorized_keys helper. Without it,
 # every SSH probe fails with "OS Login user does not have login
 # permission" and the watchdog falls into a false-positive reset loop.
-for role in roles/compute.instanceAdmin.v1 roles/compute.osLogin roles/iap.tunnelResourceAccessor roles/logging.logWriter; do
+# roles/logging.viewer — required for the watchdog's doc_count-delta
+# gate (2026-04-29). The script reads its own prior log entries via
+# `gcloud logging read` to compare current doc_count against the most-
+# recent OK/ACTION entry; without this role the read returns empty
+# and the gate silently degrades to "always reset on stale".
+for role in roles/compute.instanceAdmin.v1 roles/compute.osLogin roles/iap.tunnelResourceAccessor roles/logging.logWriter roles/logging.viewer; do
   gcloud projects add-iam-policy-binding "${PROJECT}" \
     --member="serviceAccount:${WATCHDOG_SA_EMAIL}" \
     --role="${role}" --condition=None --quiet >/dev/null

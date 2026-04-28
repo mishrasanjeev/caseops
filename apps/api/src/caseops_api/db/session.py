@@ -41,10 +41,21 @@ def get_engine(database_url: str | None = None) -> Engine:
             # reconnect instead of a crash. pool_recycle caps connection
             # age so we never hang onto a TCP socket Cloud SQL has
             # quietly closed under us.
+            #
+            # 2026-04-29: pool_recycle dropped 1800 → 300 after a
+            # multi-hour false-positive watchdog reset loop. The corpus
+            # ingest script does long OCR work between DB statements
+            # (RapidOCR can take 30-60s per HC PDF). Even with
+            # pool_pre_ping firing on checkout, the connection can be
+            # silently closed between checkout and the next statement
+            # if it's held longer than Cloud SQL's idle timeout. 300s
+            # (5min) recycle is well under any reasonable idle-timeout
+            # threshold and the ~3ms cost of reconnecting is negligible
+            # vs the cost of a failed insert + retry.
             engine_kwargs = {
                 "future": True,
                 "pool_pre_ping": True,
-                "pool_recycle": 1800,
+                "pool_recycle": 300,
             }
         _ENGINE_CACHE[resolved_url] = create_engine(
             resolved_url, connect_args=connect_args, **engine_kwargs
