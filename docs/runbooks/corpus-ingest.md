@@ -19,9 +19,9 @@ authority corpus. Tracks Sprint G in
   | Provider | `CASEOPS_EMBEDDING_PROVIDER` | Notes |
   | --- | --- | --- |
   | Mock (offline, default) | `mock` | Deterministic; CI-safe; wrong for production retrieval. |
-  | fastembed (BGE-small) | `fastembed` | `uv sync --extra embeddings`; first run downloads ~250 MB. |
-  | Voyage (voyage-3-law) | `voyage` | `CASEOPS_EMBEDDING_API_KEY=…` required. Legal-tuned; paid. |
-  | Gemini (text-embedding-005) | `gemini` | `CASEOPS_EMBEDDING_API_KEY=…`. Pairs with the Gemini LLM provider. |
+  | fastembed (BGE-small) | `fastembed` | `uv sync --extra embeddings`; first run downloads ~250 MB. Dev/offline fallback, not the production default. |
+  | Voyage (voyage-4-large) | `voyage` | `CASEOPS_EMBEDDING_API_KEY=…` required. Current production standard on GCP. |
+  | Gemini (text-embedding-005) | `gemini` | `CASEOPS_EMBEDDING_API_KEY=…`. General-purpose alternative, not the current production default. |
 
   All four providers write into the same `vector(1024)` column — a
   switch between them is a re-embedding, not a re-ingestion.
@@ -68,7 +68,7 @@ Text and chunking survive a model swap. Only the vector changes. Run:
 ```bash
 # Pick the new model, then reembed.
 export CASEOPS_EMBEDDING_PROVIDER=voyage   # or fastembed / gemini
-export CASEOPS_EMBEDDING_MODEL=voyage-3-law
+export CASEOPS_EMBEDDING_MODEL=voyage-4-large
 export CASEOPS_EMBEDDING_API_KEY=...       # if the provider needs one
 
 uv run caseops-ingest-corpus --reembed -v
@@ -101,11 +101,13 @@ re-embed was interrupted — rerun `--reembed`.
 
 ## 4. Quality gate (pre-pilot)
 
-Before the first paying customer, run a fixed 50-query legal-eval
-set and record recall@10 and p95 retrieval latency. If recall is
-below 0.5, try either:
+Before calling any corpus slice production-ready, run a fixed 50-query legal
+eval set and record recall@10 and p95 retrieval latency. Current production
+truth assumes **Voyage `voyage-4-large`**, Anthropic-backed metadata cleanup
+where needed, and reranking enabled. If the slice fails the 4.8+/5 quality bar
+or recall is below the agreed target, try either:
 
-1. A stronger embedding model (e.g. `voyage-3-law`), or
+1. A stronger or better-benchmarked embedding model/path, or
 2. A cross-encoder reranker (§4.2 Remaining).
 
 Measurements belong in this runbook — update the "Bench runs" table

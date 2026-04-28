@@ -22,6 +22,19 @@ see `memory/feedback_vector_embedding_pipeline.md` for the incident.
 > IT**. Do not save a degraded row "just to have coverage". Quality
 > trumps scope. Always.
 
+## Production truth rule
+
+- For CaseOps production on GCP, the embedding default is **Voyage
+  `voyage-4-large`**.
+- Anthropic-backed cleanup and evaluation steps are part of the production
+  quality path when the workflow calls for metadata normalization or quality
+  recovery.
+- `BAAI/bge-small-en-v1.5` and similar local/offline options are fallback
+  paths for development, smoke tests, or constrained offline runs. Do not
+  describe them as the current production embedding truth.
+- If repo docs drift and still claim `bge-small` is current production, mark
+  that as stale documentation and correct it before using the doc as evidence.
+
 Enforcement in this pipeline:
 
 - Title-chunk header builder returns `""` (→ skip embed) when the only

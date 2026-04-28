@@ -119,6 +119,12 @@ These rules are the default coding behavior for all implementation work in this 
   quality work**, read `.claude/skills/corpus-ingest/SKILL.md` and
   `.claude/projects/C--Users-mishr-caseops/memory/feedback_vector_embedding_pipeline.md`
   (personal memory). Both are mandatory, not advisory.
+- Current production truth for this repo is **Voyage `voyage-4-large` on GCP**.
+  Do not describe `BAAI/bge-small-en-v1.5` as the live production embedding
+  model unless the user explicitly scopes the discussion to historical, local,
+  or offline-only behavior.
+- Anthropic-backed cleanup or evaluation steps that materially affect corpus
+  quality are part of the production-quality path when the workflow uses them.
 - Per-bucket pipeline order is **ingest → Layer-2 metadata → title-chunk
   embed → HNSW probe → 0-5 rating**. Never batch Layer 2 at the end of a
   multi-bucket sweep — it poisons embeddings with filename-derived
@@ -178,6 +184,9 @@ These rules are the default coding behavior for all implementation work in this 
 - Provider- or payment-dependent flows need a real verification path. A skipped
   E2E is not clean sign-off unless equivalent automated or documented manual
   evidence exists.
+- Use `scripts/verify-release.sh` or `scripts/verify-release.ps1` to capture
+  canonical release evidence where possible. For manual or partial sign-off,
+  start from `docs/runbooks/release-signoff-template.md`.
 - Persist release evidence: target commit, environment URLs, commands run,
   results, skipped checks, and explicit caveats.
 - Use only these release verdicts:
@@ -187,6 +196,70 @@ These rules are the default coding behavior for all implementation work in this 
 - Do not issue a clean `GO` if commit identity is unproven without fallback
   evidence, if a required smoke test is skipped without equivalent proof, or if
   the environment is too broken to run the strongest practical verification.
+
+### Mandatory Enterprise Hardening Protocol
+
+- Before any enterprise-readiness audit, scale-hardening review, architecture
+  risk scan, security-hardening review, or analysis of
+  `docs/WORK_TO_BE_DONE.md`, read
+  `.claude/skills/enterprise-hardening/SKILL.md`. This is mandatory, not
+  advisory.
+- Use only these statuses for roadmap or hardening items:
+  - `Implemented`
+  - `Partially implemented`
+  - `Missing`
+  - `Stale-doc`
+- Do not treat `docs/WORK_TO_BE_DONE.md` as authoritative until it has been
+  cross-checked against current code, tests, and deploy manifests.
+- Separate "landed in code" from "deployed, enforced, and verified".
+- Security or operations controls are not `Implemented` without the strongest
+  practical infrastructure or runtime proof.
+- Giant hotspot modules, manual client drift, broad exception handling, raw
+  exception leaks, and fail-open controls count as enterprise hardening gaps
+  even when no user bug report exists yet.
+- Keep `docs/STRICT_ENTERPRISE_GAP_TASKLIST.md` current for every enterprise
+  audit, scale review, or `WORK_TO_BE_DONE.md` scan.
+
+### Mandatory Product PRD Protocol
+
+- Before any CaseOps feature planning, implementation, UX redesign, module-gap
+  analysis, or PRD update, read
+  `.claude/skills/caseops-prd-execution/SKILL.md`. This is mandatory, not
+  advisory.
+- Treat `docs/PRD_CLAUDE_CODE_2026-04-23.md` as the execution PRD for this
+  repo. Do not rely on `docs/PRD.md`, `docs/WORK_TO_BE_DONE.md`, or external
+  feedback files in isolation.
+- Every substantial feature task must map back to:
+  - journey IDs
+  - module IDs
+  - user story IDs
+  - test IDs
+- Do not do random work. If a requested feature is genuinely outside the PRD,
+  update the PRD first or in the same task before implementation.
+- For retrieval, corpus, statute, tribunal, or judge-intelligence work, follow
+  the PRD's production data rules: current production default
+  `voyage-4-large`, Anthropic/Opus-class enrichment where required, reranking
+  where required, and the 4.8+/5 corpus quality bar before calling a slice
+  production-ready.
+
+### Mandatory Strict Quality Review Protocol
+
+- Before any whole-repo scan, strict QA review, exhaustive test-matrix task,
+  security review, release-readiness audit, or request to make quality gates
+  stricter, read `.claude/skills/strict-quality-review/SKILL.md`. This is
+  mandatory, not advisory.
+- Start from `docs/STRICT_REPO_QUALITY_AUDIT_2026-04-24.md` and keep it current
+  or create a dated successor audit when findings materially change.
+- Do not issue a clean `GO` while P0 findings are open, canonical verification
+  scripts fail, provider checks are skipped without equivalent evidence, or a
+  security control can fail open in staging or production.
+- Every backend route, frontend page, database constraint, provider callback,
+  documentation claim, and deploy/runtime control needs either explicit test
+  evidence or an explicit tracked exemption.
+- Strict reviews must include command evidence. If a command cannot run, record
+  the exact command, exact failure, and next strongest proof.
+- Keep `docs/STRICT_ENTERPRISE_GAP_TASKLIST.md` aligned when strict quality
+  findings touch security, operations, deploy, scale, verification, or doc drift.
 
 When fixing a bug:
 

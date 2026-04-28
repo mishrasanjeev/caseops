@@ -6,6 +6,9 @@ Vendored and CaseOps-authored Claude Code skills that apply to CaseOps.
 | --- | --- | --- |
 | [`impeccable/`](./impeccable/SKILL.md) | Frontend design quality — typography, OKLCH colour, spatial rhythm, motion, interaction, UX writing, and hardening guardrails against generic "AI aesthetic" output. | All frontend work. |
 | [`bug-fixing/`](./bug-fixing/SKILL.md) | Fail-closed bug triage and regression-hardening protocol that forces explicit verdicts, adjacent-path audits, and strongest-practical verification. | Any bug fix, bug verification, reopen analysis, or review of another agent's bug-fix claim. |
+| [`enterprise-hardening/`](./enterprise-hardening/SKILL.md) | Fail-closed enterprise-readiness and scale-hardening protocol that forces evidence-backed gap statuses, `WORK_TO_BE_DONE.md` drift checks, and durable gap-ledger updates. | Any enterprise audit, architecture or security hardening review, or backlog-gap scan. |
+| [`caseops-prd-execution/`](./caseops-prd-execution/SKILL.md) | Forces CaseOps feature work to map to the unified execution PRD, current repo truth, source-data rules, user stories, and test IDs before implementation. | Any CaseOps feature planning, implementation, UX redesign, or product-gap review. |
+| [`strict-quality-review/`](./strict-quality-review/SKILL.md) | Whole-repo strict quality gate for exhaustive route/page/test/security/doc audits, evidence-backed verdicts, and Claude Code fix briefs. | Any deep repo scan, strict QA review, security review, release-readiness audit, or test-matrix hardening task. |
 | [`corpus-ingest/`](./corpus-ingest/SKILL.md) | Per-bucket SC/HC ingest pipeline (ingest → Layer-2 metadata → title-chunk embed → HNSW probe → 0-5 rating) that avoids the "placeholder title poisons embeddings" failure. | Any data-ingest / vector-quality request on the authority corpus. |
 
 ## Why these live in the repo
