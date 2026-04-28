@@ -443,6 +443,55 @@ def test_unique_constraint_on_invoice_line_item_time_entry(pg_engine):
             )
 
 
+def test_unique_tenant_key_blocks_cross_tenant_collisions(pg_engine):
+    """AQ-005 expansion (2026-04-28) — `companies.tenant_key` is the
+    cornerstone of tenant isolation. Inserting two companies with the
+    same tenant_key must be rejected by Postgres at the unique-index
+    layer, not just by application code. SQLite would also reject it,
+    but with looser semantics (NULL/case handling); only Postgres
+    proves the production guarantee.
+    """
+    shared_tenant_key = str(uuid4())
+    with pg_engine.begin() as conn:
+        # First insert succeeds.
+        conn.execute(
+            text(
+                "INSERT INTO companies "
+                "(id, name, slug, company_type, tenant_key, is_active, "
+                "timezone, created_at) "
+                "VALUES (:id, :n, :s, 'law_firm', :tk, true, :tz, :ts)"
+            ),
+            {
+                "id": str(uuid4()),
+                "n": "Tenant key uniqueness test A",
+                "s": f"tk-test-a-{shared_tenant_key[:8]}",
+                "tk": shared_tenant_key,
+                "tz": "Asia/Kolkata",
+                "ts": datetime.now(UTC),
+            },
+        )
+
+    # Second insert with the same tenant_key MUST raise IntegrityError.
+    with pytest.raises(IntegrityError):
+        with pg_engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO companies "
+                    "(id, name, slug, company_type, tenant_key, is_active, "
+                    "timezone, created_at) "
+                    "VALUES (:id, :n, :s, 'law_firm', :tk, true, :tz, :ts)"
+                ),
+                {
+                    "id": str(uuid4()),
+                    "n": "Tenant key uniqueness test B",
+                    "s": f"tk-test-b-{shared_tenant_key[:8]}",
+                    "tk": shared_tenant_key,
+                    "tz": "Asia/Kolkata",
+                    "ts": datetime.now(UTC),
+                },
+            )
+
+
 def test_oc_cross_visibility_server_default_inserts_false(pg_engine):
     """C-3c added oc_cross_visibility_enabled with
     server_default=false(). Insert a matter row WITHOUT supplying that

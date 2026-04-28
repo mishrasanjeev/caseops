@@ -261,26 +261,37 @@ Required closure:
 
 ### AQ-005 Database Validation Is Not Enterprise-Complete
 
-Status: `Missing` for Postgres-backed critical DB validation
+Status: `Partially implemented` — stale-doc upgrade 2026-04-28 from
+`Missing`. Postgres CI service container + pytest marker suite landed
+between the audit date and 2026-04-28.
 
-Evidence:
+Closure progress (verified 2026-04-28):
 
-- Existing enterprise ledger tracks P1-006 as missing until CI has a Postgres
-  service container.
-- Current tests lean heavily on SQLite-compatible paths.
+- `.github/workflows/ci.yml` has a `postgres-validation` job that
+  spins up `pgvector/pgvector:pg17` as a service container, sets
+  `CASEOPS_TEST_POSTGRES_URL` + `CASEOPS_DATABASE_URL`, and runs
+  `uv run pytest -m postgres tests/test_postgres_validation.py`.
+- `apps/api/tests/conftest.py` exposes the `pg_engine` fixture
+  gated on `CASEOPS_TEST_POSTGRES_URL` so the Postgres-marked
+  tests run in CI but are silently skipped on a developer laptop
+  without the env var.
+- `tests/test_postgres_validation.py` (483 lines) covers 6
+  validation categories:
+  - Alembic upgrade-to-head runs cleanly on a fresh DB.
+  - pgvector extension + HNSW index round-trip.
+  - Portal-user FK SET NULL cascade propagates.
+  - JSONB nested-dict round-trip.
+  - Unique constraint on invoice/line-item/time-entry triple.
+  - `oc_cross_visibility_enabled` server-default inserts `false`.
 
-Impact:
+Remaining closure:
 
-- Constraint, cascade, index, JSON/JSONB, timestamp, lock, and pgvector behavior
-  can differ from production.
-
-Required closure:
-
-- Add Postgres service container to CI.
-- Run a dedicated `postgres-validation` pytest marker suite.
-- Cover tenant keys, unique constraints, foreign-key cascade/restrict,
-  soft-delete filters, migration upgrade/downgrade where supported, pgvector
-  indexes, and advisory/row locking if used.
+- Expand the validation matrix to: tenant key constraints across
+  every cross-tenant table, soft-delete filter correctness,
+  advisory/row locking if used in services, migration downgrade
+  paths where supported.
+- Add a coverage-style report so we know which DB constraints in
+  the schema lack a Postgres-side proof.
 
 ### AQ-006 E2E Coverage Does Not Fully Replace Manual UAT
 
