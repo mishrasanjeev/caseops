@@ -40,7 +40,6 @@
 set -uo pipefail
 
 LOG=${WATCHDOG_LOG:-$HOME/.cache/caseops/ingest-watchdog.log}
-QA_COOKIE_FILE=${QA_COOKIE_FILE:-/c/Users/mishr/caseops/tests/e2e/.auth/qa-storage.json}
 ZONE=${INGEST_VM_ZONE:-asia-south1-c}
 INSTANCE=${INGEST_VM_NAME:-caseops-ingest-vm}
 PROJECT=${INGEST_VM_PROJECT:-perfect-period-305406}
@@ -52,35 +51,24 @@ mkdir -p "$(dirname "$LOG")"
 stamp() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 log() { echo "$(stamp) $*" >> "$LOG"; }
 
-# 1. Probe the live API. The cookie path is best-effort — if it fails
-#    (file missing, expired JWT, transient API error), we fall through
-#    to the SSH probe below. The dominant failure mode this watchdog
-#    catches is "VM hung / SSH unreachable", and that signal doesn't
-#    need API auth.
+# 1. Probe the live API. /api/health/ingest is unauthenticated and
+#    returns global corpus aggregates (no tenant data). No cookie
+#    refresh discipline required — durable signal. (Prior cookie path
+#    abandoned on 2026-04-28 after a session of expiring-cookie noise.)
 FALLTHROUGH=""
-COOKIES=""
 STATS=""
 LAST_INGESTED=""
 DOC_COUNT="?"
 AGE_HOURS="?"
 
-if [[ ! -f "$QA_COOKIE_FILE" ]]; then
-  FALLTHROUGH="cookie_file_missing"
+STATS=$(curl -sS -m 60 "https://api.caseops.ai/api/health/ingest" 2>/dev/null) || STATS=""
+if [[ -z "$STATS" ]]; then
+  FALLTHROUGH="api_unreachable"
 else
-  COOKIES=$(python -c "import json; d=json.load(open(r'$QA_COOKIE_FILE')); print('; '.join(f\"{c['name']}={c['value']}\" for c in d['cookies']))" 2>/dev/null) || FALLTHROUGH="cookie_parse_failed"
-fi
-
-if [[ -z "$FALLTHROUGH" ]]; then
-  STATS=$(curl -sS -m 15 "https://api.caseops.ai/api/authorities/stats" \
-          -H "Cookie: $COOKIES" 2>/dev/null) || STATS=""
-  if [[ -z "$STATS" ]]; then
-    FALLTHROUGH="api_stats_unreachable"
-  else
-    LAST_INGESTED=$(echo "$STATS" | python -c "import json,sys; print(json.load(sys.stdin).get('last_ingested_at',''))" 2>/dev/null)
-    DOC_COUNT=$(echo "$STATS" | python -c "import json,sys; print(json.load(sys.stdin).get('document_count',0))" 2>/dev/null)
-    if [[ -z "$LAST_INGESTED" ]]; then
-      FALLTHROUGH="no_last_ingested_at_field"
-    fi
+  LAST_INGESTED=$(echo "$STATS" | python -c "import json,sys; print(json.load(sys.stdin).get('last_ingested_at',''))" 2>/dev/null)
+  DOC_COUNT=$(echo "$STATS" | python -c "import json,sys; print(json.load(sys.stdin).get('document_count',0))" 2>/dev/null)
+  if [[ -z "$LAST_INGESTED" || "$LAST_INGESTED" == "None" ]]; then
+    FALLTHROUGH="no_last_ingested_at_field"
   fi
 fi
 

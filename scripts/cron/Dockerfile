@@ -14,8 +14,7 @@ COPY ingest-vm-watchdog.sh /opt/watchdog/ingest-vm-watchdog.sh
 COPY entrypoint.sh /opt/watchdog/entrypoint.sh
 RUN chmod +x /opt/watchdog/ingest-vm-watchdog.sh /opt/watchdog/entrypoint.sh
 
-ENV QA_COOKIE_FILE=/secrets/qa-storage.json \
-    WATCHDOG_LOG=/tmp/watchdog.log \
+ENV WATCHDOG_LOG=/tmp/watchdog.log \
     INGEST_VM_NAME=caseops-ingest-vm \
     INGEST_VM_ZONE=asia-south1-c \
     INGEST_VM_PROJECT=perfect-period-305406

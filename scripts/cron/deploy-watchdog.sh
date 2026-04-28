@@ -130,7 +130,6 @@ JOB_ARGS=(
   --region "${REGION}"
   --project "${PROJECT}"
   --service-account "${WATCHDOG_SA_EMAIL}"
-  --set-secrets="/secrets/qa-storage.json=${SECRET_NAME}:latest"
   --max-retries 1
   --task-timeout 10m
   --cpu 1 --memory 512Mi
