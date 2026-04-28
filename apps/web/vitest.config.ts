@@ -46,17 +46,16 @@ export default defineConfig({
         "app/**/page.tsx",
         "lib/api/openapi-types.ts",
       ],
-      // AQ-002 sub-item (2026-04-25): non-regression gate at today's
-      // baseline minus a small buffer. Today: stmts 30.31% / branches
-      // 22.89% / lines 31.83%. Floor here is rounded down so the
-      // ordinary noise of a single unrelated edit can't trip CI, but
-      // a real regression (e.g. deleting a tested module) will. Update
-      // these in the SAME commit that lifts coverage; do NOT ratchet
-      // down to make CI green.
+      // 2026-04-28 ratchet — full coverage run produced lines 35.66 %,
+      // stmts 33.99 %, branches 26.46 % (188 tests, all green; was
+      // 141/142 with 1 timeout in the 2026-04-25 audit). Threshold set
+      // ~1 pp below to leave room for unrelated-edit noise. Lift these
+      // in the SAME commit that adds new tests; never ratchet down to
+      // make CI green.
       thresholds: {
-        lines: 31,
-        statements: 30,
-        branches: 22,
+        lines: 34,
+        statements: 32,
+        branches: 25,
       },
     },
   },

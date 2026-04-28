@@ -118,42 +118,66 @@ Remaining closure work:
 
 ### AQ-002 Frontend Coverage Fails
 
-Status: `Missing` reliable coverage gate
+Status: **`Implemented` (closed 2026-04-28).**
 
-Evidence:
+Closure evidence (2026-04-28 verification):
 
-- `npm run test:coverage --workspace @caseops/web` failed.
-- Result: 33 test files executed, 141 passed, 1 failed.
-- Failing test: `apps/web/app/sign-in/NewWorkspaceForm.test.tsx`, case
-  `submits, stores the session, and routes on success`.
-- Failure: 5000 ms timeout plus jsdom "navigation to another Document" warning.
-- No `apps/web/coverage/coverage-summary.json` was produced.
+- `npx vitest run --coverage` from `apps/web` runs **191 tests across
+  51 files, all green**, in under 5 minutes — no timeouts.
+- `coverage/coverage-summary.json` is produced.
+- Coverage thresholds in `apps/web/vitest.config.ts` ratcheted in the
+  same 2026-04-28 commit to: lines 34, statements 32, branches 25
+  (today's actuals: 35.73 / 34.06 / 26.46). A real regression now
+  trips CI; ratchet upward in the same commit that lifts coverage.
+- Root cause was a default 5000 ms per-test timeout that
+  v8-instrumented form/dialog tests crossed — the
+  `testTimeout: 15_000` bump in `vitest.config.ts` resolved it.
 
-Impact:
+Original 2026-04-25 audit evidence (preserved for context):
 
-- Web coverage cannot be enforced.
-- A single timeout can hide actual coverage regressions.
-
-Required closure:
-
-- Mock navigation deterministically in `NewWorkspaceForm.test.tsx`.
-- Raise only the specific test timeout if there is a real async reason.
-- Add `npm run test:coverage --workspace @caseops/web` to CI.
-- Upload web coverage artifacts.
-- Add minimum thresholds for pages, API helpers, forms, state/error handling,
-  and critical components.
+- `npm run test:coverage --workspace @caseops/web` failed with 33
+  files / 141 passed / 1 failed; failing test was
+  `apps/web/app/sign-in/NewWorkspaceForm.test.tsx`, case
+  `submits, stores the session, and routes on success`, at the
+  default 5000 ms timeout.
 
 ### AQ-003 Page-Level UI Coverage Is Not Exhaustive
 
-Status: `Partially implemented`
+Status: `Partially implemented` — improved 2026-04-28 from 30/46 missing
+to 22/51 missing (one new page test added today on
+`app/app/matters/[id]/audit`).
 
-Evidence:
+Evidence (2026-04-28):
 
-- 46 frontend `page.tsx` routes.
-- 16 have sibling `page.test.tsx`.
-- 30 lack sibling page tests.
-- `apps/web/app/__page-coverage-matrix.test.ts` allows known waivers and only
-  blocks new unclassified pages.
+- 51 frontend `page.tsx` routes (up from 46 at audit time).
+- 29 have sibling `page.test.tsx` (up from 16).
+- 22 lack sibling page tests.
+- `apps/web/app/__page-coverage-matrix.test.ts` allows known waivers
+  and only blocks new unclassified pages.
+
+Remaining 22 pages without sibling tests (run `find apps/web/app -name
+page.tsx | while read p; do d=$(dirname "$p"); [ ! -f "$d/page.test.tsx" ]
+&& echo "$d"; done` to enumerate):
+
+- `app/app/admin/email-templates`, `app/app/admin/notifications`
+- `app/app/clients/[id]`, `app/app/contracts`,
+  `app/app/courts`, `app/app/courts/[id]`,
+  `app/app/courts/judges/[judge_id]`
+- `app/app/matters/[id]/communications`,
+  `app/app/matters/[id]/documents/[attachment_id]/view`,
+  `app/app/matters/[id]/drafts`,
+  `app/app/matters/[id]/drafts/new`,
+  `app/app/matters/[id]/drafts/[draftId]`,
+  `app/app/matters/[id]/outside-counsel`
+- `app/app/outside-counsel`, `app/app`
+- `app/general-counsels`, `app/guide`, `app/law-firms`, `app`
+- `app/portal`-scoped routes (3 untested)
+
+Closure per page averages ~30 min for simple presentational pages
+and ~1–2 h for query/mutation-heavy pages (drafts, contracts,
+communications). Use `app/app/matters/[id]/audit/page.test.tsx`
+(landed 2026-04-28) as the minimal pattern: `vi.hoisted` for the
+hook mocks, `useParams` mock, base no-data + populated-data cases.
 
 Pages still missing sibling page tests:
 
