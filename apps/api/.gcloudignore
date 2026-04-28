@@ -1,0 +1,19 @@
+# Cloud Build source upload exclusions. Without this file gcloud falls
+# back to .gitignore (located at the repo root, not apps/api), which
+# misses the local .venv when builds are submitted from this directory
+# directly. Result: a 448M upload instead of ~16M.
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+build/
+dist/
+.git/
+storage/
+.tmp-sweep/
+tmp/

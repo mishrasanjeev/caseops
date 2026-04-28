@@ -14,6 +14,7 @@
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
 .tmp/
+.tmp-sweep/
 tmp/
 tmp-*.html
 # Local document-storage root — grows at runtime with tenant uploads
@@ -45,6 +46,10 @@ __pycache__/
 # audit; IDEs were flagging the 37 files as uncommitted changes.
 .pytest-tmp/
 apps/api/.pytest-tmp/
+pytest-basetemp-coverage/
+# Coverage JSON artifact written by `coverage json` during the gate
+# run; the per-CI artifact upload is the durable copy.
+apps/api/coverage.json
 .ruff_cache/
 .mypy_cache/
 .venv/
