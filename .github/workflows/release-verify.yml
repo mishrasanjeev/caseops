@@ -1,0 +1,98 @@
+name: Release verification (provider-mandatory Playwright)
+
+# Manual / tag-triggered Playwright run that asserts every provider-
+# gated test passes — Pine Labs payment-link, SendGrid AutoMail, etc.
+# Distinguished from prod-verify.yml (every-6h smoke) by CASEOPS_
+# RELEASE_MODE=true: when this flag is set, the
+# requireProviderCredentialOrSkip helper in tests/e2e/support/
+# provider-gating.ts switches from "skip if env var missing" to
+# "throw at describe-load time so the test fails loudly".
+#
+# Why this exists (AQ-006 closure, 2026-04-28): the gating helper
+# was wired in 2026-04-25 but no workflow set CASEOPS_RELEASE_MODE,
+# so provider tests silently skipped on every CI run. Per
+# feedback_no_manual_tester_replacement_standard.md, "drop manual
+# QA?" stays NO-GO until provider UAT is mandatory in CI. This
+# workflow is the mandatory provider-UAT gate.
+#
+# Prereq secrets:
+#   CASEOPS_QA_PASSWORD — QA Bot owner password
+#   CASEOPS_PINE_LABS_API_KEY — Pine Labs UAT API key
+#   (add more secrets as new provider gates land)
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "release-*"
+      - "v*"
+
+concurrency:
+  group: release-verify
+  cancel-in-progress: false
+
+jobs:
+  release-playwright:
+    name: Release-Playwright (provider-mandatory)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Gate on required provider credentials
+        # Fail BEFORE any test setup if a release-mandatory secret is
+        # missing. The error message names the missing secret so an
+        # operator can provision and re-trigger.
+        env:
+          CASEOPS_QA_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
+          CASEOPS_PINE_LABS_API_KEY: ${{ secrets.CASEOPS_PINE_LABS_API_KEY }}
+        run: |
+          missing=()
+          for var in CASEOPS_QA_PASSWORD CASEOPS_PINE_LABS_API_KEY; do
+            if [ -z "${!var}" ]; then
+              missing+=("$var")
+            fi
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing release-mandatory secret(s): ${missing[*]}"
+            echo "Add them under repo Settings → Secrets and variables → Actions."
+            echo "release-verify is the provider-UAT gate (AQ-006); skipping is forbidden."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+
+      - run: npm ci
+
+      - name: Install Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Run release-mode Playwright (CASEOPS_RELEASE_MODE=true)
+        env:
+          CASEOPS_RELEASE_MODE: "true"
+          CASEOPS_QA_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
+          CASEOPS_PINE_LABS_API_KEY: ${{ secrets.CASEOPS_PINE_LABS_API_KEY }}
+          PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
+          PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
+          CASEOPS_QA_EMAIL: ${{ vars.CASEOPS_QA_EMAIL }}
+          CASEOPS_QA_SLUG: ${{ vars.CASEOPS_QA_SLUG }}
+        run: |
+          # Provider-gated specs live in the app config. Running with
+          # CASEOPS_RELEASE_MODE=true makes requireProviderCredentialOrSkip
+          # throw on missing creds instead of skipping silently.
+          npx playwright test --config=playwright.app.config.ts --reporter=list
+          npx playwright test --config=playwright.prod-ram.config.ts --reporter=list
+
+      - name: Upload Playwright reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 30

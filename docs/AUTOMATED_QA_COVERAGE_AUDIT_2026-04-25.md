@@ -284,25 +284,33 @@ Required closure:
 
 ### AQ-006 E2E Coverage Does Not Fully Replace Manual UAT
 
-Status: `Partially implemented`
+Status: `Partially implemented` — provider-mandatory gate landed
+2026-04-28; PRD-journey coverage and browser diversity remain.
 
-Evidence:
+Closure progress (2026-04-28):
 
-- `npx playwright test --list` lists 66 tests in 19 files.
-- App config has Chromium desktop and Pixel 5 mobile project.
-- Pine Labs payment-link path is provider-gated.
-- Production smoke exists but is not a substitute for every user journey.
+- The `requireProviderCredentialOrSkip` helper at
+  `tests/e2e/support/provider-gating.ts` (added 2026-04-25) and the
+  Pine Labs spec at `tests/e2e/billing-payment.spec.ts` were already
+  in place but no workflow set `CASEOPS_RELEASE_MODE=true`, so the
+  gate fell back to skip in every CI run.
+- New workflow `.github/workflows/release-verify.yml` sets
+  `CASEOPS_RELEASE_MODE=true` and pre-flights every release-mandatory
+  secret (CASEOPS_QA_PASSWORD, CASEOPS_PINE_LABS_API_KEY) before
+  running. Triggered by `release-*` / `v*` tags + workflow_dispatch.
+- Result: any release tag run fails loudly if a provider sandbox
+  secret is missing, instead of silently skipping. The standard
+  prod-verify (every-6h) keeps skip behaviour for resilience.
 
-Required closure:
+Remaining closure:
 
-- Every PRD journey must have at least one Playwright happy path and one
-  negative/empty/error path.
-- UAT/release job must provision provider sandbox secrets and fail when
-  provider-gated tests skip.
-- Add browser diversity for release: Chromium plus at least WebKit or Firefox
-  on the highest-risk customer-facing flows.
-- Add visual regression snapshots for complex pages: matter cockpit, drafting,
-  contract workspace, portal, billing, court/judge pages.
+- Every PRD journey must have at least one Playwright happy path and
+  one negative/empty/error path. Today the suite lists 66 tests in
+  19 files; the PRD ledger inventory is incomplete.
+- Add browser diversity for release: Chromium plus at least WebKit
+  or Firefox on the highest-risk customer-facing flows.
+- Add visual regression snapshots for complex pages: matter cockpit,
+  drafting, contract workspace, portal, billing, court/judge pages.
 
 ## Exhaustive Automated Test Case List
 
