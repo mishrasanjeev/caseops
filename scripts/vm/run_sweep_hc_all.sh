@@ -1,9 +1,12 @@
 #!/bin/bash
-# All-HC EN-only sweep launcher — 2026-04-26 PM directive from user:
-# "For all high courts maps 2025-2010 data, keep vector embedding
-#  quality above 4.5+ on the scale of 0 to 5."
+# All-HC EN-only sweep launcher.
 #
-# Coverage: 24 High Courts × 16 years (2025-2010) = 384 buckets.
+# 2026-04-26 PM directive: "For all high courts maps 2025-2010 data,
+#   keep vector embedding quality above 4.5+ on the scale of 0 to 5."
+# 2026-04-28 directive: extend year range to 2025-2000 for deeper
+#   historical coverage across all 24 HCs.
+#
+# Coverage: 24 High Courts × 26 years (2025-2000) = 624 buckets.
 # Per-bucket pipeline: ingest → Layer-2 metadata → title-chunk embed
 #   → HNSW probe → 0-5 rating (per CLAUDE.md vector-embedding rules).
 # Quality enforcement: halt sweep if a bucket rates <4.5/5 — caller
@@ -30,7 +33,7 @@ log() { echo "[$(date -Iseconds)] $*" | tee -a "$STATE"; }
 
 export CASEOPS_VOYAGE_DAILY_CAP_USD=20
 
-log "HC-ALL SWEEP START (24 HCs × 2025-2010, EN-only, floor=$FLOOR, voyage_cap=$CASEOPS_VOYAGE_DAILY_CAP_USD)"
+log "HC-ALL SWEEP START (24 HCs × 2025-2000, EN-only, floor=$FLOOR, voyage_cap=$CASEOPS_VOYAGE_DAILY_CAP_USD)"
 
 # All 24 distinct High Courts in HC_COURT_CATALOG (services/corpus_ingest.py).
 # Aliases (mumbai, chennai, bangalore, kolkata, odisha) excluded — they
@@ -46,8 +49,10 @@ HC_LIST=(
   patna punjab rajasthan sikkim tripura uttarakhand
 )
 
-# Year range 2025 down to 2010 per user directive.
-YEAR_LIST=(2025 2024 2023 2022 2021 2020 2019 2018 2017 2016 2015 2014 2013 2012 2011 2010)
+# Year range 2025 down to 2000 per 2026-04-28 user directive
+# (extended from prior 2025-2010 scope).
+YEAR_LIST=(2025 2024 2023 2022 2021 2020 2019 2018 2017 2016 2015 2014 2013 2012 2011 2010 \
+           2009 2008 2007 2006 2005 2004 2003 2002 2001 2000)
 
 run_bucket_with_floor_halt() {
   local label="$1"; shift
