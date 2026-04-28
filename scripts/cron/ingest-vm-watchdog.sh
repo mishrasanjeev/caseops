@@ -15,23 +15,16 @@
 # Anti-loop: if a reset happened in the last hour (per the audit log),
 # this run is a no-op so a stuck VM mid-boot doesn't get reset twice.
 #
-# Setup options (pick ONE):
+# Setup: GCP Cloud Run Job triggered by Cloud Scheduler.
+# The wiring (SA, Secret Manager cookie, Cloud Run Job, Scheduler) is
+# provisioned by scripts/cron/deploy-watchdog.sh. Run that script once
+# per source change. The Job runs this bash file via the entrypoint
+# wrapper at scripts/cron/entrypoint.sh (which dumps the per-run log
+# to stdout for Cloud Logging).
 #
-# A) GCP Cloud Scheduler (recommended — fully GCP-side, no workstation):
-#      gcloud scheduler jobs create http caseops-ingest-watchdog \
-#        --location=asia-south1 \
-#        --schedule="7 * * * *" \
-#        --uri="<HTTP endpoint that runs this script>" ...
-#    OR adapt the script to a Cloud Function entrypoint + invoke from
-#    Scheduler. Requires a SA with compute.instanceAdmin.v1 role.
-#
-# B) Windows Task Scheduler (this workstation):
-#      schtasks /Create /TN "CaseOps Ingest Watchdog" \
-#        /TR "C:\Program Files\Git\bin\bash.exe -c '/c/Users/mishr/caseops/scripts/cron/ingest-vm-watchdog.sh'" \
-#        /SC HOURLY /MO 1 /ST 00:07
-#
-# C) cron / launchd (Linux/macOS workstation):
-#      crontab -l | { cat; echo "7 * * * * /path/to/scripts/cron/ingest-vm-watchdog.sh"; } | crontab -
+# Manual fallback options (workstation cron) preserved at the bottom of
+# scripts/cron/deploy-watchdog.sh comments — only relevant if the GCP
+# Job is unavailable.
 #
 # Prereqs (whatever host runs it):
 #   - gcloud CLI authenticated as a principal with
@@ -59,32 +52,51 @@ mkdir -p "$(dirname "$LOG")"
 stamp() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 log() { echo "$(stamp) $*" >> "$LOG"; }
 
+# 1. Probe the live API. The cookie path is best-effort — if it fails
+#    (file missing, expired JWT, transient API error), we fall through
+#    to the SSH probe below. The dominant failure mode this watchdog
+#    catches is "VM hung / SSH unreachable", and that signal doesn't
+#    need API auth.
+FALLTHROUGH=""
+COOKIES=""
+STATS=""
+LAST_INGESTED=""
+DOC_COUNT="?"
+AGE_HOURS="?"
+
 if [[ ! -f "$QA_COOKIE_FILE" ]]; then
-  log "ERROR cookie_file_missing path=$QA_COOKIE_FILE"
-  exit 2
+  FALLTHROUGH="cookie_file_missing"
+else
+  COOKIES=$(python -c "import json; d=json.load(open(r'$QA_COOKIE_FILE')); print('; '.join(f\"{c['name']}={c['value']}\" for c in d['cookies']))" 2>/dev/null) || FALLTHROUGH="cookie_parse_failed"
 fi
 
-# 1. Probe the live API.
-COOKIES=$(python -c "import json; d=json.load(open(r'$QA_COOKIE_FILE')); print('; '.join(f\"{c['name']}={c['value']}\" for c in d['cookies']))" 2>/dev/null) || {
-  log "ERROR cookie_parse_failed"
-  exit 3
-}
+if [[ -z "$FALLTHROUGH" ]]; then
+  STATS=$(curl -sS -m 15 "https://api.caseops.ai/api/authorities/stats" \
+          -H "Cookie: $COOKIES" 2>/dev/null) || STATS=""
+  if [[ -z "$STATS" ]]; then
+    FALLTHROUGH="api_stats_unreachable"
+  else
+    LAST_INGESTED=$(echo "$STATS" | python -c "import json,sys; print(json.load(sys.stdin).get('last_ingested_at',''))" 2>/dev/null)
+    DOC_COUNT=$(echo "$STATS" | python -c "import json,sys; print(json.load(sys.stdin).get('document_count',0))" 2>/dev/null)
+    if [[ -z "$LAST_INGESTED" ]]; then
+      FALLTHROUGH="no_last_ingested_at_field"
+    fi
+  fi
+fi
 
-STATS=$(curl -sS -m 15 "https://api.caseops.ai/api/authorities/stats" \
-        -H "Cookie: $COOKIES" 2>/dev/null) || STATS=""
-if [[ -z "$STATS" ]]; then
-  log "WARN api_stats_unreachable — skipping (no signal to act on)"
+# 2. Compute age + decide action.
+#    The API probe is the SOLE authoritative signal. If it's not
+#    available (cookies expired, file missing, etc.) we exit silent —
+#    a stale signal could trigger a false-positive reset on a healthy
+#    VM. SSH probes were tried as a fallback but failed in 2 distinct
+#    ways on 2026-04-28 (Cloud Run → IAP key push timeouts; Workspace
+#    org rejecting SA OS Login). Standing-auth manual reset still
+#    works when the user spots a stuck VM.
+if [[ -n "$FALLTHROUGH" ]]; then
+  log "WARN api_signal=${FALLTHROUGH} — exiting without action (refresh tests/e2e/.auth/qa-storage.json + push to Secret Manager to restore signal)"
   exit 0
 fi
 
-LAST_INGESTED=$(echo "$STATS" | python -c "import json,sys; print(json.load(sys.stdin).get('last_ingested_at',''))" 2>/dev/null)
-DOC_COUNT=$(echo "$STATS" | python -c "import json,sys; print(json.load(sys.stdin).get('document_count',0))" 2>/dev/null)
-if [[ -z "$LAST_INGESTED" ]]; then
-  log "WARN no_last_ingested_at_field — skipping"
-  exit 0
-fi
-
-# 2. Compute age.
 AGE_HOURS=$(python -c "
 from datetime import datetime, timezone
 import sys
@@ -100,7 +112,6 @@ else:
     print(f'{delta.total_seconds() / 3600.0:.2f}')
 " "$LAST_INGESTED")
 
-# 3. Healthy → exit.
 if (( $(echo "$AGE_HOURS < $STALE_HOURS" | bc -l) )); then
   log "OK age=${AGE_HOURS}h doc_count=$DOC_COUNT — ingest healthy"
   exit 0
@@ -122,15 +133,10 @@ print(f'{delta.total_seconds() / 60.0:.0f}')
   fi
 fi
 
-# 5. Confirm VM is unreachable (don't reset a healthy VM whose ingest
-#    is just slow). 10s SSH probe.
-if gcloud compute ssh "$INSTANCE" --zone="$ZONE" --project="$PROJECT" \
-     --command="echo READY" --quiet 2>/dev/null | grep -q READY; then
-  log "DEFER age=${AGE_HOURS}h doc_count=$DOC_COUNT — SSH OK, screens may be in long phase"
-  exit 0
-fi
-
-# 6. Reset.
+# 5. Reset. API confirmed last_ingested_at >= STALE_HOURS old — the
+#    standing-auth directive is "reset if not working". No SSH probe
+#    gate here (would be a false-positive minefield from this Cloud
+#    Run container, see 2026-04-28 incident).
 log "ACTION reset age=${AGE_HOURS}h doc_count=$DOC_COUNT"
 gcloud compute instances reset "$INSTANCE" --zone="$ZONE" --project="$PROJECT" --quiet >/dev/null 2>&1
 RESET_RC=$?
@@ -139,26 +145,11 @@ if [[ $RESET_RC -ne 0 ]]; then
   exit 4
 fi
 
-# 7. Wait for SSH (max 5 min).
-DEADLINE=$(( $(date +%s) + 300 ))
-while (( $(date +%s) < DEADLINE )); do
-  if gcloud compute ssh "$INSTANCE" --zone="$ZONE" --project="$PROJECT" \
-       --command="echo READY" --quiet 2>/dev/null | grep -q READY; then
-    break
-  fi
-  sleep 8
-done
-
-# 8. Restart 3 screens (sql_proxy + en_sweep + hc_sweep_all).
-gcloud compute ssh "$INSTANCE" --zone="$ZONE" --project="$PROJECT" --quiet --command='
-  screen -dmS sql_proxy bash -c "cloud-sql-proxy --port 5432 perfect-period-305406:asia-south1:caseops-db; exec bash"
-  sleep 6
-  ss -lnt | grep -q ":5432" || echo "WARN proxy_not_listening"
-  screen -dmS en_sweep bash -c "cd ~ && ~/run_sweep_en.sh; exec bash"
-  screen -dmS hc_sweep_all bash -c "cd ~ && ~/run_sweep_hc_all.sh; exec bash"
-  sleep 4
-  screen -ls
-' >/dev/null 2>&1
-
-log "OK reset_complete age_at_reset=${AGE_HOURS}h"
+# 7. Done. The VM's startup-script (scripts/vm/startup-script.sh,
+#    installed via instance metadata) auto-launches the 3 screens
+#    (sql_proxy + en_sweep + hc_sweep_all) on every boot. The watchdog
+#    SA does not need OS Login as `mishra_sanjeev_gmail_com`, just the
+#    ability to reset the instance. Trim done 2026-04-28 after the
+#    OS-Login-as-SA false-positive incident.
+log "OK reset_issued age_at_reset=${AGE_HOURS}h — startup-script will relaunch screens on boot"
 exit 0
