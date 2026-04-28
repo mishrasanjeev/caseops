@@ -365,7 +365,7 @@ export default function ResearchPage() {
  * Tuned conservatively but ALL three v2 heuristics fire on the prod
  * failure samples above. Verified by tests/e2e/ram-batch-2026-04-26-prod.spec.ts.
  */
-function isGarbledSnippet(text: string | null | undefined): boolean {
+export function isGarbledSnippet(text: string | null | undefined): boolean {
   if (!text) return false;
   if (text.length < 40) return false;
   // v1: Replacement char (U+FFFD) is an unambiguous decoding failure.
