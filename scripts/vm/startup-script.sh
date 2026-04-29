@@ -39,6 +39,27 @@ done
 su - "$USER_NAME" <<'EOF'
 set -uo pipefail
 
+# 2026-04-29 — sync the canonical sweep scripts from main on every
+# boot. Without this, edits in scripts/vm/* that don't get manually
+# rsynced to ~/ live alongside stale ~/run_sweep_*.sh forever, and
+# the watchdog-triggered reset doesn't pick up new scope. The git
+# pull is best-effort — if the network or remote is flaky we keep
+# whatever ~/run_sweep_*.sh already has rather than fail the boot.
+if [ -d "$HOME/caseops/.git" ]; then
+  ( cd "$HOME/caseops" \
+    && git fetch --quiet origin main 2>/dev/null \
+    && git reset --hard origin/main 2>/dev/null \
+    && echo "git: $(git rev-parse --short=7 HEAD)" ) || \
+    echo "git: pull failed; proceeding with on-disk ~/run_sweep_*.sh"
+  for f in run_sweep_en.sh run_sweep_hc_all.sh; do
+    if [ -f "$HOME/caseops/scripts/vm/$f" ]; then
+      cp -f "$HOME/caseops/scripts/vm/$f" "$HOME/$f"
+      chmod +x "$HOME/$f"
+      echo "synced ~/$f from main"
+    fi
+  done
+fi
+
 # Quietly skip if a screen of that name is already alive (handles the
 # rare case where the script gets re-invoked manually).
 ensure_screen() {
