@@ -19,20 +19,27 @@ from caseops_api.scripts.seed_statutes import _seed
 from tests.test_auth_company import bootstrap_company
 
 
-def test_ft_s1_1_seed_inserts_7_acts(client: TestClient) -> None:
-    """Seed loader inserts the 7 v1 central acts: BNSS, BNS, BSA,
-    CrPC, IPC, Constitution, NI Act."""
+def test_ft_s1_1_seed_inserts_central_acts(client: TestClient) -> None:
+    """Seed loader inserts every central act in the catalog. The
+    catalog grew from 7 acts (FT-S1.1 baseline) to 23 in the
+    2026-04-27 BUG-031 batch (NDPS-1985 + 14 commonly-cited
+    acts). Original 7 must still be present; total count = catalog
+    cardinality."""
     from caseops_api.db.session import get_session_factory
 
     bootstrap_company(client)
     with get_session_factory()() as s:
         s_ins, s_upd, sec_ins, sec_upd = _seed(s)
         ids = {row.id for row in s.scalars(select(Statute)).all()}
-    assert s_ins == 7
+    # Original FT-S1.1 7 acts MUST still be in the seed.
     assert {
         "constitution-india", "bnss-2023", "bns-2023", "bsa-2023",
         "crpc-1973", "ipc-1860", "ni-act-1881",
     } <= ids
+    # Total inserted equals the live catalog size — bumps automatically
+    # as new acts land instead of pinning a stale literal.
+    assert s_ins == len(ids)
+    assert s_ins >= 7  # never regress below the original FT-S1.1 set
     assert sec_ins > 0
 
 
@@ -44,11 +51,12 @@ def test_ft_s1_2_seed_is_idempotent(client: TestClient) -> None:
     bootstrap_company(client)
     with get_session_factory()() as s:
         _seed(s)
+        first_pass_ids = {row.id for row in s.scalars(select(Statute)).all()}
     with get_session_factory()() as s:
         s_ins, s_upd, sec_ins, sec_upd = _seed(s)
     assert s_ins == 0
     assert sec_ins == 0
-    assert s_upd == 7
+    assert s_upd == len(first_pass_ids)  # every act re-validated, none new
 
 
 def test_ft_s1_3_unique_constraint_on_section_per_statute(

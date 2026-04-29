@@ -86,7 +86,11 @@ def test_resolve_court_id_maps_substring_to_court_id() -> None:
 
 
 def test_resolve_court_id_returns_none_for_unknown() -> None:
-    assert _resolve_court_id("Sikkim High Court") is None  # not in scope
+    # 2026-04-29: dropped "Sikkim High Court" from the not-in-scope
+    # list — Sikkim HC was added to HC_COURT_CATALOG in the
+    # 2026-04-28 24-HC sweep extension. Use a genuinely fictional
+    # court name + Supreme Court (not HC) + empty + None.
+    assert _resolve_court_id("Atlantis Maritime Court") is None  # fictional
     assert _resolve_court_id("Supreme Court of India") is None  # not HC
     assert _resolve_court_id("") is None
     assert _resolve_court_id(None) is None

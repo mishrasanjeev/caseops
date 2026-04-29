@@ -403,11 +403,14 @@ test.describe("Ram batch 2026-04-26 — prod verification of c58305b fixes", () 
     page,
     request,
   }) => {
-    // The /api/statutes/bns-2023/sections endpoint serializes all 358
-    // BNS sections in one shot (~47 KB) and routinely takes ~30s on
-    // a cold cache. Allocate a generous test budget so a slow but
-    // healthy response doesn't trip the default 120s ceiling.
-    test.setTimeout(180_000);
+    // The /api/statutes/{slug}/sections endpoint serializes every
+    // section in one shot (~47 KB for BNS, ~50KB+ for IPC). On a
+    // cold cache this takes 30-90s, with the worst case observed at
+    // ~85s in CI when hitting both BNS + IPC back to back. Generous
+    // budget here so a slow-but-healthy response doesn't trip the
+    // default 120s ceiling. Speed-fix tracked separately (likely
+    // pagination + section_text-as-detail-fetch).
+    test.setTimeout(300_000);
     await signIn(page);
     const cookies = await page.context().cookies();
     const cookieHeader = cookies
@@ -429,7 +432,7 @@ test.describe("Ram batch 2026-04-26 — prod verification of c58305b fixes", () 
     for (const url of candidates) {
       const r = await request.get(url, {
         headers: { Cookie: cookieHeader, Accept: "application/json" },
-        timeout: 60_000,
+        timeout: 120_000,
       });
       if (r.ok()) {
         bnsBody = await r.json();
@@ -469,6 +472,11 @@ test.describe("Ram batch 2026-04-26 — prod verification of c58305b fixes", () 
     page,
     request,
   }) => {
+    // /api/statutes/ipc-1860/sections serialises 511 IPC sections
+    // (~50KB+) and is slow on cold cache. Bump the test budget +
+    // per-request timeout so the slow-but-healthy response doesn't
+    // trip the default 120s ceiling.
+    test.setTimeout(240_000);
     await signIn(page);
     // Pull the session cookie set during sign-in so we can call the
     // API directly with the same auth.
@@ -491,6 +499,7 @@ test.describe("Ram batch 2026-04-26 — prod verification of c58305b fixes", () 
       `${apiBase}/api/statutes/ipc-1860/sections`,
       {
         headers: { Cookie: cookieHeader, Accept: "application/json" },
+        timeout: 120_000,
       },
     );
     if (!statutesResp.ok()) {
