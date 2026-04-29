@@ -278,7 +278,10 @@ test.describe("Ram batch 2026-04-26 — prod verification of c58305b fixes", () 
       await signIn(page);
       await page.goto(`${PROD_BASE_URL}/app/clients`);
 
-      const newClientBtn = page.getByRole("button", { name: /new client/i });
+      // 2026-04-29: page now has 2 "New Client" buttons (header CTA +
+      // empty-state CTA when tenant is empty). `.first()` resolves
+      // the strict-mode violation.
+      const newClientBtn = page.getByRole("button", { name: /new client/i }).first();
       if ((await newClientBtn.count()) === 0) {
         test.skip(true, "New Client trigger not visible on /app/clients.");
         return;
