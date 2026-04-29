@@ -318,6 +318,76 @@ def test_shared_citation_credits_every_option_that_cites_it(
         )
 
 
+def test_bracket_tag_citation_resolves_to_canonical_identifier(
+    client: TestClient, monkeypatch
+) -> None:
+    """Grounding fast path end-to-end. Model emits "[1] paraphrased title"
+    with a rationale that shares no tokens with the source text — the prior
+    proposition gate would 422 this. With the bracket-tag fast path, the
+    citation resolves by index, the proposition gate is skipped, and the UI
+    surfaces the canonical identifier (no [1] prefix, no paraphrase)."""
+    import json as _json
+
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    _seed_relevant_authority()  # SSANGYONG is the only retrieved authority
+
+    class _BracketTagProvider:
+        name = "mock"
+        model = "mock-bracket-tag"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            payload = {
+                "title": "Section 34 challenge",
+                "options": [
+                    {
+                        "label": "Press patent illegality",
+                        # Rationale deliberately uses tokens absent from the
+                        # source text — the proposition gate would have
+                        # rejected this before the bracket-tag fast path.
+                        "rationale": "Foundational ratio xyz qrs supports relief here.",
+                        "confidence": "medium",
+                        "supporting_citations": ["[1] paraphrased Ssangyong tag"],
+                        "risk_notes": None,
+                    }
+                ],
+                "primary_recommendation_label": None,
+                "rationale": "Standard challenge.",
+                "assumptions": [],
+                "missing_facts": [],
+                "confidence": "medium",
+                "next_action": None,
+            }
+            return LLMCompletion(
+                text=_json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=10,
+                completion_tokens=20,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _BracketTagProvider(),
+    )
+
+    token, _, matter_id = _setup_matter(client)
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "authority"},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    options = body["options"]
+    assert len(options) == 1
+    cites = options[0]["supporting_citations"]
+    assert cites, "bracket-tag citation should have verified"
+    # UI surfaces the canonical identifier — no leading "[1]", no paraphrase.
+    assert cites == ["Ssangyong Engg v. NHAI (2019)"], cites
+
+
 def test_generate_recommendation_refuses_when_retrieval_is_empty(
     client: TestClient, monkeypatch
 ) -> None:

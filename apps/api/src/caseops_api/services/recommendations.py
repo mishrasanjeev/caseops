@@ -389,11 +389,15 @@ def _build_prompt(
         "schema described by the user. Every option must cite at least one "
         "supporting authority from the RETRIEVED_AUTHORITIES list below.\n\n"
         "CITATION RULES (HARD):\n"
-        "1. Each entry in `supporting_citations` MUST be the EXACT CITATION "
-        "string from the RETRIEVED_AUTHORITIES list — copy it verbatim.\n"
-        "2. Do NOT paraphrase, abbreviate, or invent citations. If you are "
-        "unsure which authority supports your point, omit the citation and "
-        "note the gap in `missing_facts`.\n"
+        "1. Each entry in `supporting_citations` MUST start with the bracket "
+        "tag from the RETRIEVED_AUTHORITIES list (e.g. \"[1]\", \"[2]\") "
+        "followed by the citation text from that line. Example: "
+        "\"[1] Arnesh Kumar v. State of Bihar, AIR 2014 SC 2756\". The "
+        "bracket tag is required — it is how the verifier resolves the "
+        "citation. Never invent a tag that is not in the list.\n"
+        "2. Do NOT invent citations or omit the bracket tag. If you are "
+        "unsure which listed authority supports your point, omit the "
+        "citation entirely and note the gap in `missing_facts`.\n"
         "3. If no listed authority supports an option, set "
         "`supporting_citations: []`, lower `confidence` to \"low\", and "
         "explain in `missing_facts`.\n\n"
@@ -526,18 +530,22 @@ def _filter_and_verify_options(
             )
             citation_to_options.setdefault(citation, []).append(idx)
     report = verify_citations(claims, sources)
-    # Keep only citations that verified, preserving per-option order by
-    # re-walking the original option citations and filtering.
-    verified_citations = {
-        check.claim.citation for check in report.checks if check.verified
-    }
+    # Map the model's raw citation string → the canonical SourceDoc.identifier
+    # so the UI shows the clean canonical form (no "[1]" prefix, no
+    # paraphrase). Dedup is by canonical so two raw spellings of the same
+    # source collapse to one.
+    canonical_for: dict[str, str] = {}
+    for check in report.checks:
+        if check.verified and check.source is not None:
+            canonical_for[check.claim.citation] = check.source.identifier
     per_option_verified: dict[int, list[str]] = {i: [] for i in range(len(options))}
     for idx, option in enumerate(options):
         seen: set[str] = set()
         for citation in option.supporting_citations:
-            if citation in verified_citations and citation not in seen:
-                per_option_verified[idx].append(citation)
-                seen.add(citation)
+            canonical = canonical_for.get(citation)
+            if canonical and canonical not in seen:
+                per_option_verified[idx].append(canonical)
+                seen.add(canonical)
     cleaned: list[_LLMOption] = []
     for idx, option in enumerate(options):
         cleaned.append(

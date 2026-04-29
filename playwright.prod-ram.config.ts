@@ -28,7 +28,7 @@ const QA_STORAGE_STATE = "tests/e2e/.auth/qa-storage.json";
 
 export default defineConfig({
   testDir: "tests/e2e",
-  testMatch: /(ram-batch-2026-04-26-prod\.spec\.ts|qa-auth\.setup\.ts)$/,
+  testMatch: /(ram-batch-2026-04-26-prod\.spec\.ts|recommendations-grounding-2026-04-29-prod\.spec\.ts|qa-auth\.setup\.ts)$/,
   timeout: 120_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,
@@ -53,7 +53,7 @@ export default defineConfig({
     {
       name: "prod-chromium",
       dependencies: ["setup"],
-      testMatch: /ram-batch-2026-04-26-prod\.spec\.ts$/,
+      testMatch: /(ram-batch-2026-04-26-prod\.spec\.ts|recommendations-grounding-2026-04-29-prod\.spec\.ts)$/,
       use: {
         ...devices["Desktop Chrome"],
         storageState: QA_STORAGE_STATE,

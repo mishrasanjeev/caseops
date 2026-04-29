@@ -69,6 +69,12 @@ class VerificationReport:
 
 
 _WORD_RE = re.compile(r"[a-z0-9]+")
+# Grounding fast path: the recommendations prompt numbers each retrieved
+# authority and instructs the model to prefix every citation with the matching
+# bracket tag. When the prefix lands, we resolve by index — deterministic, and
+# we skip both the fuzzy citation gate and the proposition gate (the model has
+# explicitly named the source).
+_BRACKET_TAG_RE = re.compile(r"^\s*\[(\d+)\]")
 
 
 def _normalize(text: str) -> str:
@@ -83,6 +89,18 @@ def _tokens(text: str) -> list[str]:
 
 def _citation_signature(text: str) -> frozenset[str]:
     return frozenset(tok for tok in _tokens(text) if len(tok) >= 2)
+
+
+def _bracket_tag_lookup(
+    citation: str, sources: list[SourceDoc]
+) -> SourceDoc | None:
+    match = _BRACKET_TAG_RE.match(citation)
+    if not match:
+        return None
+    n = int(match.group(1))
+    if 1 <= n <= len(sources):
+        return sources[n - 1]
+    return None
 
 
 def _match_source(
@@ -140,6 +158,17 @@ def verify_citations(
     index = _index_sources(sources)
     checks: list[CitationCheck] = []
     for claim in claims:
+        bracket_match = _bracket_tag_lookup(claim.citation, sources)
+        if bracket_match is not None:
+            checks.append(
+                CitationCheck(
+                    claim=claim,
+                    source=bracket_match,
+                    verified=True,
+                    reason="bracket_tag_match",
+                )
+            )
+            continue
         source = _match_source(claim.citation, index)
         if source is None:
             checks.append(

@@ -96,6 +96,44 @@ def test_case_and_punctuation_variations_match() -> None:
     assert report.all_verified
 
 
+def test_bracket_tag_resolves_to_indexed_source() -> None:
+    """Grounding fast path: model emits "[1] ..." → verifier resolves by index
+    and skips the proposition gate. Deterministic, even when the rationale
+    shares no tokens with the source text."""
+    report = verify_citations(
+        [
+            Claim(
+                citation="[1] paraphrased title that does not match the source",
+                proposition="entirely unrelated proposition tokens xyz qrs",
+            ),
+        ],
+        [SSANGYONG, PATEL],
+    )
+    assert report.all_verified
+    assert report.checks[0].reason == "bracket_tag_match"
+    assert report.checks[0].source is SSANGYONG
+
+
+def test_bracket_tag_out_of_range_falls_through_to_fuzzy() -> None:
+    """[7] when only 2 sources exist: bracket lookup returns None, fuzzy path
+    runs. With a citation that has no token overlap the claim stays unverified."""
+    report = verify_citations(
+        [Claim(citation="[7] Fictional v. Nobody (1999)", proposition="anything")],
+        [SSANGYONG, PATEL],
+    )
+    assert not report.all_verified
+    assert report.checks[0].reason == "unknown_source"
+
+
+def test_bracket_tag_with_leading_whitespace_still_resolves() -> None:
+    report = verify_citations(
+        [Claim(citation="   [2] Patel Engg")],
+        [SSANGYONG, PATEL],
+    )
+    assert report.all_verified
+    assert report.checks[0].source is PATEL
+
+
 def test_report_counters() -> None:
     claims = [
         Claim(
