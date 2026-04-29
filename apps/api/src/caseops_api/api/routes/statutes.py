@@ -90,9 +90,31 @@ class StatuteSectionRecord(BaseModel):
     ordinal: int
 
 
+class StatuteSectionListItem(BaseModel):
+    """Lighter section row for the list endpoint.
+
+    Drops `section_text` (the full body) to keep the list response
+    fast — IPC with 511 sections × ~500 chars/section was a 250KB+
+    JSON payload that took 30-90s on a cold cache and timed out
+    prod-Playwright tests. Callers who need the body fetch the
+    section-detail endpoint, which keeps the full StatuteSectionRecord.
+    """
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    statute_id: str
+    section_number: str
+    section_label: str | None
+    section_text_source: str | None = None
+    is_provisional: bool = False
+    section_url: str | None
+    parent_section_id: str | None
+    ordinal: int
+
+
 class StatuteSectionsListResponse(BaseModel):
     statute: StatuteRecord
-    sections: list[StatuteSectionRecord]
+    sections: list[StatuteSectionListItem]
 
 
 class StatuteSectionDetailResponse(BaseModel):
@@ -198,7 +220,7 @@ def list_statute_sections(
     )
     return StatuteSectionsListResponse(
         statute=StatuteRecord.model_validate(statute),
-        sections=[StatuteSectionRecord.model_validate(s) for s in sections],
+        sections=[StatuteSectionListItem.model_validate(s) for s in sections],
     )
 
 

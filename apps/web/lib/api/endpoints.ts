@@ -1257,9 +1257,15 @@ export type StatuteSectionRecord = {
   ordinal: number;
 };
 
+// Lightweight section row for the LIST endpoint — drops `section_text`
+// for payload size (IPC with 511 sections × ~500 chars/section was a
+// 250KB+ JSON that took 30-90s on a cold cache). Callers needing the
+// full text fetch the section-detail endpoint.
+export type StatuteSectionListItem = Omit<StatuteSectionRecord, "section_text">;
+
 export type StatuteSectionsListResponse = {
   statute: StatuteRecord;
-  sections: StatuteSectionRecord[];
+  sections: StatuteSectionListItem[];
 };
 
 export type StatuteSectionDetailResponse = {
