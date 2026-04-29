@@ -7539,6 +7539,39 @@ export interface components {
             section: components["schemas"]["StatuteSectionRecord"];
             statute: components["schemas"]["StatuteRecord"];
         };
+        /**
+         * StatuteSectionListItem
+         * @description Lighter section row for the list endpoint.
+         *
+         *     Drops `section_text` (the full body) to keep the list response
+         *     fast — IPC with 511 sections × ~500 chars/section was a 250KB+
+         *     JSON payload that took 30-90s on a cold cache and timed out
+         *     prod-Playwright tests. Callers who need the body fetch the
+         *     section-detail endpoint, which keeps the full StatuteSectionRecord.
+         */
+        StatuteSectionListItem: {
+            /** Id */
+            id: string;
+            /**
+             * Is Provisional
+             * @default false
+             */
+            is_provisional: boolean;
+            /** Ordinal */
+            ordinal: number;
+            /** Parent Section Id */
+            parent_section_id: string | null;
+            /** Section Label */
+            section_label: string | null;
+            /** Section Number */
+            section_number: string;
+            /** Section Text Source */
+            section_text_source?: string | null;
+            /** Section Url */
+            section_url: string | null;
+            /** Statute Id */
+            statute_id: string;
+        };
         /** StatuteSectionRecord */
         StatuteSectionRecord: {
             /** Id */
@@ -7568,7 +7601,7 @@ export interface components {
         /** StatuteSectionsListResponse */
         StatuteSectionsListResponse: {
             /** Sections */
-            sections: components["schemas"]["StatuteSectionRecord"][];
+            sections: components["schemas"]["StatuteSectionListItem"][];
             statute: components["schemas"]["StatuteRecord"];
         };
         /** TeamCreateRequest */
