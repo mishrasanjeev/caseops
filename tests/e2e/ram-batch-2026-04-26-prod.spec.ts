@@ -184,7 +184,11 @@ test.describe("Ram batch 2026-04-26 — prod verification of c58305b fixes", () 
   test("BUG-022: Topbar dropdown does NOT render Profile / Workspace settings placeholders", async ({
     page,
   }) => {
+    // Storage state seeds cookies + localStorage but the page itself
+    // starts at about:blank — without an explicit goto the topbar
+    // never renders and the click below times out (2026-04-29 fix).
     await signIn(page);
+    await page.goto(`${PROD_BASE_URL}/app`, { waitUntil: "domcontentloaded" });
     // Open the user-menu dropdown — anchored on the sign-out testid sibling.
     // The trigger is the user-avatar button at the right edge of the topbar.
     const userMenuTrigger = page.locator("header button").filter({
@@ -399,6 +403,11 @@ test.describe("Ram batch 2026-04-26 — prod verification of c58305b fixes", () 
     page,
     request,
   }) => {
+    // The /api/statutes/bns-2023/sections endpoint serializes all 358
+    // BNS sections in one shot (~47 KB) and routinely takes ~30s on
+    // a cold cache. Allocate a generous test budget so a slow but
+    // healthy response doesn't trip the default 120s ceiling.
+    test.setTimeout(180_000);
     await signIn(page);
     const cookies = await page.context().cookies();
     const cookieHeader = cookies
@@ -420,6 +429,7 @@ test.describe("Ram batch 2026-04-26 — prod verification of c58305b fixes", () 
     for (const url of candidates) {
       const r = await request.get(url, {
         headers: { Cookie: cookieHeader, Accept: "application/json" },
+        timeout: 60_000,
       });
       if (r.ok()) {
         bnsBody = await r.json();
