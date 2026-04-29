@@ -1,0 +1,69 @@
+#!/bin/bash
+# SC + HC sweep launcher for the ingest VM.
+#
+# 2026-04-26 PM: shipped as "EN-only" with --language-suffix EN +
+#   --min-chars 4000. Original scope: SC 2025-1990 + HC 2025-2000
+#   for the 7 priority HCs (delhi/allahabad/bombay/calcutta/madras/
+#   karnataka/telangana). Tracked in feedback_corpus_spend_audit
+#   memory: $20/day Voyage cap.
+#
+# 2026-04-29: scope expansion (corpus converged at 99,242 docs under
+#   prior scope; need MORE volume). Three knobs lifted:
+#     - drop --language-suffix EN (ingest Devanagari/regional too)
+#     - lower --min-chars 4000 → 2000 (procedural orders included)
+#     - --limit 2000 → 20000 (mirrors run_sweep_hc_all.sh — original
+#       2000-cap silently halted at S3-list head and missed real new
+#       docs further into the listing)
+#   Filename suffix "_en" preserved for compatibility with the VM's
+#   startup-script (scripts/vm/startup-script.sh) and prior tooling
+#   that grep for the screen name.
+#
+# Lives at ~/run_sweep_en.sh on caseops-ingest-vm. Canonical copy
+# in this repo so future scope edits flow through git instead of
+# living only on the VM.
+set -u
+
+# Reuse env exports + helper function definitions from run_sweep.sh
+# (the part before the SC sweep loop "GCE SWEEP START" marker).
+END_LINE=$(grep -n "GCE SWEEP START" ~/run_sweep.sh | head -1 | cut -d: -f1)
+END_LINE=$((END_LINE - 1))
+. <(head -n "$END_LINE" ~/run_sweep.sh)
+
+export CASEOPS_VOYAGE_DAILY_CAP_USD=20
+
+log "EN-SWEEP START (SC 2024-1990 + HC 2025-2000, ALL-LANGUAGES, min-chars=2000, voyage_cap=$CASEOPS_VOYAGE_DAILY_CAP_USD)"
+
+# SC: skip years already rated >=4.5 in prior runs (per ratings.log).
+# Skipped: 2024 (script-flagged), 2023 (sweep-state SKIP), 2021/2020/
+# 2019/2018/2017/2016/2015 (>=4.5 rated under EN-only; we still want
+# those years re-walked under expanded scope so the skip is dropped
+# 2026-04-29 along with the EN filter).
+for year in 2024 2023 2022 2021 2020 2019 2018 2017 2016 2015 2014 2013 2012 2011 2010 \
+           2009 2008 2007 2006 2005 2004 2003 2002 2001 2000 \
+           1999 1998 1997 1996 1995 1994 1993 1992 1991 1990; do
+  label="sc-$year"
+  run_bucket "$label" "$year-$year" \
+    --from-s3 --court sc --year "$year" --min-chars 2000 --limit 20000
+  rc=$?
+  if [[ $rc -ne 0 ]]; then
+    log "EN-SWEEP HALTED at $label (rc=$rc)"
+    exit $rc
+  fi
+done
+
+log "SC DONE - starting HC priority-7 (run_sweep_hc_all.sh covers full 24-HC sweep)"
+
+for court in delhi allahabad calcutta telangana madras karnataka bombay; do
+  for year in 2025 2024 2023 2022 2021 2020 2019 2018 2017 2016 2015 2014 2013 2012 2011 2010 \
+             2009 2008 2007 2006 2005 2004 2003 2002 2001 2000; do
+    run_bucket "hc-$court-$year" "" \
+      --from-s3 --court hc --hc-courts "$court" --year "$year" --min-chars 2000 --limit 20000
+    rc=$?
+    if [[ $rc -ne 0 ]]; then
+      log "EN-SWEEP HALTED at hc-$court-$year (rc=$rc)"
+      exit $rc
+    fi
+  done
+done
+
+log "EN-SWEEP DONE"

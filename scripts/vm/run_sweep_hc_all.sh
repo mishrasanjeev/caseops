@@ -1,10 +1,18 @@
 #!/bin/bash
-# All-HC EN-only sweep launcher.
+# All-HC sweep launcher.
 #
 # 2026-04-26 PM directive: "For all high courts maps 2025-2010 data,
 #   keep vector embedding quality above 4.5+ on the scale of 0 to 5."
 # 2026-04-28 directive: extend year range to 2025-2000 for deeper
 #   historical coverage across all 24 HCs.
+# 2026-04-29 directive: scope expansion. After hitting the converged
+#   ceiling at 99,242 docs:
+#     - drop --language-suffix EN (include Devanagari/regional docs)
+#     - lower --min-chars 4000 → 2000 (include shorter procedural orders)
+#     - convert FLOOR-HALT to FLOOR-WARN so non-English buckets don't
+#       stop the sweep (Voyage embeddings rate weaker on non-Latin
+#       script — expected; we'd rather get the volume than block on
+#       per-bucket quality, with the rating logged for triage).
 #
 # Coverage: 24 High Courts × 26 years (2025-2000) = 624 buckets.
 # Per-bucket pipeline: ingest → Layer-2 metadata → title-chunk embed
@@ -33,7 +41,7 @@ log() { echo "[$(date -Iseconds)] $*" | tee -a "$STATE"; }
 
 export CASEOPS_VOYAGE_DAILY_CAP_USD=20
 
-log "HC-ALL SWEEP START (24 HCs × 2025-2000, EN-only, floor=$FLOOR, voyage_cap=$CASEOPS_VOYAGE_DAILY_CAP_USD)"
+log "HC-ALL SWEEP START (24 HCs × 2025-2000, ALL-LANGUAGES, min-chars=2000, floor=$FLOOR warn-only, voyage_cap=$CASEOPS_VOYAGE_DAILY_CAP_USD)"
 
 # All 24 distinct High Courts in HC_COURT_CATALOG (services/corpus_ingest.py).
 # Aliases (mumbai, chennai, bangalore, kolkata, odisha) excluded — they
@@ -72,9 +80,14 @@ run_bucket_with_floor_halt() {
   local below
   below=$(awk -v r="$rating" -v f="$FLOOR" "BEGIN{print (r+0 < f+0) ? 1 : 0}")
   if [[ "$below" = "1" ]]; then
-    log "FLOOR-HALT $label rating=$rating below=$FLOOR — sweep STOPPED for investigation"
-    log "To resume: investigate $HOME/logs/ingest_buckets/$label.{titles,probe}.log, then re-launch this script (it will skip already-rated buckets via INGEST-DUP path)."
-    exit 1
+    # 2026-04-29: warn-only. Pre-2026-04-29 this halted the sweep so
+    # an operator could investigate. After the scope expansion (drop
+    # EN-only, lower min-chars), Devanagari/regional buckets are
+    # expected to rate below 4.5 because Voyage embeddings perform
+    # weaker on non-Latin scripts. We'd rather get the volume than
+    # block on per-bucket quality. The rating is logged for triage.
+    log "FLOOR-WARN $label rating=$rating below=$FLOOR — continuing (post-2026-04-29 expansion accepts non-EN buckets at lower quality)"
+    return 0
   fi
   log "FLOOR-OK $label rating=$rating ≥ $FLOOR"
   return 0
@@ -83,12 +96,13 @@ run_bucket_with_floor_halt() {
 for court in "${HC_LIST[@]}"; do
   for year in "${YEAR_LIST[@]}"; do
     label="hc-$court-$year"
-    # Skip buckets already rated >=$FLOOR in any prior sweep (state file).
-    if grep -qE "bucket=$label.*rating=4\.[5-9]|bucket=$label.*rating=5\." \
-       ~/logs/ratings.log ~/logs/ratings.hc.log ~/logs/ratings.hc_all.log 2>/dev/null; then
-      log "SKIP $label (already rated >=$FLOOR in prior run)"
-      continue
-    fi
+    # 2026-04-29: skip-by-prior-rating REMOVED. Pre-expansion ratings
+    # were under --language-suffix EN + --min-chars 4000. Post-
+    # expansion, the same buckets may have new (non-EN, shorter)
+    # content to ingest that the dedupe path will pick up. The cost
+    # of a re-walk on a fully-deduped bucket is minimal: S3 list +
+    # per-doc hash checks. Real new docs flow through OCR + embed +
+    # insert as expected.
     # --limit 20000 (vs prior 2000): the prior cap meant we re-listed
     # the SAME first 2000 S3 keys per (court, year) every run. With
     # 9,224 HC docs already in DB across 24 HCs × 16 years, most
@@ -98,7 +112,7 @@ for court in "${HC_LIST[@]}"; do
     # genuinely new docs.
     run_bucket_with_floor_halt "$label" \
       --from-s3 --court hc --hc-courts "$court" --year "$year" \
-      --min-chars 4000 --limit 20000 --language-suffix EN
+      --min-chars 2000 --limit 20000
   done
 done
 
