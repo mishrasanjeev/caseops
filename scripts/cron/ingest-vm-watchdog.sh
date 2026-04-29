@@ -55,7 +55,7 @@ PROJECT=${INGEST_VM_PROJECT:-perfect-period-305406}
 # (hours of zero forward motion) still get caught. Durable fix: add
 # doc_count-delta gate that compares current count to the last
 # watchdog OK entry — if doc_count moved, ingest is alive.
-STALE_HOURS=${INGEST_STALE_HOURS:-6}
+STALE_HOURS=${INGEST_STALE_HOURS:-12}
 ANTILOOP_MIN=${INGEST_ANTILOOP_MIN:-60}
 
 mkdir -p "$(dirname "$LOG")"
