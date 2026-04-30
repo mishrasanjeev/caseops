@@ -102,6 +102,18 @@ class MatterTaskPriority(StrEnum):
     URGENT = "urgent"
 
 
+class MatterConflictCheckStatus(StrEnum):
+    # PG-001 (2026-04-30) — pre-engagement conflict gate.
+    #   pending     — check ran, ≥1 candidate flagged, awaiting partner review
+    #   cleared     — no overlap OR partner reviewed and cleared
+    #   conflicted  — partner reviewed and confirms conflict; matter cannot proceed
+    #   waived      — partner reviewed and explicitly waived (must record reason)
+    PENDING = "pending"
+    CLEARED = "cleared"
+    CONFLICTED = "conflicted"
+    WAIVED = "waived"
+
+
 class MatterCourtSyncStatus(StrEnum):
     COMPLETED = "completed"
     FAILED = "failed"
@@ -521,6 +533,10 @@ class Matter(Base):
         back_populates="matter",
         cascade="all, delete-orphan",
     )
+    conflict_checks: Mapped[list[MatterConflictCheck]] = relationship(
+        back_populates="matter",
+        cascade="all, delete-orphan",
+    )
     activity_events: Mapped[list[MatterActivity]] = relationship(
         back_populates="matter",
         cascade="all, delete-orphan",
@@ -659,6 +675,68 @@ class MatterTask(Base):
         back_populates="owned_tasks",
         foreign_keys=[owner_membership_id],
     )
+
+
+class MatterConflictCheck(Base):
+    """Pre-engagement conflict-of-interest check for a matter (PG-001).
+
+    Run when a matter is created or before opening a new client engagement.
+    Service scans existing clients, matters, and contacts for overlap by
+    name/CIN/PAN/email and persists candidate matches as a JSON column.
+    Partner reviews and records `cleared`, `conflicted`, or `waived`. The
+    intake gate (matter status promotion) and matter cockpit reference
+    the latest check.
+    """
+
+    __tablename__ = "matter_conflict_checks"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    ran_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    opposing_party_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    related_party_names_json: Mapped[str] = mapped_column(
+        Text, nullable=False, default="[]"
+    )
+    candidates_json: Mapped[str] = mapped_column(
+        Text, nullable=False, default="[]"
+    )
+    status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=MatterConflictCheckStatus.PENDING,
+    )
+    resolution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    resolved_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    ran_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+
+    matter: Mapped[Matter] = relationship(back_populates="conflict_checks")
 
 
 class MatterHearing(Base):

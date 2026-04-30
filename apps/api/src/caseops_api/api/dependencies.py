@@ -122,6 +122,9 @@ CAPABILITY_ROLES: dict[str, frozenset[MembershipRole]] = {
     "matters:edit": _ALL_FEE_EARNERS,  # paralegals can edit matter metadata
     "matters:archive": _STAFF,
     "matters:write": _ALL_FEE_EARNERS,
+    # --- conflicts (PG-001) --- every fee-earner can run, only staff resolve
+    "conflicts:run": _ALL_FEE_EARNERS,
+    "conflicts:resolve": _STAFF,
     # --- money --- paralegals + viewers stay out of finance
     "invoices:issue": _STAFF,
     "invoices:send_payment_link": _STAFF,

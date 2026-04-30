@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 
 import { CounselRecommendationsCard } from "@/components/app/CounselRecommendationsCard";
 import { BenchStrategyPanel } from "@/components/matter/BenchStrategyPanel";
+import { ConflictCheckCard } from "@/components/matters/ConflictCheckCard";
 import { ScheduleHearingDialog } from "@/components/matters/ScheduleHearingDialog";
 import {
   Card,
@@ -77,6 +78,8 @@ export default function MatterOverviewPage() {
           )}
         </CardContent>
       </Card>
+
+      <ConflictCheckCard matterId={data.matter.id} />
 
       <CounselRecommendationsCard matterId={data.matter.id} />
 

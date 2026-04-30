@@ -145,6 +145,96 @@ test.describe("Recommendations grounding fix (2026-04-29) — prod verification"
     }
   });
 
+  test("PG-001 (2026-04-30): conflict check on matter cockpit runs + flags overlap + clears", async ({
+    page,
+  }) => {
+    // PG-001 deep-cut: pre-engagement conflict-of-interest gate. Flow:
+    //   1. create matter A with client_name "Acme Pvt Ltd"
+    //   2. create matter B with opposing_party "Acme Pvt Ltd" — should
+    //      conflict with matter A
+    //   3. open matter B's cockpit, run conflict check → status=pending
+    //      with at least one candidate (matter A).
+    //   4. click "Clear (no real conflict)" — status flips to cleared.
+    await page.goto(`${PROD_BASE_URL}/app`, { waitUntil: "networkidle" });
+    expect(page.url()).toContain("/app");
+
+    const cookie = await cookieHeader(page);
+    const csrf = await csrfToken(page);
+    expect(csrf).toBeTruthy();
+
+    // Step 1+2: seed two matters whose names overlap.
+    const tag = Date.now();
+    const seedClient = `Conflict-Acme-${tag}`;
+    const matterAResp = await page.context().request.post(
+      `${PROD_API_BASE_URL}/api/matters/`,
+      {
+        headers: {
+          Cookie: cookie,
+          "X-CSRF-Token": csrf!,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        data: {
+          title: "Acme contract dispute",
+          matter_code: `CONF-A-${tag}`,
+          practice_area: "litigation",
+          forum_level: "high_court",
+          court_name: "Delhi High Court",
+          client_name: seedClient,
+          description: "Existing matter for conflict probe.",
+          status: "active",
+        },
+      },
+    );
+    expect(matterAResp.ok()).toBeTruthy();
+
+    const matterBResp = await page.context().request.post(
+      `${PROD_API_BASE_URL}/api/matters/`,
+      {
+        headers: {
+          Cookie: cookie,
+          "X-CSRF-Token": csrf!,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        data: {
+          title: "New retainer flagged for conflict",
+          matter_code: `CONF-B-${tag}`,
+          practice_area: "litigation",
+          forum_level: "high_court",
+          court_name: "Delhi High Court",
+          client_name: "Beta Corp",
+          opposing_party: seedClient,
+          description: "New matter whose opposing_party hits matter A.",
+          status: "active",
+        },
+      },
+    );
+    expect(matterBResp.ok()).toBeTruthy();
+    const matterBId = (await matterBResp.json()).id;
+
+    // Step 3: open matter B and run conflict check from the UI card.
+    await page.goto(`${PROD_BASE_URL}/app/matters/${matterBId}`, {
+      waitUntil: "networkidle",
+    });
+    const card = page.locator('[data-testid="matter-conflict-card"]');
+    await expect(card).toBeVisible({ timeout: 30_000 });
+    await card.locator('[data-testid="conflict-run-open"]').click();
+    await page.locator('[data-testid="conflict-run-opposing"]').fill(seedClient);
+    await page.locator('[data-testid="conflict-run-submit"]').click();
+
+    // Pending badge should appear — matter A is the overlap.
+    await expect(
+      card.locator('[data-testid="conflict-status-pending"]'),
+    ).toBeVisible({ timeout: 30_000 });
+
+    // Step 4: clear it.
+    await card.locator('[data-testid="conflict-resolve-clear"]').click();
+    await expect(
+      card.locator('[data-testid="conflict-status-cleared"]'),
+    ).toBeVisible({ timeout: 30_000 });
+  });
+
   test("BUG-019/025: matter cockpit empty-state shows '+ Add hearing' that schedules a hearing end-to-end", async ({
     page,
   }) => {

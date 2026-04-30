@@ -620,6 +620,73 @@ export async function createMatterHearing(
 }
 
 
+// --- Conflict checks (PG-001) ---
+// Backend endpoints: POST /api/matters/{id}/conflict-checks (capability:
+// conflicts:run), GET /api/matters/{id}/conflict-checks, PATCH
+// /api/conflict-checks/{id} (capability: conflicts:resolve).
+// Shape mirrors schemas.conflicts.
+
+export type ConflictCandidate = {
+  kind: "client" | "matter" | "contact";
+  id: string;
+  name: string;
+  overlap_reason: string;
+  similarity: number;
+};
+
+export type ConflictCheckRecord = {
+  id: string;
+  matter_id: string;
+  opposing_party_name: string;
+  related_party_names: string[];
+  candidates: ConflictCandidate[];
+  status: "pending" | "cleared" | "conflicted" | "waived";
+  resolution_note: string | null;
+  resolved_by_membership_id: string | null;
+  resolved_at: string | null;
+  ran_by_membership_id: string | null;
+  ran_at: string;
+  created_at: string;
+};
+
+export type ConflictCheckListResponse = {
+  matter_id: string;
+  checks: ConflictCheckRecord[];
+};
+
+export async function runConflictCheck(input: {
+  matterId: string;
+  opposing_party_name: string;
+  related_party_names: string[];
+}): Promise<ConflictCheckRecord> {
+  const { matterId, ...body } = input;
+  return apiRequest<ConflictCheckRecord>(
+    `/api/matters/${matterId}/conflict-checks`,
+    { method: "POST", body },
+  );
+}
+
+export async function listConflictChecks(
+  matterId: string,
+): Promise<ConflictCheckListResponse> {
+  return apiRequest<ConflictCheckListResponse>(
+    `/api/matters/${matterId}/conflict-checks`,
+  );
+}
+
+export async function resolveConflictCheck(input: {
+  checkId: string;
+  status: "cleared" | "conflicted" | "waived";
+  resolution_note?: string | null;
+}): Promise<ConflictCheckRecord> {
+  const { checkId, ...body } = input;
+  return apiRequest<ConflictCheckRecord>(
+    `/api/conflict-checks/${checkId}`,
+    { method: "PATCH", body },
+  );
+}
+
+
 // --- Court-sync (BG-012) ---
 // Backend endpoint: POST /api/matters/{id}/court-sync/pull (capability:
 // court_sync:run). Runs as a BackgroundTask; the response carries the

@@ -78,16 +78,19 @@ Do not re-classify these here. Burn-down lives under the linked ID.
 ## P0 — New Gaps Tracked Here (Stop-Ship for "Best for Law Firms" claim)
 
 ### `PG-001` Conflict check workflow
-Status: **`Missing`**.
-Evidence: zero matches for `conflict_check`, `ConflictCheck`, `ConflictsRouter` across `apps/api/src`.
-Impact: every law-firm buyer's pre-engagement gate. Without it, ethical walls and matter intake are aspirational.
-Needed:
-- `MatterConflictCheck` table (matter_id, opposing party, related parties, status, resolved_by, notes).
-- `POST /api/matters/{id}/conflict-checks` and capability `conflicts:run` gated on intake.
-- Pre-engagement service: search clients/matters/contacts by name/CIN/PAN/email, return potential conflicts ranked by overlap.
-- Intake gate: cannot promote intake to active matter until conflict check is `cleared` or `waived_by_partner`.
-- UI: conflict-check dialog on intake; conflict-check tab on matter; bulk overrides for partner.
-Estimated days: 4-5.
+Status: **`Partially implemented`** (v1 MVP shipped 2026-04-30; intake gate deferred to v2).
+Evidence:
+- DB: `MatterConflictCheck` model + migration `20260430_0001_matter_conflict_checks` (status enum: pending/cleared/conflicted/waived).
+- Service: `services/conflict_checks.py` with substring + Jaccard token-overlap scanner across `clients` + `matters`.
+- Routes: `POST /api/matters/{id}/conflict-checks`, `GET /api/matters/{id}/conflict-checks`, `PATCH /api/conflict-checks/{id}`.
+- Capabilities: `conflicts:run` (every fee-earner) + `conflicts:resolve` (staff only).
+- UI: `apps/web/components/matters/ConflictCheckCard.tsx` mounted on `/app/matters/[id]` cockpit. Run dialog + status badge + candidate list + clear / mark-conflicted / waive controls.
+- Tests: 6 backend cases (`tests/test_conflict_checks.py`); prod-Playwright spec runs scenario A (existing-client overlap) end-to-end.
+Remaining (v2):
+- Intake gate: block matter status promotion `intake → active` unless latest check is `cleared` or `waived`.
+- Contacts beyond `Client` (witnesses, opposing counsel, vendors) — needs separate contact table.
+- Bulk waiver / partner-approval email workflow.
+Estimated days remaining: 1-2.
 
 ### `PG-002` Engagement letter / fee arrangement workflow
 Status: **`Missing`**.

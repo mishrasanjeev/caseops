@@ -10,6 +10,7 @@ from caseops_api.api.routes import (
     clients,
     communications,
     companies,
+    conflicts,
     contracts,
     courts,
     drafting,
@@ -45,6 +46,7 @@ api_router.include_router(payments.router, prefix="/payments", tags=["payments"]
 api_router.include_router(authorities.router, prefix="/authorities", tags=["authorities"])
 api_router.include_router(ai.router, prefix="/ai", tags=["ai"])
 api_router.include_router(recommendations.router, tags=["recommendations"])
+api_router.include_router(conflicts.router, tags=["conflicts"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
 api_router.include_router(courts.router, prefix="/courts", tags=["courts"])
 # MOD-TS-017 Slice S2 (2026-04-25) — bare-acts read API powering

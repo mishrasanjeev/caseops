@@ -98,7 +98,10 @@ export type Capability =
   | "clients:kyc_review"
   // Phase C-1 (2026-04-24, MOD-TS-014) — portal admin
   | "portal:invite"
-  | "portal:manage_grants";
+  | "portal:manage_grants"
+  // PG-001 (2026-04-30) — pre-engagement conflict gate
+  | "conflicts:run"
+  | "conflicts:resolve";
 
 // Baseline caps for a fee-earner (owner / admin / partner / member).
 // Paralegals inherit most of these but lose a small, explicit set.
@@ -127,6 +130,9 @@ const FEE_EARNER: Capability[] = [
   // a KYC pack for a client they know. Reviewing (verify/reject)
   // is staff-only — see STAFF below for kyc_review.
   "clients:kyc_submit",
+  // PG-001 (2026-04-30) — every fee-earner can run a conflict scan;
+  // resolve (cleared/conflicted/waived) is staff-only.
+  "conflicts:run",
 ];
 
 // Creator caps — paralegals can NOT create matters/contracts or run
@@ -161,6 +167,8 @@ const STAFF: Capability[] = [
   "clients:archive",
   // KYC review — staff only (four-eyes between collector and approver).
   "clients:kyc_review",
+  // PG-001 (2026-04-30) — staff-only resolution gate.
+  "conflicts:resolve",
 ];
 
 // Governance caps — owner / admin only.
