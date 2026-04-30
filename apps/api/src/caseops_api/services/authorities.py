@@ -953,21 +953,39 @@ def _pg_prefilter_document_ids(
 
     vector = result.vectors[0]
     vec_literal = "[" + ",".join(f"{v:.6f}" for v in vector) + "]"
+    # BUG-015 root cause (2026-04-30): the prior single-CTE shape did
+    # GROUP BY authority_document_id BEFORE ORDER BY MIN(distance), which
+    # forced the planner off the HNSW index — every concurrent INSERT on
+    # authority_document_chunks (citation extraction + EN sweep) then
+    # contended with a 1.8M-chunk sequential scan and the query stalled
+    # past Cloud Run's 300s budget.
+    #
+    # Fix: push the HNSW pick into an inner CTE with `ORDER BY <=> LIMIT`
+    # — that's the canonical pgvector shape the planner can serve from
+    # the index in O(log n). Then JOIN + filter + GROUP on the small
+    # candidate set. chunk_limit overfetches by 30x so a narrow forum /
+    # court filter still has material to dedup down to `limit`.
+    chunk_limit = max(limit * 30, 1000)
     try:
         rows = session.execute(
             text(
-                "WITH candidates AS ("
+                "WITH top_chunks AS ("
                 " SELECT c.authority_document_id AS id, "
-                "        MIN(c.embedding_vector <=> cast(:q as vector)) AS distance"
+                "        c.embedding_vector <=> cast(:q as vector) AS dist"
                 " FROM authority_document_chunks c "
-                " JOIN authority_documents d ON d.id = c.authority_document_id "
                 " WHERE c.embedding_vector IS NOT NULL "
-                " AND (cast(:forum as text) IS NULL OR d.forum_level = :forum) "
+                " ORDER BY c.embedding_vector <=> cast(:q as vector) "
+                " LIMIT :chunk_limit"
+                "), filtered AS ("
+                " SELECT tc.id, MIN(tc.dist) AS distance "
+                " FROM top_chunks tc "
+                " JOIN authority_documents d ON d.id = tc.id "
+                " WHERE (cast(:forum as text) IS NULL OR d.forum_level = :forum) "
                 " AND (cast(:court as text) IS NULL OR d.court_name = :court) "
                 " AND (cast(:dtype as text) IS NULL OR d.document_type = :dtype) "
-                " GROUP BY c.authority_document_id"
+                " GROUP BY tc.id"
                 ") "
-                "SELECT id FROM candidates ORDER BY distance LIMIT :limit"
+                "SELECT id FROM filtered ORDER BY distance LIMIT :limit"
             ),
             {
                 "q": vec_literal,
@@ -975,6 +993,7 @@ def _pg_prefilter_document_ids(
                 "court": court_name,
                 "dtype": document_type,
                 "limit": limit,
+                "chunk_limit": chunk_limit,
             },
         ).all()
     except Exception:

@@ -144,4 +144,72 @@ test.describe("Recommendations grounding fix (2026-04-29) — prod verification"
       }
     }
   });
+
+  test("BUG-015 root cause (HNSW prefilter): stress matter responds in <120s, no 504, no hang", async ({
+    page,
+  }) => {
+    // Pre-deploy probe (2026-04-29) showed the stress matter
+    // 31f0577f-ea2e-4033-b16b-d04e16b13729 ("BUG-024 citation grounding
+    // probe") hung >180s on POST recommendations because the prior CTE
+    // shape forced a sequential scan over 1.8M chunks. The 2026-04-30
+    // fix rewrites _pg_prefilter_document_ids so the inner CTE uses
+    // ORDER BY <=> LIMIT directly — pgvector serves it from the HNSW
+    // index in O(log n). This case proves the read path stays fast even
+    // on richly-described matters.
+    //
+    // Acceptance: the endpoint MUST return within 120s (config default
+    // test timeout). Any 200, 422 ("none matched verified authorities"),
+    // or other 4xx counts as the fix landing — the bug is the *hang*,
+    // not the verdict. A 504 or a Playwright-level timeout fails.
+    await page.goto(`${PROD_BASE_URL}/app`, { waitUntil: "networkidle" });
+    expect(page.url()).toContain("/app");
+
+    const cookie = await cookieHeader(page);
+    const csrf = await csrfToken(page);
+    expect(csrf).toBeTruthy();
+
+    const STRESS_MATTER_ID = "31f0577f-ea2e-4033-b16b-d04e16b13729";
+
+    // Confirm the stress matter still belongs to QA Bot (defense against
+    // a future tenant re-bootstrap silently making this a no-op probe).
+    const matterResp = await page.context().request.get(
+      `${PROD_API_BASE_URL}/api/matters/${STRESS_MATTER_ID}`,
+      { headers: { Cookie: cookie, Accept: "application/json" }, timeout: 30_000 },
+    );
+    expect(
+      matterResp.status(),
+      `Stress matter ${STRESS_MATTER_ID} not visible to QA Bot — re-pick a stress matter id`,
+    ).toBe(200);
+
+    const t0 = Date.now();
+    const resp = await page.context().request.post(
+      `${PROD_API_BASE_URL}/api/matters/${STRESS_MATTER_ID}/recommendations`,
+      {
+        headers: {
+          Cookie: cookie,
+          "X-CSRF-Token": csrf!,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        data: { type: "authority" },
+        timeout: 110_000,
+      },
+    );
+    const elapsedMs = Date.now() - t0;
+    // Hard upper bound: must complete within 110s (well under 120s test
+    // cap). If we hit 504 or the timeout, the BUG-015 fix has NOT landed
+    // for this matter shape.
+    expect(
+      elapsedMs,
+      `Stress matter took ${elapsedMs}ms — BUG-015 root cause has not landed`,
+    ).toBeLessThan(110_000);
+    expect(
+      resp.status(),
+      `Stress matter returned 504 — gateway hang, BUG-015 not fixed`,
+    ).not.toBe(504);
+    // 200 (full success) or any 4xx (LLM grounding refused, citations
+    // unverified, etc.) both count as the read path succeeding fast.
+    expect(resp.status()).toBeGreaterThanOrEqual(200);
+    expect(resp.status()).toBeLessThan(500);
+  });
 });
