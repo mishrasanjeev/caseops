@@ -549,6 +549,17 @@ class OpenAIProvider:
         }
         if not self._model_rejects_temperature():
             kwargs["temperature"] = temperature
+        # gpt-5.x reasoning models add significant latency at the default
+        # ``reasoning_effort`` ("medium" → 30-90s of thinking even for
+        # short structured-output tasks). CaseOps recommendations / drafts
+        # / hearing-packs are prompt-following structured-output, not
+        # multi-step reasoning, so cap the thinking at "low" — keeps
+        # quality on legal Q&A while bringing latency back under the
+        # per-purpose Cloud Run budget. 2026-04-30: surfaced when the
+        # stress-matter probe (BUG-024 grounding) hit a 110s client
+        # timeout post-deploy.
+        if (self.model or "").lower().startswith(("gpt-5", "o1", "o3")):
+            kwargs["reasoning_effort"] = "low"
         started = time.perf_counter()
         try:
             response = self._client.chat.completions.create(**kwargs)
@@ -758,6 +769,8 @@ def _build_inner_provider(settings: object, purpose: str | None) -> LLMProvider:
         return OpenAIProvider(
             model=model or "gpt-5.1",
             api_key=settings.llm_api_key,
+            timeout_seconds=timeout_for_purpose,
+            max_retries=retries_for_purpose,
         )
     raise LLMProviderError(
         f"Unknown CASEOPS_LLM_PROVIDER value: {provider_name!r}. "
