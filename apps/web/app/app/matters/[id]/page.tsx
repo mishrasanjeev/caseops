@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 
 import { CounselRecommendationsCard } from "@/components/app/CounselRecommendationsCard";
 import { BenchStrategyPanel } from "@/components/matter/BenchStrategyPanel";
+import { ScheduleHearingDialog } from "@/components/matters/ScheduleHearingDialog";
 import {
   Card,
   CardContent,
@@ -151,17 +152,20 @@ export default function MatterOverviewPage() {
         </Card>
       ) : null}
 
-      {/* BUG-011 (Hari 2026-04-22 reopen): symmetric with Open tasks
-          and Last court order — only render Upcoming hearings when
-          there are some. The "Schedule hearing" CTA lives in the
-          dedicated Hearings tab, which is one click away in the
-          matter sub-nav, so removing it here doesn't lose the
-          affordance. Keeps the overview honest on a fresh matter. */}
+      {/* Upcoming hearings: when there are some, show the next four.
+          When empty, show a dedicated empty-state card with a "+ Add
+          hearing" CTA — BUG-019/025 durable closure (workflow-as-fix,
+          not UX-as-fix). The empty-state card is bounded to this row
+          and renders ONLY here, so populated matters stay clean per
+          BUG-011's invariant. */}
       {upcomingHearings.length > 0 ? (
         <Card>
-          <CardHeader>
-            <CardTitle>Upcoming hearings</CardTitle>
-            <CardDescription>Next four on the calendar.</CardDescription>
+          <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+            <div>
+              <CardTitle>Upcoming hearings</CardTitle>
+              <CardDescription>Next four on the calendar.</CardDescription>
+            </div>
+            <ScheduleHearingDialog matterId={params.id} />
           </CardHeader>
           <CardContent>
             <ul className="flex flex-col gap-3">
@@ -184,7 +188,23 @@ export default function MatterOverviewPage() {
             </ul>
           </CardContent>
         </Card>
-      ) : null}
+      ) : (
+        <Card data-testid="matter-overview-no-hearings">
+          <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+            <div>
+              <CardTitle>Upcoming hearings</CardTitle>
+              <CardDescription>
+                No hearings scheduled yet — add one to populate the calendar
+                and unlock the hearing-pack workflow.
+              </CardDescription>
+            </div>
+            <ScheduleHearingDialog
+              matterId={params.id}
+              triggerLabel="Add hearing"
+            />
+          </CardHeader>
+        </Card>
+      )}
 
       <Card className="lg:col-span-3">
         <CardHeader className="flex-row items-center justify-between gap-4">

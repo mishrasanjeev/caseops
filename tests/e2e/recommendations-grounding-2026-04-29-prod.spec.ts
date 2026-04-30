@@ -145,6 +145,68 @@ test.describe("Recommendations grounding fix (2026-04-29) — prod verification"
     }
   });
 
+  test("BUG-019/025: matter cockpit empty-state shows '+ Add hearing' that schedules a hearing end-to-end", async ({
+    page,
+  }) => {
+    // BUG-019/025 durable closure (2026-04-30): the calendar empty-state
+    // banner was only a Partial fix. The workflow fix is the "+ Add
+    // hearing" affordance on the matter cockpit, which posts to
+    // POST /api/matters/{id}/hearings and surfaces the result in
+    // /api/calendar/events. This spec exercises the user-visible flow
+    // end-to-end on prod.
+    await page.goto(`${PROD_BASE_URL}/app`, { waitUntil: "networkidle" });
+    expect(page.url()).toContain("/app");
+
+    const cookie = await cookieHeader(page);
+    const csrf = await csrfToken(page);
+    expect(csrf).toBeTruthy();
+
+    // Create a fresh matter so the cockpit is in the empty-state shape.
+    const matterId = await createFreshMatter(page, csrf!);
+
+    // Land on the cockpit. Empty-state card carries the "Add hearing"
+    // CTA AND the data-testid we asserted in vitest, which keeps a
+    // future regression visible at the prod surface.
+    await page.goto(`${PROD_BASE_URL}/app/matters/${matterId}`, {
+      waitUntil: "networkidle",
+    });
+    const emptyCard = page.locator('[data-testid="matter-overview-no-hearings"]');
+    await expect(emptyCard).toBeVisible({ timeout: 30_000 });
+    await emptyCard.locator('[data-testid="schedule-hearing-open"]').click();
+
+    // Fill the dialog using the same testids the vitest + hearings-tab
+    // tests use, so the contract stays consistent across surfaces.
+    const today = new Date();
+    today.setDate(today.getDate() + 14);
+    const iso = today.toISOString().slice(0, 10);
+    await page.locator('[data-testid="schedule-hearing-date"]').fill(iso);
+    await page.locator("#forum_name").fill("Delhi High Court");
+    await page.locator("#purpose").fill("Initial listing");
+    await page.locator('[data-testid="schedule-hearing-submit"]').click();
+
+    // The mutation invalidates the matter workspace query, so the
+    // cockpit repaints with the populated "Upcoming hearings" card.
+    // No empty-state card now — that's the workflow proof.
+    await expect(
+      page.locator('[data-testid="matter-overview-no-hearings"]'),
+    ).toBeHidden({ timeout: 30_000 });
+
+    // And the hearing reaches /api/calendar/events — close the loop on
+    // BUG-019/025's original "calendar should show hearings" complaint.
+    const calendarCookie = await cookieHeader(page);
+    const cal = await page.context().request.get(
+      `${PROD_API_BASE_URL}/api/calendar/events?from=${iso}&to=${iso}`,
+      { headers: { Cookie: calendarCookie, Accept: "application/json" }, timeout: 30_000 },
+    );
+    expect(cal.ok()).toBeTruthy();
+    const calBody = await cal.json();
+    const events: Array<{ kind: string; matter_id?: string }> = calBody?.events ?? [];
+    expect(
+      events.some((e) => e.kind === "hearing" && e.matter_id === matterId),
+      `calendar should surface the new hearing for matter ${matterId}`,
+    ).toBe(true);
+  });
+
   test("BUG-015 root cause (HNSW prefilter): stress matter responds in <120s, no 504, no hang", async ({
     page,
   }) => {

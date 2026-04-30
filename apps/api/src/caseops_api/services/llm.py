@@ -726,20 +726,26 @@ def _build_inner_provider(settings: object, purpose: str | None) -> LLMProvider:
     # times Sonnet primary + Haiku fallback + OpenAI fallback = ~9 min.
     # Cap the per-purpose worst case so the handler fits inside Cloud
     # Run's 300s budget with headroom for citation-verification + DB.
+    # 2026-04-30: budgets recalibrated for gpt-5.1 (sole provider).
+    # Anthropic Haiku 4.5 typical was 3-5s so 30s + 1 retry was generous.
+    # gpt-5.1 with reasoning_effort=low typically 15-30s, p95 60-90s,
+    # so the prior budget was tight at the wire (test 1/2 just timed
+    # out at 30s on prod). Cloud Run's 300s request ceiling sets the
+    # ceiling; leave 60s headroom for retrieval + verification + DB.
     per_purpose_timeout: dict[str, float] = {
-        PURPOSE_RECOMMENDATIONS: 30.0,
-        PURPOSE_HEARING_PACK: 30.0,
-        PURPOSE_METADATA_EXTRACT: 30.0,
+        PURPOSE_RECOMMENDATIONS: 90.0,
+        PURPOSE_HEARING_PACK: 90.0,
+        PURPOSE_METADATA_EXTRACT: 60.0,
         # Drafting can legitimately need longer responses (full appeal
         # memorandum, 8K output tokens) — keep its budget generous.
-        PURPOSE_DRAFTING: 90.0,
+        PURPOSE_DRAFTING: 120.0,
         PURPOSE_EVAL: 60.0,
     }
     per_purpose_retries: dict[str, int] = {
         PURPOSE_RECOMMENDATIONS: 1,
         PURPOSE_HEARING_PACK: 1,
         PURPOSE_METADATA_EXTRACT: 1,
-        PURPOSE_DRAFTING: 2,
+        PURPOSE_DRAFTING: 1,
         PURPOSE_EVAL: 2,
     }
     timeout_for_purpose = per_purpose_timeout.get(purpose or "", 60.0)
