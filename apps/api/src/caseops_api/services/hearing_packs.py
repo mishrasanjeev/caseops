@@ -44,14 +44,11 @@ from caseops_api.services.audit import record_from_context
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.llm import (
     PURPOSE_HEARING_PACK,
-    AnthropicProvider,
     LLMCallContext,
     LLMCompletion,
     LLMMessage,
     LLMProvider,
     LLMProviderError,
-    LLMQuotaExhaustedError,
-    OpenAIProvider,
     build_provider,
     generate_structured,
     max_tokens_for_purpose,
@@ -67,66 +64,9 @@ PURPOSE = "hearing_pack"
 _ALLOWED_KINDS = {kind.value for kind in HearingPackItemKind}
 
 # Haiku fallback (parallels services.drafting / services.recommendations).
-# 2026-04-22 Ram-BUG-001: hearing pack assembly was failing on Anthropic
-# 503 / overload because we only retried on format errors. Catching the
-# parent LLMProviderError + Haiku retry gives us the same resilience the
-# drafts and recommendations endpoints already had.
-_HAIKU_FALLBACK_MODEL = "claude-haiku-4-5-20251001"
-
-
-def _haiku_fallback_provider() -> LLMProvider | None:
-    from caseops_api.core.settings import get_settings
-
-    settings = get_settings()
-    if (settings.llm_provider or "").lower() != "anthropic":
-        return None
-    return AnthropicProvider(
-        model=_HAIKU_FALLBACK_MODEL,
-        api_key=settings.llm_api_key,
-        prompt_cache=bool(getattr(settings, "llm_prompt_cache_enabled", True)),
-    )
-
-
-def _openai_fallback_provider() -> LLMProvider | None:
-    """Cross-provider hard cutover for Anthropic 402 events. Mirrors
-    services.drafting._openai_fallback_provider."""
-    from caseops_api.core.settings import get_settings
-
-    settings = get_settings()
-    if not getattr(settings, "openai_api_key", None):
-        return None
-    return OpenAIProvider(
-        model=getattr(settings, "openai_fallback_model", "gpt-5.1"),
-        api_key=settings.openai_api_key,
-    )
-
-
-def _assemble_pack_via_openai(invoke, root_exc: Exception):
-    """Last-chance OpenAI cutover for hearing-pack assembly. Either
-    succeeds or raises a 422 with an actionable detail."""
-    openai = _openai_fallback_provider()
-    if openai is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=(
-                f"Could not assemble a hearing pack: the primary model "
-                f"failed ({type(root_exc).__name__}) and no OpenAI "
-                "fallback is configured. Please retry in a minute, or "
-                "contact support if this persists."
-            ),
-        ) from root_exc
-    try:
-        return invoke(openai)
-    except LLMProviderError as oa_exc:
-        logger.warning("Hearing pack OpenAI fallback also failed: %s", oa_exc)
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=(
-                f"Could not assemble a hearing pack: Anthropic "
-                f"({type(root_exc).__name__}) and the OpenAI fallback "
-                f"({type(oa_exc).__name__}) both failed. Please retry."
-            ),
-        ) from oa_exc
+# 2026-04-30: gpt-5.1-only path. Single primary call → 422 with
+# actionable detail on failure. Prior Anthropic→Haiku→OpenAI ladder
+# burned 3x tokens per click.
 
 
 class _LLMItem(BaseModel):
@@ -426,37 +366,20 @@ def generate_hearing_pack(
 
     try:
         response, completion = _invoke(llm)
-    except LLMQuotaExhaustedError as quota_exc:
-        logger.warning(
-            "Hearing pack primary %s quota exhausted; cutting over to OpenAI",
-            getattr(llm, "model", "<unknown>"),
-        )
-        response, completion = _assemble_pack_via_openai(_invoke, quota_exc)
     except LLMProviderError as exc:
-        # Ram-BUG-001 (2026-04-22): catching only the format-error
-        # child let Anthropic 503 / overload escape and surface as a
-        # generic 500. Catch the parent + retry once with Haiku before
-        # giving up so a transient provider blip doesn't break the
-        # hearing-pack workflow on the day-of-court page.
         logger.warning(
-            "Hearing pack LLM %s failed (%s: %s); retrying with Haiku",
+            "Hearing pack LLM %s failed (%s): %s",
             getattr(llm, "model", "<unknown>"),
             type(exc).__name__,
             exc,
         )
-        fallback = _haiku_fallback_provider()
-        if fallback is None:
-            response, completion = _assemble_pack_via_openai(_invoke, exc)
-        else:
-            try:
-                response, completion = _invoke(fallback)
-            except LLMQuotaExhaustedError as quota_exc:
-                logger.warning(
-                    "Hearing pack Haiku fallback hit quota wall; cutting over to OpenAI",
-                )
-                response, completion = _assemble_pack_via_openai(_invoke, quota_exc)
-            except LLMProviderError as retry_exc:
-                response, completion = _assemble_pack_via_openai(_invoke, retry_exc)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"Could not assemble a hearing pack: {type(exc).__name__}: {exc}. "
+                "Please retry in a minute, or contact support if this persists."
+            ),
+        ) from exc
 
     model_run = _write_model_run(
         session,

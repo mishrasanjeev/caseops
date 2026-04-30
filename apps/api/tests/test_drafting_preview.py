@@ -193,24 +193,16 @@ def test_preview_502_detail_redacts_internal_exception_text(
     with patch(
         "caseops_api.services.drafting_preview._default_preview_provider",
         return_value=_AlwaysFails(),
-    ), patch(
-        # Force the no-OpenAI-fallback branch so we exercise the 502
-        # path the user would actually see when both providers are
-        # unavailable.
-        "caseops_api.services.drafting_preview._openai_fallback_provider",
-        return_value=None,
-    ), patch(
-        "caseops_api.services.drafting_preview._haiku_fallback_provider",
-        return_value=None,
     ):
         resp = client.post(
             "/api/drafting/preview",
             headers=headers,
             json={"template_type": "bail", "facts": {}},
         )
+    # 2026-04-30: gpt-5.1-only path. Single primary call → redacted 502.
     assert resp.status_code == 502, resp.text
     detail = resp.json()["detail"]
-    # Redaction invariants: no raw provider error text, no internal
+    # Redaction invariants stay: no raw provider error text, no internal
     # marker substring leaked back.
     assert "SECRET_INTERNAL_TRACE_xyz" not in detail
     assert "LLMProviderError" not in detail
@@ -248,12 +240,6 @@ def test_preview_persists_error_model_run_when_provider_fails(
     with patch(
         "caseops_api.services.drafting_preview._default_preview_provider",
         return_value=_AlwaysFails(),
-    ), patch(
-        "caseops_api.services.drafting_preview._openai_fallback_provider",
-        return_value=None,
-    ), patch(
-        "caseops_api.services.drafting_preview._haiku_fallback_provider",
-        return_value=None,
     ):
         resp = client.post(
             "/api/drafting/preview",
@@ -277,57 +263,31 @@ def test_preview_persists_error_model_run_when_provider_fails(
     assert run.model == "stub-fail"
 
 
-def test_preview_402_quota_cuts_over_to_openai(client: TestClient) -> None:
-    """When the primary provider raises ``LLMQuotaExhaustedError``
-    (Anthropic 402), the preview must skip the (futile) Haiku retry
-    and call OpenAI directly. Mirrors the cutover in the drafting /
-    recommendations / hearing-pack services."""
-    from caseops_api.services.llm import LLMQuotaExhaustedError
+def test_preview_single_call_no_fallback_ladder(client: TestClient) -> None:
+    """2026-04-30: gpt-5.1-only path. Replaces test_preview_402_quota_cuts_
+    over_to_openai. With Anthropic retired and OpenAI as the sole primary,
+    a primary failure goes straight to a redacted 502 — no cutover ladder,
+    one provider call per click."""
+    from caseops_api.services.llm import LLMProviderError
     from tests.test_auth_company import auth_headers, bootstrap_company
 
     bootstrap = bootstrap_company(client)
     headers = auth_headers(str(bootstrap["access_token"]))
 
-    haiku_calls: list[bool] = []
-    openai_calls: list[bool] = []
+    primary_calls: list[bool] = []
 
-    class _QuotaPrimary:
-        name = "anthropic"
-        model = "claude-opus-4-7"
-
-        def generate(self, *, messages, temperature, max_tokens):
-            _ = messages, temperature, max_tokens
-            raise LLMQuotaExhaustedError("credit balance is too low")
-
-    class _OpenAIStub:
+    class _SinglePrimary:
         name = "openai"
         model = "gpt-5.1"
 
         def generate(self, *, messages, temperature, max_tokens):
             _ = messages, temperature, max_tokens
-            openai_calls.append(True)
-            return LLMCompletion(
-                provider=self.name,
-                model=self.model,
-                text="OPENAI PREVIEW OK",
-                prompt_tokens=80,
-                completion_tokens=20,
-                latency_ms=50,
-            )
-
-    def _haiku_should_not_be_called():
-        haiku_calls.append(True)
-        return None
+            primary_calls.append(True)
+            raise LLMProviderError("openai 503 overloaded")
 
     with patch(
         "caseops_api.services.drafting_preview._default_preview_provider",
-        return_value=_QuotaPrimary(),
-    ), patch(
-        "caseops_api.services.drafting_preview._haiku_fallback_provider",
-        new=_haiku_should_not_be_called,
-    ), patch(
-        "caseops_api.services.drafting_preview._openai_fallback_provider",
-        return_value=_OpenAIStub(),
+        return_value=_SinglePrimary(),
     ):
         resp = client.post(
             "/api/drafting/preview",
@@ -335,10 +295,6 @@ def test_preview_402_quota_cuts_over_to_openai(client: TestClient) -> None:
             json={"template_type": "bail", "facts": {}},
         )
 
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    assert "OPENAI PREVIEW OK" in body["preview_text"]
-    assert body["model"] == "gpt-5.1"
-    assert openai_calls == [True]
-    # The whole point of the quota cutover: skip Haiku entirely.
-    assert haiku_calls == []
+    assert resp.status_code == 502, resp.text
+    # Exactly one provider call — no fallback ladder, no 3x token burn.
+    assert primary_calls == [True]

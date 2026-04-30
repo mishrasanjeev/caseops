@@ -69,14 +69,11 @@ from caseops_api.services.draft_validators import (
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.llm import (
     PURPOSE_DRAFTING,
-    AnthropicProvider,
     LLMCallContext,
     LLMCompletion,
     LLMMessage,
     LLMProvider,
     LLMProviderError,
-    LLMQuotaExhaustedError,
-    OpenAIProvider,
     build_provider,
     generate_structured,
     max_tokens_for_purpose,
@@ -92,72 +89,6 @@ logger = logging.getLogger(__name__)
 # recommendations endpoint, also flagged by end users as BUG-001 /
 # BUG-002 — drafts "not created, no error toast, indefinite hang").
 # Haiku is materially more reliable on JSON shape; we retry once
-# before raising 422 so the user always gets either a draft or a
-# clear error, never a silent hang.
-_HAIKU_FALLBACK_MODEL = "claude-haiku-4-5-20251001"
-
-
-def _haiku_fallback_provider() -> LLMProvider | None:
-    from caseops_api.core.settings import get_settings
-
-    settings = get_settings()
-    if (settings.llm_provider or "").lower() != "anthropic":
-        return None
-    return AnthropicProvider(
-        model=_HAIKU_FALLBACK_MODEL,
-        api_key=settings.llm_api_key,
-        prompt_cache=bool(getattr(settings, "llm_prompt_cache_enabled", True)),
-    )
-
-
-def _openai_fallback_provider() -> LLMProvider | None:
-    """Cross-provider hard cutover for Anthropic 402 ("credit balance
-    is too low") events. Returns None when no OpenAI key is configured
-    so local / dev / test runs continue to hit the existing 422 path
-    without surprise outbound calls."""
-    from caseops_api.core.settings import get_settings
-
-    settings = get_settings()
-    if not getattr(settings, "openai_api_key", None):
-        return None
-    return OpenAIProvider(
-        model=getattr(settings, "openai_fallback_model", "gpt-5.1"),
-        api_key=settings.openai_api_key,
-    )
-
-
-def _generate_draft_via_openai(invoke, root_exc: Exception):
-    """Last-chance OpenAI cutover for the drafting pipeline.
-
-    Either succeeds (returns ``(response, completion)``) or raises a 422
-    HTTPException with an actionable detail. ``root_exc`` is the original
-    failure we're cutting over from, included in the user-visible message
-    so support can correlate from a single screenshot."""
-    openai = _openai_fallback_provider()
-    if openai is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=(
-                "Could not generate a draft: the primary model failed "
-                f"({type(root_exc).__name__}) and no OpenAI fallback is "
-                "configured. Please retry in a minute, or contact support."
-            ),
-        ) from root_exc
-    try:
-        return invoke(openai)
-    except (LLMProviderError, ValidationError) as oa_exc:
-        logger.warning("Draft OpenAI fallback also failed: %s", oa_exc)
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=(
-                "Could not generate a draft: both Anthropic "
-                f"({type(root_exc).__name__}) and the OpenAI fallback "
-                f"({type(oa_exc).__name__}) failed. Please retry in a "
-                "minute, or contact support if this persists."
-            ),
-        ) from oa_exc
-
-
 PURPOSE = "draft"
 
 
@@ -998,49 +929,26 @@ def generate_draft_version(
             session=session,
         )
 
+    # 2026-04-30: gpt-5.1-only path. Single primary call → 422 with
+    # actionable detail on any upstream failure. The prior Anthropic→
+    # Haiku→OpenAI ladder burned 3x tokens per click; with Anthropic
+    # credits gone we keep one provider line item.
     try:
         response, completion = _invoke(llm)
-    except LLMQuotaExhaustedError as quota_exc:
-        # Hard cutover: Anthropic returned 402 ("credit balance is too
-        # low"). Retrying on Haiku would hit the same wall, so we go
-        # straight to the OpenAI cross-provider fallback (gpt-5.1).
-        logger.warning(
-            "Draft primary %s quota exhausted; cutting over to OpenAI: %s",
-            getattr(llm, "model", "<unknown>"),
-            quota_exc,
-        )
-        response, completion = _generate_draft_via_openai(_invoke, quota_exc)
     except (LLMProviderError, ValidationError) as exc:
-        # Broadened from LLMResponseFormatError (Hari-III-BUG-019 +
-        # Ram-BUG-007, 2026-04-22): Anthropic 503s / httpx timeouts / connection
-        # errors are wrapped in LLMProviderError (the parent), NOT the
-        # format-error child. Catching only the child let 503s escape
-        # past the Haiku retry and surface as opaque 500s — users saw
-        # "Could not generate a new version." with no actionable
-        # detail. Catching the parent means every recoverable upstream
-        # failure (overload, malformed JSON, schema mismatch) triggers
-        # the Haiku fallback, and only a Haiku-also-down scenario
-        # reaches the OpenAI cutover (and only after that the 422).
         logger.warning(
-            "Draft LLM %s refused / malformed / upstream error: %s",
+            "Draft LLM %s failed (%s): %s",
             getattr(llm, "model", "<unknown>"),
+            type(exc).__name__,
             exc,
         )
-        fallback = _haiku_fallback_provider()
-        if fallback is None:
-            response, completion = _generate_draft_via_openai(_invoke, exc)
-        else:
-            try:
-                response, completion = _invoke(fallback)
-            except LLMQuotaExhaustedError as quota_exc:
-                logger.warning(
-                    "Draft Haiku fallback hit quota wall; cutting over to OpenAI: %s",
-                    quota_exc,
-                )
-                response, completion = _generate_draft_via_openai(_invoke, quota_exc)
-            except (LLMProviderError, ValidationError) as retry_exc:
-                logger.warning("Draft Haiku fallback also failed: %s", retry_exc)
-                response, completion = _generate_draft_via_openai(_invoke, retry_exc)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"Could not generate a draft: {type(exc).__name__}: {exc}. "
+                "Please retry in a minute, or contact support if this persists."
+            ),
+        ) from exc
 
     surviving, verified_count = _verify_version_citations(session, response.citations)
     if verified_count == 0 and response.citations:

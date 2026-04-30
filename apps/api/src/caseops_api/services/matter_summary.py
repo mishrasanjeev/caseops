@@ -52,14 +52,10 @@ from caseops_api.db.models import (
 )
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.llm import (
-    AnthropicProvider,
     LLMCallContext,
     LLMMessage,
     LLMProvider,
     LLMProviderError,
-    LLMQuotaExhaustedError,
-    LLMResponseFormatError,
-    OpenAIProvider,
     build_provider,
     generate_structured,
 )
@@ -67,12 +63,6 @@ from caseops_api.services.matters import _get_matter_model
 
 logger = logging.getLogger(__name__)
 
-
-# Same constant as services.recommendations — keep in sync. The
-# duplication is intentional (low cost, avoids cross-module coupling
-# between two domain services) until a shared llm_fallbacks module
-# justifies itself.
-_HAIKU_FALLBACK_MODEL = "claude-haiku-4-5-20251001"
 
 # Cap per-doc input so a 500 KB attachment doesn't single-handedly
 # saturate the prompt. 4 k chars is roughly 2 pages of reasoned text.
@@ -110,55 +100,6 @@ class MatterExecutiveSummary(BaseModel):
     generated_at: datetime
 
 
-def _haiku_fallback_provider() -> LLMProvider | None:
-    from caseops_api.core.settings import get_settings
-
-    settings = get_settings()
-    if (settings.llm_provider or "").lower() != "anthropic":
-        return None
-    return AnthropicProvider(
-        model=_HAIKU_FALLBACK_MODEL,
-        api_key=settings.llm_api_key,
-        prompt_cache=bool(getattr(settings, "llm_prompt_cache_enabled", True)),
-    )
-
-
-def _openai_fallback_provider() -> LLMProvider | None:
-    from caseops_api.core.settings import get_settings
-
-    settings = get_settings()
-    if not getattr(settings, "openai_api_key", None):
-        return None
-    return OpenAIProvider(
-        model=getattr(settings, "openai_fallback_model", "gpt-5.1"),
-        api_key=settings.openai_api_key,
-    )
-
-
-def _summarise_via_openai(call, root_exc: Exception):
-    """Last-chance OpenAI cutover for matter summary. Raises 502
-    when no OpenAI key is configured or the OpenAI call also fails."""
-    openai = _openai_fallback_provider()
-    if openai is None:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=(
-                f"Could not generate matter summary: primary failed "
-                f"({type(root_exc).__name__}) and no OpenAI fallback "
-                "is configured."
-            ),
-        ) from root_exc
-    try:
-        return call(openai)
-    except (LLMProviderError, LLMResponseFormatError) as oa_exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=(
-                f"Could not generate matter summary: Anthropic "
-                f"({type(root_exc).__name__}) and OpenAI fallback "
-                f"({type(oa_exc).__name__}) both failed. {oa_exc}"
-            ),
-        ) from oa_exc
 
 
 def _load_matter_context(session: Session, matter: Matter) -> str:
@@ -355,48 +296,25 @@ def generate_matter_summary(
             on_model_run=_on_model_run,
         )
 
+    # 2026-04-30: gpt-5.1-only path. Single primary call → 502 on
+    # failure. LLMProviderError is the parent of quota / format /
+    # transient blips.
     try:
         parsed, _completion = _call(llm)
-    except LLMQuotaExhaustedError as quota_exc:
-        # Hard cutover when Anthropic returns 402 ("credit balance is
-        # too low"). Haiku would 402 too, so jump straight to OpenAI.
-        logger.warning(
-            "matter summary: primary %s quota exhausted; cutting over to OpenAI",
-            getattr(llm, "model", "<unknown>"),
-        )
-        parsed, _completion = _summarise_via_openai(_call, quota_exc)
-    except LLMResponseFormatError as exc:
-        # Same fallback pattern as services.recommendations — one retry
-        # with Haiku when the primary returned malformed JSON.
-        fallback = _haiku_fallback_provider()
-        if fallback is None:
-            parsed, _completion = _summarise_via_openai(_call, exc)
-        else:
-            logger.warning(
-                "matter summary: primary LLM %s returned invalid JSON; retrying Haiku",
-                getattr(llm, "model", "<unknown>"),
-            )
-            try:
-                parsed, _completion = _call(fallback)
-            except LLMQuotaExhaustedError as quota_exc:
-                logger.warning(
-                    "matter summary: Haiku fallback hit quota wall; cutting over to OpenAI",
-                )
-                parsed, _completion = _summarise_via_openai(_call, quota_exc)
-            except LLMResponseFormatError as retry_exc:
-                parsed, _completion = _summarise_via_openai(_call, retry_exc)
     except LLMProviderError as exc:
-        # Broadened from LLMResponseFormatError-only (mirrors the fix
-        # that landed in services.drafting / services.recommendations
-        # on 2026-04-22): Anthropic 503 / overload / httpx timeouts
-        # surface as the parent class. Without this branch the
-        # endpoint 500'd opaquely instead of triggering the cutover.
         logger.warning(
-            "matter summary: primary %s upstream failure (%s); cutting over to OpenAI",
+            "matter summary: primary %s failed (%s): %s",
             getattr(llm, "model", "<unknown>"),
             type(exc).__name__,
+            exc,
         )
-        parsed, _completion = _summarise_via_openai(_call, exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=(
+                f"Could not generate matter summary: {type(exc).__name__}: {exc}. "
+                "Please retry in a minute."
+            ),
+        ) from exc
 
     summary = MatterExecutiveSummary(
         overview=parsed.overview,

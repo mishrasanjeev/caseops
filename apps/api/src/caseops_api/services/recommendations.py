@@ -55,95 +55,14 @@ from caseops_api.services.citations import (
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.llm import (
     PURPOSE_RECOMMENDATIONS,
-    AnthropicProvider,
     LLMCallContext,
     LLMCompletion,
     LLMMessage,
     LLMProvider,
     LLMProviderError,
-    LLMQuotaExhaustedError,
-    OpenAIProvider,
     build_provider,
     generate_structured,
 )
-
-# Haiku is materially more reliable than Sonnet at structured JSON
-# output on long prompts — verified empirically during Layer 2
-# backfills (Sonnet 38/38 parse failures on monster docs, Haiku ~10%).
-# When the primary (usually Sonnet) returns invalid JSON we retry once
-# with Haiku so a prod recommendation never 502s due to a parse edge.
-_HAIKU_FALLBACK_MODEL = "claude-haiku-4-5-20251001"
-
-
-def _haiku_fallback_provider() -> LLMProvider | None:
-    """Build a dedicated Haiku provider for the JSON-parse retry path.
-
-    Returns None when the primary provider isn't Anthropic — Gemini /
-    mock don't have the Sonnet-specific defect this guards against.
-
-    BUG-015 (Ram 2026-04-26): tightened timeouts to match the
-    PURPOSE_RECOMMENDATIONS budget in services/llm._build_inner_provider
-    so the full primary→Haiku→OpenAI fallback chain stays inside
-    Cloud Run's 300s request budget.
-    """
-    settings = get_settings()
-    if (settings.llm_provider or "").lower() != "anthropic":
-        return None
-    return AnthropicProvider(
-        model=_HAIKU_FALLBACK_MODEL,
-        api_key=settings.llm_api_key,
-        prompt_cache=bool(getattr(settings, "llm_prompt_cache_enabled", True)),
-        timeout_seconds=30.0,
-        max_retries=1,
-    )
-
-
-def _openai_fallback_provider() -> LLMProvider | None:
-    """Cross-provider hard cutover for Anthropic 402 events. Mirrors
-    services.drafting._openai_fallback_provider; see that module for
-    rationale.
-
-    BUG-015 (Ram 2026-04-26): same tighter timeout + retry budget as
-    the Haiku fallback so the chain fits inside Cloud Run's 300s.
-    """
-    settings = get_settings()
-    if not getattr(settings, "openai_api_key", None):
-        return None
-    return OpenAIProvider(
-        model=getattr(settings, "openai_fallback_model", "gpt-5.1"),
-        api_key=settings.openai_api_key,
-        timeout_seconds=30.0,
-        max_retries=1,
-    )
-
-
-def _generate_recommendation_via_openai(invoke, root_exc: Exception):
-    """Last-chance OpenAI cutover for recommendations. Mirrors the
-    drafting helper. Raises a 502 with an actionable detail when no
-    OpenAI key is configured or when OpenAI also fails."""
-    openai = _openai_fallback_provider()
-    if openai is None:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=(
-                "Could not generate the recommendation: the primary "
-                f"model failed ({type(root_exc).__name__}: {root_exc}) "
-                "and no OpenAI fallback is configured. Please retry in "
-                "a minute."
-            ),
-        ) from root_exc
-    try:
-        return invoke(openai)
-    except LLMProviderError as oa_exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=(
-                f"Could not generate the recommendation: Anthropic "
-                f"({type(root_exc).__name__}: {root_exc}) and the OpenAI "
-                f"fallback ({type(oa_exc).__name__}: {oa_exc}) both "
-                "failed. Please retry in a minute."
-            ),
-        ) from oa_exc
 
 logger = logging.getLogger(__name__)
 
@@ -644,57 +563,28 @@ def generate_recommendation(
             max_tokens=settings.llm_max_output_tokens_recommendations,
         )
 
+    # 2026-04-30: gpt-5.1-only path. The prior Anthropic→Haiku→OpenAI
+    # ladder burned ~3x tokens per click; with Anthropic credits gone
+    # and the OpenAI bill now the single line item, one primary call is
+    # all we want. LLMProviderError covers quota / 5xx / format / timeout
+    # — every recoverable upstream failure surfaces as an actionable 502.
     try:
         parsed, completion = _invoke(llm)
         _stage(f"llm_primary({getattr(llm, 'model', '?')})")
-    except LLMQuotaExhaustedError as quota_exc:
-        # Hard cutover: Anthropic returned 402 ("credit balance is too
-        # low"). Haiku would hit the same wall, so go straight to the
-        # OpenAI cross-provider fallback.
+    except LLMProviderError as exc:
         logger.warning(
-            "recommendation %s: primary %s quota exhausted; cutting over to OpenAI",
+            "recommendation %s: primary LLM %s failed (%s)",
             rec_type,
             getattr(llm, "model", "<unknown>"),
+            type(exc).__name__,
         )
-        parsed, completion = _generate_recommendation_via_openai(_invoke, quota_exc)
-        _stage("llm_openai_fallback_after_quota")
-    except LLMProviderError as exc:
-        # Broadened from LLMResponseFormatError (2026-04-22, Ram-007 /
-        # Hari-III-BUG-020 + Ram-BUG-007, 2026-04-22):
-        # Anthropic 503s / httpx timeouts are
-        # wrapped in LLMProviderError — the format-error child
-        # doesn't catch them, so 503s escaped past Haiku retry and
-        # surfaced as opaque 500s. Catching the parent means every
-        # recoverable upstream failure triggers the fallback.
-        fallback = _haiku_fallback_provider()
-        if fallback is None:
-            parsed, completion = _generate_recommendation_via_openai(_invoke, exc)
-        else:
-            logger.warning(
-                "recommendation %s: primary LLM %s failed (%s); "
-                "retrying with Haiku fallback",
-                rec_type,
-                getattr(llm, "model", "<unknown>"),
-                type(exc).__name__,
-            )
-            try:
-                parsed, completion = _invoke(fallback)
-                _stage("llm_haiku_fallback")
-            except LLMQuotaExhaustedError as quota_exc:
-                logger.warning(
-                    "recommendation %s: Haiku fallback hit quota wall; "
-                    "cutting over to OpenAI",
-                    rec_type,
-                )
-                parsed, completion = _generate_recommendation_via_openai(
-                    _invoke, quota_exc
-                )
-                _stage("llm_openai_fallback_after_haiku_quota")
-            except LLMProviderError as retry_exc:
-                parsed, completion = _generate_recommendation_via_openai(
-                    _invoke, retry_exc
-                )
-                _stage("llm_openai_fallback_after_haiku_error")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=(
+                f"Could not generate the recommendation: "
+                f"{type(exc).__name__}: {exc}. Please retry in a minute."
+            ),
+        ) from exc
 
     cleaned_options, report = _filter_and_verify_options(parsed.options, retrieved)
     _stage("filter_and_verify")

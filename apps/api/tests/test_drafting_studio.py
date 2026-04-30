@@ -378,23 +378,17 @@ def test_generate_draft_provider_error_returns_actionable_422(
         "caseops_api.services.drafting.build_provider",
         lambda *a, **kw: _OverloadedProvider(),
     )
-    # Force the no-fallback branch so we test the worst-case detail.
-    monkeypatch.setattr(
-        "caseops_api.services.drafting._haiku_fallback_provider",
-        lambda: None,
-    )
 
     resp = client.post(
         f"/api/matters/{matter_id}/drafts/{draft['id']}/generate",
         headers=auth_headers(token),
         json={},
     )
+    # 2026-04-30: gpt-5.1-only path. Single primary call → 422 with
+    # actionable detail naming the failure shape + retry / support guidance.
     assert resp.status_code == 422, resp.text
     detail = resp.json()["detail"]
-    assert "primary model" in detail
     assert "LLMProviderError" in detail
-    # Either retry-with-time-window or support contact must be present
-    # so the user always has a next step.
     lowered = detail.lower()
     assert "retry" in lowered or "support" in lowered
 

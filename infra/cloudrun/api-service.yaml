@@ -82,12 +82,12 @@ spec:
                 secretKeyRef:
                   name: "caseops-auth-secret"
                   key: "__AUTH_SECRET_VERSION__"
-            # 402 cutover (2026-04-23): when the primary Anthropic
-            # call returns "credit balance is too low", the drafting /
-            # recommendations / hearing-pack / matter-summary /
-            # contract-intelligence services hard-cut over to OpenAI
-            # (default model `gpt-5.1`). Retrying on Haiku would hit
-            # the same wall. Rotate the key by adding a new secret
+            # 2026-04-30: gpt-5.1 is the sole LLM provider. The prior
+            # Anthropic→Haiku→OpenAI fallback ladder (commit 4104265)
+            # was removed because the 3x token burn per click was
+            # unjustified once Anthropic credits were retired. CASEOPS_
+            # LLM_API_KEY now binds to caseops-openai-api-key; CASEOPS_
+            # LLM_PROVIDER=openai. Rotate the key by adding a new secret
             # version and redeploying:
             #   gcloud secrets versions add caseops-openai-api-key \
             #     --project=__PROJECT_ID__ --data-file=-
@@ -96,8 +96,6 @@ spec:
                 secretKeyRef:
                   name: "caseops-openai-api-key"
                   key: "latest"
-            - name: CASEOPS_OPENAI_FALLBACK_MODEL
-              value: "gpt-5.1"
           resources:
             limits:
               cpu: "1"

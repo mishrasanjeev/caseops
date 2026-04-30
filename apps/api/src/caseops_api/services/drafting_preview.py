@@ -46,13 +46,10 @@ from caseops_api.schemas.drafting_templates import DraftTemplateType
 from caseops_api.services.drafting_prompts import get_prompt_parts
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.llm import (
-    AnthropicProvider,
     LLMCompletion,
     LLMMessage,
     LLMProvider,
     LLMProviderError,
-    LLMQuotaExhaustedError,
-    OpenAIProvider,
     build_provider,
 )
 
@@ -61,7 +58,6 @@ logger = logging.getLogger(__name__)
 PURPOSE = "drafting_preview"
 _PREVIEW_MAX_TOKENS = 900
 _PREVIEW_TEMPERATURE = 0.15
-_HAIKU_FALLBACK_MODEL = "claude-haiku-4-5-20251001"
 
 
 @dataclass(frozen=True)
@@ -72,31 +68,6 @@ class DraftPreview:
     model: str
     prompt_tokens: int
     completion_tokens: int
-
-
-def _haiku_fallback_provider() -> LLMProvider | None:
-    from caseops_api.core.settings import get_settings
-
-    settings = get_settings()
-    if (settings.llm_provider or "").lower() != "anthropic":
-        return None
-    return AnthropicProvider(
-        model=_HAIKU_FALLBACK_MODEL,
-        api_key=settings.llm_api_key,
-        prompt_cache=bool(getattr(settings, "llm_prompt_cache_enabled", True)),
-    )
-
-
-def _openai_fallback_provider() -> LLMProvider | None:
-    from caseops_api.core.settings import get_settings
-
-    settings = get_settings()
-    if not getattr(settings, "openai_api_key", None):
-        return None
-    return OpenAIProvider(
-        model=getattr(settings, "openai_fallback_model", "gpt-5.1"),
-        api_key=settings.openai_api_key,
-    )
 
 
 def generate_step_preview(
@@ -211,59 +182,24 @@ def _invoke_with_cutover(
     primary: LLMProvider,
     messages: list[LLMMessage],
 ) -> LLMCompletion:
-    """Run the preview through the configured provider and apply the
-    cross-provider cutover ladder used by the rest of the AI services.
-
-    Returns the successful ``LLMCompletion`` or raises ``HTTPException``
-    with a redacted, actionable detail. The raw exception is always
-    logged at WARN with full repr so we can still debug from prod logs.
+    """Run the preview through the configured provider. 2026-04-30:
+    cross-provider cutover removed — gpt-5.1 is now the only primary.
+    Single call → redacted 502 on failure, raw exception logged at WARN
+    with full repr for prod debug.
     """
 
-    def _run(p: LLMProvider) -> LLMCompletion:
-        return p.generate(
+    try:
+        return primary.generate(
             messages=messages,
             temperature=_PREVIEW_TEMPERATURE,
             max_tokens=_PREVIEW_MAX_TOKENS,
         )
-
-    try:
-        return _run(primary)
-    except LLMQuotaExhaustedError as quota_exc:
-        logger.warning(
-            "Preview primary %s quota exhausted; cutting over to OpenAI",
-            getattr(primary, "model", "<unknown>"),
-        )
-        return _preview_via_openai(_run, quota_exc)
     except LLMProviderError as exc:
         logger.warning(
-            "Preview primary %s failed (%s); trying Haiku fallback",
+            "Preview primary %s failed (%s): %r",
             getattr(primary, "model", "<unknown>"),
             type(exc).__name__,
-        )
-        haiku = _haiku_fallback_provider()
-        if haiku is None:
-            return _preview_via_openai(_run, exc)
-        try:
-            return _run(haiku)
-        except LLMQuotaExhaustedError as quota_exc:
-            return _preview_via_openai(_run, quota_exc)
-        except LLMProviderError as retry_exc:
-            return _preview_via_openai(_run, retry_exc)
-
-
-def _preview_via_openai(
-    run, root_exc: Exception
-) -> LLMCompletion:
-    """Cross-provider hard cutover. Returns the OpenAI completion or
-    raises a redacted 502."""
-    openai = _openai_fallback_provider()
-    if openai is None:
-        # Don't echo the raw exception into ``detail`` — log it and
-        # show the user something actionable.
-        logger.warning(
-            "Preview unavailable, no OpenAI fallback configured. "
-            "Underlying error: %r",
-            root_exc,
+            exc,
         )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -271,23 +207,7 @@ def _preview_via_openai(
                 "Drafting preview is temporarily unavailable. Please "
                 "retry in a minute, or contact support if this persists."
             ),
-        ) from root_exc
-    try:
-        return run(openai)
-    except LLMProviderError as oa_exc:
-        logger.warning(
-            "Preview OpenAI fallback also failed. Underlying errors: "
-            "primary=%r openai=%r",
-            root_exc,
-            oa_exc,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=(
-                "Drafting preview is temporarily unavailable. Please "
-                "retry in a minute, or contact support if this persists."
-            ),
-        ) from oa_exc
+        ) from exc
 
 
 def _write_model_run(

@@ -249,20 +249,15 @@ def test_hearing_pack_provider_error_returns_actionable_422(
         "caseops_api.services.hearing_packs.build_provider",
         lambda *a, **kw: _OverloadedProvider(),
     )
-    # No fallback configured — exercises the worst-case detail.
-    monkeypatch.setattr(
-        "caseops_api.services.hearing_packs._haiku_fallback_provider",
-        lambda: None,
-    )
-
     resp = client.post(
         f"/api/matters/{matter_id}/hearings/{hearing_id}/pack",
         headers=auth_headers(token),
         json={},
     )
+    # 2026-04-30: gpt-5.1-only path. Single primary call → 422 with
+    # actionable detail naming the failure shape + retry / support guidance.
     assert resp.status_code == 422, resp.text
     detail = resp.json()["detail"]
-    assert "primary model" in detail
     assert "LLMProviderError" in detail
     lowered = detail.lower()
     assert "retry" in lowered or "support" in lowered

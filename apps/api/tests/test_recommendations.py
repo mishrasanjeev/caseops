@@ -221,13 +221,6 @@ def test_recommendation_provider_error_returns_actionable_502(
         "caseops_api.services.recommendations.build_provider",
         lambda *a, **kw: _OverloadedProvider(),
     )
-    # Mock provider lookup → Haiku fallback returns None, so the path
-    # forces the "no fallback configured" branch which is the worst
-    # user-visible case we still need to make actionable.
-    monkeypatch.setattr(
-        "caseops_api.services.recommendations._haiku_fallback_provider",
-        lambda: None,
-    )
 
     token, _, matter_id = _setup_matter(client)
     response = client.post(
@@ -235,13 +228,12 @@ def test_recommendation_provider_error_returns_actionable_502(
         headers=auth_headers(token),
         json={"type": "authority"},
     )
+    # 2026-04-30: gpt-5.1-only path. Single primary call → 502 with
+    # actionable detail. No fallback ladder, no 3x token burn.
     assert response.status_code == 502, response.text
     detail = response.json()["detail"]
-    # Detail must name the failure shape and tell the user what to do.
-    assert "primary" in detail
     assert "LLMProviderError" in detail
-    lowered = detail.lower()
-    assert "openai" in lowered or "retry" in lowered
+    assert "retry" in detail.lower()
 
 
 def test_shared_citation_credits_every_option_that_cites_it(
