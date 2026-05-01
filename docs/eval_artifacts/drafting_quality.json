@@ -7,8 +7,8 @@
       "findings_summary": [],
       "input_tokens": 1636,
       "key": "bnss-303-simple-theft",
-      "latency_ms": 38479,
-      "output_tokens": 3025,
+      "latency_ms": 45036,
+      "output_tokens": 3211,
       "rating": 4.33,
       "structure_present": [
         "cause_title",
@@ -28,8 +28,8 @@
       "findings_summary": [],
       "input_tokens": 1635,
       "key": "ndps-prolonged-custody",
-      "latency_ms": 57536,
-      "output_tokens": 3813,
+      "latency_ms": 52196,
+      "output_tokens": 3427,
       "rating": 4.33,
       "structure_present": [
         "cause_title",
@@ -49,16 +49,17 @@
       "findings_summary": [],
       "input_tokens": 1668,
       "key": "standard-insufficient-funds",
-      "latency_ms": 26162,
-      "output_tokens": 1866,
-      "rating": 4.0,
+      "latency_ms": 29640,
+      "output_tokens": 1788,
+      "rating": 4.33,
       "structure_present": [
         "from",
         "to",
         "instrument",
-        "demand"
+        "demand",
+        "deadline"
       ],
-      "structure_score": 4.0,
+      "structure_score": 5.0,
       "template_type": "cheque_bounce_notice",
       "validator_score": 5.0
     },
@@ -69,16 +70,17 @@
       "findings_summary": [],
       "input_tokens": 1660,
       "key": "payment-stopped-high-value",
-      "latency_ms": 20907,
-      "output_tokens": 1834,
-      "rating": 4.0,
+      "latency_ms": 17262,
+      "output_tokens": 1669,
+      "rating": 4.33,
       "structure_present": [
         "from",
         "to",
         "instrument",
-        "demand"
+        "demand",
+        "deadline"
       ],
-      "structure_score": 4.0,
+      "structure_score": 5.0,
       "template_type": "cheque_bounce_notice",
       "validator_score": 5.0
     },
@@ -89,8 +91,8 @@
       "findings_summary": [],
       "input_tokens": 2028,
       "key": "economic-offence-business-dispute",
-      "latency_ms": 43983,
-      "output_tokens": 2960,
+      "latency_ms": 36734,
+      "output_tokens": 2780,
       "rating": 5.0,
       "structure_present": [
         "cause_title",
@@ -110,8 +112,8 @@
       "findings_summary": [],
       "input_tokens": 1994,
       "key": "matrimonial-no-fir",
-      "latency_ms": 35436,
-      "output_tokens": 2923,
+      "latency_ms": 47681,
+      "output_tokens": 3085,
       "rating": 5.0,
       "structure_present": [
         "cause_title",
@@ -131,8 +133,8 @@
       "findings_summary": [],
       "input_tokens": 1680,
       "key": "recovery-of-money-commercial",
-      "latency_ms": 41485,
-      "output_tokens": 3449,
+      "latency_ms": 62797,
+      "output_tokens": 3522,
       "rating": 4.33,
       "structure_present": [
         "cause_title",
@@ -152,8 +154,8 @@
       "findings_summary": [],
       "input_tokens": 1715,
       "key": "specific-performance-real-estate",
-      "latency_ms": 49836,
-      "output_tokens": 3423,
+      "latency_ms": 46177,
+      "output_tokens": 3031,
       "rating": 4.33,
       "structure_present": [
         "cause_title",
@@ -173,16 +175,17 @@
       "findings_summary": [],
       "input_tokens": 1459,
       "key": "hma-cruelty-desertion",
-      "latency_ms": 28555,
-      "output_tokens": 2715,
-      "rating": 4.0,
+      "latency_ms": 40487,
+      "output_tokens": 3349,
+      "rating": 4.33,
       "structure_present": [
         "cause_title",
-        "facts",
+        "marriage",
         "grounds",
+        "prayer",
         "verification"
       ],
-      "structure_score": 4.0,
+      "structure_score": 5.0,
       "template_type": "divorce_petition",
       "validator_score": 5.0
     },
@@ -193,8 +196,8 @@
       "findings_summary": [],
       "input_tokens": 1426,
       "key": "encroachment-flat",
-      "latency_ms": 22424,
-      "output_tokens": 1929,
+      "latency_ms": 33155,
+      "output_tokens": 2333,
       "rating": 4.33,
       "structure_present": [
         "from",
@@ -214,8 +217,8 @@
       "findings_summary": [],
       "input_tokens": 1488,
       "key": "standard-evidentiary",
-      "latency_ms": 9765,
-      "output_tokens": 654,
+      "latency_ms": 12678,
+      "output_tokens": 910,
       "rating": 4.33,
       "structure_present": [
         "cause_title",
@@ -235,16 +238,17 @@
       "findings_summary": [],
       "input_tokens": 1757,
       "key": "bns-cheating-forgery",
-      "latency_ms": 29474,
-      "output_tokens": 2670,
-      "rating": 4.0,
+      "latency_ms": 39668,
+      "output_tokens": 3236,
+      "rating": 4.33,
       "structure_present": [
         "cause_title",
+        "jurisdiction",
         "facts",
-        "prayer",
-        "verification"
+        "allegations",
+        "prayer"
       ],
-      "structure_score": 4.0,
+      "structure_score": 5.0,
       "template_type": "criminal_complaint",
       "validator_score": 5.0
     },
@@ -255,8 +259,8 @@
       "findings_summary": [],
       "input_tokens": 2175,
       "key": "civil-appeal-cpc-order-xli",
-      "latency_ms": 30569,
-      "output_tokens": 2937,
+      "latency_ms": 49114,
+      "output_tokens": 3403,
       "rating": 4.33,
       "structure_present": [
         "cause_title",
@@ -276,8 +280,8 @@
       "findings_summary": [],
       "input_tokens": 1965,
       "key": "mandamus-rti-inaction",
-      "latency_ms": 37307,
-      "output_tokens": 3053,
+      "latency_ms": 36711,
+      "output_tokens": 3200,
       "rating": 4.33,
       "structure_present": [
         "cause_title",
@@ -297,8 +301,8 @@
       "findings_summary": [],
       "input_tokens": 1869,
       "key": "compromise-civil-flavour-318",
-      "latency_ms": 45759,
-      "output_tokens": 3784,
+      "latency_ms": 26511,
+      "output_tokens": 3448,
       "rating": 5.0,
       "structure_present": [
         "cause_title",
@@ -318,17 +322,16 @@
       "findings_summary": [],
       "input_tokens": 1901,
       "key": "specific-performance-defence",
-      "latency_ms": 31629,
-      "output_tokens": 2542,
-      "rating": 4.33,
+      "latency_ms": 31817,
+      "output_tokens": 2753,
+      "rating": 4.0,
       "structure_present": [
         "cause_title",
         "facts",
-        "grounds",
         "prayer",
         "verification"
       ],
-      "structure_score": 5.0,
+      "structure_score": 4.0,
       "template_type": "written_statement",
       "validator_score": 5.0
     },
@@ -339,8 +342,8 @@
       "findings_summary": [],
       "input_tokens": 2122,
       "key": "writ-counter-affidavit-state",
-      "latency_ms": 49566,
-      "output_tokens": 2727,
+      "latency_ms": 20449,
+      "output_tokens": 2212,
       "rating": 4.33,
       "structure_present": [
         "cause_title",
@@ -360,8 +363,8 @@
       "findings_summary": [],
       "input_tokens": 1818,
       "key": "settlement-recorded-with-consent",
-      "latency_ms": 54837,
-      "output_tokens": 4289,
+      "latency_ms": 44218,
+      "output_tokens": 3252,
       "rating": 4.33,
       "structure_present": [
         "cause_title",
@@ -381,8 +384,8 @@
       "findings_summary": [],
       "input_tokens": 2115,
       "key": "pre-arbitration-injunction",
-      "latency_ms": 41945,
-      "output_tokens": 3820,
+      "latency_ms": 52709,
+      "output_tokens": 3461,
       "rating": 4.33,
       "structure_present": [
         "cause_title",
@@ -402,8 +405,8 @@
       "findings_summary": [],
       "input_tokens": 1541,
       "key": "caveat-against-ex-parte-injunction",
-      "latency_ms": 10706,
-      "output_tokens": 1001,
+      "latency_ms": 14488,
+      "output_tokens": 1084,
       "rating": 4.33,
       "structure_present": [
         "section",
@@ -423,8 +426,8 @@
       "findings_summary": [],
       "input_tokens": 1633,
       "key": "fresh-filing-delhi-hc",
-      "latency_ms": 12594,
-      "output_tokens": 1131,
+      "latency_ms": 20232,
+      "output_tokens": 1382,
       "rating": 5.0,
       "structure_present": [
         "court_header",
@@ -444,16 +447,17 @@
       "findings_summary": [],
       "input_tokens": 2061,
       "key": "post-trial-due-diligence-amendment",
-      "latency_ms": 29581,
-      "output_tokens": 2757,
-      "rating": 4.0,
+      "latency_ms": 46170,
+      "output_tokens": 2738,
+      "rating": 4.33,
       "structure_present": [
         "cause_title",
-        "facts",
-        "prayer",
-        "verification"
+        "section",
+        "proposed_amendments",
+        "reason",
+        "prayer"
       ],
-      "structure_score": 4.0,
+      "structure_score": 5.0,
       "template_type": "amendment_of_pleadings",
       "validator_score": 5.0
     },
@@ -464,8 +468,8 @@
       "findings_summary": [],
       "input_tokens": 2106,
       "key": "criminal-non-compoundable-gian-singh",
-      "latency_ms": 30436,
-      "output_tokens": 2641,
+      "latency_ms": 36652,
+      "output_tokens": 2133,
       "rating": 4.33,
       "structure_present": [
         "cause_title",
@@ -485,8 +489,8 @@
       "findings_summary": [],
       "input_tokens": 2235,
       "key": "uncontested-hindu-will-bombay-hc",
-      "latency_ms": 43074,
-      "output_tokens": 3585,
+      "latency_ms": 50083,
+      "output_tokens": 3254,
       "rating": 4.33,
       "structure_present": [
         "cause_title",
@@ -503,167 +507,167 @@
   "summary": {
     "dry_run": false,
     "meets_target": false,
-    "overall_rating": 4.36,
+    "overall_rating": 4.41,
     "per_template": {
       "affidavit": {
         "errored": 0,
-        "median_latency_ms": 9765,
+        "median_latency_ms": 12678,
         "rating": 4.33,
         "scenarios": 1,
         "total_input_tokens": 1488,
-        "total_output_tokens": 654
+        "total_output_tokens": 910
       },
       "amendment_of_pleadings": {
         "errored": 0,
-        "median_latency_ms": 29581,
-        "rating": 4.0,
+        "median_latency_ms": 46170,
+        "rating": 4.33,
         "scenarios": 1,
         "total_input_tokens": 2061,
-        "total_output_tokens": 2757
+        "total_output_tokens": 2738
       },
       "anticipatory_bail": {
         "errored": 0,
-        "median_latency_ms": 43983,
+        "median_latency_ms": 47681,
         "rating": 5.0,
         "scenarios": 2,
         "total_input_tokens": 4022,
-        "total_output_tokens": 5883
+        "total_output_tokens": 5865
       },
       "appeal_memorandum": {
         "errored": 0,
-        "median_latency_ms": 30569,
+        "median_latency_ms": 49114,
         "rating": 4.33,
         "scenarios": 1,
         "total_input_tokens": 2175,
-        "total_output_tokens": 2937
+        "total_output_tokens": 3403
       },
       "arbitration_section_9": {
         "errored": 0,
-        "median_latency_ms": 41945,
+        "median_latency_ms": 52709,
         "rating": 4.33,
         "scenarios": 1,
         "total_input_tokens": 2115,
-        "total_output_tokens": 3820
+        "total_output_tokens": 3461
       },
       "bail": {
         "errored": 0,
-        "median_latency_ms": 57536,
+        "median_latency_ms": 52196,
         "rating": 4.33,
         "scenarios": 2,
         "total_input_tokens": 3271,
-        "total_output_tokens": 6838
+        "total_output_tokens": 6638
       },
       "caveat_petition": {
         "errored": 0,
-        "median_latency_ms": 10706,
+        "median_latency_ms": 14488,
         "rating": 4.33,
         "scenarios": 1,
         "total_input_tokens": 1541,
-        "total_output_tokens": 1001
+        "total_output_tokens": 1084
       },
       "cheque_bounce_notice": {
         "errored": 0,
-        "median_latency_ms": 26162,
-        "rating": 4.0,
+        "median_latency_ms": 29640,
+        "rating": 4.33,
         "scenarios": 2,
         "total_input_tokens": 3328,
-        "total_output_tokens": 3700
+        "total_output_tokens": 3457
       },
       "civil_suit": {
         "errored": 0,
-        "median_latency_ms": 49836,
+        "median_latency_ms": 62797,
         "rating": 4.33,
         "scenarios": 2,
         "total_input_tokens": 3395,
-        "total_output_tokens": 6872
+        "total_output_tokens": 6553
       },
       "compromise_petition": {
         "errored": 0,
-        "median_latency_ms": 30436,
+        "median_latency_ms": 36652,
         "rating": 4.33,
         "scenarios": 1,
         "total_input_tokens": 2106,
-        "total_output_tokens": 2641
+        "total_output_tokens": 2133
       },
       "criminal_complaint": {
         "errored": 0,
-        "median_latency_ms": 29474,
-        "rating": 4.0,
+        "median_latency_ms": 39668,
+        "rating": 4.33,
         "scenarios": 1,
         "total_input_tokens": 1757,
-        "total_output_tokens": 2670
+        "total_output_tokens": 3236
       },
       "divorce_petition": {
         "errored": 0,
-        "median_latency_ms": 28555,
-        "rating": 4.0,
+        "median_latency_ms": 40487,
+        "rating": 4.33,
         "scenarios": 1,
         "total_input_tokens": 1459,
-        "total_output_tokens": 2715
+        "total_output_tokens": 3349
       },
       "dv_quashing_petition": {
         "errored": 0,
-        "median_latency_ms": 54837,
+        "median_latency_ms": 44218,
         "rating": 4.33,
         "scenarios": 1,
         "total_input_tokens": 1818,
-        "total_output_tokens": 4289
+        "total_output_tokens": 3252
       },
       "probate_petition": {
         "errored": 0,
-        "median_latency_ms": 43074,
+        "median_latency_ms": 50083,
         "rating": 4.33,
         "scenarios": 1,
         "total_input_tokens": 2235,
-        "total_output_tokens": 3585
+        "total_output_tokens": 3254
       },
       "property_dispute_notice": {
         "errored": 0,
-        "median_latency_ms": 22424,
+        "median_latency_ms": 33155,
         "rating": 4.33,
         "scenarios": 1,
         "total_input_tokens": 1426,
-        "total_output_tokens": 1929
+        "total_output_tokens": 2333
       },
       "quashing_petition": {
         "errored": 0,
-        "median_latency_ms": 45759,
+        "median_latency_ms": 26511,
         "rating": 5.0,
         "scenarios": 1,
         "total_input_tokens": 1869,
-        "total_output_tokens": 3784
+        "total_output_tokens": 3448
       },
       "reply_counter_affidavit": {
         "errored": 0,
-        "median_latency_ms": 49566,
+        "median_latency_ms": 20449,
         "rating": 4.33,
         "scenarios": 1,
         "total_input_tokens": 2122,
-        "total_output_tokens": 2727
+        "total_output_tokens": 2212
       },
       "vakalatnama": {
         "errored": 0,
-        "median_latency_ms": 12594,
+        "median_latency_ms": 20232,
         "rating": 5.0,
         "scenarios": 1,
         "total_input_tokens": 1633,
-        "total_output_tokens": 1131
+        "total_output_tokens": 1382
       },
       "writ_petition": {
         "errored": 0,
-        "median_latency_ms": 37307,
+        "median_latency_ms": 36711,
         "rating": 4.33,
         "scenarios": 1,
         "total_input_tokens": 1965,
-        "total_output_tokens": 3053
+        "total_output_tokens": 3200
       },
       "written_statement": {
         "errored": 0,
-        "median_latency_ms": 31629,
-        "rating": 4.33,
+        "median_latency_ms": 31817,
+        "rating": 4.0,
         "scenarios": 1,
         "total_input_tokens": 1901,
-        "total_output_tokens": 2542
+        "total_output_tokens": 2753
       }
     },
     "target": 4.8

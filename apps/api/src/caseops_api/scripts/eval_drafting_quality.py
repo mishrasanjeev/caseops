@@ -98,7 +98,15 @@ _STRUCTURE_HEADINGS_BY_TEMPLATE: dict[str, list[tuple[str, list[str]]]] = {
         ("to", ["TO:", "ADDRESSEE", "DEAR SIR"]),
         ("instrument", ["CHEQUE NO", "DRAWN ON", "BANK MEMO"]),
         ("demand", ["DEMAND", "PAY THE", "PAYMENT WITHIN"]),
-        ("deadline", ["15 DAYS", "FIFTEEN DAYS", "WITHIN A PERIOD"]),
+        # Sprint 12 follow-up (2026-05-01): broader deadline markers —
+        # the model was writing the 15-day phrase as "fifteen (15)
+        # days" / "within fifteen days from receipt" / etc., none of
+        # which matched the original 3-marker list.
+        ("deadline", [
+            "15 DAYS", "FIFTEEN DAYS", "WITHIN A PERIOD",
+            "FIFTEEN (15)", "(15) DAYS", "WITHIN FIFTEEN",
+            "STATUTORY PERIOD", "DAYS FROM RECEIPT",
+        ]),
     ],
     "property_dispute_notice": [
         ("from", ["FROM:", "ADVOCATE FOR", "COUNSEL FOR"]),
@@ -165,6 +173,53 @@ _STRUCTURE_HEADINGS_BY_TEMPLATE: dict[str, list[tuple[str, list[str]]]] = {
         ("will", ["WILL", "TESTAMENT", "ATTESTING WITNESSES", "EXECUTED"]),
         ("estate", ["ESTATE", "ASSETS", "VALUE", "SCHEDULE"]),
         ("prayer", ["PROBATE", "GRANT", "PRAYER"]),
+    ],
+    # Criminal complaint — pleading-shaped but with "Allegations /
+    # Offences alleged" instead of "Grounds". Sprint 12 follow-up
+    # (2026-05-01).
+    "criminal_complaint": [
+        ("cause_title", ["IN THE", "COMPLAINANT", "ACCUSED", "v.", "VERSUS"]),
+        ("jurisdiction", [
+            "BNSS S.223", "BNSS SECTION 223", "S.223",
+            "TERRITORIAL JURISDICTION",
+        ]),
+        ("facts", ["STATEMENT OF FACTS", "FACTS", "BACKGROUND"]),
+        ("allegations", [
+            "OFFENCES ALLEGED", "OFFENCES COMMITTED", "ALLEGATIONS",
+            "BNS S.", "BNS SECTION", "SECTIONS COMMITTED",
+        ]),
+        ("prayer", ["PRAYER", "COGNISANCE", "SUMMON THE ACCUSED"]),
+    ],
+    # Amendment — Order VI Rule 17 application has "Proposed
+    # amendments / Reason" instead of "Grounds".
+    "amendment_of_pleadings": [
+        ("cause_title", ["IN THE", "PETITIONER", "RESPONDENT", "VERSUS"]),
+        ("section", ["ORDER VI RULE 17", "ORDER 6 RULE 17", "RULE 17"]),
+        ("proposed_amendments", [
+            "PROPOSED AMENDMENT", "AMENDMENT SOUGHT",
+            "FOR PARAGRAPH", "READ PARAGRAPH",
+        ]),
+        ("reason", [
+            "REASON", "DUE DILIGENCE", "GROUND", "PRAYED FOR",
+        ]),
+        ("prayer", ["PRAYER", "LEAVE TO AMEND", "PERMIT FILING"]),
+    ],
+    # Divorce — petition shape with "Marriage details / Grounds /
+    # Prayer for dissolution".
+    "divorce_petition": [
+        ("cause_title", ["IN THE", "PETITIONER", "RESPONDENT", "VERSUS"]),
+        ("marriage", [
+            "MARRIAGE", "SOLEMNISED", "SOLEMNIZED", "WED", "MARRIED",
+        ]),
+        ("grounds", [
+            "GROUND", "CRUELTY", "DESERTION", "ADULTERY",
+            "IRRETRIEVABLE", "MUTUAL CONSENT",
+        ]),
+        ("prayer", [
+            "PRAYER", "DECREE OF DIVORCE", "DISSOLUTION",
+            "DECREE DISSOLVING",
+        ]),
+        ("verification", ["VERIFICATION", "VERIFIED", "AFFIRMED"]),
     ],
 }
 
