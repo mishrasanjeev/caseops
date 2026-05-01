@@ -453,7 +453,7 @@ test.describe("Ram batch 2026-04-26 — prod verification of c58305b fixes", () 
     // Section_number is a STRING like "Section 63" / "Section 318".
     // Find the section explicitly so we can also check section_text length
     // (hand-curated BNS §318 = 1593 chars).
-    const sections = (bnsBody as { sections?: Array<{ section_number: string; section_text: string | null }> })?.sections ?? [];
+    const sections = (bnsBody as { sections?: Array<{ section_number: string }> })?.sections ?? [];
     const sec318 = sections.find((s) => /\bSection\s*318\b/i.test(s.section_number));
     if (!sec318) {
       const numbers = sections.map((s) => s.section_number).join(", ");
@@ -461,12 +461,22 @@ test.describe("Ram batch 2026-04-26 — prod verification of c58305b fixes", () 
         `STATUTE-LOOP NOT VERIFIED — route ${hitRoute} returned ${sections.length} sections but none match Section 318. Found: ${numbers.slice(0, 400)}`,
       );
     }
-    // The hand-curated section_text is 1593 chars. Anything < 200 means
-    // the seed job ran but didn't bring the hand-curated payload, OR the
-    // route returns trimmed text.
-    expect.soft(sec318.section_text, "BNS §318 section_text is null or empty").not.toBeNull();
+    // 2026-05-01: the list endpoint legitimately drops section_text from
+    // its payload (commit 213dbde) to keep the response small; the full
+    // text only ships from the per-section detail endpoint. Fetch that
+    // and assert the hand-curated length there. Hand-curated BNS §318
+    // is ~1593 chars; require >500 to allow some pruning margin.
+    const detailUrl = `${PROD_API_BASE_URL}/api/statutes/bns-2023/sections/${encodeURIComponent(sec318.section_number)}`;
+    const detailResp = await request.get(detailUrl, {
+      headers: { Cookie: cookieHeader, Accept: "application/json" },
+      timeout: 60_000,
+    });
+    expect(detailResp.ok(), `${detailUrl} returned ${detailResp.status()}`).toBeTruthy();
+    const detail = (await detailResp.json()) as { section: { section_text: string | null } };
+    const sectionText = detail.section?.section_text;
+    expect.soft(sectionText, "BNS §318 section_text is null or empty").not.toBeNull();
     expect.soft(
-      sec318.section_text?.length ?? 0,
+      sectionText?.length ?? 0,
       `BNS §318 section_text shorter than expected (hand-curated ~1593 chars)`,
     ).toBeGreaterThan(500);
   });
