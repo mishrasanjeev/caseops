@@ -92,6 +92,33 @@ logger = logging.getLogger(__name__)
 PURPOSE = "draft"
 
 
+# PG-005 Sprint 7 (2026-05-01) — bench-aware drafting expansion.
+# Templates that benefit from bench-strategy context injection. These
+# all argue legal positions to a court where the assigned judge's
+# prior tendencies + favoured authorities materially affect drafting
+# choices. Templates excluded: pre-litigation notices
+# (property_dispute_notice, cheque_bounce_notice), procedural-only
+# filings (vakalatnama, caveat_petition), generic statements
+# (affidavit) — none of these benefit from bench analytics.
+_BENCH_AWARE_TEMPLATES: frozenset[str] = frozenset({
+    "bail",
+    "anticipatory_bail",
+    "writ_petition",
+    "quashing_petition",
+    "dv_quashing_petition",
+    "civil_suit",
+    "written_statement",
+    "reply_counter_affidavit",
+    "appeal_memorandum",
+    "arbitration_section_9",
+    "criminal_complaint",
+    "amendment_of_pleadings",
+    "divorce_petition",
+    "compromise_petition",
+    "probate_petition",
+})
+
+
 class _LLMDraftResponse(BaseModel):
     body: str = Field(min_length=20, max_length=20000)
     citations: list[str] = Field(default_factory=list, max_length=30)
@@ -306,13 +333,16 @@ def _build_messages(
 
     # PG-107 (2026-05-01) — opt-in predictive bench analytics.
     # When the workspace has enabled predictive mode AND we're drafting
-    # an appeal memorandum, append an override addendum that lifts the
-    # template's evidence-only ABSOLUTE RULES around favorability /
-    # judge-tendency language, replacing them with sample-size +
-    # disclaimer requirements. The override comes AFTER the template
-    # block so the LLM treats it as the operative rule.
+    # any litigation template (PG-005 Sprint 7, 2026-05-01: expanded
+    # from appeal_memorandum-only to every template that argues legal
+    # positions to a court — bail, writ, quashing, civil suit, etc.),
+    # append an override addendum that lifts the template's evidence-
+    # only ABSOLUTE RULES around favorability / judge-tendency
+    # language, replacing them with sample-size + disclaimer
+    # requirements. The override comes AFTER the template block so the
+    # LLM treats it as the operative rule.
     predictive_addendum = ""
-    if predictive_bench_enabled and draft.template_type == "appeal_memorandum":
+    if predictive_bench_enabled and draft.template_type in _BENCH_AWARE_TEMPLATES:
         predictive_addendum = (
             "\n\n=== WORKSPACE POLICY OVERRIDE: PREDICTIVE BENCH ANALYTICS ===\n"
             "This workspace has opted in to predictive bench analytics. "
@@ -474,12 +504,15 @@ def _build_messages(
 
     # BAAD-001 slice 3: bench history context block. Only injected when
     # the caller passed a usable BenchStrategyContext AND the template
-    # is appeal_memorandum. We tolerate `bench_context` being any
-    # truthy object with the expected fields (duck-typed) so this stays
-    # decoupled from the import.
+    # is in the bench-aware set. PG-005 Sprint 7 (2026-05-01) expanded
+    # the gate from appeal_memorandum-only to every litigation template
+    # that argues legal positions to a court (see
+    # `_BENCH_AWARE_TEMPLATES` above). We tolerate `bench_context`
+    # being any truthy object with the expected fields (duck-typed) so
+    # this stays decoupled from the import.
     if (
         bench_context is not None
-        and getattr(draft, "template_type", None) == "appeal_memorandum"
+        and getattr(draft, "template_type", None) in _BENCH_AWARE_TEMPLATES
     ):
         ctx_quality = getattr(bench_context, "context_quality", "none")
         coverage_pct = getattr(
@@ -499,11 +532,11 @@ def _build_messages(
         if ctx_quality in ("low", "none"):
             parts.append(
                 "BENCH CONTEXT IS LOW/NONE — DO NOT cite bench-specific "
-                "tendencies. Draft using general appellate principles + "
+                "tendencies. Draft using general legal principles + "
                 "the AUTHORITIES block above. Add a one-sentence "
                 "limitation note in the grounds section: 'Bench-history "
                 "context was sparse for this matter; the grounds rest "
-                "on general appellate principles and the cited "
+                "on general legal principles and the cited "
                 "authorities only.'"
             )
         else:
@@ -874,7 +907,7 @@ def generate_draft_version(
     # bench-specific block degrades to a limitation note + the
     # existing court-scoped context.
     bench_context = None
-    if draft.template_type == "appeal_memorandum":
+    if draft.template_type in _BENCH_AWARE_TEMPLATES:
         try:
             from datetime import date as _date
 

@@ -122,7 +122,7 @@ Needed:
 Estimated days: 5-7.
 
 ### `PG-005` Drafting finalization — court-specific format + PDF + revision diff
-Status: **`Partially implemented`** (Sprints 1 + 2 + 3 + 4 + 5 + 6 of 12 landed 2026-05-01).
+Status: **`Partially implemented`** (Sprints 1 + 2 + 3 + 4 + 5 + 6 + 7 of 12 landed 2026-05-01).
 Evidence:
 - Sprint 1 (2026-05-01) added 4 highest-frequency missing templates: `WRIT_PETITION`, `QUASHING_PETITION`, `WRITTEN_STATEMENT`, `REPLY_COUNTER_AFFIDAVIT` (full statutory awareness + per-template prompts + recommender-matrix coverage).
 - Sprint 2 (2026-05-01) added 7 more templates covering daily Indian-litigation filings:
@@ -160,9 +160,13 @@ Evidence:
   - `GET /api/matters/{matter_id}/drafts/{draft_id}/compare?prev_revision=N&next_revision=M&context_lines=K` route. context_lines bounded [0, 10] (400 outside range).
   - Web: `<DraftCompareView>` component on the draft detail page renders the diff with red/green highlighting + citation-deltas panel + revision-pair selector. Defaults to comparing the latest two revisions on first render.
   - 13 new pytest cases (7 pure-function unit tests covering insert / delete / replace / citation set semantics / no-change / malformed-json / context_lines=0 + 6 route integration tests covering happy path / unknown-revision 404 / identical-revision 400 / context_lines bounds 400 / 404 on unknown draft / auth gate). 102 broader drafting tests pass.
+- Sprint 7 (2026-05-01) expanded bench-aware drafting from `appeal_memorandum`-only to 15 of 20 templates:
+  - `_BENCH_AWARE_TEMPLATES` constant added in `services/drafting.py` covering bail, anticipatory_bail, writ_petition, quashing_petition, dv_quashing_petition, civil_suit, written_statement, reply_counter_affidavit, appeal_memorandum, arbitration_section_9, criminal_complaint, amendment_of_pleadings, divorce_petition, compromise_petition, probate_petition. Excluded: `property_dispute_notice`, `cheque_bounce_notice` (pre-litigation notices), `affidavit` (generic), `vakalatnama` + `caveat_petition` (procedural-only). Bench analytics on these would be noise.
+  - Three gates updated to use the new set: (1) `bench_context = build_bench_strategy_context(...)` build call; (2) the BENCH HISTORY CONTEXT block injection in the user prompt; (3) the PG-107 predictive-mode WORKSPACE POLICY OVERRIDE addendum in the system prompt.
+  - Low-context fallback note generalised from "general appellate principles" → "general legal principles" so it reads correctly across non-appeal templates.
+  - 42 new pytest cases (parameterised across all 15 bench-aware templates × 2 gates + 5 non-bench templates × 2 gates + sanity-check on the explicit set membership + low-context fallback wording test). 127 broader drafting tests pass.
 - `services/drafting.py` (1187 lines) still has DOCX export + citation verifier; filing checklist remains.
-Needed (Sprints 7-12):
-- Sprint 7 — Bench-aware extension of drafting (extend PG-107 v3 predictive into draft suggestions).
+Needed (Sprints 8-12):
 - Sprint 8 — Filing checklist per court (limit, fees, annexures, vakalatnama).
 - Sprint 9 — Mobile (responsive DraftingStepper at 360px).
 - Sprint 10 — Solo mode (one-page guided form).
