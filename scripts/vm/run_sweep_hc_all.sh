@@ -46,6 +46,13 @@ mkdir -p ~/logs
 PROGRESS_FILE=~/logs/sweep_progress.hc_all.txt
 touch "$PROGRESS_FILE"
 
+# 2026-05-01: per-bucket attempt counter. Increments before each
+# run_bucket invocation; >3 attempts → SKIP-MAX-ATTEMPTS so a stuck
+# bucket (corrupt PDFs / OCR loop / DB timeout) can't park the entire
+# 864-bucket sweep on a single HC × year.
+ATTEMPTS_FILE=~/logs/sweep_attempts.hc_all.txt
+touch "$ATTEMPTS_FILE"
+
 log() { echo "[$(date -Iseconds)] $*" | tee -a "$STATE"; }
 
 bucket_done() {
@@ -54,6 +61,20 @@ bucket_done() {
 
 mark_done() {
   echo "DONE-$1" >> "$PROGRESS_FILE"
+}
+
+record_attempt() {
+  local label="$1"
+  local current
+  current=$(grep -E "^$label [0-9]+$" "$ATTEMPTS_FILE" 2>/dev/null \
+            | awk '{print $2}' | tail -1)
+  current=${current:-0}
+  current=$((current + 1))
+  grep -vE "^$label " "$ATTEMPTS_FILE" 2>/dev/null \
+    > "$ATTEMPTS_FILE.tmp" || true
+  echo "$label $current" >> "$ATTEMPTS_FILE.tmp"
+  mv "$ATTEMPTS_FILE.tmp" "$ATTEMPTS_FILE"
+  echo "$current"
 }
 
 export CASEOPS_VOYAGE_DAILY_CAP_USD=20
@@ -74,10 +95,12 @@ HC_LIST=(
   patna punjab rajasthan sikkim tripura uttarakhand
 )
 
-# Year range 2025 down to 2000 per 2026-04-28 user directive
-# (extended from prior 2025-2010 scope).
+# Year range 2025 down to 1990 per 2026-05-01 user directive
+# ("lot of data, 2025-1990"). Earlier directives ratcheted: 2025-2010
+# → 2025-2000 → 2025-1990. 24 HCs × 36 years = 864 buckets total.
 YEAR_LIST=(2025 2024 2023 2022 2021 2020 2019 2018 2017 2016 2015 2014 2013 2012 2011 2010 \
-           2009 2008 2007 2006 2005 2004 2003 2002 2001 2000)
+           2009 2008 2007 2006 2005 2004 2003 2002 2001 2000 \
+           1999 1998 1997 1996 1995 1994 1993 1992 1991 1990)
 
 run_bucket_with_floor_halt() {
   local label="$1"; shift
@@ -119,6 +142,12 @@ for court in "${HC_LIST[@]}"; do
     # AFTER run_bucket succeeds — incomplete buckets re-run.
     if bucket_done "$label"; then
       log "RESUME-SKIP $label (marked DONE in $PROGRESS_FILE)"
+      continue
+    fi
+    attempts=$(record_attempt "$label")
+    if (( attempts > 3 )); then
+      log "SKIP-MAX-ATTEMPTS $label (attempts=$attempts; investigate offline)"
+      mark_done "$label"
       continue
     fi
     # 2026-04-29: skip-by-prior-rating REMOVED. Pre-expansion ratings

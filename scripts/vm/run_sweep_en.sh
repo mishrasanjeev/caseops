@@ -65,6 +65,28 @@ mark_done() {
   echo "DONE-$1" >> "$PROGRESS_FILE"
 }
 
+# 2026-05-01: per-bucket attempt counter. Used to skip a bucket after
+# 3 failed attempts so a stuck S3-list / OCR loop / DB-timeout doesn't
+# block the rest of the sweep. State lives in a sibling file so the
+# DONE-marker file stays a clean source of "what's complete".
+ATTEMPTS_FILE=~/logs/sweep_attempts.en.txt
+touch "$ATTEMPTS_FILE"
+
+record_attempt() {
+  # Increment the attempt count for $1 and echo the new count.
+  local label="$1"
+  local current
+  current=$(grep -E "^$label [0-9]+$" "$ATTEMPTS_FILE" 2>/dev/null \
+            | awk '{print $2}' | tail -1)
+  current=${current:-0}
+  current=$((current + 1))
+  grep -vE "^$label " "$ATTEMPTS_FILE" 2>/dev/null \
+    > "$ATTEMPTS_FILE.tmp" || true
+  echo "$label $current" >> "$ATTEMPTS_FILE.tmp"
+  mv "$ATTEMPTS_FILE.tmp" "$ATTEMPTS_FILE"
+  echo "$current"
+}
+
 log "EN-SWEEP START (SC 2024-1990 + HC 2025-2000, ALL-LANGUAGES, min-chars=2000, voyage_cap=$CASEOPS_VOYAGE_DAILY_CAP_USD, progress=$PROGRESS_FILE)"
 
 # SC: skip years already rated >=4.5 in prior runs (per ratings.log).
@@ -80,32 +102,58 @@ for year in 2024 2023 2022 2021 2020 2019 2018 2017 2016 2015 2014 2013 2012 201
     log "RESUME-SKIP $label (marked DONE in $PROGRESS_FILE)"
     continue
   fi
+  attempts=$(record_attempt "$label")
+  if (( attempts > 3 )); then
+    log "SKIP-MAX-ATTEMPTS $label (attempts=$attempts; investigate offline)"
+    mark_done "$label"
+    continue
+  fi
+  # 2026-05-01: SC failures used to halt the sweep with `exit $rc`.
+  # Replaced with skip-after-3-attempts to keep the loop moving when
+  # a single bucket is stuck. The attempt counter is persistent so a
+  # subsequent restart picks up where we left off.
   run_bucket "$label" "$year-$year" \
     --from-s3 --court sc --year "$year" --min-chars 2000 --limit 20000
   rc=$?
   if [[ $rc -ne 0 ]]; then
-    log "EN-SWEEP HALTED at $label (rc=$rc)"
-    exit $rc
+    log "BUCKET-FAIL $label (rc=$rc, attempt=$attempts) — continuing"
+    continue
   fi
   mark_done "$label"
 done
 
 log "SC DONE - starting HC priority-7 (run_sweep_hc_all.sh covers full 24-HC sweep)"
 
+# 2026-05-01: HC year range extended 2025-2000 → 2025-1990 to mirror
+# the SC sweep's depth. User directive: "lot of data to work on,
+# 2025-1990".
 for court in delhi allahabad calcutta telangana madras karnataka bombay; do
   for year in 2025 2024 2023 2022 2021 2020 2019 2018 2017 2016 2015 2014 2013 2012 2011 2010 \
-             2009 2008 2007 2006 2005 2004 2003 2002 2001 2000; do
+             2009 2008 2007 2006 2005 2004 2003 2002 2001 2000 \
+             1999 1998 1997 1996 1995 1994 1993 1992 1991 1990; do
     label="hc-$court-$year"
     if bucket_done "$label"; then
       log "RESUME-SKIP $label (marked DONE in $PROGRESS_FILE)"
+      continue
+    fi
+    # 2026-05-01: skip-after-N-attempts. Each invocation of this loop
+    # records an ATTEMPT entry for the bucket. If a bucket has been
+    # attempted >=3 times without ever marking DONE (probably stuck on
+    # a corrupt PDF / never-ending OCR loop), we mark it DONE anyway
+    # and move on — staying parked on one HC × year would block the
+    # other 800+ buckets.
+    attempts=$(record_attempt "$label")
+    if (( attempts > 3 )); then
+      log "SKIP-MAX-ATTEMPTS $label (attempts=$attempts; investigate offline)"
+      mark_done "$label"
       continue
     fi
     run_bucket "$label" "" \
       --from-s3 --court hc --hc-courts "$court" --year "$year" --min-chars 2000 --limit 20000
     rc=$?
     if [[ $rc -ne 0 ]]; then
-      log "EN-SWEEP HALTED at $label (rc=$rc)"
-      exit $rc
+      log "BUCKET-FAIL $label (rc=$rc, attempt=$attempts) — continuing"
+      continue
     fi
     mark_done "$label"
   done
