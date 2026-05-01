@@ -781,17 +781,22 @@ def _title_is_predominantly_ascii(title: str | None) -> bool:
 
     - it has ≥3 ASCII letters (rejects pure-citation titles like
       "[2024] 9 S.C.R. 683" that surface from Layer-2 placeholder
-      failures); AND
-    - ASCII-letter-ratio over letter chars is ≥70% (rejects pure
-      Devanagari/Tamil/etc. where letter chars are all non-ASCII); AND
-    - `?` chars are <20% of non-whitespace chars (rejects OCR-failed
-      regional-script titles like "???Rai on??aniko ku??siktangona…"
-      where Unicode chars decoded to literal '?').
+      failures — but those still pass since they have S, C, R letters);
+    - ASCII-letter ratio over letter chars is ≥70% (rejects pure
+      Devanagari/Tamil/etc. where letter chars are all non-ASCII);
+    - `?` chars count <3 absolute (rejects OCR-failed regional-script
+      titles like "???Rai on??aniko ku??siktangona…" where Unicode
+      chars decoded to literal '?'). Real English titles essentially
+      never carry multiple question marks; even one is unusual.
 
-    Empty / None titles return False so OCR-garbled rows don't slip
-    through as "no-letter content".
+    Empty / None / no-letter titles return False so OCR-garbled rows
+    don't slip through.
     """
     if not title:
+        return False
+    # Reject any title with 3+ literal `?` chars — that's an OCR /
+    # encoding-failure signal, not a real punctuation choice.
+    if title.count("?") >= 3:
         return False
     letters = [c for c in title if c.isalpha()]
     if not letters:
@@ -799,14 +804,7 @@ def _title_is_predominantly_ascii(title: str | None) -> bool:
     ascii_letters = sum(1 for c in letters if ord(c) < 128)
     if ascii_letters < 3:
         return False
-    if ascii_letters / len(letters) < 0.7:
-        return False
-    non_ws = [c for c in title if not c.isspace()]
-    if non_ws:
-        question_ratio = sum(1 for c in non_ws if c == "?") / len(non_ws)
-        if question_ratio >= 0.20:
-            return False
-    return True
+    return ascii_letters / len(letters) >= 0.7
 
 
 # Case-name queries carry at least one distinctive proper noun (the
