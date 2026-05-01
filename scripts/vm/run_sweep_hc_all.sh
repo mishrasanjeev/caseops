@@ -37,11 +37,28 @@ STATE=~/logs/sweep_state.hc_all.txt
 RATINGS=~/logs/ratings.hc_all.log
 FLOOR="4.5"
 
+# 2026-05-01: PROGRESS RESUME (state file). Pre-fix every reboot
+# restarted at hc-delhi-2025 (first court × newest year). Combined
+# with the hourly watchdog reset, the sweep rarely reached past the
+# first 2-3 buckets. Fix: the per-bucket DONE marker survives reboots.
+# Re-run from scratch with `rm ~/logs/sweep_progress.hc_all.txt`.
+mkdir -p ~/logs
+PROGRESS_FILE=~/logs/sweep_progress.hc_all.txt
+touch "$PROGRESS_FILE"
+
 log() { echo "[$(date -Iseconds)] $*" | tee -a "$STATE"; }
+
+bucket_done() {
+  grep -qx "DONE-$1" "$PROGRESS_FILE"
+}
+
+mark_done() {
+  echo "DONE-$1" >> "$PROGRESS_FILE"
+}
 
 export CASEOPS_VOYAGE_DAILY_CAP_USD=20
 
-log "HC-ALL SWEEP START (24 HCs × 2025-2000, ALL-LANGUAGES, min-chars=2000, floor=$FLOOR warn-only, voyage_cap=$CASEOPS_VOYAGE_DAILY_CAP_USD)"
+log "HC-ALL SWEEP START (24 HCs × 2025-2000, ALL-LANGUAGES, min-chars=2000, floor=$FLOOR warn-only, voyage_cap=$CASEOPS_VOYAGE_DAILY_CAP_USD, progress=$PROGRESS_FILE)"
 
 # All 24 distinct High Courts in HC_COURT_CATALOG (services/corpus_ingest.py).
 # Aliases (mumbai, chennai, bangalore, kolkata, odisha) excluded — they
@@ -96,6 +113,14 @@ run_bucket_with_floor_halt() {
 for court in "${HC_LIST[@]}"; do
   for year in "${YEAR_LIST[@]}"; do
     label="hc-$court-$year"
+    # 2026-05-01: skip buckets already marked DONE in this VM's
+    # progress file so reboots / watchdog resets don't re-walk the
+    # head of the list every cycle. The DONE marker is only written
+    # AFTER run_bucket succeeds — incomplete buckets re-run.
+    if bucket_done "$label"; then
+      log "RESUME-SKIP $label (marked DONE in $PROGRESS_FILE)"
+      continue
+    fi
     # 2026-04-29: skip-by-prior-rating REMOVED. Pre-expansion ratings
     # were under --language-suffix EN + --min-chars 4000. Post-
     # expansion, the same buckets may have new (non-EN, shorter)
@@ -113,6 +138,7 @@ for court in "${HC_LIST[@]}"; do
     run_bucket_with_floor_halt "$label" \
       --from-s3 --court hc --hc-courts "$court" --year "$year" \
       --min-chars 2000 --limit 20000
+    mark_done "$label"
   done
 done
 

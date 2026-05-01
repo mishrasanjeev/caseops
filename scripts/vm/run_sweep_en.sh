@@ -18,6 +18,15 @@
 #   startup-script (scripts/vm/startup-script.sh) and prior tooling
 #   that grep for the screen name.
 #
+# 2026-05-01: PROGRESS RESUME (state file). Pre-fix, every reboot
+#   restarted the launcher at sc-2024 (newest year). With the hourly
+#   watchdog reset + occasional VM reboots, the sweep burned 15-20
+#   min per cycle on sc-2024's already-ingested dups and rarely
+#   reached deeper buckets. Fix: ~/logs/sweep_progress.en.txt records
+#   each bucket on successful run_bucket; on startup we skip buckets
+#   marked DONE so progress survives reboots. Re-run from scratch
+#   with `rm ~/logs/sweep_progress.en.txt`.
+#
 # Lives at ~/run_sweep_en.sh on caseops-ingest-vm. Canonical copy
 # in this repo so future scope edits flow through git instead of
 # living only on the VM.
@@ -31,7 +40,32 @@ END_LINE=$((END_LINE - 1))
 
 export CASEOPS_VOYAGE_DAILY_CAP_USD=20
 
-log "EN-SWEEP START (SC 2024-1990 + HC 2025-2000, ALL-LANGUAGES, min-chars=2000, voyage_cap=$CASEOPS_VOYAGE_DAILY_CAP_USD)"
+# Dedicated master log + progress state — keeps en_sweep cycles from
+# stomping over each other and gives a single source of truth for
+# "what has actually completed".
+mkdir -p ~/logs
+EN_MASTER_LOG=~/logs/en_sweep_master.log
+PROGRESS_FILE=~/logs/sweep_progress.en.txt
+touch "$PROGRESS_FILE"
+
+# Override the sourced `log` so every line is also appended to the
+# launcher's own master log + progress file. Both files are created
+# with append semantics so reboots stack new lines on top of history
+# (pre-fix the new launcher truncated en_sweep_master.log on every
+# restart, leaving 0% visibility into what had happened).
+log() {
+  echo "[$(date -Iseconds)] $*" | tee -a "$EN_MASTER_LOG"
+}
+
+bucket_done() {
+  grep -qx "DONE-$1" "$PROGRESS_FILE"
+}
+
+mark_done() {
+  echo "DONE-$1" >> "$PROGRESS_FILE"
+}
+
+log "EN-SWEEP START (SC 2024-1990 + HC 2025-2000, ALL-LANGUAGES, min-chars=2000, voyage_cap=$CASEOPS_VOYAGE_DAILY_CAP_USD, progress=$PROGRESS_FILE)"
 
 # SC: skip years already rated >=4.5 in prior runs (per ratings.log).
 # Skipped: 2024 (script-flagged), 2023 (sweep-state SKIP), 2021/2020/
@@ -42,6 +76,10 @@ for year in 2024 2023 2022 2021 2020 2019 2018 2017 2016 2015 2014 2013 2012 201
            2009 2008 2007 2006 2005 2004 2003 2002 2001 2000 \
            1999 1998 1997 1996 1995 1994 1993 1992 1991 1990; do
   label="sc-$year"
+  if bucket_done "$label"; then
+    log "RESUME-SKIP $label (marked DONE in $PROGRESS_FILE)"
+    continue
+  fi
   run_bucket "$label" "$year-$year" \
     --from-s3 --court sc --year "$year" --min-chars 2000 --limit 20000
   rc=$?
@@ -49,6 +87,7 @@ for year in 2024 2023 2022 2021 2020 2019 2018 2017 2016 2015 2014 2013 2012 201
     log "EN-SWEEP HALTED at $label (rc=$rc)"
     exit $rc
   fi
+  mark_done "$label"
 done
 
 log "SC DONE - starting HC priority-7 (run_sweep_hc_all.sh covers full 24-HC sweep)"
@@ -56,13 +95,19 @@ log "SC DONE - starting HC priority-7 (run_sweep_hc_all.sh covers full 24-HC swe
 for court in delhi allahabad calcutta telangana madras karnataka bombay; do
   for year in 2025 2024 2023 2022 2021 2020 2019 2018 2017 2016 2015 2014 2013 2012 2011 2010 \
              2009 2008 2007 2006 2005 2004 2003 2002 2001 2000; do
-    run_bucket "hc-$court-$year" "" \
+    label="hc-$court-$year"
+    if bucket_done "$label"; then
+      log "RESUME-SKIP $label (marked DONE in $PROGRESS_FILE)"
+      continue
+    fi
+    run_bucket "$label" "" \
       --from-s3 --court hc --hc-courts "$court" --year "$year" --min-chars 2000 --limit 20000
     rc=$?
     if [[ $rc -ne 0 ]]; then
-      log "EN-SWEEP HALTED at hc-$court-$year (rc=$rc)"
+      log "EN-SWEEP HALTED at $label (rc=$rc)"
       exit $rc
     fi
+    mark_done "$label"
   done
 done
 
