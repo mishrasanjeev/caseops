@@ -225,14 +225,23 @@ Needed:
 - Read receipts; secure document request inline.
 Estimated days: 6-8.
 
-### `PG-107` Bench-strategy governance decision
-Status: **`Stale-doc` AND blocking**.
-Evidence: `docs/PRD_BENCH_STRATEGY_2026-04-26.md` §3 authorizes "favorability scoring + judge tendency claims + reputation labels"; `services/bench_strategy_context.py` enforces "no favorability"; `services/appeal_strength.py` has structural `_FORBIDDEN_PATTERN` regex blocking favorability copy.
-Conflict: PRD overrides skill-level rule, but code still rejects. One must give.
-Decision required from Mishra:
-- Option A (recommended by Codex + my read): keep V1 evidence-only. Surface supportive + adverse authorities, no judge prediction. PRD §3 reverted.
-- Option B: go predictive. Requires sample-size thresholds, source links, audit, opt-in tenant policy, legal review, "Not legal advice" disclaimers on every output.
-Estimated days: 0 (decision) + 0-12 days (code follow-up depending on option).
+### `PG-107` Bench-strategy governance — dual-mode tenant policy gate
+Status: **`Partially implemented`** (v1 backend gate shipped 2026-05-01; web admin toggle UI is v1.5).
+User decision: keep BOTH options A and B available. Default = A (evidence-only); workspaces can opt-in to B (predictive) per the PRD §3 authorization.
+Evidence:
+- DB: `TenantAIPolicy.predictive_bench_strategy_enabled` (default false) + migration `20260501_0001`.
+- `services/tenant_ai_policy.ResolvedAIPolicy` carries the new field.
+- `build_bench_strategy_context` accepts an optional `policy`, resolves the tenant's flag if absent, and emits `mode` + `disclaimer` fields on the response.
+- `analyze_appeal_strength` honors the same policy and propagates `mode` + `disclaimer` to every `AppealStrengthReport` return path.
+- `services/drafting._build_messages` appends a `=== WORKSPACE POLICY OVERRIDE: PREDICTIVE BENCH ANALYTICS ===` addendum to the appeal-memorandum prompt only when the workspace has opted in. Override block enforces the PRD §3 rule 3 sample-size guard (≥5 indexed decisions per claim) and a mandatory verbatim disclaimer paragraph.
+- Admin: `GET /api/admin/tenant-ai-policy` + `PATCH /api/admin/tenant-ai-policy` (capability `workspace:admin`).
+- Audit: every flip writes a `tenant_ai_policy.updated` event with before/after.
+- Tests: 4 backend cases (`tests/test_pg107_predictive_bench.py`) covering default-A, flip, tenant isolation, prompt-addendum swap.
+Remaining (v1.5):
+- Web admin settings UI: workspace toggle on `/app/admin` + mode badge + disclaimer banner on `BenchContextCard` / `AppealStrengthPanel`.
+- Predictive analytics computation (judge_tendency_summary on bench, predicted_strength per ground) — currently mode/disclaimer fields surface but analytics content itself is unchanged. Drafting prompt addendum is the active behavior change in v1.
+- Prod-Playwright case toggling on/off and asserting badge change.
+Estimated days remaining: 2-3.
 
 ### `PG-108` Coverage confidence UI in research/drafting
 Status: **`Missing`**.

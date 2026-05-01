@@ -30,7 +30,6 @@ import hashlib
 import json
 from datetime import UTC, date, datetime
 
-import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
@@ -184,36 +183,10 @@ def test_matter_court_sync_pull_request_source_is_optional() -> None:
     assert parsed.source_reference is None
 
 
-# ---------------------------------------------------------------
-# 2. Recommendations Haiku fallback guard
-# ---------------------------------------------------------------
-
-def test_haiku_fallback_none_for_non_anthropic(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """When CASEOPS_LLM_PROVIDER is mock/gemini, fallback is None."""
-    monkeypatch.setenv("CASEOPS_LLM_PROVIDER", "mock")
-    from caseops_api.core.settings import get_settings
-    from caseops_api.services import recommendations
-
-    get_settings.cache_clear()
-    fallback = recommendations._haiku_fallback_provider()
-    assert fallback is None
-
-
-def test_haiku_fallback_built_for_anthropic(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Anthropic provider + key → Haiku AnthropicProvider instance."""
-    monkeypatch.setenv("CASEOPS_LLM_PROVIDER", "anthropic")
-    monkeypatch.setenv("CASEOPS_LLM_API_KEY", "sk-ant-test")
-    from caseops_api.core.settings import get_settings
-    from caseops_api.services import recommendations
-
-    get_settings.cache_clear()
-    fallback = recommendations._haiku_fallback_provider()
-    assert fallback is not None
-    assert "haiku" in fallback.model.lower()
+# Recommendations Haiku-fallback guard tests removed 2026-04-30 / 2026-05-01
+# with the gpt-5.1-only cutover (commit 39cd459) — the
+# _haiku_fallback_provider helper no longer exists. Single-provider
+# error path is tested in tests/test_recommendations.py.
 
 
 # ---------------------------------------------------------------
@@ -424,24 +397,8 @@ def test_matter_summary_schema_shape() -> None:
     assert s.timeline[0].label == "No date event"
 
 
-def test_matter_summary_haiku_fallback_guard(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Matter-summary fallback follows the same pattern as recommendations —
-    only fires for the Anthropic provider path."""
-    monkeypatch.setenv("CASEOPS_LLM_PROVIDER", "mock")
-    from caseops_api.core.settings import get_settings
-    from caseops_api.services import matter_summary
-
-    get_settings.cache_clear()
-    assert matter_summary._haiku_fallback_provider() is None
-
-    monkeypatch.setenv("CASEOPS_LLM_PROVIDER", "anthropic")
-    monkeypatch.setenv("CASEOPS_LLM_API_KEY", "sk-ant-test")
-    get_settings.cache_clear()
-    fallback = matter_summary._haiku_fallback_provider()
-    assert fallback is not None
-    assert "haiku" in fallback.model.lower()
+# Matter-summary Haiku-fallback guard test removed 2026-04-30 / 2026-05-01
+# with the gpt-5.1-only cutover (commit 39cd459).
 
 
 # ---------------------------------------------------------------
@@ -450,25 +407,8 @@ def test_matter_summary_haiku_fallback_guard(
 # ---------------------------------------------------------------
 
 
-def test_drafting_has_haiku_fallback_provider_guard(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """BUG-001/002 fix: services/drafting.py gains the same Haiku
-    fallback pattern as recommendations / matter_summary. Non-Anthropic
-    providers return None."""
-    monkeypatch.setenv("CASEOPS_LLM_PROVIDER", "mock")
-    from caseops_api.core.settings import get_settings
-    from caseops_api.services import drafting
-
-    get_settings.cache_clear()
-    assert drafting._haiku_fallback_provider() is None
-
-    monkeypatch.setenv("CASEOPS_LLM_PROVIDER", "anthropic")
-    monkeypatch.setenv("CASEOPS_LLM_API_KEY", "sk-ant-test")
-    get_settings.cache_clear()
-    fallback = drafting._haiku_fallback_provider()
-    assert fallback is not None
-    assert "haiku" in fallback.model.lower()
+# Drafting Haiku-fallback guard test removed 2026-04-30 / 2026-05-01
+# with the gpt-5.1-only cutover (commit 39cd459).
 
 
 def test_intake_promote_returns_400_on_duplicate_matter_code(

@@ -34,6 +34,8 @@ class ResolvedAIPolicy:
     monthly_token_budget: int | None
     external_share_requires_approval: bool
     training_opt_in: bool
+    # PG-107 (2026-05-01) — opt-in predictive bench analytics.
+    predictive_bench_strategy_enabled: bool = False
 
 
 def _parse_list(raw: str | None) -> tuple[str, ...]:
@@ -76,6 +78,7 @@ def resolve_tenant_policy(
             monthly_token_budget=DEFAULT_POLICY.monthly_token_budget,
             external_share_requires_approval=DEFAULT_POLICY.external_share_requires_approval,
             training_opt_in=DEFAULT_POLICY.training_opt_in,
+            predictive_bench_strategy_enabled=DEFAULT_POLICY.predictive_bench_strategy_enabled,
         )
     return ResolvedAIPolicy(
         company_id=row.company_id,
@@ -88,6 +91,9 @@ def resolve_tenant_policy(
         ),
         external_share_requires_approval=bool(row.external_share_requires_approval),
         training_opt_in=bool(row.training_opt_in),
+        predictive_bench_strategy_enabled=bool(
+            getattr(row, "predictive_bench_strategy_enabled", False)
+        ),
     )
 
 

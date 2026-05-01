@@ -643,6 +643,11 @@ class BenchStrategyContextResponse(BaseModel):
     # listing the bench-specific block was anchored to. None when the
     # caller didn't pass one or when no upcoming listing exists.
     next_listing_id: str | None = None
+    # PG-107 (2026-05-01) — tenant policy gate. "evidence_only" by default;
+    # "predictive" when the workspace has opted in to predictive bench
+    # analytics. UI surfaces a mode badge + disclaimer when predictive.
+    mode: str = "evidence_only"
+    disclaimer: str | None = None
 
 
 @router.get(
@@ -757,6 +762,8 @@ async def get_current_company_matter_bench_strategy_context(
         ],
         bench_specific_limitation_note=ctx.bench_specific_limitation_note,
         next_listing_id=next_listing_id,
+        mode=ctx.mode,
+        disclaimer=ctx.disclaimer,
     )
 
 
@@ -878,6 +885,9 @@ class AppealStrengthReportResponse(BaseModel):
     ground_assessments: list[AppealStrengthGroundResponse]
     weak_evidence_paths: list[str]
     recommended_edits: list[str]
+    # PG-107 (2026-05-01) — tenant policy gate echo.
+    mode: str = "evidence_only"
+    disclaimer: str | None = None
 
 
 @router.get(
@@ -933,6 +943,8 @@ async def get_current_company_matter_appeal_strength(
         ],
         weak_evidence_paths=list(rep.weak_evidence_paths),
         recommended_edits=list(rep.recommended_edits),
+        mode=rep.mode,
+        disclaimer=rep.disclaimer,
     )
 
 

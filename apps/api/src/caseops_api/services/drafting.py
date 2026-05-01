@@ -239,6 +239,7 @@ def _build_messages(
     focus_note: str | None,
     bench_context: object = None,  # BenchStrategyContext | None — late import
     statute_refs: list[dict] | None = None,
+    predictive_bench_enabled: bool = False,
 ) -> list[LLMMessage]:
     # BAAD-001 slice 3 (Sprint P5, 2026-04-25). Per-template prompt
     # wiring + bench-strategy-context injection. Two changes vs the
@@ -303,7 +304,35 @@ def _build_messages(
             # Unknown template → fall back to generic prompt only.
             pass
 
-    system = base_system + template_system_addendum
+    # PG-107 (2026-05-01) — opt-in predictive bench analytics.
+    # When the workspace has enabled predictive mode AND we're drafting
+    # an appeal memorandum, append an override addendum that lifts the
+    # template's evidence-only ABSOLUTE RULES around favorability /
+    # judge-tendency language, replacing them with sample-size +
+    # disclaimer requirements. The override comes AFTER the template
+    # block so the LLM treats it as the operative rule.
+    predictive_addendum = ""
+    if predictive_bench_enabled and draft.template_type == "appeal_memorandum":
+        predictive_addendum = (
+            "\n\n=== WORKSPACE POLICY OVERRIDE: PREDICTIVE BENCH ANALYTICS ===\n"
+            "This workspace has opted in to predictive bench analytics. "
+            "The 'no favorability / no judge-tendency' rules above are "
+            "RELAXED. You MAY use favorability language, win/loss framing, "
+            "and judge-tendency claims, BUT only under these constraints:\n"
+            " - Every predictive claim must cite at least 5 indexed prior "
+            "decisions from the bench strategy context. If you have fewer, "
+            "fall back to evidence-only phrasing for that claim and add "
+            "'(limited bench history — fewer than 5 indexed decisions "
+            "available)'.\n"
+            " - End the document with a verbatim disclaimer paragraph: "
+            "'Predictive analytics in this draft are statistical "
+            "descriptions of indexed decisions only. They are not legal "
+            "advice and are not a guarantee of outcome.'\n"
+            " - Never claim outcome certainty (e.g. 'will win', 'will be "
+            "granted'). Always frame as 'in N of M indexed decisions on "
+            "comparable grounds, this bench ruled in favour of [side]'.\n"
+        )
+    system = base_system + template_system_addendum + predictive_addendum
 
     parts: list[str] = [_STATUTE_GUIDANCE, ""]
     parts.append("=== MATTER RECORD (only source of facts) ===")
@@ -906,10 +935,26 @@ def generate_draft_version(
             matter.id, exc,
         )
 
+    # PG-107: read tenant policy once; controls predictive-bench addendum.
+    predictive_enabled = False
+    try:
+        from caseops_api.services.tenant_ai_policy import (
+            resolve_tenant_policy as _resolve_policy,
+        )
+        _policy = _resolve_policy(session, company_id=context.company.id)
+        predictive_enabled = bool(_policy.predictive_bench_strategy_enabled)
+    except Exception as exc:  # noqa: BLE001 — fall back to evidence-only
+        logger.warning(
+            "Tenant AI policy resolution failed for matter %s; defaulting "
+            "to evidence-only mode: %s",
+            matter.id, exc,
+        )
+
     messages = _build_messages(
         matter, draft, retrieved_docs, focus_note,
         bench_context=bench_context,
         statute_refs=statute_refs,
+        predictive_bench_enabled=predictive_enabled,
     )
     prompt_hash = _prompt_hash(messages)
     # Drafting routes to the per-purpose drafting model (Opus-class

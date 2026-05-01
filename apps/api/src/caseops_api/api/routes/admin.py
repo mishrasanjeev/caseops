@@ -304,3 +304,97 @@ def download_audit_export_job(
         media_type=media,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+# ---------------------------------------------------------------------------
+# Tenant AI policy (PG-107) — workspace owner/admin can flip the
+# predictive-bench-strategy gate. Default = false (evidence-only).
+# ---------------------------------------------------------------------------
+
+
+from pydantic import BaseModel  # noqa: E402
+
+from caseops_api.db.models import TenantAIPolicy  # noqa: E402
+
+WorkspaceAdmin = Annotated[
+    SessionContext, Depends(require_capability("workspace:admin"))
+]
+
+
+class TenantAIPolicyResponse(BaseModel):
+    company_id: str
+    predictive_bench_strategy_enabled: bool
+
+
+class TenantAIPolicyPatchRequest(BaseModel):
+    predictive_bench_strategy_enabled: bool
+
+
+def _ensure_policy_row(session, company_id: str) -> TenantAIPolicy:
+    row = session.scalar(
+        select(TenantAIPolicy).where(TenantAIPolicy.company_id == company_id)
+    )
+    if row is None:
+        row = TenantAIPolicy(company_id=company_id)
+        session.add(row)
+        session.flush()
+    return row
+
+
+@router.get(
+    "/tenant-ai-policy",
+    response_model=TenantAIPolicyResponse,
+    summary="Read this workspace's AI policy (PG-107).",
+)
+def get_tenant_ai_policy(
+    context: WorkspaceAdmin,
+    session: DbSession,
+) -> TenantAIPolicyResponse:
+    row = _ensure_policy_row(session, context.company.id)
+    return TenantAIPolicyResponse(
+        company_id=row.company_id,
+        predictive_bench_strategy_enabled=bool(
+            getattr(row, "predictive_bench_strategy_enabled", False)
+        ),
+    )
+
+
+@router.patch(
+    "/tenant-ai-policy",
+    response_model=TenantAIPolicyResponse,
+    summary=(
+        "Toggle predictive bench analytics for this workspace (PG-107). "
+        "Owner/admin only."
+    ),
+)
+def patch_tenant_ai_policy(
+    payload: TenantAIPolicyPatchRequest,
+    context: WorkspaceAdmin,
+    session: DbSession,
+) -> TenantAIPolicyResponse:
+    row = _ensure_policy_row(session, context.company.id)
+    before = bool(getattr(row, "predictive_bench_strategy_enabled", False))
+    row.predictive_bench_strategy_enabled = bool(
+        payload.predictive_bench_strategy_enabled
+    )
+    session.flush()
+    record_from_context(
+        session,
+        context,
+        action="tenant_ai_policy.updated",
+        target_type="tenant_ai_policy",
+        target_id=row.id,
+        metadata={
+            "predictive_bench_strategy_enabled": {
+                "before": before,
+                "after": bool(payload.predictive_bench_strategy_enabled),
+            },
+        },
+    )
+    session.commit()
+    return TenantAIPolicyResponse(
+        company_id=row.company_id,
+        predictive_bench_strategy_enabled=bool(
+            row.predictive_bench_strategy_enabled
+        ),
+    )

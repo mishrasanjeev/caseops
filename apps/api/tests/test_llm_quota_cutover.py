@@ -149,92 +149,10 @@ def test_openai_provider_wraps_insufficient_quota_as_quota_exhausted(
         provider.generate([LLMMessage(role="user", content="hi")])
 
 
-def test_drafting_quota_error_routes_to_openai_not_haiku(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The drafting service's error handler must:
-
-    - On ``LLMQuotaExhaustedError`` from the primary provider, skip
-      the (futile) Haiku retry and call OpenAI directly.
-    - When OpenAI succeeds, return the OpenAI completion as the
-      successful draft.
-
-    Verified by spying on which fallback helpers are called."""
-    from caseops_api.services import drafting as drafting_mod
-
-    haiku_calls: list[bool] = []
-    openai_calls: list[bool] = []
-
-    def _fake_haiku() -> None:
-        haiku_calls.append(True)
-        return None
-
-    class _FakeOpenAI:
-        name = "openai"
-        model = "gpt-5.1"
-
-        def generate(self, messages, **_kwargs):
-            openai_calls.append(True)
-            raise AssertionError(
-                "drafting helper should call generate_structured, not generate"
-            )
-
-    def _fake_openai_provider():
-        return _FakeOpenAI()
-
-    monkeypatch.setattr(
-        drafting_mod, "_haiku_fallback_provider", _fake_haiku
-    )
-    monkeypatch.setattr(
-        drafting_mod, "_openai_fallback_provider", _fake_openai_provider
-    )
-
-    # Spy on the inner invoke shape: drafting's
-    # ``_generate_draft_via_openai(invoke, root_exc)`` calls
-    # ``invoke(openai_provider)``. We simulate a successful OpenAI
-    # response so the helper returns rather than raising.
-    sentinel_ok = ("RESPONSE_OK", "COMPLETION_OK")
-
-    def _fake_invoke(p):
-        # The helper passes the OpenAI provider here. If we got the
-        # _FakeOpenAI we expected, return the success sentinel.
-        assert isinstance(p, _FakeOpenAI), (
-            "drafting must invoke OpenAI fallback, not Haiku"
-        )
-        return sentinel_ok
-
-    quota_exc = LLMQuotaExhaustedError("Anthropic credit balance is too low")
-    result = drafting_mod._generate_draft_via_openai(_fake_invoke, quota_exc)
-    assert result == sentinel_ok
-    # Helper does NOT consult Haiku — that's the whole point of the
-    # quota cutover branch.
-    assert haiku_calls == []
-    # OpenAI provider must have been built.
-    assert openai_calls == []  # _FakeOpenAI.generate was not called directly
-
-
-def test_drafting_openai_unconfigured_raises_actionable_422() -> None:
-    """When OpenAI isn't configured (no ``CASEOPS_OPENAI_API_KEY``),
-    the cutover helper must surface a 422 with a detail string the
-    user can act on — not a 500."""
-    from fastapi import HTTPException
-
-    from caseops_api.services import drafting as drafting_mod
-
-    quota_exc = LLMQuotaExhaustedError("Anthropic credit balance is too low")
-    # _openai_fallback_provider returns None when no key is configured.
-    # In test env we have no CASEOPS_OPENAI_API_KEY, so this is the
-    # natural state.
-
-    with pytest.raises(HTTPException) as info:
-        drafting_mod._generate_draft_via_openai(
-            lambda _p: ("R", "C"), quota_exc,
-        )
-    assert info.value.status_code == 422
-    detail = info.value.detail
-    assert "OpenAI" in detail
-    assert "LLMQuotaExhaustedError" in detail
-    # Actionability: must mention either a retry path or a support
-    # contact so the lawyer knows what to do next.
-    lowered = detail.lower()
-    assert "retry" in lowered or "support" in lowered
+# Tests test_drafting_quota_error_routes_to_openai_not_haiku and
+# test_drafting_openai_unconfigured_raises_actionable_422 were removed
+# 2026-04-30 / 2026-05-01 with the gpt-5.1-only cutover (commit 39cd459)
+# — the Anthropic→Haiku→OpenAI fallback ladder + its helper functions
+# (_haiku_fallback_provider, _generate_draft_via_openai) no longer
+# exist. The single-call shape is exercised by
+# tests/test_drafting_studio.py::test_generate_draft_provider_error_returns_actionable_422.

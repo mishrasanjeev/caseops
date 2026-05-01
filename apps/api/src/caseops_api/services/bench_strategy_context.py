@@ -58,6 +58,7 @@ from caseops_api.services.bench_matcher import (
     suggest_bench,
 )
 from caseops_api.services.identity import SessionContext
+from caseops_api.services.tenant_ai_policy import ResolvedAIPolicy
 
 # Honorific stripper duplicated from `api/routes/courts.py` so this
 # service stays route-independent. Both must update together if the
@@ -195,6 +196,14 @@ class BenchStrategyContext:
     # but couldn't deliver — drafting service surfaces this so the
     # user knows the fallback is intentional, not a silent gap.
     bench_specific_limitation_note: str | None = None
+    # PG-107 (2026-05-01) — tenant policy gate.
+    #   "evidence_only" (default) — no favorability / prediction copy
+    #     anywhere in this output; existing behavior.
+    #   "predictive" — workspace has opted in to predictive bench
+    #     analytics. Drafting prompts allow favorability language;
+    #     this output carries a mandatory disclaimer.
+    mode: str = "evidence_only"
+    disclaimer: str | None = None
 
 
 # Recurring legal-test phrases we look for in each authority's
@@ -243,6 +252,7 @@ def build_bench_strategy_context(
     authority_limit: int = _DEFAULT_AUTHORITY_LIMIT,
     next_listing_id: str | None = None,
     bench_specific_limit: int = 5,
+    policy: ResolvedAIPolicy | None = None,
 ) -> BenchStrategyContext:
     """Build the BenchStrategyContext for the calling tenant's matter.
 
@@ -328,6 +338,26 @@ def build_bench_strategy_context(
         limit=bench_specific_limit,
     )
 
+    # PG-107: tenant-policy gate. Default = evidence-only; opt-in =
+    # predictive. Resolve here (instead of at every call site) so the
+    # service stays the single point of truth.
+    if policy is None:
+        from caseops_api.services.tenant_ai_policy import resolve_tenant_policy as _resolve_policy
+
+        policy = _resolve_policy(session, company_id=context.company.id)
+    mode = (
+        "predictive" if policy.predictive_bench_strategy_enabled else "evidence_only"
+    )
+    disclaimer: str | None = None
+    if mode == "predictive":
+        disclaimer = (
+            "This view includes predictive bench analytics enabled by your "
+            "workspace's AI policy. Outputs are statistical descriptions of "
+            "indexed decisions only — not legal advice and not a guarantee "
+            "of outcome. Sample size of "
+            f"{len(similar_authorities)} indexed decision(s) for this bench."
+        )
+
     return BenchStrategyContext(
         matter_id=matter.id,
         court_name=court_name,
@@ -343,6 +373,8 @@ def build_bench_strategy_context(
         unsupported_gaps=unsupported_gaps,
         bench_specific_authorities=bench_specific,
         bench_specific_limitation_note=bench_specific_note,
+        mode=mode,
+        disclaimer=disclaimer,
     )
 
 

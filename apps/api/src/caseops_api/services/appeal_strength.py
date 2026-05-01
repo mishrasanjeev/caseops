@@ -49,6 +49,7 @@ from caseops_api.services.bench_strategy_context import (
     build_bench_strategy_context,
 )
 from caseops_api.services.identity import SessionContext
+from caseops_api.services.tenant_ai_policy import ResolvedAIPolicy
 
 # Hard rule: every string this module ever emits in `suggestions` /
 # `weak_evidence_paths` / `recommended_edits` is filtered against this
@@ -137,6 +138,9 @@ class AppealStrengthReport:
     recommended_edits: list[str] = field(default_factory=list)
     bench_context_quality: str = "none"
     has_draft: bool = False
+    # PG-107 (2026-05-01) — tenant policy gate.
+    mode: str = "evidence_only"  # or "predictive"
+    disclaimer: str | None = None
 
 
 _FORBIDDEN_PATTERN = re.compile(
@@ -178,6 +182,7 @@ def analyze_appeal_strength(
     context: SessionContext,
     matter_id: str,
     draft_id: str | None = None,
+    policy: ResolvedAIPolicy | None = None,
 ) -> AppealStrengthReport:
     """Analyze the appeal-strength of a matter's appeal-memorandum
     draft.
@@ -201,15 +206,36 @@ def analyze_appeal_strength(
             detail="Matter not found.",
         )
 
+    # PG-107: resolve policy once and propagate so the bench context
+    # + the report carry the same mode/disclaimer.
+    if policy is None:
+        from caseops_api.services.tenant_ai_policy import (
+            resolve_tenant_policy as _resolve_policy,
+        )
+        policy = _resolve_policy(session, company_id=context.company.id)
+    mode = (
+        "predictive" if policy.predictive_bench_strategy_enabled else "evidence_only"
+    )
+    disclaimer = (
+        "Predictive bench analytics enabled by your workspace's AI policy. "
+        "Outputs are statistical descriptions of indexed decisions only — "
+        "not legal advice and not a guarantee of outcome."
+        if mode == "predictive"
+        else None
+    )
+
     bench_ctx = build_bench_strategy_context(
-        session=session, context=context, matter_id=matter.id,
+        session=session,
+        context=context,
+        matter_id=matter.id,
+        policy=policy,
     )
 
     draft = _resolve_draft(
         session, matter=matter, draft_id=draft_id,
     )
     if draft is None:
-        return _no_draft_report(matter, bench_ctx)
+        return _no_draft_report(matter, bench_ctx, mode=mode, disclaimer=disclaimer)
 
     # Pull the latest draft version body. Drafts may have multiple
     # versions; we always analyze the highest-revision one.
@@ -220,7 +246,9 @@ def analyze_appeal_strength(
         .limit(1)
     )
     if latest is None or not latest.body:
-        return _no_draft_report(matter, bench_ctx, draft_id=draft.id)
+        return _no_draft_report(
+            matter, bench_ctx, draft_id=draft.id, mode=mode, disclaimer=disclaimer,
+        )
 
     grounds_text = _extract_numbered_grounds(latest.body)
     if not grounds_text:
@@ -247,6 +275,8 @@ def analyze_appeal_strength(
             ],
             bench_context_quality=bench_ctx.context_quality,
             has_draft=True,
+            mode=mode,
+            disclaimer=disclaimer,
         )
 
     # Resolve authorities from bench context for fast lookup.
@@ -289,6 +319,8 @@ def analyze_appeal_strength(
         recommended_edits=recommended,
         bench_context_quality=bench_ctx.context_quality,
         has_draft=True,
+        mode=mode,
+        disclaimer=disclaimer,
     )
 
 
@@ -321,6 +353,8 @@ def _no_draft_report(
     bench_ctx: BenchStrategyContext,
     *,
     draft_id: str | None = None,
+    mode: str = "evidence_only",
+    disclaimer: str | None = None,
 ) -> AppealStrengthReport:
     """When there's no appeal-memorandum draft yet, fall back to a
     bench-context-only report. Tells the lawyer they need to start
@@ -352,6 +386,8 @@ def _no_draft_report(
         ],
         bench_context_quality=bench_ctx.context_quality,
         has_draft=False,
+        mode=mode,
+        disclaimer=disclaimer,
     )
 
 

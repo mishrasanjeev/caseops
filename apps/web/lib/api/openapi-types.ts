@@ -180,6 +180,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/tenant-ai-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read this workspace's AI policy (PG-107). */
+        get: operations["get_tenant_ai_policy_api_admin_tenant_ai_policy_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Toggle predictive bench analytics for this workspace (PG-107). Owner/admin only. */
+        patch: operations["patch_tenant_ai_policy_api_admin_tenant_ai_policy_patch"];
+        trace?: never;
+    };
     "/api/ai/contracts/{contract_id}/clauses/extract": {
         parameters: {
             query?: never;
@@ -775,6 +793,23 @@ export interface paths {
         head?: never;
         /** Update a company user's role or active status */
         patch: operations["update_current_company_user_api_companies_current_users__membership_id__patch"];
+        trace?: never;
+    };
+    "/api/conflict-checks/{check_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Resolve a pending conflict check (cleared / conflicted / waived) */
+        patch: operations["patch_conflict_check_api_conflict_checks__check_id__patch"];
         trace?: never;
     };
     "/api/contracts/": {
@@ -1626,6 +1661,24 @@ export interface paths {
         put?: never;
         /** Compose & send an email via a template (Phase B M11 slice 2). */
         post: operations["send_current_matter_email_api_matters__matter_id__communications_send_email_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/{matter_id}/conflict-checks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List conflict checks recorded against a matter */
+        get: operations["get_matter_conflict_checks_api_matters__matter_id__conflict_checks_get"];
+        put?: never;
+        /** Run a fresh conflict-of-interest scan on a matter */
+        post: operations["post_matter_conflict_check_api_matters__matter_id__conflict_checks_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2860,6 +2913,8 @@ export interface components {
         AppealStrengthReportResponse: {
             /** Bench Context Quality */
             bench_context_quality: string;
+            /** Disclaimer */
+            disclaimer?: string | null;
             /** Draft Id */
             draft_id?: string | null;
             /** Ground Assessments */
@@ -2868,6 +2923,11 @@ export interface components {
             has_draft: boolean;
             /** Matter Id */
             matter_id: string;
+            /**
+             * Mode
+             * @default evidence_only
+             */
+            mode: string;
             /** Overall Strength */
             overall_strength: string;
             /** Recommended Edits */
@@ -3402,12 +3462,19 @@ export interface components {
             context_quality: string;
             /** Court Name */
             court_name: string | null;
+            /** Disclaimer */
+            disclaimer?: string | null;
             /** Drafting Cautions */
             drafting_cautions: string[];
             /** Judge Candidates */
             judge_candidates: components["schemas"]["BenchContextJudgeCandidateResponse"][];
             /** Matter Id */
             matter_id: string;
+            /**
+             * Mode
+             * @default evidence_only
+             */
+            mode: string;
             /** Next Listing Id */
             next_listing_id?: string | null;
             /** Practice Area Patterns */
@@ -3978,6 +4045,97 @@ export interface components {
             company_slug: string;
             /** Users */
             users: components["schemas"]["CompanyUserRecord"][];
+        };
+        /**
+         * ConflictCandidate
+         * @description A potential overlap surfaced by the scanner.
+         *
+         *     `kind` names the source table; `id` is the row id; `name` is the
+         *     string that overlapped; `overlap_reason` is human-readable.
+         *     `similarity` is in [0, 1] — 1.0 = exact normalised match.
+         */
+        ConflictCandidate: {
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "client" | "matter" | "contact";
+            /** Name */
+            name: string;
+            /** Overlap Reason */
+            overlap_reason: string;
+            /** Similarity */
+            similarity: number;
+        };
+        /** ConflictCheckListResponse */
+        ConflictCheckListResponse: {
+            /** Checks */
+            checks: components["schemas"]["ConflictCheckRecord"][];
+            /** Matter Id */
+            matter_id: string;
+        };
+        /** ConflictCheckRecord */
+        ConflictCheckRecord: {
+            /** Candidates */
+            candidates: components["schemas"]["ConflictCandidate"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Matter Id */
+            matter_id: string;
+            /** Opposing Party Name */
+            opposing_party_name: string;
+            /**
+             * Ran At
+             * Format: date-time
+             */
+            ran_at: string;
+            /** Ran By Membership Id */
+            ran_by_membership_id: string | null;
+            /** Related Party Names */
+            related_party_names: string[];
+            /** Resolution Note */
+            resolution_note: string | null;
+            /** Resolved At */
+            resolved_at: string | null;
+            /** Resolved By Membership Id */
+            resolved_by_membership_id: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "cleared" | "conflicted" | "waived";
+        };
+        /** ConflictCheckResolveRequest */
+        ConflictCheckResolveRequest: {
+            /** Resolution Note */
+            resolution_note?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "cleared" | "conflicted" | "waived";
+        };
+        /**
+         * ConflictCheckRunRequest
+         * @description Run a fresh conflict check on a matter.
+         *
+         *     `opposing_party_name` is required (most matters have one).
+         *     `related_party_names` is the list of additional party names to scan
+         *     (witnesses, related entities, beneficiaries, parent companies, etc.).
+         *     The scanner intersects every name across clients/matters/contacts.
+         */
+        ConflictCheckRunRequest: {
+            /** Opposing Party Name */
+            opposing_party_name: string;
+            /** Related Party Names */
+            related_party_names?: string[];
         };
         /** ContractActivityRecord */
         ContractActivityRecord: {
@@ -7741,6 +7899,18 @@ export interface components {
             /** Template Type */
             template_type: string;
         };
+        /** TenantAIPolicyPatchRequest */
+        TenantAIPolicyPatchRequest: {
+            /** Predictive Bench Strategy Enabled */
+            predictive_bench_strategy_enabled: boolean;
+        };
+        /** TenantAIPolicyResponse */
+        TenantAIPolicyResponse: {
+            /** Company Id */
+            company_id: string;
+            /** Predictive Bench Strategy Enabled */
+            predictive_bench_strategy_enabled: boolean;
+        };
         /** TimeEntryCreateRequest */
         TimeEntryCreateRequest: {
             /**
@@ -8253,6 +8423,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PortalInviteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_tenant_ai_policy_api_admin_tenant_ai_policy_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantAIPolicyResponse"];
+                };
+            };
+        };
+    };
+    patch_tenant_ai_policy_api_admin_tenant_ai_policy_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TenantAIPolicyPatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantAIPolicyResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9454,6 +9677,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CompanyUserRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_conflict_check_api_conflict_checks__check_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                check_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConflictCheckResolveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConflictCheckRecord"];
                 };
             };
             /** @description Validation Error */
@@ -11240,6 +11498,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CommunicationRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_matter_conflict_checks_api_matters__matter_id__conflict_checks_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConflictCheckListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_matter_conflict_check_api_matters__matter_id__conflict_checks_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConflictCheckRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConflictCheckRecord"];
                 };
             };
             /** @description Validation Error */

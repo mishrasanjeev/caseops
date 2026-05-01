@@ -3593,6 +3593,14 @@ class TenantAIPolicy(Base):
     training_opt_in: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
+    # PG-107 (2026-05-01) — opt-in predictive bench analytics.
+    # Default false: existing evidence-only output (no favorability /
+    # judge-tendency / win-loss copy). Owner/admin can flip per
+    # workspace; sample-size ≥5 guard + mandatory disclaimer remain
+    # enforced server-side in B mode.
+    predictive_bench_strategy_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
