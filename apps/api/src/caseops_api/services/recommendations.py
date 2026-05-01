@@ -60,6 +60,7 @@ from caseops_api.services.llm import (
     LLMMessage,
     LLMProvider,
     LLMProviderError,
+    LLMResponseFormatError,
     build_provider,
     generate_structured,
 )
@@ -566,11 +567,45 @@ def generate_recommendation(
     # 2026-04-30: gpt-5.1-only path. The prior Anthropic→Haiku→OpenAI
     # ladder burned ~3x tokens per click; with Anthropic credits gone
     # and the OpenAI bill now the single line item, one primary call is
-    # all we want. LLMProviderError covers quota / 5xx / format / timeout
-    # — every recoverable upstream failure surfaces as an actionable 502.
+    # all we want. LLMProviderError covers quota / 5xx / format / timeout.
+    #
+    # Ram BUG-029 (2026-05-01) — recommendations 502 reopen, GPT-5.1
+    # occasionally returns malformed JSON (~1-2% of long structured
+    # outputs). Without a fallback ladder a single transient format
+    # error puts the user on a 502. Single retry on LLMResponseFormatError
+    # specifically — same provider, same model, same prompt. Most format
+    # errors clear on retry because the model's JSON output is non-
+    # deterministic at temperature > 0. Quota / 5xx / timeout still 502
+    # immediately (retry won't help upstream outages).
     try:
         parsed, completion = _invoke(llm)
         _stage(f"llm_primary({getattr(llm, 'model', '?')})")
+    except LLMResponseFormatError as exc:
+        logger.warning(
+            "recommendation %s: primary LLM %s returned malformed JSON; "
+            "retrying once. detail=%s",
+            rec_type,
+            getattr(llm, "model", "<unknown>"),
+            str(exc)[:300],
+        )
+        try:
+            parsed, completion = _invoke(llm)
+            _stage(f"llm_retry({getattr(llm, 'model', '?')})")
+        except LLMProviderError as retry_exc:
+            logger.warning(
+                "recommendation %s: retry on %s also failed (%s)",
+                rec_type,
+                getattr(llm, "model", "<unknown>"),
+                type(retry_exc).__name__,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=(
+                    f"Could not generate the recommendation: "
+                    f"{type(retry_exc).__name__}: {retry_exc}. Please "
+                    f"retry in a minute."
+                ),
+            ) from retry_exc
     except LLMProviderError as exc:
         logger.warning(
             "recommendation %s: primary LLM %s failed (%s)",

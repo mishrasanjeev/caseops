@@ -23,12 +23,32 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { cn } from "@/lib/cn";
 
+// Ram BUG-028 (2026-05-01) root-cause fix:
+//
+// The previous wiring pointed the pdfjs worker at unpkg.com. Prod CSP
+// (configured on the web origin) restricts script-src + worker-src to
+// 'self' + blob: + analytics — unpkg.com is blocked. Result: react-pdf
+// fails to spawn the worker, and <Document> falls through to the
+// generic "Could not load the PDF" error UI. The CSP cannot be
+// loosened (defense-in-depth), so the fix is to bundle the worker
+// from the local pdfjs-dist install and serve it same-origin.
+//
+// `new URL(... import.meta.url)` is the Webpack/Turbopack-recognised
+// idiom for pulling a static asset out of a node_module — Next.js
+// emits the worker into the build output as
+// `/_next/static/media/pdf.worker.<hash>.mjs` (same-origin → CSP
+// passes). pdfjs-dist is a transitive dep of react-pdf so the import
+// resolves without an additional package.
+//
 // Attach worker once per process. Point at the CDN-hosted pdfjs
 // worker that matches react-pdf's pinned pdfjs version — using a
 // bundler-specific `?url` import works in Turbopack but fails in
 // `tsc --noEmit` without a declaration shim. CDN keeps the typecheck
 // clean and still caches per-visitor after the first hit.
-pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+  "pdfjs-dist/build/pdf.worker.min.mjs",
+  import.meta.url,
+).toString();
 
 export interface PDFAnnotation {
   id: string;

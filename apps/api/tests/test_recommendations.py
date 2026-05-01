@@ -195,6 +195,124 @@ def test_generate_recommendation_refuses_when_no_verified_citations(
     assert any(run.status == "rejected_no_verified_citations" for run in runs)
 
 
+def test_recommendation_format_error_retries_once_then_succeeds(
+    client: TestClient, monkeypatch,
+) -> None:
+    """Ram BUG-029 (2026-05-01) regression: GPT-5.1 sporadically
+    returns malformed JSON on long structured outputs (~1-2%). With
+    the Anthropic→Haiku→OpenAI fallback ladder removed, a single
+    transient format error used to put the user on a 502. The fix is
+    a single retry on LLMResponseFormatError specifically — same
+    provider, same model. This test asserts the retry happens AND
+    that a successful retry yields a 200 (not the original 502)."""
+    import json as _json
+
+    from caseops_api.services.llm import (
+        LLMCompletion,
+        LLMMessage,
+        LLMResponseFormatError,
+    )
+
+    _seed_relevant_authority()
+
+    valid_payload = {
+        "title": "Authority recommendation — retry succeeded",
+        "options": [
+            {
+                "label": "File writ petition",
+                "rationale": "The retrieved authorities support the relief sought.",
+                "confidence": "medium",
+                "supporting_citations": ["Ssangyong Engg v. NHAI (2019)"],
+                "risk_notes": None,
+            },
+        ],
+        "primary_recommendation_label": "File writ petition",
+        "rationale": "The retrieved authority supports the proposition.",
+        "assumptions": [],
+        "missing_facts": [],
+        "confidence": "medium",
+        "next_action": None,
+    }
+
+    call_count = {"n": 0}
+
+    class _FlakyJSONProvider:
+        name = "mock"
+        model = "mock-flaky-json"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                raise LLMResponseFormatError(
+                    "mock:flaky-json did not return valid JSON. "
+                    "raw[:500]='Here is the recommendation: [truncated]'"
+                )
+            return LLMCompletion(
+                text=_json.dumps(valid_payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=100,
+                completion_tokens=200,
+                latency_ms=10,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _FlakyJSONProvider(),
+    )
+
+    token, _, matter_id = _setup_matter(client)
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "authority"},
+    )
+    # First call format-errored, retry succeeded → 200 not 502.
+    assert response.status_code == 200, response.text
+    assert call_count["n"] == 2, (
+        f"Expected exactly 2 LLM calls (1 format-error + 1 retry); got {call_count['n']}"
+    )
+
+
+def test_recommendation_format_error_retry_also_fails_yields_502(
+    client: TestClient, monkeypatch,
+) -> None:
+    """Ram BUG-029 regression — the retry on format error is bounded.
+    If the retry ALSO produces a format error, the route surfaces a
+    502 with the retry's detail (not an infinite loop)."""
+    from caseops_api.services.llm import LLMMessage, LLMResponseFormatError
+
+    _seed_relevant_authority()
+
+    call_count = {"n": 0}
+
+    class _AlwaysFlakyProvider:
+        name = "mock"
+        model = "mock-always-flaky"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            call_count["n"] += 1
+            raise LLMResponseFormatError(
+                "mock:always-flaky did not return valid JSON. raw[:500]=''"
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _AlwaysFlakyProvider(),
+    )
+
+    token, _, matter_id = _setup_matter(client)
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "authority"},
+    )
+    assert response.status_code == 502, response.text
+    detail = response.json()["detail"]
+    assert "LLMResponseFormatError" in detail
+    assert call_count["n"] == 2  # retried exactly once before giving up
+
+
 def test_recommendation_provider_error_returns_actionable_502(
     client: TestClient, monkeypatch,
 ) -> None:

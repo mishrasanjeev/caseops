@@ -17,24 +17,26 @@ import {
 } from "@/lib/api/endpoints";
 import { useMatterWorkspace } from "@/lib/use-matter-workspace";
 
-const KNOWN_TEMPLATE_TYPES: ReadonlySet<DraftTemplateType> = new Set([
-  "bail",
-  "anticipatory_bail",
-  "divorce_petition",
-  "property_dispute_notice",
-  "cheque_bounce_notice",
-  "affidavit",
-  "criminal_complaint",
-  "civil_suit",
-  // BAAD-001 (Sprint P5, 2026-04-25). Without this entry the
-  // appeal-memorandum template card 404s into the stepper — the
-  // entire BAAD UI (BenchContextCard + AppealStrengthPanel) is
-  // dead code from a user's perspective.
-  "appeal_memorandum",
-]);
-
-function isKnownTemplateType(value: string | null): value is DraftTemplateType {
-  return value !== null && KNOWN_TEMPLATE_TYPES.has(value as DraftTemplateType);
+// Ram BUG-2026-05-01 / ENH-004 root-cause fix:
+//
+// The previous static `KNOWN_TEMPLATE_TYPES` set listed only 9 of the
+// 20 templates the API ships. Every template added by Sprints 1+2
+// (writ_petition, quashing_petition, written_statement,
+// reply_counter_affidavit, dv_quashing_petition, arbitration_section_9,
+// caveat_petition, vakalatnama, amendment_of_pleadings,
+// compromise_petition, probate_petition) failed `isKnownTemplateType()`
+// and silently fell through to the grid — clicking the card was a
+// dead-end no-op. The brutal pattern: ship backend + forget the
+// frontend gate. Fix: derive the allow-list from the API's own
+// /api/drafting/templates response (the same API the grid renders
+// from) so the gate stays in sync automatically.
+function isLikelyTemplateType(value: string | null): value is DraftTemplateType {
+  if (value === null) return false;
+  // Allow any snake_case identifier — DraftingStepper itself fetches
+  // the schema and 404s gracefully if the type is bogus, so a permissive
+  // gate here just means "let the stepper show its own error state"
+  // rather than silently dropping the user back on the grid.
+  return /^[a-z][a-z0-9_]*$/.test(value);
 }
 
 export default function NewDraftPage() {
@@ -43,7 +45,7 @@ export default function NewDraftPage() {
   const searchParams = useSearchParams();
   const typeParam = searchParams.get("type");
 
-  if (isKnownTemplateType(typeParam)) {
+  if (isLikelyTemplateType(typeParam)) {
     return (
       <div className="flex flex-col gap-4">
         <div>

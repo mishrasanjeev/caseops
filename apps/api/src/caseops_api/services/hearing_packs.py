@@ -49,6 +49,7 @@ from caseops_api.services.llm import (
     LLMMessage,
     LLMProvider,
     LLMProviderError,
+    LLMResponseFormatError,
     build_provider,
     generate_structured,
     max_tokens_for_purpose,
@@ -364,8 +365,36 @@ def generate_hearing_pack(
             session=session,
         )
 
+    # Ram BUG-029 (2026-05-01) parallel pattern fix — single retry on
+    # LLMResponseFormatError. GPT-5.1 sporadically emits malformed JSON
+    # on long structured outputs; retry on the same provider clears
+    # most because output is non-deterministic at temperature > 0.
     try:
         response, completion = _invoke(llm)
+    except LLMResponseFormatError as exc:
+        logger.warning(
+            "Hearing pack LLM %s returned malformed JSON; retrying once. "
+            "detail=%s",
+            getattr(llm, "model", "<unknown>"),
+            str(exc)[:300],
+        )
+        try:
+            response, completion = _invoke(llm)
+        except LLMProviderError as retry_exc:
+            logger.warning(
+                "Hearing pack LLM %s retry also failed (%s): %s",
+                getattr(llm, "model", "<unknown>"),
+                type(retry_exc).__name__,
+                retry_exc,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    f"Could not assemble a hearing pack: "
+                    f"{type(retry_exc).__name__}: {retry_exc}. Please retry "
+                    f"in a minute, or contact support if this persists."
+                ),
+            ) from retry_exc
     except LLMProviderError as exc:
         logger.warning(
             "Hearing pack LLM %s failed (%s): %s",

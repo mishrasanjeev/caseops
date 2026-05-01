@@ -1,55 +1,23 @@
 "use client";
 
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileText, Loader2, Plus } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { FileText, Plus } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
-import { useState } from "react";
-import { useForm } from "react-hook-form";
-import { toast } from "sonner";
-import { z } from "zod";
 
 import { Button } from "@/components/ui/Button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/Dialog";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { Input } from "@/components/ui/Input";
-import { Label } from "@/components/ui/Label";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/Select";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { apiErrorMessage } from "@/lib/api/config";
-import { createDraft, listDrafts } from "@/lib/api/endpoints";
-import type { DraftType } from "@/lib/api/schemas";
+import { listDrafts } from "@/lib/api/endpoints";
 
-const DRAFT_TYPE_LABEL: Record<DraftType, string> = {
+const DRAFT_TYPE_LABEL: Record<string, string> = {
   brief: "Brief",
   notice: "Notice",
   reply: "Reply",
   memo: "Internal memo",
   other: "Other",
 };
-
-const createSchema = z.object({
-  title: z.string().min(3, "At least 3 characters."),
-  draft_type: z.enum(["brief", "notice", "reply", "memo", "other"]),
-});
-
-type CreateForm = z.infer<typeof createSchema>;
 
 export default function MatterDraftsPage() {
   const params = useParams<{ id: string }>();
@@ -152,123 +120,29 @@ export default function MatterDraftsPage() {
   );
 }
 
+// Ram BUG-2026-05-01 / ENH-004 root-cause fix:
+//
+// The previous "New draft" dialog opened a 5-option form (Brief /
+// Notice / Reply / Internal memo / Other) — completely bypassing the
+// 20 specialised templates the backend ships (Sprints 1+2). A user
+// clicking "New draft" never saw the bail / writ / quashing / civil
+// suit / written statement / etc. templates because the dialog short-
+// circuited the template grid entirely.
+//
+// Fix: replace the dialog with a Link that routes to the template
+// grid (/app/matters/{id}/drafts/new). The grid is the single source
+// of truth for "all available templates" — the user picks one, the
+// stepper opens, and the resulting draft inherits the right
+// template_type. Legacy generic types (brief/notice/reply/memo/other)
+// remain accessible as catch-all entries inside the grid for users
+// who don't need a structured template.
 function NewDraftDialog({ matterId }: { matterId: string }) {
-  const [open, setOpen] = useState(false);
-  const router = useRouter();
-  const queryClient = useQueryClient();
-  const form = useForm<CreateForm>({
-    resolver: zodResolver(createSchema),
-    defaultValues: { title: "", draft_type: "brief" },
-  });
-
-  const mutation = useMutation({
-    mutationFn: (values: CreateForm) =>
-      createDraft({
-        matterId,
-        title: values.title.trim(),
-        draftType: values.draft_type,
-      }),
-    onSuccess: async (draft) => {
-      await queryClient.invalidateQueries({
-        queryKey: ["matters", matterId, "drafts"],
-      });
-      toast.success("Draft created");
-      form.reset();
-      setOpen(false);
-      router.push(`/app/matters/${matterId}/drafts/${draft.id}`);
-    },
-    onError: (err) => {
-      toast.error(
-        apiErrorMessage(err, "Could not create draft."),
-      );
-    },
-  });
-
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button data-testid="new-draft-trigger">
-          <Plus className="h-4 w-4" aria-hidden /> New draft
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>New draft</DialogTitle>
-          <DialogDescription>
-            Creates the draft shell — generate the first version from the
-            editor.
-          </DialogDescription>
-        </DialogHeader>
-        <form
-          className="flex flex-col gap-4"
-          onSubmit={form.handleSubmit((values) => mutation.mutate(values))}
-          noValidate
-        >
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="draft-title">Title</Label>
-            <Input
-              id="draft-title"
-              placeholder="Interim reply brief"
-              autoFocus
-              aria-invalid={form.formState.errors.title ? true : undefined}
-              aria-describedby={form.formState.errors.title ? "draft-title-error" : undefined}
-              {...form.register("title")}
-            />
-            {form.formState.errors.title ? (
-              <p
-                id="draft-title-error"
-                role="alert"
-                className="text-xs text-[var(--color-danger-500,#c53030)]"
-              >
-                {form.formState.errors.title.message}
-              </p>
-            ) : null}
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="draft-type">Type</Label>
-            <Select
-              value={form.watch("draft_type")}
-              onValueChange={(v) =>
-                form.setValue("draft_type", v as DraftType)
-              }
-            >
-              <SelectTrigger id="draft-type">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(Object.entries(DRAFT_TYPE_LABEL) as [DraftType, string][]).map(
-                  ([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ),
-                )}
-              </SelectContent>
-            </Select>
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                form.reset();
-                setOpen(false);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" /> Creating…
-                </>
-              ) : (
-                "Create draft"
-              )}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+    <Button
+      href={`/app/matters/${matterId}/drafts/new`}
+      data-testid="new-draft-trigger"
+    >
+      <Plus className="h-4 w-4" aria-hidden /> New draft
+    </Button>
   );
 }

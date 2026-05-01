@@ -74,6 +74,7 @@ from caseops_api.services.llm import (
     LLMMessage,
     LLMProvider,
     LLMProviderError,
+    LLMResponseFormatError,
     build_provider,
     generate_structured,
     max_tokens_for_purpose,
@@ -1011,8 +1012,38 @@ def generate_draft_version(
     # actionable detail on any upstream failure. The prior Anthropic→
     # Haiku→OpenAI ladder burned 3x tokens per click; with Anthropic
     # credits gone we keep one provider line item.
+    #
+    # Ram BUG-029 (2026-05-01) parallel pattern fix — single retry on
+    # LLMResponseFormatError specifically. GPT-5.1 sporadically emits
+    # malformed JSON on long structured outputs (~1-2%); retry on the
+    # same provider clears most of these because the output is non-
+    # deterministic at temperature > 0. Quota / 5xx / timeout still
+    # 422 immediately (retry won't fix upstream outages).
     try:
         response, completion = _invoke(llm)
+    except LLMResponseFormatError as exc:
+        logger.warning(
+            "Draft LLM %s returned malformed JSON; retrying once. detail=%s",
+            getattr(llm, "model", "<unknown>"),
+            str(exc)[:300],
+        )
+        try:
+            response, completion = _invoke(llm)
+        except (LLMProviderError, ValidationError) as retry_exc:
+            logger.warning(
+                "Draft LLM %s retry also failed (%s): %s",
+                getattr(llm, "model", "<unknown>"),
+                type(retry_exc).__name__,
+                retry_exc,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    f"Could not generate a draft: {type(retry_exc).__name__}: "
+                    f"{retry_exc}. Please retry in a minute, or contact "
+                    f"support if this persists."
+                ),
+            ) from retry_exc
     except (LLMProviderError, ValidationError) as exc:
         logger.warning(
             "Draft LLM %s failed (%s): %s",
