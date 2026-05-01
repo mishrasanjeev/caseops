@@ -60,7 +60,7 @@ hitting and locks them into the contributor handbook:
 | **9** | Mobile responsive — DraftingStepper bottom nav stacks vertically below sm; full-width buttons on 360x800 | `5a35bc5` | +1 mobile-responsive Playwright case (no-overflow + stack-proven + ≥240px width) |
 | **10** | Solo mode — `?solo=1` flattens the stepper into a single scrollable form with one "Generate draft" CTA; "Solo mode" link on every template card | `be9180c` | DraftingStepper `solo` prop |
 | **11** | Template governance — `tenant_ai_policies.disabled_template_types_json` (Alembic `20260501_0003`); PATCH `/api/admin/tenant-ai-policy` partial-update; templates list filters per tenant | `be9180c` | 6 pytest cases (incl. tenant-isolation) |
-| **12** | Live-LLM drafting quality harness — `caseops_api.scripts.eval_drafting_quality` — runs each fixture through the EXACT production prompt, scores validator + structure + citations against the 4.8/5 PG-005 target | `d2d20c4` | Markdown report + JSON artifact; dry-run mode for prompt-edit diff review |
+| **12** | Live-LLM drafting quality **harness** — `caseops_api.scripts.eval_drafting_quality` — assembles the EXACT production prompt and CAN run each fixture through GPT-5.1 to score validator + structure + citations against the 4.8/5 PG-005 target. Sprint 12 ships the harness; the **first live-LLM run is queued separately** (budgeted; addendum below). | `d2d20c4` | Harness + dry-run smoke; live numbers TBD |
 
 **Total templates available in production:** 20.
 **Total court format profiles:** 10.
@@ -151,3 +151,60 @@ Ram (tester) — caught the three reopens that grounded the brutal-pattern
 memo additions and forced the discoverability fix. The bug-fix
 verification rule that "reopened bugs require fresh end-user
 verification" came from his last batch and saved this one.
+
+---
+
+## Addendum (2026-05-01) — response to Codex's gap report
+
+Codex flagged a real credibility problem in the original cut of these
+release notes: this document said "drafting studio is feature-complete"
+while a `0.0/5` artifact sat in `docs/eval_artifacts/drafting_quality.json`.
+The artifact was a `--dry-run` smoke output (no LLM call, scoring
+skipped) — but a reader couldn't tell that from the file. That's
+exactly the brutal pattern the 2026-05-01 memo warned about: ship the
+backend, never click through.
+
+**Concrete fix shipped in this commit:**
+
+- `scripts/eval_drafting_quality.py` dry-run path now writes an explicit
+  `dry_run: true` flag to the JSON artifact, sets `meets_target: null`,
+  and emits a Markdown header that says "DRY-RUN smoke output — the LLM
+  was NOT called". A reader can no longer read 0.0/5 as a quality
+  measurement.
+- This release notes table row for Sprint 12 was rephrased: Sprint 12
+  ships the **harness**, the **first live-LLM eval run is queued**
+  separately. The "feature-complete drafting studio" claim is honest
+  about the workflow surface (20 templates + 10 court profiles + PDF +
+  filing bundle + revision compare + bench-aware drafting + filing
+  checklist + mobile + solo + governance + harness) — but the live
+  quality NUMBER against 4.8/5 is not yet measured. It will be.
+
+**On the broader Codex P0 list:**
+
+Codex catalogues 15 P0 gaps. They split into four buckets:
+
+1. **Already in the strict ledger as Missing/Partial** — PG-006
+   (research good-law signal), PG-007 (GC spend depth), PG-008 (CLM
+   lifecycle), PG-009 (enterprise identity), PG-010 (pricing /
+   entitlement), PG-101 (universal command palette / today cockpit).
+   These are accurately captured today; Codex is restating the ledger.
+2. **Genuinely under-emphasised in the ledger** — durable workflow
+   orchestration (Temporal), onboarding/migration tooling, source-
+   coverage matrix for research, integration depth (M365/Google,
+   e-sign, accounting). These deserve a lift in priority.
+3. **Sharp critique I accept** — "review workflow not lawyer-grade"
+   (we have approve/finalize but no reviewer assignment, redline
+   threads, privilege labels, signoff gates) and "release-blocking
+   eval gates" (Sprint 12 ships the harness; we don't yet block
+   release on its score).
+4. **Already addressed but Codex over-reads** — bench/judge governance
+   (PG-107 already gates predictive mode behind explicit tenant opt-in
+   with a mandatory disclaimer + sample-size floor); template
+   governance (Sprint 11 just shipped); strict positioning
+   (intentional today — see `docs/PRD_CLAUDE_CODE_2026-04-23.md`).
+
+Net: Codex's report is mostly right. The strict ledger
+(`docs/STRICT_PRODUCT_GAPS_2026-04-30.md`) needs an update sweep that
+absorbs Codex's emphasis (durable workflow + integrations + migration
++ release-blocking eval). That's the next concrete action — not more
+features.

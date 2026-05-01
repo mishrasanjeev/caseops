@@ -315,8 +315,33 @@ def _run_one_scenario(
 # ---------------------------------------------------------------
 
 
-def _aggregate(results: list[ScenarioResult]) -> dict:
-    """Roll up per-template rating + overall."""
+def _aggregate(results: list[ScenarioResult], *, dry_run: bool) -> dict:
+    """Roll up per-template rating + overall.
+
+    Dry-run path: no LLM call was made, so scoring is meaningless.
+    Codex 2026-05-01 flagged a real credibility problem: a previous
+    dry-run write produced a "0.0/5 — meets target: NO" artifact
+    that a reader couldn't distinguish from a real failed eval.
+    Dry-run output now ships an explicit `dry_run: true` flag, sets
+    `meets_target: null`, and skips the rating math entirely.
+    """
+    if dry_run:
+        return {
+            "dry_run": True,
+            "overall_rating": None,
+            "target": _TARGET_RATING,
+            "meets_target": None,
+            "note": (
+                "Dry-run smoke output — the LLM was NOT called, no scoring "
+                "performed. Re-run without --dry-run to produce a real "
+                "rating. Reading any score in this file as a quality "
+                "measurement is incorrect."
+            ),
+            "per_template": {
+                tt: {"scenarios": len([r for r in results if r.template_type == tt])}
+                for tt in {r.template_type for r in results}
+            },
+        }
     by_type: dict[str, list[ScenarioResult]] = {}
     for r in results:
         by_type.setdefault(r.template_type, []).append(r)
@@ -339,6 +364,7 @@ def _aggregate(results: list[ScenarioResult]) -> dict:
         overall_ratings.append(avg)
     overall = round(sum(overall_ratings) / len(overall_ratings), 2) if overall_ratings else 0.0
     return {
+        "dry_run": False,
         "overall_rating": overall,
         "target": _TARGET_RATING,
         "meets_target": overall >= _TARGET_RATING,
@@ -349,6 +375,7 @@ def _aggregate(results: list[ScenarioResult]) -> dict:
 def _write_report(
     results: list[ScenarioResult], summary: dict, report_path: Path, artifact_path: Path,
 ) -> None:
+    is_dry = bool(summary.get("dry_run"))
     artifact_path.parent.mkdir(parents=True, exist_ok=True)
     artifact_path.write_text(
         json.dumps(
@@ -381,6 +408,23 @@ def _write_report(
 
     report_path.parent.mkdir(parents=True, exist_ok=True)
     lines: list[str] = []
+    if is_dry:
+        lines.append("# Drafting quality eval — DRY-RUN smoke output")
+        lines.append("")
+        lines.append(
+            "**Important:** this report was produced with `--dry-run`. "
+            "The LLM was NOT called, no scoring was performed. Any number "
+            "appearing as `0.0/5` below is an artefact of skipping the LLM "
+            "step, not a real quality measurement. Re-run "
+            "`python -m caseops_api.scripts.eval_drafting_quality` "
+            "without the `--dry-run` flag to produce a real rating against "
+            f"the **{summary['target']}/5** PG-005 target."
+        )
+        lines.append("")
+        lines.append(f"Scenarios queued: {len(results)}")
+        for r in results:
+            lines.append(f"- `{r.template_type}` / `{r.key}`")
+        return _finalise_report(lines, report_path)
     lines.append(f"# Drafting quality eval — overall {summary['overall_rating']}/5")
     lines.append("")
     lines.append(
@@ -415,6 +459,10 @@ def _write_report(
             for f in r.findings_summary[:5]:
                 lines.append(f"  - {f}")
         lines.append("")
+    _finalise_report(lines, report_path)
+
+
+def _finalise_report(lines: list[str], report_path: Path) -> None:
     report_path.write_text("\n".join(lines), encoding="utf-8")
 
 
@@ -470,17 +518,26 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
 
-    summary = _aggregate(results)
+    summary = _aggregate(results, dry_run=args.dry_run)
     _write_report(
         results, summary, Path(args.report_path), Path(args.artifact_path),
     )
-    print(
-        f"\nOverall: {summary['overall_rating']}/5 (target {summary['target']}). "
-        f"Meets target: {summary['meets_target']}.",
-        file=sys.stderr,
-    )
+    if summary.get("dry_run"):
+        print(
+            f"\nDRY-RUN: {len(results)} scenarios queued; LLM not called. "
+            f"Re-run without --dry-run for a real rating.",
+            file=sys.stderr,
+        )
+    else:
+        print(
+            f"\nOverall: {summary['overall_rating']}/5 (target {summary['target']}). "
+            f"Meets target: {summary['meets_target']}.",
+            file=sys.stderr,
+        )
     print(f"Report: {args.report_path}", file=sys.stderr)
     print(f"Artifact: {args.artifact_path}", file=sys.stderr)
+    if summary.get("dry_run"):
+        return 0
     return 0 if summary["meets_target"] else 1
 
 

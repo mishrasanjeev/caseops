@@ -1,0 +1,49 @@
+{
+  "scenarios": [
+    {
+      "citation_count": 0,
+      "citation_score": 0.0,
+      "error": null,
+      "findings_summary": [],
+      "input_tokens": 0,
+      "key": "bnss-303-simple-theft",
+      "latency_ms": 0,
+      "output_tokens": 0,
+      "rating": 0.0,
+      "structure_present": [],
+      "structure_score": 0.0,
+      "template_type": "bail",
+      "validator_score": 0.0
+    },
+    {
+      "citation_count": 0,
+      "citation_score": 0.0,
+      "error": null,
+      "findings_summary": [],
+      "input_tokens": 0,
+      "key": "mandamus-rti-inaction",
+      "latency_ms": 0,
+      "output_tokens": 0,
+      "rating": 0.0,
+      "structure_present": [],
+      "structure_score": 0.0,
+      "template_type": "writ_petition",
+      "validator_score": 0.0
+    }
+  ],
+  "summary": {
+    "dry_run": true,
+    "meets_target": null,
+    "note": "Dry-run smoke output \u2014 the LLM was NOT called, no scoring performed. Re-run without --dry-run to produce a real rating. Reading any score in this file as a quality measurement is incorrect.",
+    "overall_rating": null,
+    "per_template": {
+      "bail": {
+        "scenarios": 1
+      },
+      "writ_petition": {
+        "scenarios": 1
+      }
+    },
+    "target": 4.8
+  }
+}
