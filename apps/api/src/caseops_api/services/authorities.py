@@ -779,24 +779,30 @@ def search_authorities(
 def _title_is_predominantly_ascii(title: str | None) -> bool:
     """Heuristic: title qualifies as English when
 
-    - it has ≥3 ASCII letters (rejects pure-citation titles like
-      "[2024] 9 S.C.R. 683" that surface from Layer-2 placeholder
-      failures — but those still pass since they have S, C, R letters);
-    - ASCII-letter ratio over letter chars is ≥70% (rejects pure
-      Devanagari/Tamil/etc. where letter chars are all non-ASCII);
-    - `?` chars count <3 absolute (rejects OCR-failed regional-script
-      titles like "???Rai on??aniko ku??siktangona…" where Unicode
-      chars decoded to literal '?'). Real English titles essentially
-      never carry multiple question marks; even one is unusual.
+    - it has ≥3 ASCII letters (so pure-Devanagari/Tamil titles fail);
+    - ASCII-letter ratio over letter chars is ≥70%;
+    - non-ASCII char count is <3 (rejects regional-language
+      transliterations where the letters happen to be Latin but the
+      title is peppered with regional diacritics like `ˑ` U+02D1
+      from Garo, or other modifier letters from Tamil / Bengali
+      transliterations). Real English titles average 0-1 non-ASCII
+      chars (occasional smart quote / em-dash); ≥3 is the regional
+      signal.
+    - `?` count <3 (legacy OCR-fail signal — kept as belt+braces).
 
     Empty / None / no-letter titles return False so OCR-garbled rows
     don't slip through.
     """
     if not title:
         return False
-    # Reject any title with 3+ literal `?` chars — that's an OCR /
-    # encoding-failure signal, not a real punctuation choice.
+    # Belt-and-braces OCR signal.
     if title.count("?") >= 3:
+        return False
+    # Regional transliteration signal — Garo / Tamil / Bengali Latin-
+    # transliterated titles carry repeated non-ASCII modifier letters
+    # (e.g. "Rai onˑaniko kuˑsiktangona peˑanira" has 6× U+02D1).
+    non_ascii = sum(1 for c in title if ord(c) >= 128)
+    if non_ascii >= 3:
         return False
     letters = [c for c in title if c.isalpha()]
     if not letters:

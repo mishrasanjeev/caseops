@@ -511,6 +511,15 @@ def test_pg110_title_predominantly_ascii_filter() -> None:
         )
         is True
     )
+    # Regression — actual title surfaced from Garo High Court
+    # transliteration on prod 2026-05-01. Latin letters (89.8% ASCII
+    # ratio) but 6× U+02D1 modifier letter + 1× U+201C left-double-
+    # quote. The non-ASCII-count ≥3 rule rejects it.
+    garo_title = (
+        "“Rai  onˑaniko  kuˑsiktangona  peˑanira  "
+        "mamlako  nalis  kaˑgiparangna"
+    )
+    assert _title_is_predominantly_ascii(garo_title) is False
 
 
 def test_pg110_search_default_filters_non_english(client: TestClient, monkeypatch) -> None:
