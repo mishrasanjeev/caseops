@@ -622,6 +622,15 @@ class BenchSpecificAuthorityResponse(BaseModel):
     relevance: str  # 'practice_area' | 'general'
 
 
+class PredictiveSummaryResponse(BaseModel):
+    sample_size: int
+    favorable_count: int
+    adverse_count: int
+    neutral_count: int
+    top_outcome_label: str | None
+    practice_area_key: str
+
+
 class BenchStrategyContextResponse(BaseModel):
     matter_id: str
     court_name: str | None
@@ -648,6 +657,10 @@ class BenchStrategyContextResponse(BaseModel):
     # analytics. UI surfaces a mode badge + disclaimer when predictive.
     mode: str = "evidence_only"
     disclaimer: str | None = None
+    # PG-107 v2 (2026-05-01) — descriptive stats on the bench's
+    # indexed decisions; emitted only when mode=predictive AND
+    # sample_size ≥5.
+    predictive_summary: PredictiveSummaryResponse | None = None
 
 
 @router.get(
@@ -764,6 +777,18 @@ async def get_current_company_matter_bench_strategy_context(
         next_listing_id=next_listing_id,
         mode=ctx.mode,
         disclaimer=ctx.disclaimer,
+        predictive_summary=(
+            PredictiveSummaryResponse(
+                sample_size=ctx.predictive_summary.sample_size,
+                favorable_count=ctx.predictive_summary.favorable_count,
+                adverse_count=ctx.predictive_summary.adverse_count,
+                neutral_count=ctx.predictive_summary.neutral_count,
+                top_outcome_label=ctx.predictive_summary.top_outcome_label,
+                practice_area_key=ctx.predictive_summary.practice_area_key,
+            )
+            if ctx.predictive_summary is not None
+            else None
+        ),
     )
 
 

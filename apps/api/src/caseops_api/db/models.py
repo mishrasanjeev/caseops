@@ -2484,6 +2484,14 @@ class Recommendation(Base):
         ForeignKey("model_runs.id", ondelete="SET NULL"),
         nullable=True,
     )
+    # PG-109 (2026-05-01) — source-used / source-ignored panel.
+    # JSON list of retrieved authority identifiers the LLM was given
+    # for this recommendation. UI computes cited-vs-considered by
+    # intersecting with options[*].supporting_citations. Empty by
+    # default for legacy rows that pre-date PG-109.
+    retrieved_authorities_json: Mapped[str] = mapped_column(
+        Text, nullable=False, default="[]"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,

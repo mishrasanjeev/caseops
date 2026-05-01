@@ -172,6 +172,29 @@ class BenchSpecificAuthority:
 
 
 @dataclass(frozen=True)
+class PredictiveSummary:
+    """PG-107 v2 (2026-05-01) — descriptive statistics over the bench's
+    indexed decisions. Emitted only when the workspace has opted in to
+    predictive bench analytics AND the bench has ≥5 indexed decisions
+    in scope (PRD §3 rule 3 sample-size guard). NOT a probability claim
+    — these are counts of recorded outcome_label values; the
+    accompanying disclaimer says "not legal advice".
+    """
+
+    sample_size: int
+    favorable_count: int
+    adverse_count: int
+    neutral_count: int
+    # Single most-common outcome label across the sample, lowercased.
+    # None when no outcome_label was set on any of the sample.
+    top_outcome_label: str | None
+    # The practice-area key used for favorable/adverse classification
+    # (e.g. "criminal", "civil", "bail", "general"). "general" =
+    # fallback when matter.practice_area didn't match the bias table.
+    practice_area_key: str
+
+
+@dataclass(frozen=True)
 class BenchStrategyContext:
     matter_id: str
     court_name: str | None
@@ -204,6 +227,9 @@ class BenchStrategyContext:
     #     this output carries a mandatory disclaimer.
     mode: str = "evidence_only"
     disclaimer: str | None = None
+    # PG-107 v2 (2026-05-01) — descriptive stats. None when mode is
+    # evidence_only OR sample size <5 (PRD §3 rule 3 fallback).
+    predictive_summary: PredictiveSummary | None = None
 
 
 # Recurring legal-test phrases we look for in each authority's
@@ -349,6 +375,7 @@ def build_bench_strategy_context(
         "predictive" if policy.predictive_bench_strategy_enabled else "evidence_only"
     )
     disclaimer: str | None = None
+    predictive_summary: PredictiveSummary | None = None
     if mode == "predictive":
         disclaimer = (
             "This view includes predictive bench analytics enabled by your "
@@ -357,6 +384,16 @@ def build_bench_strategy_context(
             "of outcome. Sample size of "
             f"{len(similar_authorities)} indexed decision(s) for this bench."
         )
+        # PG-107 v2 (2026-05-01): compute descriptive stats over the
+        # bench's indexed decisions. ≥5 sample-size guard per PRD §3
+        # rule 3; below that, predictive_summary stays None and the
+        # drafter falls back to evidence-only language for that claim.
+        if len(similar_authorities) >= 5:
+            predictive_summary = _compute_predictive_summary(
+                session=session,
+                matter=matter,
+                authorities=similar_authorities,
+            )
 
     return BenchStrategyContext(
         matter_id=matter.id,
@@ -375,6 +412,109 @@ def build_bench_strategy_context(
         bench_specific_limitation_note=bench_specific_note,
         mode=mode,
         disclaimer=disclaimer,
+        predictive_summary=predictive_summary,
+    )
+
+
+# PG-107 v2 (2026-05-01) — outcome-label classification per practice
+# area. Mirrors services/recommendations._OUTCOME_BIAS but inlined to
+# avoid a cross-service import cycle. Adding an entry here updates the
+# predictive_summary classification for that practice area; everything
+# unmapped falls through to "general".
+_PREDICTIVE_OUTCOMES: dict[str, dict[str, tuple[str, ...]]] = {
+    "criminal": {
+        "favorable": ("allowed", "granted", "quashed", "acquitted"),
+        "adverse": ("dismissed", "rejected", "denied", "convicted"),
+    },
+    "bail": {
+        "favorable": ("granted", "allowed", "bail allowed"),
+        "adverse": ("denied", "dismissed", "rejected"),
+    },
+    "civil": {
+        "favorable": ("allowed", "decreed", "partly allowed"),
+        "adverse": ("dismissed",),
+    },
+    "commercial": {
+        "favorable": ("allowed", "decreed", "partly allowed"),
+        "adverse": ("dismissed",),
+    },
+    "employment": {
+        "favorable": ("allowed", "granted", "reinstated"),
+        "adverse": ("dismissed", "rejected"),
+    },
+    "family": {
+        "favorable": ("allowed", "granted", "decreed"),
+        "adverse": ("dismissed", "rejected"),
+    },
+    "intellectual_property": {
+        "favorable": ("allowed", "granted", "injunction granted"),
+        "adverse": ("dismissed", "rejected"),
+    },
+    "real_estate": {
+        "favorable": ("allowed", "decreed", "specific performance"),
+        "adverse": ("dismissed",),
+    },
+    "constitutional": {
+        "favorable": ("allowed", "struck down", "directions issued"),
+        "adverse": ("dismissed",),
+    },
+}
+
+
+def _compute_predictive_summary(
+    *,
+    session: Session,
+    matter: Matter,
+    authorities: list[CitableAuthority],
+) -> PredictiveSummary | None:
+    """Count favorable / adverse / neutral outcomes across the bench's
+    indexed decisions. Returns None if no outcome labels are recorded
+    on any of the sample (insufficient data, even if sample_size ≥5)."""
+    practice = (matter.practice_area or "").lower()
+    bias = _PREDICTIVE_OUTCOMES.get(practice)
+    practice_key = practice if bias else "general"
+    if bias is None:
+        # Fallback bias mirrors "civil" — broad allowed / dismissed buckets.
+        bias = {
+            "favorable": ("allowed", "decreed", "granted"),
+            "adverse": ("dismissed", "rejected"),
+        }
+
+    doc_ids = [a.id for a in authorities]
+    if not doc_ids:
+        return None
+    rows = list(
+        session.execute(
+            select(AuthorityDocument.id, AuthorityDocument.outcome_label)
+            .where(AuthorityDocument.id.in_(doc_ids))
+        ).all()
+    )
+
+    favorable = adverse = neutral = 0
+    label_counts: dict[str, int] = {}
+    has_any_label = False
+    for row in rows:
+        label = (row.outcome_label or "").lower().strip()
+        if not label:
+            continue
+        has_any_label = True
+        label_counts[label] = label_counts.get(label, 0) + 1
+        if any(token in label for token in bias["favorable"]):
+            favorable += 1
+        elif any(token in label for token in bias["adverse"]):
+            adverse += 1
+        else:
+            neutral += 1
+    if not has_any_label:
+        return None
+    top_label = max(label_counts.items(), key=lambda kv: kv[1])[0]
+    return PredictiveSummary(
+        sample_size=len(rows),
+        favorable_count=favorable,
+        adverse_count=adverse,
+        neutral_count=neutral,
+        top_outcome_label=top_label,
+        practice_area_key=practice_key,
     )
 
 

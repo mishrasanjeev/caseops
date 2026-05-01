@@ -242,9 +242,8 @@ Web side (v1.5, 2026-05-01):
 - `BenchContextCard` + `AppealStrengthPanel` render the mode as a Badge (Evidence-only / Predictive) plus an amber disclaimer banner when predictive.
 - 3 new vitest cases (`TenantAIPolicyCard.test.tsx`); existing admin page test wrapped in `QueryClientProvider`.
 - Prod-Playwright: `recommendations-grounding-2026-04-29-prod.spec.ts:148` "PG-107 v1.5 admin toggle flips bench panel mode badge" exercises the round-trip (read → click → verify API state → restore).
-Open as v2 (deferred):
-- Predictive analytics computation (judge_tendency_summary on bench, predicted_strength per ground). Currently mode + disclaimer surface but the analytical content itself is unchanged; drafting prompt addendum is the active behavior change.
-Estimated days for v2: 3-5.
+v2 (2026-05-01, additional):
+- `bench_strategy_context.py` adds a `PredictiveSummary` dataclass (sample_size, favorable/adverse/neutral counts, top_outcome_label, practice_area_key) computed via `_compute_predictive_summary` over `similar_authorities.outcome_label`, with the PRD §3 rule 3 sample-size ≥5 guard. Surfaced on the API response and rendered as a 3-column tally + top-label line on `BenchContextCard` when predictive mode is on.
 
 ### `PG-108` Coverage confidence UI in research/drafting
 Status: **`Missing`**.
@@ -256,12 +255,16 @@ Needed:
 Estimated days: 3-4.
 
 ### `PG-109` Source-used / source-ignored AI trust panel
-Status: **`Missing`**.
-Evidence: AI outputs surface `supporting_citations` post-verification but don't show what was retrieved-but-not-used or why.
-Needed:
-- Pass the full `RetrievedAuthority` list AND the per-option `verified_citations` to the UI.
-- Render "Used these sources / Considered but not used" on every AI output.
-Estimated days: 2-3.
+Status: **`Implemented`** (v1 shipped 2026-05-01).
+Evidence:
+- DB: `recommendations.retrieved_authorities_json` (TEXT, default `'[]'`) + migration `20260501_0002`.
+- `services/recommendations.generate_recommendation` captures the retrieved-authorities list (post-rerank, pre-LLM) and persists it on the row.
+- Schema + route serializer expose the field as `RecommendationRecord.retrieved_authorities: list[str]` (default empty for legacy rows).
+- Frontend `recommendations` Zod schema gains the field with a default; `apps/web/app/app/matters/[id]/recommendations/page.tsx` renders a `SourcesUsedPanel` ("Sources considered: M · cited: N" + collapsible "Considered but not cited" list) under each recommendation card.
+- Existing 11/11 backend recommendations tests + 3/3 page vitest stay green.
+Open follow-on:
+- Mirror panel on draft + hearing-pack outputs (only recommendations covered in v1).
+Estimated days for follow-on: 1-2.
 
 ### `PG-110` Per-workflow LLM evaluation harness with goldens
 Status: **`Partially implemented`** (cross-ref `WTD-11.4`).

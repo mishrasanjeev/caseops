@@ -53,6 +53,11 @@ class RecommendationRecord(BaseModel):
     created_at: datetime
     options: list[RecommendationOptionRecord]
     decisions: list[RecommendationDecisionRecord]
+    # PG-109 (2026-05-01) — full retrieved-authorities list the LLM
+    # was given. UI computes cited-vs-considered by intersecting with
+    # options[*].supporting_citations. Empty for legacy rows that
+    # pre-date the PG-109 schema column.
+    retrieved_authorities: list[str] = Field(default_factory=list)
 
 
 class RecommendationListResponse(BaseModel):

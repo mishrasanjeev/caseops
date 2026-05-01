@@ -195,6 +195,16 @@ export type BenchStrategyContext = {
   // PG-107 (2026-05-01). Tenant policy gate.
   mode?: "evidence_only" | "predictive";
   disclaimer?: string | null;
+  // PG-107 v2 (2026-05-01). Descriptive stats; only when predictive
+  // mode + sample_size ≥5.
+  predictive_summary?: {
+    sample_size: number;
+    favorable_count: number;
+    adverse_count: number;
+    neutral_count: number;
+    top_outcome_label: string | null;
+    practice_area_key: string;
+  } | null;
 };
 
 export async function fetchBenchStrategyContext(

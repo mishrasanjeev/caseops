@@ -643,6 +643,11 @@ def generate_recommendation(
     )
 
     primary_idx = _pick_primary(cleaned_options, parsed.primary_recommendation_label)
+    # PG-109 (2026-05-01) — capture the full retrieved-authorities list
+    # so the UI can show "considered M, cited N". The set we save is
+    # the canonical identifiers the LLM was given (post-rerank, pre-
+    # truncation to top-K), not the raw S3 ids.
+    retrieved_identifiers = [a.identifier for a in retrieved]
     recommendation = Recommendation(
         company_id=context.company.id,
         matter_id=matter.id,
@@ -657,6 +662,7 @@ def generate_recommendation(
         review_required=True,
         next_action=parsed.next_action,
         model_run_id=run.id,
+        retrieved_authorities_json=json.dumps(retrieved_identifiers),
     )
     for rank, option in enumerate(cleaned_options):
         recommendation.options.append(

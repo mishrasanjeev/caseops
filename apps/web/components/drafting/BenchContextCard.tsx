@@ -128,6 +128,53 @@ export function BenchContextCard({ matterId }: { matterId: string }) {
             {ctx.disclaimer}
           </p>
         ) : null}
+        {/* PG-107 v2 (2026-05-01) — descriptive stats over the indexed
+            decisions. Only renders when predictive mode is on AND the
+            server returned a non-null summary (sample size ≥5). */}
+        {isPredictive && ctx.predictive_summary ? (
+          <div
+            className="mt-2 rounded-md border border-[var(--color-line)] bg-[var(--color-bg-2)] p-3 text-xs"
+            data-testid="bench-context-predictive-summary"
+          >
+            <div className="mb-1 font-medium text-[var(--color-ink)]">
+              Indexed-decision tally · sample size{" "}
+              {ctx.predictive_summary.sample_size}
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div>
+                <div className="text-base font-semibold text-emerald-700">
+                  {ctx.predictive_summary.favorable_count}
+                </div>
+                <div className="text-[var(--color-mute)]">Favorable</div>
+              </div>
+              <div>
+                <div className="text-base font-semibold text-rose-700">
+                  {ctx.predictive_summary.adverse_count}
+                </div>
+                <div className="text-[var(--color-mute)]">Adverse</div>
+              </div>
+              <div>
+                <div className="text-base font-semibold text-slate-700">
+                  {ctx.predictive_summary.neutral_count}
+                </div>
+                <div className="text-[var(--color-mute)]">Neutral / other</div>
+              </div>
+            </div>
+            {ctx.predictive_summary.top_outcome_label ? (
+              <p className="mt-2 text-[var(--color-mute)]">
+                Most common outcome label:{" "}
+                <strong className="text-[var(--color-ink-2)]">
+                  {ctx.predictive_summary.top_outcome_label}
+                </strong>{" "}
+                · classified using the{" "}
+                <code className="rounded bg-[var(--color-bg)] px-1">
+                  {ctx.predictive_summary.practice_area_key}
+                </code>{" "}
+                practice-area bias.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="grid gap-3 sm:grid-cols-3">

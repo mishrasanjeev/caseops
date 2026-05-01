@@ -82,6 +82,9 @@ def _recommendation_record(recommendation: Recommendation) -> RecommendationReco
         created_at=recommendation.created_at,
         options=[_option_record(o) for o in recommendation.options],
         decisions=[_decision_record(d) for d in recommendation.decisions],
+        retrieved_authorities=parse_assumptions(
+            recommendation.retrieved_authorities_json,
+        ),
     )
 
 

@@ -371,6 +371,18 @@ function RecommendationCard({
           ) : null}
         </div>
 
+        {/* PG-109 (2026-05-01) — source-used / source-ignored panel.
+            Shows the full retrieved-authorities list the LLM was given,
+            split by which were cited in any option vs considered but
+            not cited. Builds AI-trust by making the retrieval set
+            visible. Hidden when the row pre-dates PG-109 (empty list). */}
+        {rec.retrieved_authorities && rec.retrieved_authorities.length > 0 ? (
+          <SourcesUsedPanel
+            retrieved={rec.retrieved_authorities}
+            options={rec.options}
+          />
+        ) : null}
+
         {rec.next_action ? (
           <p className="rounded-md bg-[var(--color-bg)] px-3 py-2 text-xs text-[var(--color-mute)]">
             <span className="font-semibold text-[var(--color-ink-2)]">
@@ -482,6 +494,62 @@ function Detail({ title, items }: { title: string; items: string[] }) {
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+
+// PG-109 (2026-05-01) — source-used / source-ignored AI-trust panel.
+// Receives the full retrieved-authorities list the LLM saw plus the
+// per-option supporting_citations that survived verification. Shows
+// "considered M, cited N" + a collapsible "Considered but not cited"
+// list so the user can see which evidence the model passed over.
+function SourcesUsedPanel({
+  retrieved,
+  options,
+}: {
+  retrieved: string[];
+  options: Recommendation["options"];
+}): React.JSX.Element {
+  const cited = new Set<string>();
+  for (const opt of options) {
+    for (const citation of opt.supporting_citations) {
+      cited.add(citation);
+    }
+  }
+  const consideredButNotCited = retrieved.filter((id) => !cited.has(id));
+  const citedCount = retrieved.filter((id) => cited.has(id)).length;
+
+  return (
+    <div
+      data-testid="recommendations-sources-panel"
+      className="rounded-lg border border-[var(--color-line)] bg-[var(--color-bg-2)] p-3 text-xs"
+    >
+      <div className="font-medium text-[var(--color-ink)]">
+        Sources considered: {retrieved.length} · cited:{" "}
+        <strong>{citedCount}</strong>
+      </div>
+      <p className="mt-1 text-[var(--color-mute)]">
+        The LLM was given these authorities for grounding. Citations
+        that survived verification appear in each option above.
+      </p>
+      {consideredButNotCited.length > 0 ? (
+        <details className="mt-2">
+          <summary className="cursor-pointer text-[var(--color-mute-2)]">
+            Considered but not cited ({consideredButNotCited.length})
+          </summary>
+          <ul className="mt-2 flex flex-col gap-1">
+            {consideredButNotCited.map((id) => (
+              <li
+                key={id}
+                className="rounded border border-dashed border-[var(--color-line)] bg-white px-2 py-1 text-[var(--color-mute)]"
+              >
+                {id}
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
     </div>
   );
 }

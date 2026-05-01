@@ -129,6 +129,9 @@ export const recommendation = z.object({
   created_at: z.string(),
   options: z.array(recommendationOption),
   decisions: z.array(recommendationDecision),
+  // PG-109 (2026-05-01) — full retrieved-authorities list. Default
+  // empty for legacy rows.
+  retrieved_authorities: z.array(z.string()).default([]),
 });
 
 export const recommendationList = z.object({
