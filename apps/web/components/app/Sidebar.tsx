@@ -16,6 +16,7 @@ import {
   PanelsTopLeft,
   Scale,
   Sparkles,
+  Sun,
   Users,
   Wrench,
 } from "lucide-react";
@@ -37,6 +38,11 @@ type NavItem = {
 
 const NAV: NavItem[] = [
   { href: "/app", label: "Home", icon: LayoutDashboard, section: "work" },
+  // PG-004 (2026-05-01) — daily command center. Aggregates hearings
+  // / tasks / drafts in review / overdue invoices / deadlines for
+  // the current user. Pinned at the top of "Work" because most
+  // sessions start with "what must I do today".
+  { href: "/app/today", label: "Today", icon: Sun, section: "work" },
   { href: "/app/matters", label: "Matters", icon: Briefcase, section: "work" },
   {
     href: "/app/intake",

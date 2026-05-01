@@ -112,14 +112,14 @@ Needed:
 Estimated days: 5-6.
 
 ### `PG-004` Matter command center / "Today" view
-Status: **`Missing`** (today's `+ Add hearing` empty-state addresses ~5% of this).
-Evidence: no `today_view`, `command_center`, or matter-cockpit aggregator beyond `apps/web/app/app/matters/[id]/page.tsx` (260 lines, single-section view).
-Needed:
-- New `/app/today` page: per-user pre-aggregated list of (i) hearings in next 7d, (ii) tasks with `due_at` overdue or due-today, (iii) draft reviews assigned to me, (iv) approval requests, (v) overdue invoices.
-- Backend: `GET /api/me/today` returning the union, tenant + matter-access-scoped.
-- Matter cockpit: add a "Next action" card derived from the unified view (highest-priority item for THIS matter).
-- Sidebar default route changes from `/app` to `/app/today` for users with active matters.
-Estimated days: 5-7.
+Status: **`Implemented`** (2026-05-01).
+Evidence:
+- `services/today_view.py` aggregates 5 streams tenant-scoped + matter-access-respecting: hearings_next_7d (status SCHEDULED), tasks_due_or_overdue (status ≠ COMPLETED, owner = me OR unassigned), drafts_in_review (status = IN_REVIEW), overdue_invoices (status ∈ {issued, partially_paid}, due_on < today), deadlines_next_7d (matter_deadlines).
+- `GET /api/me/today?horizon_days=N` (1 ≤ N ≤ 30; 400 outside range). Tenant isolation enforced via `Matter.company_id == context.company.id` on every join.
+- `apps/web/app/app/today/page.tsx` renders sectioned cards (Hearings / Deadlines / Tasks / Drafts pending review / Overdue invoices). Each row deeplinks to the matter cockpit. Empty-state when nothing demands attention.
+- Sidebar gets a pinned "Today" entry at the top of the Work section.
+- 10 backend pytest cases (test_today_view.py) — empty workspace, hearings 7d filter, past-hearings excluded, tasks overdue+due-today+horizon, completed-task excluded, horizon 400 clamping, drafts in review, overdue invoices (paid/partially-paid filter), deadlines, tenant-isolation.
+Still on the roadmap: matter-cockpit "Next action" card derived from this feed; sidebar default route swap from `/app` → `/app/today` for users with active matters.
 
 ### `PG-005` Drafting finalization — court-specific format + PDF + revision diff
 Status: **`Implemented`** (all 12 sprints of the drafting roadmap landed 2026-05-01; live-LLM eval harness in place to enforce 4.8/5 going forward).

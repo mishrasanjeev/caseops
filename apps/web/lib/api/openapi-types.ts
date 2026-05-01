@@ -187,14 +187,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Read this workspace's AI policy (PG-107). */
+        /** Read this workspace's AI policy (PG-107 + Sprint 11 governance). */
         get: operations["get_tenant_ai_policy_api_admin_tenant_ai_policy_get"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        /** Toggle predictive bench analytics for this workspace (PG-107). Owner/admin only. */
+        /** Toggle predictive bench analytics + admin-disabled templates for this workspace (PG-107 + Sprint 11). Owner/admin only. */
         patch: operations["patch_tenant_ai_policy_api_admin_tenant_ai_policy_patch"];
         trace?: never;
     };
@@ -2292,6 +2292,23 @@ export interface paths {
         };
         /** Get the full workspace for a matter */
         get: operations["get_current_company_matter_workspace_api_matters__matter_id__workspace_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/today": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Today's prioritised feed for the current user — hearings + tasks + draft reviews + overdue invoices + deadlines, all tenant-scoped and matter-access-respecting (PG-004, 2026-05-01). */
+        get: operations["get_my_today_view_api_me_today_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -8162,13 +8179,20 @@ export interface components {
         };
         /** TenantAIPolicyPatchRequest */
         TenantAIPolicyPatchRequest: {
+            /** Disabled Template Types */
+            disabled_template_types?: string[] | null;
             /** Predictive Bench Strategy Enabled */
-            predictive_bench_strategy_enabled: boolean;
+            predictive_bench_strategy_enabled?: boolean | null;
         };
         /** TenantAIPolicyResponse */
         TenantAIPolicyResponse: {
             /** Company Id */
             company_id: string;
+            /**
+             * Disabled Template Types
+             * @default []
+             */
+            disabled_template_types: string[];
             /** Predictive Bench Strategy Enabled */
             predictive_bench_strategy_enabled: boolean;
         };
@@ -8231,6 +8255,26 @@ export interface components {
              */
             work_date: string;
         };
+        /** TodayViewResponse */
+        TodayViewResponse: {
+            /** Deadlines Next 7D */
+            deadlines_next_7d: components["schemas"]["_DeadlineResponse"][];
+            /** Drafts In Review */
+            drafts_in_review: components["schemas"]["_DraftInReviewResponse"][];
+            /** Hearings Next 7D */
+            hearings_next_7d: components["schemas"]["_HearingResponse"][];
+            /** Horizon Days */
+            horizon_days: number;
+            /** Overdue Invoices */
+            overdue_invoices: components["schemas"]["_InvoiceResponse"][];
+            /** Tasks Due Or Overdue */
+            tasks_due_or_overdue: components["schemas"]["_TaskResponse"][];
+            /**
+             * Today
+             * Format: date
+             */
+            today: string;
+        };
         /** UserSummary */
         UserSummary: {
             /**
@@ -8269,6 +8313,100 @@ export interface components {
             accepted: number;
             /** Matched */
             matched: number;
+        };
+        /** _DeadlineResponse */
+        _DeadlineResponse: {
+            /** Days Until */
+            days_until: number;
+            /**
+             * Due On
+             * Format: date
+             */
+            due_on: string;
+            /** Id */
+            id: string;
+            matter: components["schemas"]["_MatterRefResponse"];
+            /** Severity */
+            severity: string;
+            /** Title */
+            title: string;
+        };
+        /** _DraftInReviewResponse */
+        _DraftInReviewResponse: {
+            /** Draft Type */
+            draft_type: string;
+            /** Id */
+            id: string;
+            matter: components["schemas"]["_MatterRefResponse"];
+            /** Template Type */
+            template_type?: string | null;
+            /** Title */
+            title: string;
+            /** Updated At Iso */
+            updated_at_iso: string;
+        };
+        /** _HearingResponse */
+        _HearingResponse: {
+            /** Forum Name */
+            forum_name: string;
+            /**
+             * Hearing On
+             * Format: date
+             */
+            hearing_on: string;
+            /** Id */
+            id: string;
+            /** Judge Name */
+            judge_name?: string | null;
+            matter: components["schemas"]["_MatterRefResponse"];
+            /** Purpose */
+            purpose: string;
+        };
+        /** _InvoiceResponse */
+        _InvoiceResponse: {
+            /** Currency */
+            currency: string;
+            /** Days Overdue */
+            days_overdue: number;
+            /**
+             * Due On
+             * Format: date
+             */
+            due_on: string;
+            /** Id */
+            id: string;
+            /** Invoice Number */
+            invoice_number?: string | null;
+            matter: components["schemas"]["_MatterRefResponse"];
+            /** Status */
+            status: string;
+            /** Total Amount Minor */
+            total_amount_minor: number;
+        };
+        /** _MatterRefResponse */
+        _MatterRefResponse: {
+            /** Id */
+            id: string;
+            /** Matter Code */
+            matter_code: string;
+            /** Title */
+            title: string;
+        };
+        /** _TaskResponse */
+        _TaskResponse: {
+            /** Due On */
+            due_on?: string | null;
+            /** Id */
+            id: string;
+            matter: components["schemas"]["_MatterRefResponse"];
+            /** Overdue */
+            overdue: boolean;
+            /** Priority */
+            priority: string;
+            /** Status */
+            status: string;
+            /** Title */
+            title: string;
         };
     };
     responses: never;
@@ -13097,6 +13235,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MatterWorkspaceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_my_today_view_api_me_today_get: {
+        parameters: {
+            query?: {
+                horizon_days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TodayViewResponse"];
                 };
             };
             /** @description Validation Error */

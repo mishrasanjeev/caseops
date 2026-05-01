@@ -936,6 +936,81 @@ export type DraftCompareResponse = {
   summary: string;
 };
 
+// PG-004 (2026-05-01) — Today cockpit feed.
+type TodayMatterRef = {
+  id: string;
+  title: string;
+  matter_code: string;
+};
+
+export type TodayHearing = {
+  id: string;
+  matter: TodayMatterRef;
+  hearing_on: string; // ISO date
+  forum_name: string;
+  judge_name: string | null;
+  purpose: string;
+};
+
+export type TodayTask = {
+  id: string;
+  matter: TodayMatterRef;
+  title: string;
+  due_on: string | null; // ISO date
+  status: string;
+  priority: string;
+  overdue: boolean;
+};
+
+export type TodayDraftInReview = {
+  id: string;
+  matter: TodayMatterRef;
+  title: string;
+  draft_type: string;
+  template_type: string | null;
+  updated_at_iso: string;
+};
+
+export type TodayInvoice = {
+  id: string;
+  matter: TodayMatterRef;
+  invoice_number: string | null;
+  total_amount_minor: number;
+  currency: string;
+  due_on: string;
+  days_overdue: number;
+  status: string;
+};
+
+export type TodayDeadline = {
+  id: string;
+  matter: TodayMatterRef;
+  title: string;
+  due_on: string;
+  severity: string;
+  days_until: number;
+};
+
+export type TodayView = {
+  today: string;
+  horizon_days: number;
+  hearings_next_7d: TodayHearing[];
+  tasks_due_or_overdue: TodayTask[];
+  drafts_in_review: TodayDraftInReview[];
+  overdue_invoices: TodayInvoice[];
+  deadlines_next_7d: TodayDeadline[];
+};
+
+export async function fetchTodayView(input?: {
+  horizonDays?: number;
+}): Promise<TodayView> {
+  const params = new URLSearchParams();
+  if (input?.horizonDays) params.set("horizon_days", String(input.horizonDays));
+  const qs = params.toString();
+  return apiRequest<TodayView>(`/api/me/today${qs ? `?${qs}` : ""}`);
+}
+
+
 export async function compareDraftRevisions(input: {
   matterId: string;
   draftId: string;
