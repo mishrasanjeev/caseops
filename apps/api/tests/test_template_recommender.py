@@ -141,3 +141,84 @@ def test_route_requires_auth(client: TestClient) -> None:
         "/api/drafting/templates/recommend?forum_level=high_court",
     )
     assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------
+# PG-005 Sprint 1 (2026-05-01): writ / quashing / written-statement /
+# reply templates promoted into the recommender matrix.
+# ---------------------------------------------------------------
+
+def test_high_court_writ_recommends_writ_petition_primary() -> None:
+    """HC + writ → WRIT_PETITION primary (replacing AFFIDAVIT primary).
+    Article 226 writ filings are first-class petitions, not affidavit-led."""
+    recs = recommend_templates(
+        forum_level="high_court", practice_area="Writ",
+    )
+    assert recs[0].template_type == DraftTemplateType.WRIT_PETITION
+    assert recs[0].relevance == "primary"
+
+
+def test_supreme_court_writ_recommends_writ_petition_primary() -> None:
+    """SC + writ → WRIT_PETITION primary. Article 32 is the SC's
+    original constitutional jurisdiction."""
+    recs = recommend_templates(
+        forum_level="supreme_court", practice_area="Constitutional",
+    )
+    assert recs[0].template_type == DraftTemplateType.WRIT_PETITION
+    assert recs[0].relevance == "primary"
+
+
+def test_high_court_criminal_recommends_quashing_petition() -> None:
+    """HC + criminal → QUASHING_PETITION as a primary recommendation.
+    s.528 BNSS / s.482 CrPC quashing is the HC's inherent-powers
+    jurisdiction and a daily filing on the criminal-side."""
+    recs = recommend_templates(
+        forum_level="high_court", practice_area="Criminal",
+    )
+    types = [r.template_type for r in recs]
+    assert DraftTemplateType.QUASHING_PETITION in types
+    rec = next(
+        r for r in recs if r.template_type == DraftTemplateType.QUASHING_PETITION
+    )
+    assert rec.relevance == "primary"
+
+
+def test_lower_court_civil_recommends_written_statement_primary() -> None:
+    """Trial-court civil → WRITTEN_STATEMENT among primaries (every
+    contested suit needs one within Order VIII Rule 1's timeline)."""
+    recs = recommend_templates(
+        forum_level="lower_court", practice_area="Civil",
+    )
+    primary_types = [r.template_type for r in recs if r.relevance == "primary"]
+    assert DraftTemplateType.WRITTEN_STATEMENT in primary_types
+
+
+def test_high_court_civil_includes_reply_counter_affidavit() -> None:
+    """HC + civil → REPLY_COUNTER_AFFIDAVIT in the recommendation list
+    (most contested HC matters generate at least one reply on
+    interlocutory applications)."""
+    recs = recommend_templates(
+        forum_level="high_court", practice_area="Civil",
+    )
+    types = [r.template_type for r in recs]
+    assert DraftTemplateType.REPLY_COUNTER_AFFIDAVIT in types
+
+
+def test_high_court_writ_lists_reply_counter_affidavit() -> None:
+    """HC + writ → REPLY_COUNTER_AFFIDAVIT for the State /
+    authority respondents."""
+    recs = recommend_templates(
+        forum_level="high_court", practice_area="Writ",
+    )
+    types = [r.template_type for r in recs]
+    assert DraftTemplateType.REPLY_COUNTER_AFFIDAVIT in types
+
+
+def test_high_court_commercial_includes_written_statement() -> None:
+    """HC + commercial → WRITTEN_STATEMENT (Commercial Courts Act
+    120-day cap on filing the written statement)."""
+    recs = recommend_templates(
+        forum_level="high_court", practice_area="Commercial",
+    )
+    types = [r.template_type for r in recs]
+    assert DraftTemplateType.WRITTEN_STATEMENT in types

@@ -26,9 +26,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class DraftTemplateType(StrEnum):
-    """The eight specialised templates covered in Sprint R.
+    """Specialised drafting templates.
 
-    Ordered by how frequently Indian litigators use them (bail
+    Ordered roughly by how frequently Indian litigators use them (bail
     applications dominate HC criminal-side work).
     """
 
@@ -44,6 +44,12 @@ class DraftTemplateType(StrEnum):
     # bench-aware drafting flow's anchor template. Covers HC appeals
     # under Letters Patent / civil + criminal appellate-side practice.
     APPEAL_MEMORANDUM = "appeal_memorandum"
+    # PG-005 Sprint 1 (2026-05-01). Four highest-frequency missing
+    # templates per Codex's product-gap report.
+    WRIT_PETITION = "writ_petition"
+    QUASHING_PETITION = "quashing_petition"
+    WRITTEN_STATEMENT = "written_statement"
+    REPLY_COUNTER_AFFIDAVIT = "reply_counter_affidavit"
 
 
 DraftTemplateTypeLiteral = Literal[
@@ -56,6 +62,10 @@ DraftTemplateTypeLiteral = Literal[
     "criminal_complaint",
     "civil_suit",
     "appeal_memorandum",
+    "writ_petition",
+    "quashing_petition",
+    "written_statement",
+    "reply_counter_affidavit",
 ]
 
 
@@ -236,6 +246,177 @@ class AppealMemorandumFacts(_TemplateFactsBase):
     delay_condonation_needed: bool = False
     delay_condonation_days: int | None = Field(default=None, ge=0, le=10000)
     record_references: str | None = Field(default=None, max_length=4000)
+
+
+class WritPetitionFacts(_TemplateFactsBase):
+    """Article 226 (HC) / Article 32 (SC) writ petition.
+
+    The shape covers all five writ types; the prompt branches on
+    `writ_type` to enforce the right relief language (mandamus
+    compels, certiorari quashes, prohibition stops, quo warranto
+    questions office, habeas corpus produces the body).
+    """
+
+    petitioner_name: str = Field(min_length=2, max_length=255)
+    respondent_name: str = Field(
+        min_length=2,
+        max_length=500,
+        description="Usually 'State of X' / 'Union of India'; multi-respondent supported.",
+    )
+    writ_court: Literal["high_court", "supreme_court"] = "high_court"
+    writ_type: Literal[
+        "mandamus", "certiorari", "prohibition", "quo_warranto", "habeas_corpus",
+    ] = "mandamus"
+    impugned_action: str = Field(
+        min_length=20,
+        max_length=4000,
+        description="The order / act / policy / inaction under challenge.",
+    )
+    impugned_action_date: str | None = Field(
+        default=None,
+        max_length=10,
+        description="ISO yyyy-mm-dd; omit when challenging continuing inaction.",
+    )
+    fundamental_rights_invoked: list[str] = Field(
+        default_factory=list,
+        max_length=15,
+        description="e.g. ['Article 14', 'Article 21'].",
+    )
+    statutory_violations: list[str] = Field(
+        default_factory=list,
+        max_length=20,
+        description="Statutory provisions the impugned action violates.",
+    )
+    prayer_clauses: list[str] = Field(
+        min_length=1,
+        max_length=15,
+        description="Reliefs sought, one per line. Mandamus → 'direct respondent to…' etc.",
+    )
+    interim_relief_sought: str | None = Field(default=None, max_length=2000)
+    laches_position: str | None = Field(
+        default=None,
+        max_length=2000,
+        description=(
+            "Explanation if filed late (writs have no fixed "
+            "limitation but laches matters)."
+        ),
+    )
+
+
+class QuashingPetitionFacts(_TemplateFactsBase):
+    """Quashing petition under BNSS s.528 (earlier CrPC s.482).
+
+    Per Gian Singh + B.S. Joshi + Narinder Singh, compromise +
+    victim_consent are dispositive on whether a non-compoundable
+    matter can be quashed. The prompt enforces that framing.
+    """
+
+    petitioner_name: str = Field(min_length=2, max_length=255)
+    respondent_name: str = Field(min_length=2, max_length=500)
+    fir_number: str | None = Field(
+        default=None,
+        max_length=120,
+        description="FIR / chargesheet number being challenged.",
+    )
+    police_station: str | None = Field(default=None, max_length=255)
+    impugned_proceedings_summary: str = Field(
+        min_length=40,
+        max_length=4000,
+        description="The investigation / chargesheet / order under challenge.",
+    )
+    statutory_offences: list[str] = Field(
+        default_factory=list,
+        max_length=40,
+        description="BNS / IPC sections the petitioner is charged under.",
+    )
+    grounds_for_quashing: str = Field(min_length=40, max_length=4000)
+    compromise_recorded: bool = Field(
+        default=False,
+        description="Has the matter been compromised between parties? Triggers Gian Singh framing.",
+    )
+    victim_consent: bool | None = Field(
+        default=None,
+        description=(
+            "Has the victim explicitly consented to quashing? "
+            "None when not yet ascertained."
+        ),
+    )
+    court_name: str = Field(min_length=2, max_length=255)
+
+
+class WrittenStatementFacts(_TemplateFactsBase):
+    """Written statement under CPC Order VIII.
+
+    Defendant-side response to a plaint. Order VIII Rule 1 sets a
+    30-day default with a 90-day cap; the prompt flags this as a
+    drop-dead deadline.
+    """
+
+    defendant_name: str = Field(min_length=2, max_length=255)
+    plaintiff_name: str = Field(min_length=2, max_length=255)
+    suit_number: str = Field(min_length=1, max_length=120)
+    court_name: str = Field(min_length=2, max_length=255)
+    preliminary_objections: list[str] = Field(
+        default_factory=list,
+        max_length=15,
+        description="Jurisdiction, limitation, mis-joinder, valuation, etc.",
+    )
+    paragraph_wise_reply: str = Field(
+        min_length=80,
+        max_length=8000,
+        description=(
+            "Para-by-para denials of the plaint. Use 'Para X is denied' / "
+            "'Para X is admitted' / 'Para X is denied for want of knowledge'."
+        ),
+    )
+    counter_claim_text: str | None = Field(default=None, max_length=4000)
+    set_off_text: str | None = Field(default=None, max_length=4000)
+    limitation_defence: str | None = Field(default=None, max_length=2000)
+    documents_relied: list[str] = Field(
+        default_factory=list,
+        max_length=40,
+        description="List of docs relied on by defendant; goes into the Order VIII Rule 1A list.",
+    )
+
+
+class ReplyCounterAffidavitFacts(_TemplateFactsBase):
+    """Reply / counter-affidavit to any pending petition or application.
+
+    Generic shape covering writ counter-affidavits, IA replies, MA
+    replies, etc. The prompt branches on petition_type when supplied.
+    """
+
+    deponent_name: str = Field(min_length=2, max_length=255)
+    deponent_designation: str | None = Field(default=None, max_length=255)
+    deponent_address: str = Field(min_length=10, max_length=1000)
+    petition_number: str = Field(min_length=1, max_length=120)
+    petition_type: str | None = Field(
+        default=None,
+        max_length=120,
+        description="Writ Petition (C) / Crl. M.A. / IA / MA — for the cause-title hint.",
+    )
+    main_petition_summary: str = Field(
+        min_length=40,
+        max_length=4000,
+        description="Short summary of what the original petition seeks.",
+    )
+    court_name: str = Field(min_length=2, max_length=255)
+    paragraph_wise_response: str = Field(
+        min_length=80,
+        max_length=8000,
+        description="Para-by-para reply to the petition's averments.",
+    )
+    additional_facts_pleaded: list[str] = Field(
+        default_factory=list,
+        max_length=20,
+        description="New facts the respondent introduces.",
+    )
+    preliminary_submissions: str | None = Field(default=None, max_length=4000)
+    relief_sought_against_petition: str = Field(
+        min_length=20,
+        max_length=2000,
+        description="Typically 'dismiss the petition' but may include conditional relief.",
+    )
 
 
 class DraftTemplateSchema(BaseModel):
@@ -554,6 +735,246 @@ _APPEAL_FIELDS: list[DraftingFieldSpec] = [
 ]
 
 
+_WRIT_FIELDS: list[DraftingFieldSpec] = [
+    DraftingFieldSpec(name="petitioner_name", label="Petitioner's full name"),
+    DraftingFieldSpec(
+        name="respondent_name",
+        label="Respondent(s)",
+        help_text=(
+            "Usually 'State of X' or 'Union of India'; multiple "
+            "respondents in one field separated by commas."
+        ),
+    ),
+    DraftingFieldSpec(
+        name="writ_court",
+        label="Forum",
+        kind="enum",
+        enum_options=["high_court", "supreme_court"],
+    ),
+    DraftingFieldSpec(
+        name="writ_type",
+        label="Type of writ",
+        kind="enum",
+        enum_options=[
+            "mandamus", "certiorari", "prohibition", "quo_warranto", "habeas_corpus",
+        ],
+    ),
+    DraftingFieldSpec(
+        name="impugned_action",
+        label="Impugned order / action / inaction",
+        kind="text",
+        step_group="impugned",
+    ),
+    DraftingFieldSpec(
+        name="impugned_action_date",
+        label="Date of impugned action (optional)",
+        kind="date",
+        required=False,
+        step_group="impugned",
+    ),
+    DraftingFieldSpec(
+        name="fundamental_rights_invoked",
+        label="Fundamental rights invoked",
+        help_text="One per line — e.g. Article 14, Article 19(1)(g), Article 21.",
+        required=False,
+        step_group="grounds",
+    ),
+    DraftingFieldSpec(
+        name="statutory_violations",
+        label="Statutory provisions violated",
+        help_text="One per line.",
+        required=False,
+        step_group="grounds",
+    ),
+    DraftingFieldSpec(
+        name="prayer_clauses",
+        label="Prayer clauses",
+        help_text=(
+            "One per line. Mandamus → 'direct respondent to…'; "
+            "Certiorari → 'quash the impugned order…'."
+        ),
+        step_group="relief",
+    ),
+    DraftingFieldSpec(
+        name="interim_relief_sought",
+        label="Interim relief (optional)",
+        kind="text",
+        required=False,
+        step_group="relief",
+    ),
+    DraftingFieldSpec(
+        name="laches_position",
+        label="Laches / delay explanation (if filed late)",
+        kind="text",
+        required=False,
+        step_group="limitation",
+    ),
+]
+
+
+_QUASHING_FIELDS: list[DraftingFieldSpec] = [
+    DraftingFieldSpec(name="petitioner_name", label="Petitioner's full name"),
+    DraftingFieldSpec(name="respondent_name", label="Respondent(s)"),
+    DraftingFieldSpec(
+        name="fir_number",
+        label="FIR / chargesheet number",
+        required=False,
+        placeholder="FIR No. 234/2025",
+    ),
+    DraftingFieldSpec(
+        name="police_station", label="Police station", required=False,
+    ),
+    DraftingFieldSpec(
+        name="impugned_proceedings_summary",
+        label="Impugned proceedings (FIR / chargesheet / order)",
+        kind="text",
+        step_group="impugned",
+    ),
+    DraftingFieldSpec(
+        name="statutory_offences",
+        label="Statutory offences alleged",
+        help_text="One per line — e.g. BNS s.318, BNS s.351.",
+        required=False,
+        step_group="impugned",
+    ),
+    DraftingFieldSpec(
+        name="grounds_for_quashing",
+        label="Grounds for quashing",
+        kind="text",
+        step_group="grounds",
+        help_text="No prima facie offence, abuse of process, jurisdictional bar, settlement, etc.",
+    ),
+    DraftingFieldSpec(
+        name="compromise_recorded",
+        label="Matter compromised between parties?",
+        kind="boolean",
+        required=False,
+        step_group="grounds",
+        help_text="Triggers Gian Singh / B.S. Joshi framing if true.",
+    ),
+    DraftingFieldSpec(
+        name="victim_consent",
+        label="Victim has consented to quashing?",
+        kind="boolean",
+        required=False,
+        step_group="grounds",
+    ),
+    DraftingFieldSpec(name="court_name", label="High Court"),
+]
+
+
+_WS_FIELDS: list[DraftingFieldSpec] = [
+    DraftingFieldSpec(name="defendant_name", label="Defendant's full name"),
+    DraftingFieldSpec(name="plaintiff_name", label="Plaintiff's full name"),
+    DraftingFieldSpec(
+        name="suit_number",
+        label="Suit number",
+        placeholder="CS (OS) 123/2025",
+    ),
+    DraftingFieldSpec(name="court_name", label="Court"),
+    DraftingFieldSpec(
+        name="preliminary_objections",
+        label="Preliminary objections",
+        help_text="Jurisdiction, limitation, mis-joinder, valuation, suppression — one per line.",
+        required=False,
+        step_group="objections",
+    ),
+    DraftingFieldSpec(
+        name="paragraph_wise_reply",
+        label="Para-by-para reply to plaint",
+        kind="text",
+        step_group="reply",
+        help_text=(
+            "'Para 1 is denied' / 'Para 2 is admitted' / 'Para 3 "
+            "is denied for want of knowledge'."
+        ),
+    ),
+    DraftingFieldSpec(
+        name="counter_claim_text",
+        label="Counter-claim (Order VIII Rule 6A) — optional",
+        kind="text",
+        required=False,
+        step_group="affirmative",
+    ),
+    DraftingFieldSpec(
+        name="set_off_text",
+        label="Set-off (Order VIII Rule 6) — optional",
+        kind="text",
+        required=False,
+        step_group="affirmative",
+    ),
+    DraftingFieldSpec(
+        name="limitation_defence",
+        label="Limitation defence (optional)",
+        kind="text",
+        required=False,
+        step_group="affirmative",
+    ),
+    DraftingFieldSpec(
+        name="documents_relied",
+        label="Documents relied on (Order VIII Rule 1A list)",
+        help_text="One per line.",
+        required=False,
+        step_group="documents",
+    ),
+]
+
+
+_REPLY_FIELDS: list[DraftingFieldSpec] = [
+    DraftingFieldSpec(name="deponent_name", label="Deponent's full name"),
+    DraftingFieldSpec(
+        name="deponent_designation",
+        label="Designation (if institutional respondent)",
+        required=False,
+    ),
+    DraftingFieldSpec(name="deponent_address", label="Deponent's address", kind="text"),
+    DraftingFieldSpec(
+        name="petition_number",
+        label="Petition number being replied to",
+        placeholder="W.P. (C) 1234/2025",
+    ),
+    DraftingFieldSpec(
+        name="petition_type",
+        label="Type of petition (optional)",
+        required=False,
+        placeholder="Writ Petition (C) / Crl. M.A. / IA",
+    ),
+    DraftingFieldSpec(
+        name="main_petition_summary",
+        label="Summary of the petition being replied to",
+        kind="text",
+        step_group="impugned",
+    ),
+    DraftingFieldSpec(name="court_name", label="Court"),
+    DraftingFieldSpec(
+        name="preliminary_submissions",
+        label="Preliminary submissions (optional)",
+        kind="text",
+        required=False,
+        step_group="objections",
+    ),
+    DraftingFieldSpec(
+        name="paragraph_wise_response",
+        label="Para-by-para response to the petition",
+        kind="text",
+        step_group="reply",
+    ),
+    DraftingFieldSpec(
+        name="additional_facts_pleaded",
+        label="Additional facts pleaded by the respondent",
+        help_text="One per line.",
+        required=False,
+        step_group="reply",
+    ),
+    DraftingFieldSpec(
+        name="relief_sought_against_petition",
+        label="Relief sought (typically 'dismiss the petition')",
+        kind="text",
+        step_group="relief",
+    ),
+]
+
+
 # ---------------------------------------------------------------
 # Registry — the template route reads this; nothing else should.
 # ---------------------------------------------------------------
@@ -666,6 +1087,71 @@ _register(
     fields=_APPEAL_FIELDS,
     facts_model=AppealMemorandumFacts,
 )
+_register(
+    DraftTemplateType.WRIT_PETITION,
+    display_name="Writ Petition",
+    summary=(
+        "Article 226 (HC) / Article 32 (SC) writ petition — covers "
+        "mandamus, certiorari, prohibition, quo warranto, and habeas "
+        "corpus. The drafting prompt branches on the writ_type field "
+        "to enforce the right relief language."
+    ),
+    statutory_basis=[
+        "Constitution Article 226 (HC writ jurisdiction)",
+        "Constitution Article 32 (SC writ jurisdiction)",
+        "Constitution Articles 14, 19, 21 (commonly invoked)",
+    ],
+    fields=_WRIT_FIELDS,
+    facts_model=WritPetitionFacts,
+)
+_register(
+    DraftTemplateType.QUASHING_PETITION,
+    display_name="Quashing Petition",
+    summary=(
+        "Petition under BNSS s.528 (earlier CrPC s.482) to quash an "
+        "FIR / chargesheet / proceedings. Prompt enforces Gian Singh / "
+        "B.S. Joshi framing when compromise + victim consent are present."
+    ),
+    statutory_basis=[
+        "BNSS s.528 (inherent powers of HC)",
+        "CrPC s.482 (historical equivalent)",
+        "Gian Singh v. State of Punjab (2012) 10 SCC 303",
+        "B.S. Joshi v. State of Haryana (2003) 4 SCC 675",
+    ],
+    fields=_QUASHING_FIELDS,
+    facts_model=QuashingPetitionFacts,
+)
+_register(
+    DraftTemplateType.WRITTEN_STATEMENT,
+    display_name="Written Statement",
+    summary=(
+        "Defendant-side written statement under CPC Order VIII. "
+        "Order VIII Rule 1 sets a 30-day default with a 90-day cap; "
+        "the prompt flags this as a drop-dead deadline."
+    ),
+    statutory_basis=[
+        "CPC Order VIII Rules 1, 1A, 6, 6A",
+        "Commercial Courts Act 2015 (timeline modifications)",
+    ],
+    fields=_WS_FIELDS,
+    facts_model=WrittenStatementFacts,
+)
+_register(
+    DraftTemplateType.REPLY_COUNTER_AFFIDAVIT,
+    display_name="Reply / Counter-Affidavit",
+    summary=(
+        "Reply / counter-affidavit to a pending petition or "
+        "application — covers writ counter-affidavits, IA replies, "
+        "MA replies, and similar respondent-side filings."
+    ),
+    statutory_basis=[
+        "CPC Order XIX (affidavits)",
+        "Indian Oaths Act 1969",
+        "Court rules on counter-affidavit timelines (HC-specific)",
+    ],
+    fields=_REPLY_FIELDS,
+    facts_model=ReplyCounterAffidavitFacts,
+)
 
 
 def get_template_schema(template_type: DraftTemplateType) -> DraftTemplateSchema:
@@ -700,6 +1186,10 @@ __all__ = [
     "DraftTemplateTypeLiteral",
     "DraftingFieldSpec",
     "PropertyDisputeNoticeFacts",
+    "QuashingPetitionFacts",
+    "ReplyCounterAffidavitFacts",
+    "WritPetitionFacts",
+    "WrittenStatementFacts",
     "get_template_facts_model",
     "get_template_schema",
     "list_template_schemas",

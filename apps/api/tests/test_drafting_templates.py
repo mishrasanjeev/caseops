@@ -18,6 +18,7 @@ from fastapi.testclient import TestClient
 from caseops_api.schemas.drafting_templates import (
     AffidavitFacts,
     AnticipatoryBailFacts,
+    AppealMemorandumFacts,
     BailFacts,
     ChequeBounceNoticeFacts,
     CivilSuitFacts,
@@ -25,6 +26,10 @@ from caseops_api.schemas.drafting_templates import (
     DivorcePetitionFacts,
     DraftTemplateType,
     PropertyDisputeNoticeFacts,
+    QuashingPetitionFacts,
+    ReplyCounterAffidavitFacts,
+    WritPetitionFacts,
+    WrittenStatementFacts,
     get_template_facts_model,
     get_template_schema,
     list_template_schemas,
@@ -41,10 +46,11 @@ def test_registry_has_one_entry_per_template_type() -> None:
     types_in_registry = {s.template_type for s in schemas}
     expected = {t.value for t in DraftTemplateType}
     assert types_in_registry == expected
-    # 9 templates after BAAD-001 (Sprint P5, 2026-04-25) added
-    # APPEAL_MEMORANDUM. Update this count + the route test below
-    # in lockstep when a new template lands.
-    assert len(schemas) == 9
+    # 13 templates after PG-005 Sprint 1 (2026-05-01) added writ
+    # petition + quashing petition + written statement + reply / counter-
+    # affidavit. Update this count + the route test below in lockstep
+    # when a new template lands.
+    assert len(schemas) == 13
 
 
 def test_every_template_has_fields_and_step_groups() -> None:
@@ -114,6 +120,180 @@ def test_divorce_prompt_respects_act_choice() -> None:
     assert "HMA" in prompt.system and "SMA" in prompt.system
     # Must not hardcode a single ground — grounds come from the user.
     assert "DO NOT GUESS" in prompt.system
+
+
+# ---------------------------------------------------------------
+# PG-005 Sprint 1 (2026-05-01): per-template prompt correctness for
+# the four new high-frequency templates.
+# ---------------------------------------------------------------
+
+
+def test_writ_prompt_branches_on_writ_type_and_flags_laches() -> None:
+    """Writ petition prompt must teach the LLM the per-writ-type relief
+    language (mandamus / certiorari / prohibition / quo warranto /
+    habeas corpus) AND must enforce laches awareness — writs have no
+    fixed limitation but stale petitions get dismissed."""
+    prompt = get_prompt_parts(DraftTemplateType.WRIT_PETITION)
+    assert "Article 226" in prompt.system
+    assert "Article 32" in prompt.system
+    for writ_type in (
+        "mandamus", "certiorari", "prohibition", "quo warranto", "habeas corpus",
+    ):
+        assert writ_type in prompt.system, (
+            f"WRIT prompt missing relief language for {writ_type!r}"
+        )
+    assert "laches" in prompt.system.lower()
+
+
+def test_quashing_prompt_invokes_gian_singh_on_compromise() -> None:
+    """Quashing prompt must (a) cite BNSS s.528 / CrPC s.482 and (b)
+    invoke Gian Singh + B.S. Joshi when compromise is recorded — these
+    are the dispositive authorities on whether non-compoundable
+    matters can be quashed on settlement."""
+    prompt = get_prompt_parts(DraftTemplateType.QUASHING_PETITION)
+    assert "528" in prompt.system  # BNSS s.528
+    assert "482" in prompt.system  # CrPC s.482
+    assert "Gian Singh" in prompt.system
+    assert "B.S. Joshi" in prompt.system
+    # And the heinous-offences carve-out must be enforced — Gian Singh
+    # forbids quashing of murder / rape on settlement alone.
+    assert "heinous" in prompt.system.lower() or "rape" in prompt.system.lower()
+
+
+def test_written_statement_prompt_enforces_order_viii_timeline() -> None:
+    """Written statement prompt must enforce Order VIII Rule 1's
+    30-day default + 90-day cap, and the Commercial Courts Act 120-day
+    cap for commercial suits."""
+    prompt = get_prompt_parts(DraftTemplateType.WRITTEN_STATEMENT)
+    assert "Order VIII" in prompt.system
+    assert "30 days" in prompt.system or "30-day" in prompt.system.lower()
+    assert "90 days" in prompt.system or "90-day" in prompt.system.lower()
+    assert "120" in prompt.system  # Commercial Courts Act
+    # And the silent-omission rule — every plaint paragraph must be
+    # addressed because adverse inference attaches to silence.
+    assert "silent" in prompt.system.lower() or "silence" in prompt.system.lower()
+
+
+def test_reply_counter_affidavit_prompt_enforces_para_by_para() -> None:
+    """Reply / counter-affidavit must enforce para-by-para coverage
+    — silent omissions are treated as admissions in Indian pleading
+    practice."""
+    prompt = get_prompt_parts(DraftTemplateType.REPLY_COUNTER_AFFIDAVIT)
+    assert "para" in prompt.system.lower()
+    assert "silent" in prompt.system.lower() or "admission" in prompt.system.lower()
+    # And the verification block — counter-affidavits are sworn.
+    assert "verif" in prompt.system.lower()
+
+
+# ---------------------------------------------------------------
+# PG-005 Sprint 1 — Pydantic facts-model validation for new templates.
+# ---------------------------------------------------------------
+
+
+def test_writ_facts_requires_at_least_one_prayer_clause() -> None:
+    with pytest.raises(ValueError):
+        WritPetitionFacts(
+            matter_id="m",
+            petitioner_name="Anil Sharma",
+            respondent_name="State of Delhi",
+            writ_court="high_court",
+            writ_type="mandamus",
+            impugned_action=(
+                "The respondent has not processed the petitioner's "
+                "RTI application despite repeated reminders over 18 months."
+            ),
+            prayer_clauses=[],  # invalid — at least one required
+        )
+
+
+def test_writ_facts_accepts_realistic_mandamus_fixture() -> None:
+    facts = WritPetitionFacts(
+        matter_id="22222222-2222-2222-2222-222222222222",
+        petitioner_name="Anil Sharma",
+        respondent_name="Union of India",
+        writ_court="high_court",
+        writ_type="mandamus",
+        impugned_action=(
+            "The respondent has failed to act on the petitioner's "
+            "representation dated 2025-08-12 seeking sanction for "
+            "prosecution under the PC Act, despite the statutory "
+            "three-month timeline having long expired."
+        ),
+        impugned_action_date="2025-08-12",
+        fundamental_rights_invoked=["Article 14", "Article 21"],
+        statutory_violations=["Prevention of Corruption Act, 1988 s.19(1)"],
+        prayer_clauses=[
+            "Direct the respondent to dispose of the petitioner's "
+            "representation within four weeks.",
+            "Pass any other order this Hon'ble Court deems fit."
+        ],
+    )
+    assert facts.writ_type == "mandamus"
+    assert len(facts.prayer_clauses) == 2
+
+
+def test_quashing_facts_compromise_flag_round_trips() -> None:
+    facts = QuashingPetitionFacts(
+        matter_id="33333333-3333-3333-3333-333333333333",
+        petitioner_name="Vikram Singh",
+        respondent_name="State of Maharashtra",
+        fir_number="FIR 145/2025",
+        police_station="Khar",
+        impugned_proceedings_summary=(
+            "FIR registered under BNS s.318 (cheating) arising out of "
+            "a commercial dispute that has since been settled between "
+            "the parties through a written compromise dated 2026-02-10."
+        ),
+        statutory_offences=["BNS s.318"],
+        grounds_for_quashing=(
+            "The dispute is predominantly civil and commercial in "
+            "nature; the parties have entered into a written "
+            "compromise; continuation of proceedings would be an "
+            "abuse of process."
+        ),
+        compromise_recorded=True,
+        victim_consent=True,
+        court_name="Bombay High Court",
+    )
+    assert facts.compromise_recorded is True
+    assert facts.victim_consent is True
+
+
+def test_written_statement_facts_requires_paragraph_wise_reply() -> None:
+    with pytest.raises(ValueError):
+        WrittenStatementFacts(
+            matter_id="m",
+            defendant_name="D",
+            plaintiff_name="P",
+            suit_number="CS 123/2026",
+            court_name="Bombay City Civil Court",
+            paragraph_wise_reply="too short",  # below min_length
+        )
+
+
+def test_reply_counter_affidavit_round_trips() -> None:
+    facts = ReplyCounterAffidavitFacts(
+        matter_id="44444444-4444-4444-4444-444444444444",
+        deponent_name="Joint Secretary, Ministry of X",
+        deponent_designation="Joint Secretary",
+        deponent_address="North Block, New Delhi 110001",
+        petition_number="W.P.(C) 1234/2026",
+        petition_type="Writ Petition (C)",
+        main_petition_summary=(
+            "The petitioner challenges Notification No. 12/2025 dated "
+            "2025-11-30 on the ground that it violates Article 14."
+        ),
+        court_name="Delhi High Court",
+        paragraph_wise_response=(
+            "The contents of paras 1 to 3 are matters of record. "
+            "Para 4 is denied. The notification was issued after due "
+            "consultation and an inter-ministerial review and is a "
+            "valid exercise of statutory power. The remaining paras "
+            "are denied save to the extent expressly admitted."
+        ),
+        relief_sought_against_petition="Dismiss the writ petition with costs.",
+    )
+    assert facts.petition_type == "Writ Petition (C)"
 
 
 # ---------------------------------------------------------------
@@ -197,6 +377,11 @@ def test_facts_model_mapping_matches_enum() -> None:
         DraftTemplateType.AFFIDAVIT: AffidavitFacts,
         DraftTemplateType.CRIMINAL_COMPLAINT: CriminalComplaintFacts,
         DraftTemplateType.CIVIL_SUIT: CivilSuitFacts,
+        DraftTemplateType.APPEAL_MEMORANDUM: AppealMemorandumFacts,
+        DraftTemplateType.WRIT_PETITION: WritPetitionFacts,
+        DraftTemplateType.QUASHING_PETITION: QuashingPetitionFacts,
+        DraftTemplateType.WRITTEN_STATEMENT: WrittenStatementFacts,
+        DraftTemplateType.REPLY_COUNTER_AFFIDAVIT: ReplyCounterAffidavitFacts,
     }
     for template_type, cls in mapping.items():
         assert get_template_facts_model(template_type) is cls
@@ -207,8 +392,9 @@ def test_facts_model_mapping_matches_enum() -> None:
 # ---------------------------------------------------------------
 
 
-def test_list_templates_route_returns_all_nine(client: TestClient) -> None:
-    """9 templates after BAAD-001 added APPEAL_MEMORANDUM."""
+def test_list_templates_route_returns_all_thirteen(client: TestClient) -> None:
+    """13 templates after PG-005 Sprint 1 (2026-05-01) added writ /
+    quashing / written-statement / reply."""
     from tests.test_auth_company import auth_headers, bootstrap_company
 
     bootstrap = bootstrap_company(client)
@@ -218,7 +404,7 @@ def test_list_templates_route_returns_all_nine(client: TestClient) -> None:
     resp = client.get("/api/drafting/templates", headers=headers)
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert len(body["templates"]) == 9
+    assert len(body["templates"]) == 13
     types = {t["template_type"] for t in body["templates"]}
     assert types == {t.value for t in DraftTemplateType}
 

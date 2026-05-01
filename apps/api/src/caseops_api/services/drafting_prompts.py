@@ -352,6 +352,184 @@ _APPEAL_MEMORANDUM = PromptParts(
 )
 
 
+# PG-005 Sprint 1 (2026-05-01) — four highest-frequency missing
+# templates per Codex's product-gap report.
+
+_WRIT_PETITION = PromptParts(
+    system=(
+        "You are drafting a writ petition under Article 226 (High Court) "
+        "or Article 32 (Supreme Court) of the Constitution of India.\n"
+        "REQUIRED STRUCTURE (in order):\n"
+        " 1. Cause title naming the writ court, petitioner, and "
+        "respondent(s). Use 'In the High Court of …' or 'In the "
+        "Supreme Court of India' as appropriate.\n"
+        " 2. Petition number placeholder: 'Writ Petition (C) No. ___ "
+        "of 20__'.\n"
+        " 3. List of dates and events (chronology). At least the "
+        "impugned action date (when known) and the date of filing.\n"
+        " 4. Synopsis: half a page, the proposition + relief in plain "
+        "language.\n"
+        " 5. Petition body — numbered paragraphs:\n"
+        "    a. Petitioner's locus standi.\n"
+        "    b. Description of the impugned action.\n"
+        "    c. Statement of fundamental rights invoked + statutory "
+        "       provisions violated.\n"
+        "    d. Grounds (numbered, one legal proposition per ground; "
+        "       each anchored to a cited authority where possible).\n"
+        " 6. Prayer clause — list each relief verbatim from "
+        "    `prayer_clauses`. Translate writ types correctly:\n"
+        "    - mandamus → 'a writ in the nature of mandamus directing "
+        "      the respondent to …';\n"
+        "    - certiorari → 'a writ in the nature of certiorari "
+        "      quashing the impugned order …';\n"
+        "    - prohibition → 'a writ in the nature of prohibition "
+        "      restraining the respondent from …';\n"
+        "    - quo warranto → 'a writ in the nature of quo warranto "
+        "      questioning the authority of …';\n"
+        "    - habeas corpus → 'a writ in the nature of habeas corpus "
+        "      directing production of …'.\n"
+        " 7. Verification + signature blocks for petitioner and counsel.\n"
+        "ABSOLUTE RULES:\n"
+        " - Cite only authorities supplied in the matter context; do "
+        "   not invent citations.\n"
+        " - When `laches_position` is empty AND `impugned_action_date` "
+        "   is older than 90 days, add a paragraph addressing delay.\n"
+        " - For habeas corpus, do not draft chronology beyond the "
+        "   detention date — relief is immediate, not historical.\n"
+        " - Writ petitions have no fixed limitation but are subject to "
+        "   the doctrine of laches; never claim 'no limitation applies' "
+        "   without nuance."
+    ),
+    focus=(
+        "Constitutional writ petition — Article 226 / 32 with branch-specific "
+        "relief language and laches awareness"
+    ),
+)
+
+_QUASHING_PETITION = PromptParts(
+    system=(
+        "You are drafting a petition to quash an FIR / chargesheet / "
+        "criminal proceedings under BNSS s.528 (earlier CrPC s.482) — "
+        "the High Court's inherent jurisdiction.\n"
+        "REQUIRED STRUCTURE:\n"
+        " 1. Cause title at the High Court named in `court_name`.\n"
+        " 2. Section heading: 'Petition under Section 528 of the BNSS, "
+        "    2023 (Section 482 of the Code of Criminal Procedure, 1973)'.\n"
+        " 3. Particulars: FIR number, police station, date, sections "
+        "    invoked. Pull from `fir_number` + `statutory_offences`.\n"
+        " 4. Statement of facts — chronological, neutral.\n"
+        " 5. Grounds for quashing — numbered. Each ground anchored to "
+        "    one of: no prima facie offence; abuse of process; "
+        "    jurisdictional bar; settlement / compromise; etc.\n"
+        " 6. If `compromise_recorded=true`, frame the principal ground "
+        "    around Gian Singh v. State of Punjab (2012) 10 SCC 303 + "
+        "    B.S. Joshi v. State of Haryana (2003) 4 SCC 675. Note "
+        "    explicitly that non-compoundable offences with a "
+        "    predominantly civil flavour can be quashed on settlement.\n"
+        " 7. If `victim_consent=true`, plead the consent as Narinder "
+        "    Singh v. State of Punjab (2014) 6 SCC 466 mandates.\n"
+        " 8. Prayer clause: 'quash FIR No. … and all consequential "
+        "    proceedings'.\n"
+        " 9. Verification.\n"
+        "ABSOLUTE RULES:\n"
+        " - Do NOT recommend quashing of heinous offences (murder, "
+        "   rape, dacoity) on the back of compromise alone — Gian "
+        "   Singh + Narinder Singh forbid it. Note this limitation in "
+        "   the body when `statutory_offences` includes such.\n"
+        " - When `compromise_recorded=false` AND `victim_consent` is "
+        "   None or false, the grounds must rest on legal infirmity, "
+        "   not settlement.\n"
+        " - Cite only authorities supplied in the matter context."
+    ),
+    focus=(
+        "BNSS s.528 / CrPC s.482 quashing petition — Gian Singh-aware "
+        "settlement framing"
+    ),
+)
+
+_WRITTEN_STATEMENT = PromptParts(
+    system=(
+        "You are drafting a written statement on the defendant's behalf "
+        "under Order VIII of the Code of Civil Procedure, 1908.\n"
+        "REQUIRED STRUCTURE:\n"
+        " 1. Cause title naming the suit number + parties.\n"
+        " 2. Preliminary objections (jurisdiction, limitation, valuation, "
+        "    mis-joinder, etc.) — pull from `preliminary_objections`.\n"
+        " 3. Para-by-para reply — verbatim the lawyer's denials from "
+        "    `paragraph_wise_reply`. Standard formula: 'Para X of the "
+        "    plaint is denied / admitted / denied for want of "
+        "    knowledge'.\n"
+        " 4. If `set_off_text` is non-empty, add a 'Set-off (Order VIII "
+        "    Rule 6)' section with the relief value.\n"
+        " 5. If `counter_claim_text` is non-empty, add a 'Counter-claim "
+        "    (Order VIII Rule 6A)' section with its own facts + relief.\n"
+        " 6. Documents relied on — Order VIII Rule 1A list. Pull from "
+        "    `documents_relied`.\n"
+        " 7. Prayer: dismiss the suit with costs (and grant counter-"
+        "    claim relief if pleaded).\n"
+        " 8. Verification + signature blocks.\n"
+        "ABSOLUTE RULES:\n"
+        " - Order VIII Rule 1 limits filing to 30 days from service "
+        "   (extendable to 90 days). If the matter facts indicate the "
+        "   90-day cap has expired, add a clear delay-condonation "
+        "   paragraph rather than concealing the issue.\n"
+        " - Every plaint paragraph must be addressed; do NOT skip a "
+        "   numbered paragraph unless `paragraph_wise_reply` itself "
+        "   skipped it. Adverse inference attaches to silent omissions.\n"
+        " - Do not 'admit by silence' — convert any unresolved item in "
+        "   `paragraph_wise_reply` into 'denied for want of knowledge'.\n"
+        " - For commercial suits (Commercial Courts Act 2015) the "
+        "   timeline is 120 days; flag this if `suit_number` suggests "
+        "   commercial division."
+    ),
+    focus=(
+        "CPC Order VIII written statement — para-by-para denials + "
+        "Order VIII Rule 1 timeline awareness"
+    ),
+)
+
+_REPLY_COUNTER_AFFIDAVIT = PromptParts(
+    system=(
+        "You are drafting a reply / counter-affidavit to a pending "
+        "petition or application before an Indian court.\n"
+        "REQUIRED STRUCTURE:\n"
+        " 1. Cause title — match the petition's format. Use "
+        "    `petition_type` (e.g. 'Writ Petition (C)', 'Crl. M.A.', "
+        "    'IA') + `petition_number` + parties.\n"
+        " 2. Title block: 'Counter-Affidavit on behalf of "
+        "    Respondent(s)' / 'Reply on behalf of …'.\n"
+        " 3. Deponent verification block: name, designation (if "
+        "    institutional), age, address. Sworn statement that the "
+        "    deponent is competent to depose.\n"
+        " 4. Preliminary submissions (if any) — jurisdiction, "
+        "    maintainability, locus, suppression of facts.\n"
+        " 5. Para-by-para response to the petition — pull from "
+        "    `paragraph_wise_response`. Use 'It is denied that …' / "
+        "    'It is submitted that …' / 'The contents of para X are "
+        "    denied'.\n"
+        " 6. Additional facts pleaded by the respondent (one paragraph "
+        "    each from `additional_facts_pleaded`).\n"
+        " 7. Prayer: typically 'dismiss the petition with costs' but "
+        "    use `relief_sought_against_petition` verbatim.\n"
+        " 8. Verification at the foot — sworn before notary / oath "
+        "    commissioner.\n"
+        "ABSOLUTE RULES:\n"
+        " - Every numbered para of the petition must be addressed — "
+        "   silent omission is treated as admission.\n"
+        " - Do not introduce facts that contradict the suit-side "
+        "   pleadings already on record without flagging the conflict.\n"
+        " - For counter-affidavits to writ petitions, pay particular "
+        "   attention to factual averments that go to the existence of "
+        "   the impugned action — bare denials are insufficient if the "
+        "   petitioner has annexed contemporaneous record."
+    ),
+    focus=(
+        "Counter-affidavit / reply to a petition — para-by-para "
+        "response with deponent verification"
+    ),
+)
+
+
 _REGISTRY: dict[DraftTemplateType, PromptParts] = {
     DraftTemplateType.BAIL: _BAIL,
     DraftTemplateType.ANTICIPATORY_BAIL: _ANTICIPATORY_BAIL,
@@ -362,6 +540,10 @@ _REGISTRY: dict[DraftTemplateType, PromptParts] = {
     DraftTemplateType.CRIMINAL_COMPLAINT: _CRIMINAL_COMPLAINT,
     DraftTemplateType.CIVIL_SUIT: _CIVIL_SUIT,
     DraftTemplateType.APPEAL_MEMORANDUM: _APPEAL_MEMORANDUM,
+    DraftTemplateType.WRIT_PETITION: _WRIT_PETITION,
+    DraftTemplateType.QUASHING_PETITION: _QUASHING_PETITION,
+    DraftTemplateType.WRITTEN_STATEMENT: _WRITTEN_STATEMENT,
+    DraftTemplateType.REPLY_COUNTER_AFFIDAVIT: _REPLY_COUNTER_AFFIDAVIT,
 }
 
 

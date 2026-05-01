@@ -122,14 +122,20 @@ Needed:
 Estimated days: 5-7.
 
 ### `PG-005` Drafting finalization — court-specific format + PDF + revision diff
-Status: **`Partially implemented`**.
-Evidence: `services/drafting.py` (1187 lines) has DOCX export and citation verifier; missing: PDF, court-specific cause-title profiles, revision compare, page numbering, vakalat/affidavit variants, filing checklist.
-Needed:
+Status: **`Partially implemented`** (Sprint 1 of 12 landed 2026-05-01).
+Evidence:
+- Sprint 1 (2026-05-01) added 4 highest-frequency missing templates: `WRIT_PETITION` (Article 226 / 32 with branch-specific relief language for mandamus / certiorari / prohibition / quo warranto / habeas corpus + laches awareness), `QUASHING_PETITION` (BNSS s.528 / CrPC s.482 with Gian Singh + B.S. Joshi + Narinder Singh framing on compromise + heinous-offences carve-out), `WRITTEN_STATEMENT` (Order VIII Rule 1 30/90/120-day timeline + para-by-para + silent-omission rule), `REPLY_COUNTER_AFFIDAVIT` (cause-title cloning + para-by-para + verification block). 13 templates total now in `_REGISTRY`.
+- `services/template_recommender.py` matrix updated so HC + writ → WRIT_PETITION primary (replacing AFFIDAVIT primary); SC + writ → WRIT_PETITION primary; HC + criminal adds QUASHING_PETITION as primary; lower_court + civil and HC + commercial add WRITTEN_STATEMENT as primary/secondary; REPLY_COUNTER_AFFIDAVIT added across most contested-matter buckets.
+- `apps/api/tests/test_drafting_templates.py` extended with 4 facts-validation + 4 prompt-correctness tests; `apps/api/tests/test_template_recommender.py` extended with 7 new matrix-coverage tests; fixture corpus (`tests/fixtures/drafting/misc_templates.json`) extended with 4 canonical scenarios.
+- `services/drafting.py` (1187 lines) still has DOCX export + citation verifier; PDF + court-specific cause-title profiles + revision compare + page numbering + filing checklist remain.
+Needed (Sprints 2-12):
+- 7 more templates (Quashing of Domestic Violence proceedings, Section 9 Arbitration, Caveat Petition, Vakalatnama, Application for amendment of pleadings, Compromise petition, Probate petition).
 - `DraftRevision` model already exists; add `draft_compare(prev_id, next_id)` returning structured diff.
 - Court format profiles: Delhi HC / Bombay HC / SC margin/header/cause-title rules.
 - PDF export via WeasyPrint or Playwright print-to-PDF.
+- Filing bundle ZIP (memorandum + vakalat + index + exhibits + e-stamp placeholder).
 - Filing checklist per court (limit, fees, annexures, vakalatnama).
-Estimated days: 6-8 (pdf + 1 court) → 12-15 (5 courts).
+Estimated days remaining after Sprint 1: 5-7 (7 more templates) + 6-8 (PDF + 1 court) → 10-13 (PDF + 5 courts) + 4-6 (filing bundle).
 
 ### `PG-006` Research treatment / good-law signal
 Status: **`Missing`**.

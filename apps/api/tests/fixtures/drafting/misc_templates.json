@@ -101,6 +101,99 @@
           "must_pass_rules": []
         }
       ]
+    },
+    "writ_petition": {
+      "scenarios": [
+        {
+          "key": "mandamus-rti-inaction",
+          "facts": {
+            "petitioner_name": "Anil Sharma",
+            "respondent_name": "Union of India through Ministry of Personnel",
+            "writ_court": "high_court",
+            "writ_type": "mandamus",
+            "impugned_action": "The respondent has failed to dispose of the petitioner's representation dated 2025-08-12 seeking sanction for prosecution under the Prevention of Corruption Act, 1988, despite the statutory three-month timeline having expired.",
+            "impugned_action_date": "2025-08-12",
+            "fundamental_rights_invoked": ["Article 14", "Article 21"],
+            "statutory_violations": ["Prevention of Corruption Act, 1988 s.19(1)"],
+            "prayer_clauses": [
+              "Direct the respondent to dispose of the petitioner's representation dated 2025-08-12 within four weeks.",
+              "Pass any other order this Hon'ble Court deems fit."
+            ],
+            "interim_relief_sought": "Pending disposal, restrain the respondent from acting on any contrary administrative communication.",
+            "laches_position": "The petitioner has approached this Hon'ble Court promptly upon expiry of the statutory timeline."
+          },
+          "must_pass_rules": []
+        }
+      ]
+    },
+    "quashing_petition": {
+      "scenarios": [
+        {
+          "key": "compromise-civil-flavour-318",
+          "facts": {
+            "petitioner_name": "Vikram Singh",
+            "respondent_name": "State of Maharashtra",
+            "fir_number": "FIR 145/2025",
+            "police_station": "Khar",
+            "impugned_proceedings_summary": "FIR registered under BNS s.318 (cheating) arising out of a commercial dispute over a stalled real-estate transaction. The parties have since entered into a written compromise dated 2026-02-10 under which the petitioner has refunded the disputed amount with interest.",
+            "statutory_offences": ["BNS s.318"],
+            "grounds_for_quashing": "The dispute is predominantly civil and commercial in nature; the parties have entered into a written compromise; continuation of proceedings would be an abuse of the process of court.",
+            "compromise_recorded": true,
+            "victim_consent": true,
+            "court_name": "Bombay High Court"
+          },
+          "must_pass_rules": []
+        }
+      ]
+    },
+    "written_statement": {
+      "scenarios": [
+        {
+          "key": "specific-performance-defence",
+          "facts": {
+            "defendant_name": "Sunrise Builders Pvt Ltd",
+            "plaintiff_name": "Anjali Mehta",
+            "suit_number": "CS 412/2026",
+            "court_name": "Bombay City Civil Court",
+            "preliminary_objections": [
+              "The plaint is barred by limitation under Article 54 of the Limitation Act, 1963.",
+              "The suit is undervalued for the purpose of pecuniary jurisdiction."
+            ],
+            "paragraph_wise_reply": "Para 1 is a matter of record. Para 2 is admitted insofar as the agreement to sell dated 2024-05-01 is concerned. Para 3 is denied; the plaintiff failed to tender the balance consideration within the time stipulated. Para 4 is denied for want of knowledge. Paras 5 to 8 are denied save and except as specifically admitted herein.",
+            "limitation_defence": "The cause of action accrued on 2024-12-01 when the plaintiff defaulted; the suit filed on 2026-04-15 is beyond the three-year limitation period.",
+            "documents_relied": [
+              "Agreement to Sell dated 2024-05-01",
+              "Bank statements showing non-receipt of balance consideration",
+              "Notice of cancellation dated 2025-01-15"
+            ]
+          },
+          "must_pass_rules": []
+        }
+      ]
+    },
+    "reply_counter_affidavit": {
+      "scenarios": [
+        {
+          "key": "writ-counter-affidavit-state",
+          "facts": {
+            "deponent_name": "Joint Secretary, Department of X",
+            "deponent_designation": "Joint Secretary",
+            "deponent_address": "North Block, New Delhi 110001",
+            "petition_number": "W.P.(C) 1234/2026",
+            "petition_type": "Writ Petition (C)",
+            "main_petition_summary": "The petitioner challenges Notification No. 12/2025 dated 2025-11-30 on the ground that it violates Articles 14 and 19(1)(g) of the Constitution.",
+            "court_name": "Delhi High Court",
+            "paragraph_wise_response": "The contents of paras 1 to 3 are matters of record. Para 4 is denied. The notification was issued after due consultation with the stakeholder ministries and an inter-ministerial review committee, and is a valid exercise of statutory power conferred under s.5 of the parent Act. Paras 5 and 6 are denied. The remaining paras are denied save to the extent expressly admitted.",
+            "additional_facts_pleaded": [
+              "The respondent has placed on record the inter-ministerial consultation file by way of separate affidavit.",
+              "The petitioner has suppressed the fact that representations were entertained by the respondent on 2026-01-10 and 2026-02-15."
+            ],
+            "preliminary_submissions": "The writ petition is liable to be dismissed at the threshold for suppression of material facts and for want of cause of action.",
+            "relief_sought_against_petition": "Dismiss the writ petition with costs."
+          },
+          "must_pass_rules": []
+        }
+      ]
     }
   }
 }

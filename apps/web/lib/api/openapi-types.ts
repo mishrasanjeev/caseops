@@ -3224,10 +3224,21 @@ export interface components {
             /** Forum Level */
             forum_level?: ("high_court" | "supreme_court") | null;
             /**
+             * Language
+             * @default en
+             * @enum {string}
+             */
+            language: "en" | "any";
+            /**
              * Limit
-             * @default 5
+             * @default 10
              */
             limit: number;
+            /**
+             * Offset
+             * @default 0
+             */
+            offset: number;
             /** Query */
             query: string;
         };
@@ -3238,12 +3249,22 @@ export interface components {
              * Format: date-time
              */
             generated_at: string;
+            /**
+             * Offset
+             * @default 0
+             */
+            offset: number;
             /** Provider */
             provider: string;
             /** Query */
             query: string;
             /** Results */
             results: components["schemas"]["AuthoritySearchResult"][];
+            /**
+             * Total After Filter
+             * @default 0
+             */
+            total_after_filter: number;
         };
         /** AuthoritySearchResult */
         AuthoritySearchResult: {
@@ -3479,6 +3500,7 @@ export interface components {
             next_listing_id?: string | null;
             /** Practice Area Patterns */
             practice_area_patterns: components["schemas"]["BenchContextPracticeAreaPatternResponse"][];
+            predictive_summary?: components["schemas"]["PredictiveSummaryResponse"] | null;
             /** Recurring Tests */
             recurring_tests: components["schemas"]["BenchContextRecurringTestResponse"][];
             /** Similar Authorities */
@@ -4859,7 +4881,7 @@ export interface components {
              * Template Type
              * @enum {string}
              */
-            template_type: "bail" | "anticipatory_bail" | "divorce_petition" | "property_dispute_notice" | "cheque_bounce_notice" | "affidavit" | "criminal_complaint" | "civil_suit" | "appeal_memorandum";
+            template_type: "bail" | "anticipatory_bail" | "divorce_petition" | "property_dispute_notice" | "cheque_bounce_notice" | "affidavit" | "criminal_complaint" | "civil_suit" | "appeal_memorandum" | "writ_petition" | "quashing_petition" | "written_statement" | "reply_counter_affidavit";
         };
         /** DraftTemplateSummary */
         DraftTemplateSummary: {
@@ -7417,6 +7439,21 @@ export interface components {
             /** Count */
             count: number;
         };
+        /** PredictiveSummaryResponse */
+        PredictiveSummaryResponse: {
+            /** Adverse Count */
+            adverse_count: number;
+            /** Favorable Count */
+            favorable_count: number;
+            /** Neutral Count */
+            neutral_count: number;
+            /** Practice Area Key */
+            practice_area_key: string;
+            /** Sample Size */
+            sample_size: number;
+            /** Top Outcome Label */
+            top_outcome_label: string | null;
+        };
         /** RecommendationDecisionRecord */
         RecommendationDecisionRecord: {
             /** Actor Membership Id */
@@ -7516,6 +7553,8 @@ export interface components {
             primary_option_index: number;
             /** Rationale */
             rationale: string;
+            /** Retrieved Authorities */
+            retrieved_authorities?: string[];
             /** Review Required */
             review_required: boolean;
             /**
