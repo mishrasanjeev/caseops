@@ -24,6 +24,7 @@ from caseops_api.schemas.drafting_templates import (
     get_template_schema,
     list_template_schemas,
 )
+from caseops_api.services.court_format_profiles import list_profiles
 from caseops_api.services.drafting_preview import (
     DraftPreview,
     generate_step_preview,
@@ -67,6 +68,20 @@ class TemplateRecommendationsResponse(BaseModel):
     forum_level: str
     practice_area: str | None
     recommendations: list[TemplateRecommendationResponse]
+
+
+class CourtFormatProfileResponse(BaseModel):
+    """One row in the PDF-export court-profile selector."""
+
+    key: str
+    display_name: str
+    page_format: str
+    body_font_size_pt: int
+    page_number_position: str
+
+
+class CourtFormatProfilesResponse(BaseModel):
+    profiles: list[CourtFormatProfileResponse]
 
 
 @router.get(
@@ -130,6 +145,32 @@ async def get_template_recommendations(
                 reason=r.reason,
             )
             for r in recs
+        ],
+    )
+
+
+@router.get(
+    "/court-profiles",
+    response_model=CourtFormatProfilesResponse,
+    summary=(
+        "List court format profiles available for the PDF export "
+        "selector (PG-005 Sprint 3, 2026-05-01)."
+    ),
+)
+async def get_court_format_profiles(
+    context: CurrentContext,
+) -> CourtFormatProfilesResponse:
+    _ = context  # auth-gated; profiles are global (no per-tenant scope)
+    return CourtFormatProfilesResponse(
+        profiles=[
+            CourtFormatProfileResponse(
+                key=p.key,
+                display_name=p.display_name,
+                page_format=p.page_format,
+                body_font_size_pt=p.body_font_size_pt,
+                page_number_position=p.page_number_position,
+            )
+            for p in list_profiles()
         ],
     )
 

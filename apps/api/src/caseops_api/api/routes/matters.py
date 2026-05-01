@@ -76,6 +76,7 @@ from caseops_api.services.court_sync_jobs import (
     run_matter_court_sync_job,
 )
 from caseops_api.services.document_jobs import run_document_processing_job
+from caseops_api.services.draft_pdf_export import render_version_pdf
 from caseops_api.services.drafting import (
     create_draft,
     generate_draft_version,
@@ -1553,6 +1554,45 @@ async def get_current_company_matter_draft_docx(
         ),
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.get(
+    "/{matter_id}/drafts/{draft_id}/export.pdf",
+    summary="Download the current (or a specific) draft version as filing-grade PDF",
+)
+async def get_current_company_matter_draft_pdf(
+    matter_id: str,
+    draft_id: str,
+    context: CurrentContext,
+    session: DbSession,
+    version_id: str | None = None,
+    court_profile: str | None = None,
+) -> Response:
+    """PG-005 Sprint 3 (2026-05-01) — court-format-aware PDF export.
+
+    The optional ``court_profile`` query param overrides the auto-
+    resolution from the matter's ``court_name``. Known keys:
+    ``supreme_court``, ``delhi_hc``, ``bombay_hc``, ``generic``.
+    Unknown key → 422.
+    """
+    body, filename, profile_key = render_version_pdf(
+        session,
+        context=context,
+        matter_id=matter_id,
+        draft_id=draft_id,
+        version_id=version_id,
+        court_profile_key=court_profile,
+    )
+    return Response(
+        content=body,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-CaseOps-Court-Profile": profile_key,
+        },
+    )
+
+
 
 
 @router.get(

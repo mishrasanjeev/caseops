@@ -1086,6 +1086,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/drafting/court-profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List court format profiles available for the PDF export selector (PG-005 Sprint 3, 2026-05-01). */
+        get: operations["get_court_format_profiles_api_drafting_court_profiles_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/drafting/preview": {
         parameters: {
             query?: never;
@@ -1780,6 +1797,31 @@ export interface paths {
         };
         /** Download the current (or a specific) draft version as DOCX */
         get: operations["get_current_company_matter_draft_docx_api_matters__matter_id__drafts__draft_id__export_docx_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/{matter_id}/drafts/{draft_id}/export.pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download the current (or a specific) draft version as filing-grade PDF
+         * @description PG-005 Sprint 3 (2026-05-01) — court-format-aware PDF export.
+         *
+         *     The optional ``court_profile`` query param overrides the auto-
+         *     resolution from the matter's ``court_name``. Known keys:
+         *     ``supreme_court``, ``delhi_hc``, ``bombay_hc``, ``generic``.
+         *     Unknown key → 422.
+         */
+        get: operations["get_current_company_matter_draft_pdf_api_matters__matter_id__drafts__draft_id__export_pdf_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4623,6 +4665,27 @@ export interface components {
             playbook_hits: components["schemas"]["ContractPlaybookHitRecord"][];
             /** Playbook Rules */
             playbook_rules: components["schemas"]["ContractPlaybookRuleRecord"][];
+        };
+        /**
+         * CourtFormatProfileResponse
+         * @description One row in the PDF-export court-profile selector.
+         */
+        CourtFormatProfileResponse: {
+            /** Body Font Size Pt */
+            body_font_size_pt: number;
+            /** Display Name */
+            display_name: string;
+            /** Key */
+            key: string;
+            /** Page Format */
+            page_format: string;
+            /** Page Number Position */
+            page_number_position: string;
+        };
+        /** CourtFormatProfilesResponse */
+        CourtFormatProfilesResponse: {
+            /** Profiles */
+            profiles: components["schemas"]["CourtFormatProfileResponse"][];
         };
         /** CourtProfileResponse */
         CourtProfileResponse: {
@@ -10336,6 +10399,26 @@ export interface operations {
             };
         };
     };
+    get_court_format_profiles_api_drafting_court_profiles_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourtFormatProfilesResponse"];
+                };
+            };
+        };
+    };
     post_drafting_preview_api_drafting_preview_post: {
         parameters: {
             query?: never;
@@ -11824,6 +11907,41 @@ export interface operations {
         parameters: {
             query?: {
                 version_id?: string | null;
+            };
+            header?: never;
+            path: {
+                matter_id: string;
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_current_company_matter_draft_pdf_api_matters__matter_id__drafts__draft_id__export_pdf_get: {
+        parameters: {
+            query?: {
+                version_id?: string | null;
+                court_profile?: string | null;
             };
             header?: never;
             path: {

@@ -32,6 +32,7 @@ import { apiErrorMessage, isApiErrorShape } from "@/lib/api/config";
 import {
   approveDraft,
   draftDocxUrl,
+  draftPdfUrl,
   fetchDraft,
   finalizeDraft,
   generateDraftVersion,
@@ -268,13 +269,22 @@ function DraftBody({
             </Button>
           ) : null}
           {canExport ? (
-            <Button
-              variant="outline"
-              href={draftDocxUrl(matterId, draft.id)}
-              data-testid="draft-download-docx"
-            >
-              <Download className="h-4 w-4" aria-hidden /> Download DOCX
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                href={draftDocxUrl(matterId, draft.id)}
+                data-testid="draft-download-docx"
+              >
+                <Download className="h-4 w-4" aria-hidden /> Download DOCX
+              </Button>
+              <Button
+                variant="outline"
+                href={draftPdfUrl(matterId, draft.id)}
+                data-testid="draft-download-pdf"
+              >
+                <Download className="h-4 w-4" aria-hidden /> Download PDF
+              </Button>
+            </>
           ) : null}
         </div>
       </header>

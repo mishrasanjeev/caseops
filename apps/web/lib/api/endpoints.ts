@@ -888,6 +888,36 @@ export function draftDocxUrl(matterId: string, draftId: string): string {
   return `${API_BASE_URL}/api/matters/${matterId}/drafts/${draftId}/export.docx`;
 }
 
+// PG-005 Sprint 3 (2026-05-01) — court-format-aware PDF export.
+// `courtProfile` is optional; when omitted the API auto-resolves
+// from the matter's `court_name`. Known keys: supreme_court /
+// delhi_hc / bombay_hc / generic.
+export function draftPdfUrl(
+  matterId: string,
+  draftId: string,
+  courtProfile?: string,
+): string {
+  const base = `${API_BASE_URL}/api/matters/${matterId}/drafts/${draftId}/export.pdf`;
+  return courtProfile
+    ? `${base}?court_profile=${encodeURIComponent(courtProfile)}`
+    : base;
+}
+
+export type CourtFormatProfile = {
+  key: string;
+  display_name: string;
+  page_format: string;
+  body_font_size_pt: number;
+  page_number_position: string;
+};
+
+export async function listCourtFormatProfiles(): Promise<CourtFormatProfile[]> {
+  const data = await apiRequest<{ profiles: CourtFormatProfile[] }>(
+    "/api/drafting/court-profiles",
+  );
+  return data.profiles;
+}
+
 export type MatterAttachmentProcessingStatus =
   | "pending"
   | "indexed"

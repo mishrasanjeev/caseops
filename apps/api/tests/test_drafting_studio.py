@@ -321,6 +321,128 @@ def test_docx_export_404_on_unknown_draft(client: TestClient) -> None:
     assert resp.status_code == 404
 
 
+# ---------------------------------------------------------------
+# PG-005 Sprint 3 (2026-05-01) — court-format-aware PDF export.
+# ---------------------------------------------------------------
+
+
+def test_pdf_export_returns_a_pdf_document(client: TestClient) -> None:
+    """Smoke: PDF endpoint produces a real PDF with the right
+    Content-Type + Content-Disposition + court-profile header."""
+    token = str(bootstrap_company(client)["access_token"])
+    matter_id = _create_matter(client, token, "DS-PDF")
+    _seed_authority(neutral_citation="2024 SCC OnLine SC 1001")
+    draft = _create_draft(client, token, matter_id)
+    _generate(client, token, matter_id, draft["id"])
+
+    resp = client.get(
+        f"/api/matters/{matter_id}/drafts/{draft['id']}/export.pdf",
+        headers=auth_headers(token),
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.headers["content-type"] == "application/pdf"
+    disposition = resp.headers["content-disposition"]
+    assert "attachment" in disposition
+    assert ".pdf" in disposition
+    # A valid PDF starts with the magic bytes "%PDF-".
+    assert resp.content[:5] == b"%PDF-"
+    assert len(resp.content) > 1000  # sanity — must contain meaningful body
+    # The matter's court_name is "Delhi High Court" → auto-resolves to
+    # the delhi_hc profile and the route surfaces it in a header.
+    assert resp.headers.get("x-caseops-court-profile") == "delhi_hc"
+    # Filename embeds the resolved profile so a downloads folder with
+    # multiple PDFs from the same draft is human-readable.
+    assert "delhi_hc" in disposition
+
+
+def test_pdf_export_explicit_court_profile_overrides_court_name(
+    client: TestClient,
+) -> None:
+    """Caller can pass ?court_profile=supreme_court to override the
+    auto-resolution. Useful when filing a transfer petition."""
+    token = str(bootstrap_company(client)["access_token"])
+    matter_id = _create_matter(client, token, "DS-PDF-SC")
+    _seed_authority(neutral_citation="2024 SCC OnLine SC 1002")
+    draft = _create_draft(client, token, matter_id)
+    _generate(client, token, matter_id, draft["id"])
+
+    resp = client.get(
+        f"/api/matters/{matter_id}/drafts/{draft['id']}/export.pdf"
+        "?court_profile=supreme_court",
+        headers=auth_headers(token),
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.headers.get("x-caseops-court-profile") == "supreme_court"
+    assert "supreme_court" in resp.headers["content-disposition"]
+
+
+def test_pdf_export_unknown_court_profile_returns_422(client: TestClient) -> None:
+    """Unknown profile key → 422 with an actionable detail string."""
+    token = str(bootstrap_company(client)["access_token"])
+    matter_id = _create_matter(client, token, "DS-PDF-422")
+    _seed_authority(neutral_citation="2024 SCC OnLine SC 1003")
+    draft = _create_draft(client, token, matter_id)
+    _generate(client, token, matter_id, draft["id"])
+
+    resp = client.get(
+        f"/api/matters/{matter_id}/drafts/{draft['id']}/export.pdf"
+        "?court_profile=mars_high_court",
+        headers=auth_headers(token),
+    )
+    assert resp.status_code == 422, resp.text
+    assert "mars_high_court" in resp.json()["detail"]
+
+
+def test_pdf_export_404_on_unknown_draft(client: TestClient) -> None:
+    token = str(bootstrap_company(client)["access_token"])
+    matter_id = _create_matter(client, token, "DS-PDF-NF")
+    resp = client.get(
+        f"/api/matters/{matter_id}/drafts/00000000-0000-0000-0000-000000000000/export.pdf",
+        headers=auth_headers(token),
+    )
+    assert resp.status_code == 404
+
+
+def test_pdf_export_blocked_without_verified_citations(client: TestClient) -> None:
+    """Same citation gate as DOCX — zero-citation drafts cannot be
+    exported as PDF unless approved by a partner."""
+    token = str(bootstrap_company(client)["access_token"])
+    matter_id = _create_matter(client, token, "DS-PDF-GATED")
+    # No authorities seeded → mock produces a draft with no citations.
+    draft = _create_draft(client, token, matter_id)
+    _generate(client, token, matter_id, draft["id"])
+
+    resp = client.get(
+        f"/api/matters/{matter_id}/drafts/{draft['id']}/export.pdf",
+        headers=auth_headers(token),
+    )
+    assert resp.status_code == 422, resp.text
+    detail = resp.json()["detail"]
+    assert "verified citation" in detail.lower()
+
+
+def test_court_profiles_route_lists_four_profiles(client: TestClient) -> None:
+    """GET /api/drafting/court-profiles returns the four pinned profiles
+    in stable order — the web PDF-export selector reads this directly."""
+    token = str(bootstrap_company(client)["access_token"])
+    resp = client.get(
+        "/api/drafting/court-profiles",
+        headers=auth_headers(token),
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    keys = [p["key"] for p in body["profiles"]]
+    assert keys == ["supreme_court", "delhi_hc", "bombay_hc", "generic"]
+    sc = next(p for p in body["profiles"] if p["key"] == "supreme_court")
+    assert sc["page_number_position"] == "center"
+    assert sc["body_font_size_pt"] == 12
+
+
+def test_court_profiles_route_requires_auth(client: TestClient) -> None:
+    resp = client.get("/api/drafting/court-profiles")
+    assert resp.status_code in {401, 403}
+
+
 def test_generate_increments_revision_and_keeps_history(client: TestClient) -> None:
     token = str(bootstrap_company(client)["access_token"])
     matter_id = _create_matter(client, token, "DS-006")

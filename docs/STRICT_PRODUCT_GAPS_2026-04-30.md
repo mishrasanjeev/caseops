@@ -122,7 +122,7 @@ Needed:
 Estimated days: 5-7.
 
 ### `PG-005` Drafting finalization — court-specific format + PDF + revision diff
-Status: **`Partially implemented`** (Sprints 1 + 2 of 12 landed 2026-05-01).
+Status: **`Partially implemented`** (Sprints 1 + 2 + 3 of 12 landed 2026-05-01).
 Evidence:
 - Sprint 1 (2026-05-01) added 4 highest-frequency missing templates: `WRIT_PETITION`, `QUASHING_PETITION`, `WRITTEN_STATEMENT`, `REPLY_COUNTER_AFFIDAVIT` (full statutory awareness + per-template prompts + recommender-matrix coverage).
 - Sprint 2 (2026-05-01) added 7 more templates covering daily Indian-litigation filings:
@@ -135,11 +135,16 @@ Evidence:
   - `PROBATE_PETITION` — Indian Succession Act 1925 ss.276-300. Prompt enforces s.63(c) two-attestor rule + s.283 citation-to-heirs requirement; routes to Letters of Administration when intestate.
 - 20 templates total now in `_REGISTRY`. `services/template_recommender.py` matrix extended: HC + criminal adds COMPROMISE_PETITION + CAVEAT_PETITION + VAKALATNAMA secondaries; HC + civil / commercial / lower_court + civil add AMENDMENT_OF_PLEADINGS + COMPROMISE_PETITION + CAVEAT_PETITION + VAKALATNAMA; HC + commercial adds ARBITRATION_SECTION_9; HC + matrimonial adds DV_QUASHING_PETITION; arbitration + commercial bucket promoted ARBITRATION_SECTION_9 to primary alongside AFFIDAVIT; PWDVA/domestic-violence/succession/probate practice-area aliases added to bucket map.
 - 14 new pytest cases (7 prompt-correctness + 7 facts-validation in `test_drafting_templates.py`) + 8 new recommender matrix tests; fixture corpus extended with 7 canonical Sprint-2 scenarios. 170 backend tests pass; web `tsc --noEmit` clean after `openapi-types.ts` regeneration.
-- `services/drafting.py` (1187 lines) still has DOCX export + citation verifier; PDF + court-specific cause-title profiles + revision compare + page numbering + filing checklist + filing-bundle ZIP remain.
-Needed (Sprints 3-12):
-- Sprint 3 — PDF export (court-format-aware page numbering, headers, footers) via WeasyPrint or Playwright print-to-PDF.
+- Sprint 3 (2026-05-01) added court-format-aware PDF export:
+  - `services/court_format_profiles.py` ships 4 pinned profiles — Supreme Court (1.5" margins, 12pt, double-spaced, center page numbers, "IN THE SUPREME COURT OF INDIA" first-page header), Delhi HC (1" margins, 12pt, 1.5x line height, right page numbers, "IN THE HIGH COURT OF DELHI AT NEW DELHI"), Bombay HC (1" margins, 12pt, 1.5x line height, center page numbers, "IN THE HIGH COURT OF JUDICATURE AT BOMBAY"), generic (catch-all, 11pt, 1.2x, no court header). Profile resolution: explicit caller key > fuzzy match against `Matter.court_name` > generic fallback.
+  - `services/draft_pdf_export.py` ships `render_version_pdf` (mirrors the DOCX route signature) + a pure-function `render_pdf_bytes` for unit tests. fpdf2-based (already in deps; no native build deps), with Latin-1 ASCII-safe fallback so smart quotes / em-dashes / ellipses don't crash the WinAnsi font writer. Same citation gate as DOCX (zero-citation drafts blocked unless approved).
+  - `GET /api/matters/{matter_id}/drafts/{draft_id}/export.pdf` (with optional `?court_profile=` override; X-CaseOps-Court-Profile response header + filename suffix surface the resolved profile). `GET /api/drafting/court-profiles` lists the 4 profiles for the web selector.
+  - Web: "Download PDF" button alongside "Download DOCX" on the draft detail page; `draftPdfUrl()` + `listCourtFormatProfiles()` helpers in `lib/api/endpoints.ts`.
+  - 16 new pytest cases (10 unit tests in `test_court_format_profiles.py` + 6 integration tests in `test_drafting_studio.py` covering smoke / explicit-profile override / unknown-key 422 / 404 on unknown draft / citation-gate / list-route).
+- `services/drafting.py` (1187 lines) still has DOCX export + citation verifier; revision compare + filing checklist + filing-bundle ZIP remain.
+Needed (Sprints 4-12):
 - Sprint 4 — Filing bundle ZIP (memorandum + vakalat + index + exhibits + e-stamp placeholder).
-- Sprint 5 — Court format profiles: Delhi HC / Bombay HC / SC margin/header/cause-title rules.
+- Sprint 5 — Court format profile expansion (today: SC + Delhi HC + Bombay HC + generic; remaining: Madras HC, Calcutta HC, Karnataka HC, NCLT, NCLAT, DRT, etc.) + cause-title profiles.
 - Sprint 6 — `draft_compare(prev_id, next_id)` returning structured diff against existing `DraftRevision` model.
 - Sprint 7 — Bench-aware extension of drafting (extend PG-107 v3 predictive into draft suggestions).
 - Sprint 8 — Filing checklist per court (limit, fees, annexures, vakalatnama).
