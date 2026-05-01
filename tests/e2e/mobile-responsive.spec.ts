@@ -163,4 +163,81 @@ test.describe("Mobile / responsive proofs [mobile]", () => {
     await cancel.scrollIntoViewIfNeeded();
     await expect(cancel).toBeVisible();
   });
+
+  // ---------------------------------------------------------------
+  // PG-005 Sprint 9 (2026-05-01) — DraftingStepper at 360x800.
+  // The stepper's bottom nav row used to put "Previous" + "Submit
+  // for full draft" side-by-side; on a 360px viewport the second
+  // button overflowed the form bounds. Sprint 9 stacks the buttons
+  // vertically below the sm breakpoint.
+  // ---------------------------------------------------------------
+  test("PG-005 Sprint 9 [mobile]: DraftingStepper bottom nav stacks vertically + no horizontal overflow at 360x800", async ({
+    page,
+  }) => {
+    const api = await request.newContext();
+    const slug = unique("ds");
+    await bootstrap(api, slug);
+    await signIn(page, slug);
+
+    // Create a matter so we can navigate to /drafts/new with a
+    // template selection.
+    await page.goto("/app/matters/new");
+    await page.locator("#matter-title").fill("Mobile stepper smoke");
+    await page.locator("#matter-code").fill("MOB-DS-1");
+    await page.locator("#practice-area").fill("Criminal");
+    // Forum select — pick high_court so bench-aware drafting fires.
+    const forumTrigger = page.getByLabel("Forum level");
+    if (await forumTrigger.isVisible().catch(() => false)) {
+      await forumTrigger.tap();
+      await page.getByRole("option", { name: /High court/i }).tap();
+    }
+    await page.getByRole("button", { name: /Create matter/i }).tap();
+    await page.waitForURL(/\/app\/matters\/[^/]+/);
+
+    // Navigate to the drafts list, click "New draft" → grid → bail.
+    const matterUrl = page.url();
+    await page.goto(`${matterUrl}/drafts`);
+    await page.getByTestId("new-draft-trigger").first().tap();
+    await page.waitForURL(/\/drafts\/new(\?|$)/);
+    await page.getByTestId("start-draft-bail").first().tap();
+    await page.waitForURL(/\?type=bail/);
+
+    // Wait for the stepper to render.
+    await expect(page.locator('[data-testid^="step-"]').first()).toBeVisible({
+      timeout: 15_000,
+    });
+
+    // Critical assertion #1: the document body must not horizontally
+    // overflow the viewport. scrollWidth > clientWidth means a sideways
+    // scrollbar — the BUG-013 / Sprint 9 anchor symptom.
+    const overflow = await page.evaluate(() => ({
+      sw: document.documentElement.scrollWidth,
+      cw: document.documentElement.clientWidth,
+    }));
+    expect(overflow.sw).toBeLessThanOrEqual(overflow.cw + 1);
+
+    // Critical assertion #2: the Previous + Next buttons must stack
+    // vertically (Next.y > Previous.y + Previous.height - 2). This
+    // proves the sm:flex-row breakpoint kicked in.
+    const previous = page.getByRole("button", { name: /^Previous/i });
+    const next = page.getByRole("button", { name: /^Next/i });
+    await previous.scrollIntoViewIfNeeded();
+    const prevBox = await previous.boundingBox();
+    const nextBox = await next.boundingBox();
+    expect(prevBox).not.toBeNull();
+    expect(nextBox).not.toBeNull();
+    if (prevBox && nextBox) {
+      expect(nextBox.y).toBeGreaterThanOrEqual(prevBox.y + prevBox.height - 4);
+    }
+
+    // Critical assertion #3: each button is full-width (within the
+    // form column) so the tap target is comfortable on mobile. The
+    // form padding leaves ~16px on each side; allow a generous
+    // tolerance.
+    if (prevBox) {
+      // Previous + Next button width >= 240px on a 360px viewport
+      // (i.e. they are clearly stretched, not minimum-content).
+      expect(prevBox.width).toBeGreaterThanOrEqual(240);
+    }
+  });
 });

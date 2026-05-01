@@ -322,17 +322,25 @@ function StepperInner({ matterId, template, suggestions, onSubmitted }: InnerPro
           </Card>
         )}
 
-        <div className="flex items-center justify-between gap-2">
+        {/* Sprint 9 (2026-05-01) — mobile-responsive bottom nav. On
+            360px viewports the "Submit for full draft" + "Previous"
+            row overflowed the form; stack vertically below sm. */}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <Button
             type="button"
             variant="outline"
             onClick={goPrev}
             disabled={stepIndex === 0}
+            className="w-full sm:w-auto"
           >
             <ArrowLeft className="h-4 w-4" aria-hidden /> Previous
           </Button>
           {isPreviewStep ? (
-            <Button type="submit" disabled={createMutation.isPending}>
+            <Button
+              type="submit"
+              disabled={createMutation.isPending}
+              className="w-full sm:w-auto"
+            >
               {createMutation.isPending ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" /> Creating draft…
@@ -342,7 +350,11 @@ function StepperInner({ matterId, template, suggestions, onSubmitted }: InnerPro
               )}
             </Button>
           ) : (
-            <Button type="button" onClick={goNext}>
+            <Button
+              type="button"
+              onClick={goNext}
+              className="w-full sm:w-auto"
+            >
               Next <ArrowRight className="h-4 w-4" aria-hidden />
             </Button>
           )}
