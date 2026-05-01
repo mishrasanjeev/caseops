@@ -416,14 +416,17 @@ test.describe("Hari II bug regressions", () => {
 
 
   // --------------------------------------------------------------
-  // BUG-011 (reopened 2026-04-22) — overview hides ALL three
-  // empty-state cards (Open tasks, Last court order, Upcoming
-  // hearings) on a fresh matter. The prior fix only hid Open tasks;
-  // user wants symmetric behaviour because the empty CTAs read as
-  // a broken promise. The Hearings tab is still reachable from the
-  // matter sub-nav so the Schedule-hearing affordance isn't lost.
+  // BUG-011 (reopened 2026-04-22) — overview hides empty-state cards
+  // for Open tasks + Last court order on a fresh matter. The original
+  // BUG-011 fix also hid Upcoming hearings, but BUG-019/025 (commit
+  // f641e4b, 2026-04-30) flipped that one back to a workflow-as-fix
+  // empty state with a "+ Add hearing" CTA — without it, fresh-matter
+  // users had no path to populate the calendar. So the assertion
+  // here is now: Open tasks + Last court order stay hidden (BUG-011
+  // invariant), Upcoming hearings renders the empty-state card with
+  // the Add hearing CTA (BUG-019/025).
   // --------------------------------------------------------------
-  test("BUG-011: overview hides all three empty-state cards on a fresh matter", async ({
+  test("BUG-011 + BUG-019/025: overview hides Open tasks + Last court order on a fresh matter, shows Upcoming hearings empty-state with Add hearing CTA", async ({
     page,
   }) => {
     const api = await request.newContext();
@@ -449,12 +452,21 @@ test.describe("Hari II bug regressions", () => {
     await page.waitForURL(/\/app/);
     await page.goto(`/app/matters/${matter.id}`);
 
-    // None of the three empty-state cards render on a fresh matter.
+    // BUG-011 invariant: Open tasks + Last court order still hidden.
     await expect(page.getByText("Open tasks")).toHaveCount(0);
     await expect(page.getByText("Last court order")).toHaveCount(0);
-    await expect(page.getByText("Upcoming hearings")).toHaveCount(0);
-    // The matter cockpit "Hearings" tab is still reachable so the
-    // user can open the schedule-hearing dialog there. Scope the
+    // BUG-019/025 fix: Upcoming hearings empty-state card renders
+    // with the "+ Add hearing" CTA so fresh matters have a workflow
+    // path to populate the calendar.
+    await expect(
+      page.locator('[data-testid="matter-overview-no-hearings"]'),
+    ).toBeVisible();
+    await expect(
+      page
+        .locator('[data-testid="matter-overview-no-hearings"]')
+        .locator('[data-testid="schedule-hearing-open"]'),
+    ).toBeVisible();
+    // The matter cockpit "Hearings" tab is still reachable. Scope the
     // assertion to the matter sub-nav (aria-label "Matter cockpit
     // tabs") to avoid colliding with the global sidebar's
     // "Hearings" link, which also matches /^Hearings$/.
