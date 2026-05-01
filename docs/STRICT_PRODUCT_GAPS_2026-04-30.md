@@ -122,7 +122,7 @@ Needed:
 Estimated days: 5-7.
 
 ### `PG-005` Drafting finalization — court-specific format + PDF + revision diff
-Status: **`Partially implemented`** (Sprints 1 + 2 + 3 + 4 + 5 + 6 + 7 of 12 landed 2026-05-01).
+Status: **`Partially implemented`** (Sprints 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 of 12 landed 2026-05-01).
 Evidence:
 - Sprint 1 (2026-05-01) added 4 highest-frequency missing templates: `WRIT_PETITION`, `QUASHING_PETITION`, `WRITTEN_STATEMENT`, `REPLY_COUNTER_AFFIDAVIT` (full statutory awareness + per-template prompts + recommender-matrix coverage).
 - Sprint 2 (2026-05-01) added 7 more templates covering daily Indian-litigation filings:
@@ -165,9 +165,15 @@ Evidence:
   - Three gates updated to use the new set: (1) `bench_context = build_bench_strategy_context(...)` build call; (2) the BENCH HISTORY CONTEXT block injection in the user prompt; (3) the PG-107 predictive-mode WORKSPACE POLICY OVERRIDE addendum in the system prompt.
   - Low-context fallback note generalised from "general appellate principles" → "general legal principles" so it reads correctly across non-appeal templates.
   - 42 new pytest cases (parameterised across all 15 bench-aware templates × 2 gates + 5 non-bench templates × 2 gates + sanity-check on the explicit set membership + low-context fallback wording test). 127 broader drafting tests pass.
-- `services/drafting.py` (1187 lines) still has DOCX export + citation verifier; filing checklist remains.
-Needed (Sprints 8-12):
-- Sprint 8 — Filing checklist per court (limit, fees, annexures, vakalatnama).
+- Sprint 8 (2026-05-01) added pre-filing checklist per court:
+  - `services/filing_checklist.py` produces a `FilingChecklist` from `(court_profile, template_type)` covering documents (memorandum, vakalat, index, court fee, synopsis, affidavit, statutory forms, etc.), fees, procedure (caveat search, citations to heirs), and service. Items the system can verify itself ship `auto_satisfied=True` with a one-line reason — vakalat draft on the matter ticks the vakalat slot; matter attachments tick FIR/order/will/death-certificate items.
+  - Court overrides for SC (synopsis + caveat search + memo of appearance), every HC (synopsis + verifying affidavit), NCLT/NCLAT (statutory form + board resolution), DRT (OA form + schedule of debt). Template overrides for bail (custody certificate), quashing (FIR copy + settlement deed), writ (impugned-order copy), cheque-bounce (bank memo + RPAD proof), civil suit (schedule of property + cause-of-action chronology), written statement (Order VIII Rule 1A index), probate (will + death certificate + heir citations), vakalatnama (court-fee stamp).
+  - Court fee notes per (template, court) — bail / writ / civil-suit / probate / NCLT / NCLAT / DRT / generic. Limitation notes for written statement (Order VIII Rule 1 30/90/120-day), appeal memorandum, cheque-bounce notice, writ + quashing (laches), amendment of pleadings (Order VI Rule 17 proviso). Copies-required matrix: SC=6, HCs=3, NCLT/NCLAT=5, DRT=3, generic=2.
+  - `GET /api/matters/{matter_id}/drafts/{draft_id}/filing-checklist?court_profile=...` route. 422 on unknown profile key. Same tenant scoping as the rest of the drafting routes.
+  - Web: `<FilingChecklistCard>` on the draft detail page renders the items grouped by category (Documents / Court fee / Procedure / Service), with a tickbox for each (auto-satisfied items pre-ticked + disabled), a limitation-note callout in amber, and a court-fee note in the footer. Local-state ticking — the checklist is descriptive, not gating.
+  - 9 new pytest cases (default Delhi-HC bail layout, SC writ overrides + 6 copies + laches limitation note, NCLT statutory form + 5 copies, vakalat auto-satisfaction when sibling vakalat draft exists, 404 on unknown draft, 422 on unknown court profile, auth gate, written statement limitation note, unknown-template graceful degradation). Web `tsc --noEmit` clean.
+- `services/drafting.py` (1187 lines) still has DOCX export + citation verifier; mobile + solo mode + template governance + live-LLM eval remain.
+Needed (Sprints 9-12):
 - Sprint 9 — Mobile (responsive DraftingStepper at 360px).
 - Sprint 10 — Solo mode (one-page guided form).
 - Sprint 11 — Template governance (admin-side template ordering / pinning).

@@ -25,6 +25,7 @@ import {
   CardTitle,
 } from "@/components/ui/Card";
 import { DraftCompareView } from "@/components/drafting/DraftCompareView";
+import { FilingChecklistCard } from "@/components/drafting/FilingChecklistCard";
 import { DraftFindings, parseDraftSummary } from "@/components/app/DraftFindings";
 import { Button } from "@/components/ui/Button";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
@@ -384,6 +385,8 @@ function DraftBody({
             draftId={draft.id}
             revisions={draft.versions.map((v) => v.revision)}
           />
+
+          <FilingChecklistCard matterId={matterId} draftId={draft.id} />
 
           <Card>
             <CardHeader>

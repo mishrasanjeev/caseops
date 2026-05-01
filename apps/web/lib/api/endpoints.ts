@@ -956,6 +956,42 @@ export async function compareDraftRevisions(input: {
 }
 
 
+// PG-005 Sprint 8 (2026-05-01) — pre-filing checklist.
+export type FilingChecklistItem = {
+  id: string;
+  label: string;
+  description: string;
+  category: "document" | "fee" | "procedure" | "service";
+  required: boolean;
+  auto_satisfied: boolean;
+  auto_satisfied_reason: string | null;
+};
+
+export type FilingChecklistResponse = {
+  matter_id: string;
+  draft_id: string;
+  template_type: string;
+  court_profile_key: string;
+  court_display_name: string;
+  items: FilingChecklistItem[];
+  court_fee_note: string;
+  limitation_note: string | null;
+  copies_required: number;
+};
+
+export async function fetchFilingChecklist(input: {
+  matterId: string;
+  draftId: string;
+  courtProfile?: string;
+}): Promise<FilingChecklistResponse> {
+  const params = new URLSearchParams();
+  if (input.courtProfile) params.set("court_profile", input.courtProfile);
+  const qs = params.toString();
+  const path = `/api/matters/${input.matterId}/drafts/${input.draftId}/filing-checklist${qs ? `?${qs}` : ""}`;
+  return apiRequest<FilingChecklistResponse>(path);
+}
+
+
 // PG-005 Sprint 4 (2026-05-01) — filing-grade ZIP bundle with
 // memorandum + vakalat (auto-resolved) + index + e-stamp placeholder
 // + matter exhibits.

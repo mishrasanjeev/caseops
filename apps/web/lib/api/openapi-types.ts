@@ -1878,6 +1878,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matters/{matter_id}/drafts/{draft_id}/filing-checklist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Pre-filing checklist for the draft — required documents, court fee, copies, limitation reminder (PG-005 Sprint 8, 2026-05-01).
+         * @description Returns the pre-filing checklist for the draft. Optional
+         *     ``court_profile`` overrides the auto-resolution from the matter's
+         *     ``court_name``.
+         */
+        get: operations["get_current_company_matter_draft_filing_checklist_api_matters__matter_id__drafts__draft_id__filing_checklist_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matters/{matter_id}/drafts/{draft_id}/finalize": {
         parameters: {
             query?: never;
@@ -5292,6 +5314,44 @@ export interface components {
             label: string;
             /** Options */
             options: string[];
+        };
+        /** FilingChecklistItemResponse */
+        FilingChecklistItemResponse: {
+            /** Auto Satisfied */
+            auto_satisfied: boolean;
+            /** Auto Satisfied Reason */
+            auto_satisfied_reason?: string | null;
+            /** Category */
+            category: string;
+            /** Description */
+            description: string;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Required */
+            required: boolean;
+        };
+        /** FilingChecklistResponse */
+        FilingChecklistResponse: {
+            /** Copies Required */
+            copies_required: number;
+            /** Court Display Name */
+            court_display_name: string;
+            /** Court Fee Note */
+            court_fee_note: string;
+            /** Court Profile Key */
+            court_profile_key: string;
+            /** Draft Id */
+            draft_id: string;
+            /** Items */
+            items: components["schemas"]["FilingChecklistItemResponse"][];
+            /** Limitation Note */
+            limitation_note?: string | null;
+            /** Matter Id */
+            matter_id: string;
+            /** Template Type */
+            template_type: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -12131,6 +12191,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_current_company_matter_draft_filing_checklist_api_matters__matter_id__drafts__draft_id__filing_checklist_get: {
+        parameters: {
+            query?: {
+                court_profile?: string | null;
+            };
+            header?: never;
+            path: {
+                matter_id: string;
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FilingChecklistResponse"];
                 };
             };
             /** @description Validation Error */

@@ -100,6 +100,7 @@ from caseops_api.services.drafting import (
     transition_draft,
 )
 from caseops_api.services.filing_bundle import render_filing_bundle
+from caseops_api.services.filing_checklist import build_filing_checklist
 from caseops_api.services.hearing_packs import (
     generate_hearing_pack,
     get_latest_hearing_pack,
@@ -1760,6 +1761,92 @@ async def get_current_company_matter_draft_filing_bundle(
         },
     )
 
+
+# PG-005 Sprint 8 (2026-05-01) — pre-filing checklist response shape.
+class FilingChecklistItemResponse(BaseModel):
+    id: str
+    label: str
+    description: str
+    category: str  # "document" | "fee" | "procedure" | "service"
+    required: bool
+    auto_satisfied: bool
+    auto_satisfied_reason: str | None = None
+
+
+class FilingChecklistResponse(BaseModel):
+    matter_id: str
+    draft_id: str
+    template_type: str
+    court_profile_key: str
+    court_display_name: str
+    items: list[FilingChecklistItemResponse]
+    court_fee_note: str
+    limitation_note: str | None = None
+    copies_required: int
+
+
+@router.get(
+    "/{matter_id}/drafts/{draft_id}/filing-checklist",
+    response_model=FilingChecklistResponse,
+    summary=(
+        "Pre-filing checklist for the draft — required documents, "
+        "court fee, copies, limitation reminder (PG-005 Sprint 8, "
+        "2026-05-01)."
+    ),
+)
+async def get_current_company_matter_draft_filing_checklist(
+    matter_id: str,
+    draft_id: str,
+    context: CurrentContext,
+    session: DbSession,
+    court_profile: str | None = None,
+) -> FilingChecklistResponse:
+    """Returns the pre-filing checklist for the draft. Optional
+    ``court_profile`` overrides the auto-resolution from the matter's
+    ``court_name``.
+    """
+    # Reuse the load helpers from the drafting service (tenant-scoped).
+    from caseops_api.services.drafting import _load_draft, _load_matter
+
+    matter = _load_matter(session, context, matter_id)
+    draft = _load_draft(session, matter, draft_id)
+
+    try:
+        checklist = build_filing_checklist(
+            session,
+            matter_id=matter.id,
+            draft=draft,
+            court_profile_key=court_profile,
+            court_name=matter.court_name,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+    return FilingChecklistResponse(
+        matter_id=checklist.matter_id,
+        draft_id=checklist.draft_id,
+        template_type=checklist.template_type,
+        court_profile_key=checklist.court_profile_key,
+        court_display_name=checklist.court_display_name,
+        items=[
+            FilingChecklistItemResponse(
+                id=item.id,
+                label=item.label,
+                description=item.description,
+                category=item.category,
+                required=item.required,
+                auto_satisfied=item.auto_satisfied,
+                auto_satisfied_reason=item.auto_satisfied_reason,
+            )
+            for item in checklist.items
+        ],
+        court_fee_note=checklist.court_fee_note,
+        limitation_note=checklist.limitation_note,
+        copies_required=checklist.copies_required,
+    )
 
 
 
