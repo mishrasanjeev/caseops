@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,6 +14,16 @@ vi.mock("sonner", () => ({
 }));
 
 import AdminPage from "@/app/app/admin/page";
+
+// PG-107 (2026-05-01): TenantAIPolicyCard uses React Query, so the
+// admin page now needs a QueryClientProvider in tests. Wrap render so
+// existing tests don't have to change.
+function renderWithQuery(ui: React.ReactElement) {
+  const qc = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>);
+}
 
 describe("AdminPage audit export (P0-001 cookie-auth regression)", () => {
   let originalFetch: typeof globalThis.fetch;
@@ -53,7 +64,7 @@ describe("AdminPage audit export (P0-001 cookie-auth regression)", () => {
       blob: async () => new Blob(["row\n"], { type: "application/jsonl" }),
     });
     const user = userEvent.setup();
-    render(<AdminPage />);
+    renderWithQuery(<AdminPage />);
     await user.click(screen.getByTestId("download-audit-export"));
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     const [, init] = fetchMock.mock.calls[0];
@@ -69,7 +80,7 @@ describe("AdminPage audit export (P0-001 cookie-auth regression)", () => {
     });
     const { toast } = await import("sonner");
     const user = userEvent.setup();
-    render(<AdminPage />);
+    renderWithQuery(<AdminPage />);
     await user.click(screen.getByTestId("download-audit-export"));
     await waitFor(() =>
       expect(toast.error).toHaveBeenCalledWith(
@@ -86,7 +97,7 @@ describe("AdminPage audit export (P0-001 cookie-auth regression)", () => {
     });
     const { toast } = await import("sonner");
     const user = userEvent.setup();
-    render(<AdminPage />);
+    renderWithQuery(<AdminPage />);
     await user.click(screen.getByTestId("download-audit-export"));
     await waitFor(() =>
       expect(toast.error).toHaveBeenCalledWith(

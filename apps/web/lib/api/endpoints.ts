@@ -192,6 +192,9 @@ export type BenchStrategyContext = {
   bench_specific_authorities?: BenchSpecificAuthority[];
   bench_specific_limitation_note?: string | null;
   next_listing_id?: string | null;
+  // PG-107 (2026-05-01). Tenant policy gate.
+  mode?: "evidence_only" | "predictive";
+  disclaimer?: string | null;
 };
 
 export async function fetchBenchStrategyContext(
@@ -280,7 +283,30 @@ export type AppealStrengthReport = {
   ground_assessments: AppealStrengthGround[];
   weak_evidence_paths: string[];
   recommended_edits: string[];
+  // PG-107 (2026-05-01). Tenant policy gate.
+  mode?: "evidence_only" | "predictive";
+  disclaimer?: string | null;
 };
+
+
+// PG-107 (2026-05-01). Tenant AI policy admin endpoints.
+export type TenantAIPolicy = {
+  company_id: string;
+  predictive_bench_strategy_enabled: boolean;
+};
+
+export async function getTenantAIPolicy(): Promise<TenantAIPolicy> {
+  return apiRequest<TenantAIPolicy>("/api/admin/tenant-ai-policy");
+}
+
+export async function updateTenantAIPolicy(input: {
+  predictive_bench_strategy_enabled: boolean;
+}): Promise<TenantAIPolicy> {
+  return apiRequest<TenantAIPolicy>("/api/admin/tenant-ai-policy", {
+    method: "PATCH",
+    body: input,
+  });
+}
 
 export async function fetchAppealStrength(
   matterId: string,

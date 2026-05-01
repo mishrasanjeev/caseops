@@ -80,17 +80,46 @@ export function AppealStrengthPanel({ matterId }: { matterId: string }) {
         ? "neutral"
         : "warning";
 
+  const isPredictive = rep.mode === "predictive";
   return (
     <Card data-testid="appeal-strength-panel">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <FileText className="h-4 w-4" /> Appeal strength
           <Badge tone={overallTone}>{rep.overall_strength}</Badge>
+          {isPredictive ? (
+            <Badge tone="warning" data-testid="appeal-strength-mode-predictive">
+              Predictive
+            </Badge>
+          ) : (
+            <Badge tone="neutral" data-testid="appeal-strength-mode-evidence">
+              Evidence-only
+            </Badge>
+          )}
         </CardTitle>
         <CardDescription>
-          Per-ground argument completeness. Frame: argument coverage,
-          not outcome prediction. <strong>No win/lose scoring.</strong>
+          {isPredictive ? (
+            <>
+              Predictive bench analytics enabled by your workspace's AI
+              policy. Per-ground analytics are statistical descriptions
+              of indexed decisions only — <strong>not legal advice.</strong>
+            </>
+          ) : (
+            <>
+              Per-ground argument completeness. Frame: argument coverage,
+              not outcome prediction. <strong>No win/lose scoring.</strong>
+            </>
+          )}
         </CardDescription>
+        {isPredictive && rep.disclaimer ? (
+          <p
+            className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900"
+            role="note"
+            data-testid="appeal-strength-disclaimer"
+          >
+            {rep.disclaimer}
+          </p>
+        ) : null}
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {!rep.has_draft ? (

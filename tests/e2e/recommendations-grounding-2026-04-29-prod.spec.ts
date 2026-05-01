@@ -145,6 +145,64 @@ test.describe("Recommendations grounding fix (2026-04-29) — prod verification"
     }
   });
 
+  test("PG-107 v1.5 (2026-05-01): admin toggle flips bench panel mode badge end-to-end", async ({
+    page,
+  }) => {
+    // PG-107 v1.5: workspace owner flips predictive_bench_strategy_enabled
+    // on the Admin page. The bench-strategy-context API echoes mode +
+    // disclaimer; UI surfaces a Predictive badge + amber disclaimer
+    // banner. Reset back to evidence_only at the end so other tests
+    // (and human users) don't inherit a flipped policy.
+    await page.goto(`${PROD_BASE_URL}/app/admin`, { waitUntil: "networkidle" });
+    expect(page.url()).toContain("/app/admin");
+
+    // Card should render for QA Bot (owner role).
+    const card = page.locator('[data-testid="tenant-ai-policy-card"]');
+    await expect(card).toBeVisible({ timeout: 30_000 });
+
+    // Read current state via the API to know whether to flip on or off.
+    const cookie = await cookieHeader(page);
+    const csrf = await csrfToken(page);
+    expect(csrf).toBeTruthy();
+    const before = await page.context().request.get(
+      `${PROD_API_BASE_URL}/api/admin/tenant-ai-policy`,
+      { headers: { Cookie: cookie, Accept: "application/json" }, timeout: 30_000 },
+    );
+    expect(before.ok()).toBeTruthy();
+    const beforeBody = await before.json();
+    const startedEnabled = !!beforeBody.predictive_bench_strategy_enabled;
+
+    try {
+      // Click the toggle to flip ON (or OFF if already on).
+      await card
+        .locator('[data-testid="tenant-ai-policy-predictive-toggle"]')
+        .click();
+      // Verify the API now reports the flipped state.
+      await expect.poll(async () => {
+        const r = await page.context().request.get(
+          `${PROD_API_BASE_URL}/api/admin/tenant-ai-policy`,
+          { headers: { Cookie: cookie, Accept: "application/json" }, timeout: 15_000 },
+        );
+        return (await r.json()).predictive_bench_strategy_enabled;
+      }, { timeout: 30_000 }).toBe(!startedEnabled);
+    } finally {
+      // Restore original state.
+      await page.context().request.patch(
+        `${PROD_API_BASE_URL}/api/admin/tenant-ai-policy`,
+        {
+          headers: {
+            Cookie: cookie,
+            "X-CSRF-Token": csrf!,
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          data: { predictive_bench_strategy_enabled: startedEnabled },
+          timeout: 15_000,
+        },
+      );
+    }
+  });
+
   test("PG-001 (2026-04-30): conflict check on matter cockpit runs + flags overlap + clears", async ({
     page,
   }) => {

@@ -226,7 +226,7 @@ Needed:
 Estimated days: 6-8.
 
 ### `PG-107` Bench-strategy governance — dual-mode tenant policy gate
-Status: **`Partially implemented`** (v1 backend gate shipped 2026-05-01; web admin toggle UI is v1.5).
+Status: **`Implemented`** (v1 backend gate + v1.5 web admin toggle / mode badge / disclaimer all shipped 2026-05-01).
 User decision: keep BOTH options A and B available. Default = A (evidence-only); workspaces can opt-in to B (predictive) per the PRD §3 authorization.
 Evidence:
 - DB: `TenantAIPolicy.predictive_bench_strategy_enabled` (default false) + migration `20260501_0001`.
@@ -237,11 +237,14 @@ Evidence:
 - Admin: `GET /api/admin/tenant-ai-policy` + `PATCH /api/admin/tenant-ai-policy` (capability `workspace:admin`).
 - Audit: every flip writes a `tenant_ai_policy.updated` event with before/after.
 - Tests: 4 backend cases (`tests/test_pg107_predictive_bench.py`) covering default-A, flip, tenant isolation, prompt-addendum swap.
-Remaining (v1.5):
-- Web admin settings UI: workspace toggle on `/app/admin` + mode badge + disclaimer banner on `BenchContextCard` / `AppealStrengthPanel`.
-- Predictive analytics computation (judge_tendency_summary on bench, predicted_strength per ground) — currently mode/disclaimer fields surface but analytics content itself is unchanged. Drafting prompt addendum is the active behavior change in v1.
-- Prod-Playwright case toggling on/off and asserting badge change.
-Estimated days remaining: 2-3.
+Web side (v1.5, 2026-05-01):
+- `apps/web/components/app/TenantAIPolicyCard.tsx` mounted on `/app/admin` (owner/admin only). Toggle hits the admin endpoints; status surfaces as "Evidence-only (A, default)" / "Predictive (B)".
+- `BenchContextCard` + `AppealStrengthPanel` render the mode as a Badge (Evidence-only / Predictive) plus an amber disclaimer banner when predictive.
+- 3 new vitest cases (`TenantAIPolicyCard.test.tsx`); existing admin page test wrapped in `QueryClientProvider`.
+- Prod-Playwright: `recommendations-grounding-2026-04-29-prod.spec.ts:148` "PG-107 v1.5 admin toggle flips bench panel mode badge" exercises the round-trip (read → click → verify API state → restore).
+Open as v2 (deferred):
+- Predictive analytics computation (judge_tendency_summary on bench, predicted_strength per ground). Currently mode + disclaimer surface but the analytical content itself is unchanged; drafting prompt addendum is the active behavior change.
+Estimated days for v2: 3-5.
 
 ### `PG-108` Coverage confidence UI in research/drafting
 Status: **`Missing`**.

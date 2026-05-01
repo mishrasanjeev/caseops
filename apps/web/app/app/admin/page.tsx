@@ -6,6 +6,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { RoadmapStub } from "@/components/app/RoadmapStub";
+import { TenantAIPolicyCard } from "@/components/app/TenantAIPolicyCard";
 import { Button } from "@/components/ui/Button";
 import {
   Card,
@@ -223,6 +224,8 @@ export default function AdminPage() {
           )}
         </CardContent>
       </Card>
+
+      <TenantAIPolicyCard />
 
       {canAdmin ? null : (
         <Card>

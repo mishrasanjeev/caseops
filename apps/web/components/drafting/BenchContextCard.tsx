@@ -87,18 +87,47 @@ export function BenchContextCard({ matterId }: { matterId: string }) {
         ? "neutral"
         : "warning";
 
+  const isPredictive = ctx.mode === "predictive";
   return (
     <Card data-testid="bench-context-card">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <Gavel className="h-4 w-4" /> Bench history context
           <Badge tone={qualityTone}>{ctx.context_quality}</Badge>
+          {isPredictive ? (
+            <Badge tone="warning" data-testid="bench-context-mode-predictive">
+              Predictive
+            </Badge>
+          ) : (
+            <Badge tone="neutral" data-testid="bench-context-mode-evidence">
+              Evidence-only
+            </Badge>
+          )}
         </CardTitle>
         <CardDescription>
-          Evidence-cited summary of how the assigned judge or likely
-          bench has decided similar matters. Used by the appeal-draft
-          generator. <strong>No favorability scoring.</strong>
+          {isPredictive ? (
+            <>
+              Predictive bench analytics enabled by your workspace's AI
+              policy. Outputs are statistical descriptions of indexed
+              decisions only — <strong>not legal advice.</strong>
+            </>
+          ) : (
+            <>
+              Evidence-cited summary of how the assigned judge or likely
+              bench has decided similar matters. Used by the appeal-draft
+              generator. <strong>No favorability scoring.</strong>
+            </>
+          )}
         </CardDescription>
+        {isPredictive && ctx.disclaimer ? (
+          <p
+            className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900"
+            role="note"
+            data-testid="bench-context-disclaimer"
+          >
+            {ctx.disclaimer}
+          </p>
+        ) : null}
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="grid gap-3 sm:grid-cols-3">
