@@ -1,0 +1,30 @@
+# CaseOps gitleaks configuration.
+#
+# Extends the upstream default config (AWS / GitHub PAT / Stripe /
+# Anthropic / OpenAI / SendGrid / generic-api-key) with allowlist
+# entries for files that legitimately contain `key=` assignments
+# whose values are eval-test scenario identifiers, NOT secrets.
+#
+# Anchor incident: 2026-05-01 — scheduled gitleaks run flagged 8
+# false positives on `apps/api/src/caseops_api/scripts/eval_*.py`
+# where `key="quashing-482"`, `key="498a-cruelty"`, etc. are
+# CitationCase / EvalCase dataclass fields naming legal eval
+# scenarios. Entropy on dotted slug strings happens to clear the
+# generic-api-key threshold, but these are never written to a
+# response, never sent to a third party, and never persisted as
+# auth material.
+#
+# Reference: https://github.com/gitleaks/gitleaks#configuration
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Skip eval-suite scenario keys that look like API keys"
+paths = [
+    '''apps/api/src/caseops_api/scripts/eval_citations\.py''',
+    '''apps/api/src/caseops_api/scripts/eval_drafting\.py''',
+    '''apps/api/src/caseops_api/scripts/eval_recommendations\.py''',
+    '''apps/api/src/caseops_api/scripts/eval_hearing_packs\.py''',
+    '''apps/api/tests/fixtures/.*''',
+]
