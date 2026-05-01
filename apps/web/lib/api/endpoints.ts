@@ -1010,6 +1010,24 @@ export async function fetchTodayView(input?: {
   return apiRequest<TodayView>(`/api/me/today${qs ? `?${qs}` : ""}`);
 }
 
+// PG-004 follow-up (2026-05-01) — per-matter Next-action card.
+export type NextAction = {
+  kind: "hearing" | "task" | "draft" | "invoice" | "deadline";
+  label: string;
+  detail: string;
+  severity: "urgent" | "soon" | "normal";
+  href: string;
+  due_on_iso: string | null;
+};
+
+export async function fetchMatterNextAction(
+  matterId: string,
+): Promise<NextAction | null> {
+  return apiRequest<NextAction | null>(
+    `/api/matters/${matterId}/next-action`,
+  );
+}
+
 
 export async function compareDraftRevisions(input: {
   matterId: string;

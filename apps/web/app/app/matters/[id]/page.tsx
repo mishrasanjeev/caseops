@@ -7,6 +7,7 @@ import { useParams } from "next/navigation";
 import { CounselRecommendationsCard } from "@/components/app/CounselRecommendationsCard";
 import { BenchStrategyPanel } from "@/components/matter/BenchStrategyPanel";
 import { ConflictCheckCard } from "@/components/matters/ConflictCheckCard";
+import { NextActionCard } from "@/components/matters/NextActionCard";
 import { ScheduleHearingDialog } from "@/components/matters/ScheduleHearingDialog";
 import {
   Card,
@@ -57,6 +58,14 @@ export default function MatterOverviewPage() {
 
   return (
     <div className="grid gap-5 lg:grid-cols-3">
+      {/* PG-004 follow-up (2026-05-01) — single highest-priority
+          item demanding attention on this matter, derived from the
+          /api/me/today feed. The card auto-hides when nothing is
+          queued so it doesn't leave dead space. */}
+      <div className="lg:col-span-3">
+        <NextActionCard matterId={data.matter.id} />
+      </div>
+
       <Card className="lg:col-span-2">
         <CardHeader>
           <CardTitle>Matter summary</CardTitle>

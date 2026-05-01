@@ -321,13 +321,203 @@ def _deadlines(
     return out
 
 
+# ---------------------------------------------------------------
+# Per-matter "Next action" — single highest-priority item for the
+# matter cockpit.
+# ---------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class NextAction:
+    """Highest-priority item demanding attention on a specific matter.
+
+    Returned by `/api/matters/{matter_id}/next-action`. Lets the
+    matter cockpit show "the one thing the user should do next" on
+    this matter without making the user piece it together from five
+    sections.
+    """
+
+    kind: str  # "hearing" | "task" | "draft" | "invoice" | "deadline"
+    label: str  # human-readable title
+    detail: str  # secondary line (date / status / amount)
+    severity: str  # "urgent" | "soon" | "normal"
+    href: str  # deeplink the cockpit card uses
+    due_on_iso: str | None = None
+
+
+# Severity ordering. Lower number = higher priority.
+_SEVERITY_RANK = {"urgent": 0, "soon": 1, "normal": 2}
+
+
+def build_matter_next_action(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+    today: date | None = None,
+) -> NextAction | None:
+    """Pick the single most urgent item on a matter.
+
+    Priority order (within the same severity bucket, earliest date
+    wins):
+    1. Overdue task / overdue invoice / overdue deadline → URGENT.
+    2. Hearing today / hearing tomorrow / draft in review → SOON.
+    3. Anything in the next 7 days → NORMAL.
+
+    Returns None if nothing demands attention on this matter.
+    """
+    today = today or date.today()
+    horizon_end = today + timedelta(days=7)
+
+    # Reuse the per-stream queries by reading just one matter's slice.
+    # Cheaper than re-querying — we already have these joined views.
+    hearings = [
+        h for h in _hearings(
+            session, context.company.id, today, horizon_end,
+        ) if h.matter.id == matter_id
+    ]
+    tasks = [
+        t for t in _tasks(
+            session, context.company.id, context.membership.id,
+            today, horizon_end,
+        ) if t.matter.id == matter_id
+    ]
+    drafts = [
+        d for d in _drafts_in_review(
+            session, context.company.id,
+        ) if d.matter.id == matter_id
+    ]
+    invoices = [
+        i for i in _overdue_invoices(
+            session, context.company.id, today,
+        ) if i.matter.id == matter_id
+    ]
+    deadlines = [
+        d for d in _deadlines(
+            session, context.company.id, today, horizon_end,
+        ) if d.matter.id == matter_id
+    ]
+
+    candidates: list[NextAction] = []
+
+    for inv in invoices:
+        candidates.append(
+            NextAction(
+                kind="invoice",
+                label=f"Overdue invoice {inv.invoice_number or ''}",
+                detail=(
+                    f"{inv.days_overdue}d overdue · "
+                    f"{inv.currency} {inv.total_amount_minor / 100:,.0f}"
+                ),
+                severity="urgent",
+                href=f"/app/matters/{matter_id}/billing",
+                due_on_iso=inv.due_on.isoformat(),
+            )
+        )
+
+    for t in tasks:
+        if t.overdue:
+            candidates.append(
+                NextAction(
+                    kind="task",
+                    label=t.title,
+                    detail=f"Task overdue · due {t.due_on.isoformat() if t.due_on else 'unset'}",
+                    severity="urgent",
+                    href=f"/app/matters/{matter_id}",
+                    due_on_iso=t.due_on.isoformat() if t.due_on else None,
+                )
+            )
+
+    for d in deadlines:
+        if d.days_until <= 0:
+            severity = "urgent"
+            detail = f"Deadline {'today' if d.days_until == 0 else f'{abs(d.days_until)}d overdue'}"
+        elif d.days_until <= 2:
+            severity = "soon"
+            detail = f"Deadline in {d.days_until}d"
+        else:
+            severity = "normal"
+            detail = f"Deadline in {d.days_until}d"
+        candidates.append(
+            NextAction(
+                kind="deadline",
+                label=d.title,
+                detail=detail,
+                severity=severity,
+                href=f"/app/matters/{matter_id}",
+                due_on_iso=d.due_on.isoformat(),
+            )
+        )
+
+    for h in hearings:
+        days_until = (h.hearing_on - today).days
+        if days_until <= 1:
+            severity = "soon"
+        else:
+            severity = "normal"
+        candidates.append(
+            NextAction(
+                kind="hearing",
+                label=f"Hearing — {h.purpose}",
+                detail=f"{h.forum_name} · {h.hearing_on.isoformat()} (in {days_until}d)",
+                severity=severity,
+                href=f"/app/matters/{matter_id}/hearings",
+                due_on_iso=h.hearing_on.isoformat(),
+            )
+        )
+
+    for t in tasks:
+        if not t.overdue and t.due_on is not None:
+            days_until = (t.due_on - today).days
+            severity = "soon" if days_until <= 1 else "normal"
+            candidates.append(
+                NextAction(
+                    kind="task",
+                    label=t.title,
+                    detail=f"Task due in {days_until}d",
+                    severity=severity,
+                    href=f"/app/matters/{matter_id}",
+                    due_on_iso=t.due_on.isoformat(),
+                )
+            )
+
+    for d in drafts:
+        candidates.append(
+            NextAction(
+                kind="draft",
+                label=f"{d.title} — pending review",
+                detail=f"{d.template_type or d.draft_type} · waiting for partner sign-off",
+                severity="soon",
+                href=f"/app/matters/{matter_id}/drafts/{d.id}",
+                due_on_iso=None,
+            )
+        )
+
+    if not candidates:
+        return None
+
+    # Sort: severity first (urgent < soon < normal), then earliest date,
+    # then by kind preference (invoice > task > deadline > hearing > draft).
+    kind_rank = {
+        "invoice": 0, "task": 1, "deadline": 2, "hearing": 3, "draft": 4,
+    }
+    candidates.sort(key=lambda c: (
+        _SEVERITY_RANK.get(c.severity, 9),
+        c.due_on_iso or "9999-99-99",
+        kind_rank.get(c.kind, 9),
+    ))
+    return candidates[0]
+
+
 __all__ = [
     "MatterRef",
+    "NextAction",
     "TodayDeadline",
     "TodayDraftInReview",
     "TodayHearing",
     "TodayInvoice",
     "TodayTask",
     "TodayView",
+    "build_matter_next_action",
     "build_today_view",
 ]

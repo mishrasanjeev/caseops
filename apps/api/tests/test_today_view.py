@@ -333,6 +333,123 @@ def test_today_route_requires_auth(client: TestClient) -> None:
     assert resp.status_code in {401, 403}
 
 
+# ---------------------------------------------------------------
+# PG-004 follow-up — per-matter Next-action card.
+# ---------------------------------------------------------------
+
+
+def test_next_action_returns_null_for_clean_matter(client: TestClient) -> None:
+    """Empty matter (no hearings, tasks, deadlines, drafts, invoices) →
+    next-action endpoint returns null instead of erroring."""
+    token = str(bootstrap_company(client)["access_token"])
+    matter_id = _create_matter(client, token, "NA-EMPTY")
+
+    resp = client.get(
+        f"/api/matters/{matter_id}/next-action",
+        headers=auth_headers(token),
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json() is None
+
+
+def test_next_action_picks_overdue_invoice_first(client: TestClient) -> None:
+    """When a matter has both an overdue invoice AND an upcoming
+    hearing, the overdue invoice wins (severity=urgent beats soon)."""
+    token = str(bootstrap_company(client)["access_token"])
+    matter_id = _create_matter(client, token, "NA-INV")
+    _seed_invoice(matter_id, due_on=date.today() - timedelta(days=15))
+    _seed_hearing(matter_id, date.today() + timedelta(days=3))
+
+    resp = client.get(
+        f"/api/matters/{matter_id}/next-action",
+        headers=auth_headers(token),
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body is not None
+    assert body["kind"] == "invoice"
+    assert body["severity"] == "urgent"
+    assert "Overdue invoice" in body["label"]
+
+
+def test_next_action_picks_overdue_task_over_upcoming_hearing(
+    client: TestClient,
+) -> None:
+    """Overdue task beats a hearing 3 days out (urgent > normal)."""
+    token = str(bootstrap_company(client)["access_token"])
+    matter_id = _create_matter(client, token, "NA-TASK")
+    _seed_task(matter_id, due_on=date.today() - timedelta(days=2))
+    _seed_hearing(matter_id, date.today() + timedelta(days=3))
+
+    resp = client.get(
+        f"/api/matters/{matter_id}/next-action",
+        headers=auth_headers(token),
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body is not None
+    assert body["kind"] == "task"
+    assert body["severity"] == "urgent"
+
+
+def test_next_action_picks_hearing_today_over_draft_in_review(
+    client: TestClient,
+) -> None:
+    """Within `soon` severity, a hearing today wins over a draft
+    in review (kind tiebreak: hearing > draft)."""
+    token = str(bootstrap_company(client)["access_token"])
+    matter_id = _create_matter(client, token, "NA-HRG")
+    _seed_hearing(matter_id, date.today())  # today → soon
+    _seed_draft_in_review(client, token, matter_id)  # soon
+
+    resp = client.get(
+        f"/api/matters/{matter_id}/next-action",
+        headers=auth_headers(token),
+    )
+    body = resp.json()
+    assert body is not None
+    # Both severity=soon; hearing has earlier due date (today).
+    assert body["kind"] == "hearing"
+
+
+def test_next_action_tenant_scoped(client: TestClient) -> None:
+    """A matter id from tenant A doesn't surface tenant A's data when
+    queried with tenant B's token."""
+    token_a = str(bootstrap_company(client)["access_token"])
+    matter_a = _create_matter(client, token_a, "NA-ISO-A")
+    _seed_hearing(matter_a, date.today() + timedelta(days=2))
+
+    bootstrap_resp = client.post(
+        "/api/bootstrap/company",
+        json={
+            "company_name": "Tenant B LLP",
+            "company_slug": "next-iso-b",
+            "company_type": "law_firm",
+            "owner_full_name": "Owner B",
+            "owner_email": "owner-b@nextiso.in",
+            "owner_password": "TenantBPass123!",
+        },
+    )
+    assert bootstrap_resp.status_code == 200, bootstrap_resp.text
+    token_b = str(bootstrap_resp.json()["access_token"])
+
+    # Tenant A sees the action.
+    resp_a = client.get(
+        f"/api/matters/{matter_a}/next-action",
+        headers=auth_headers(token_a),
+    )
+    assert resp_a.json() is not None
+
+    # Tenant B querying tenant A's matter id sees null
+    # (matter_id filter inside build_matter_next_action only matches
+    # rows whose Matter.company_id == B's company id, which is none).
+    resp_b = client.get(
+        f"/api/matters/{matter_a}/next-action",
+        headers=auth_headers(token_b),
+    )
+    assert resp_b.json() is None
+
+
 # Pacify the import-unused linter; both names are referenced in the
 # helpers above conditionally + used by readers consulting the test
 # fixtures.

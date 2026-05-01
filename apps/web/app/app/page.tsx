@@ -3,6 +3,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { ArrowUpRight, Briefcase, Gavel, LibraryBig, Sparkles } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -38,6 +40,18 @@ export default function DashboardPage() {
 
   const matters = mattersQuery.data?.matters ?? [];
   const activeCount = matters.filter((m) => m.status === "active").length;
+
+  // PG-004 (2026-05-01) — for users with at least one active matter,
+  // /app/today is the natural daily landing page (hearings + tasks +
+  // drafts to review + overdue invoices + deadlines). First-run users
+  // (no active matters yet) stay on this dashboard so they see the
+  // welcome / portfolio-setup state instead of an empty Today feed.
+  const router = useRouter();
+  useEffect(() => {
+    if (mattersQuery.isSuccess && activeCount >= 1) {
+      router.replace("/app/today");
+    }
+  }, [mattersQuery.isSuccess, activeCount, router]);
   const upcoming = [...matters]
     .filter((m) => !!m.next_hearing_on)
     .sort((a, b) => (a.next_hearing_on ?? "").localeCompare(b.next_hearing_on ?? ""))

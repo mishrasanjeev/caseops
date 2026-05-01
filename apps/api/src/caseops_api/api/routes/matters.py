@@ -153,6 +153,7 @@ from caseops_api.services.matters import (
     update_matter_hearing,
     update_matter_task,
 )
+from caseops_api.services.today_view import build_matter_next_action
 
 router = APIRouter()
 CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
@@ -565,6 +566,48 @@ class BenchMatchResponse(BaseModel):
     confidence: str
     reasoning: list[str]
     suggested_judges: list[BenchMatchJudge]
+
+
+# PG-004 (2026-05-01) — per-matter Next-action card.
+class NextActionResponse(BaseModel):
+    kind: str  # "hearing" | "task" | "draft" | "invoice" | "deadline"
+    label: str
+    detail: str
+    severity: str  # "urgent" | "soon" | "normal"
+    href: str
+    due_on_iso: str | None = None
+
+
+@router.get(
+    "/{matter_id}/next-action",
+    response_model=NextActionResponse | None,
+    summary=(
+        "Highest-priority item demanding attention on this matter "
+        "(PG-004, 2026-05-01). Returns null when nothing is queued."
+    ),
+)
+async def get_matter_next_action(
+    matter_id: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> NextActionResponse | None:
+    # Tenant scoping is enforced inside build_matter_next_action via
+    # Matter.company_id checks on every join. We don't pre-load the
+    # matter here — a matter that doesn't belong to the tenant just
+    # produces zero candidates and returns null.
+    action = build_matter_next_action(
+        session, context=context, matter_id=matter_id,
+    )
+    if action is None:
+        return None
+    return NextActionResponse(
+        kind=action.kind,
+        label=action.label,
+        detail=action.detail,
+        severity=action.severity,
+        href=action.href,
+        due_on_iso=action.due_on_iso,
+    )
 
 
 # PG-005 Sprint 6 (2026-05-01) — draft revision compare response shape.
