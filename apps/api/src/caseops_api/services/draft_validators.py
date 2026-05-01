@@ -210,12 +210,47 @@ def _looks_like_citation(text: str) -> bool:
     return bool(_CITATION_LIKE.search(text))
 
 
-def run_validators(body: str, citations: Iterable[str]) -> list[DraftFinding]:
-    """Run the full validator suite over a generated draft."""
+# Templates whose body is procedural-only (POA / sworn statement /
+# notice / caveat) and SHOULD NOT trigger citation-coverage checks.
+# These docs recite statute and rules procedurally; the
+# `no_inline_anchors` heuristic fires on phrases like "Order XIX CPC"
+# or "Section 138 NI Act" even though the absence of bracketed
+# citations is the correct behaviour.
+_PROCEDURAL_ONLY_TEMPLATES: frozenset[str] = frozenset({
+    "vakalatnama",
+    "caveat_petition",
+    "affidavit",
+    "reply_counter_affidavit",
+    "cheque_bounce_notice",
+    "property_dispute_notice",
+})
+
+
+def run_validators(
+    body: str,
+    citations: Iterable[str],
+    *,
+    template_type: str | None = None,
+) -> list[DraftFinding]:
+    """Run the full validator suite over a generated draft.
+
+    `template_type` is optional for backward compatibility with the
+    drafting service, which still calls `run_validators(body,
+    surviving)` without the kwarg. When supplied, procedural-only
+    templates skip the `citation.no_inline_anchors` heuristic — those
+    documents are statutory recitals + verification, not legal
+    arguments, so the no-inline-anchors signal is a false positive.
+    """
     findings: list[DraftFinding] = []
     findings.extend(check_statute_confusion(body))
     findings.extend(check_uuid_leakage(body))
-    findings.extend(check_citation_coverage(body, citations))
+    citation_findings = check_citation_coverage(body, citations)
+    if template_type in _PROCEDURAL_ONLY_TEMPLATES:
+        citation_findings = [
+            f for f in citation_findings
+            if f.code != "citation.no_inline_anchors"
+        ]
+    findings.extend(citation_findings)
     return findings
 
 

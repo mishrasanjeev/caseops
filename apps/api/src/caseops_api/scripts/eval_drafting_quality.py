@@ -243,7 +243,7 @@ def _score_validator(
     3.0 = warning-only findings.
     0.0 = at least one error.
     """
-    findings = run_validators(body, citations)
+    findings = run_validators(body, citations, template_type=template_type)
     summary = [f"[{f.severity}] {f.code}: {f.message}" for f in findings]
     has_error = any(f.severity == "error" for f in findings)
     if has_error:
