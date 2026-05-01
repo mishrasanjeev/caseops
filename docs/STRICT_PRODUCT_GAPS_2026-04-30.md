@@ -122,7 +122,7 @@ Needed:
 Estimated days: 5-7.
 
 ### `PG-005` Drafting finalization — court-specific format + PDF + revision diff
-Status: **`Partially implemented`** (Sprints 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 of 12 landed 2026-05-01).
+Status: **`Implemented`** (all 12 sprints of the drafting roadmap landed 2026-05-01; live-LLM eval harness in place to enforce 4.8/5 going forward).
 Evidence:
 - Sprint 1 (2026-05-01) added 4 highest-frequency missing templates: `WRIT_PETITION`, `QUASHING_PETITION`, `WRITTEN_STATEMENT`, `REPLY_COUNTER_AFFIDAVIT` (full statutory awareness + per-template prompts + recommender-matrix coverage).
 - Sprint 2 (2026-05-01) added 7 more templates covering daily Indian-litigation filings:
@@ -173,11 +173,10 @@ Evidence:
   - Web: `<FilingChecklistCard>` on the draft detail page renders the items grouped by category (Documents / Court fee / Procedure / Service), with a tickbox for each (auto-satisfied items pre-ticked + disabled), a limitation-note callout in amber, and a court-fee note in the footer. Local-state ticking — the checklist is descriptive, not gating.
   - 9 new pytest cases (default Delhi-HC bail layout, SC writ overrides + 6 copies + laches limitation note, NCLT statutory form + 5 copies, vakalat auto-satisfaction when sibling vakalat draft exists, 404 on unknown draft, 422 on unknown court profile, auth gate, written statement limitation note, unknown-template graceful degradation). Web `tsc --noEmit` clean.
 - `services/drafting.py` (1187 lines) still has DOCX export + citation verifier; mobile + solo mode + template governance + live-LLM eval remain.
-Needed (Sprints 9-12):
-- Sprint 9 — Mobile (responsive DraftingStepper at 360px).
-- Sprint 10 — Solo mode (one-page guided form).
-- Sprint 11 — Template governance (admin-side template ordering / pinning).
-- Sprint 12 — Live-LLM eval harness (caseops-eval-drafting) reaching 4.8+/5 on each template.
+- Sprint 9 (2026-05-01) shipped DraftingStepper mobile-responsive at 360px — bottom nav stacks vertically below sm; full-width buttons; +1 mobile-responsive Playwright case asserting no horizontal overflow + Next-below-Previous stack + ≥240px button width.
+- Sprint 10 (2026-05-01) shipped solo mode — `?solo=1` query param flattens the stepper into a single scrollable form with one "Generate draft" CTA. DraftTemplateCard exposes a "Solo mode" link (Zap icon, ghost variant) alongside the standard "Start drafting" CTA.
+- Sprint 11 (2026-05-01) shipped template governance — `tenant_ai_policies.disabled_template_types_json` column (Alembic 20260501_0003); PATCH /api/admin/tenant-ai-policy accepts a JSON list of DraftTemplateType values to hide; GET /api/drafting/templates filters its response on the resolved policy. 6 new pytest cases (default-20-list / disable-drops-from-list / canonical-set validation / disable-then-re-enable round-trip / partial-update semantics / tenant-isolation).
+- Sprint 12 (2026-05-01) shipped live-LLM drafting quality harness — `caseops_api.scripts.eval_drafting_quality` iterates the canonical fixtures, builds the EXACT production prompt via `_build_messages`, runs GPT-5.1, scores each output across 3 dimensions (validator_score / structure_score / citation_score) and produces an aggregate 0-5 rating with a 4.8 target. Dry-run mode emits the assembled prompts without calling the LLM (cheap diff against future prompt edits).
 Estimated days remaining after Sprint 2: 6-8 (PDF + 1 court) → 10-13 (PDF + 5 courts) + 4-6 (filing bundle) + 8-12 (revision diff + filing checklist + mobile + solo + governance + live-eval).
 
 ### `PG-006` Research treatment / good-law signal
