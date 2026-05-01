@@ -71,6 +71,14 @@ export default function ResearchPage() {
   const [forumLevel, setForumLevel] = useState<ForumFilter>("any");
   const [courtName, setCourtName] = useState("");
   const [documentType, setDocumentType] = useState<DocTypeFilter>("any");
+  // PG-110 (2026-05-01): language filter + pagination. Default "en"
+  // because the 2026-04-28 ingest sweep dropped the EN-only filter,
+  // so without a default users were seeing Garo / Hindi / Tamil
+  // titles dominate top results. PAGE_SIZE matches the new server-side
+  // limit ceiling step.
+  const PAGE_SIZE = 10;
+  const [language, setLanguage] = useState<"en" | "any">("en");
+  const [page, setPage] = useState(0);
   const [savedAuthorityIds, setSavedAuthorityIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -86,12 +94,14 @@ export default function ResearchPage() {
     queryKey: [
       "authorities",
       "search",
-      { q: pendingQuery, forumLevel, courtName, documentType },
+      { q: pendingQuery, forumLevel, courtName, documentType, language, page },
     ],
     queryFn: () =>
       searchAuthorities({
         query: pendingQuery,
-        limit: 10,
+        limit: PAGE_SIZE,
+        offset: page * PAGE_SIZE,
+        language,
         forumLevel: forumLevel === "any" ? null : forumLevel,
         courtName: courtName.trim() || null,
         documentType: documentType === "any" ? null : documentType,
@@ -131,10 +141,21 @@ export default function ResearchPage() {
       return;
     }
     setPendingQuery(trimmed);
+    setPage(0); // PG-110: reset pagination on a new query
   };
 
+  // Reset to page 0 when the user changes the language filter or any
+  // other filter that changes the result set shape. Otherwise the
+  // current `offset` could land outside the new filtered range.
+  useEffect(() => {
+    setPage(0);
+  }, [language, forumLevel, courtName, documentType]);
+
   const results = searchQuery.data?.results ?? [];
+  const totalAfterFilter = searchQuery.data?.total_after_filter ?? 0;
   const hasSearched = pendingQuery.length > 0;
+  const hasNextPage = (page + 1) * PAGE_SIZE < totalAfterFilter;
+  const hasPrevPage = page > 0;
 
   return (
     <div className="flex flex-col gap-6">
@@ -278,6 +299,45 @@ export default function ResearchPage() {
                 </Select>
               </div>
             </div>
+            {/* PG-110 (2026-05-01): language filter. Default English so
+                Garo / Hindi / Tamil judgments pulled by the 2026-04-28
+                ingest sweep don't dominate top results. */}
+            <div className="flex flex-wrap items-center gap-2">
+              <Label className="text-xs text-[var(--color-mute-2)]">
+                Language
+              </Label>
+              <div
+                className="inline-flex rounded-md border border-[var(--color-line)] bg-white"
+                data-testid="research-language-toggle"
+              >
+                <button
+                  type="button"
+                  onClick={() => setLanguage("en")}
+                  data-testid="research-language-en"
+                  className={`px-3 py-1 text-xs font-medium ${
+                    language === "en"
+                      ? "bg-[var(--color-ink)] text-white"
+                      : "text-[var(--color-ink-2)]"
+                  }`}
+                  aria-pressed={language === "en"}
+                >
+                  English
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLanguage("any")}
+                  data-testid="research-language-any"
+                  className={`px-3 py-1 text-xs font-medium ${
+                    language === "any"
+                      ? "bg-[var(--color-ink)] text-white"
+                      : "text-[var(--color-ink-2)]"
+                  }`}
+                  aria-pressed={language === "any"}
+                >
+                  All languages
+                </button>
+              </div>
+            </div>
           </form>
         </CardContent>
       </Card>
@@ -326,22 +386,63 @@ export default function ResearchPage() {
           description="Broaden your filters or rephrase the query. The corpus is still growing."
         />
       ) : (
-        <ul className="flex flex-col gap-3" data-testid="research-results">
-          {results.map((result) => (
-            <AuthorityCard
-              key={result.authority_document_id}
-              result={result}
-              saved={savedAuthorityIds.has(result.authority_document_id)}
-              canAnnotate={canAnnotate}
-              onSave={() => saveMutation.mutate(result)}
-              saving={
-                saveMutation.isPending &&
-                saveMutation.variables?.authority_document_id ===
-                  result.authority_document_id
-              }
-            />
-          ))}
-        </ul>
+        <>
+          <ul className="flex flex-col gap-3" data-testid="research-results">
+            {results.map((result) => (
+              <AuthorityCard
+                key={result.authority_document_id}
+                result={result}
+                saved={savedAuthorityIds.has(result.authority_document_id)}
+                canAnnotate={canAnnotate}
+                onSave={() => saveMutation.mutate(result)}
+                saving={
+                  saveMutation.isPending &&
+                  saveMutation.variables?.authority_document_id ===
+                    result.authority_document_id
+                }
+              />
+            ))}
+          </ul>
+          {/* PG-110 (2026-05-01): paginate over the language-filtered
+              result set. total_after_filter comes from the server. */}
+          {totalAfterFilter > PAGE_SIZE ? (
+            <div
+              className="flex items-center justify-between gap-3 rounded-lg border border-[var(--color-line)] bg-[var(--color-bg-2)] px-4 py-3 text-sm"
+              data-testid="research-pagination"
+            >
+              <span className="text-[var(--color-mute)]">
+                Showing {page * PAGE_SIZE + 1}–
+                {Math.min((page + 1) * PAGE_SIZE, totalAfterFilter)} of{" "}
+                {totalAfterFilter}
+                {language === "en"
+                  ? " English-language matches"
+                  : " matches across all languages"}
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  disabled={!hasPrevPage}
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  data-testid="research-page-prev"
+                >
+                  Prev
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  disabled={!hasNextPage}
+                  onClick={() => setPage((p) => p + 1)}
+                  data-testid="research-page-next"
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </>
       )}
     </div>
   );

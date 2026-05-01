@@ -254,6 +254,21 @@ Needed:
 - Honest "limited corpus" warning when coverage drops below threshold.
 Estimated days: 3-4.
 
+### `PG-110` Research search: language filter + pagination
+Status: **`Implemented`** (v1 shipped 2026-05-01).
+Anchor: user-reported bug — `https://caseops.ai/app/research` was surfacing Garo / Hindi / Tamil titles at the top of every English query because commit `35956c9` (2026-04-28) widened the ingest sweep to drop EN-only filtering. Curl probe on prod confirmed: query "patent illegality" → 2 results, top result was Garo transliteration with `?` placeholder chars; query "specific performance" → 5 results dominated by raw-citation-only titles ("[2010] 12 S.C.R. 515" — Layer-2 metadata extraction failures).
+Evidence:
+- `schemas/authorities.AuthoritySearchRequest` adds `language: Literal["en", "any"] = "en"` + `offset: int = 0` (range 0-500); `limit` ceiling bumped 10 → 50.
+- `services/authorities.search_authorities` over-fetches `(offset + limit) * 5` from the catalog, applies `_title_is_predominantly_ascii` filter when `language=en`, then slices to `[offset : offset+limit]`. Returns `total_after_filter` + echoed `offset` so the UI can render Prev/Next correctly.
+- `_title_is_predominantly_ascii`: rejects empty / no-letter / Devanagari / OCR-failed titles (≥3 ASCII letters required, ASCII ratio ≥70%, `?` chars <20% of non-whitespace).
+- `apps/web/app/app/research/page.tsx`: new English / All languages toggle (default English), Prev / Next pagination (10/page), "Showing 1–10 of N" footer. Page resets to 0 on filter change.
+- `apps/web/lib/api/endpoints.ts::searchAuthorities` + response types updated.
+- 4 backend tests (`tests/test_authorities.py`) + 8 web vitest cases stay green.
+Open follow-ons (deferred, NOT blocking):
+- Persistent `language` column on `AuthorityDocument` so the filter can run as SQL `WHERE` instead of post-retrieval (saves over-fetch cost; bigger filter precision).
+- Layer-2 metadata re-extraction to clean citation-only titles (e.g. "[2024] 9 SCR 683") into proper case names — separate corpus-quality workstream.
+Estimated days for follow-ons: 4-6.
+
 ### `PG-109` Source-used / source-ignored AI trust panel
 Status: **`Implemented`** (v1 shipped 2026-05-01).
 Evidence:

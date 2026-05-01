@@ -1747,6 +1747,9 @@ export type AuthoritySearchResult = {
 export async function searchAuthorities(input: {
   query: string;
   limit?: number;
+  // PG-110 (2026-05-01): pagination + language filter.
+  offset?: number;
+  language?: "en" | "any";
   forumLevel?: AuthorityForumLevel | null;
   courtName?: string | null;
   documentType?: AuthorityDocumentType | null;
@@ -1755,12 +1758,16 @@ export async function searchAuthorities(input: {
   provider: string;
   generated_at: string;
   results: AuthoritySearchResult[];
+  total_after_filter: number;
+  offset: number;
 }> {
   return apiRequest("/api/authorities/search", {
     method: "POST",
     body: {
       query: input.query,
-      limit: input.limit ?? 8,
+      limit: input.limit ?? 10,
+      offset: input.offset ?? 0,
+      language: input.language ?? "en",
       forum_level: input.forumLevel ?? null,
       court_name: input.courtName ?? null,
       document_type: input.documentType ?? null,

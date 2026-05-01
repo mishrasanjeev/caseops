@@ -472,3 +472,152 @@ def test_forum_precedent_boost_does_not_score_judges_or_outcomes() -> None:
     a = _forum_precedent_boost("high_court", "supreme_court")
     b = _forum_precedent_boost("high_court", "supreme_court")
     assert a == b
+
+
+# PG-110 (2026-05-01) — language filter + pagination on /authorities/search.
+
+def test_pg110_title_predominantly_ascii_filter() -> None:
+    """ASCII-ratio classifier — pure Latin pass, mixed Latin pass,
+    non-Latin reject. Anchors the language filter behaviour."""
+    from caseops_api.services.authorities import _title_is_predominantly_ascii
+
+    assert (
+        _title_is_predominantly_ascii("Arnesh Kumar v. State of Bihar") is True
+    )
+    # Diacritic-heavy Latin titles ("Bhāratīya") fail the 70% bar
+    # because non-ASCII combining-letter chars dominate; that's
+    # acceptable since pure-Latin titles overwhelmingly pass.
+    assert (
+        _title_is_predominantly_ascii("Mr R K Singh v State of UP") is True
+    )
+    assert (
+        _title_is_predominantly_ascii(
+            "???Rai on??aniko ku??siktangona pe??anira"
+        )
+        is False
+    )
+    # Devanagari title, zero ASCII letters.
+    assert _title_is_predominantly_ascii("भारतीय न्याय संहिता") is False
+    assert _title_is_predominantly_ascii("") is False
+    assert _title_is_predominantly_ascii(None) is False
+    # Citation-only titles ("[2024] 9 S.C.R. 683") DO pass — they are
+    # English content. The shitty-title problem (Layer-2 metadata
+    # extraction failed to pull a case name) is orthogonal to the
+    # language filter; we'd rather show a row with a citation as title
+    # than hide it entirely.
+    assert (
+        _title_is_predominantly_ascii(
+            "[2024] 9 S.C.R. 683 : 2024 INSC 687"
+        )
+        is True
+    )
+
+
+def test_pg110_search_default_filters_non_english(client: TestClient, monkeypatch) -> None:
+    """Default language=en MUST drop non-Latin-script titles from the
+    response. Stub the catalog to return one Latin + one non-Latin
+    result; the route layer should keep only the Latin one."""
+    from caseops_api.schemas.authorities import AuthoritySearchResult
+    from caseops_api.services import authorities as svc
+
+    fake = [
+        AuthoritySearchResult(
+            authority_document_id="d1", title="State of Maharashtra v. Acme Pvt Ltd",
+            court_name="Bombay High Court", forum_level="high_court",
+            document_type="judgment", decision_date=None, case_reference="A/1",
+            bench_name=None, summary="s", source="t", source_reference=None,
+            snippet="snippet", score=10, matched_terms=["acme"],
+        ),
+        AuthoritySearchResult(
+            authority_document_id="d2", title="भारतीय न्याय संहिता",
+            court_name="Bombay High Court", forum_level="high_court",
+            document_type="judgment", decision_date=None, case_reference="A/2",
+            bench_name=None, summary="s", source="t", source_reference=None,
+            snippet="x", score=9, matched_terms=["acme"],
+        ),
+    ]
+    monkeypatch.setattr(svc, "search_authority_catalog", lambda *a, **kw: fake)
+
+    token = str(bootstrap_company(client)["access_token"])
+    resp = client.post(
+        "/api/authorities/search",
+        headers=auth_headers(token),
+        json={"query": "Acme", "limit": 10},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["total_after_filter"] == 1
+    assert len(body["results"]) == 1
+    assert body["results"][0]["authority_document_id"] == "d1"
+
+
+def test_pg110_search_language_any_returns_unfiltered(
+    client: TestClient, monkeypatch,
+) -> None:
+    """language=any disables the ASCII filter; both rows survive."""
+    from caseops_api.schemas.authorities import AuthoritySearchResult
+    from caseops_api.services import authorities as svc
+
+    fake = [
+        AuthoritySearchResult(
+            authority_document_id="d1", title="State of Maharashtra v. Acme",
+            court_name="Bombay High Court", forum_level="high_court",
+            document_type="judgment", decision_date=None, case_reference="A/1",
+            bench_name=None, summary="s", source="t", source_reference=None,
+            snippet="x", score=10, matched_terms=[],
+        ),
+        AuthoritySearchResult(
+            authority_document_id="d2", title="भारतीय न्याय संहिता",
+            court_name="Bombay High Court", forum_level="high_court",
+            document_type="judgment", decision_date=None, case_reference="A/2",
+            bench_name=None, summary="s", source="t", source_reference=None,
+            snippet="x", score=9, matched_terms=[],
+        ),
+    ]
+    monkeypatch.setattr(svc, "search_authority_catalog", lambda *a, **kw: fake)
+
+    token = str(bootstrap_company(client)["access_token"])
+    resp = client.post(
+        "/api/authorities/search",
+        headers=auth_headers(token),
+        json={"query": "Acme", "limit": 10, "language": "any"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["total_after_filter"] == 2
+
+
+def test_pg110_search_offset_pagination(client: TestClient, monkeypatch) -> None:
+    """offset slices the language-filtered list; total_after_filter
+    stays the size of the full filtered set."""
+    from caseops_api.schemas.authorities import AuthoritySearchResult
+    from caseops_api.services import authorities as svc
+
+    fake = [
+        AuthoritySearchResult(
+            authority_document_id=f"d{i}", title=f"Case Number {i}",
+            court_name="Bombay High Court", forum_level="high_court",
+            document_type="judgment", decision_date=None, case_reference=f"A/{i}",
+            bench_name=None, summary="s", source="t", source_reference=None,
+            snippet="x", score=100 - i, matched_terms=[],
+        )
+        for i in range(15)
+    ]
+    monkeypatch.setattr(svc, "search_authority_catalog", lambda *a, **kw: fake)
+
+    token = str(bootstrap_company(client)["access_token"])
+    page1 = client.post(
+        "/api/authorities/search",
+        headers=auth_headers(token),
+        json={"query": "Case", "limit": 5, "offset": 0},
+    ).json()
+    assert page1["total_after_filter"] == 15
+    assert [r["authority_document_id"] for r in page1["results"]] == [f"d{i}" for i in range(5)]
+
+    page2 = client.post(
+        "/api/authorities/search",
+        headers=auth_headers(token),
+        json={"query": "Case", "limit": 5, "offset": 5},
+    ).json()
+    assert page2["offset"] == 5
+    assert [r["authority_document_id"] for r in page2["results"]] == [f"d{i}" for i in range(5, 10)]
+

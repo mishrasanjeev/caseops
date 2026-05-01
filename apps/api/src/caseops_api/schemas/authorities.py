@@ -66,7 +66,18 @@ class AuthorityDocumentListResponse(BaseModel):
 
 class AuthoritySearchRequest(BaseModel):
     query: str = Field(min_length=2, max_length=300)
-    limit: int = Field(default=5, ge=1, le=10)
+    # PG-110 (2026-05-01): bump ceiling 10→50 so pagination is useful;
+    # 50 is still small enough to keep retrieval+rerank under 10s.
+    limit: int = Field(default=10, ge=1, le=50)
+    # PG-110: pagination cursor — 0-indexed offset into the ranked
+    # result set. The service over-fetches enough to honour offset
+    # without re-running retrieval per page.
+    offset: int = Field(default=0, ge=0, le=500)
+    # PG-110: language filter. "en" (default) drops results whose
+    # title is non-Latin-script (Garo, Hindi, Tamil, etc. — common
+    # after the 2026-04-28 ingest sweep dropped EN-only filtering).
+    # "any" returns the unfiltered ranked set.
+    language: Literal["en", "any"] = "en"
     forum_level: AuthorityForumLevelLiteral | None = None
     court_name: str | None = Field(default=None, min_length=2, max_length=255)
     document_type: AuthorityDocumentTypeLiteral | None = None
@@ -94,6 +105,11 @@ class AuthoritySearchResponse(BaseModel):
     provider: str
     generated_at: datetime
     results: list[AuthoritySearchResult]
+    # PG-110 (2026-05-01) — pagination metadata. ``total_after_filter``
+    # is the size of the ranked+language-filtered result set; ``offset``
+    # echoes back the request so the UI can compute Prev/Next visibility.
+    total_after_filter: int = 0
+    offset: int = 0
 
 
 class AuthorityCorpusStats(BaseModel):

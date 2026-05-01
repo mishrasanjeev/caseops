@@ -744,19 +744,69 @@ def search_authorities(
     payload: AuthoritySearchRequest,
 ) -> AuthoritySearchResponse:
     del context
+    # PG-110 (2026-05-01): over-fetch from the catalog to give language
+    # filter + offset enough room. After the 2026-04-28 sweep widened
+    # to non-EN documents, top-ranked results frequently include Garo
+    # / Hindi / Tamil titles whose Latin-script ratio is <70% — those
+    # leak into the user's view and dominate "why English content is
+    # not coming" complaints. Filter at the route layer so the catalog
+    # call stays a single source of truth for retrieval + rerank.
+    overfetch = max((payload.offset + payload.limit) * 5, 50)
+    raw = search_authority_catalog(
+        session,
+        query=payload.query,
+        limit=overfetch,
+        forum_level=payload.forum_level,
+        court_name=payload.court_name,
+        document_type=payload.document_type,
+    )
+    if payload.language == "en":
+        filtered = [r for r in raw if _title_is_predominantly_ascii(r.title)]
+    else:
+        filtered = list(raw)
+    total = len(filtered)
+    page = filtered[payload.offset : payload.offset + payload.limit]
     return AuthoritySearchResponse(
         query=payload.query,
         provider="caseops-authority-search-v2",
         generated_at=datetime.now(UTC),
-        results=search_authority_catalog(
-            session,
-            query=payload.query,
-            limit=payload.limit,
-            forum_level=payload.forum_level,
-            court_name=payload.court_name,
-            document_type=payload.document_type,
-        ),
+        results=page,
+        total_after_filter=total,
+        offset=payload.offset,
     )
+
+
+def _title_is_predominantly_ascii(title: str | None) -> bool:
+    """Heuristic: title qualifies as English when
+
+    - it has ≥3 ASCII letters (rejects pure-citation titles like
+      "[2024] 9 S.C.R. 683" that surface from Layer-2 placeholder
+      failures); AND
+    - ASCII-letter-ratio over letter chars is ≥70% (rejects pure
+      Devanagari/Tamil/etc. where letter chars are all non-ASCII); AND
+    - `?` chars are <20% of non-whitespace chars (rejects OCR-failed
+      regional-script titles like "???Rai on??aniko ku??siktangona…"
+      where Unicode chars decoded to literal '?').
+
+    Empty / None titles return False so OCR-garbled rows don't slip
+    through as "no-letter content".
+    """
+    if not title:
+        return False
+    letters = [c for c in title if c.isalpha()]
+    if not letters:
+        return False
+    ascii_letters = sum(1 for c in letters if ord(c) < 128)
+    if ascii_letters < 3:
+        return False
+    if ascii_letters / len(letters) < 0.7:
+        return False
+    non_ws = [c for c in title if not c.isspace()]
+    if non_ws:
+        question_ratio = sum(1 for c in non_ws if c == "?") / len(non_ws)
+        if question_ratio >= 0.20:
+            return False
+    return True
 
 
 # Case-name queries carry at least one distinctive proper noun (the
