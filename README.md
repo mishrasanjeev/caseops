@@ -28,6 +28,7 @@ workspace — with tenant isolation, scoped agent grants, and audit by default.
 | Architecture | Stable | [`docs/architecture.md`](./docs/architecture.md) |
 | Work plan | Current | [`docs/WORK_TO_BE_DONE.md`](./docs/WORK_TO_BE_DONE.md) |
 | Strict bug ledger | Closed (10/10 Properly fixed) | [`docs/STRICT_BUG_TASKLIST_2026-04-22.md`](./docs/STRICT_BUG_TASKLIST_2026-04-22.md) |
+| Drafting studio (20 specialised templates + court-aware PDF + filing bundle + revision diff + bench-aware drafting + filing checklist + mobile + solo mode + governance + live-LLM eval) | Implemented (PG-005, 12 sprints, 2026-05-01) | [`docs/RELEASE_NOTES_2026-05-01.md`](./docs/RELEASE_NOTES_2026-05-01.md) |
 
 ---
 
@@ -277,9 +278,27 @@ the legal next transitions. A `Download DOCX` button streams a Word
 doc directly from `/api/matters/{id}/drafts/{id}/export.docx`. The full
 state machine is covered by `tests/e2e/drafting.spec.ts`.
 
-**Still on the roadmap:** PDF export via `weasyprint`, template
-selection, a `Compare revisions` drawer for version diff, and inline
-citation anchors wired from the body into the citations panel.
+### PG-005 drafting roadmap (12 sprints, closed 2026-05-01)
+
+The drafting studio reached `Implemented` status on 2026-05-01 with all
+twelve sprints landed in production. See
+[`docs/RELEASE_NOTES_2026-05-01.md`](./docs/RELEASE_NOTES_2026-05-01.md)
+for the full release notes.
+
+| Sprint | Surface | Where |
+| --- | --- | --- |
+| 1 | 4 templates: writ, quashing, written statement, reply / counter-affidavit | `apps/api/src/caseops_api/schemas/drafting_templates.py` |
+| 2 | 7 more templates: DV-quashing, S.9 arbitration, caveat, vakalat, amendment of pleadings, compromise, probate (20 templates total) | `apps/api/src/caseops_api/services/drafting_prompts.py` |
+| 3 | Court-format-aware PDF export (SC / Delhi HC / Bombay HC + generic profiles) | `apps/api/src/caseops_api/services/court_format_profiles.py` + `services/draft_pdf_export.py` |
+| 4 | Filing-grade ZIP bundle (memo + vakalat + index + e-stamp placeholder + exhibits) | `apps/api/src/caseops_api/services/filing_bundle.py` |
+| 5 | Court profile expansion: Madras / Calcutta / Karnataka HC + NCLT / NCLAT / DRT (10 profiles) + cause-title formatter | `services/court_format_profiles.py` |
+| 6 | Structured draft revision compare (line-level diff hunks + citation deltas) | `services/draft_compare.py` + `<DraftCompareView>` |
+| 7 | Bench-aware drafting expanded to 15 of 20 templates | `services/drafting.py` `_BENCH_AWARE_TEMPLATES` |
+| 8 | Per-court / per-template pre-filing checklist | `services/filing_checklist.py` + `<FilingChecklistCard>` |
+| 9 | DraftingStepper mobile-responsive at 360x800 | `components/drafting/DraftingStepper.tsx` |
+| 10 | Solo mode (`?solo=1` flattens stepper into one form) | same |
+| 11 | Template governance — admin can hide templates per tenant | `tenant_ai_policies.disabled_template_types_json` (Alembic `20260501_0003`) |
+| 12 | Live-LLM drafting quality harness (target 4.8/5) | `caseops_api.scripts.eval_drafting_quality` |
 
 ---
 
