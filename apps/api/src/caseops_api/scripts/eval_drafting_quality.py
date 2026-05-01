@@ -72,14 +72,103 @@ _MISC_FIXTURE = "misc_templates.json"
 _PLACEHOLDER_MATTER_ID = "11111111-1111-1111-1111-111111111111"
 _TARGET_RATING = 4.8
 
-# Heading patterns we look for in the body text. Case-insensitive.
-_STRUCTURE_HEADINGS: list[tuple[str, list[str]]] = [
+# ---------------------------------------------------------------
+# Structure rubric — per-template markers (Sprint 12 follow-up,
+# 2026-05-01). The first run flagged that a template-agnostic rubric
+# unfairly penalised notices / forms / POAs (vakalatnama, cheque-
+# bounce, property-dispute) which never carry "Cause Title / Facts /
+# Grounds / Prayer / Verification" headings. Each template now ships
+# its own 5-marker rubric reflecting its actual filing-grade
+# structure. Templates without an explicit entry fall back to the
+# generic pleading rubric.
+# ---------------------------------------------------------------
+
+_PLEADING_RUBRIC: list[tuple[str, list[str]]] = [
     ("cause_title", ["IN THE", "PETITIONER", "RESPONDENT", "VERSUS", "v."]),
     ("facts", ["STATEMENT OF FACTS", "FACTS", "BACKGROUND"]),
     ("grounds", ["GROUNDS", "ARGUMENTS", "SUBMISSIONS"]),
     ("prayer", ["PRAYER", "RELIEF SOUGHT"]),
     ("verification", ["VERIFICATION", "AFFIRMATION", "VERIFIED ON OATH"]),
 ]
+
+_STRUCTURE_HEADINGS_BY_TEMPLATE: dict[str, list[tuple[str, list[str]]]] = {
+    # Notices — letters with sender/recipient/demand/deadline blocks.
+    "cheque_bounce_notice": [
+        ("from", ["FROM:", "ADVOCATE FOR", "COUNSEL FOR"]),
+        ("to", ["TO:", "ADDRESSEE", "DEAR SIR"]),
+        ("instrument", ["CHEQUE NO", "DRAWN ON", "BANK MEMO"]),
+        ("demand", ["DEMAND", "PAY THE", "PAYMENT WITHIN"]),
+        ("deadline", ["15 DAYS", "FIFTEEN DAYS", "WITHIN A PERIOD"]),
+    ],
+    "property_dispute_notice": [
+        ("from", ["FROM:", "ADVOCATE FOR", "COUNSEL FOR"]),
+        ("to", ["TO:", "ADDRESSEE", "DEAR SIR"]),
+        ("property", ["PROPERTY", "PREMISES", "SCHEDULE"]),
+        ("demand", ["DEMAND", "VACATE", "REMOVE", "RESTORE"]),
+        ("deadline", ["DAYS", "FAILING WHICH", "WITHIN A PERIOD"]),
+    ],
+    # Power-of-attorney — court header / cause / authority / acceptance.
+    "vakalatnama": [
+        ("court_header", ["IN THE HIGH COURT", "IN THE SUPREME COURT", "IN THE COURT"]),
+        ("cause_title", ["VS", "v.", "VERSUS", "PETITIONER", "PLAINTIFF"]),
+        ("authority", ["DO HEREBY APPOINT", "AUTHORISE", "ADVOCATE"]),
+        ("acceptance", ["ACCEPTED", "ENROLMENT", "ENROLLMENT"]),
+        ("signature", ["SIGNED", "WITNESS", "DATE"]),
+    ],
+    # Affidavit — sworn-statement structure.
+    "affidavit": [
+        ("cause_title", ["IN THE", "PETITIONER", "RESPONDENT", "VERSUS", "v."]),
+        ("deponent_block", ["DEPONENT", "I,", "AGED", "RESIDENT OF"]),
+        ("sworn_statements", ["SOLEMNLY", "AFFIRM", "ON OATH", "STATE AS UNDER"]),
+        ("verification", ["VERIFICATION", "VERIFIED", "TRUE TO MY KNOWLEDGE"]),
+        ("notary_block", ["BEFORE ME", "NOTARY", "OATH COMMISSIONER", "SIGNATURE"]),
+    ],
+    # Reply / counter-affidavit shares affidavit shape but with response.
+    "reply_counter_affidavit": [
+        ("cause_title", ["IN THE", "PETITIONER", "RESPONDENT", "VERSUS"]),
+        ("deponent_block", ["DEPONENT", "I,", "AGED", "RESIDENT OF"]),
+        ("para_response", ["PARA", "DENIED", "ADMITTED", "DENIED FOR WANT"]),
+        ("relief", ["DISMISS", "REJECT", "PRAYER", "RELIEF"]),
+        ("verification", ["VERIFICATION", "VERIFIED", "TRUE TO MY KNOWLEDGE"]),
+    ],
+    # Caveat — short procedural notice; no merits, no prayer.
+    "caveat_petition": [
+        ("section", ["SECTION 148A", "S. 148A", "CAVEAT"]),
+        ("caveator", ["CAVEATOR", "I,", "RESIDING AT"]),
+        ("apprehended", ["APPREHEND", "EX PARTE", "WITHOUT NOTICE"]),
+        ("notice_request", ["NOTICE", "BE PLEASED NOT TO PASS", "HEAR THE CAVEATOR"]),
+        ("ninety_days", ["90 DAYS", "NINETY DAYS", "EXPIRY"]),
+    ],
+    # Arbitration s.9 — interim-relief structure.
+    "arbitration_section_9": [
+        ("cause_title", ["IN THE", "BEFORE", "PETITIONER", "RESPONDENT"]),
+        ("section", ["SECTION 9", "S. 9", "1996"]),
+        ("agreement", ["ARBITRATION AGREEMENT", "ARBITRATION CLAUSE", "CLAUSE"]),
+        ("urgency", ["URGENT", "IRREPARABLE", "BALANCE OF CONVENIENCE", "PRIMA FACIE"]),
+        ("relief", ["INTERIM", "PRAYER", "RELIEF"]),
+    ],
+    # Compromise — joint pleading recording settlement.
+    "compromise_petition": [
+        ("cause_title", ["IN THE", "PETITIONER", "RESPONDENT", "VERSUS"]),
+        ("statutory_basis", [
+            "ORDER XXIII", "ORDER 23", "SECTION 359",
+            "SECTION 528", "SECTION 13B",
+        ]),
+        ("settlement_terms", ["SETTLEMENT", "COMPROMISE", "PARTIES", "AGREED"]),
+        ("prayer", ["DECREE", "QUASH", "RELIEF", "PRAYER"]),
+        ("verification", ["VERIFICATION", "VERIFIED", "BOTH PARTIES"]),
+    ],
+    # Probate — Indian Succession Act structure.
+    "probate_petition": [
+        ("cause_title", ["IN THE", "MATTER OF THE WILL", "DECEASED"]),
+        ("deceased", ["DECEASED", "DATE OF DEATH", "LAST RESIDED"]),
+        ("will", ["WILL", "TESTAMENT", "ATTESTING WITNESSES", "EXECUTED"]),
+        ("estate", ["ESTATE", "ASSETS", "VALUE", "SCHEDULE"]),
+        ("prayer", ["PROBATE", "GRANT", "PRAYER"]),
+    ],
+}
+
+_STRUCTURE_HEADINGS = _PLEADING_RUBRIC  # Back-compat for any external readers.
 
 
 # ---------------------------------------------------------------
@@ -164,18 +253,385 @@ def _score_validator(
     return 5.0, summary
 
 
-def _score_structure(body: str) -> tuple[float, list[str]]:
-    """Look for 5 canonical structural headings. 1 point each."""
+def _score_structure(body: str, template_type: str) -> tuple[float, list[str]]:
+    """Look for the per-template structural markers. 1 point each, max 5.
+
+    Sprint 12 follow-up (2026-05-01): the original implementation used a
+    single pleading rubric for every template, which unfairly scored
+    notices / forms / POAs at 1-2 / 5 because they don't have Cause
+    Title / Facts / Grounds / Prayer / Verification headings. Each
+    template now picks up its own rubric (see
+    `_STRUCTURE_HEADINGS_BY_TEMPLATE`). Templates without an explicit
+    entry fall back to the generic pleading rubric.
+    """
+    rubric = _STRUCTURE_HEADINGS_BY_TEMPLATE.get(template_type, _PLEADING_RUBRIC)
     haystack = body.upper()
     present: list[str] = []
-    for label, markers in _STRUCTURE_HEADINGS:
+    for label, markers in rubric:
         if any(m.upper() in haystack for m in markers):
             present.append(label)
     return float(len(present)), present
 
 
-def _score_citations(citations: list[str]) -> float:
-    """5.0 = ≥3 citations, 3.0 = 1-2, 0.0 = none."""
+# ---------------------------------------------------------------
+# Representative authorities per template. The harness was previously
+# passing `retrieved=[]` to `_build_messages`, leaving the model with
+# nothing to cite — every citation_score collapsed to 0/5. The
+# production drafting endpoint seeds 5-15 retrieved authorities; here
+# we seed 2-3 canonical ones per template that the prompts already
+# expect (Sushila Aggarwal for bail, Gian Singh for quashing, etc.).
+# Every entry needs (neutral_citation OR case_reference) so it lands
+# in the citable bucket of `_build_messages`.
+# ---------------------------------------------------------------
+
+@dataclass
+class _FakeAuthority:
+    """Duck-typed AuthorityDocument. _build_messages reads attributes
+    only; we don't need an ORM row."""
+
+    neutral_citation: str | None
+    case_reference: str
+    title: str
+    summary: str
+
+
+_AUTHORITIES_BY_TEMPLATE: dict[str, list[_FakeAuthority]] = {
+    "bail": [
+        _FakeAuthority(
+            neutral_citation="(2020) 5 SCC 1",
+            case_reference="Sushila Aggarwal v. State (NCT of Delhi)",
+            title="Sushila Aggarwal v. State (NCT of Delhi) (2020) 5 SCC 1",
+            summary=(
+                "Anticipatory bail under s.438 CrPC is not limited to a "
+                "fixed period; the protection generally subsists till "
+                "the end of trial unless the court for special reasons "
+                "imposes a time limit."
+            ),
+        ),
+        _FakeAuthority(
+            neutral_citation="(2014) 8 SCC 273",
+            case_reference="Arnesh Kumar v. State of Bihar",
+            title="Arnesh Kumar v. State of Bihar (2014) 8 SCC 273",
+            summary=(
+                "Police must record reasons for arrest in offences "
+                "punishable up to 7 years. s.41A CrPC notice is mandatory."
+            ),
+        ),
+    ],
+    "anticipatory_bail": [
+        _FakeAuthority(
+            neutral_citation="(2020) 5 SCC 1",
+            case_reference="Sushila Aggarwal v. State (NCT of Delhi)",
+            title="Sushila Aggarwal v. State (NCT of Delhi) (2020) 5 SCC 1",
+            summary="Anticipatory bail is not time-limited by default.",
+        ),
+        _FakeAuthority(
+            neutral_citation="(1980) 2 SCC 565",
+            case_reference="Gurbaksh Singh Sibbia v. State of Punjab",
+            title="Gurbaksh Singh Sibbia v. State of Punjab (1980) 2 SCC 565",
+            summary=(
+                "s.438 CrPC is to be liberally construed; reasonable "
+                "apprehension of arrest is sufficient."
+            ),
+        ),
+    ],
+    "writ_petition": [
+        _FakeAuthority(
+            neutral_citation="(1978) 1 SCC 248",
+            case_reference="Maneka Gandhi v. Union of India",
+            title="Maneka Gandhi v. Union of India (1978) 1 SCC 248",
+            summary=(
+                "Articles 14, 19, and 21 are not mutually exclusive; "
+                "any procedure depriving life or liberty must be just, "
+                "fair, and reasonable."
+            ),
+        ),
+        _FakeAuthority(
+            neutral_citation="(1985) 1 SCC 641",
+            case_reference="Indian Express Newspapers v. Union of India",
+            title="Indian Express Newspapers v. Union of India (1985) 1 SCC 641",
+            summary=(
+                "Mandamus lies to compel performance of a statutory duty "
+                "where the authority has failed to act within a "
+                "reasonable time."
+            ),
+        ),
+    ],
+    "quashing_petition": [
+        _FakeAuthority(
+            neutral_citation="(2012) 10 SCC 303",
+            case_reference="Gian Singh v. State of Punjab",
+            title="Gian Singh v. State of Punjab (2012) 10 SCC 303",
+            summary=(
+                "Inherent powers under s.482 CrPC can be exercised to "
+                "quash non-compoundable offences with a predominantly "
+                "civil flavour where parties have settled."
+            ),
+        ),
+        _FakeAuthority(
+            neutral_citation="(2003) 4 SCC 675",
+            case_reference="B.S. Joshi v. State of Haryana",
+            title="B.S. Joshi v. State of Haryana (2003) 4 SCC 675",
+            summary=(
+                "Matrimonial offences settled between the parties may "
+                "be quashed even if non-compoundable to secure the "
+                "ends of justice."
+            ),
+        ),
+        _FakeAuthority(
+            neutral_citation="(2014) 6 SCC 466",
+            case_reference="Narinder Singh v. State of Punjab",
+            title="Narinder Singh v. State of Punjab (2014) 6 SCC 466",
+            summary=(
+                "Heinous offences cannot be quashed on settlement alone; "
+                "victim consent + nature of offence are both relevant."
+            ),
+        ),
+    ],
+    "dv_quashing_petition": [
+        _FakeAuthority(
+            neutral_citation="(2016) 2 SCC 705",
+            case_reference="Krishna Bhattacharjee v. Sarathi Choudhury",
+            title="Krishna Bhattacharjee v. Sarathi Choudhury (2016) 2 SCC 705",
+            summary=(
+                "PWDVA proceedings are quasi-civil; limitation under "
+                "s.468 CrPC does not strictly apply to s.12 applications."
+            ),
+        ),
+        _FakeAuthority(
+            neutral_citation="(2012) 10 SCC 303",
+            case_reference="Gian Singh v. State of Punjab",
+            title="Gian Singh v. State of Punjab (2012) 10 SCC 303",
+            summary=(
+                "Inherent powers may be exercised to quash quasi-civil "
+                "proceedings on bona-fide settlement subject to welfare "
+                "considerations."
+            ),
+        ),
+    ],
+    "civil_suit": [
+        _FakeAuthority(
+            neutral_citation="(2005) 6 SCC 344",
+            case_reference="Salem Advocate Bar Assn (II) v. Union of India",
+            title="Salem Advocate Bar Assn (II) v. Union of India (2005) 6 SCC 344",
+            summary=(
+                "CPC amendments — Order VII Rule 1 mandates pleading the "
+                "cause of action; Order VIII Rule 1 the timeline for "
+                "the written statement."
+            ),
+        ),
+    ],
+    "written_statement": [
+        _FakeAuthority(
+            neutral_citation="(2005) 6 SCC 344",
+            case_reference="Salem Advocate Bar Assn (II) v. Union of India",
+            title="Salem Advocate Bar Assn (II) v. Union of India (2005) 6 SCC 344",
+            summary=(
+                "Order VIII Rule 1 fixes a 30-day default with a 90-day "
+                "cap (120 days for commercial suits). Late WS requires "
+                "delay condonation."
+            ),
+        ),
+    ],
+    "appeal_memorandum": [
+        _FakeAuthority(
+            neutral_citation="1990 Supp SCC 727",
+            case_reference="Wander Ltd v. Antox India",
+            title="Wander Ltd v. Antox India 1990 Supp SCC 727",
+            summary=(
+                "Appellate court should not reverse a discretionary "
+                "interlocutory order unless the trial court's decision "
+                "was manifestly perverse."
+            ),
+        ),
+    ],
+    "arbitration_section_9": [
+        _FakeAuthority(
+            neutral_citation="(2022) SCC OnLine SC 1219",
+            case_reference="Essar House Pvt Ltd v. ArcelorMittal Nippon Steel India Ltd",
+            title=(
+                "Essar House Pvt Ltd v. ArcelorMittal Nippon Steel "
+                "India Ltd (2022) SCC OnLine SC 1219"
+            ),
+            summary=(
+                "Section 9 interim relief mirrors CPC Order XXXVIII / "
+                "XXXIX; three-part test (prima facie / balance / "
+                "irreparable injury) governs."
+            ),
+        ),
+        _FakeAuthority(
+            neutral_citation="(2019) 15 SCC 131",
+            case_reference="Ssangyong Engg & Construction v. NHAI",
+            title="Ssangyong Engg & Construction v. NHAI (2019) 15 SCC 131",
+            summary=(
+                "Patent illegality is a ground under s.34. s.9(3) "
+                "limits court intervention once tribunal is constituted."
+            ),
+        ),
+    ],
+    "compromise_petition": [
+        _FakeAuthority(
+            neutral_citation="(2017) 8 SCC 746",
+            case_reference="Amardeep Singh v. Harveen Kaur",
+            title="Amardeep Singh v. Harveen Kaur (2017) 8 SCC 746",
+            summary=(
+                "Six-month cooling-off period under HMA s.13B(2) may be "
+                "waived where settlement is genuine and reconciliation "
+                "is impossible."
+            ),
+        ),
+        _FakeAuthority(
+            neutral_citation="(2012) 10 SCC 303",
+            case_reference="Gian Singh v. State of Punjab",
+            title="Gian Singh v. State of Punjab (2012) 10 SCC 303",
+            summary="Quashing on settlement framework for non-compoundable offences.",
+        ),
+    ],
+    "divorce_petition": [
+        _FakeAuthority(
+            neutral_citation="(2007) 4 SCC 511",
+            case_reference="Samar Ghosh v. Jaya Ghosh",
+            title="Samar Ghosh v. Jaya Ghosh (2007) 4 SCC 511",
+            summary=(
+                "Mental cruelty is a ground for divorce; a course of "
+                "conduct that makes cohabitation impossible suffices."
+            ),
+        ),
+        _FakeAuthority(
+            neutral_citation="(2006) 4 SCC 558",
+            case_reference="Naveen Kohli v. Neelu Kohli",
+            title="Naveen Kohli v. Neelu Kohli (2006) 4 SCC 558",
+            summary=(
+                "Irretrievable breakdown of marriage may justify decree "
+                "of divorce in appropriate cases."
+            ),
+        ),
+    ],
+    "amendment_of_pleadings": [
+        _FakeAuthority(
+            neutral_citation="(2009) 2 SCC 409",
+            case_reference="Vidyabai v. Padmalatha",
+            title="Vidyabai v. Padmalatha (2009) 2 SCC 409",
+            summary=(
+                "Order VI Rule 17 proviso requires a due-diligence "
+                "showing for amendment after trial commences."
+            ),
+        ),
+        _FakeAuthority(
+            neutral_citation="(2009) 10 SCC 84",
+            case_reference="Revajeetu Builders v. Narayanaswamy",
+            title="Revajeetu Builders v. Narayanaswamy (2009) 10 SCC 84",
+            summary=(
+                "Amendments must not introduce a new cause of action "
+                "or prejudice the opposite party."
+            ),
+        ),
+    ],
+    "probate_petition": [
+        _FakeAuthority(
+            neutral_citation="(2008) 7 SCC 695",
+            case_reference="Anil Kak v. Kumari Sharada Raje",
+            title="Anil Kak v. Kumari Sharada Raje (2008) 7 SCC 695",
+            summary=(
+                "Indian Succession Act s.63(c) requires at least two "
+                "attesting witnesses; suspicious circumstances must be "
+                "explained."
+            ),
+        ),
+    ],
+    "criminal_complaint": [
+        _FakeAuthority(
+            neutral_citation="(2012) 5 SCC 424",
+            case_reference="Bhushan Kumar v. State (NCT of Delhi)",
+            title="Bhushan Kumar v. State (NCT of Delhi) (2012) 5 SCC 424",
+            summary=(
+                "Magistrate may take cognizance under s.190 CrPC on "
+                "examination of complainant under s.200; summoning "
+                "order requires application of mind."
+            ),
+        ),
+    ],
+    "cheque_bounce_notice": [
+        _FakeAuthority(
+            neutral_citation="(2014) 9 SCC 129",
+            case_reference="Dashrath Rupsingh Rathod v. State of Maharashtra",
+            title="Dashrath Rupsingh Rathod v. State of Maharashtra (2014) 9 SCC 129",
+            summary=(
+                "s.138 NI Act complaint lies before the magistrate "
+                "having jurisdiction over the bank where the cheque was "
+                "presented for collection."
+            ),
+        ),
+        _FakeAuthority(
+            neutral_citation="(2013) 1 SCC 177",
+            case_reference="MSR Leathers v. S. Palaniappan",
+            title="MSR Leathers v. S. Palaniappan (2013) 1 SCC 177",
+            summary=(
+                "Successive presentation of a cheque does not give rise "
+                "to a fresh cause of action under s.138 NI Act."
+            ),
+        ),
+    ],
+    "property_dispute_notice": [
+        _FakeAuthority(
+            neutral_citation="(2012) 1 SCC 656",
+            case_reference="Suraj Lamp & Industries v. State of Haryana",
+            title="Suraj Lamp & Industries v. State of Haryana (2012) 1 SCC 656",
+            summary=(
+                "Sale agreement / GPA sales do not transfer title; "
+                "registered conveyance under TPA s.54 is required."
+            ),
+        ),
+    ],
+    "affidavit": [
+        _FakeAuthority(
+            neutral_citation="AIR 1969 SC 1267",
+            case_reference="A.K.K. Nambiar v. Union of India",
+            title="A.K.K. Nambiar v. Union of India AIR 1969 SC 1267",
+            summary=(
+                "Order XIX CPC affidavits must be confined to facts "
+                "deponent can prove of his own knowledge; verification "
+                "is essential."
+            ),
+        ),
+    ],
+    "reply_counter_affidavit": [
+        _FakeAuthority(
+            neutral_citation="AIR 1969 SC 1267",
+            case_reference="A.K.K. Nambiar v. Union of India",
+            title="A.K.K. Nambiar v. Union of India AIR 1969 SC 1267",
+            summary=(
+                "Order XIX CPC affidavits must be confined to facts "
+                "deponent can prove of his own knowledge; silent "
+                "omissions are treated as admissions."
+            ),
+        ),
+    ],
+    # Caveat + vakalatnama are procedural-only — they do not cite
+    # case authority. Keep their bundles empty so the harness emits
+    # an "AUTHORITIES: none retrieved" prompt and the citation rubric
+    # for these templates becomes "did the model correctly NOT cite".
+    "caveat_petition": [],
+    "vakalatnama": [],
+}
+
+
+# ---------------------------------------------------------------
+# Citation rubric
+# ---------------------------------------------------------------
+
+
+
+def _score_citations(template_type: str, citations: list[str]) -> float:
+    """5.0 = ≥3 citations, 3.0 = 1-2, 0.0 = none.
+
+    Sprint 12 follow-up (2026-05-01): caveat_petition and vakalatnama
+    are procedural-only and SHOULD NOT cite case authority. For those
+    templates, no-citations is the correct outcome and scores 5/5.
+    """
+    if template_type in {"caveat_petition", "vakalatnama"}:
+        # The right behaviour is zero citations — this is a feature.
+        return 5.0 if len(citations or []) == 0 else 3.0
     n = len(citations or [])
     if n >= 3:
         return 5.0
@@ -245,8 +701,9 @@ def _run_one_scenario(
         "facts_json": json.dumps(facts),
     })()
 
+    seeded = _AUTHORITIES_BY_TEMPLATE.get(template_type, [])
     messages = _build_messages(
-        matter, draft, retrieved=[], focus_note=json.dumps(facts),
+        matter, draft, retrieved=seeded, focus_note=json.dumps(facts),
     )
 
     if dry_run:
@@ -297,8 +754,8 @@ def _run_one_scenario(
     val_score, val_findings = _score_validator(
         template_type, response.body, response.citations,
     )
-    struct_score, struct_present = _score_structure(response.body)
-    cite_score = _score_citations(response.citations)
+    struct_score, struct_present = _score_structure(response.body, template_type)
+    cite_score = _score_citations(template_type, response.citations)
 
     result.validator_score = val_score
     result.structure_score = struct_score
