@@ -226,6 +226,39 @@ class OutsideCounselSpendStatus(StrEnum):
     PAID = "paid"
 
 
+class AuthorityCitationTreatment(StrEnum):
+    """Good-law signal — how a citing case treats a cited authority.
+
+    Values follow the standard citator vocabulary used by Westlaw /
+    Manupatra / SCC OnLine, narrowed to seven categories that map onto
+    cue-verb heuristics in Indian judgments:
+
+    - ``followed``      — citing case applies / approves / relies on the
+                          authority. Positive treatment.
+    - ``distinguished`` — citing case sets the authority aside on the
+                          facts. Mildly negative — still good law, but
+                          not on point.
+    - ``overruled``     — later case explicitly overrules. Bad law.
+    - ``doubted``       — citing case expresses doubt or reservation.
+                          Caution.
+    - ``reversed``      — appellate reversal of the cited decision. Bad
+                          law for the original holding.
+    - ``dissented``     — cited only in a dissent (not majority). Weak
+                          authority.
+    - ``considered``    — discussed without applying or rejecting.
+                          Default fallback when cues are weak.
+    - ``neutral``       — no cue verb detected; pure citation reference.
+    """
+    FOLLOWED = "followed"
+    DISTINGUISHED = "distinguished"
+    OVERRULED = "overruled"
+    DOUBTED = "doubted"
+    REVERSED = "reversed"
+    DISSENTED = "dissented"
+    CONSIDERED = "considered"
+    NEUTRAL = "neutral"
+
+
 class AuthorityDocumentType(StrEnum):
     JUDGMENT = "judgment"
     ORDER = "order"
@@ -2193,6 +2226,28 @@ class AuthorityCitation(Base):
     )
     citation_text: Mapped[str] = mapped_column(String(255), nullable=False)
     normalized_reference: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    # PG-006 (2026-05-01) — good-law / treatment signal. Populated by the
+    # heuristic classifier in services/citation_treatment.py at
+    # extraction time, and (later) revisited by an LLM-assisted pass for
+    # uncertain rows. Stored as String to match the codebase convention
+    # for StrEnum columns; defaults to NEUTRAL so existing rows still
+    # parse cleanly after the alembic backfill.
+    treatment: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=AuthorityCitationTreatment.NEUTRAL,
+        server_default=AuthorityCitationTreatment.NEUTRAL.value,
+        index=True,
+    )
+    treatment_evidence_text: Mapped[str | None] = mapped_column(
+        String(500), nullable=True,
+    )
+    treatment_confidence: Mapped[float | None] = mapped_column(
+        Numeric(4, 3), nullable=True,
+    )
+    treatment_classified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,

@@ -39,6 +39,11 @@ from uuid import uuid4
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from caseops_api.db.models import AuthorityCitationTreatment
+from caseops_api.services.citation_treatment import (
+    classify_citation_treatment,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -237,15 +242,31 @@ def extract_for_one_document(
             continue
         if cited_id:
             n_resolved += 1
+        # PG-006: classify the citing case's treatment of this
+        # authority while we still have the surrounding text loaded.
+        # Heuristic-only — zero LLM cost, neutral fallback when no cue
+        # verb fires.
+        treatment_result = classify_citation_treatment(document_text, ctext)
+        treatment_value = treatment_result.treatment.value
+        treatment_evidence = treatment_result.evidence_text
+        treatment_confidence = (
+            float(treatment_result.confidence)
+            if treatment_result.treatment
+            != AuthorityCitationTreatment.NEUTRAL
+            else None
+        )
         try:
             session.execute(
                 text(
                     "INSERT INTO authority_citations "
                     "(id, source_authority_document_id, "
                     " cited_authority_document_id, citation_text, "
-                    " normalized_reference, created_at) "
+                    " normalized_reference, treatment, "
+                    " treatment_evidence_text, treatment_confidence, "
+                    " treatment_classified_at, created_at) "
                     "VALUES (:id, :src, :cited, :ctext, :norm, "
-                    "  CURRENT_TIMESTAMP)"
+                    " :treatment, :evidence, :confidence, "
+                    " CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
                 ),
                 {
                     "id": str(uuid4()),
@@ -253,6 +274,9 @@ def extract_for_one_document(
                     "cited": cited_id,
                     "ctext": ctext[:255],
                     "norm": norm[:255],
+                    "treatment": treatment_value,
+                    "evidence": treatment_evidence,
+                    "confidence": treatment_confidence,
                 },
             )
             n_inserted += 1
