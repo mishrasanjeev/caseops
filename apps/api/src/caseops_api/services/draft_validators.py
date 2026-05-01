@@ -40,9 +40,22 @@ _BAIL_TERMS = re.compile(r"\b(bail|anticipatory bail|default bail)\b", re.I)
 _BNS_SECTION = re.compile(
     r"\b(Section\s+(\d+)|s\.\s*(\d+))\b.{0,60}?Bharatiya\s+Nyaya\s+Sanhita", re.I
 )
+# Match either: (a) Section N + "Bharatiya Nagarik Suraksha" within
+# 60 chars (verbose form), OR (b) "BNSS" within 60 chars of Section N
+# in either order — covers "BNSS s.482", "Section 482 of BNSS",
+# "BNSS, 2023, Section 482", etc. Pre-fix the regex required the
+# verbose form ONLY, which produced false-positive
+# `bail_missing_bnss_reference` warnings on every bail draft that
+# used the standard abbreviation (the dominant practice).
 _BNSS_SECTION = re.compile(
-    r"\b(Section\s+(\d+)|s\.\s*(\d+))\b.{0,60}?Bharatiya\s+Nagarik\s+Suraksha",
-    re.I,
+    r"""(?ix)
+        # form 1: Section/s. N ... Bharatiya Nagarik Suraksha (verbose)
+        \b (?: Section\s+\d+ | s\.\s*\d+ ) \b
+            .{0,60}? Bharatiya\s+Nagarik\s+Suraksha
+      | # form 2: Section/s. N ... BNSS (abbreviated, either order)
+        \b (?: Section\s+\d+ | s\.\s*\d+ ) \b .{0,60}? \b BNSS \b
+      | \b BNSS \b .{0,60}? \b (?: Section\s+\d+ | s\.\s*\d+ ) \b
+    """,
 )
 _UUID_RE = re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.I)
 _BRACKET_ANCHOR = re.compile(r"\[([^\]\n]{2,120})\]")

@@ -334,6 +334,17 @@ _AUTHORITIES_BY_TEMPLATE: dict[str, list[_FakeAuthority]] = {
                 "apprehension of arrest is sufficient."
             ),
         ),
+        _FakeAuthority(
+            neutral_citation="(2014) 8 SCC 273",
+            case_reference="Arnesh Kumar v. State of Bihar",
+            title="Arnesh Kumar v. State of Bihar (2014) 8 SCC 273",
+            summary=(
+                "Mandatory s.41A CrPC notice for offences punishable up "
+                "to 7 years; police must record reasons for arrest. "
+                "Cited routinely on the no-need-for-custodial-"
+                "interrogation ground."
+            ),
+        ),
     ],
     "writ_petition": [
         _FakeAuthority(
