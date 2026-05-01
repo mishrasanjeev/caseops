@@ -1788,6 +1788,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matters/{matter_id}/drafts/{draft_id}/compare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Structured diff between two revisions of the same draft (PG-005 Sprint 6, 2026-05-01).
+         * @description Returns line-level diff hunks + citation deltas between two
+         *     versions of the same draft. Pure-function compute (no LLM call).
+         *     Use ``?prev_revision=N&next_revision=M&context_lines=K``.
+         */
+        get: operations["get_current_company_matter_draft_compare_api_matters__matter_id__drafts__draft_id__compare_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matters/{matter_id}/drafts/{draft_id}/export.docx": {
         parameters: {
             query?: never;
@@ -4809,6 +4831,33 @@ export interface components {
              */
             updated_at: string;
         };
+        /** DraftCompareResponse */
+        DraftCompareResponse: {
+            /** Citations Added */
+            citations_added: string[];
+            /** Citations Kept */
+            citations_kept: string[];
+            /** Citations Removed */
+            citations_removed: string[];
+            /** Draft Id */
+            draft_id: string;
+            /** Hunks */
+            hunks: components["schemas"]["DraftDiffHunkResponse"][];
+            /** Lines Added */
+            lines_added: number;
+            /** Lines Removed */
+            lines_removed: number;
+            /** Next Revision */
+            next_revision: number;
+            /** Next Version Id */
+            next_version_id: string;
+            /** Prev Revision */
+            prev_revision: number;
+            /** Prev Version Id */
+            prev_version_id: string;
+            /** Summary */
+            summary: string;
+        };
         /** DraftCreateRequest */
         DraftCreateRequest: {
             /**
@@ -4825,6 +4874,30 @@ export interface components {
             template_type?: string | null;
             /** Title */
             title: string;
+        };
+        /** DraftDiffHunkResponse */
+        DraftDiffHunkResponse: {
+            /** Lines */
+            lines: components["schemas"]["DraftDiffLineResponse"][];
+            /** Next Length */
+            next_length: number;
+            /** Next Start */
+            next_start: number;
+            /** Prev Length */
+            prev_length: number;
+            /** Prev Start */
+            prev_start: number;
+        };
+        /** DraftDiffLineResponse */
+        DraftDiffLineResponse: {
+            /** Kind */
+            kind: string;
+            /** Next Line Number */
+            next_line_number?: number | null;
+            /** Prev Line Number */
+            prev_line_number?: number | null;
+            /** Text */
+            text: string;
         };
         /**
          * DraftGenerateRequest
@@ -11916,6 +11989,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DraftRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_current_company_matter_draft_compare_api_matters__matter_id__drafts__draft_id__compare_get: {
+        parameters: {
+            query: {
+                prev_revision: number;
+                next_revision: number;
+                context_lines?: number;
+            };
+            header?: never;
+            path: {
+                matter_id: string;
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftCompareResponse"];
                 };
             };
             /** @description Validation Error */

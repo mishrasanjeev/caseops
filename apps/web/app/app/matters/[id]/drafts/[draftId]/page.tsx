@@ -24,6 +24,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/Card";
+import { DraftCompareView } from "@/components/drafting/DraftCompareView";
 import { DraftFindings, parseDraftSummary } from "@/components/app/DraftFindings";
 import { Button } from "@/components/ui/Button";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
@@ -377,6 +378,12 @@ function DraftBody({
               )}
             </CardContent>
           </Card>
+
+          <DraftCompareView
+            matterId={matterId}
+            draftId={draft.id}
+            revisions={draft.versions.map((v) => v.revision)}
+          />
 
           <Card>
             <CardHeader>

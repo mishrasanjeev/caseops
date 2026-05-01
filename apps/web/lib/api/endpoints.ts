@@ -903,6 +903,59 @@ export function draftPdfUrl(
     : base;
 }
 
+// PG-005 Sprint 6 (2026-05-01) — draft revision compare. Pure-fn
+// diff hunks + citation deltas between two revisions of the same
+// draft.
+export type DraftDiffLine = {
+  kind: "equal" | "insert" | "delete" | "replace";
+  prev_line_number: number | null;
+  next_line_number: number | null;
+  text: string;
+};
+
+export type DraftDiffHunk = {
+  prev_start: number;
+  prev_length: number;
+  next_start: number;
+  next_length: number;
+  lines: DraftDiffLine[];
+};
+
+export type DraftCompareResponse = {
+  draft_id: string;
+  prev_revision: number;
+  next_revision: number;
+  prev_version_id: string;
+  next_version_id: string;
+  hunks: DraftDiffHunk[];
+  citations_added: string[];
+  citations_removed: string[];
+  citations_kept: string[];
+  lines_added: number;
+  lines_removed: number;
+  summary: string;
+};
+
+export async function compareDraftRevisions(input: {
+  matterId: string;
+  draftId: string;
+  prevRevision: number;
+  nextRevision: number;
+  contextLines?: number;
+}): Promise<DraftCompareResponse> {
+  const params = new URLSearchParams({
+    prev_revision: String(input.prevRevision),
+    next_revision: String(input.nextRevision),
+  });
+  if (input.contextLines !== undefined) {
+    params.set("context_lines", String(input.contextLines));
+  }
+  return apiRequest<DraftCompareResponse>(
+    `/api/matters/${input.matterId}/drafts/${input.draftId}/compare?${params.toString()}`,
+  );
+}
+
+
 // PG-005 Sprint 4 (2026-05-01) — filing-grade ZIP bundle with
 // memorandum + vakalat (auto-resolved) + index + e-stamp placeholder
 // + matter exhibits.

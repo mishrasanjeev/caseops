@@ -122,7 +122,7 @@ Needed:
 Estimated days: 5-7.
 
 ### `PG-005` Drafting finalization — court-specific format + PDF + revision diff
-Status: **`Partially implemented`** (Sprints 1 + 2 + 3 + 4 + 5 of 12 landed 2026-05-01).
+Status: **`Partially implemented`** (Sprints 1 + 2 + 3 + 4 + 5 + 6 of 12 landed 2026-05-01).
 Evidence:
 - Sprint 1 (2026-05-01) added 4 highest-frequency missing templates: `WRIT_PETITION`, `QUASHING_PETITION`, `WRITTEN_STATEMENT`, `REPLY_COUNTER_AFFIDAVIT` (full statutory awareness + per-template prompts + recommender-matrix coverage).
 - Sprint 2 (2026-05-01) added 7 more templates covering daily Indian-litigation filings:
@@ -154,9 +154,14 @@ Evidence:
   - Cause-title rules added to `CourtFormatProfile`: `cause_title_party_case` ("upper" / "title" / "as_given") + `cause_title_numbered` (bool). SC + every HC + every tribunal use ALL CAPS + numbered + "VERSUS"; generic uses Title Case + plain + "v.".
   - `format_cause_title(profile, petitioner_names, respondent_names)` helper produces a multi-line cause title respecting the profile's casing / numbering / separator. Handles single-party (no numbering, "...Petitioner" / "...Respondent" suffix) and empty-party (placeholder "[parties to be filled in]") cases.
   - 11 new pytest cases (6 fuzzy-resolution tests for the new courts + 3 cause-title formatter tests + 1 NCLAT-before-NCLT ordering test + 1 tribunal font-size test). Updated existing list-profile + route tests to expect 10 keys. 48 drafting-studio + court-profile tests pass.
-- `services/drafting.py` (1187 lines) still has DOCX export + citation verifier; revision compare + filing checklist remain.
-Needed (Sprints 6-12):
-- Sprint 6 — `draft_compare(prev_id, next_id)` returning structured diff against existing `DraftRevision` model.
+- Sprint 6 (2026-05-01) added structured draft revision compare:
+  - `services/draft_compare.py` exposes `compare_versions(prev, next, context_lines=3)` — pure-function over two DraftVersion rows. Returns `DraftCompareResult` with line-level hunks (each line tagged `equal | insert | delete | replace`) using `difflib.SequenceMatcher`, plus citation deltas (added / removed / kept) computed as case-folded sets, plus a human-readable summary ("r1 → r2: +12 lines, -8 lines, +2 citations").
+  - `compare_versions_in_db()` is the tenant-scoped wrapper. 400 on identical revisions, 404 on missing revisions.
+  - `GET /api/matters/{matter_id}/drafts/{draft_id}/compare?prev_revision=N&next_revision=M&context_lines=K` route. context_lines bounded [0, 10] (400 outside range).
+  - Web: `<DraftCompareView>` component on the draft detail page renders the diff with red/green highlighting + citation-deltas panel + revision-pair selector. Defaults to comparing the latest two revisions on first render.
+  - 13 new pytest cases (7 pure-function unit tests covering insert / delete / replace / citation set semantics / no-change / malformed-json / context_lines=0 + 6 route integration tests covering happy path / unknown-revision 404 / identical-revision 400 / context_lines bounds 400 / 404 on unknown draft / auth gate). 102 broader drafting tests pass.
+- `services/drafting.py` (1187 lines) still has DOCX export + citation verifier; filing checklist remains.
+Needed (Sprints 7-12):
 - Sprint 7 — Bench-aware extension of drafting (extend PG-107 v3 predictive into draft suggestions).
 - Sprint 8 — Filing checklist per court (limit, fees, annexures, vakalatnama).
 - Sprint 9 — Mobile (responsive DraftingStepper at 360px).

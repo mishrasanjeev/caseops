@@ -2,7 +2,16 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Request, UploadFile
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    HTTPException,
+    Request,
+    UploadFile,
+    status,
+)
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -76,6 +85,10 @@ from caseops_api.services.court_sync_jobs import (
     run_matter_court_sync_job,
 )
 from caseops_api.services.document_jobs import run_document_processing_job
+from caseops_api.services.draft_compare import (
+    DraftCompareResult,
+    compare_versions_in_db,
+)
 from caseops_api.services.draft_pdf_export import render_version_pdf
 from caseops_api.services.drafting import (
     create_draft,
@@ -551,6 +564,105 @@ class BenchMatchResponse(BaseModel):
     confidence: str
     reasoning: list[str]
     suggested_judges: list[BenchMatchJudge]
+
+
+# PG-005 Sprint 6 (2026-05-01) — draft revision compare response shape.
+class DraftDiffLineResponse(BaseModel):
+    kind: str  # "equal" | "insert" | "delete" | "replace"
+    prev_line_number: int | None = None
+    next_line_number: int | None = None
+    text: str
+
+
+class DraftDiffHunkResponse(BaseModel):
+    prev_start: int
+    prev_length: int
+    next_start: int
+    next_length: int
+    lines: list[DraftDiffLineResponse]
+
+
+class DraftCompareResponse(BaseModel):
+    draft_id: str
+    prev_revision: int
+    next_revision: int
+    prev_version_id: str
+    next_version_id: str
+    hunks: list[DraftDiffHunkResponse]
+    citations_added: list[str]
+    citations_removed: list[str]
+    citations_kept: list[str]
+    lines_added: int
+    lines_removed: int
+    summary: str
+
+
+@router.get(
+    "/{matter_id}/drafts/{draft_id}/compare",
+    response_model=DraftCompareResponse,
+    summary=(
+        "Structured diff between two revisions of the same draft "
+        "(PG-005 Sprint 6, 2026-05-01)."
+    ),
+)
+async def get_current_company_matter_draft_compare(
+    matter_id: str,
+    draft_id: str,
+    prev_revision: int,
+    next_revision: int,
+    context: CurrentContext,
+    session: DbSession,
+    context_lines: int = 3,
+) -> DraftCompareResponse:
+    """Returns line-level diff hunks + citation deltas between two
+    versions of the same draft. Pure-function compute (no LLM call).
+    Use ``?prev_revision=N&next_revision=M&context_lines=K``.
+    """
+    if context_lines < 0 or context_lines > 10:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="context_lines must be between 0 and 10.",
+        )
+    result: DraftCompareResult = compare_versions_in_db(
+        session,
+        context=context,
+        matter_id=matter_id,
+        draft_id=draft_id,
+        prev_revision=prev_revision,
+        next_revision=next_revision,
+        context_lines=context_lines,
+    )
+    return DraftCompareResponse(
+        draft_id=result.draft_id,
+        prev_revision=result.prev_revision,
+        next_revision=result.next_revision,
+        prev_version_id=result.prev_version_id,
+        next_version_id=result.next_version_id,
+        hunks=[
+            DraftDiffHunkResponse(
+                prev_start=h.prev_start,
+                prev_length=h.prev_length,
+                next_start=h.next_start,
+                next_length=h.next_length,
+                lines=[
+                    DraftDiffLineResponse(
+                        kind=ln.kind,
+                        prev_line_number=ln.prev_line_number,
+                        next_line_number=ln.next_line_number,
+                        text=ln.text,
+                    )
+                    for ln in h.lines
+                ],
+            )
+            for h in result.hunks
+        ],
+        citations_added=result.citations_added,
+        citations_removed=result.citations_removed,
+        citations_kept=result.citations_kept,
+        lines_added=result.lines_added,
+        lines_removed=result.lines_removed,
+        summary=result.summary,
+    )
 
 
 @router.get(
