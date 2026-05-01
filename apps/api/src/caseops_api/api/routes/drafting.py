@@ -91,13 +91,22 @@ class CourtFormatProfilesResponse(BaseModel):
 )
 async def list_drafting_templates(
     context: CurrentContext,
+    session: DbSession,
 ) -> DraftTemplatesListResponse:
-    # Context is only consumed to enforce auth; templates are not
-    # tenant-scoped.
-    _ = context
+    # PG-005 Sprint 11 (2026-05-01) — template governance. Filter the
+    # global template list by the tenant's `disabled_template_types`
+    # policy. Default is no filter (every template visible). Admins
+    # configure the disabled list via PATCH /api/admin/tenant-ai-policy.
+    from caseops_api.services.tenant_ai_policy import resolve_tenant_policy
+
+    policy = resolve_tenant_policy(session, company_id=context.company.id)
+    disabled = set(policy.disabled_template_types)
+
     schemas = list_template_schemas()
     summaries: list[DraftTemplateSummary] = []
     for schema in schemas:
+        if schema.template_type in disabled:
+            continue
         template_type = DraftTemplateType(schema.template_type)
         prompt = get_prompt_parts(template_type)
         summaries.append(

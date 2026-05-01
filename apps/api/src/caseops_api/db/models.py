@@ -3609,6 +3609,15 @@ class TenantAIPolicy(Base):
     predictive_bench_strategy_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
+    # PG-005 Sprint 11 (2026-05-01) — template governance. JSON list of
+    # DraftTemplateType values the admin has hidden from this workspace
+    # (e.g. a corporate-only firm hiding "bail" / "criminal_complaint").
+    # The /api/drafting/templates endpoint filters its response on this
+    # list; the recommender matrix also drops disabled types from its
+    # output. Default empty = every template visible.
+    disabled_template_types_json: Mapped[str] = mapped_column(
+        Text, nullable=False, default="[]"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )

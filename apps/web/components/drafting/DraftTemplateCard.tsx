@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Zap } from "lucide-react";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -14,6 +14,11 @@ type Props = {
 
 export function DraftTemplateCard({ matterId, template }: Props) {
   const href = `/app/matters/${matterId}/drafts/new?type=${template.template_type}`;
+  // Sprint 10 (2026-05-01) — solo mode link. Same destination, but
+  // adds ?solo=1 so the stepper flattens to a single scrollable form
+  // with one "Generate draft" CTA. Solo practitioners reach drafts
+  // faster without the partner-review ceremony.
+  const soloHref = `${href}&solo=1`;
   return (
     <Card className="flex flex-col justify-between">
       <CardContent className="flex flex-col gap-3">
@@ -32,7 +37,15 @@ export function DraftTemplateCard({ matterId, template }: Props) {
             ))}
           </div>
         ) : null}
-        <div className="mt-2 flex justify-end">
+        <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
+          <Button
+            href={soloHref}
+            size="sm"
+            variant="ghost"
+            data-testid={`start-solo-${template.template_type}`}
+          >
+            <Zap className="h-3.5 w-3.5" aria-hidden /> Solo mode
+          </Button>
           <Button
             href={href}
             size="sm"

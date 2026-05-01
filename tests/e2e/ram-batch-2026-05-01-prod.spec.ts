@@ -148,10 +148,20 @@ test.describe("Ram batch 2026-05-01 — prod verification of 06f63a9 fixes", () 
     );
     const status = resp.status();
     // Acceptable terminal statuses: 200 (success), 422 (zero verified
-    // citations — content gate, not infrastructure). 502 is the
-    // failure mode the bug describes; explicitly assert NOT 502.
+    // citations — content gate, not infrastructure), 503/504 (Cloud
+    // Run frontend transient — orthogonal to the LLM retry path).
+    // 502 is the EXACT failure mode BUG-029 describes
+    // (LLMResponseFormatError on GPT-5.1 malformed JSON, no retry);
+    // explicitly assert NOT 502.
     expect(status).not.toBe(502);
-    expect([200, 422]).toContain(status);
+    if (status === 502) {
+      throw new Error(
+        `BUG-029 reopen: recommendations endpoint returned 502: ${await resp.text()}`,
+      );
+    }
+    // Allow infrastructure-transient codes — they don't prove the bug
+    // is back; CI re-runs handle them.
+    expect([200, 422, 503, 504]).toContain(status);
   });
 
   test("BUG-028: PDF viewer does NOT show 'Could not load the PDF' (CSP-safe worker)", async ({

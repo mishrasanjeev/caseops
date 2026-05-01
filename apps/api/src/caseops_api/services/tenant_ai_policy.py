@@ -36,6 +36,8 @@ class ResolvedAIPolicy:
     training_opt_in: bool
     # PG-107 (2026-05-01) — opt-in predictive bench analytics.
     predictive_bench_strategy_enabled: bool = False
+    # PG-005 Sprint 11 (2026-05-01) — admin-disabled drafting templates.
+    disabled_template_types: tuple[str, ...] = ()
 
 
 def _parse_list(raw: str | None) -> tuple[str, ...]:
@@ -79,6 +81,7 @@ def resolve_tenant_policy(
             external_share_requires_approval=DEFAULT_POLICY.external_share_requires_approval,
             training_opt_in=DEFAULT_POLICY.training_opt_in,
             predictive_bench_strategy_enabled=DEFAULT_POLICY.predictive_bench_strategy_enabled,
+            disabled_template_types=DEFAULT_POLICY.disabled_template_types,
         )
     return ResolvedAIPolicy(
         company_id=row.company_id,
@@ -93,6 +96,9 @@ def resolve_tenant_policy(
         training_opt_in=bool(row.training_opt_in),
         predictive_bench_strategy_enabled=bool(
             getattr(row, "predictive_bench_strategy_enabled", False)
+        ),
+        disabled_template_types=_parse_list(
+            getattr(row, "disabled_template_types_json", None)
         ),
     )
 

@@ -44,6 +44,11 @@ export default function NewDraftPage() {
   const matterId = params.id;
   const searchParams = useSearchParams();
   const typeParam = searchParams.get("type");
+  // Sprint 10 (2026-05-01) — solo mode toggle. When the URL carries
+  // ?solo=1, the stepper renders all step groups as a single
+  // scrollable form. Targeted at solo practitioners who don't need
+  // the partner-review ceremony of the full multi-step flow.
+  const solo = searchParams.get("solo") === "1";
 
   if (isLikelyTemplateType(typeParam)) {
     return (
@@ -57,7 +62,11 @@ export default function NewDraftPage() {
             <ArrowLeft className="h-4 w-4" aria-hidden /> All templates
           </Button>
         </div>
-        <DraftingStepper matterId={matterId} templateType={typeParam} />
+        <DraftingStepper
+          matterId={matterId}
+          templateType={typeParam}
+          solo={solo}
+        />
       </div>
     );
   }

@@ -138,9 +138,18 @@ function pruneFacts(raw: Record<string, unknown>): Record<string, unknown> {
 type Props = {
   matterId: string;
   templateType: DraftTemplateType;
+  /**
+   * PG-005 Sprint 10 (2026-05-01) — solo-mode toggle. When `true`,
+   * the stepper renders all step groups as a single scrollable form
+   * with one "Generate draft" CTA at the bottom. Targets solo
+   * practitioners who don't need the partner-review ceremony of the
+   * full multi-step flow. Triggered by the `?solo=1` query param on
+   * `/app/matters/{id}/drafts/new?type=...&solo=1`.
+   */
+  solo?: boolean;
 };
 
-export function DraftingStepper({ matterId, templateType }: Props) {
+export function DraftingStepper({ matterId, templateType, solo = false }: Props) {
   const router = useRouter();
 
   const templateQuery = useQuery({
@@ -178,6 +187,7 @@ export function DraftingStepper({ matterId, templateType }: Props) {
       matterId={matterId}
       template={templateQuery.data}
       suggestions={suggestionsQuery.data ?? null}
+      solo={solo}
       onSubmitted={(draftId) =>
         router.push(`/app/matters/${matterId}/drafts/${draftId}`)
       }
@@ -189,10 +199,17 @@ type InnerProps = {
   matterId: string;
   template: DraftTemplateSchema;
   suggestions: TemplateSuggestions | null;
+  solo?: boolean;
   onSubmitted: (draftId: string) => void;
 };
 
-function StepperInner({ matterId, template, suggestions, onSubmitted }: InnerProps) {
+function StepperInner({
+  matterId,
+  template,
+  suggestions,
+  solo = false,
+  onSubmitted,
+}: InnerProps) {
   const schema = useMemo(() => buildFormSchema(template.fields), [template.fields]);
   const defaults = useMemo(() => buildDefaults(template.fields), [template.fields]);
   const steps = useMemo(
@@ -281,22 +298,57 @@ function StepperInner({ matterId, template, suggestions, onSubmitted }: InnerPro
         </>
       ) : null}
 
-      <StepperBreadcrumbs
-        steps={steps}
-        stepIndex={stepIndex}
-        onSelect={(i) => {
-          // Only allow jumping to a previous step; forward nav must go
-          // through validation.
-          if (i <= stepIndex) setStepIndex(i);
-        }}
-      />
+      {!solo && (
+        <StepperBreadcrumbs
+          steps={steps}
+          stepIndex={stepIndex}
+          onSelect={(i) => {
+            // Only allow jumping to a previous step; forward nav must go
+            // through validation.
+            if (i <= stepIndex) setStepIndex(i);
+          }}
+        />
+      )}
 
       <form
         className="flex flex-col gap-5"
         onSubmit={form.handleSubmit((values) => createMutation.mutate(values))}
         noValidate
+        data-testid={solo ? "drafting-stepper-solo-form" : "drafting-stepper-form"}
       >
-        {isPreviewStep ? (
+        {/* Sprint 10 (2026-05-01) — solo mode: one-page guided form.
+            Renders every step group as a single Card with all fields
+            inline. The lawyer scrolls top-to-bottom; the bottom CTA
+            says "Generate draft" instead of the Preview-step
+            "Submit for full draft" so there's no review-stage copy. */}
+        {solo ? (
+          template.step_groups.map((group) => {
+            const groupFields = template.fields.filter((f) => f.step_group === group);
+            return (
+              <Card key={group}>
+                <CardContent className="flex flex-col gap-4">
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--color-mute-2)]">
+                    {group.replace(/_/g, " ")}
+                  </h3>
+                  {groupFields.length === 0 ? (
+                    <p className="text-sm text-[var(--color-mute)]">
+                      No fields in this section.
+                    </p>
+                  ) : (
+                    groupFields.map((f) => (
+                      <FieldRow
+                        key={f.name}
+                        field={f}
+                        form={form}
+                        suggestions={suggestionLookup.get(f.name) ?? null}
+                      />
+                    ))
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })
+        ) : isPreviewStep ? (
           <PreviewPane
             templateType={template.template_type}
             facts={pruneFacts(allValues)}
@@ -324,18 +376,38 @@ function StepperInner({ matterId, template, suggestions, onSubmitted }: InnerPro
 
         {/* Sprint 9 (2026-05-01) — mobile-responsive bottom nav. On
             360px viewports the "Submit for full draft" + "Previous"
-            row overflowed the form; stack vertically below sm. */}
+            row overflowed the form; stack vertically below sm.
+            Sprint 10 (2026-05-01) — solo mode collapses to a single
+            CTA ("Generate draft") since there are no steps to
+            navigate. */}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={goPrev}
-            disabled={stepIndex === 0}
-            className="w-full sm:w-auto"
-          >
-            <ArrowLeft className="h-4 w-4" aria-hidden /> Previous
-          </Button>
-          {isPreviewStep ? (
+          {solo ? null : (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={goPrev}
+              disabled={stepIndex === 0}
+              className="w-full sm:w-auto"
+            >
+              <ArrowLeft className="h-4 w-4" aria-hidden /> Previous
+            </Button>
+          )}
+          {solo ? (
+            <Button
+              type="submit"
+              disabled={createMutation.isPending}
+              className="w-full sm:ml-auto sm:w-auto"
+              data-testid="drafting-solo-generate"
+            >
+              {createMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Generating draft…
+                </>
+              ) : (
+                "Generate draft"
+              )}
+            </Button>
+          ) : isPreviewStep ? (
             <Button
               type="submit"
               disabled={createMutation.isPending}

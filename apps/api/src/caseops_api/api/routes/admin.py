@@ -324,10 +324,13 @@ WorkspaceAdmin = Annotated[
 class TenantAIPolicyResponse(BaseModel):
     company_id: str
     predictive_bench_strategy_enabled: bool
+    # PG-005 Sprint 11 (2026-05-01) — admin-disabled drafting templates.
+    disabled_template_types: list[str] = []
 
 
 class TenantAIPolicyPatchRequest(BaseModel):
-    predictive_bench_strategy_enabled: bool
+    predictive_bench_strategy_enabled: bool | None = None
+    disabled_template_types: list[str] | None = None
 
 
 def _ensure_policy_row(session, company_id: str) -> TenantAIPolicy:
@@ -341,10 +344,24 @@ def _ensure_policy_row(session, company_id: str) -> TenantAIPolicy:
     return row
 
 
+def _parse_disabled_templates(raw: str | None) -> list[str]:
+    import json
+
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    return [
+        str(x) for x in parsed if isinstance(x, str)
+    ] if isinstance(parsed, list) else []
+
+
 @router.get(
     "/tenant-ai-policy",
     response_model=TenantAIPolicyResponse,
-    summary="Read this workspace's AI policy (PG-107).",
+    summary="Read this workspace's AI policy (PG-107 + Sprint 11 governance).",
 )
 def get_tenant_ai_policy(
     context: WorkspaceAdmin,
@@ -356,6 +373,9 @@ def get_tenant_ai_policy(
         predictive_bench_strategy_enabled=bool(
             getattr(row, "predictive_bench_strategy_enabled", False)
         ),
+        disabled_template_types=_parse_disabled_templates(
+            getattr(row, "disabled_template_types_json", None)
+        ),
     )
 
 
@@ -363,8 +383,8 @@ def get_tenant_ai_policy(
     "/tenant-ai-policy",
     response_model=TenantAIPolicyResponse,
     summary=(
-        "Toggle predictive bench analytics for this workspace (PG-107). "
-        "Owner/admin only."
+        "Toggle predictive bench analytics + admin-disabled templates "
+        "for this workspace (PG-107 + Sprint 11). Owner/admin only."
     ),
 )
 def patch_tenant_ai_policy(
@@ -372,29 +392,57 @@ def patch_tenant_ai_policy(
     context: WorkspaceAdmin,
     session: DbSession,
 ) -> TenantAIPolicyResponse:
+    import json
+
     row = _ensure_policy_row(session, context.company.id)
-    before = bool(getattr(row, "predictive_bench_strategy_enabled", False))
-    row.predictive_bench_strategy_enabled = bool(
-        payload.predictive_bench_strategy_enabled
-    )
+    audit_metadata: dict = {}
+
+    if payload.predictive_bench_strategy_enabled is not None:
+        before = bool(getattr(row, "predictive_bench_strategy_enabled", False))
+        row.predictive_bench_strategy_enabled = bool(
+            payload.predictive_bench_strategy_enabled
+        )
+        audit_metadata["predictive_bench_strategy_enabled"] = {
+            "before": before,
+            "after": bool(payload.predictive_bench_strategy_enabled),
+        }
+
+    if payload.disabled_template_types is not None:
+        before_list = _parse_disabled_templates(
+            getattr(row, "disabled_template_types_json", None)
+        )
+        # Validate each value against the canonical DraftTemplateType set
+        # so a typo can't silently disable nothing.
+        from caseops_api.schemas.drafting_templates import DraftTemplateType
+
+        valid_types = {t.value for t in DraftTemplateType}
+        cleaned: list[str] = []
+        for t in payload.disabled_template_types:
+            if t in valid_types and t not in cleaned:
+                cleaned.append(t)
+        row.disabled_template_types_json = json.dumps(cleaned)
+        audit_metadata["disabled_template_types"] = {
+            "before": before_list,
+            "after": cleaned,
+        }
+
     session.flush()
-    record_from_context(
-        session,
-        context,
-        action="tenant_ai_policy.updated",
-        target_type="tenant_ai_policy",
-        target_id=row.id,
-        metadata={
-            "predictive_bench_strategy_enabled": {
-                "before": before,
-                "after": bool(payload.predictive_bench_strategy_enabled),
-            },
-        },
-    )
+    if audit_metadata:
+        record_from_context(
+            session,
+            context,
+            action="tenant_ai_policy.updated",
+            target_type="tenant_ai_policy",
+            target_id=row.id,
+            metadata=audit_metadata,
+        )
     session.commit()
     return TenantAIPolicyResponse(
         company_id=row.company_id,
         predictive_bench_strategy_enabled=bool(
             row.predictive_bench_strategy_enabled
+        ),
+        disabled_template_types=_parse_disabled_templates(
+            getattr(row, "disabled_template_types_json", None)
         ),
     )
