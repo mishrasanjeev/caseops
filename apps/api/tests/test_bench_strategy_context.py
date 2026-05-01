@@ -473,10 +473,16 @@ def test_build_messages_does_not_inject_bench_context_for_other_templates(
             session, company_id=boot["company"]["id"], code="BAAD-B-3",
         )
 
+    # PG-005 Sprint 7 (2026-05-01) expanded _BENCH_AWARE_TEMPLATES from
+    # appeal_memorandum-only to every litigation template that argues a
+    # legal position to a court (bail, writ, quashing, civil_suit, etc).
+    # vakalatnama is a procedural-only template — NEVER bench-aware —
+    # so it remains a stable anchor for "non-bench template doesn't get
+    # the block" coverage.
     class _Draft:
-        template_type = "bail"  # NOT appeal
-        title = "Bail Test"
-        draft_type = "bail"
+        template_type = "vakalatnama"  # procedural-only, not bench-aware
+        title = "Vakalatnama Test"
+        draft_type = "vakalatnama"
         facts_json = None
 
     ctx = BenchStrategyContext(
