@@ -421,9 +421,11 @@ def test_pdf_export_blocked_without_verified_citations(client: TestClient) -> No
     assert "verified citation" in detail.lower()
 
 
-def test_court_profiles_route_lists_four_profiles(client: TestClient) -> None:
-    """GET /api/drafting/court-profiles returns the four pinned profiles
-    in stable order — the web PDF-export selector reads this directly."""
+def test_court_profiles_route_lists_ten_profiles(client: TestClient) -> None:
+    """GET /api/drafting/court-profiles returns 10 profiles in stable
+    order after PG-005 Sprint 5 (2026-05-01) added Madras HC, Calcutta
+    HC, Karnataka HC, NCLT, NCLAT, DRT — the web PDF-export selector
+    reads this directly."""
     token = str(bootstrap_company(client)["access_token"])
     resp = client.get(
         "/api/drafting/court-profiles",
@@ -432,10 +434,23 @@ def test_court_profiles_route_lists_four_profiles(client: TestClient) -> None:
     assert resp.status_code == 200, resp.text
     body = resp.json()
     keys = [p["key"] for p in body["profiles"]]
-    assert keys == ["supreme_court", "delhi_hc", "bombay_hc", "generic"]
+    assert keys == [
+        "supreme_court",
+        "delhi_hc",
+        "bombay_hc",
+        "madras_hc",
+        "calcutta_hc",
+        "karnataka_hc",
+        "nclt",
+        "nclat",
+        "drt",
+        "generic",
+    ]
     sc = next(p for p in body["profiles"] if p["key"] == "supreme_court")
     assert sc["page_number_position"] == "center"
     assert sc["body_font_size_pt"] == 12
+    nclt = next(p for p in body["profiles"] if p["key"] == "nclt")
+    assert nclt["body_font_size_pt"] == 11
 
 
 def test_court_profiles_route_requires_auth(client: TestClient) -> None:

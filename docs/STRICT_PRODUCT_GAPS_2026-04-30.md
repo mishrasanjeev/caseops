@@ -122,7 +122,7 @@ Needed:
 Estimated days: 5-7.
 
 ### `PG-005` Drafting finalization — court-specific format + PDF + revision diff
-Status: **`Partially implemented`** (Sprints 1 + 2 + 3 + 4 of 12 landed 2026-05-01).
+Status: **`Partially implemented`** (Sprints 1 + 2 + 3 + 4 + 5 of 12 landed 2026-05-01).
 Evidence:
 - Sprint 1 (2026-05-01) added 4 highest-frequency missing templates: `WRIT_PETITION`, `QUASHING_PETITION`, `WRITTEN_STATEMENT`, `REPLY_COUNTER_AFFIDAVIT` (full statutory awareness + per-template prompts + recommender-matrix coverage).
 - Sprint 2 (2026-05-01) added 7 more templates covering daily Indian-litigation filings:
@@ -147,9 +147,15 @@ Evidence:
   - Same citation gate as the PDF / DOCX paths. Telemetry headers on the response: `X-CaseOps-Court-Profile`, `X-CaseOps-Vakalat-Source` (`draft:<id>` or `placeholder`), `X-CaseOps-Exhibit-Count`. 422 on unknown profile key + unknown attachment ids + non-VAKALATNAMA draft id passed as the explicit vakalat.
   - Web: "Filing bundle" button (FolderArchive icon) alongside "Download DOCX" + "Download PDF" on the draft detail page; `draftFilingBundleUrl()` helper in `lib/api/endpoints.ts` accepts optional `courtProfile` / `vakalatDraftId` / `attachmentIds` overrides.
   - 7 new pytest cases (default layout + court-profile override + auto-pick vakalat draft + non-vakalat-template 422 + citation gate + 404 on unknown draft + unknown attachment id 422). 173 broader drafting tests pass; web `tsc --noEmit` clean.
+- Sprint 5 (2026-05-01) expanded court format profiles from 4 to 10 + added cause-title formatting helper:
+  - Madras HC ("IN THE HIGH COURT OF JUDICATURE AT MADRAS", center page numbers, bare numerals like SC); Calcutta HC ("IN THE HIGH COURT AT CALCUTTA", right page numbers); Karnataka HC ("IN THE HIGH COURT OF KARNATAKA AT BENGALURU", right page numbers).
+  - NCLT ("IN THE NATIONAL COMPANY LAW TRIBUNAL", 11pt body); NCLAT ("IN THE NATIONAL COMPANY LAW APPELLATE TRIBUNAL, NEW DELHI"); DRT ("IN THE DEBTS RECOVERY TRIBUNAL"). Tribunals use 11pt body to match the looser tribunal-rules formatting.
+  - Fuzzy court-name patterns extended for all six new courts. NCLAT-before-NCLT ordering enforced (substring overlap) — "National Company Law Appellate Tribunal" must NOT route to NCLT.
+  - Cause-title rules added to `CourtFormatProfile`: `cause_title_party_case` ("upper" / "title" / "as_given") + `cause_title_numbered` (bool). SC + every HC + every tribunal use ALL CAPS + numbered + "VERSUS"; generic uses Title Case + plain + "v.".
+  - `format_cause_title(profile, petitioner_names, respondent_names)` helper produces a multi-line cause title respecting the profile's casing / numbering / separator. Handles single-party (no numbering, "...Petitioner" / "...Respondent" suffix) and empty-party (placeholder "[parties to be filled in]") cases.
+  - 11 new pytest cases (6 fuzzy-resolution tests for the new courts + 3 cause-title formatter tests + 1 NCLAT-before-NCLT ordering test + 1 tribunal font-size test). Updated existing list-profile + route tests to expect 10 keys. 48 drafting-studio + court-profile tests pass.
 - `services/drafting.py` (1187 lines) still has DOCX export + citation verifier; revision compare + filing checklist remain.
-Needed (Sprints 5-12):
-- Sprint 5 — Court format profile expansion (today: SC + Delhi HC + Bombay HC + generic; remaining: Madras HC, Calcutta HC, Karnataka HC, NCLT, NCLAT, DRT, etc.) + cause-title profiles.
+Needed (Sprints 6-12):
 - Sprint 6 — `draft_compare(prev_id, next_id)` returning structured diff against existing `DraftRevision` model.
 - Sprint 7 — Bench-aware extension of drafting (extend PG-107 v3 predictive into draft suggestions).
 - Sprint 8 — Filing checklist per court (limit, fees, annexures, vakalatnama).

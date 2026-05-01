@@ -54,7 +54,16 @@ class CourtFormatProfile:
     show_court_header_first_page: bool = True
     court_header_text: str | None = None  # None → infer from court_name
     show_court_header_subsequent_pages: bool = False
+    # Cause-title rules (PG-005 Sprint 5, 2026-05-01).
     cause_title_separator: str = "VERSUS"  # "Versus" / "v." / "VERSUS"
+    # Casing for party names in the cause title. Higher courts (SC,
+    # most HCs) use ALL_CAPS by convention; tribunals and DRTs are
+    # flexible. Drafting prompts that build the cause title can read
+    # this to enforce the right styling.
+    cause_title_party_case: str = "upper"  # "upper" | "title" | "as_given"
+    # Whether cause titles number the parties (SC: numbered; tribunal:
+    # often plain).
+    cause_title_numbered: bool = True
 
 
 # ---------------------------------------------------------------
@@ -123,6 +132,143 @@ _BOMBAY_HIGH_COURT = CourtFormatProfile(
     cause_title_separator="VERSUS",
 )
 
+_MADRAS_HIGH_COURT = CourtFormatProfile(
+    key="madras_hc",
+    display_name="High Court of Madras",
+    page_format="A4",
+    margin_left_mm=25.4,
+    margin_right_mm=25.4,
+    margin_top_mm=25.4,
+    margin_bottom_mm=25.4,
+    body_font_size_pt=12,
+    body_line_height_mm=6.5,
+    heading_font_size_pt=14,
+    title_font_size_pt=16,
+    page_number_position="center",
+    page_number_format="{n}",
+    show_court_header_first_page=True,
+    court_header_text="IN THE HIGH COURT OF JUDICATURE AT MADRAS",
+    show_court_header_subsequent_pages=False,
+    cause_title_separator="VERSUS",
+    cause_title_party_case="upper",
+    cause_title_numbered=True,
+)
+
+_CALCUTTA_HIGH_COURT = CourtFormatProfile(
+    key="calcutta_hc",
+    display_name="High Court at Calcutta",
+    page_format="A4",
+    margin_left_mm=25.4,
+    margin_right_mm=25.4,
+    margin_top_mm=25.4,
+    margin_bottom_mm=25.4,
+    body_font_size_pt=12,
+    body_line_height_mm=6.5,
+    heading_font_size_pt=14,
+    title_font_size_pt=16,
+    page_number_position="right",
+    page_number_format="Page {n} of {total}",
+    show_court_header_first_page=True,
+    court_header_text="IN THE HIGH COURT AT CALCUTTA",
+    show_court_header_subsequent_pages=False,
+    cause_title_separator="VERSUS",
+    cause_title_party_case="upper",
+    cause_title_numbered=True,
+)
+
+_KARNATAKA_HIGH_COURT = CourtFormatProfile(
+    key="karnataka_hc",
+    display_name="High Court of Karnataka",
+    page_format="A4",
+    margin_left_mm=25.4,
+    margin_right_mm=25.4,
+    margin_top_mm=25.4,
+    margin_bottom_mm=25.4,
+    body_font_size_pt=12,
+    body_line_height_mm=6.5,
+    heading_font_size_pt=14,
+    title_font_size_pt=16,
+    page_number_position="right",
+    page_number_format="Page {n} of {total}",
+    show_court_header_first_page=True,
+    court_header_text="IN THE HIGH COURT OF KARNATAKA AT BENGALURU",
+    show_court_header_subsequent_pages=False,
+    cause_title_separator="VERSUS",
+    cause_title_party_case="upper",
+    cause_title_numbered=True,
+)
+
+# Tribunal profiles. Tribunals don't strictly enforce SC-level margins
+# but the standard NCLT Rules 2016 / NCLAT Rules 2016 / DRT (Procedure)
+# Rules 1993 templates expect 1" margins, 12pt, single-spaced, party-
+# numbered cause title. Tribunals are flexible on "v." vs "Versus".
+
+_NCLT = CourtFormatProfile(
+    key="nclt",
+    display_name="National Company Law Tribunal",
+    page_format="A4",
+    margin_left_mm=25.4,
+    margin_right_mm=25.4,
+    margin_top_mm=25.4,
+    margin_bottom_mm=25.4,
+    body_font_size_pt=11,
+    body_line_height_mm=5.5,
+    heading_font_size_pt=13,
+    title_font_size_pt=16,
+    page_number_position="right",
+    page_number_format="Page {n} of {total}",
+    show_court_header_first_page=True,
+    court_header_text="IN THE NATIONAL COMPANY LAW TRIBUNAL",
+    show_court_header_subsequent_pages=False,
+    cause_title_separator="VERSUS",
+    cause_title_party_case="upper",
+    cause_title_numbered=True,
+)
+
+_NCLAT = CourtFormatProfile(
+    key="nclat",
+    display_name="National Company Law Appellate Tribunal",
+    page_format="A4",
+    margin_left_mm=25.4,
+    margin_right_mm=25.4,
+    margin_top_mm=25.4,
+    margin_bottom_mm=25.4,
+    body_font_size_pt=11,
+    body_line_height_mm=5.5,
+    heading_font_size_pt=13,
+    title_font_size_pt=16,
+    page_number_position="right",
+    page_number_format="Page {n} of {total}",
+    show_court_header_first_page=True,
+    court_header_text="IN THE NATIONAL COMPANY LAW APPELLATE TRIBUNAL, NEW DELHI",
+    show_court_header_subsequent_pages=False,
+    cause_title_separator="VERSUS",
+    cause_title_party_case="upper",
+    cause_title_numbered=True,
+)
+
+_DRT = CourtFormatProfile(
+    key="drt",
+    display_name="Debts Recovery Tribunal",
+    page_format="A4",
+    margin_left_mm=25.4,
+    margin_right_mm=25.4,
+    margin_top_mm=25.4,
+    margin_bottom_mm=25.4,
+    body_font_size_pt=11,
+    body_line_height_mm=5.5,
+    heading_font_size_pt=13,
+    title_font_size_pt=16,
+    page_number_position="right",
+    page_number_format="Page {n} of {total}",
+    show_court_header_first_page=True,
+    court_header_text="IN THE DEBTS RECOVERY TRIBUNAL",
+    show_court_header_subsequent_pages=False,
+    cause_title_separator="VERSUS",
+    cause_title_party_case="upper",
+    cause_title_numbered=True,
+)
+
 _GENERIC_COURT = CourtFormatProfile(
     key="generic",
     display_name="Generic Court",
@@ -141,6 +287,8 @@ _GENERIC_COURT = CourtFormatProfile(
     court_header_text=None,
     show_court_header_subsequent_pages=False,
     cause_title_separator="v.",
+    cause_title_party_case="title",
+    cause_title_numbered=False,
 )
 
 
@@ -148,6 +296,12 @@ _PROFILES: dict[str, CourtFormatProfile] = {
     _SUPREME_COURT.key: _SUPREME_COURT,
     _DELHI_HIGH_COURT.key: _DELHI_HIGH_COURT,
     _BOMBAY_HIGH_COURT.key: _BOMBAY_HIGH_COURT,
+    _MADRAS_HIGH_COURT.key: _MADRAS_HIGH_COURT,
+    _CALCUTTA_HIGH_COURT.key: _CALCUTTA_HIGH_COURT,
+    _KARNATAKA_HIGH_COURT.key: _KARNATAKA_HIGH_COURT,
+    _NCLT.key: _NCLT,
+    _NCLAT.key: _NCLAT,
+    _DRT.key: _DRT,
     _GENERIC_COURT.key: _GENERIC_COURT,
 }
 
@@ -155,6 +309,10 @@ _PROFILES: dict[str, CourtFormatProfile] = {
 # Fuzzy court-name → profile-key mapping. First substring match wins,
 # so order goes specific → general. The match is case-insensitive +
 # whitespace-collapsed.
+#
+# NCLAT and NCLT must come BEFORE NCLT alone because "national company
+# law tribunal" is a substring of "national company law appellate
+# tribunal" — naive ordering would route NCLAT to NCLT.
 _COURT_NAME_PATTERNS: list[tuple[str, str]] = [
     ("supreme court", "supreme_court"),
     ("hon'ble supreme court", "supreme_court"),
@@ -163,6 +321,21 @@ _COURT_NAME_PATTERNS: list[tuple[str, str]] = [
     ("bombay high court", "bombay_hc"),
     ("high court of judicature at bombay", "bombay_hc"),
     ("high court of bombay", "bombay_hc"),
+    ("madras high court", "madras_hc"),
+    ("high court of judicature at madras", "madras_hc"),
+    ("high court of madras", "madras_hc"),
+    ("calcutta high court", "calcutta_hc"),
+    ("high court at calcutta", "calcutta_hc"),
+    ("high court of calcutta", "calcutta_hc"),
+    ("karnataka high court", "karnataka_hc"),
+    ("high court of karnataka", "karnataka_hc"),
+    # Tribunals — NCLAT before NCLT (substring overlap).
+    ("national company law appellate tribunal", "nclat"),
+    ("nclat", "nclat"),
+    ("national company law tribunal", "nclt"),
+    ("nclt", "nclt"),
+    ("debts recovery tribunal", "drt"),
+    ("drt", "drt"),
 ]
 
 
@@ -204,12 +377,65 @@ def resolve_profile(
 
 def list_profiles() -> list[CourtFormatProfile]:
     """Return all profiles for the UI selector. Order is stable:
-    SC → Delhi HC → Bombay HC → generic."""
-    return [_SUPREME_COURT, _DELHI_HIGH_COURT, _BOMBAY_HIGH_COURT, _GENERIC_COURT]
+    SC → HC profiles (Delhi → Bombay → Madras → Calcutta → Karnataka)
+    → tribunals (NCLT → NCLAT → DRT) → generic."""
+    return [
+        _SUPREME_COURT,
+        _DELHI_HIGH_COURT,
+        _BOMBAY_HIGH_COURT,
+        _MADRAS_HIGH_COURT,
+        _CALCUTTA_HIGH_COURT,
+        _KARNATAKA_HIGH_COURT,
+        _NCLT,
+        _NCLAT,
+        _DRT,
+        _GENERIC_COURT,
+    ]
+
+
+def format_cause_title(
+    *,
+    profile: CourtFormatProfile,
+    petitioner_names: list[str],
+    respondent_names: list[str],
+) -> str:
+    """Format a cause title using the profile's casing + numbering +
+    separator rules.
+
+    Returns a multi-line string ready to drop into a draft body or PDF
+    header. Caller is responsible for any preceding court header
+    (e.g. "IN THE SUPREME COURT OF INDIA") — that lives in the profile
+    and the renderer injects it separately."""
+    case_fn = {
+        "upper": str.upper,
+        "title": str.title,
+        "as_given": lambda s: s,
+    }.get(profile.cause_title_party_case, lambda s: s)
+
+    def _render_block(names: list[str]) -> list[str]:
+        if not names:
+            return ["[parties to be filled in]"]
+        if profile.cause_title_numbered and len(names) > 1:
+            return [f"{idx}. {case_fn(name).strip()}" for idx, name in enumerate(names, start=1)]
+        return [case_fn(name).strip() for name in names]
+
+    petitioner_lines = _render_block(petitioner_names)
+    respondent_lines = _render_block(respondent_names)
+
+    out: list[str] = []
+    out.extend(petitioner_lines)
+    out.append("…Petitioner(s)" if len(petitioner_names) != 1 else "…Petitioner")
+    out.append("")
+    out.append(profile.cause_title_separator)
+    out.append("")
+    out.extend(respondent_lines)
+    out.append("…Respondent(s)" if len(respondent_names) != 1 else "…Respondent")
+    return "\n".join(out)
 
 
 __all__ = [
     "CourtFormatProfile",
+    "format_cause_title",
     "list_profiles",
     "resolve_profile",
 ]
