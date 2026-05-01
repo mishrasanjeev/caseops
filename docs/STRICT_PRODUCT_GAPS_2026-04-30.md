@@ -122,20 +122,32 @@ Needed:
 Estimated days: 5-7.
 
 ### `PG-005` Drafting finalization — court-specific format + PDF + revision diff
-Status: **`Partially implemented`** (Sprint 1 of 12 landed 2026-05-01).
+Status: **`Partially implemented`** (Sprints 1 + 2 of 12 landed 2026-05-01).
 Evidence:
-- Sprint 1 (2026-05-01) added 4 highest-frequency missing templates: `WRIT_PETITION` (Article 226 / 32 with branch-specific relief language for mandamus / certiorari / prohibition / quo warranto / habeas corpus + laches awareness), `QUASHING_PETITION` (BNSS s.528 / CrPC s.482 with Gian Singh + B.S. Joshi + Narinder Singh framing on compromise + heinous-offences carve-out), `WRITTEN_STATEMENT` (Order VIII Rule 1 30/90/120-day timeline + para-by-para + silent-omission rule), `REPLY_COUNTER_AFFIDAVIT` (cause-title cloning + para-by-para + verification block). 13 templates total now in `_REGISTRY`.
-- `services/template_recommender.py` matrix updated so HC + writ → WRIT_PETITION primary (replacing AFFIDAVIT primary); SC + writ → WRIT_PETITION primary; HC + criminal adds QUASHING_PETITION as primary; lower_court + civil and HC + commercial add WRITTEN_STATEMENT as primary/secondary; REPLY_COUNTER_AFFIDAVIT added across most contested-matter buckets.
-- `apps/api/tests/test_drafting_templates.py` extended with 4 facts-validation + 4 prompt-correctness tests; `apps/api/tests/test_template_recommender.py` extended with 7 new matrix-coverage tests; fixture corpus (`tests/fixtures/drafting/misc_templates.json`) extended with 4 canonical scenarios.
-- `services/drafting.py` (1187 lines) still has DOCX export + citation verifier; PDF + court-specific cause-title profiles + revision compare + page numbering + filing checklist remain.
-Needed (Sprints 2-12):
-- 7 more templates (Quashing of Domestic Violence proceedings, Section 9 Arbitration, Caveat Petition, Vakalatnama, Application for amendment of pleadings, Compromise petition, Probate petition).
-- `DraftRevision` model already exists; add `draft_compare(prev_id, next_id)` returning structured diff.
-- Court format profiles: Delhi HC / Bombay HC / SC margin/header/cause-title rules.
-- PDF export via WeasyPrint or Playwright print-to-PDF.
-- Filing bundle ZIP (memorandum + vakalat + index + exhibits + e-stamp placeholder).
-- Filing checklist per court (limit, fees, annexures, vakalatnama).
-Estimated days remaining after Sprint 1: 5-7 (7 more templates) + 6-8 (PDF + 1 court) → 10-13 (PDF + 5 courts) + 4-6 (filing bundle).
+- Sprint 1 (2026-05-01) added 4 highest-frequency missing templates: `WRIT_PETITION`, `QUASHING_PETITION`, `WRITTEN_STATEMENT`, `REPLY_COUNTER_AFFIDAVIT` (full statutory awareness + per-template prompts + recommender-matrix coverage).
+- Sprint 2 (2026-05-01) added 7 more templates covering daily Indian-litigation filings:
+  - `DV_QUASHING_PETITION` — quashing of PWDVA s.12 proceedings under BNSS s.528. Prompt explicitly disclaims Gian Singh as dispositive (PWDVA is quasi-civil, not criminal-FIR) and enforces s.2(f) domestic-relationship analysis + welfare-of-children factor.
+  - `ARBITRATION_SECTION_9` — interim measures under s.9 of the Arbitration & Conciliation Act, 1996. Prompt enforces three-part test (prima facie / balance of convenience / irreparable injury) AND the s.9(3) tribunal-constituted carve-out + cross-undertaking.
+  - `CAVEAT_PETITION` — CPC s.148A. Short procedural notice; prompt forbids merits pleading and surfaces 90-day automatic lapse rule.
+  - `VAKALATNAMA` — branches on `court_name` for SC / Delhi HC / Bombay HC / generic court-specific headers + counsel-acceptance block + bar-enrolment requirement.
+  - `AMENDMENT_OF_PLEADINGS` — CPC Order VI Rule 17. Prompt enforces the post-2002 proviso (due-diligence test) when `trial_commenced=true`, and forbids amendments that change the cause of action (Vidyabai v. Padmalatha).
+  - `COMPROMISE_PETITION` — branches on `statutory_basis` across CPC Order XXIII Rule 3 / BNSS s.359 (compoundable) / BNSS s.528 (Gian Singh non-compoundable) / HMA s.13B (mutual consent). Surfaces heinous-offences carve-out for s.528 settlements + 6-month cooling-off rule for s.13B.
+  - `PROBATE_PETITION` — Indian Succession Act 1925 ss.276-300. Prompt enforces s.63(c) two-attestor rule + s.283 citation-to-heirs requirement; routes to Letters of Administration when intestate.
+- 20 templates total now in `_REGISTRY`. `services/template_recommender.py` matrix extended: HC + criminal adds COMPROMISE_PETITION + CAVEAT_PETITION + VAKALATNAMA secondaries; HC + civil / commercial / lower_court + civil add AMENDMENT_OF_PLEADINGS + COMPROMISE_PETITION + CAVEAT_PETITION + VAKALATNAMA; HC + commercial adds ARBITRATION_SECTION_9; HC + matrimonial adds DV_QUASHING_PETITION; arbitration + commercial bucket promoted ARBITRATION_SECTION_9 to primary alongside AFFIDAVIT; PWDVA/domestic-violence/succession/probate practice-area aliases added to bucket map.
+- 14 new pytest cases (7 prompt-correctness + 7 facts-validation in `test_drafting_templates.py`) + 8 new recommender matrix tests; fixture corpus extended with 7 canonical Sprint-2 scenarios. 170 backend tests pass; web `tsc --noEmit` clean after `openapi-types.ts` regeneration.
+- `services/drafting.py` (1187 lines) still has DOCX export + citation verifier; PDF + court-specific cause-title profiles + revision compare + page numbering + filing checklist + filing-bundle ZIP remain.
+Needed (Sprints 3-12):
+- Sprint 3 — PDF export (court-format-aware page numbering, headers, footers) via WeasyPrint or Playwright print-to-PDF.
+- Sprint 4 — Filing bundle ZIP (memorandum + vakalat + index + exhibits + e-stamp placeholder).
+- Sprint 5 — Court format profiles: Delhi HC / Bombay HC / SC margin/header/cause-title rules.
+- Sprint 6 — `draft_compare(prev_id, next_id)` returning structured diff against existing `DraftRevision` model.
+- Sprint 7 — Bench-aware extension of drafting (extend PG-107 v3 predictive into draft suggestions).
+- Sprint 8 — Filing checklist per court (limit, fees, annexures, vakalatnama).
+- Sprint 9 — Mobile (responsive DraftingStepper at 360px).
+- Sprint 10 — Solo mode (one-page guided form).
+- Sprint 11 — Template governance (admin-side template ordering / pinning).
+- Sprint 12 — Live-LLM eval harness (caseops-eval-drafting) reaching 4.8+/5 on each template.
+Estimated days remaining after Sprint 2: 6-8 (PDF + 1 court) → 10-13 (PDF + 5 courts) + 4-6 (filing bundle) + 8-12 (revision diff + filing checklist + mobile + solo + governance + live-eval).
 
 ### `PG-006` Research treatment / good-law signal
 Status: **`Missing`**.

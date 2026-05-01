@@ -4881,7 +4881,7 @@ export interface components {
              * Template Type
              * @enum {string}
              */
-            template_type: "bail" | "anticipatory_bail" | "divorce_petition" | "property_dispute_notice" | "cheque_bounce_notice" | "affidavit" | "criminal_complaint" | "civil_suit" | "appeal_memorandum" | "writ_petition" | "quashing_petition" | "written_statement" | "reply_counter_affidavit";
+            template_type: "bail" | "anticipatory_bail" | "divorce_petition" | "property_dispute_notice" | "cheque_bounce_notice" | "affidavit" | "criminal_complaint" | "civil_suit" | "appeal_memorandum" | "writ_petition" | "quashing_petition" | "written_statement" | "reply_counter_affidavit" | "dv_quashing_petition" | "arbitration_section_9" | "caveat_petition" | "vakalatnama" | "amendment_of_pleadings" | "compromise_petition" | "probate_petition";
         };
         /** DraftTemplateSummary */
         DraftTemplateSummary: {

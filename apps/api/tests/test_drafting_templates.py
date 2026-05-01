@@ -17,17 +17,24 @@ from fastapi.testclient import TestClient
 
 from caseops_api.schemas.drafting_templates import (
     AffidavitFacts,
+    AmendmentOfPleadingsFacts,
     AnticipatoryBailFacts,
     AppealMemorandumFacts,
+    ArbitrationSection9Facts,
     BailFacts,
+    CaveatPetitionFacts,
     ChequeBounceNoticeFacts,
     CivilSuitFacts,
+    CompromisePetitionFacts,
     CriminalComplaintFacts,
     DivorcePetitionFacts,
     DraftTemplateType,
+    DvQuashingPetitionFacts,
+    ProbatePetitionFacts,
     PropertyDisputeNoticeFacts,
     QuashingPetitionFacts,
     ReplyCounterAffidavitFacts,
+    VakalatnamaFacts,
     WritPetitionFacts,
     WrittenStatementFacts,
     get_template_facts_model,
@@ -46,11 +53,11 @@ def test_registry_has_one_entry_per_template_type() -> None:
     types_in_registry = {s.template_type for s in schemas}
     expected = {t.value for t in DraftTemplateType}
     assert types_in_registry == expected
-    # 13 templates after PG-005 Sprint 1 (2026-05-01) added writ
-    # petition + quashing petition + written statement + reply / counter-
-    # affidavit. Update this count + the route test below in lockstep
-    # when a new template lands.
-    assert len(schemas) == 13
+    # 20 templates after PG-005 Sprint 2 (2026-05-01) added DV-quashing,
+    # Section 9 Arbitration, Caveat, Vakalatnama, Amendment of pleadings,
+    # Compromise, and Probate. Update this count + the route test below
+    # in lockstep when a new template lands.
+    assert len(schemas) == 20
 
 
 def test_every_template_has_fields_and_step_groups() -> None:
@@ -382,6 +389,13 @@ def test_facts_model_mapping_matches_enum() -> None:
         DraftTemplateType.QUASHING_PETITION: QuashingPetitionFacts,
         DraftTemplateType.WRITTEN_STATEMENT: WrittenStatementFacts,
         DraftTemplateType.REPLY_COUNTER_AFFIDAVIT: ReplyCounterAffidavitFacts,
+        DraftTemplateType.DV_QUASHING_PETITION: DvQuashingPetitionFacts,
+        DraftTemplateType.ARBITRATION_SECTION_9: ArbitrationSection9Facts,
+        DraftTemplateType.CAVEAT_PETITION: CaveatPetitionFacts,
+        DraftTemplateType.VAKALATNAMA: VakalatnamaFacts,
+        DraftTemplateType.AMENDMENT_OF_PLEADINGS: AmendmentOfPleadingsFacts,
+        DraftTemplateType.COMPROMISE_PETITION: CompromisePetitionFacts,
+        DraftTemplateType.PROBATE_PETITION: ProbatePetitionFacts,
     }
     for template_type, cls in mapping.items():
         assert get_template_facts_model(template_type) is cls
@@ -392,9 +406,10 @@ def test_facts_model_mapping_matches_enum() -> None:
 # ---------------------------------------------------------------
 
 
-def test_list_templates_route_returns_all_thirteen(client: TestClient) -> None:
-    """13 templates after PG-005 Sprint 1 (2026-05-01) added writ /
-    quashing / written-statement / reply."""
+def test_list_templates_route_returns_all_twenty(client: TestClient) -> None:
+    """20 templates after PG-005 Sprint 2 (2026-05-01) added DV-quashing,
+    Section 9 Arbitration, Caveat, Vakalatnama, Amendment of pleadings,
+    Compromise, and Probate."""
     from tests.test_auth_company import auth_headers, bootstrap_company
 
     bootstrap = bootstrap_company(client)
@@ -404,7 +419,7 @@ def test_list_templates_route_returns_all_thirteen(client: TestClient) -> None:
     resp = client.get("/api/drafting/templates", headers=headers)
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert len(body["templates"]) == 13
+    assert len(body["templates"]) == 20
     types = {t["template_type"] for t in body["templates"]}
     assert types == {t.value for t in DraftTemplateType}
 
@@ -438,3 +453,251 @@ def test_get_template_route_404_on_unknown_type(client: TestClient) -> None:
 def test_templates_route_requires_auth(client: TestClient) -> None:
     resp = client.get("/api/drafting/templates")
     assert resp.status_code in {401, 403}
+
+
+# ---------------------------------------------------------------
+# PG-005 Sprint 2 (2026-05-01): seven additional templates covering
+# DV-quashing, Section 9 Arbitration, Caveat, Vakalatnama, Amendment
+# of pleadings, Compromise, and Probate.
+# ---------------------------------------------------------------
+
+
+def test_dv_quashing_prompt_avoids_gian_singh_as_dispositive() -> None:
+    """PWDVA quashing is quasi-civil — Gian Singh is criminal-FIR
+    jurisprudence. The prompt must teach the LLM that the test is
+    welfare + bona fides, not Gian Singh-style settlement."""
+    prompt = get_prompt_parts(DraftTemplateType.DV_QUASHING_PETITION)
+    assert "PWDVA" in prompt.system
+    assert "528" in prompt.system  # BNSS s.528
+    assert "Gian Singh" in prompt.system  # mentioned to disclaim
+    # Must explicitly warn against Gian Singh as dispositive.
+    assert "NOT" in prompt.system or "not cite" in prompt.system.lower()
+    assert "welfare" in prompt.system.lower() or "children" in prompt.system.lower()
+    assert "2(f)" in prompt.system or "domestic relationship" in prompt.system.lower()
+
+
+def test_arbitration_section_9_prompt_enforces_three_part_test() -> None:
+    """Section 9 prompt must enforce the three-part interim-relief
+    test (prima facie / balance of convenience / irreparable injury)
+    AND the s.9(3) tribunal-constituted carve-out."""
+    prompt = get_prompt_parts(DraftTemplateType.ARBITRATION_SECTION_9)
+    assert "Section 9" in prompt.system or "s.9" in prompt.system.lower()
+    assert "1996" in prompt.system  # the Act year
+    assert "9(3)" in prompt.system or "Section 9(3)" in prompt.system
+    assert "prima facie" in prompt.system.lower()
+    assert "balance of convenience" in prompt.system.lower()
+    assert "irreparable" in prompt.system.lower()
+
+
+def test_caveat_prompt_enforces_no_merits_pleading() -> None:
+    """Caveat is procedural notice. The prompt must NOT let the LLM
+    plead the merits of any dispute, and must mention the 90-day
+    automatic lapse."""
+    prompt = get_prompt_parts(DraftTemplateType.CAVEAT_PETITION)
+    assert "148A" in prompt.system
+    assert "90" in prompt.system  # 90-day lapse
+    # Must forbid merits pleading.
+    assert "merits" in prompt.system.lower() or "procedural" in prompt.system.lower()
+
+
+def test_vakalatnama_prompt_branches_on_court_format() -> None:
+    """Vakalat prompt must teach the LLM the right court-specific
+    header for SC / Delhi HC / Bombay HC."""
+    prompt = get_prompt_parts(DraftTemplateType.VAKALATNAMA)
+    assert "SUPREME COURT OF INDIA" in prompt.system
+    assert "DELHI" in prompt.system
+    assert "BOMBAY" in prompt.system
+    # Counsel acceptance block + bar enrolment must be enforced.
+    assert "enrol" in prompt.system.lower() or "Enrolment" in prompt.system
+
+
+def test_amendment_prompt_enforces_due_diligence_post_trial() -> None:
+    """Order VI Rule 17 prompt must enforce the due-diligence proviso
+    when trial has commenced — the most-litigated point on amendment
+    applications."""
+    prompt = get_prompt_parts(DraftTemplateType.AMENDMENT_OF_PLEADINGS)
+    assert "Order VI Rule 17" in prompt.system
+    assert "due diligence" in prompt.system.lower()
+    assert "trial" in prompt.system.lower()
+
+
+def test_compromise_prompt_branches_on_statutory_basis() -> None:
+    """Compromise prompt must branch correctly across CPC Order XXIII
+    Rule 3 / BNSS s.359 / BNSS s.528 / HMA s.13B and surface the
+    Gian Singh heinous-offences carve-out for s.528 settlements."""
+    prompt = get_prompt_parts(DraftTemplateType.COMPROMISE_PETITION)
+    assert "Order XXIII" in prompt.system or "Order 23" in prompt.system
+    assert "359" in prompt.system  # BNSS s.359
+    assert "528" in prompt.system  # BNSS s.528
+    assert "13B" in prompt.system  # HMA s.13B
+    assert "heinous" in prompt.system.lower()
+    assert "Gian Singh" in prompt.system
+
+
+def test_probate_prompt_enforces_two_attestor_rule() -> None:
+    """Probate prompt must enforce s.63(c) two-attestor rule and
+    s.283 citation-to-heirs requirement."""
+    prompt = get_prompt_parts(DraftTemplateType.PROBATE_PETITION)
+    assert "Indian Succession Act" in prompt.system
+    assert "63(c)" in prompt.system
+    assert "283" in prompt.system  # citation to heirs
+    assert "two" in prompt.system.lower() or "TWO" in prompt.system
+    # Letters of Administration carve-out must be flagged.
+    assert "Letters of Administration" in prompt.system or "intestate" in prompt.system.lower()
+
+
+# ---------------------------------------------------------------
+# PG-005 Sprint 2 — Pydantic facts-model validation for new templates.
+# ---------------------------------------------------------------
+
+
+def test_dv_quashing_facts_round_trips_with_settlement() -> None:
+    facts = DvQuashingPetitionFacts(
+        matter_id="55555555-5555-5555-5555-555555555555",
+        petitioner_name="Aman Verma",
+        aggrieved_person_name="Priya Verma",
+        pwdva_application_number="MA 412/2025",
+        magistrate_court_name="MM-08, Saket Courts",
+        high_court_name="Delhi High Court",
+        impugned_reliefs_in_pwdva_app=["protection", "monetary", "residence"],
+        grounds_for_quashing=(
+            "The aggrieved person and the petitioner have arrived at a "
+            "settlement of their disputes; the magistrate proceedings are "
+            "an abuse of process and serve no useful purpose."
+        ),
+        settlement_recorded=True,
+        aggrieved_consent=True,
+        children_minor_count=1,
+    )
+    assert facts.settlement_recorded is True
+    assert facts.children_minor_count == 1
+
+
+def test_arbitration_s9_requires_at_least_one_interim_relief() -> None:
+    with pytest.raises(ValueError):
+        ArbitrationSection9Facts(
+            matter_id="m",
+            applicant_name="ABC Pvt Ltd",
+            respondent_name="XYZ Ltd",
+            court_name="Bombay High Court",
+            arbitration_status="pre_arbitration",
+            arbitration_agreement_summary=(
+                "Clause 18 of the Master Services Agreement dated "
+                "2024-04-01 referring disputes to a sole arbitrator."
+            ),
+            interim_reliefs_sought=[],  # invalid — at least one required
+            underlying_cause_of_action=(
+                "The respondent has commenced parallel litigation in "
+                "violation of the arbitration clause and is dissipating "
+                "the security deposit."
+            ),
+            urgency_basis=(
+                "Without immediate court intervention, the security "
+                "deposit will be irrevocably lost."
+            ),
+        )
+
+
+def test_caveat_facts_round_trips() -> None:
+    facts = CaveatPetitionFacts(
+        matter_id="66666666-6666-6666-6666-666666666666",
+        caveator_name="Sonia Trading Co.",
+        caveator_address="Plot 42, Industrial Area, Phase II, Gurgaon",
+        apprehended_applicant_name="Counter-party Industries Pvt Ltd",
+        apprehended_proceeding_summary=(
+            "An ex parte injunction application restraining the "
+            "caveator from invoking bank guarantee BG/2025/0142."
+        ),
+        court_name="Delhi High Court",
+    )
+    assert facts.apprehended_applicant_name.startswith("Counter-party")
+
+
+def test_vakalatnama_facts_accept_optional_case_number() -> None:
+    """Fresh-filing vakalats omit case number — must round-trip with
+    case_number=None."""
+    facts = VakalatnamaFacts(
+        matter_id="77777777-7777-7777-7777-777777777777",
+        client_name="Ravi Mehta",
+        client_address="Flat 304, Vasant Kunj, New Delhi",
+        counsel_name="Adv. Sneha Iyer",
+        counsel_enrollment_number="D/12345/2018",
+        counsel_address="Chamber 22, Tis Hazari Courts, Delhi",
+        case_title="Mehta v. State of Delhi",
+        case_number=None,
+        court_name="Delhi High Court",
+        party_role="petitioner",
+    )
+    assert facts.case_number is None
+    assert facts.party_role == "petitioner"
+
+
+def test_amendment_facts_round_trips_with_due_diligence() -> None:
+    facts = AmendmentOfPleadingsFacts(
+        matter_id="88888888-8888-8888-8888-888888888888",
+        applicant_name="Plaintiff Corp",
+        applicant_role="plaintiff",
+        suit_number="CS 99/2024",
+        court_name="Bombay City Civil Court",
+        pleading_to_amend="plaint",
+        proposed_amendments=(
+            "Add para 14-A: 'The plaintiff has, after the filing of "
+            "this suit, discovered Annexure P-12 (the original board "
+            "resolution dated 2023-11-15) which establishes the "
+            "respondent's authority to bind itself.'"
+        ),
+        reason_for_amendment=(
+            "The board resolution was not previously available to the "
+            "plaintiff because it was retained by the respondent and "
+            "produced for the first time during third-party "
+            "discovery on 2026-03-10."
+        ),
+        trial_commenced=True,
+        due_diligence_explanation=(
+            "The plaintiff conducted document searches in 2024 + 2025 "
+            "and the respondent did not produce this document until "
+            "compelled discovery in March 2026; the plaintiff could "
+            "not have discovered the document despite due diligence."
+        ),
+    )
+    assert facts.trial_commenced is True
+    assert facts.due_diligence_explanation is not None
+
+
+def test_compromise_facts_requires_min_settlement_terms_length() -> None:
+    """settlement_terms must be ≥80 chars — terse settlements are a
+    drafting smell."""
+    with pytest.raises(ValueError):
+        CompromisePetitionFacts(
+            matter_id="m",
+            matter_type="civil",
+            party_a_name="A",
+            party_b_name="B",
+            case_number="CS 1/2026",
+            court_name="Court",
+            statutory_basis="cpc_order_23_rule_3",
+            settlement_terms="short",  # below 80 chars
+        )
+
+
+def test_probate_facts_requires_two_attesting_witnesses() -> None:
+    """s.63(c) demands ≥2 attesting witnesses — Pydantic enforces it."""
+    with pytest.raises(ValueError):
+        ProbatePetitionFacts(
+            matter_id="m",
+            petitioner_name="Executor X",
+            petitioner_relationship_to_deceased="Son",
+            deceased_name="Late Y",
+            deceased_date_of_death="2025-06-01",
+            deceased_last_residence="123 Main Street, Mumbai",
+            deceased_religion="hindu",
+            will_date="2024-01-15",
+            will_attesting_witnesses=["Witness A only"],  # only 1
+            estate_assets_summary=(
+                "Movable: bank deposits ~50L; immovable: flat at "
+                "Andheri ~3Cr."
+            ),
+            estate_total_value_inr=35000000.0,
+            legal_heirs=["Y's spouse", "Y's son", "Y's daughter"],
+            court_name="Bombay High Court",
+        )

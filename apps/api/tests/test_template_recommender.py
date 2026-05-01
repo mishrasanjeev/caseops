@@ -222,3 +222,106 @@ def test_high_court_commercial_includes_written_statement() -> None:
     )
     types = [r.template_type for r in recs]
     assert DraftTemplateType.WRITTEN_STATEMENT in types
+
+
+# ---------------------------------------------------------------
+# PG-005 Sprint 2 (2026-05-01): DV-quashing, Section 9 Arbitration,
+# Caveat, Vakalatnama, Amendment, Compromise, Probate matrix coverage.
+# ---------------------------------------------------------------
+
+
+def test_arbitration_commercial_recommends_section_9_primary() -> None:
+    """Arbitration + commercial → ARBITRATION_SECTION_9 primary
+    (s.9 interim measures dominate arbitral filings before / during /
+    after the tribunal)."""
+    recs = recommend_templates(
+        forum_level="arbitration", practice_area="Commercial",
+    )
+    primary_types = [r.template_type for r in recs if r.relevance == "primary"]
+    assert DraftTemplateType.ARBITRATION_SECTION_9 in primary_types
+
+
+def test_high_court_commercial_lists_arbitration_section_9() -> None:
+    """HC + commercial → ARBITRATION_SECTION_9 in the recommendation
+    list (commercial division frequently hears s.9 applications)."""
+    recs = recommend_templates(
+        forum_level="high_court", practice_area="Commercial",
+    )
+    types = [r.template_type for r in recs]
+    assert DraftTemplateType.ARBITRATION_SECTION_9 in types
+
+
+def test_pwdva_practice_area_routes_to_matrimonial_bucket() -> None:
+    """'Domestic violence' / 'PWDVA' practice area normalises to the
+    matrimonial bucket so DV_QUASHING_PETITION shows up at the HC."""
+    for area in ("Domestic violence", "PWDVA matter"):
+        recs = recommend_templates(
+            forum_level="high_court", practice_area=area,
+        )
+        types = [r.template_type for r in recs]
+        assert DraftTemplateType.DV_QUASHING_PETITION in types, (
+            f"area={area!r}: expected DV_QUASHING_PETITION in recs, got {types}"
+        )
+
+
+def test_caveat_petition_appears_in_civil_buckets() -> None:
+    """Caveat is a defensive filing that surfaces across HC + lower-court
+    civil + commercial buckets."""
+    for forum, area in (
+        ("high_court", "Civil"),
+        ("high_court", "Commercial"),
+        ("lower_court", "Civil"),
+    ):
+        recs = recommend_templates(forum_level=forum, practice_area=area)
+        types = [r.template_type for r in recs]
+        assert DraftTemplateType.CAVEAT_PETITION in types, (
+            f"{forum}/{area}: expected CAVEAT_PETITION, got {types}"
+        )
+
+
+def test_vakalatnama_appears_in_lower_court_buckets() -> None:
+    """Every appearance needs a vakalat — surface it in the
+    lower-court buckets where filings are most frequent."""
+    recs = recommend_templates(
+        forum_level="lower_court", practice_area="Civil",
+    )
+    types = [r.template_type for r in recs]
+    assert DraftTemplateType.VAKALATNAMA in types
+
+
+def test_amendment_of_pleadings_in_civil_buckets() -> None:
+    """Order VI Rule 17 amendments are routine — present in HC civil
+    + lower-court civil + HC commercial."""
+    for forum, area in (
+        ("high_court", "Civil"),
+        ("lower_court", "Civil"),
+        ("high_court", "Commercial"),
+    ):
+        recs = recommend_templates(forum_level=forum, practice_area=area)
+        types = [r.template_type for r in recs]
+        assert DraftTemplateType.AMENDMENT_OF_PLEADINGS in types, (
+            f"{forum}/{area}: expected AMENDMENT_OF_PLEADINGS, got {types}"
+        )
+
+
+def test_compromise_petition_in_matrimonial_and_criminal_buckets() -> None:
+    """Compromise petition surfaces in both matrimonial (HMA s.13B
+    mutual-consent) and criminal (BNSS s.359 / s.528) buckets."""
+    matrimonial = recommend_templates(
+        forum_level="high_court", practice_area="Matrimonial",
+    )
+    criminal = recommend_templates(
+        forum_level="high_court", practice_area="Criminal",
+    )
+    assert DraftTemplateType.COMPROMISE_PETITION in [r.template_type for r in matrimonial]
+    assert DraftTemplateType.COMPROMISE_PETITION in [r.template_type for r in criminal]
+
+
+def test_probate_petition_surfaces_in_lower_court_civil() -> None:
+    """Probate is filed at the District Court for estates within
+    pecuniary limit — should surface in lower_court + civil."""
+    recs = recommend_templates(
+        forum_level="lower_court", practice_area="Succession",
+    )
+    types = [r.template_type for r in recs]
+    assert DraftTemplateType.PROBATE_PETITION in types

@@ -50,6 +50,17 @@ class DraftTemplateType(StrEnum):
     QUASHING_PETITION = "quashing_petition"
     WRITTEN_STATEMENT = "written_statement"
     REPLY_COUNTER_AFFIDAVIT = "reply_counter_affidavit"
+    # PG-005 Sprint 2 (2026-05-01). Seven additional templates covering
+    # daily Indian-litigation filings — DV-quashing, arbitration interim
+    # measures, caveat, vakalatnama, amendment of pleadings, compromise,
+    # and probate.
+    DV_QUASHING_PETITION = "dv_quashing_petition"
+    ARBITRATION_SECTION_9 = "arbitration_section_9"
+    CAVEAT_PETITION = "caveat_petition"
+    VAKALATNAMA = "vakalatnama"
+    AMENDMENT_OF_PLEADINGS = "amendment_of_pleadings"
+    COMPROMISE_PETITION = "compromise_petition"
+    PROBATE_PETITION = "probate_petition"
 
 
 DraftTemplateTypeLiteral = Literal[
@@ -66,6 +77,13 @@ DraftTemplateTypeLiteral = Literal[
     "quashing_petition",
     "written_statement",
     "reply_counter_affidavit",
+    "dv_quashing_petition",
+    "arbitration_section_9",
+    "caveat_petition",
+    "vakalatnama",
+    "amendment_of_pleadings",
+    "compromise_petition",
+    "probate_petition",
 ]
 
 
@@ -417,6 +435,343 @@ class ReplyCounterAffidavitFacts(_TemplateFactsBase):
         max_length=2000,
         description="Typically 'dismiss the petition' but may include conditional relief.",
     )
+
+
+class DvQuashingPetitionFacts(_TemplateFactsBase):
+    """Quashing of proceedings under the Protection of Women from
+    Domestic Violence Act, 2005 (PWDVA).
+
+    The application is filed in the High Court under BNSS s.528 / CrPC
+    s.482, and the framing is materially different from a regular
+    quashing petition because the impugned proceedings are quasi-civil
+    (PWDVA s.12 application before a magistrate) rather than a pure
+    criminal FIR. Compromise + the aggrieved person's consent are
+    relevant but do not have the same dispositive weight as in a
+    Gian Singh setting; courts typically demand bona fides + welfare-
+    of-children analysis.
+    """
+
+    petitioner_name: str = Field(min_length=2, max_length=255)
+    aggrieved_person_name: str = Field(
+        min_length=2,
+        max_length=255,
+        description="Original PWDVA s.12 applicant (the aggrieved person).",
+    )
+    pwdva_application_number: str = Field(
+        min_length=1,
+        max_length=120,
+        description="Magistrate-court PWDVA application number being challenged.",
+    )
+    magistrate_court_name: str = Field(min_length=2, max_length=255)
+    high_court_name: str = Field(min_length=2, max_length=255)
+    impugned_reliefs_in_pwdva_app: list[str] = Field(
+        default_factory=list,
+        max_length=20,
+        description=(
+            "Which PWDVA s.18-22 reliefs the aggrieved person sought "
+            "(protection / residence / monetary / custody / compensation)."
+        ),
+    )
+    grounds_for_quashing: str = Field(min_length=40, max_length=4000)
+    domestic_relationship_disputed: bool = Field(
+        default=False,
+        description=(
+            "Has the petitioner pleaded that no domestic relationship "
+            "exists (s.2(f) PWDVA)? Goes to maintainability."
+        ),
+    )
+    settlement_recorded: bool = Field(default=False)
+    aggrieved_consent: bool | None = Field(default=None)
+    children_minor_count: int = Field(
+        default=0,
+        ge=0,
+        le=20,
+        description="Welfare of children is a factor in PWDVA quashing.",
+    )
+
+
+class ArbitrationSection9Facts(_TemplateFactsBase):
+    """Application under Section 9 of the Arbitration & Conciliation
+    Act, 1996 for interim measures of protection.
+
+    Filed in the High Court (commercial division) for international /
+    domestic-commercial arbitrations, otherwise in the principal civil
+    court of original jurisdiction. Section 9 can be invoked
+    pre-arbitration, during arbitration (subject to s.9(3)), or after
+    the award but before enforcement under s.36.
+    """
+
+    applicant_name: str = Field(min_length=2, max_length=255)
+    respondent_name: str = Field(min_length=2, max_length=500)
+    court_name: str = Field(min_length=2, max_length=255)
+    arbitration_status: Literal[
+        "pre_arbitration", "during_arbitration", "post_award_pre_enforcement",
+    ] = "pre_arbitration"
+    arbitration_agreement_summary: str = Field(
+        min_length=40,
+        max_length=2000,
+        description="Clause / agreement that triggers Section 9 jurisdiction.",
+    )
+    arbitral_tribunal_constituted: bool = Field(default=False)
+    interim_reliefs_sought: list[str] = Field(
+        min_length=1,
+        max_length=15,
+        description=(
+            "Reliefs under s.9(1)(i) (preservation / custody / sale of "
+            "goods) or s.9(1)(ii) (interim injunction / receiver / "
+            "amount in dispute / disclosure)."
+        ),
+    )
+    underlying_cause_of_action: str = Field(min_length=40, max_length=4000)
+    urgency_basis: str = Field(
+        min_length=20,
+        max_length=2000,
+        description="Why interim relief cannot await arbitral tribunal.",
+    )
+    undertaking_offered: str | None = Field(
+        default=None,
+        max_length=2000,
+        description=(
+            "Cross-undertaking the applicant offers; standard practice "
+            "is an undertaking to compensate for any loss caused by "
+            "interim relief."
+        ),
+    )
+
+
+class CaveatPetitionFacts(_TemplateFactsBase):
+    """Caveat petition under CPC Section 148A — filed by a person who
+    apprehends an ex parte order against them.
+
+    Short, formal pleading. The court must not pass any order without
+    first hearing the caveator. Caveat lapses after 90 days unless
+    renewed.
+    """
+
+    caveator_name: str = Field(min_length=2, max_length=255)
+    caveator_address: str = Field(min_length=10, max_length=1000)
+    apprehended_applicant_name: str = Field(
+        min_length=2,
+        max_length=500,
+        description="The person likely to file an application against the caveator.",
+    )
+    apprehended_proceeding_summary: str = Field(
+        min_length=40,
+        max_length=2000,
+        description=(
+            "What the caveator apprehends — e.g. anticipatory injunction, "
+            "stay application, contempt petition."
+        ),
+    )
+    court_name: str = Field(min_length=2, max_length=255)
+    related_matter_reference: str | None = Field(
+        default=None,
+        max_length=300,
+        description="Existing case number, FIR, or contract dispute reference.",
+    )
+    counsel_name: str | None = Field(default=None, max_length=255)
+
+
+class VakalatnamaFacts(_TemplateFactsBase):
+    """Power-of-attorney / vakalatnama executed by a litigant
+    authorising counsel to appear and conduct the case.
+
+    Trivial in legal substance but every fee-earner files one with
+    every appearance. Court-specific formats exist (Delhi HC, Bombay HC,
+    SC) — the prompt picks the right header based on `court_name`.
+    """
+
+    client_name: str = Field(min_length=2, max_length=255)
+    client_address: str = Field(min_length=10, max_length=1000)
+    counsel_name: str = Field(min_length=2, max_length=255)
+    counsel_enrollment_number: str = Field(
+        min_length=2,
+        max_length=120,
+        description="Bar council enrollment number — court-rule requirement.",
+    )
+    counsel_address: str = Field(min_length=10, max_length=1000)
+    case_title: str = Field(
+        min_length=2,
+        max_length=500,
+        description="A v. B — appears in the cause title.",
+    )
+    case_number: str | None = Field(
+        default=None,
+        max_length=120,
+        description="Empty when filing fresh; vakalat goes with the plaint.",
+    )
+    court_name: str = Field(min_length=2, max_length=255)
+    party_role: Literal[
+        "plaintiff", "defendant", "petitioner", "respondent",
+        "appellant", "applicant", "objector",
+    ] = "petitioner"
+    accepts_appearance_for_appeals: bool = Field(
+        default=True,
+        description=(
+            "Standard vakalat extends to interim applications + appeals; "
+            "set false to limit scope."
+        ),
+    )
+
+
+class AmendmentOfPleadingsFacts(_TemplateFactsBase):
+    """Application under CPC Order VI Rule 17 to amend a plaint or
+    written statement.
+
+    Post-2002 CPC amendment, applications after trial commences are
+    barred unless the proviso (`due diligence`) is satisfied. The
+    prompt enforces that test.
+    """
+
+    applicant_name: str = Field(min_length=2, max_length=255)
+    applicant_role: Literal[
+        "plaintiff", "defendant", "petitioner", "respondent",
+    ] = "plaintiff"
+    suit_number: str = Field(min_length=1, max_length=120)
+    court_name: str = Field(min_length=2, max_length=255)
+    pleading_to_amend: Literal[
+        "plaint", "written_statement", "petition", "counter_affidavit",
+    ] = "plaint"
+    proposed_amendments: str = Field(
+        min_length=40,
+        max_length=8000,
+        description=(
+            "Verbatim text of the additions / deletions sought, "
+            "paragraph-numbered."
+        ),
+    )
+    reason_for_amendment: str = Field(min_length=40, max_length=4000)
+    trial_commenced: bool = Field(
+        default=False,
+        description=(
+            "Triggers the Order VI Rule 17 proviso (due-diligence test "
+            "post-2002 amendment)."
+        ),
+    )
+    due_diligence_explanation: str | None = Field(
+        default=None,
+        max_length=4000,
+        description=(
+            "Required when `trial_commenced=true`. Explain why the "
+            "amendment could not have been raised earlier despite due "
+            "diligence."
+        ),
+    )
+    prejudice_to_opposite_party: str | None = Field(
+        default=None,
+        max_length=2000,
+        description="Address why the amendment causes no prejudice.",
+    )
+
+
+class CompromisePetitionFacts(_TemplateFactsBase):
+    """Compromise petition recording a settlement between parties.
+
+    Civil — under CPC Order XXIII Rule 3 (compromise decree). Criminal
+    — under BNSS s.359 (CrPC s.320 historical) for compoundable
+    offences, or under BNSS s.528 / CrPC s.482 (Gian Singh framework)
+    for non-compoundable settlements.
+    """
+
+    matter_type: Literal["civil", "criminal", "matrimonial"] = "civil"
+    party_a_name: str = Field(min_length=2, max_length=500)
+    party_b_name: str = Field(min_length=2, max_length=500)
+    case_number: str = Field(min_length=1, max_length=120)
+    court_name: str = Field(min_length=2, max_length=255)
+    statutory_basis: Literal[
+        "cpc_order_23_rule_3",
+        "bnss_s_359_compoundable",
+        "bnss_s_528_non_compoundable",
+        "hma_s_13b_mutual_consent",
+    ] = "cpc_order_23_rule_3"
+    settlement_terms: str = Field(
+        min_length=80,
+        max_length=8000,
+        description=(
+            "Verbatim terms of the compromise — payment schedule, "
+            "withdrawal of allegations, mutual obligations, etc."
+        ),
+    )
+    consideration_paid: str | None = Field(
+        default=None,
+        max_length=500,
+        description="E.g. 'INR 5,00,000 paid via NEFT on 2026-04-15'.",
+    )
+    each_party_to_bear_own_costs: bool = Field(default=True)
+    children_arrangements: str | None = Field(
+        default=None,
+        max_length=2000,
+        description="For matrimonial settlements only.",
+    )
+    statutory_offences_compounded: list[str] = Field(
+        default_factory=list,
+        max_length=20,
+        description="For criminal compromises — sections being compounded.",
+    )
+
+
+class ProbatePetitionFacts(_TemplateFactsBase):
+    """Probate petition under Sections 276-300 of the Indian
+    Succession Act, 1925.
+
+    Filed in the District Court (or HC original side, depending on
+    pecuniary jurisdiction). Probate is granted only of a will. For
+    intestate succession the lawyer files Letters of Administration
+    (s.218-220).
+    """
+
+    petitioner_name: str = Field(
+        min_length=2,
+        max_length=255,
+        description="The executor named in the will (or the LR if no executor).",
+    )
+    petitioner_relationship_to_deceased: str = Field(
+        min_length=2,
+        max_length=255,
+    )
+    deceased_name: str = Field(min_length=2, max_length=255)
+    deceased_date_of_death: str = Field(
+        min_length=10,
+        max_length=10,
+        description="ISO yyyy-mm-dd.",
+    )
+    deceased_last_residence: str = Field(min_length=10, max_length=500)
+    deceased_religion: Literal[
+        "hindu", "muslim", "christian", "parsi", "jew", "other",
+    ] = "hindu"
+    will_date: str = Field(
+        min_length=10,
+        max_length=10,
+        description="ISO yyyy-mm-dd of will execution.",
+    )
+    will_attesting_witnesses: list[str] = Field(
+        min_length=2,
+        max_length=10,
+        description=(
+            "Indian Succession Act s.63(c) requires at least two "
+            "attesting witnesses; both must be named here."
+        ),
+    )
+    estate_assets_summary: str = Field(
+        min_length=40,
+        max_length=8000,
+        description=(
+            "Movable + immovable assets with approximate value. Court "
+            "fee is computed on this — under-valuation is a common "
+            "rejection ground."
+        ),
+    )
+    estate_total_value_inr: float = Field(
+        gt=0,
+        description="Aggregate value drives pecuniary jurisdiction + court fee.",
+    )
+    legal_heirs: list[str] = Field(
+        min_length=1,
+        max_length=30,
+        description="Each LR who would inherit under intestacy — they get notice.",
+    )
+    will_contested: bool = Field(default=False)
+    court_name: str = Field(min_length=2, max_length=255)
 
 
 class DraftTemplateSchema(BaseModel):
@@ -975,6 +1330,379 @@ _REPLY_FIELDS: list[DraftingFieldSpec] = [
 ]
 
 
+_DV_QUASHING_FIELDS: list[DraftingFieldSpec] = [
+    DraftingFieldSpec(name="petitioner_name", label="Petitioner's full name"),
+    DraftingFieldSpec(
+        name="aggrieved_person_name",
+        label="Aggrieved person (PWDVA s.12 applicant)",
+    ),
+    DraftingFieldSpec(
+        name="pwdva_application_number",
+        label="PWDVA application number",
+        placeholder="MA No. 123/2025",
+    ),
+    DraftingFieldSpec(name="magistrate_court_name", label="Magistrate court"),
+    DraftingFieldSpec(name="high_court_name", label="High Court"),
+    DraftingFieldSpec(
+        name="impugned_reliefs_in_pwdva_app",
+        label="Reliefs sought in PWDVA application",
+        help_text=(
+            "One per line — protection / residence / monetary / "
+            "custody / compensation."
+        ),
+        required=False,
+        step_group="impugned",
+    ),
+    DraftingFieldSpec(
+        name="grounds_for_quashing",
+        label="Grounds for quashing",
+        kind="text",
+        step_group="grounds",
+    ),
+    DraftingFieldSpec(
+        name="domestic_relationship_disputed",
+        label="No domestic relationship (s.2(f) PWDVA)?",
+        kind="boolean",
+        required=False,
+        step_group="grounds",
+    ),
+    DraftingFieldSpec(
+        name="settlement_recorded",
+        label="Settlement recorded between parties?",
+        kind="boolean",
+        required=False,
+        step_group="grounds",
+    ),
+    DraftingFieldSpec(
+        name="aggrieved_consent",
+        label="Aggrieved person consents to quashing?",
+        kind="boolean",
+        required=False,
+        step_group="grounds",
+    ),
+    DraftingFieldSpec(
+        name="children_minor_count",
+        label="Number of minor children (welfare factor)",
+        kind="number",
+        required=False,
+        step_group="grounds",
+    ),
+]
+
+
+_ARBITRATION_S9_FIELDS: list[DraftingFieldSpec] = [
+    DraftingFieldSpec(name="applicant_name", label="Applicant"),
+    DraftingFieldSpec(name="respondent_name", label="Respondent(s)"),
+    DraftingFieldSpec(name="court_name", label="Court"),
+    DraftingFieldSpec(
+        name="arbitration_status",
+        label="Stage of arbitration",
+        kind="enum",
+        enum_options=[
+            "pre_arbitration", "during_arbitration", "post_award_pre_enforcement",
+        ],
+    ),
+    DraftingFieldSpec(
+        name="arbitration_agreement_summary",
+        label="Arbitration clause / agreement",
+        kind="text",
+        step_group="agreement",
+    ),
+    DraftingFieldSpec(
+        name="arbitral_tribunal_constituted",
+        label="Tribunal already constituted?",
+        kind="boolean",
+        required=False,
+        step_group="agreement",
+        help_text="Triggers s.9(3) — court will not entertain except in exceptional cases.",
+    ),
+    DraftingFieldSpec(
+        name="interim_reliefs_sought",
+        label="Interim reliefs sought",
+        help_text=(
+            "One per line — preservation / receiver / injunction / "
+            "amount in dispute / disclosure."
+        ),
+        step_group="relief",
+    ),
+    DraftingFieldSpec(
+        name="underlying_cause_of_action",
+        label="Underlying cause of action",
+        kind="text",
+        step_group="cause",
+    ),
+    DraftingFieldSpec(
+        name="urgency_basis",
+        label="Why interim relief cannot await tribunal",
+        kind="text",
+        step_group="urgency",
+    ),
+    DraftingFieldSpec(
+        name="undertaking_offered",
+        label="Cross-undertaking (optional)",
+        kind="text",
+        required=False,
+        step_group="urgency",
+    ),
+]
+
+
+_CAVEAT_FIELDS: list[DraftingFieldSpec] = [
+    DraftingFieldSpec(name="caveator_name", label="Caveator"),
+    DraftingFieldSpec(
+        name="caveator_address",
+        label="Caveator's address",
+        kind="text",
+    ),
+    DraftingFieldSpec(
+        name="apprehended_applicant_name",
+        label="Person apprehended to file against caveator",
+    ),
+    DraftingFieldSpec(
+        name="apprehended_proceeding_summary",
+        label="Apprehended proceeding (what relief is feared?)",
+        kind="text",
+        step_group="apprehension",
+    ),
+    DraftingFieldSpec(name="court_name", label="Court"),
+    DraftingFieldSpec(
+        name="related_matter_reference",
+        label="Related matter (case number / FIR / contract — optional)",
+        required=False,
+    ),
+    DraftingFieldSpec(
+        name="counsel_name",
+        label="Counsel for caveator (optional)",
+        required=False,
+    ),
+]
+
+
+_VAKALAT_FIELDS: list[DraftingFieldSpec] = [
+    DraftingFieldSpec(name="client_name", label="Client / litigant name"),
+    DraftingFieldSpec(name="client_address", label="Client's address", kind="text"),
+    DraftingFieldSpec(name="counsel_name", label="Counsel's name"),
+    DraftingFieldSpec(
+        name="counsel_enrollment_number",
+        label="Counsel's bar enrollment number",
+        placeholder="D/12345/2018",
+    ),
+    DraftingFieldSpec(name="counsel_address", label="Counsel's address", kind="text"),
+    DraftingFieldSpec(
+        name="case_title",
+        label="Case title (A v. B)",
+        placeholder="Sharma v. State of Delhi",
+    ),
+    DraftingFieldSpec(
+        name="case_number",
+        label="Case number (leave blank for fresh filings)",
+        required=False,
+    ),
+    DraftingFieldSpec(name="court_name", label="Court"),
+    DraftingFieldSpec(
+        name="party_role",
+        label="Client's role",
+        kind="enum",
+        enum_options=[
+            "plaintiff", "defendant", "petitioner", "respondent",
+            "appellant", "applicant", "objector",
+        ],
+    ),
+    DraftingFieldSpec(
+        name="accepts_appearance_for_appeals",
+        label="Vakalat extends to appeals + IAs?",
+        kind="boolean",
+        required=False,
+    ),
+]
+
+
+_AMENDMENT_FIELDS: list[DraftingFieldSpec] = [
+    DraftingFieldSpec(name="applicant_name", label="Applicant"),
+    DraftingFieldSpec(
+        name="applicant_role",
+        label="Applicant's role in suit",
+        kind="enum",
+        enum_options=["plaintiff", "defendant", "petitioner", "respondent"],
+    ),
+    DraftingFieldSpec(
+        name="suit_number",
+        label="Suit / petition number",
+        placeholder="CS 412/2025",
+    ),
+    DraftingFieldSpec(name="court_name", label="Court"),
+    DraftingFieldSpec(
+        name="pleading_to_amend",
+        label="Pleading to be amended",
+        kind="enum",
+        enum_options=[
+            "plaint", "written_statement", "petition", "counter_affidavit",
+        ],
+    ),
+    DraftingFieldSpec(
+        name="proposed_amendments",
+        label="Proposed amendments (verbatim text)",
+        kind="text",
+        step_group="amendments",
+        help_text="Number each addition / deletion. Use 'add para X-A' / 'delete para Y'.",
+    ),
+    DraftingFieldSpec(
+        name="reason_for_amendment",
+        label="Reason for amendment",
+        kind="text",
+        step_group="reason",
+    ),
+    DraftingFieldSpec(
+        name="trial_commenced",
+        label="Has trial commenced?",
+        kind="boolean",
+        required=False,
+        step_group="reason",
+        help_text="If true, the Order VI Rule 17 proviso (due diligence) applies.",
+    ),
+    DraftingFieldSpec(
+        name="due_diligence_explanation",
+        label="Due-diligence explanation (required if trial commenced)",
+        kind="text",
+        required=False,
+        step_group="reason",
+    ),
+    DraftingFieldSpec(
+        name="prejudice_to_opposite_party",
+        label="Why no prejudice to opposite party (optional)",
+        kind="text",
+        required=False,
+        step_group="reason",
+    ),
+]
+
+
+_COMPROMISE_FIELDS: list[DraftingFieldSpec] = [
+    DraftingFieldSpec(
+        name="matter_type",
+        label="Matter type",
+        kind="enum",
+        enum_options=["civil", "criminal", "matrimonial"],
+    ),
+    DraftingFieldSpec(name="party_a_name", label="Party A (e.g. plaintiff / complainant)"),
+    DraftingFieldSpec(name="party_b_name", label="Party B (e.g. defendant / accused)"),
+    DraftingFieldSpec(name="case_number", label="Case number"),
+    DraftingFieldSpec(name="court_name", label="Court"),
+    DraftingFieldSpec(
+        name="statutory_basis",
+        label="Statutory basis",
+        kind="enum",
+        enum_options=[
+            "cpc_order_23_rule_3",
+            "bnss_s_359_compoundable",
+            "bnss_s_528_non_compoundable",
+            "hma_s_13b_mutual_consent",
+        ],
+    ),
+    DraftingFieldSpec(
+        name="settlement_terms",
+        label="Settlement terms (verbatim)",
+        kind="text",
+        step_group="terms",
+    ),
+    DraftingFieldSpec(
+        name="consideration_paid",
+        label="Consideration paid (optional)",
+        required=False,
+        step_group="terms",
+    ),
+    DraftingFieldSpec(
+        name="each_party_to_bear_own_costs",
+        label="Each party bears own costs?",
+        kind="boolean",
+        required=False,
+        step_group="terms",
+    ),
+    DraftingFieldSpec(
+        name="children_arrangements",
+        label="Children arrangements (matrimonial only — optional)",
+        kind="text",
+        required=False,
+        step_group="terms",
+    ),
+    DraftingFieldSpec(
+        name="statutory_offences_compounded",
+        label="Offences being compounded (criminal only — optional)",
+        help_text="One per line.",
+        required=False,
+        step_group="terms",
+    ),
+]
+
+
+_PROBATE_FIELDS: list[DraftingFieldSpec] = [
+    DraftingFieldSpec(name="petitioner_name", label="Petitioner (executor / LR)"),
+    DraftingFieldSpec(
+        name="petitioner_relationship_to_deceased",
+        label="Petitioner's relationship to deceased",
+    ),
+    DraftingFieldSpec(name="deceased_name", label="Deceased's name"),
+    DraftingFieldSpec(
+        name="deceased_date_of_death",
+        label="Date of death",
+        kind="date",
+    ),
+    DraftingFieldSpec(
+        name="deceased_last_residence",
+        label="Deceased's last residence",
+        kind="text",
+    ),
+    DraftingFieldSpec(
+        name="deceased_religion",
+        label="Religion of deceased (governs personal law)",
+        kind="enum",
+        enum_options=["hindu", "muslim", "christian", "parsi", "jew", "other"],
+    ),
+    DraftingFieldSpec(
+        name="will_date",
+        label="Date of will",
+        kind="date",
+        step_group="will",
+    ),
+    DraftingFieldSpec(
+        name="will_attesting_witnesses",
+        label="Attesting witnesses (s.63(c) requires ≥2)",
+        help_text="One per line — name + father's name + address.",
+        step_group="will",
+    ),
+    DraftingFieldSpec(
+        name="estate_assets_summary",
+        label="Estate assets (movable + immovable)",
+        kind="text",
+        step_group="estate",
+    ),
+    DraftingFieldSpec(
+        name="estate_total_value_inr",
+        label="Aggregate estate value (INR)",
+        kind="number",
+        step_group="estate",
+        help_text=(
+            "Drives pecuniary jurisdiction + court fee. "
+            "Under-valuation is a rejection ground."
+        ),
+    ),
+    DraftingFieldSpec(
+        name="legal_heirs",
+        label="Legal heirs (for notice under s.283)",
+        help_text="One per line — each heir entitled to intestate share.",
+        step_group="heirs",
+    ),
+    DraftingFieldSpec(
+        name="will_contested",
+        label="Will contested by any heir?",
+        kind="boolean",
+        required=False,
+        step_group="heirs",
+    ),
+    DraftingFieldSpec(name="court_name", label="Court (District / HC original side)"),
+]
+
+
 # ---------------------------------------------------------------
 # Registry — the template route reads this; nothing else should.
 # ---------------------------------------------------------------
@@ -1152,6 +1880,121 @@ _register(
     fields=_REPLY_FIELDS,
     facts_model=ReplyCounterAffidavitFacts,
 )
+_register(
+    DraftTemplateType.DV_QUASHING_PETITION,
+    display_name="Quashing of PWDVA Proceedings",
+    summary=(
+        "Petition under BNSS s.528 / CrPC s.482 to quash PWDVA s.12 "
+        "proceedings before a magistrate. Distinct from a regular "
+        "criminal-FIR quashing because the impugned proceedings are "
+        "quasi-civil in flavour."
+    ),
+    statutory_basis=[
+        "BNSS s.528 (HC inherent powers)",
+        "CrPC s.482 (historical)",
+        "PWDVA s.12 (the impugned application)",
+        "PWDVA s.2(f) (domestic relationship)",
+    ],
+    fields=_DV_QUASHING_FIELDS,
+    facts_model=DvQuashingPetitionFacts,
+)
+_register(
+    DraftTemplateType.ARBITRATION_SECTION_9,
+    display_name="Section 9 Arbitration Application (Interim Measures)",
+    summary=(
+        "Application under Section 9 of the Arbitration & Conciliation "
+        "Act, 1996 for interim measures of protection — pre-arbitration, "
+        "during arbitration (subject to s.9(3)), or post-award before "
+        "enforcement under s.36."
+    ),
+    statutory_basis=[
+        "Arbitration & Conciliation Act 1996 s.9",
+        "Arbitration & Conciliation Act 1996 s.9(3)",
+        "Commercial Courts Act 2015",
+    ],
+    fields=_ARBITRATION_S9_FIELDS,
+    facts_model=ArbitrationSection9Facts,
+)
+_register(
+    DraftTemplateType.CAVEAT_PETITION,
+    display_name="Caveat Petition",
+    summary=(
+        "Caveat under CPC Section 148A. Lapses after 90 days unless "
+        "renewed. The court must hear the caveator before passing any "
+        "ex parte order on the apprehended application."
+    ),
+    statutory_basis=["CPC s.148A"],
+    fields=_CAVEAT_FIELDS,
+    facts_model=CaveatPetitionFacts,
+)
+_register(
+    DraftTemplateType.VAKALATNAMA,
+    display_name="Vakalatnama",
+    summary=(
+        "Power-of-attorney executed by the litigant authorising "
+        "counsel to appear and conduct the case. The drafting prompt "
+        "selects the right court-specific format (Delhi HC, Bombay HC, "
+        "SC) when known."
+    ),
+    statutory_basis=[
+        "Advocates Act 1961 s.30",
+        "Bar Council of India Rules",
+        "Court-specific civil rules (Delhi HC / Bombay HC / SC)",
+    ],
+    fields=_VAKALAT_FIELDS,
+    facts_model=VakalatnamaFacts,
+)
+_register(
+    DraftTemplateType.AMENDMENT_OF_PLEADINGS,
+    display_name="Application for Amendment of Pleadings",
+    summary=(
+        "Application under CPC Order VI Rule 17 to amend a plaint or "
+        "written statement. Post-2002 amendment, applications after "
+        "trial commences require a due-diligence showing under the "
+        "proviso."
+    ),
+    statutory_basis=[
+        "CPC Order VI Rule 17",
+        "CPC Order VI Rule 17 proviso (post-2002 due-diligence test)",
+    ],
+    fields=_AMENDMENT_FIELDS,
+    facts_model=AmendmentOfPleadingsFacts,
+)
+_register(
+    DraftTemplateType.COMPROMISE_PETITION,
+    display_name="Compromise Petition",
+    summary=(
+        "Petition recording a settlement between parties. Civil — "
+        "CPC Order XXIII Rule 3. Criminal — BNSS s.359 (compoundable) "
+        "or BNSS s.528 (Gian Singh framework for non-compoundable)."
+    ),
+    statutory_basis=[
+        "CPC Order XXIII Rule 3",
+        "BNSS s.359 (CrPC s.320 historical)",
+        "BNSS s.528 (CrPC s.482 historical)",
+        "HMA s.13B (matrimonial mutual consent)",
+    ],
+    fields=_COMPROMISE_FIELDS,
+    facts_model=CompromisePetitionFacts,
+)
+_register(
+    DraftTemplateType.PROBATE_PETITION,
+    display_name="Probate Petition",
+    summary=(
+        "Petition for grant of probate of a will under the Indian "
+        "Succession Act, 1925. Filed in the District Court or HC "
+        "original side per pecuniary jurisdiction. Notice issues to "
+        "all legal heirs under s.283."
+    ),
+    statutory_basis=[
+        "Indian Succession Act 1925 s.276 (form of petition)",
+        "Indian Succession Act 1925 s.281 (verification)",
+        "Indian Succession Act 1925 s.283 (citation to heirs)",
+        "Indian Succession Act 1925 s.63(c) (attestation of will)",
+    ],
+    fields=_PROBATE_FIELDS,
+    facts_model=ProbatePetitionFacts,
+)
 
 
 def get_template_schema(template_type: DraftTemplateType) -> DraftTemplateSchema:
@@ -1174,20 +2017,27 @@ def list_template_schemas() -> list[DraftTemplateSchema]:
 
 __all__ = [
     "AffidavitFacts",
+    "AmendmentOfPleadingsFacts",
     "AnticipatoryBailFacts",
     "AppealMemorandumFacts",
+    "ArbitrationSection9Facts",
     "BailFacts",
+    "CaveatPetitionFacts",
     "ChequeBounceNoticeFacts",
     "CivilSuitFacts",
+    "CompromisePetitionFacts",
     "CriminalComplaintFacts",
     "DivorcePetitionFacts",
     "DraftTemplateSchema",
     "DraftTemplateType",
     "DraftTemplateTypeLiteral",
     "DraftingFieldSpec",
+    "DvQuashingPetitionFacts",
+    "ProbatePetitionFacts",
     "PropertyDisputeNoticeFacts",
     "QuashingPetitionFacts",
     "ReplyCounterAffidavitFacts",
+    "VakalatnamaFacts",
     "WritPetitionFacts",
     "WrittenStatementFacts",
     "get_template_facts_model",

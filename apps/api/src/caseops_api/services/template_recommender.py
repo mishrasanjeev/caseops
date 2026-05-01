@@ -55,6 +55,8 @@ class TemplateRecommendation:
 # specific terms first, e.g. "matrimonial" before "civil").
 _PRACTICE_AREA_BUCKETS: list[tuple[str, str]] = [
     # (substring, canonical bucket)
+    ("domestic violence", "matrimonial"),
+    ("pwdva", "matrimonial"),
     ("matrimonial", "matrimonial"),
     ("divorce", "matrimonial"),
     ("family", "matrimonial"),
@@ -71,6 +73,9 @@ _PRACTICE_AREA_BUCKETS: list[tuple[str, str]] = [
     ("contract", "commercial"),
     ("criminal", "criminal"),
     ("civil", "civil"),
+    ("succession", "civil"),
+    ("probate", "civil"),
+    ("estate", "civil"),
     ("property", "property"),
     ("real estate", "property"),
     ("land", "property"),
@@ -95,6 +100,12 @@ _MATRIX: dict[
          "Letters Patent + criminal appeals from sessions courts."),
         (DraftTemplateType.REPLY_COUNTER_AFFIDAVIT, "secondary",
          "Reply / counter-affidavit when responding to a State or co-accused petition."),
+        (DraftTemplateType.COMPROMISE_PETITION, "secondary",
+         "BNSS s.359 compounding + Gian Singh non-compoundable settlements."),
+        (DraftTemplateType.CAVEAT_PETITION, "secondary",
+         "Anticipating an ex parte criminal application by the State."),
+        (DraftTemplateType.VAKALATNAMA, "secondary",
+         "Required with every appearance."),
     ],
     ("high_court", "civil"): [
         (DraftTemplateType.APPEAL_MEMORANDUM, "primary",
@@ -107,6 +118,14 @@ _MATRIX: dict[
          "Interlocutory + supporting affidavits."),
         (DraftTemplateType.REPLY_COUNTER_AFFIDAVIT, "secondary",
          "Reply / counter-affidavit on interlocutory applications."),
+        (DraftTemplateType.AMENDMENT_OF_PLEADINGS, "secondary",
+         "Order VI Rule 17 amendment of plaint or written statement."),
+        (DraftTemplateType.COMPROMISE_PETITION, "secondary",
+         "Order XXIII Rule 3 compromise decree."),
+        (DraftTemplateType.CAVEAT_PETITION, "secondary",
+         "CPC s.148A caveat against ex parte adverse orders."),
+        (DraftTemplateType.VAKALATNAMA, "secondary",
+         "Required with every appearance."),
     ],
     ("high_court", "commercial"): [
         (DraftTemplateType.CIVIL_SUIT, "primary",
@@ -119,6 +138,12 @@ _MATRIX: dict[
          "Order XXXIX-supporting + balance-of-convenience affidavits."),
         (DraftTemplateType.REPLY_COUNTER_AFFIDAVIT, "secondary",
          "Replies to Section 9 / 11 / 34 Arbitration Act applications."),
+        (DraftTemplateType.ARBITRATION_SECTION_9, "secondary",
+         "Section 9 interim measures pre / during / post-award."),
+        (DraftTemplateType.AMENDMENT_OF_PLEADINGS, "secondary",
+         "Order VI Rule 17 amendments are common in commercial suits."),
+        (DraftTemplateType.CAVEAT_PETITION, "secondary",
+         "Caveat against ex parte stay / injunction by counter-party."),
     ],
     ("high_court", "matrimonial"): [
         (DraftTemplateType.DIVORCE_PETITION, "primary",
@@ -130,6 +155,10 @@ _MATRIX: dict[
          "First appeals against family-court orders."),
         (DraftTemplateType.AFFIDAVIT, "secondary",
          "Custody / maintenance interim affidavits."),
+        (DraftTemplateType.DV_QUASHING_PETITION, "secondary",
+         "Quashing of PWDVA s.12 proceedings — HC inherent-powers."),
+        (DraftTemplateType.COMPROMISE_PETITION, "secondary",
+         "HMA s.13B mutual-consent + matrimonial settlement deeds."),
     ],
     ("high_court", "writ"): [
         (DraftTemplateType.WRIT_PETITION, "primary",
@@ -210,6 +239,10 @@ _MATRIX: dict[
          "Bail-supporting affidavits."),
         (DraftTemplateType.REPLY_COUNTER_AFFIDAVIT, "secondary",
          "Replies to bail-cancellation / discharge applications."),
+        (DraftTemplateType.COMPROMISE_PETITION, "secondary",
+         "BNSS s.359 compounding for compoundable offences."),
+        (DraftTemplateType.VAKALATNAMA, "secondary",
+         "Required with every appearance."),
     ],
     ("lower_court", "civil"): [
         (DraftTemplateType.CIVIL_SUIT, "primary",
@@ -220,6 +253,16 @@ _MATRIX: dict[
          "Interlocutory + supporting affidavits."),
         (DraftTemplateType.REPLY_COUNTER_AFFIDAVIT, "secondary",
          "Replies to interim / interlocutory applications."),
+        (DraftTemplateType.AMENDMENT_OF_PLEADINGS, "secondary",
+         "Order VI Rule 17 amendments are routine at trial stage."),
+        (DraftTemplateType.COMPROMISE_PETITION, "secondary",
+         "Order XXIII Rule 3 compromise decree."),
+        (DraftTemplateType.CAVEAT_PETITION, "secondary",
+         "Caveat against ex parte injunctions."),
+        (DraftTemplateType.VAKALATNAMA, "secondary",
+         "Required with every appearance."),
+        (DraftTemplateType.PROBATE_PETITION, "secondary",
+         "District Court probate where estate value is within pecuniary limit."),
     ],
     ("lower_court", "matrimonial"): [
         (DraftTemplateType.DIVORCE_PETITION, "primary",
@@ -228,6 +271,8 @@ _MATRIX: dict[
          "Written statement when responding to the petition."),
         (DraftTemplateType.AFFIDAVIT, "secondary",
          "Custody + maintenance interim affidavits."),
+        (DraftTemplateType.COMPROMISE_PETITION, "secondary",
+         "HMA s.13B mutual-consent decree on settled grounds."),
     ],
     ("lower_court", "banking"): [
         (DraftTemplateType.CHEQUE_BOUNCE_NOTICE, "primary",
@@ -256,10 +301,14 @@ _MATRIX: dict[
     ],
     # ---- Arbitration ----
     ("arbitration", "commercial"): [
+        (DraftTemplateType.ARBITRATION_SECTION_9, "primary",
+         "s.9 interim measures pre / during / post-award."),
         (DraftTemplateType.AFFIDAVIT, "primary",
          "Witness affidavits-in-chief are the dominant arbitral filing."),
         (DraftTemplateType.APPEAL_MEMORANDUM, "secondary",
          "s.34 challenges to arbitral awards (HC forum, but flagged here)."),
+        (DraftTemplateType.REPLY_COUNTER_AFFIDAVIT, "secondary",
+         "Replies to s.9 / 11 / 34 applications."),
     ],
     # ---- Advisory ----
     ("advisory", "commercial"): [
