@@ -158,6 +158,13 @@ class Settings(BaseSettings):
     # silently disabled (the existing 422 message still fires).
     openai_api_key: str | None = Field(default=None)
     openai_fallback_model: str = Field(default="gpt-5.1")
+    # 2026-05-01: $/day cap on Layer 2 corpus metadata extraction
+    # (services/corpus_structured.py). Set to 0 or negative to fall
+    # back to the hardcoded $20 default. The cap is enforced
+    # pre-flight: each per-doc call sums today's metadata_extract
+    # spend from model_runs and refuses to proceed when at/above the
+    # cap. Per `feedback_corpus_spend_audit` 2026-04-23.
+    layer2_daily_cap_usd: float = Field(default=20.0)
     llm_max_output_tokens: int = Field(default=2048, ge=256)
     # Drafting warrants a bigger ceiling — full bail applications /
     # review memos can hit 8-12k output tokens. Recommendations are

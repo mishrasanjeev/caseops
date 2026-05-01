@@ -34,12 +34,12 @@ from caseops_api.core.settings import get_settings
 from caseops_api.db.models import AuthorityDocument, AuthorityDocumentChunk
 from caseops_api.services.llm import (
     PURPOSE_METADATA_EXTRACT,
-    AnthropicProvider,
     LLMCallContext,
     LLMMessage,
     LLMProvider,
     LLMProviderError,
     LLMResponseFormatError,
+    OpenAIProvider,
     build_provider,
     generate_structured,
 )
@@ -106,29 +106,58 @@ HAIKU_VERSION = 1
 SONNET_VERSION = 2
 STRUCTURED_VERSION = HAIKU_VERSION  # legacy alias; prefer tier-specific constants
 
+# 2026-05-01: Layer 2 ingest cut over from Anthropic (Haiku/Sonnet) to
+# OpenAI gpt-5.1 — single model, no tiered routing. Tier names retained
+# for backward-compat with callers that still pass tier="haiku" /
+# "sonnet"; both resolve to gpt-5.1. Drives:
+#   - User directive "no more Anthropic key" (workstation .env locked
+#     to mock since 2026-04-26 burn).
+#   - Cost visibility via ModelRun + a $20/day cap enforced in
+#     ``ensure_daily_cap_not_exceeded`` (env: CASEOPS_LAYER2_DAILY_CAP_USD).
+#
+# We keep two distinct version stamps so docs annotated under the prior
+# Haiku/Sonnet runs aren't silently downgraded by the GPT-5.1 pass: a
+# doc with structured_version=SONNET_VERSION (=2) still wins over a
+# fresh GPT-5.1 (HAIKU_VERSION=1) extraction. Operators who want
+# GPT-5.1 to override an old Sonnet annotation can bump structured_version
+# manually via SQL — the safe-by-default is "trust the higher number".
+_GPT_5_1 = "gpt-5.1"
 _TIER_MODEL: dict[str, str] = {
-    "haiku": "claude-haiku-4-5-20251001",
-    "sonnet": "claude-sonnet-4-6",
+    "haiku": _GPT_5_1,
+    "sonnet": _GPT_5_1,
 }
 _TIER_VERSION: dict[str, int] = {
     "haiku": HAIKU_VERSION,
     "sonnet": SONNET_VERSION,
 }
 
-# Anthropic pricing as of 2026-04 (USD per 1M tokens). Cache-hit reads
-# are 10% of the input rate but we bill pessimistically since the
-# corpus extraction sees no repeated system prompts across docs.
+# OpenAI pricing as of 2026-05 (USD per 1M tokens). Conservative rates
+# so the daily cap fires earlier rather than later — exact spend is
+# tracked via ModelRun.cost_usd on every call.
 _PRICING_USD_PER_MTOK: dict[str, tuple[float, float]] = {
+    _GPT_5_1: (2.00, 10.00),
+    # Legacy Anthropic entries retained so historical ModelRun rows
+    # still resolve correctly when summing today's spend.
     "claude-haiku-4-5-20251001": (1.00, 5.00),
     "claude-sonnet-4-6": (3.00, 15.00),
     "claude-opus-4-7": (15.00, 75.00),
 }
 
+# Default daily spend cap for Layer 2 metadata extraction. Per
+# user 2026-05-01 directive: $20/day, env-overridable.
+DEFAULT_LAYER2_DAILY_CAP_USD = 20.0
+
 
 def build_tier_provider(tier: str) -> LLMProvider:
     """Explicit provider for a named tier. Bypasses the per-purpose
     model routing in ``build_provider`` so the triage router can pick
-    Sonnet on one doc and Haiku on the next within a single run."""
+    its tier within a single run.
+
+    2026-05-01: both tiers map to gpt-5.1. The function still accepts
+    "haiku" / "sonnet" labels so the triage router doesn't need to
+    change. Mock/noop providers fall back to the per-purpose mock so
+    tests keep working without an OpenAI key.
+    """
     settings = get_settings()
     model = _TIER_MODEL.get(tier)
     if not model:
@@ -136,36 +165,95 @@ def build_tier_provider(tier: str) -> LLMProvider:
     provider_name = (settings.llm_provider or "").lower()
     if provider_name in {"mock", "noop", "off"}:
         return build_provider(purpose=PURPOSE_METADATA_EXTRACT)
-    if provider_name != "anthropic":
+    api_key = settings.llm_api_key or getattr(settings, "openai_api_key", None)
+    if not api_key:
         raise LLMProviderError(
-            "Tiered structured extraction requires CASEOPS_LLM_PROVIDER=anthropic; "
-            f"got {provider_name!r}"
+            "Layer 2 ingest requires an OpenAI key. Set "
+            "CASEOPS_LLM_API_KEY (with CASEOPS_LLM_PROVIDER=openai) or "
+            "CASEOPS_OPENAI_API_KEY."
         )
-    if not settings.llm_api_key:
-        raise LLMProviderError("CASEOPS_LLM_API_KEY must be set for tiered extraction")
-    # Long bumped from the default 60s. Sonnet on a 60K-char SC
-    # judgment frequently exceeds 60s end-to-end, and three SDK retries
-    # at 60s each cost 3 min wall time per failure. 180s lets the long
-    # docs land first try; max_retries stays at 2 so transient blips
-    # still recover.
-    return AnthropicProvider(
+    # 180s timeout matches the prior Sonnet path — gpt-5.1 with
+    # reasoning_effort=low on a 60K-char SC judgment can sit at 60-90s,
+    # and a single retry at 180s still fits inside the worker's
+    # per-doc budget.
+    return OpenAIProvider(
         model=model,
-        api_key=settings.llm_api_key,
-        prompt_cache=bool(getattr(settings, "llm_prompt_cache_enabled", True)),
+        api_key=api_key,
         timeout_seconds=180.0,
     )
 
 
 def completion_cost_usd(completion_provider: str, completion_model: str,
                         prompt_tokens: int, completion_tokens: int) -> float:
+    """USD cost for one Layer 2 call. Used by the per-doc ModelRun
+    row + the daily-cap guard. Returns 0 for unknown
+    (provider, model) so an unrecognised entry never blocks the
+    pipeline — but it WILL leak the daily cap, so add new (provider,
+    model) pairs to ``_PRICING_USD_PER_MTOK`` when introducing one.
+    """
     rates = _PRICING_USD_PER_MTOK.get(completion_model)
-    if not rates or completion_provider not in {"anthropic"}:
+    if not rates or completion_provider not in {"anthropic", "openai"}:
         return 0.0
     input_rate, output_rate = rates
     return (
         prompt_tokens * input_rate / 1_000_000
         + completion_tokens * output_rate / 1_000_000
     )
+
+
+def _layer2_daily_cap_usd() -> float:
+    """Resolve the $/day cap. CASEOPS_LAYER2_DAILY_CAP_USD overrides
+    the $20 default."""
+    settings = get_settings()
+    cap = getattr(settings, "layer2_daily_cap_usd", None)
+    if cap is None:
+        return DEFAULT_LAYER2_DAILY_CAP_USD
+    try:
+        cap_f = float(cap)
+    except (TypeError, ValueError):
+        return DEFAULT_LAYER2_DAILY_CAP_USD
+    return cap_f if cap_f > 0 else DEFAULT_LAYER2_DAILY_CAP_USD
+
+
+def ensure_daily_cap_not_exceeded(session) -> None:  # type: ignore[no-untyped-def]
+    """Pre-flight check before every Layer 2 LLM call.
+
+    Sums today's spend by reading every ``model_runs`` row with
+    ``purpose='metadata_extract'`` from the current date and
+    re-applying the pricing table on its (provider, model,
+    prompt_tokens, completion_tokens). ``ModelRun`` does not carry a
+    ``cost_usd`` column today; computing inline avoids a schema
+    change and stays consistent with how callers compute the per-row
+    cost via ``completion_cost_usd``.
+
+    Raises ``LLMProviderError`` when the running total has reached or
+    crossed the configured daily cap.
+    """
+    from sqlalchemy import text
+    cap = _layer2_daily_cap_usd()
+    rows = session.execute(
+        text(
+            "SELECT provider, model, prompt_tokens, completion_tokens "
+            "FROM model_runs "
+            "WHERE purpose = 'metadata_extract' "
+            # DATE(created_at) is portable across PG + SQLite.
+            "  AND DATE(created_at) = DATE(CURRENT_TIMESTAMP)"
+        ),
+    ).fetchall()
+    spent = 0.0
+    for provider, model, prompt_tokens, completion_tokens in rows:
+        spent += completion_cost_usd(
+            provider, model,
+            int(prompt_tokens or 0),
+            int(completion_tokens or 0),
+        )
+    if spent >= cap:
+        raise LLMProviderError(
+            f"Layer 2 daily cap reached: ${spent:.2f} spent today "
+            f"(cap ${cap:.2f}). Set CASEOPS_LAYER2_DAILY_CAP_USD "
+            f"to raise the limit; default is "
+            f"${DEFAULT_LAYER2_DAILY_CAP_USD:.0f}."
+        )
 
 
 ChunkRole = Literal[
@@ -421,6 +509,12 @@ def extract_and_persist_structured(
             llm = build_provider(purpose=PURPOSE_METADATA_EXTRACT)
     else:
         llm = provider
+
+    # 2026-05-01: enforce the $20/day Layer 2 cap before incurring more
+    # spend on this doc. Skipped for mock providers (test path) so unit
+    # tests don't need a model_runs table populated.
+    if getattr(llm, "name", "") not in {"caseops-mock", "mock"}:
+        ensure_daily_cap_not_exceeded(session)
     messages = _build_prompt(document=document, chunks=chunks)
 
     try:
