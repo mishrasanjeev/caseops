@@ -86,6 +86,7 @@ from caseops_api.services.drafting import (
     render_version_docx,
     transition_draft,
 )
+from caseops_api.services.filing_bundle import render_filing_bundle
 from caseops_api.services.hearing_packs import (
     generate_hearing_pack,
     get_latest_hearing_pack,
@@ -1589,6 +1590,61 @@ async def get_current_company_matter_draft_pdf(
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',
             "X-CaseOps-Court-Profile": profile_key,
+        },
+    )
+
+
+@router.get(
+    "/{matter_id}/drafts/{draft_id}/filing-bundle.zip",
+    summary=(
+        "Download a filing-grade ZIP bundle for the draft: index + "
+        "memorandum PDF + vakalat (auto-resolved) + e-stamp placeholder "
+        "+ matter exhibits"
+    ),
+)
+async def get_current_company_matter_draft_filing_bundle(
+    matter_id: str,
+    draft_id: str,
+    context: CurrentContext,
+    session: DbSession,
+    version_id: str | None = None,
+    court_profile: str | None = None,
+    vakalat_draft_id: str | None = None,
+    attachment_ids: str | None = None,
+) -> Response:
+    """PG-005 Sprint 4 (2026-05-01) — court-filing bundle ZIP.
+
+    Auto-resolves the court profile from ``Matter.court_name`` (override
+    via ``court_profile``); auto-picks the newest VAKALATNAMA-typed
+    draft on the same matter (override via ``vakalat_draft_id``); and
+    includes every attachment on the matter (narrow via
+    ``attachment_ids`` — comma-separated).
+    """
+    selected_attachment_ids: list[str] | None = None
+    if attachment_ids:
+        selected_attachment_ids = [
+            a.strip() for a in attachment_ids.split(",") if a.strip()
+        ] or None
+
+    result = render_filing_bundle(
+        session,
+        context=context,
+        matter_id=matter_id,
+        draft_id=draft_id,
+        version_id=version_id,
+        court_profile_key=court_profile,
+        vakalat_draft_id=vakalat_draft_id,
+        attachment_ids=selected_attachment_ids,
+    )
+
+    return Response(
+        content=result.zip_bytes,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{result.filename}"',
+            "X-CaseOps-Court-Profile": result.profile_key,
+            "X-CaseOps-Vakalat-Source": result.vakalat_source,
+            "X-CaseOps-Exhibit-Count": str(result.exhibit_count),
         },
     )
 

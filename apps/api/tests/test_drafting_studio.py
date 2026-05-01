@@ -443,6 +443,184 @@ def test_court_profiles_route_requires_auth(client: TestClient) -> None:
     assert resp.status_code in {401, 403}
 
 
+# ---------------------------------------------------------------
+# PG-005 Sprint 4 (2026-05-01) — filing bundle ZIP.
+# ---------------------------------------------------------------
+
+
+def _read_zip(content: bytes):
+    import io
+    import zipfile
+
+    return zipfile.ZipFile(io.BytesIO(content), mode="r")
+
+
+def test_filing_bundle_default_layout(client: TestClient) -> None:
+    """Smoke: bundle endpoint returns a valid ZIP with the expected
+    layout (00-index / 01-memorandum / 02-vakalat / 03-estamp), the
+    right Content-Type + filename + telemetry headers, and a
+    placeholder vakalat when no vakalat draft exists."""
+    token = str(bootstrap_company(client)["access_token"])
+    matter_id = _create_matter(client, token, "DS-BUNDLE-1")
+    _seed_authority(neutral_citation="2024 SCC OnLine SC 2001")
+    draft = _create_draft(client, token, matter_id)
+    _generate(client, token, matter_id, draft["id"])
+
+    resp = client.get(
+        f"/api/matters/{matter_id}/drafts/{draft['id']}/filing-bundle.zip",
+        headers=auth_headers(token),
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.headers["content-type"] == "application/zip"
+    disp = resp.headers["content-disposition"]
+    assert "attachment" in disp
+    assert "bundle.zip" in disp
+    # Court profile auto-resolved from matter's "Delhi High Court".
+    assert resp.headers.get("x-caseops-court-profile") == "delhi_hc"
+    # No vakalat draft on the matter → placeholder.
+    assert resp.headers.get("x-caseops-vakalat-source") == "placeholder"
+    # No attachments seeded → exhibit count is 0.
+    assert resp.headers.get("x-caseops-exhibit-count") == "0"
+
+    with _read_zip(resp.content) as zf:
+        names = sorted(zf.namelist())
+        assert "00-index.pdf" in names
+        assert any(n.startswith("01-memorandum-") and n.endswith(".pdf") for n in names)
+        assert "02-vakalatnama.pdf" in names
+        assert "03-estamp-placeholder.pdf" in names
+        # Each PDF should be a real PDF (magic bytes).
+        for n in ("00-index.pdf", "02-vakalatnama.pdf", "03-estamp-placeholder.pdf"):
+            assert zf.read(n)[:5] == b"%PDF-", f"{n} is not a real PDF"
+        # Memorandum filename embeds revision; magic-bytes check.
+        memo_name = next(n for n in names if n.startswith("01-memorandum-"))
+        assert "-r1-" in memo_name or memo_name.endswith("r1.pdf") or "-r1." in memo_name
+        assert zf.read(memo_name)[:5] == b"%PDF-"
+
+
+def test_filing_bundle_explicit_court_profile_override(
+    client: TestClient,
+) -> None:
+    """Caller passes ?court_profile=supreme_court — bundle uses SC
+    layout, response headers reflect the override."""
+    token = str(bootstrap_company(client)["access_token"])
+    matter_id = _create_matter(client, token, "DS-BUNDLE-SC")
+    _seed_authority(neutral_citation="2024 SCC OnLine SC 2002")
+    draft = _create_draft(client, token, matter_id)
+    _generate(client, token, matter_id, draft["id"])
+
+    resp = client.get(
+        f"/api/matters/{matter_id}/drafts/{draft['id']}/filing-bundle.zip"
+        "?court_profile=supreme_court",
+        headers=auth_headers(token),
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.headers.get("x-caseops-court-profile") == "supreme_court"
+    assert "supreme_court" in resp.headers["content-disposition"]
+
+
+def test_filing_bundle_uses_existing_vakalat_draft(client: TestClient) -> None:
+    """When the matter has a VAKALATNAMA draft, the bundle uses it
+    instead of the placeholder. Vakalat-source header echoes the
+    draft id."""
+    token = str(bootstrap_company(client)["access_token"])
+    matter_id = _create_matter(client, token, "DS-BUNDLE-VK")
+    _seed_authority(neutral_citation="2024 SCC OnLine SC 2003")
+    draft = _create_draft(client, token, matter_id)
+    _generate(client, token, matter_id, draft["id"])
+
+    # Create a VAKALATNAMA-typed draft on the same matter.
+    vak_resp = client.post(
+        f"/api/matters/{matter_id}/drafts",
+        headers=auth_headers(token),
+        json={
+            "title": "Vakalatnama for Mr Mehta",
+            "draft_type": "other",
+            "template_type": "vakalatnama",
+        },
+    )
+    assert vak_resp.status_code == 200, vak_resp.text
+    vak_id = vak_resp.json()["id"]
+    _generate(client, token, matter_id, vak_id)
+
+    resp = client.get(
+        f"/api/matters/{matter_id}/drafts/{draft['id']}/filing-bundle.zip",
+        headers=auth_headers(token),
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.headers.get("x-caseops-vakalat-source") == f"draft:{vak_id}"
+
+
+def test_filing_bundle_explicit_vakalat_draft_id_must_be_vakalatnama(
+    client: TestClient,
+) -> None:
+    """Passing a draft_id whose template_type is NOT vakalatnama
+    returns 422 — the route refuses to silently swap a non-vakalat
+    pleading into the vakalat slot."""
+    token = str(bootstrap_company(client)["access_token"])
+    matter_id = _create_matter(client, token, "DS-BUNDLE-VK-422")
+    _seed_authority(neutral_citation="2024 SCC OnLine SC 2004")
+    draft = _create_draft(client, token, matter_id)
+    _generate(client, token, matter_id, draft["id"])
+
+    # Use the memorandum draft id itself as the vakalat — should 422.
+    resp = client.get(
+        f"/api/matters/{matter_id}/drafts/{draft['id']}/filing-bundle.zip"
+        f"?vakalat_draft_id={draft['id']}",
+        headers=auth_headers(token),
+    )
+    assert resp.status_code == 422, resp.text
+    assert "VAKALATNAMA" in resp.json()["detail"]
+
+
+def test_filing_bundle_blocked_without_verified_citations(
+    client: TestClient,
+) -> None:
+    """Citation gate matches the PDF / DOCX export paths — zero-
+    citation drafts are blocked unless the partner approves."""
+    token = str(bootstrap_company(client)["access_token"])
+    matter_id = _create_matter(client, token, "DS-BUNDLE-GATED")
+    # No authorities seeded.
+    draft = _create_draft(client, token, matter_id)
+    _generate(client, token, matter_id, draft["id"])
+
+    resp = client.get(
+        f"/api/matters/{matter_id}/drafts/{draft['id']}/filing-bundle.zip",
+        headers=auth_headers(token),
+    )
+    assert resp.status_code == 422, resp.text
+    assert "verified citation" in resp.json()["detail"].lower()
+
+
+def test_filing_bundle_404_on_unknown_draft(client: TestClient) -> None:
+    token = str(bootstrap_company(client)["access_token"])
+    matter_id = _create_matter(client, token, "DS-BUNDLE-NF")
+    resp = client.get(
+        f"/api/matters/{matter_id}/drafts/00000000-0000-0000-0000-000000000000/filing-bundle.zip",
+        headers=auth_headers(token),
+    )
+    assert resp.status_code == 404
+
+
+def test_filing_bundle_unknown_attachment_id_returns_422(
+    client: TestClient,
+) -> None:
+    """Passing an attachment_id not on the matter → 422 with the
+    bad ids surfaced in the detail."""
+    token = str(bootstrap_company(client)["access_token"])
+    matter_id = _create_matter(client, token, "DS-BUNDLE-ATT-422")
+    _seed_authority(neutral_citation="2024 SCC OnLine SC 2005")
+    draft = _create_draft(client, token, matter_id)
+    _generate(client, token, matter_id, draft["id"])
+
+    resp = client.get(
+        f"/api/matters/{matter_id}/drafts/{draft['id']}/filing-bundle.zip"
+        "?attachment_ids=00000000-0000-0000-0000-000000000000",
+        headers=auth_headers(token),
+    )
+    assert resp.status_code == 422, resp.text
+    assert "00000000-0000-0000-0000-000000000000" in resp.json()["detail"]
+
+
 def test_generate_increments_revision_and_keeps_history(client: TestClient) -> None:
     token = str(bootstrap_company(client)["access_token"])
     matter_id = _create_matter(client, token, "DS-006")

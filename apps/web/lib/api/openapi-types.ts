@@ -1830,6 +1830,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matters/{matter_id}/drafts/{draft_id}/filing-bundle.zip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download a filing-grade ZIP bundle for the draft: index + memorandum PDF + vakalat (auto-resolved) + e-stamp placeholder + matter exhibits
+         * @description PG-005 Sprint 4 (2026-05-01) — court-filing bundle ZIP.
+         *
+         *     Auto-resolves the court profile from ``Matter.court_name`` (override
+         *     via ``court_profile``); auto-picks the newest VAKALATNAMA-typed
+         *     draft on the same matter (override via ``vakalat_draft_id``); and
+         *     includes every attachment on the matter (narrow via
+         *     ``attachment_ids`` — comma-separated).
+         */
+        get: operations["get_current_company_matter_draft_filing_bundle_api_matters__matter_id__drafts__draft_id__filing_bundle_zip_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matters/{matter_id}/drafts/{draft_id}/finalize": {
         parameters: {
             query?: never;
@@ -11942,6 +11968,43 @@ export interface operations {
             query?: {
                 version_id?: string | null;
                 court_profile?: string | null;
+            };
+            header?: never;
+            path: {
+                matter_id: string;
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_current_company_matter_draft_filing_bundle_api_matters__matter_id__drafts__draft_id__filing_bundle_zip_get: {
+        parameters: {
+            query?: {
+                version_id?: string | null;
+                court_profile?: string | null;
+                vakalat_draft_id?: string | null;
+                attachment_ids?: string | null;
             };
             header?: never;
             path: {

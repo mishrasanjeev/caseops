@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   CheckCircle2,
   Download,
+  FolderArchive,
   Lock,
   Loader2,
   RefreshCcw,
@@ -32,6 +33,7 @@ import { apiErrorMessage, isApiErrorShape } from "@/lib/api/config";
 import {
   approveDraft,
   draftDocxUrl,
+  draftFilingBundleUrl,
   draftPdfUrl,
   fetchDraft,
   finalizeDraft,
@@ -283,6 +285,13 @@ function DraftBody({
                 data-testid="draft-download-pdf"
               >
                 <Download className="h-4 w-4" aria-hidden /> Download PDF
+              </Button>
+              <Button
+                variant="outline"
+                href={draftFilingBundleUrl(matterId, draft.id)}
+                data-testid="draft-download-filing-bundle"
+              >
+                <FolderArchive className="h-4 w-4" aria-hidden /> Filing bundle
               </Button>
             </>
           ) : null}

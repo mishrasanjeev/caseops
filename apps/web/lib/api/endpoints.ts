@@ -903,6 +903,29 @@ export function draftPdfUrl(
     : base;
 }
 
+// PG-005 Sprint 4 (2026-05-01) — filing-grade ZIP bundle with
+// memorandum + vakalat (auto-resolved) + index + e-stamp placeholder
+// + matter exhibits.
+export function draftFilingBundleUrl(
+  matterId: string,
+  draftId: string,
+  options?: {
+    courtProfile?: string;
+    vakalatDraftId?: string;
+    attachmentIds?: string[];
+  },
+): string {
+  const base = `${API_BASE_URL}/api/matters/${matterId}/drafts/${draftId}/filing-bundle.zip`;
+  const params = new URLSearchParams();
+  if (options?.courtProfile) params.set("court_profile", options.courtProfile);
+  if (options?.vakalatDraftId) params.set("vakalat_draft_id", options.vakalatDraftId);
+  if (options?.attachmentIds && options.attachmentIds.length > 0) {
+    params.set("attachment_ids", options.attachmentIds.join(","));
+  }
+  const qs = params.toString();
+  return qs ? `${base}?${qs}` : base;
+}
+
 export type CourtFormatProfile = {
   key: string;
   display_name: string;

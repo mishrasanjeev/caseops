@@ -122,7 +122,7 @@ Needed:
 Estimated days: 5-7.
 
 ### `PG-005` Drafting finalization — court-specific format + PDF + revision diff
-Status: **`Partially implemented`** (Sprints 1 + 2 + 3 of 12 landed 2026-05-01).
+Status: **`Partially implemented`** (Sprints 1 + 2 + 3 + 4 of 12 landed 2026-05-01).
 Evidence:
 - Sprint 1 (2026-05-01) added 4 highest-frequency missing templates: `WRIT_PETITION`, `QUASHING_PETITION`, `WRITTEN_STATEMENT`, `REPLY_COUNTER_AFFIDAVIT` (full statutory awareness + per-template prompts + recommender-matrix coverage).
 - Sprint 2 (2026-05-01) added 7 more templates covering daily Indian-litigation filings:
@@ -141,9 +141,14 @@ Evidence:
   - `GET /api/matters/{matter_id}/drafts/{draft_id}/export.pdf` (with optional `?court_profile=` override; X-CaseOps-Court-Profile response header + filename suffix surface the resolved profile). `GET /api/drafting/court-profiles` lists the 4 profiles for the web selector.
   - Web: "Download PDF" button alongside "Download DOCX" on the draft detail page; `draftPdfUrl()` + `listCourtFormatProfiles()` helpers in `lib/api/endpoints.ts`.
   - 16 new pytest cases (10 unit tests in `test_court_format_profiles.py` + 6 integration tests in `test_drafting_studio.py` covering smoke / explicit-profile override / unknown-key 422 / 404 on unknown draft / citation-gate / list-route).
-- `services/drafting.py` (1187 lines) still has DOCX export + citation verifier; revision compare + filing checklist + filing-bundle ZIP remain.
-Needed (Sprints 4-12):
-- Sprint 4 — Filing bundle ZIP (memorandum + vakalat + index + exhibits + e-stamp placeholder).
+- Sprint 4 (2026-05-01) added court-filing bundle ZIP (`services/filing_bundle.py`):
+  - `GET /api/matters/{matter_id}/drafts/{draft_id}/filing-bundle.zip` with optional `?court_profile=`, `?vakalat_draft_id=`, `?attachment_ids=` (comma-separated) overrides.
+  - Bundle layout: `00-index.pdf` (auto-generated cover + table of contents) + `01-memorandum-<title>-r<rev>.pdf` (court-format-aware) + `02-vakalatnama.pdf` (auto-picks newest VAKALATNAMA-typed draft on the matter; falls back to a placeholder page if none exists, surfacing the gap to the lawyer rather than shipping silently) + `03-estamp-placeholder.pdf` (court-fee slot) + `04-exhibits/<NN>-<safe-filename>.<ext>` (matter attachments, default = all, narrowable via `attachment_ids`).
+  - Same citation gate as the PDF / DOCX paths. Telemetry headers on the response: `X-CaseOps-Court-Profile`, `X-CaseOps-Vakalat-Source` (`draft:<id>` or `placeholder`), `X-CaseOps-Exhibit-Count`. 422 on unknown profile key + unknown attachment ids + non-VAKALATNAMA draft id passed as the explicit vakalat.
+  - Web: "Filing bundle" button (FolderArchive icon) alongside "Download DOCX" + "Download PDF" on the draft detail page; `draftFilingBundleUrl()` helper in `lib/api/endpoints.ts` accepts optional `courtProfile` / `vakalatDraftId` / `attachmentIds` overrides.
+  - 7 new pytest cases (default layout + court-profile override + auto-pick vakalat draft + non-vakalat-template 422 + citation gate + 404 on unknown draft + unknown attachment id 422). 173 broader drafting tests pass; web `tsc --noEmit` clean.
+- `services/drafting.py` (1187 lines) still has DOCX export + citation verifier; revision compare + filing checklist remain.
+Needed (Sprints 5-12):
 - Sprint 5 — Court format profile expansion (today: SC + Delhi HC + Bombay HC + generic; remaining: Madras HC, Calcutta HC, Karnataka HC, NCLT, NCLAT, DRT, etc.) + cause-title profiles.
 - Sprint 6 — `draft_compare(prev_id, next_id)` returning structured diff against existing `DraftRevision` model.
 - Sprint 7 — Bench-aware extension of drafting (extend PG-107 v3 predictive into draft suggestions).
