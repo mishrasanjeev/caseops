@@ -4,44 +4,698 @@
       "citation_count": 0,
       "citation_score": 0.0,
       "error": null,
-      "findings_summary": [],
-      "input_tokens": 0,
+      "findings_summary": [
+        "[warning] citation.no_inline_anchors: The body reads like a substantive legal argument but contains zero inline citation anchors. Every legal proposition should be anchored to a retrieved authority \u2014 or flagged as `[citation needed]`."
+      ],
+      "input_tokens": 1364,
       "key": "bnss-303-simple-theft",
-      "latency_ms": 0,
-      "output_tokens": 0,
-      "rating": 0.0,
-      "structure_present": [],
-      "structure_score": 0.0,
+      "latency_ms": 39141,
+      "output_tokens": 3155,
+      "rating": 2.67,
+      "structure_present": [
+        "cause_title",
+        "facts",
+        "grounds",
+        "prayer",
+        "verification"
+      ],
+      "structure_score": 5.0,
       "template_type": "bail",
-      "validator_score": 0.0
+      "validator_score": 3.0
+    },
+    {
+      "citation_count": 1,
+      "citation_score": 3.0,
+      "error": null,
+      "findings_summary": [
+        "[warning] citation.coverage_gap: The citations list contains 1 identifier(s) that never appear as inline anchors in the body: [citation needed]",
+        "[warning] citation.no_inline_anchors: The body reads like a substantive legal argument but contains zero inline citation anchors. Every legal proposition should be anchored to a retrieved authority \u2014 or flagged as `[citation needed]`."
+      ],
+      "input_tokens": 1363,
+      "key": "ndps-prolonged-custody",
+      "latency_ms": 35840,
+      "output_tokens": 3680,
+      "rating": 3.67,
+      "structure_present": [
+        "cause_title",
+        "facts",
+        "grounds",
+        "prayer",
+        "verification"
+      ],
+      "structure_score": 5.0,
+      "template_type": "bail",
+      "validator_score": 3.0
+    },
+    {
+      "citation_count": 0,
+      "citation_score": 0.0,
+      "error": null,
+      "findings_summary": [
+        "[warning] citation.no_inline_anchors: The body reads like a substantive legal argument but contains zero inline citation anchors. Every legal proposition should be anchored to a retrieved authority \u2014 or flagged as `[citation needed]`."
+      ],
+      "input_tokens": 1370,
+      "key": "standard-insufficient-funds",
+      "latency_ms": 16010,
+      "output_tokens": 1437,
+      "rating": 1.33,
+      "structure_present": [
+        "cause_title"
+      ],
+      "structure_score": 1.0,
+      "template_type": "cheque_bounce_notice",
+      "validator_score": 3.0
+    },
+    {
+      "citation_count": 0,
+      "citation_score": 0.0,
+      "error": null,
+      "findings_summary": [
+        "[warning] citation.no_inline_anchors: The body reads like a substantive legal argument but contains zero inline citation anchors. Every legal proposition should be anchored to a retrieved authority \u2014 or flagged as `[citation needed]`."
+      ],
+      "input_tokens": 1362,
+      "key": "payment-stopped-high-value",
+      "latency_ms": 12782,
+      "output_tokens": 1498,
+      "rating": 1.67,
+      "structure_present": [
+        "cause_title",
+        "facts"
+      ],
+      "structure_score": 2.0,
+      "template_type": "cheque_bounce_notice",
+      "validator_score": 3.0
+    },
+    {
+      "citation_count": 0,
+      "citation_score": 0.0,
+      "error": null,
+      "findings_summary": [
+        "[warning] citation.no_inline_anchors: The body reads like a substantive legal argument but contains zero inline citation anchors. Every legal proposition should be anchored to a retrieved authority \u2014 or flagged as `[citation needed]`."
+      ],
+      "input_tokens": 1336,
+      "key": "economic-offence-business-dispute",
+      "latency_ms": 40859,
+      "output_tokens": 3331,
+      "rating": 2.33,
+      "structure_present": [
+        "cause_title",
+        "facts",
+        "prayer",
+        "verification"
+      ],
+      "structure_score": 4.0,
+      "template_type": "anticipatory_bail",
+      "validator_score": 3.0
+    },
+    {
+      "citation_count": 0,
+      "citation_score": 0.0,
+      "error": null,
+      "findings_summary": [
+        "[warning] statute.bail_missing_bnss_reference: The body discusses bail but does not cite the governing BNSS section (typically s.482 anticipatory, s.483 regular, s.187 default). Add the correct BNSS reference before review.",
+        "[warning] citation.no_inline_anchors: The body reads like a substantive legal argument but contains zero inline citation anchors. Every legal proposition should be anchored to a retrieved authority \u2014 or flagged as `[citation needed]`."
+      ],
+      "input_tokens": 1302,
+      "key": "matrimonial-no-fir",
+      "latency_ms": 33353,
+      "output_tokens": 3175,
+      "rating": 2.67,
+      "structure_present": [
+        "cause_title",
+        "facts",
+        "grounds",
+        "prayer",
+        "verification"
+      ],
+      "structure_score": 5.0,
+      "template_type": "anticipatory_bail",
+      "validator_score": 3.0
+    },
+    {
+      "citation_count": 0,
+      "citation_score": 0.0,
+      "error": null,
+      "findings_summary": [
+        "[warning] citation.no_inline_anchors: The body reads like a substantive legal argument but contains zero inline citation anchors. Every legal proposition should be anchored to a retrieved authority \u2014 or flagged as `[citation needed]`."
+      ],
+      "input_tokens": 1510,
+      "key": "recovery-of-money-commercial",
+      "latency_ms": 28730,
+      "output_tokens": 3899,
+      "rating": 2.67,
+      "structure_present": [
+        "cause_title",
+        "facts",
+        "grounds",
+        "prayer",
+        "verification"
+      ],
+      "structure_score": 5.0,
+      "template_type": "civil_suit",
+      "validator_score": 3.0
+    },
+    {
+      "citation_count": 0,
+      "citation_score": 0.0,
+      "error": null,
+      "findings_summary": [
+        "[warning] citation.no_inline_anchors: The body reads like a substantive legal argument but contains zero inline citation anchors. Every legal proposition should be anchored to a retrieved authority \u2014 or flagged as `[citation needed]`."
+      ],
+      "input_tokens": 1545,
+      "key": "specific-performance-real-estate",
+      "latency_ms": 26122,
+      "output_tokens": 3462,
+      "rating": 2.67,
+      "structure_present": [
+        "cause_title",
+        "facts",
+        "grounds",
+        "prayer",
+        "verification"
+      ],
+      "structure_score": 5.0,
+      "template_type": "civil_suit",
+      "validator_score": 3.0
+    },
+    {
+      "citation_count": 1,
+      "citation_score": 3.0,
+      "error": null,
+      "findings_summary": [
+        "[warning] citation.no_inline_anchors: The body reads like a substantive legal argument but contains zero inline citation anchors. Every legal proposition should be anchored to a retrieved authority \u2014 or flagged as `[citation needed]`."
+      ],
+      "input_tokens": 1286,
+      "key": "hma-cruelty-desertion",
+      "latency_ms": 35353,
+      "output_tokens": 3017,
+      "rating": 3.67,
+      "structure_present": [
+        "cause_title",
+        "facts",
+        "grounds",
+        "prayer",
+        "verification"
+      ],
+      "structure_score": 5.0,
+      "template_type": "divorce_petition",
+      "validator_score": 3.0
+    },
+    {
+      "citation_count": 0,
+      "citation_score": 0.0,
+      "error": null,
+      "findings_summary": [
+        "[warning] citation.no_inline_anchors: The body reads like a substantive legal argument but contains zero inline citation anchors. Every legal proposition should be anchored to a retrieved authority \u2014 or flagged as `[citation needed]`."
+      ],
+      "input_tokens": 1208,
+      "key": "encroachment-flat",
+      "latency_ms": 32305,
+      "output_tokens": 3330,
+      "rating": 1.67,
+      "structure_present": [
+        "cause_title",
+        "verification"
+      ],
+      "structure_score": 2.0,
+      "template_type": "property_dispute_notice",
+      "validator_score": 3.0
     },
     {
       "citation_count": 0,
       "citation_score": 0.0,
       "error": null,
       "findings_summary": [],
-      "input_tokens": 0,
+      "input_tokens": 1282,
+      "key": "standard-evidentiary",
+      "latency_ms": 7985,
+      "output_tokens": 702,
+      "rating": 2.67,
+      "structure_present": [
+        "cause_title",
+        "facts",
+        "verification"
+      ],
+      "structure_score": 3.0,
+      "template_type": "affidavit",
+      "validator_score": 5.0
+    },
+    {
+      "citation_count": 0,
+      "citation_score": 0.0,
+      "error": null,
+      "findings_summary": [
+        "[warning] citation.no_inline_anchors: The body reads like a substantive legal argument but contains zero inline citation anchors. Every legal proposition should be anchored to a retrieved authority \u2014 or flagged as `[citation needed]`."
+      ],
+      "input_tokens": 1424,
+      "key": "bns-cheating-forgery",
+      "latency_ms": 22892,
+      "output_tokens": 2800,
+      "rating": 2.33,
+      "structure_present": [
+        "cause_title",
+        "facts",
+        "prayer",
+        "verification"
+      ],
+      "structure_score": 4.0,
+      "template_type": "criminal_complaint",
+      "validator_score": 3.0
+    },
+    {
+      "citation_count": 0,
+      "citation_score": 0.0,
+      "error": null,
+      "findings_summary": [
+        "[warning] citation.no_inline_anchors: The body reads like a substantive legal argument but contains zero inline citation anchors. Every legal proposition should be anchored to a retrieved authority \u2014 or flagged as `[citation needed]`."
+      ],
+      "input_tokens": 2018,
+      "key": "civil-appeal-cpc-order-xli",
+      "latency_ms": 30571,
+      "output_tokens": 3809,
+      "rating": 2.67,
+      "structure_present": [
+        "cause_title",
+        "facts",
+        "grounds",
+        "prayer",
+        "verification"
+      ],
+      "structure_score": 5.0,
+      "template_type": "appeal_memorandum",
+      "validator_score": 3.0
+    },
+    {
+      "citation_count": 1,
+      "citation_score": 3.0,
+      "error": null,
+      "findings_summary": [
+        "[warning] citation.coverage_gap: The citations list contains 1 identifier(s) that never appear as inline anchors in the body: [citation needed]",
+        "[warning] citation.no_inline_anchors: The body reads like a substantive legal argument but contains zero inline citation anchors. Every legal proposition should be anchored to a retrieved authority \u2014 or flagged as `[citation needed]`."
+      ],
+      "input_tokens": 1780,
       "key": "mandamus-rti-inaction",
-      "latency_ms": 0,
-      "output_tokens": 0,
-      "rating": 0.0,
-      "structure_present": [],
-      "structure_score": 0.0,
+      "latency_ms": 22111,
+      "output_tokens": 2909,
+      "rating": 3.67,
+      "structure_present": [
+        "cause_title",
+        "facts",
+        "grounds",
+        "prayer",
+        "verification"
+      ],
+      "structure_score": 5.0,
       "template_type": "writ_petition",
-      "validator_score": 0.0
+      "validator_score": 3.0
+    },
+    {
+      "citation_count": 0,
+      "citation_score": 0.0,
+      "error": null,
+      "findings_summary": [
+        "[warning] citation.no_inline_anchors: The body reads like a substantive legal argument but contains zero inline citation anchors. Every legal proposition should be anchored to a retrieved authority \u2014 or flagged as `[citation needed]`."
+      ],
+      "input_tokens": 1621,
+      "key": "compromise-civil-flavour-318",
+      "latency_ms": 21448,
+      "output_tokens": 2752,
+      "rating": 2.67,
+      "structure_present": [
+        "cause_title",
+        "facts",
+        "grounds",
+        "prayer",
+        "verification"
+      ],
+      "structure_score": 5.0,
+      "template_type": "quashing_petition",
+      "validator_score": 3.0
+    },
+    {
+      "citation_count": 1,
+      "citation_score": 3.0,
+      "error": null,
+      "findings_summary": [
+        "[warning] citation.coverage_gap: The citations list contains 1 identifier(s) that never appear as inline anchors in the body: [citation needed]",
+        "[warning] citation.no_inline_anchors: The body reads like a substantive legal argument but contains zero inline citation anchors. Every legal proposition should be anchored to a retrieved authority \u2014 or flagged as `[citation needed]`."
+      ],
+      "input_tokens": 1737,
+      "key": "specific-performance-defence",
+      "latency_ms": 16263,
+      "output_tokens": 1827,
+      "rating": 3.67,
+      "structure_present": [
+        "cause_title",
+        "facts",
+        "grounds",
+        "prayer",
+        "verification"
+      ],
+      "structure_score": 5.0,
+      "template_type": "written_statement",
+      "validator_score": 3.0
+    },
+    {
+      "citation_count": 1,
+      "citation_score": 3.0,
+      "error": null,
+      "findings_summary": [
+        "[warning] citation.no_inline_anchors: The body reads like a substantive legal argument but contains zero inline citation anchors. Every legal proposition should be anchored to a retrieved authority \u2014 or flagged as `[citation needed]`."
+      ],
+      "input_tokens": 1839,
+      "key": "writ-counter-affidavit-state",
+      "latency_ms": 19870,
+      "output_tokens": 2531,
+      "rating": 3.67,
+      "structure_present": [
+        "cause_title",
+        "facts",
+        "grounds",
+        "prayer",
+        "verification"
+      ],
+      "structure_score": 5.0,
+      "template_type": "reply_counter_affidavit",
+      "validator_score": 3.0
+    },
+    {
+      "citation_count": 1,
+      "citation_score": 3.0,
+      "error": null,
+      "findings_summary": [
+        "[warning] citation.no_inline_anchors: The body reads like a substantive legal argument but contains zero inline citation anchors. Every legal proposition should be anchored to a retrieved authority \u2014 or flagged as `[citation needed]`."
+      ],
+      "input_tokens": 1633,
+      "key": "settlement-recorded-with-consent",
+      "latency_ms": 28088,
+      "output_tokens": 3676,
+      "rating": 3.67,
+      "structure_present": [
+        "cause_title",
+        "facts",
+        "grounds",
+        "prayer",
+        "verification"
+      ],
+      "structure_score": 5.0,
+      "template_type": "dv_quashing_petition",
+      "validator_score": 3.0
+    },
+    {
+      "citation_count": 0,
+      "citation_score": 0.0,
+      "error": null,
+      "findings_summary": [
+        "[warning] citation.no_inline_anchors: The body reads like a substantive legal argument but contains zero inline citation anchors. Every legal proposition should be anchored to a retrieved authority \u2014 or flagged as `[citation needed]`."
+      ],
+      "input_tokens": 1910,
+      "key": "pre-arbitration-injunction",
+      "latency_ms": 31418,
+      "output_tokens": 3526,
+      "rating": 2.67,
+      "structure_present": [
+        "cause_title",
+        "facts",
+        "grounds",
+        "prayer",
+        "verification"
+      ],
+      "structure_score": 5.0,
+      "template_type": "arbitration_section_9",
+      "validator_score": 3.0
+    },
+    {
+      "citation_count": 0,
+      "citation_score": 0.0,
+      "error": null,
+      "findings_summary": [
+        "[warning] citation.no_inline_anchors: The body reads like a substantive legal argument but contains zero inline citation anchors. Every legal proposition should be anchored to a retrieved authority \u2014 or flagged as `[citation needed]`."
+      ],
+      "input_tokens": 1465,
+      "key": "caveat-against-ex-parte-injunction",
+      "latency_ms": 11141,
+      "output_tokens": 1360,
+      "rating": 2.33,
+      "structure_present": [
+        "cause_title",
+        "facts",
+        "prayer",
+        "verification"
+      ],
+      "structure_score": 4.0,
+      "template_type": "caveat_petition",
+      "validator_score": 3.0
+    },
+    {
+      "citation_count": 0,
+      "citation_score": 0.0,
+      "error": null,
+      "findings_summary": [
+        "[warning] citation.no_inline_anchors: The body reads like a substantive legal argument but contains zero inline citation anchors. Every legal proposition should be anchored to a retrieved authority \u2014 or flagged as `[citation needed]`."
+      ],
+      "input_tokens": 1557,
+      "key": "fresh-filing-delhi-hc",
+      "latency_ms": 12525,
+      "output_tokens": 1262,
+      "rating": 1.33,
+      "structure_present": [
+        "cause_title"
+      ],
+      "structure_score": 1.0,
+      "template_type": "vakalatnama",
+      "validator_score": 3.0
+    },
+    {
+      "citation_count": 0,
+      "citation_score": 0.0,
+      "error": null,
+      "findings_summary": [
+        "[warning] citation.no_inline_anchors: The body reads like a substantive legal argument but contains zero inline citation anchors. Every legal proposition should be anchored to a retrieved authority \u2014 or flagged as `[citation needed]`."
+      ],
+      "input_tokens": 1828,
+      "key": "post-trial-due-diligence-amendment",
+      "latency_ms": 24063,
+      "output_tokens": 2442,
+      "rating": 2.67,
+      "structure_present": [
+        "cause_title",
+        "facts",
+        "grounds",
+        "prayer",
+        "verification"
+      ],
+      "structure_score": 5.0,
+      "template_type": "amendment_of_pleadings",
+      "validator_score": 3.0
+    },
+    {
+      "citation_count": 1,
+      "citation_score": 3.0,
+      "error": null,
+      "findings_summary": [
+        "[warning] citation.no_inline_anchors: The body reads like a substantive legal argument but contains zero inline citation anchors. Every legal proposition should be anchored to a retrieved authority \u2014 or flagged as `[citation needed]`."
+      ],
+      "input_tokens": 1934,
+      "key": "criminal-non-compoundable-gian-singh",
+      "latency_ms": 25561,
+      "output_tokens": 2539,
+      "rating": 3.33,
+      "structure_present": [
+        "cause_title",
+        "facts",
+        "prayer",
+        "verification"
+      ],
+      "structure_score": 4.0,
+      "template_type": "compromise_petition",
+      "validator_score": 3.0
+    },
+    {
+      "citation_count": 1,
+      "citation_score": 3.0,
+      "error": null,
+      "findings_summary": [
+        "[warning] citation.no_inline_anchors: The body reads like a substantive legal argument but contains zero inline citation anchors. Every legal proposition should be anchored to a retrieved authority \u2014 or flagged as `[citation needed]`."
+      ],
+      "input_tokens": 2117,
+      "key": "uncontested-hindu-will-bombay-hc",
+      "latency_ms": 33478,
+      "output_tokens": 3523,
+      "rating": 2.67,
+      "structure_present": [
+        "cause_title",
+        "verification"
+      ],
+      "structure_score": 2.0,
+      "template_type": "probate_petition",
+      "validator_score": 3.0
     }
   ],
   "summary": {
-    "dry_run": true,
-    "meets_target": null,
-    "note": "Dry-run smoke output \u2014 the LLM was NOT called, no scoring performed. Re-run without --dry-run to produce a real rating. Reading any score in this file as a quality measurement is incorrect.",
-    "overall_rating": null,
+    "dry_run": false,
+    "meets_target": false,
+    "overall_rating": 2.76,
     "per_template": {
+      "affidavit": {
+        "errored": 0,
+        "median_latency_ms": 7985,
+        "rating": 2.67,
+        "scenarios": 1,
+        "total_input_tokens": 1282,
+        "total_output_tokens": 702
+      },
+      "amendment_of_pleadings": {
+        "errored": 0,
+        "median_latency_ms": 24063,
+        "rating": 2.67,
+        "scenarios": 1,
+        "total_input_tokens": 1828,
+        "total_output_tokens": 2442
+      },
+      "anticipatory_bail": {
+        "errored": 0,
+        "median_latency_ms": 40859,
+        "rating": 2.5,
+        "scenarios": 2,
+        "total_input_tokens": 2638,
+        "total_output_tokens": 6506
+      },
+      "appeal_memorandum": {
+        "errored": 0,
+        "median_latency_ms": 30571,
+        "rating": 2.67,
+        "scenarios": 1,
+        "total_input_tokens": 2018,
+        "total_output_tokens": 3809
+      },
+      "arbitration_section_9": {
+        "errored": 0,
+        "median_latency_ms": 31418,
+        "rating": 2.67,
+        "scenarios": 1,
+        "total_input_tokens": 1910,
+        "total_output_tokens": 3526
+      },
       "bail": {
-        "scenarios": 1
+        "errored": 0,
+        "median_latency_ms": 39141,
+        "rating": 3.17,
+        "scenarios": 2,
+        "total_input_tokens": 2727,
+        "total_output_tokens": 6835
+      },
+      "caveat_petition": {
+        "errored": 0,
+        "median_latency_ms": 11141,
+        "rating": 2.33,
+        "scenarios": 1,
+        "total_input_tokens": 1465,
+        "total_output_tokens": 1360
+      },
+      "cheque_bounce_notice": {
+        "errored": 0,
+        "median_latency_ms": 16010,
+        "rating": 1.5,
+        "scenarios": 2,
+        "total_input_tokens": 2732,
+        "total_output_tokens": 2935
+      },
+      "civil_suit": {
+        "errored": 0,
+        "median_latency_ms": 28730,
+        "rating": 2.67,
+        "scenarios": 2,
+        "total_input_tokens": 3055,
+        "total_output_tokens": 7361
+      },
+      "compromise_petition": {
+        "errored": 0,
+        "median_latency_ms": 25561,
+        "rating": 3.33,
+        "scenarios": 1,
+        "total_input_tokens": 1934,
+        "total_output_tokens": 2539
+      },
+      "criminal_complaint": {
+        "errored": 0,
+        "median_latency_ms": 22892,
+        "rating": 2.33,
+        "scenarios": 1,
+        "total_input_tokens": 1424,
+        "total_output_tokens": 2800
+      },
+      "divorce_petition": {
+        "errored": 0,
+        "median_latency_ms": 35353,
+        "rating": 3.67,
+        "scenarios": 1,
+        "total_input_tokens": 1286,
+        "total_output_tokens": 3017
+      },
+      "dv_quashing_petition": {
+        "errored": 0,
+        "median_latency_ms": 28088,
+        "rating": 3.67,
+        "scenarios": 1,
+        "total_input_tokens": 1633,
+        "total_output_tokens": 3676
+      },
+      "probate_petition": {
+        "errored": 0,
+        "median_latency_ms": 33478,
+        "rating": 2.67,
+        "scenarios": 1,
+        "total_input_tokens": 2117,
+        "total_output_tokens": 3523
+      },
+      "property_dispute_notice": {
+        "errored": 0,
+        "median_latency_ms": 32305,
+        "rating": 1.67,
+        "scenarios": 1,
+        "total_input_tokens": 1208,
+        "total_output_tokens": 3330
+      },
+      "quashing_petition": {
+        "errored": 0,
+        "median_latency_ms": 21448,
+        "rating": 2.67,
+        "scenarios": 1,
+        "total_input_tokens": 1621,
+        "total_output_tokens": 2752
+      },
+      "reply_counter_affidavit": {
+        "errored": 0,
+        "median_latency_ms": 19870,
+        "rating": 3.67,
+        "scenarios": 1,
+        "total_input_tokens": 1839,
+        "total_output_tokens": 2531
+      },
+      "vakalatnama": {
+        "errored": 0,
+        "median_latency_ms": 12525,
+        "rating": 1.33,
+        "scenarios": 1,
+        "total_input_tokens": 1557,
+        "total_output_tokens": 1262
       },
       "writ_petition": {
-        "scenarios": 1
+        "errored": 0,
+        "median_latency_ms": 22111,
+        "rating": 3.67,
+        "scenarios": 1,
+        "total_input_tokens": 1780,
+        "total_output_tokens": 2909
+      },
+      "written_statement": {
+        "errored": 0,
+        "median_latency_ms": 16263,
+        "rating": 3.67,
+        "scenarios": 1,
+        "total_input_tokens": 1737,
+        "total_output_tokens": 1827
       }
     },
     "target": 4.8
