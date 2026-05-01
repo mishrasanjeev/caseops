@@ -1962,6 +1962,19 @@ export type AuthorityForumLevel =
 
 export type AuthorityDocumentType = "judgment" | "order" | "statute" | "regulation" | "other";
 
+// PG-006 Phase 1B (2026-05-01) — good-law signal carried alongside
+// every search result so the result card can surface a treatment
+// badge in one render (no per-row N+1 fetch).
+export type AuthorityCitationTreatment =
+  | "followed"
+  | "distinguished"
+  | "overruled"
+  | "doubted"
+  | "reversed"
+  | "dissented"
+  | "considered"
+  | "neutral";
+
 export type AuthoritySearchResult = {
   authority_document_id: string;
   title: string;
@@ -1977,6 +1990,8 @@ export type AuthoritySearchResult = {
   snippet: string;
   score: number;
   matched_terms: string[];
+  worst_treatment: AuthorityCitationTreatment | null;
+  adverse_count: number;
 };
 
 export async function searchAuthorities(input: {

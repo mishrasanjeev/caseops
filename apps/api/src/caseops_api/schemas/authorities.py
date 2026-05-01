@@ -83,6 +83,18 @@ class AuthoritySearchRequest(BaseModel):
     document_type: AuthorityDocumentTypeLiteral | None = None
 
 
+AuthorityCitationTreatmentLiteral = Literal[
+    "followed",
+    "distinguished",
+    "overruled",
+    "doubted",
+    "reversed",
+    "dissented",
+    "considered",
+    "neutral",
+]
+
+
 class AuthoritySearchResult(BaseModel):
     authority_document_id: str
     title: str
@@ -98,6 +110,15 @@ class AuthoritySearchResult(BaseModel):
     snippet: str
     score: int
     matched_terms: list[str]
+    # PG-006 Phase 1B (2026-05-01) — good-law signal. Lightweight
+    # rollup so the search result list can show a single-glance
+    # treatment badge without a per-row N+1 fetch. ``worst_treatment``
+    # is the strongest adverse signal in the incoming-citation graph
+    # (overruled > reversed > doubted) or null when no adverse cite
+    # exists. ``adverse_count`` is the total number of adverse incoming
+    # citations.
+    worst_treatment: AuthorityCitationTreatmentLiteral | None = None
+    adverse_count: int = 0
 
 
 class AuthoritySearchResponse(BaseModel):
@@ -211,3 +232,31 @@ class SavedAuthorityAnnotationRecord(BaseModel):
 
 class SavedAnnotationListResponse(BaseModel):
     annotations: list[SavedAuthorityAnnotationRecord]
+
+
+# PG-006 Phase 1B — treatment summary surface ----------------
+
+
+class AuthorityTreatmentSampleRecord(BaseModel):
+    citing_authority_document_id: str
+    citing_title: str | None
+    citing_neutral_citation: str | None
+    citation_text: str
+    treatment: AuthorityCitationTreatmentLiteral
+    confidence: float | None
+    evidence_text: str | None
+
+
+class AuthorityTreatmentBucketRecord(BaseModel):
+    treatment: AuthorityCitationTreatmentLiteral
+    count: int
+    samples: list[AuthorityTreatmentSampleRecord]
+
+
+class AuthorityTreatmentSummaryResponse(BaseModel):
+    authority_document_id: str
+    total_incoming: int
+    adverse_count: int
+    has_adverse_treatment: bool
+    worst_treatment: AuthorityCitationTreatmentLiteral | None
+    buckets: list[AuthorityTreatmentBucketRecord]

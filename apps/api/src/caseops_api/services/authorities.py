@@ -766,11 +766,36 @@ def search_authorities(
         filtered = list(raw)
     total = len(filtered)
     page = filtered[payload.offset : payload.offset + payload.limit]
+
+    # PG-006 Phase 1B (2026-05-01) — enrich the page with the good-law
+    # signal in a single bulk query. Authorities with no adverse cite
+    # leave the defaults (worst_treatment=None, adverse_count=0) so the
+    # frontend can render the badge only when something is wrong.
+    from caseops_api.services.authority_treatments import (
+        compute_search_result_treatments,
+    )
+    treatment_lookup = compute_search_result_treatments(
+        session, [r.authority_document_id for r in page],
+    )
+    enriched_page = [
+        r.model_copy(
+            update={
+                "worst_treatment": treatment_lookup.get(
+                    r.authority_document_id, (None, 0),
+                )[0],
+                "adverse_count": treatment_lookup.get(
+                    r.authority_document_id, (None, 0),
+                )[1],
+            },
+        )
+        for r in page
+    ]
+
     return AuthoritySearchResponse(
         query=payload.query,
         provider="caseops-authority-search-v2",
         generated_at=datetime.now(UTC),
-        results=page,
+        results=enriched_page,
         total_after_filter=total,
         offset=payload.offset,
     )

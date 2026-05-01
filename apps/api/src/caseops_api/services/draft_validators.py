@@ -267,8 +267,53 @@ def run_validators(
     return findings
 
 
+def check_adverse_treatment(
+    session,  # type: ignore[no-untyped-def]
+    citations: Iterable[str],
+) -> list[DraftFinding]:
+    """PG-006 Phase 1B — DraftFinding when a draft cites an authority
+    that has been overruled / reversed / doubted by a later case in
+    our corpus.
+
+    DB-aware (unlike the rest of this module) so it lives outside
+    `run_validators`. Callers in the drafting service merge the
+    returned findings into the rest of the validator output. Returns
+    an empty list when nothing in the corpus marks any of the cited
+    authorities adversely — including when the corpus has no
+    treatment data at all (Phase 1A backfill not yet run).
+    """
+    from caseops_api.services.authority_treatments import (
+        find_authorities_with_adverse_treatment,
+    )
+
+    citation_strings = [c for c in citations if c and c.strip()]
+    if not citation_strings:
+        return []
+    summaries = find_authorities_with_adverse_treatment(
+        session, citation_strings,
+    )
+    findings: list[DraftFinding] = []
+    for _, summary in summaries.items():
+        worst = summary.worst_treatment or "adverse"
+        findings.append(
+            DraftFinding(
+                code="citation.adverse_treatment",
+                severity="warning",
+                message=(
+                    f"A cited authority has been {worst} by "
+                    f"{summary.adverse_count} later case"
+                    f"{'s' if summary.adverse_count != 1 else ''} "
+                    "in the indexed corpus. Verify the holding is "
+                    "still good law before filing."
+                ),
+            )
+        )
+    return findings
+
+
 __all__ = [
     "DraftFinding",
+    "check_adverse_treatment",
     "check_citation_coverage",
     "check_statute_confusion",
     "check_uuid_leakage",

@@ -64,6 +64,7 @@ from caseops_api.services.citations import (
 )
 from caseops_api.services.draft_validators import (
     DraftFinding,
+    check_adverse_treatment,
     run_validators,
 )
 from caseops_api.services.identity import SessionContext
@@ -1074,6 +1075,9 @@ def generate_draft_version(
         )
 
     findings = run_validators(response.body, surviving)
+    # PG-006 Phase 1B — add the adverse-treatment finding (DB-backed,
+    # so it's a separate call from the pure-function validator suite).
+    findings.extend(check_adverse_treatment(session, surviving))
     for f in findings:
         logger.warning(
             "Draft validation finding [%s:%s] on draft %s: %s",

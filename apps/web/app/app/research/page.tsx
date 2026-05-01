@@ -537,6 +537,17 @@ function AuthorityCard({
             ) : null}
             <span>· score {result.score}</span>
           </div>
+          {/* PG-006 Phase 1B (2026-05-01) — good-law badge. Renders only
+              when an authority has at least one adverse incoming
+              citation in the corpus. Tone matches severity (overruled =
+              red-strong, reversed = red-soft, doubted = amber). The
+              count tells lawyers how widely the criticism has spread. */}
+          {result.worst_treatment ? (
+            <TreatmentBadge
+              treatment={result.worst_treatment}
+              count={result.adverse_count}
+            />
+          ) : null}
           <h3 className="mt-1 text-base font-semibold text-[var(--color-ink)]">
             {result.title}
           </h3>
@@ -599,5 +610,41 @@ function AuthorityCard({
         </div>
       </div>
     </li>
+  );
+}
+
+
+function TreatmentBadge({
+  treatment,
+  count,
+}: {
+  treatment: NonNullable<AuthoritySearchResult["worst_treatment"]>;
+  count: number;
+}) {
+  const tone =
+    treatment === "overruled"
+      ? "border-red-300 bg-red-50 text-red-800"
+      : treatment === "reversed"
+        ? "border-red-300 bg-red-50 text-red-800"
+        : "border-amber-300 bg-amber-50 text-amber-900";
+
+  const label =
+    treatment === "overruled"
+      ? "Overruled"
+      : treatment === "reversed"
+        ? "Reversed"
+        : "Doubted";
+
+  return (
+    <span
+      data-testid={`research-treatment-${treatment}`}
+      className={`mt-1 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${tone}`}
+      title={`${label} by ${count} later case${count === 1 ? "" : "s"} in the indexed corpus. Verify before relying on the holding.`}
+    >
+      {label}
+      <span className="rounded-full bg-white/70 px-1.5 py-0 text-[10px] font-medium">
+        {count}
+      </span>
+    </span>
   );
 }

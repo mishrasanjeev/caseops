@@ -21,6 +21,9 @@ from caseops_api.schemas.authorities import (
     AuthoritySearchRequest,
     AuthoritySearchResponse,
     AuthoritySourceListResponse,
+    AuthorityTreatmentBucketRecord,
+    AuthorityTreatmentSampleRecord,
+    AuthorityTreatmentSummaryResponse,
     SavedAnnotationListResponse,
     SavedAuthorityAnnotationRecord,
 )
@@ -37,6 +40,9 @@ from caseops_api.services.authority_annotations import (
     list_annotations,
     list_tenant_annotations,
     update_annotation,
+)
+from caseops_api.services.authority_treatments import (
+    summarize_treatments,
 )
 from caseops_api.services.identity import SessionContext
 
@@ -107,6 +113,53 @@ async def post_authority_search(
     session: DbSession,
 ) -> AuthoritySearchResponse:
     return search_authorities(session, context=context, payload=payload)
+
+
+@router.get(
+    "/{authority_document_id}/treatments",
+    response_model=AuthorityTreatmentSummaryResponse,
+    summary="Good-law treatment summary for one authority (PG-006)",
+)
+async def get_authority_treatment_summary(
+    authority_document_id: str,
+    context: AuthoritySearcher,
+    session: DbSession,
+) -> AuthorityTreatmentSummaryResponse:
+    """Return the treatment counts + sample evidence for one authority.
+
+    PG-006 Phase 1B — reads from ``authority_citations.treatment``
+    (populated by Phase 1A's heuristic classifier). The response
+    powers the research-result badge and the per-authority "good
+    law?" panel. Permission gate is the same as authority search.
+    """
+    _ = context  # suppress unused; capability check happens via the dep
+    summary = summarize_treatments(session, authority_document_id)
+    return AuthorityTreatmentSummaryResponse(
+        authority_document_id=summary.authority_document_id,
+        total_incoming=summary.total_incoming,
+        adverse_count=summary.adverse_count,
+        has_adverse_treatment=summary.has_adverse_treatment,
+        worst_treatment=summary.worst_treatment,  # type: ignore[arg-type]
+        buckets=[
+            AuthorityTreatmentBucketRecord(
+                treatment=b.treatment,  # type: ignore[arg-type]
+                count=b.count,
+                samples=[
+                    AuthorityTreatmentSampleRecord(
+                        citing_authority_document_id=s.citing_authority_document_id,
+                        citing_title=s.citing_title,
+                        citing_neutral_citation=s.citing_neutral_citation,
+                        citation_text=s.citation_text,
+                        treatment=s.treatment,  # type: ignore[arg-type]
+                        confidence=s.confidence,
+                        evidence_text=s.evidence_text,
+                    )
+                    for s in b.samples
+                ],
+            )
+            for b in summary.buckets
+        ],
+    )
 
 
 def _annotation_record(annotation) -> AuthorityAnnotationRecord:
