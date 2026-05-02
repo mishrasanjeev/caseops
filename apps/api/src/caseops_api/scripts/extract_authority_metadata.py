@@ -78,6 +78,7 @@ _PRICE_TABLE: dict[str, tuple[float, float]] = {
     "claude-haiku-4":  (1.0,   5.0),    # $1/M in, $5/M out
     "claude-sonnet-4": (3.0,   15.0),   # $3/M in, $15/M out
     "claude-opus-4":   (15.0,  75.0),   # $15/M in, $75/M out
+    "gpt-5":           (2.0,   10.0),   # $2/M in, $10/M out — matches services/corpus_structured.py
 }
 _DEFAULT_RATES = (15.0, 75.0)  # Opus — conservative default
 _DEFAULT_DAILY_USD_CAP = 100.0
