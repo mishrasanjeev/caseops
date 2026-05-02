@@ -79,15 +79,37 @@ test.describe("Drafting studio (§4.3)", () => {
       page.getByRole("heading", { name: "Drafting studio", exact: true }),
     ).toBeVisible();
 
-    // Empty state → create a draft.
-    await page.getByTestId("new-draft-trigger").first().click();
-    const createDialog = page.getByRole("dialog");
-    await createDialog.getByLabel("Title").fill("E2E reply brief");
-    await createDialog.getByRole("button", { name: /Create draft/i }).click();
-    await expect(createDialog).toBeHidden();
-
-    // Lands on detail page.
-    await page.waitForURL(/\/app\/matters\/[0-9a-f-]+\/drafts\/[0-9a-f-]+$/);
+    // ENH-004 (2026-05-01): "New draft" no longer opens a dialog — it
+    // navigates to /drafts/new which renders the template-grid + multi-
+    // step fact-capture stepper. The CREATE step is incidental to what
+    // this test covers (the generate → submit → request_changes → ...
+    // state machine), so we bypass the new UI and create the draft via
+    // the matter-scoped API. Use page.context().request so the call
+    // shares the BrowserContext's cookies — fetch() inside evaluate
+    // would be cross-origin (web :3100 → api :8000) and miss the auth.
+    const draftsListUrl = page.url();
+    const matterId = draftsListUrl.match(/matters\/([0-9a-f-]+)\/drafts/)?.[1];
+    if (!matterId) throw new Error(`could not parse matter id from ${draftsListUrl}`);
+    // CaseOps uses double-submit CSRF: the api/client.ts helper reads
+    // the caseops_csrf cookie and forwards it as X-CSRF-Token. Mirror
+    // that here for the raw API call.
+    const cookies = await page.context().cookies();
+    const csrf = cookies.find((c) => c.name === "caseops_csrf")?.value;
+    if (!csrf) throw new Error("caseops_csrf cookie missing after sign-in");
+    const draftRes = await page.context().request.post(
+      `http://127.0.0.1:8000/api/matters/${matterId}/drafts`,
+      {
+        data: { title: "E2E reply brief", draft_type: "brief" },
+        headers: { "X-CSRF-Token": csrf },
+      },
+    );
+    if (!draftRes.ok()) {
+      throw new Error(
+        `POST /matters/${matterId}/drafts -> ${draftRes.status()}: ${await draftRes.text()}`,
+      );
+    }
+    const draftId = ((await draftRes.json()) as { id: string }).id;
+    await page.goto(`/app/matters/${matterId}/drafts/${draftId}`);
     await expect(
       page.getByRole("heading", { name: "E2E reply brief" }),
     ).toBeVisible();

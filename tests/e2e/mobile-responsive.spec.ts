@@ -180,19 +180,28 @@ test.describe("Mobile / responsive proofs [mobile]", () => {
     await signIn(page, slug);
 
     // Create a matter so we can navigate to /drafts/new with a
-    // template selection.
-    await page.goto("/app/matters/new");
-    await page.locator("#matter-title").fill("Mobile stepper smoke");
-    await page.locator("#matter-code").fill("MOB-DS-1");
-    await page.locator("#practice-area").fill("Criminal");
+    // template selection. The matter-create surface is a Dialog opened
+    // from the matters list (no /app/matters/new route exists). Form
+    // fields use generated IDs from the <Field> primitive — drive them
+    // via getByLabel, not CSS id selectors.
+    await page.goto("/app/matters");
+    await page.getByTestId("new-matter-trigger").first().tap();
+    const newMatterDialog = page.getByRole("dialog");
+    await newMatterDialog.getByLabel("Title").fill("Mobile stepper smoke");
+    await newMatterDialog.getByLabel("Matter code").fill("MOB-DS-1");
+    await newMatterDialog.getByLabel("Practice area").fill("Criminal");
     // Forum select — pick high_court so bench-aware drafting fires.
-    const forumTrigger = page.getByLabel("Forum level");
+    const forumTrigger = newMatterDialog.getByLabel("Forum level");
     if (await forumTrigger.isVisible().catch(() => false)) {
       await forumTrigger.tap();
       await page.getByRole("option", { name: /High court/i }).tap();
     }
-    await page.getByRole("button", { name: /Create matter/i }).tap();
-    await page.waitForURL(/\/app\/matters\/[^/]+/);
+    await newMatterDialog.getByRole("button", { name: /Create matter/i }).tap();
+    await expect(newMatterDialog).toBeHidden();
+    // Tap the new matter's row to navigate to its cockpit (the dialog
+    // closes back onto the list — there's no auto-redirect).
+    await page.getByText("Mobile stepper smoke").first().tap();
+    await page.waitForURL(/\/app\/matters\/[0-9a-f-]+$/);
 
     // Navigate to the drafts list, click "New draft" → grid → bail.
     const matterUrl = page.url();
