@@ -206,36 +206,38 @@ def _structured_pass(
 
     # Partition into buckets. Sonnet first — premium budget is the
     # binding constraint, so we spend that ink deliberately and in
-    # chronological-priority order.
+    # chronological-priority order. When `year_range` is set, the filter
+    # applies to BOTH tiers so per-bucket sweeps that route to haiku
+    # (the launcher's normal mode) actually process docs — the prior
+    # year-range-only-on-sonnet behavior turned every per-bucket Layer-2
+    # invocation into a no-op for ~9 days (2026-04-23 → 2026-05-02).
     sonnet_bucket: list[AuthorityDocument] = []
     haiku_bucket: list[AuthorityDocument] = []
     for doc in all_docs:
         tier = force_tier or _tier_for_doc(doc)
         if _already_covered_at_tier(doc, tier):
             continue
+        if year_range is not None:
+            year = _year_for_doc(doc)
+            if year is None or not (year_range[0] <= year <= year_range[1]):
+                continue
         if tier == "sonnet":
-            if year_range is not None:
-                year = _year_for_doc(doc)
-                if year is None or not (year_range[0] <= year <= year_range[1]):
-                    continue
             sonnet_bucket.append(doc)
         else:
             haiku_bucket.append(doc)
 
-    # Sort sonnet bucket by filename year DESC so 2025 lands before
-    # 2020 inside a multi-year bucket. NULL-dated docs without a
-    # filename year are dropped to the end via -inf.
-    sonnet_bucket.sort(
-        key=lambda d: _year_for_doc(d) or -1,
-        reverse=True,
-    )
+    # Sort each bucket by filename year DESC so newest lands before
+    # oldest inside a multi-year bucket. NULL-dated docs without a
+    # filename year drop to the end via -1.
+    sonnet_bucket.sort(key=lambda d: _year_for_doc(d) or -1, reverse=True)
+    haiku_bucket.sort(key=lambda d: _year_for_doc(d) or -1, reverse=True)
 
     if year_range is not None:
         logger.info(
-            "year-range %d-%d: %d sonnet candidates (Haiku bucket skipped), budget=$%.2f",
-            year_range[0], year_range[1], len(sonnet_bucket), budget_usd,
+            "year-range %d-%d: %d sonnet, %d haiku candidates, budget=$%.2f",
+            year_range[0], year_range[1],
+            len(sonnet_bucket), len(haiku_bucket), budget_usd,
         )
-        haiku_bucket = []
     else:
         logger.info(
             "triage: %d sonnet candidates, %d haiku candidates, budget=$%.2f",
