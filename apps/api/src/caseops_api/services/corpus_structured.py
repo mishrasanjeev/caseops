@@ -136,6 +136,14 @@ _TIER_VERSION: dict[str, int] = {
 # tracked via ModelRun.cost_usd on every call.
 _PRICING_USD_PER_MTOK: dict[str, tuple[float, float]] = {
     _GPT_5_1: (2.00, 10.00),
+    # Cheaper OpenAI alternatives for Layer-2 A/B testing — verified
+    # 2026-05-02 against openai.com/api/pricing.
+    "gpt-5":         (1.25, 10.00),
+    "gpt-5-mini":    (0.25,  2.00),
+    "gpt-5-nano":    (0.05,  0.40),
+    "gpt-5.4":       (2.50, 15.00),
+    "gpt-5.4-mini":  (0.75,  4.50),
+    "gpt-5.4-nano":  (0.20,  1.25),
     # Legacy Anthropic entries retained so historical ModelRun rows
     # still resolve correctly when summing today's spend.
     "claude-haiku-4-5-20251001": (1.00, 5.00),
@@ -159,9 +167,16 @@ def build_tier_provider(tier: str) -> LLMProvider:
     tests keep working without an OpenAI key.
     """
     settings = get_settings()
-    model = _TIER_MODEL.get(tier)
-    if not model:
+    if tier not in _TIER_MODEL:
         raise ValueError(f"unknown tier: {tier!r}")
+    # Allow CASEOPS_LLM_MODEL_METADATA_EXTRACT to override the tier
+    # default. This is what makes Layer-2 model A/Bs possible without a
+    # code change per candidate — set the env var, run a small batch,
+    # rate the cohort, compare. The override applies to BOTH tier names
+    # ("haiku" and "sonnet") since post-cutover both already resolve to
+    # a single model.
+    override = getattr(settings, "llm_model_metadata_extract", None)
+    model = override or _TIER_MODEL[tier]
     provider_name = (settings.llm_provider or "").lower()
     if provider_name in {"mock", "noop", "off"}:
         return build_provider(purpose=PURPOSE_METADATA_EXTRACT)

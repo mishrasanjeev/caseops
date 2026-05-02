@@ -78,6 +78,14 @@ _PRICE_TABLE: dict[str, tuple[float, float]] = {
     "claude-haiku-4":  (1.0,   5.0),    # $1/M in, $5/M out
     "claude-sonnet-4": (3.0,   15.0),   # $3/M in, $15/M out
     "claude-opus-4":   (15.0,  75.0),   # $15/M in, $75/M out
+    # OpenAI family — keys are prefixes; gpt-5.1 / gpt-5-mini / etc all
+    # match "gpt-5". Specific-rate entries below override the generic
+    # one when their prefix matches first (dict-iteration order).
+    "gpt-5.4-nano":    (0.20,  1.25),
+    "gpt-5.4-mini":    (0.75,  4.50),
+    "gpt-5.4":         (2.50, 15.00),
+    "gpt-5-nano":      (0.05,  0.40),
+    "gpt-5-mini":      (0.25,  2.00),
     "gpt-5":           (2.0,   10.0),   # $2/M in, $10/M out — matches services/corpus_structured.py
 }
 _DEFAULT_RATES = (15.0, 75.0)  # Opus — conservative default

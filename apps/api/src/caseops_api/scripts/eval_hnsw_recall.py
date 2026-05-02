@@ -39,6 +39,7 @@ import re
 import sys
 from collections.abc import Iterable
 from dataclasses import dataclass
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -160,9 +161,19 @@ def _expand_query_via_haiku(query: str) -> str:
 
 
 def _sample_probes(
-    session: Session, *, sample_size: int, seed: int
+    session: Session,
+    *,
+    sample_size: int,
+    seed: int,
+    updated_since: datetime | None = None,
+    updated_until: datetime | None = None,
 ) -> tuple[list[_Probe], dict[str, int]]:
     """Return ``(probes, skip_reasons)``.
+
+    ``updated_since`` / ``updated_until`` (inclusive lower / exclusive
+    upper) filter the candidate pool to docs whose ``updated_at`` falls
+    in the window. Used by Layer-2 model A/Bs to rate just the cohort
+    that a particular candidate model touched.
 
     ``skip_reasons`` tags why a doc was excluded from the probe sample
     — almost always a title-validation failure (bench placeholder, OCR
@@ -182,6 +193,10 @@ def _sample_probes(
         .where(AuthorityDocument.structured_version.is_not(None))
         .where(AuthorityDocument.title.is_not(None))
     )
+    if updated_since is not None:
+        stmt = stmt.where(AuthorityDocument.updated_at >= updated_since)
+    if updated_until is not None:
+        stmt = stmt.where(AuthorityDocument.updated_at < updated_until)
     candidates = list(session.execute(stmt).all())
     if not candidates:
         return [], {}
@@ -328,6 +343,8 @@ def run(
     dry_run: bool,
     expand_query: bool = False,
     fail_on_miss: bool = False,
+    updated_since: datetime | None = None,
+    updated_until: datetime | None = None,
 ) -> int:
     logging.basicConfig(
         level=logging.INFO,
@@ -351,6 +368,7 @@ def run(
         else:
             probes, skip_reasons = _sample_probes(
                 session, sample_size=sample_size, seed=seed,
+                updated_since=updated_since, updated_until=updated_until,
             )
             if expand_query and probes:
                 expanded: list[_Probe] = []
@@ -441,11 +459,34 @@ def main(argv: Iterable[str] | None = None) -> int:
             "Turn this on for strict CI gating."
         ),
     )
+    parser.add_argument(
+        "--updated-since", default=None,
+        help=(
+            "ISO-8601 UTC timestamp; sample only docs whose updated_at >= "
+            "this. Used by Layer-2 model A/Bs to rate just the cohort a "
+            "candidate model touched."
+        ),
+    )
+    parser.add_argument(
+        "--updated-until", default=None,
+        help=(
+            "ISO-8601 UTC timestamp; sample only docs whose updated_at < "
+            "this. Pair with --updated-since to slice an A/B window."
+        ),
+    )
     args = parser.parse_args(list(argv) if argv is not None else None)
+
+    def _parse_iso(v: str | None) -> datetime | None:
+        if v is None:
+            return None
+        return datetime.fromisoformat(v.replace("Z", "+00:00"))
+
     return run(
         tenant_slug=args.tenant, sample_size=args.sample_size, k=args.k,
         seed=args.seed, dry_run=args.dry_run, expand_query=args.expand_query,
         fail_on_miss=args.fail_on_miss,
+        updated_since=_parse_iso(args.updated_since),
+        updated_until=_parse_iso(args.updated_until),
     )
 
 

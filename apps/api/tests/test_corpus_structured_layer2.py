@@ -35,10 +35,12 @@ from caseops_api.services.llm import LLMProviderError, OpenAIProvider
 def test_build_tier_provider_returns_openai_for_haiku(
     client: TestClient, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Live-mode haiku tier returns OpenAIProvider on gpt-5.1."""
+    """Live-mode haiku tier returns OpenAIProvider on gpt-5.1 when no
+    CASEOPS_LLM_MODEL_METADATA_EXTRACT override is set."""
     _ = client
     monkeypatch.setenv("CASEOPS_LLM_PROVIDER", "openai")
     monkeypatch.setenv("CASEOPS_LLM_API_KEY", "sk-test-key")
+    monkeypatch.setenv("CASEOPS_LLM_MODEL_METADATA_EXTRACT", "")
     get_settings.cache_clear()
     provider = build_tier_provider("haiku")
     assert isinstance(provider, OpenAIProvider)
@@ -53,10 +55,26 @@ def test_build_tier_provider_sonnet_also_gpt_5_1(
     _ = client
     monkeypatch.setenv("CASEOPS_LLM_PROVIDER", "openai")
     monkeypatch.setenv("CASEOPS_LLM_API_KEY", "sk-test-key")
+    monkeypatch.setenv("CASEOPS_LLM_MODEL_METADATA_EXTRACT", "")
     get_settings.cache_clear()
     provider = build_tier_provider("sonnet")
     assert isinstance(provider, OpenAIProvider)
     assert provider.model == "gpt-5.1"
+
+
+def test_build_tier_provider_honors_env_override(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CASEOPS_LLM_MODEL_METADATA_EXTRACT overrides the tier default —
+    this is what enables Layer-2 model A/Bs without a code change."""
+    _ = client
+    monkeypatch.setenv("CASEOPS_LLM_PROVIDER", "openai")
+    monkeypatch.setenv("CASEOPS_LLM_API_KEY", "sk-test-key")
+    monkeypatch.setenv("CASEOPS_LLM_MODEL_METADATA_EXTRACT", "gpt-5-nano")
+    get_settings.cache_clear()
+    provider = build_tier_provider("haiku")
+    assert isinstance(provider, OpenAIProvider)
+    assert provider.model == "gpt-5-nano"
 
 
 def test_build_tier_provider_unknown_tier_raises(client: TestClient) -> None:
