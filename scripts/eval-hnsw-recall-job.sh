@@ -36,7 +36,7 @@ gcloud run jobs $ACTION "${JOB}" \
   --set-env-vars "CASEOPS_ENV=cloud,CASEOPS_AUTO_MIGRATE=false,CASEOPS_EMBEDDING_PROVIDER=voyage,CASEOPS_EMBEDDING_MODEL=voyage-4-large,CASEOPS_EMBEDDING_DIMENSIONS=1024,CASEOPS_RERANK_ENABLED=true,CASEOPS_RERANK_BACKEND=fastembed" \
   --set-secrets "CASEOPS_DATABASE_URL=caseops-database-url:latest,CASEOPS_AUTH_SECRET=caseops-auth-secret:latest,CASEOPS_EMBEDDING_API_KEY=caseops-voyage-api-key:latest" \
   --set-cloudsql-instances "${SQL_INSTANCE}" \
-  --memory 2Gi --cpu 2 \
+  --memory 8Gi --cpu 2 \
   --max-retries 1 --quiet
 
 echo "--- executing job ---"
