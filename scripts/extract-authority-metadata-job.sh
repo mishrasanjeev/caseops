@@ -71,7 +71,7 @@ gcloud run jobs $ACTION "${JOB}" \
   --command=python \
   --args="^|^${JOINED}" \
   --service-account="${SA}" \
-  --set-env-vars="CASEOPS_ENV=cloud,CASEOPS_AUTO_MIGRATE=false,CASEOPS_LLM_PROVIDER=openai,CASEOPS_LLM_MODEL=gpt-5.1,CASEOPS_LAYER2_DAILY_USD_CAP=40,CASEOPS_LAYER2_DAILY_CAP_USD=40,CASEOPS_EMBEDDING_PROVIDER=voyage,CASEOPS_EMBEDDING_MODEL=voyage-4-large,CASEOPS_EMBEDDING_DIMENSIONS=1024" \
+  --set-env-vars="CASEOPS_ENV=cloud,CASEOPS_AUTO_MIGRATE=false,CASEOPS_LLM_PROVIDER=openai,CASEOPS_LLM_MODEL=gpt-5-mini,CASEOPS_LLM_MODEL_METADATA_EXTRACT=gpt-5-mini,CASEOPS_LAYER2_DAILY_USD_CAP=40,CASEOPS_LAYER2_DAILY_CAP_USD=40,CASEOPS_EMBEDDING_PROVIDER=voyage,CASEOPS_EMBEDDING_MODEL=voyage-4-large,CASEOPS_EMBEDDING_DIMENSIONS=1024" \
   --set-secrets="CASEOPS_DATABASE_URL=caseops-database-url:latest,CASEOPS_LLM_API_KEY=caseops-openai-api-key:latest,CASEOPS_OPENAI_API_KEY=caseops-openai-api-key:latest,CASEOPS_EMBEDDING_API_KEY=caseops-voyage-api-key:latest,CASEOPS_AUTH_SECRET=caseops-auth-secret:latest" \
   --set-cloudsql-instances="${SQL_INSTANCE}" \
   --memory=2Gi --cpu=2 \
