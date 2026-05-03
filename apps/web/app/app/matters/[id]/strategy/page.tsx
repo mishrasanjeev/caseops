@@ -568,8 +568,26 @@ function StrategyCard({
               className="flex list-decimal flex-col gap-1.5 pl-5 text-sm"
               data-testid="strategy-next-best-actions"
             >
-              {payload.next_best_actions.map((action) => (
-                <li key={action}>{action}</li>
+              {payload.next_best_actions.map((nba, idx) => (
+                <li
+                  key={`${nba.action}-${idx}`}
+                  className="flex items-start gap-2"
+                >
+                  <span className="flex-1">
+                    {nba.action}
+                    {/* Round-2 P1 #4: surface unverified items so the
+                        partner-reviewer knows which procedural claims
+                        the corpus could not back. */}
+                    {nba.unverified ? (
+                      <span
+                        className="ml-2 inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-800"
+                        data-testid="strategy-nba-unverified"
+                      >
+                        Unverified
+                      </span>
+                    ) : null}
+                  </span>
+                </li>
               ))}
             </ol>
           </Section>
@@ -699,6 +717,14 @@ function ForumSequenceTimeline({ steps }: { steps: ForumStep[] }) {
                   {step.forum_name}
                 </span>
               ) : null}
+              {step.unverified ? (
+                <span
+                  className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-800"
+                  data-testid={`strategy-forum-step-unverified-${idx}`}
+                >
+                  Unverified
+                </span>
+              ) : null}
             </div>
             <p className="mt-1 text-sm text-[var(--color-ink-2)]">
               {step.rationale}
@@ -713,6 +739,12 @@ function ForumSequenceTimeline({ steps }: { steps: ForumStep[] }) {
               <p className="mt-1 text-xs text-[var(--color-mute)]">
                 <span className="font-semibold">Filings:</span>{" "}
                 {step.expected_filings.join(", ")}
+              </p>
+            ) : null}
+            {step.supporting_citations.length > 0 ? (
+              <p className="mt-1 text-xs text-[var(--color-mute)]">
+                <span className="font-semibold">Cited:</span>{" "}
+                {step.supporting_citations.join(", ")}
               </p>
             ) : null}
           </div>
@@ -799,11 +831,25 @@ function LimitationFlagRow({ flag }: { flag: LimitationFlag }) {
         {flag.deadline_iso ? (
           <span className="text-xs">Deadline: {flag.deadline_iso}</span>
         ) : null}
+        {flag.unverified ? (
+          <span
+            className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-800"
+            data-testid="strategy-limitation-flag-unverified"
+          >
+            Unverified
+          </span>
+        ) : null}
       </div>
       <p className="mt-1 text-sm leading-relaxed">{flag.description}</p>
       {flag.statutory_basis ? (
         <p className="mt-1 text-xs">
           <span className="font-semibold">Basis:</span> {flag.statutory_basis}
+        </p>
+      ) : null}
+      {flag.supporting_citations.length > 0 ? (
+        <p className="mt-1 text-xs">
+          <span className="font-semibold">Cited:</span>{" "}
+          {flag.supporting_citations.join(", ")}
         </p>
       ) : null}
     </li>
@@ -823,11 +869,25 @@ function RiskRow({ risk }: { risk: StrategyRisk }) {
         <Badge tone={risk.severity === "high" ? "warning" : "neutral"}>
           {risk.severity}
         </Badge>
+        {risk.unverified ? (
+          <span
+            className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-800"
+            data-testid="strategy-risk-unverified"
+          >
+            Unverified
+          </span>
+        ) : null}
       </div>
       <p className="mt-1 text-sm leading-relaxed">{risk.description}</p>
       {risk.mitigation ? (
         <p className="mt-1 text-xs">
           <span className="font-semibold">Mitigation:</span> {risk.mitigation}
+        </p>
+      ) : null}
+      {risk.supporting_citations.length > 0 ? (
+        <p className="mt-1 text-xs">
+          <span className="font-semibold">Cited:</span>{" "}
+          {risk.supporting_citations.join(", ")}
         </p>
       ) : null}
     </li>

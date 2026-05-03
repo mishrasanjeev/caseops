@@ -190,6 +190,7 @@ def _valid_strategy_payload(citation: str) -> dict:
                 "expected_filings": [
                     "quashing_petition", "vakalatnama", "affidavit",
                 ],
+                "supporting_citations": [f"[1] {citation}"],
             },
             {
                 "forum_level": "supreme_court",
@@ -204,6 +205,7 @@ def _valid_strategy_payload(citation: str) -> dict:
                     "special_leave_petition", "synopsis_list_of_dates",
                     "condonation_of_delay",
                 ],
+                "supporting_citations": [f"[1] {citation}"],
             },
         ],
         "limitation_flags": [
@@ -217,6 +219,7 @@ def _valid_strategy_payload(citation: str) -> dict:
                 "statutory_basis": "Limitation Act 1963 Article 132",
                 "deadline_iso": None,
                 "severity": "warning",
+                "supporting_citations": [f"[1] {citation}"],
             }
         ],
         "required_documents": [
@@ -236,11 +239,18 @@ def _valid_strategy_payload(citation: str) -> dict:
                 ),
                 "severity": "medium",
                 "mitigation": "Estimate at outset; secure client mandate.",
+                "supporting_citations": [],
             }
         ],
         "next_best_actions": [
-            "Wait for HC pronouncement",
-            "If dismissed, prepare SLP within 60 days",
+            {
+                "action": "Wait for HC pronouncement",
+                "supporting_citations": [],
+            },
+            {
+                "action": "If dismissed, prepare SLP within 60 days",
+                "supporting_citations": [f"[1] {citation}"],
+            },
         ],
         "rationale": (
             "Two-stage strategy: pursue quashing at HC; if declined, "
@@ -618,6 +628,174 @@ def test_strategy_refuses_when_forbidden_phrase_in_payload(
     assert any(r.status == "rejected_forbidden_phrase" for r in runs), (
         "A forbidden-phrase refusal must persist as a ModelRun row."
     )
+
+
+# ---------------------------------------------------------------
+# Round-2 P1 #4: per-item citation verification on forum_sequence,
+# limitation_flags, risks, and next_best_actions.
+# ---------------------------------------------------------------
+
+
+def test_strategy_persists_verified_citations_on_every_item_kind(
+    client: TestClient, mock_strategy_provider,
+) -> None:
+    """The valid mock fixture cites the seeded SC authority on every
+    forum step, every limitation flag, and on the second next-best
+    action. After persistence those items must carry verified
+    citations + ``unverified=False``. Pure factual risk (no citation)
+    keeps ``unverified=False``."""
+    token, _, matter_id = _setup_matter(client, forum_level="high_court")
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "litigation_strategy"},
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()["strategy_payload"]
+
+    for step in payload["forum_sequence"]:
+        assert step["unverified"] is False, (
+            f"Forum step {step['stage_label']!r} cited the seeded "
+            "authority and must persist as verified."
+        )
+        assert len(step["supporting_citations"]) >= 1
+    for flag in payload["limitation_flags"]:
+        assert flag["unverified"] is False
+        assert len(flag["supporting_citations"]) >= 1
+    # Risk fixture has no citations (pure factual risk) — unverified
+    # must STAY False because the LLM didn't try to ground a legal
+    # claim.
+    for risk in payload["risks"]:
+        assert risk["unverified"] is False
+        assert risk["supporting_citations"] == []
+    # next_best_actions: first is bare-string-style (no citation, not
+    # legal), second cites the seeded authority.
+    actions = payload["next_best_actions"]
+    assert all(a["unverified"] is False for a in actions)
+    assert actions[0]["supporting_citations"] == []
+    assert len(actions[1]["supporting_citations"]) >= 1
+
+
+def test_strategy_flags_unverified_when_forum_step_citation_does_not_match(
+    client: TestClient, monkeypatch,
+) -> None:
+    """A forum step whose only citation is unverifiable must persist
+    with ``unverified=True`` and an empty ``supporting_citations``
+    list. The narrative is preserved so the partner-reviewer can still
+    see the procedural step that needs vetting."""
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    citation = _seed_relevant_authority()
+    payload = _valid_strategy_payload(citation)
+    # Primary route stays verified — we want the strategy to persist.
+    # But poison the FIRST forum step's citation.
+    payload["forum_sequence"][0]["supporting_citations"] = [
+        "Made Up Forum Step v. Nobody (2099)"
+    ]
+
+    class _PartialBad:
+        name = "mock"
+        model = "mock-partial-bad"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            return LLMCompletion(
+                text=json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=10,
+                completion_tokens=20,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _PartialBad(),
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.litigation_strategy.build_provider",
+        lambda *a, **kw: _PartialBad(),
+    )
+
+    token, _, matter_id = _setup_matter(client, forum_level="high_court")
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "litigation_strategy"},
+    )
+    assert response.status_code == 200, response.text
+    persisted = response.json()["strategy_payload"]
+    first_step = persisted["forum_sequence"][0]
+    assert first_step["unverified"] is True
+    assert first_step["supporting_citations"] == []
+    # The narrative is still there — the user can see what to vet.
+    assert first_step["stage_label"]
+    assert first_step["rationale"]
+
+
+def test_strategy_flags_unverified_on_legal_risk_with_bad_citation(
+    client: TestClient, monkeypatch,
+) -> None:
+    """A risk that emits a citation (i.e. asserts a legal claim) and
+    fails verification must persist with ``unverified=True``. A risk
+    with NO citation stays ``unverified=False`` (factual)."""
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    citation = _seed_relevant_authority()
+    payload = _valid_strategy_payload(citation)
+    # First risk: legal claim with bad citation. Second risk: factual,
+    # no citation.
+    payload["risks"] = [
+        {
+            "label": "Counterclaim exposure",
+            "description": "Plaintiff may file a counterclaim under fictitious section.",
+            "severity": "high",
+            "mitigation": "Reserve right to amend.",
+            "supporting_citations": ["Imaginary Statute v. Bench (2099)"],
+        },
+        {
+            "label": "Cost",
+            "description": "Senior counsel fees are material.",
+            "severity": "medium",
+            "mitigation": "Cap engagement.",
+            "supporting_citations": [],
+        },
+    ]
+
+    class _RiskUncited:
+        name = "mock"
+        model = "mock-risk-uncited"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            return LLMCompletion(
+                text=json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=10,
+                completion_tokens=20,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _RiskUncited(),
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.litigation_strategy.build_provider",
+        lambda *a, **kw: _RiskUncited(),
+    )
+
+    token, _, matter_id = _setup_matter(client, forum_level="high_court")
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "litigation_strategy"},
+    )
+    assert response.status_code == 200, response.text
+    risks = response.json()["strategy_payload"]["risks"]
+    assert risks[0]["unverified"] is True
+    assert risks[0]["supporting_citations"] == []
+    assert risks[1]["unverified"] is False  # factual risk
+    assert risks[1]["supporting_citations"] == []
 
 
 # ---------------------------------------------------------------

@@ -151,6 +151,9 @@ export const forumStep = z.object({
   rationale: z.string(),
   statutory_basis: z.array(z.string()),
   expected_filings: z.array(z.string()),
+  // Round-2 P1 #4: per-step citation verification.
+  supporting_citations: z.array(z.string()).default([]),
+  unverified: z.boolean().default(false),
 });
 
 export const recommendedDraft = z.object({
@@ -167,6 +170,9 @@ export const limitationFlag = z.object({
   statutory_basis: z.string().nullable(),
   deadline_iso: z.string().nullable(),
   severity: z.enum(["info", "warning", "critical"]),
+  // Round-2 P1 #4: per-flag citation verification.
+  supporting_citations: z.array(z.string()).default([]),
+  unverified: z.boolean().default(false),
 });
 
 export const strategyRisk = z.object({
@@ -174,6 +180,16 @@ export const strategyRisk = z.object({
   description: z.string(),
   severity: z.enum(["low", "medium", "high"]),
   mitigation: z.string().nullable(),
+  // Round-2 P1 #4: optional per-risk citation verification.
+  // Empty supporting_citations + unverified=false == factual risk.
+  supporting_citations: z.array(z.string()).default([]),
+  unverified: z.boolean().default(false),
+});
+
+export const nextBestAction = z.object({
+  action: z.string(),
+  supporting_citations: z.array(z.string()).default([]),
+  unverified: z.boolean().default(false),
 });
 
 export const litigationStrategyPayload = z.object({
@@ -186,7 +202,9 @@ export const litigationStrategyPayload = z.object({
   required_documents: z.array(z.string()),
   missing_facts: z.array(z.string()),
   risks: z.array(strategyRisk),
-  next_best_actions: z.array(z.string()),
+  // Round-2 P1 #4: structured next_best_actions so each carries
+  // verified citations + an unverified flag.
+  next_best_actions: z.array(nextBestAction),
   disclaimer: z.string(),
 });
 
@@ -234,6 +252,8 @@ export type ForumStepLevel = z.infer<typeof forumStepLevel>;
 export type RecommendedDraft = z.infer<typeof recommendedDraft>;
 export type LimitationFlag = z.infer<typeof limitationFlag>;
 export type StrategyRisk = z.infer<typeof strategyRisk>;
+// Round-2 P1 #4 — structured next_best_actions.
+export type NextBestAction = z.infer<typeof nextBestAction>;
 
 export const contractStatus = z.enum([
   "draft",

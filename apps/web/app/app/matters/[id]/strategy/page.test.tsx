@@ -72,6 +72,8 @@ const SAMPLE_PAYLOAD = {
       rationale: "HC inherent powers under BNSS s.528.",
       statutory_basis: ["BNSS s.528"],
       expected_filings: ["quashing_petition", "vakalatnama"],
+      supporting_citations: ["Sushila Aggarwal v. State of NCT (2020)"],
+      unverified: false,
     },
     {
       forum_level: "supreme_court" as const,
@@ -80,6 +82,8 @@ const SAMPLE_PAYLOAD = {
       rationale: "Article 136 SLP grounds.",
       statutory_basis: ["Constitution Article 136"],
       expected_filings: ["special_leave_petition", "synopsis_list_of_dates"],
+      supporting_citations: ["Sushila Aggarwal v. State of NCT (2020)"],
+      unverified: false,
     },
   ],
   recommended_drafts: [
@@ -106,6 +110,8 @@ const SAMPLE_PAYLOAD = {
       statutory_basis: "Limitation Act Article 132",
       deadline_iso: null,
       severity: "warning" as const,
+      supporting_citations: ["Sushila Aggarwal v. State of NCT (2020)"],
+      unverified: false,
     },
   ],
   required_documents: ["Certified copy of FIR", "Certified copy of HC order"],
@@ -116,9 +122,22 @@ const SAMPLE_PAYLOAD = {
       description: "SC-stage costs are material.",
       severity: "medium" as const,
       mitigation: "Estimate at outset.",
+      supporting_citations: [],
+      unverified: false,
     },
   ],
-  next_best_actions: ["Wait for HC listing", "Prepare SLP within 60 days"],
+  next_best_actions: [
+    {
+      action: "Wait for HC listing",
+      supporting_citations: [],
+      unverified: false,
+    },
+    {
+      action: "Prepare SLP within 60 days",
+      supporting_citations: ["Sushila Aggarwal v. State of NCT (2020)"],
+      unverified: false,
+    },
+  ],
   disclaimer:
     "This strategy is a citation-grounded starting point and requires lawyer review.",
 };
@@ -408,6 +427,56 @@ describe("MatterStrategyPage", () => {
     );
     // Banner stays — Request changes is not an approval.
     expect(screen.getByTestId("strategy-review-required")).toBeInTheDocument();
+  });
+
+  // ---------------------------------------------------------------
+  // Round-2 P1 #4: surface unverified flags on items that did not
+  // pass per-item citation verification.
+  // ---------------------------------------------------------------
+
+  it("renders an Unverified badge on a forum step / limitation flag / next-best action whose citation did not verify", async () => {
+    const unverifiedStrategy = {
+      ...SAMPLE_STRATEGY,
+      strategy_payload: {
+        ...SAMPLE_PAYLOAD,
+        forum_sequence: [
+          {
+            ...SAMPLE_PAYLOAD.forum_sequence[0],
+            supporting_citations: [],
+            unverified: true,
+          },
+        ],
+        limitation_flags: [
+          {
+            ...SAMPLE_PAYLOAD.limitation_flags[0],
+            supporting_citations: [],
+            unverified: true,
+          },
+        ],
+        next_best_actions: [
+          {
+            action: "File the application",
+            supporting_citations: [],
+            unverified: true,
+          },
+        ],
+      },
+    };
+    listRecommendationsMock.mockResolvedValue({
+      matter_id: "m-1",
+      recommendations: [unverifiedStrategy],
+    });
+    render(withClient(<StrategyPage />));
+    await waitFor(() =>
+      expect(screen.getByTestId("strategy-card")).toBeInTheDocument(),
+    );
+    expect(
+      screen.getByTestId("strategy-forum-step-unverified-0"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("strategy-limitation-flag-unverified"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("strategy-nba-unverified")).toBeInTheDocument();
   });
 
   it("structural test: the strategy fixture contains no forbidden outcome-promising language", () => {

@@ -83,6 +83,13 @@ class ForumStep(BaseModel):
     Order is meaningful — the list is the route through forums in
     chronological order. ``stage_label`` is a short tag the UI shows on
     the step (e.g. "First appeal", "SLP", "Review").
+
+    Round-2 P1 #4: the forum step's statutory / jurisdictional basis is
+    a legal claim and must be cited. ``supporting_citations`` is the
+    list of citations that the verifier confirmed against the retrieved
+    authority set. ``unverified=True`` is set when the LLM either
+    emitted no citation for this step or every citation it emitted
+    failed verification.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -95,6 +102,8 @@ class ForumStep(BaseModel):
     expected_filings: list[RecommendedDraftType] = Field(
         default_factory=list, max_length=10,
     )
+    supporting_citations: list[str] = Field(default_factory=list, max_length=10)
+    unverified: bool = False
 
 
 class RecommendedDraft(BaseModel):
@@ -125,6 +134,11 @@ class LimitationFlag(BaseModel):
     ``deadline_iso`` stays None and ``description`` calls out the
     missing fact (e.g. "limitation runs from impugned-order date,
     which is not on file").
+
+    Round-2 P1 #4: a limitation flag is a legal claim about a statutory
+    deadline. ``supporting_citations`` carries the verifier-confirmed
+    citations; ``unverified=True`` is set when the cited statute /
+    case did not verify against the retrieved authority set.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -134,6 +148,8 @@ class LimitationFlag(BaseModel):
     statutory_basis: str | None = Field(default=None, max_length=200)
     deadline_iso: str | None = Field(default=None, max_length=10)
     severity: LimitationSeverity = "info"
+    supporting_citations: list[str] = Field(default_factory=list, max_length=10)
+    unverified: bool = False
 
 
 class StrategyRisk(BaseModel):
@@ -141,7 +157,18 @@ class StrategyRisk(BaseModel):
     recommended route. Risks are deliberately distinct from
     ``risk_notes`` on a route — those are per-route; these are
     cross-cutting risks (cost, reputational, parallel proceedings,
-    counterclaim exposure)."""
+    counterclaim exposure).
+
+    Round-2 P1 #4: risks are sometimes purely factual (cost, client
+    withdrawal, reputational fallout) and need no citation. Other
+    times they are legal/procedural claims (parallel-proceedings bar,
+    counterclaim exposure under a specific section). When the LLM
+    chooses to emit ``supporting_citations`` for a risk, we run them
+    through the verifier; if every emitted citation fails, we set
+    ``unverified=True`` and drop the citations from the persisted
+    payload. Empty ``supporting_citations`` is the factual-risk path
+    and does not flip ``unverified``.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -149,6 +176,26 @@ class StrategyRisk(BaseModel):
     description: str = Field(min_length=2, max_length=2000)
     severity: RiskSeverity = "medium"
     mitigation: str | None = Field(default=None, max_length=1000)
+    supporting_citations: list[str] = Field(default_factory=list, max_length=10)
+    unverified: bool = False
+
+
+class NextBestAction(BaseModel):
+    """A concrete next step the lawyer should take. Round-2 P1 #4
+    structurised this from a free string list so each action's
+    procedural basis can be cited and verified. ``unverified=True`` is
+    set when the LLM emitted a citation for the action that did not
+    verify against the retrieved authority set, OR when the action
+    makes a legal claim with no citation. Purely operational actions
+    (``"call the client back"``) are emitted with no citations and
+    ``unverified=False``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    action: str = Field(min_length=2, max_length=600)
+    supporting_citations: list[str] = Field(default_factory=list, max_length=10)
+    unverified: bool = False
 
 
 class LitigationStrategyPayload(BaseModel):
@@ -177,7 +224,9 @@ class LitigationStrategyPayload(BaseModel):
     required_documents: list[str] = Field(default_factory=list, max_length=20)
     missing_facts: list[str] = Field(default_factory=list, max_length=20)
     risks: list[StrategyRisk] = Field(default_factory=list, max_length=10)
-    next_best_actions: list[str] = Field(default_factory=list, max_length=10)
+    next_best_actions: list[NextBestAction] = Field(
+        default_factory=list, max_length=10,
+    )
     disclaimer: str = Field(min_length=2, max_length=2000)
 
 
@@ -226,6 +275,7 @@ __all__ = [
     "LimitationFlag",
     "LimitationSeverity",
     "LitigationStrategyPayload",
+    "NextBestAction",
     "RecommendedDraft",
     "RecommendedDraftType",
     "RouteAvailability",

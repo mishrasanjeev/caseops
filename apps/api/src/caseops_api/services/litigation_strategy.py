@@ -59,8 +59,12 @@ from caseops_api.schemas.drafting_templates import (
     list_template_schemas,
 )
 from caseops_api.schemas.litigation_strategy import (
+    ForumStep,
+    LimitationFlag,
     LitigationStrategyPayload,
+    NextBestAction,
     RecommendedDraft,
+    StrategyRisk,
     StrategyRoute,
     assert_no_forbidden_phrases,
 )
@@ -141,7 +145,13 @@ class _LLMStrategyResponse(BaseModel):
     required_documents: list[str] = Field(default_factory=list, max_length=20)
     missing_facts: list[str] = Field(default_factory=list, max_length=20)
     risks: list[dict] = Field(default_factory=list, max_length=10)
-    next_best_actions: list[str] = Field(default_factory=list, max_length=10)
+    # Round-2 P1 #4: structured next_best_actions so each action's
+    # procedural basis can be cited and verified. We accept either
+    # ``[str]`` (legacy) or ``[{"action": str, "supporting_citations": [...]}]``
+    # so an LLM that hasn't picked up the new schema doesn't 502 the
+    # whole strategy. The post-processor coerces both forms into
+    # ``list[NextBestAction]`` before persistence.
+    next_best_actions: list[str | dict] = Field(default_factory=list, max_length=10)
     rationale: str = Field(min_length=2, max_length=8000)
     confidence: str = "low"
     next_action: str | None = None
@@ -260,7 +270,13 @@ def _build_prompt(
         "    statutory basis you cite MUST be supported by at least "
         "    one authority from the RETRIEVED_AUTHORITIES list, "
         "    referenced VERBATIM by its bracket tag (e.g. [1], [2]) "
-        "    plus the citation text from that line.\n"
+        "    plus the citation text from that line. This rule applies "
+        "    to `recommended_route.supporting_citations`, "
+        "    `alternative_routes[*].supporting_citations`, "
+        "    `forum_sequence[*].supporting_citations`, "
+        "    `limitation_flags[*].supporting_citations`, "
+        "    `next_best_actions[*].supporting_citations` AND any "
+        "    `risks[*].supporting_citations` you choose to emit.\n"
         " 2. NEVER use the phrases: 'perfect strategy', 'guaranteed', "
         "    'will win', 'will succeed', 'will be granted', 'certain "
         "    outcome', 'no lawyer needed', 'replace advocate', "
@@ -270,8 +286,13 @@ def _build_prompt(
         " 3. NEVER invent facts, dates, citations, party names, "
         "    forum names, or remedies. If you do not have a fact, "
         "    list it under `missing_facts`.\n"
-        " 4. NEVER promise an outcome. Strategy is about ROUTES + "
-        "    PROBABILITIES, not guarantees.\n"
+        " 4. Strategy is about ROUTES, RISKS, PROCEDURAL POSTURE, "
+        "    and EVIDENCE GAPS — NOT outcome prediction. Do NOT use "
+        "    percentage-based outcome language ('70% chance', '40% "
+        "    likelihood of success', 'odds of winning'), do NOT use "
+        "    'likely to win' / 'likelihood of success' / 'probability "
+        "    of success' / 'chance of success' phrasing, and do NOT "
+        "    rank routes on outcome probability.\n"
         " 5. The output ALWAYS requires lawyer review — say so in "
         "    the disclaimer.\n"
         f" 6. {sc_clause}\n"
@@ -285,6 +306,12 @@ def _build_prompt(
         "    If the limitation date depends on a fact you do not "
         "    have, leave `deadline_iso` null and explain in "
         "    `description` what fact is missing.\n"
+        "10. For `risks`, emit `supporting_citations` ONLY when the "
+        "    risk is a legal/procedural claim (parallel-proceedings "
+        "    bar, counterclaim exposure under a specific section, "
+        "    res-judicata risk). Pure operational risks (cost, "
+        "    client withdrawal, reputational fallout) take an empty "
+        "    `supporting_citations: []`.\n"
         "CITATION RULES (HARD): each `supporting_citations` entry "
         "MUST start with the bracket tag from RETRIEVED_AUTHORITIES "
         "(e.g. \"[1]\") followed by the citation text from that "
@@ -320,13 +347,17 @@ def _build_prompt(
         "|supreme_court|supreme_court_review|supreme_court_curative|arbitration"
         "|executive|other\", \"stage_label\": str, \"forum_name\": "
         "str | null, \"rationale\": str, \"statutory_basis\": [str], "
-        "\"expected_filings\": [str]}], \"limitation_flags\": "
+        "\"expected_filings\": [str], \"supporting_citations\": [str]}], "
+        "\"limitation_flags\": "
         "[{\"label\": str, \"description\": str, \"statutory_basis\": "
         "str | null, \"deadline_iso\": str | null, \"severity\": "
-        "\"info|warning|critical\"}], \"required_documents\": [str], "
+        "\"info|warning|critical\", \"supporting_citations\": [str]}], "
+        "\"required_documents\": [str], "
         "\"missing_facts\": [str], \"risks\": [{\"label\": str, "
         "\"description\": str, \"severity\": \"low|medium|high\", "
-        "\"mitigation\": str | null}], \"next_best_actions\": [str], "
+        "\"mitigation\": str | null, \"supporting_citations\": [str]}], "
+        "\"next_best_actions\": [{\"action\": str, "
+        "\"supporting_citations\": [str]}], "
         "\"rationale\": str, \"confidence\": \"low|medium|high\", "
         "\"next_action\": str | null, \"assumptions\": [str], "
         "\"disclaimer\": str}"
@@ -398,6 +429,37 @@ def _verify_routes(
             option.model_copy(update={"supporting_citations": per_option})
         )
     return cleaned, report
+
+
+def _verify_item_citations(
+    raw_citations: list[str], retrieved: list[RetrievedAuthority]
+) -> list[str]:
+    """Round-2 P1 #4 helper. Run a list of raw citation strings through
+    the verifier and return only the canonical, verified survivors
+    (deduplicated, in original order)."""
+    if not raw_citations:
+        return []
+    sources = [
+        SourceDoc(identifier=a.identifier, text=a.text, aliases=a.aliases)
+        for a in retrieved
+    ]
+    claims = [
+        Claim(citation=citation, proposition="strategy item citation")
+        for citation in raw_citations
+    ]
+    report = verify_citations(claims, sources)
+    canonical_for: dict[str, str] = {}
+    for check in report.checks:
+        if check.verified and check.source is not None:
+            canonical_for[check.claim.citation] = check.source.identifier
+    seen: set[str] = set()
+    verified: list[str] = []
+    for citation in raw_citations:
+        canonical = canonical_for.get(citation)
+        if canonical and canonical not in seen:
+            verified.append(canonical)
+            seen.add(canonical)
+    return verified
 
 
 # ---------------------------------------------------------------
@@ -656,6 +718,23 @@ def generate_litigation_strategy(
     # narrow ``_StrategyOption`` shape into the full
     # ``LitigationStrategyPayload`` model so the persisted JSON is
     # validated against the contract that the API returns.
+
+    # Round-2 fix (P1 #4): also verify citations on forum_sequence,
+    # limitation_flags, risks, and next_best_actions. Items whose
+    # citations don't verify keep their narrative content (so the user
+    # still sees the substantive strategy) but are flagged
+    # ``unverified=True`` AND have their citations stripped from the
+    # persisted payload. The frontend renders an unverified badge so
+    # the partner reviewer knows what to vet.
+    forum_steps_payload = _build_forum_steps(parsed.forum_sequence, retrieved)
+    limitation_flags_payload = _build_limitation_flags(
+        parsed.limitation_flags, retrieved
+    )
+    risks_payload = _build_risks(parsed.risks, retrieved)
+    next_best_actions_payload = _build_next_best_actions(
+        parsed.next_best_actions, retrieved
+    )
+
     try:
         payload = LitigationStrategyPayload(
             current_posture=parsed.current_posture,
@@ -680,12 +759,12 @@ def generate_litigation_strategy(
                 )
                 for alt in cleaned_alternatives
             ],
-            forum_sequence=parsed.forum_sequence,  # validated by pydantic
-            limitation_flags=parsed.limitation_flags,
+            forum_sequence=forum_steps_payload,
+            limitation_flags=limitation_flags_payload,
             required_documents=parsed.required_documents,
             missing_facts=parsed.missing_facts,
-            risks=parsed.risks,
-            next_best_actions=parsed.next_best_actions,
+            risks=risks_payload,
+            next_best_actions=next_best_actions_payload,
             disclaimer=parsed.disclaimer,
             recommended_drafts=_build_recommended_drafts(
                 matter=matter,
@@ -863,6 +942,183 @@ def _extract_template_slugs(parsed: _LLMStrategyResponse) -> list[str]:
             slugs.append(slug)
             seen.add(slug)
     return slugs
+
+
+def _build_forum_steps(
+    raw_steps: list[dict], retrieved: list[RetrievedAuthority]
+) -> list[ForumStep]:
+    """Round-2 P1 #4. Coerce LLM forum_sequence dicts into ForumStep
+    models with verified citations and ``unverified`` flags.
+
+    A forum step's statutory / jurisdictional basis is a legal claim,
+    so we treat ``unverified=True`` as the default unless at least one
+    citation survives verification. Items with no citations OR whose
+    every citation fails verification are kept (the user still sees
+    the procedural narrative) but flagged so the partner-reviewer
+    knows to vet them.
+    """
+    out: list[ForumStep] = []
+    for raw in raw_steps:
+        if not isinstance(raw, dict):
+            continue
+        raw_citations = raw.get("supporting_citations") or []
+        if not isinstance(raw_citations, list):
+            raw_citations = []
+        verified = _verify_item_citations(
+            [c for c in raw_citations if isinstance(c, str)], retrieved
+        )
+        unverified_flag = len(verified) == 0
+        try:
+            step = ForumStep(
+                forum_level=raw.get("forum_level", "other"),
+                stage_label=str(raw.get("stage_label", "Stage")),
+                forum_name=raw.get("forum_name"),
+                rationale=str(raw.get("rationale", "")),
+                statutory_basis=[
+                    s for s in (raw.get("statutory_basis") or []) if isinstance(s, str)
+                ][:10],
+                expected_filings=[
+                    s for s in (raw.get("expected_filings") or []) if isinstance(s, str)
+                ][:10],
+                supporting_citations=verified,
+                unverified=unverified_flag,
+            )
+        except ValidationError:
+            # Skip a malformed step rather than fail the whole strategy
+            # — the surviving steps still represent a usable plan.
+            continue
+        out.append(step)
+    return out
+
+
+def _build_limitation_flags(
+    raw_flags: list[dict], retrieved: list[RetrievedAuthority]
+) -> list[LimitationFlag]:
+    """Round-2 P1 #4. Limitation flags claim a statutory deadline; they
+    require a verified citation. Default ``unverified=True`` unless at
+    least one citation survives."""
+    out: list[LimitationFlag] = []
+    for raw in raw_flags:
+        if not isinstance(raw, dict):
+            continue
+        raw_citations = raw.get("supporting_citations") or []
+        if not isinstance(raw_citations, list):
+            raw_citations = []
+        verified = _verify_item_citations(
+            [c for c in raw_citations if isinstance(c, str)], retrieved
+        )
+        unverified_flag = len(verified) == 0
+        try:
+            flag = LimitationFlag(
+                label=str(raw.get("label", "Limitation")),
+                description=str(raw.get("description", "")),
+                statutory_basis=raw.get("statutory_basis"),
+                deadline_iso=raw.get("deadline_iso"),
+                severity=raw.get("severity", "info"),
+                supporting_citations=verified,
+                unverified=unverified_flag,
+            )
+        except ValidationError:
+            continue
+        out.append(flag)
+    return out
+
+
+def _build_risks(
+    raw_risks: list[dict], retrieved: list[RetrievedAuthority]
+) -> list[StrategyRisk]:
+    """Round-2 P1 #4. Risks are the most heterogeneous of the four —
+    some are factual (cost, client withdrawal, reputation) and need no
+    citation; others are legal/procedural claims and do.
+
+    Convention: if the LLM emitted ``supporting_citations`` for a risk,
+    treat it as a legal claim and verify. If at least one survives,
+    keep those + ``unverified=False``. If none survive, keep narrative
+    + flag ``unverified=True`` (the LLM TRIED to ground a legal claim
+    and missed). Empty ``supporting_citations`` is the factual-risk
+    path — keep ``unverified=False``.
+    """
+    out: list[StrategyRisk] = []
+    for raw in raw_risks:
+        if not isinstance(raw, dict):
+            continue
+        raw_citations = raw.get("supporting_citations") or []
+        if not isinstance(raw_citations, list):
+            raw_citations = []
+        cleaned_raw = [c for c in raw_citations if isinstance(c, str)]
+        verified = _verify_item_citations(cleaned_raw, retrieved)
+        # Only flag unverified when the LLM emitted citations and none verified.
+        unverified_flag = len(cleaned_raw) > 0 and len(verified) == 0
+        try:
+            risk = StrategyRisk(
+                label=str(raw.get("label", "Risk")),
+                description=str(raw.get("description", "")),
+                severity=raw.get("severity", "medium"),
+                mitigation=raw.get("mitigation"),
+                supporting_citations=verified,
+                unverified=unverified_flag,
+            )
+        except ValidationError:
+            continue
+        out.append(risk)
+    return out
+
+
+def _build_next_best_actions(
+    raw_actions: list[str | dict],
+    retrieved: list[RetrievedAuthority],
+) -> list[NextBestAction]:
+    """Round-2 P1 #4. Convert the LLM next_best_actions into structured
+    ``NextBestAction`` records with verified citations.
+
+    Accepts either ``[str]`` (legacy) or ``[{"action": str,
+    "supporting_citations": [str]}]``. Strings are wrapped with no
+    citations and ``unverified=False`` (a free-text action like 'Wait
+    for HC pronouncement' carries no legal claim). Structured items
+    follow the same rule as forum steps: at least one citation must
+    survive verification, otherwise ``unverified=True``.
+    """
+    out: list[NextBestAction] = []
+    for raw in raw_actions:
+        if isinstance(raw, str):
+            # Bare-string action — no citation, no legal claim flagged.
+            try:
+                out.append(
+                    NextBestAction(
+                        action=raw,
+                        supporting_citations=[],
+                        unverified=False,
+                    )
+                )
+            except ValidationError:
+                continue
+            continue
+        if not isinstance(raw, dict):
+            continue
+        action_text = str(raw.get("action", "")).strip()
+        if not action_text:
+            continue
+        raw_citations = raw.get("supporting_citations") or []
+        if not isinstance(raw_citations, list):
+            raw_citations = []
+        cleaned_raw = [c for c in raw_citations if isinstance(c, str)]
+        verified = _verify_item_citations(cleaned_raw, retrieved)
+        # If the model emitted citations on this action, treat the
+        # action as a legal/procedural claim. unverified flips when no
+        # citation survives. Empty cleaned_raw == operational action
+        # (factual / non-legal) and stays verified=True.
+        unverified_flag = len(cleaned_raw) > 0 and len(verified) == 0
+        try:
+            out.append(
+                NextBestAction(
+                    action=action_text,
+                    supporting_citations=verified,
+                    unverified=unverified_flag,
+                )
+            )
+        except ValidationError:
+            continue
+    return out
 
 
 __all__ = [
