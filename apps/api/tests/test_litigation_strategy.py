@@ -1612,3 +1612,94 @@ def test_strategy_approve_succeeds_when_role_has_strategy_approve(
     assert decision.status_code == 200, decision.text
     assert decision.json()["review_required"] is False
     assert decision.json()["status"] == "accepted"
+
+
+# ---------------------------------------------------------------
+# Round-3 P1 #R3-1: uncited alternative routes must NOT be
+# persisted as available legal strategies. We drop them entirely.
+# ---------------------------------------------------------------
+
+
+def test_strategy_drops_uncited_alternative_routes(
+    client: TestClient, monkeypatch,
+) -> None:
+    """LLM emits 2 alternatives. One cites the seeded authority (will
+    verify), one cites a fictitious case (will not). The persisted
+    payload must contain exactly one alternative — the verified one."""
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    citation = _seed_relevant_authority()
+    payload = _valid_strategy_payload(citation)
+    payload["alternative_routes"] = [
+        {
+            "label": "Verified compromise route",
+            "rationale": "Settle and compound with cross-reference to seeded authority.",
+            "confidence": "low",
+            "availability": "uncertain",
+            "supporting_citations": [f"[1] {citation}"],
+            "risk_notes": None,
+        },
+        {
+            "label": "Uncited speculative route",
+            "rationale": "Approach a hypothetical alternative bench.",
+            "confidence": "low",
+            "availability": "available",
+            "supporting_citations": ["Made Up Alt v. Nobody (2099)"],
+            "risk_notes": None,
+        },
+    ]
+
+    class _MixedAlternatives:
+        name = "mock"
+        model = "mock-mixed-alts"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            return LLMCompletion(
+                text=json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=10,
+                completion_tokens=20,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _MixedAlternatives(),
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.litigation_strategy.build_provider",
+        lambda *a, **kw: _MixedAlternatives(),
+    )
+
+    token, _, matter_id = _setup_matter(client, forum_level="high_court")
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "litigation_strategy"},
+    )
+    assert response.status_code == 200, response.text
+    persisted = response.json()["strategy_payload"]
+    alternatives = persisted["alternative_routes"]
+    assert len(alternatives) == 1, (
+        "Uncited alternative route must be dropped, not persisted with "
+        "supporting_citations=[]."
+    )
+    assert alternatives[0]["label"] == "Verified compromise route"
+    assert len(alternatives[0]["supporting_citations"]) >= 1
+    # And the persisted RecommendationOption rows must mirror the drop:
+    # rank 0 is primary, rank 1 is the surviving alternative; there is
+    # no rank 2 for the dropped uncited alternative.
+    factory = get_session_factory()
+    with factory() as session:
+        rec = session.scalar(
+            select(Recommendation).where(
+                Recommendation.type == "litigation_strategy",
+            )
+        )
+        assert rec is not None
+        ranks = sorted(opt.rank for opt in rec.options)
+        assert ranks == [0, 1], (
+            f"Recommendation.options ranks must be [0, 1] after dropping the "
+            f"uncited alternative. Got {ranks!r}."
+        )

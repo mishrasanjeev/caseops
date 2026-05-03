@@ -826,10 +826,18 @@ def generate_litigation_strategy(
     all_routes = [parsed.recommended_route, *parsed.alternative_routes]
     cleaned_routes, _report = _verify_routes(all_routes, retrieved)
     cleaned_recommended = cleaned_routes[0]
-    cleaned_alternatives = cleaned_routes[1:]
+    # Round-3 fix (P1 #R3-1, 2026-05-03): drop uncited alternative
+    # routes entirely. Persisting an alternative with
+    # ``supporting_citations=[]`` and ``available=...`` would surface an
+    # uncited route to the lawyer as an available legal strategy. The
+    # only fail-closed answer is: if an alternative has no verified
+    # citation, it is not a "supported alternative" — drop it.
+    cleaned_alternatives = [
+        alt for alt in cleaned_routes[1:] if alt.supporting_citations
+    ]
     primary_verified = len(cleaned_recommended.supporting_citations)
-    total_verified = sum(
-        len(r.supporting_citations) for r in cleaned_routes
+    total_verified = primary_verified + sum(
+        len(r.supporting_citations) for r in cleaned_alternatives
     )
 
     # Round-2 fix (P1 #1, 2026-05-03): citation verification is
