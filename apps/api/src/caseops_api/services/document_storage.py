@@ -14,6 +14,7 @@ from google.cloud import storage
 from caseops_api.core.settings import get_settings
 
 _FILENAME_SANITIZER = re.compile(r"[^A-Za-z0-9._-]+")
+_STORAGE_SEGMENT = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 _SUPPORTED_STORAGE_BACKENDS = {"local", "gcs"}
 
 
@@ -85,6 +86,22 @@ def sanitize_filename(filename: str) -> str:
     candidate = Path(filename).name.strip() or "document"
     sanitized = _FILENAME_SANITIZER.sub("_", candidate)
     return sanitized[:255] or "document"
+
+
+def _safe_storage_segment(value: str, label: str) -> str:
+    segment = str(value or "").strip()
+    if (
+        not segment
+        or segment in {".", ".."}
+        or "/" in segment
+        or "\\" in segment
+        or not _STORAGE_SEGMENT.fullmatch(segment)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid {label} for document storage.",
+        )
+    return segment
 
 
 def _write_stream_to_temp_file(stream: BinaryIO) -> tuple[Path, int, str]:
@@ -167,8 +184,15 @@ def persist_workspace_attachment(
     namespace: str = "matters",
 ) -> StoredDocument:
     safe_filename = sanitize_filename(filename)
+    safe_company_id = _safe_storage_segment(company_id, "company id")
+    safe_namespace = _safe_storage_segment(namespace, "storage namespace")
+    safe_workspace_id = _safe_storage_segment(workspace_id, "workspace id")
+    safe_attachment_id = _safe_storage_segment(attachment_id, "attachment id")
     relative_path = (
-        Path(company_id) / namespace / workspace_id / f"{attachment_id}-{safe_filename}"
+        Path(safe_company_id)
+        / safe_namespace
+        / safe_workspace_id
+        / f"{safe_attachment_id}-{safe_filename}"
     )
     storage_key = relative_path.as_posix()
     temp_path, size_bytes, sha256_hex = _write_stream_to_temp_file(stream)
@@ -176,7 +200,13 @@ def persist_workspace_attachment(
 
     try:
         if backend == "local":
-            target_path = (_document_root() / relative_path).resolve()
+            root = _document_root()
+            target_path = (root / relative_path).resolve()
+            if os.path.commonpath([str(root), str(target_path)]) != str(root):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid storage key.",
+                )
             target_path.parent.mkdir(parents=True, exist_ok=True)
             temp_path.replace(target_path)
         else:
@@ -191,6 +221,40 @@ def persist_workspace_attachment(
         size_bytes=size_bytes,
         sha256_hex=sha256_hex,
     )
+
+
+def delete_stored_document(storage_key: str) -> None:
+    """Best-effort removal for a persisted document.
+
+    Upload routes call this when a post-persistence guard, such as the
+    virus scanner, rejects the file. The previous cleanup path unlinked
+    only the local materialized path returned by ``resolve_storage_path``;
+    for GCS that left the just-uploaded blob behind in the bucket.
+    """
+    relative_path = _validated_relative_path(storage_key)
+    backend = _storage_backend()
+    if backend == "local":
+        root = _document_root()
+        target_path = (root / relative_path).resolve()
+        if os.path.commonpath([str(root), str(target_path)]) != str(root):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid storage key.",
+            )
+        target_path.unlink(missing_ok=True)
+        return
+
+    cache_root = _document_cache_root()
+    cache_path = (cache_root / relative_path).resolve()
+    if os.path.commonpath([str(cache_root), str(cache_path)]) != str(cache_root):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid storage key.",
+        )
+    cache_path.unlink(missing_ok=True)
+    blob = _gcs_client().bucket(_gcs_bucket_name()).blob(_gcs_blob_name(storage_key))
+    if blob.exists():
+        blob.delete()
 
 
 def resolve_storage_path(storage_key: str) -> Path:
@@ -223,5 +287,19 @@ def resolve_storage_path(storage_key: str) -> Path:
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Attachment file is no longer available.",
         )
-    blob.download_to_filename(str(target_path))
+    temp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            suffix=".download",
+            prefix=f".{target_path.name}.",
+            dir=str(target_path.parent),
+            delete=False,
+        ) as temp_file:
+            temp_path = Path(temp_file.name)
+        blob.download_to_filename(str(temp_path))
+        temp_path.replace(target_path)
+    except Exception:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
+        raise
     return target_path

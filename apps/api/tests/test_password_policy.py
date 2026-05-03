@@ -4,12 +4,19 @@ import pytest
 from fastapi.testclient import TestClient
 
 from caseops_api.core.password_policy import WeakPasswordError, enforce_password_policy
+from caseops_api.core.security import hash_password, verify_password
 
 STRONG = "FoundersPass123!"
 
 
 def test_strong_password_is_accepted() -> None:
     enforce_password_policy(STRONG)
+
+
+def test_verify_password_returns_false_for_corrupt_hashes() -> None:
+    assert verify_password(STRONG, "not-a-valid-hash") is False
+    assert verify_password(STRONG, "scrypt$not-hex$also-not-hex") is False
+    assert verify_password(STRONG, hash_password(STRONG)) is True
 
 
 @pytest.mark.parametrize(

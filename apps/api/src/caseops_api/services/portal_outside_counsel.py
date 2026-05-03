@@ -54,6 +54,7 @@ from caseops_api.db.models import (
 )
 from caseops_api.services.audit import record_audit
 from caseops_api.services.document_storage import (
+    delete_stored_document,
     persist_matter_attachment,
     resolve_storage_path,
     sanitize_filename,
@@ -167,7 +168,7 @@ def upload_oc_work_product(
             )
         except Exception:
             try:
-                resolve_storage_path(stored.storage_key).unlink(missing_ok=True)
+                delete_stored_document(stored.storage_key)
             except Exception:
                 pass
             raise

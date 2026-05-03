@@ -2,11 +2,22 @@
 from __future__ import annotations
 
 import io
+import zipfile
 
 import pytest
 from fastapi import HTTPException
 
 from caseops_api.services.file_security import verify_upload
+
+
+def _minimal_docx_bytes(extra_entries: dict[str, bytes] | None = None) -> bytes:
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, mode="w") as zf:
+        zf.writestr("[Content_Types].xml", b"<Types></Types>")
+        zf.writestr("word/document.xml", b"<w:document></w:document>")
+        for name, body in (extra_entries or {}).items():
+            zf.writestr(name, body)
+    return out.getvalue()
 
 
 def test_accepts_pdf_with_matching_magic() -> None:
@@ -53,7 +64,7 @@ def test_refuses_mismatched_content_type() -> None:
 
 
 def test_accepts_docx_zip_magic() -> None:
-    stream = io.BytesIO(b"PK\x03\x04" + b"\x00" * 500)
+    stream = io.BytesIO(_minimal_docx_bytes())
     verify_upload(
         filename="contract.docx",
         content_type=(
@@ -61,6 +72,42 @@ def test_accepts_docx_zip_magic() -> None:
         ),
         stream=stream,
     )
+    assert stream.tell() == 0
+
+
+def test_refuses_renamed_zip_missing_docx_parts() -> None:
+    stream = io.BytesIO()
+    with zipfile.ZipFile(stream, mode="w") as zf:
+        zf.writestr("payload.txt", b"not a Word document")
+    stream.seek(0)
+
+    with pytest.raises(HTTPException) as exc:
+        verify_upload(
+            filename="contract.docx",
+            content_type=(
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            ),
+            stream=stream,
+        )
+
+    assert exc.value.status_code == 400
+    assert "required word document parts" in exc.value.detail.lower()
+
+
+def test_refuses_docx_internal_path_traversal() -> None:
+    stream = io.BytesIO(_minimal_docx_bytes({"../evil.txt": b"escape"}))
+
+    with pytest.raises(HTTPException) as exc:
+        verify_upload(
+            filename="contract.docx",
+            content_type=(
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            ),
+            stream=stream,
+        )
+
+    assert exc.value.status_code == 400
+    assert "unsafe internal path" in exc.value.detail.lower()
 
 
 def test_accepts_png_with_magic() -> None:
@@ -94,6 +141,17 @@ def test_txt_has_no_signature_requirement() -> None:
         content_type="text/plain",
         stream=io.BytesIO(b"just some text"),
     )
+
+
+def test_txt_rejects_nul_bytes() -> None:
+    with pytest.raises(HTTPException) as exc:
+        verify_upload(
+            filename="notes.txt",
+            content_type="text/plain",
+            stream=io.BytesIO(b"hello\x00world"),
+        )
+    assert exc.value.status_code == 400
+    assert "nul" in exc.value.detail.lower()
 
 
 # ---------------------------------------------------------------------

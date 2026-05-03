@@ -6,11 +6,9 @@ import os
 import re
 import shutil
 import subprocess
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-import pypdfium2 as pdfium
 from pdfminer.high_level import extract_text as pdf_extract_text
 from sqlalchemy.orm import Session
 
@@ -120,36 +118,20 @@ def _extract_image_text(path: Path) -> str:
 
 
 def _extract_scanned_pdf_text(path: Path) -> str:
-    command = _resolve_tesseract_command()
-    if not command:
-        raise RuntimeError("OCR is not configured yet because no tesseract binary is available.")
+    from caseops_api.services.ocr import ocr_pdf
 
-    document = pdfium.PdfDocument(str(path))
-    page_texts: list[str] = []
-    try:
-        for page_index in range(len(document)):
-            page = document.get_page(page_index)
-            temp_path: Path | None = None
-            try:
-                bitmap = page.render(scale=2)
-                image = bitmap.to_pil()
-                try:
-                    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as temp_file:
-                        temp_path = Path(temp_file.name)
-                    image.save(temp_path, format="PNG")
-                    text = _normalize_whitespace(_run_tesseract(command, temp_path))
-                finally:
-                    image.close()
-                    if temp_path is not None:
-                        temp_path.unlink(missing_ok=True)
-                if text:
-                    page_texts.append(text)
-            finally:
-                page.close()
-    finally:
-        document.close()
-
-    return "\n\n".join(page_texts)
+    result = ocr_pdf(path)
+    if result is None:
+        raise RuntimeError("OCR is not configured for scanned PDF extraction.")
+    if not result.text.strip():
+        scope = (
+            f"{result.pages_processed}/{result.pages_total} pages"
+            if result.pages_total
+            else "0 pages"
+        )
+        suffix = " (truncated by configured OCR page cap)" if result.truncated else ""
+        raise RuntimeError(f"OCR returned no accepted text after {scope}{suffix}.")
+    return result.text
 
 
 def _chunk_text(

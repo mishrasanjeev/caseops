@@ -71,6 +71,52 @@ def test_ocr_result_dataclass_roundtrip() -> None:
     assert result.text == "abc" and result.provider == "rapidocr"
 
 
+def test_document_processing_scanned_pdf_uses_configured_ocr(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from caseops_api.services.document_processing import _extract_scanned_pdf_text
+
+    dummy = tmp_path / "doc.pdf"
+    dummy.write_bytes(b"%PDF-1.4\n%%EOF\n")
+    monkeypatch.setattr(
+        "caseops_api.services.ocr.ocr_pdf",
+        lambda path: OcrResult(
+            text="bounded OCR text",
+            provider="rapidocr",
+            pages_processed=2,
+            pages_total=10,
+            truncated=True,
+        ),
+    )
+
+    assert _extract_scanned_pdf_text(dummy) == "bounded OCR text"
+
+
+def test_document_processing_scanned_pdf_surfaces_empty_bounded_ocr(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from caseops_api.services.document_processing import _extract_scanned_pdf_text
+
+    dummy = tmp_path / "doc.pdf"
+    dummy.write_bytes(b"%PDF-1.4\n%%EOF\n")
+    monkeypatch.setattr(
+        "caseops_api.services.ocr.ocr_pdf",
+        lambda path: OcrResult(
+            text="",
+            provider="rapidocr",
+            pages_processed=2,
+            pages_total=10,
+            truncated=True,
+        ),
+    )
+
+    with pytest.raises(RuntimeError) as exc:
+        _extract_scanned_pdf_text(dummy)
+
+    assert "2/10 pages" in str(exc.value)
+    assert "page cap" in str(exc.value)
+
+
 # ---------------------------------------------------------------
 # Sprint Q4 — per-page OCR quality gate.
 # ---------------------------------------------------------------
