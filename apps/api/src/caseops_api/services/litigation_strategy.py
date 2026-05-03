@@ -50,9 +50,14 @@ from sqlalchemy.orm import Session, selectinload
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     Matter,
+    MatterAttachment,
+    MatterCauseListEntry,
     MatterHearing,
+    MatterStatuteReference,
     Recommendation,
     RecommendationOption,
+    Statute,
+    StatuteSection,
 )
 from caseops_api.schemas.drafting_templates import (
     DraftTemplateType,
@@ -174,21 +179,56 @@ class _LLMStrategyResponse(BaseModel):
 
 
 @dataclass
+class _AttachmentSnippet:
+    title: str
+    excerpt: str
+
+
+@dataclass
+class _StatuteSnippet:
+    statute_name: str
+    section_number: str
+    section_label: str | None
+    section_text: str | None
+    relevance: str  # 'cited' | 'opposing' | 'context'
+
+
+@dataclass
 class _StrategyContext:
     matter: Matter
     hearings: list[MatterHearing]
     template_recommendations: list[TemplateRecommendation]
     sc_route_plausible: bool
+    attachment_snippets: list[_AttachmentSnippet]
+    statute_snippets: list[_StatuteSnippet]
+    cause_list_snippets: list[MatterCauseListEntry]
+
+
+# Round-2 P2 #6 budget knobs. The PR's prompt already runs ~3000 chars
+# per matter; we cap each new context block so a doc-rich matter does
+# not blow the LLM's context window.
+_MAX_ATTACHMENT_DOCS = 6
+_MAX_ATTACHMENT_EXCERPT_CHARS = 600
+_MAX_STATUTE_REFS = 8
+_MAX_STATUTE_SECTION_TEXT_CHARS = 600
+_MAX_CAUSE_LIST_ENTRIES = 4
 
 
 def _assemble_context(session: Session, matter: Matter) -> _StrategyContext:
     """Pull the matter context the strategy planner needs.
 
-    We fetch the upcoming + past hearings to surface stage context,
-    and the template recommender's matrix output as a starting point
-    for the recommended-drafts panel. The model can override / add to
-    this list, but starting from the canonical recommender keeps the
-    SC pack consistent across matters.
+    We fetch:
+      - the upcoming + past hearings to surface stage context
+      - the template recommender's matrix output (drafts panel seed)
+      - Round-2 P2 #6: matter attachments (titles + bounded excerpts),
+        linked statute references with section text, and recent
+        bench/cause-list entries. This is the context the brief said
+        was missing — without it the strategy planner could only see
+        the matter description and hearings, leaving uploaded orders /
+        statute references / next-bench information out of scope.
+
+    Each new block is bounded so a doc-rich matter does not blow the
+    prompt budget.
     """
     hearings = list(
         session.scalars(
@@ -202,6 +242,73 @@ def _assemble_context(session: Session, matter: Matter) -> _StrategyContext:
         forum_level=matter.forum_level or "",
         practice_area=matter.practice_area or "",
     )
+
+    # Attachments — only those whose extraction succeeded so we feed
+    # text the LLM can actually read. Most-recent first.
+    attachments = list(
+        session.scalars(
+            select(MatterAttachment)
+            .where(MatterAttachment.matter_id == matter.id)
+            .where(MatterAttachment.extracted_text.is_not(None))
+            .order_by(MatterAttachment.created_at.desc())
+            .limit(_MAX_ATTACHMENT_DOCS)
+        )
+    )
+    attachment_snippets: list[_AttachmentSnippet] = []
+    for att in attachments:
+        excerpt = (att.extracted_text or "").strip()
+        if not excerpt:
+            continue
+        attachment_snippets.append(
+            _AttachmentSnippet(
+                title=att.original_filename,
+                excerpt=excerpt[:_MAX_ATTACHMENT_EXCERPT_CHARS],
+            )
+        )
+
+    # Statutes — joined with the section + parent statute so we can
+    # render 'BNSS s.528' style identifiers + a bounded slice of
+    # section_text where indexed.
+    statute_rows = list(
+        session.execute(
+            select(MatterStatuteReference, StatuteSection, Statute)
+            .join(
+                StatuteSection,
+                StatuteSection.id == MatterStatuteReference.section_id,
+            )
+            .join(Statute, Statute.id == StatuteSection.statute_id)
+            .where(MatterStatuteReference.matter_id == matter.id)
+            .order_by(MatterStatuteReference.created_at.desc())
+            .limit(_MAX_STATUTE_REFS)
+        )
+    )
+    statute_snippets: list[_StatuteSnippet] = []
+    for ref, section, statute in statute_rows:
+        text = (section.section_text or "").strip() or None
+        if text and len(text) > _MAX_STATUTE_SECTION_TEXT_CHARS:
+            text = text[:_MAX_STATUTE_SECTION_TEXT_CHARS] + "…"
+        statute_snippets.append(
+            _StatuteSnippet(
+                statute_name=statute.short_name,
+                section_number=section.section_number,
+                section_label=section.section_label,
+                section_text=text,
+                relevance=ref.relevance,
+            )
+        )
+
+    # Cause-list / next-bench entries — bench_name + listing_date is
+    # the procedurally relevant context. Older than current is OK; we
+    # just want the next few listings ordered desc.
+    cause_list_entries = list(
+        session.scalars(
+            select(MatterCauseListEntry)
+            .where(MatterCauseListEntry.matter_id == matter.id)
+            .order_by(MatterCauseListEntry.listing_date.desc())
+            .limit(_MAX_CAUSE_LIST_ENTRIES)
+        )
+    )
+
     # SC plausibility is a coarse heuristic on the matter forum_level
     # plus the practice area. Routes that escalate to SC are surfaced
     # only when this gate is open. The LLM can still REFUSE to
@@ -220,6 +327,9 @@ def _assemble_context(session: Session, matter: Matter) -> _StrategyContext:
         hearings=hearings,
         template_recommendations=template_recs,
         sc_route_plausible=sc_plausible,
+        attachment_snippets=attachment_snippets,
+        statute_snippets=statute_snippets,
+        cause_list_snippets=cause_list_entries,
     )
 
 
@@ -249,6 +359,66 @@ def _build_prompt(
         f"[{i}] CITATION: {a.identifier}\n    EXCERPT: {a.text[:600]}"
         for i, a in enumerate(authorities, start=1)
     ) or "(no authorities retrieved)"
+
+    # Round-2 P2 #6 — additional context blocks. When any block is
+    # empty we explicitly say "none on file" so the model knows the
+    # absence is data, not omission, and lists the gap under
+    # `missing_facts` per the prompt rule.
+    if ctx.attachment_snippets:
+        attachment_block = "\n".join(
+            f"- {snip.title}: {snip.excerpt}"
+            for snip in ctx.attachment_snippets
+        )
+    else:
+        attachment_block = (
+            "(no matter attachments on file. If the strategy depends on "
+            "uploaded orders / pleadings, list 'matter attachments' "
+            "under `missing_facts`.)"
+        )
+    if ctx.statute_snippets:
+        statute_lines: list[str] = []
+        for snip in ctx.statute_snippets:
+            label = (
+                f" — {snip.section_label}"
+                if snip.section_label
+                else ""
+            )
+            text_block = (
+                f"\n    TEXT: {snip.section_text}"
+                if snip.section_text
+                else ""
+            )
+            statute_lines.append(
+                f"- [{snip.relevance}] {snip.statute_name} "
+                f"s.{snip.section_number}{label}{text_block}"
+            )
+        statute_block = "\n".join(statute_lines)
+    else:
+        statute_block = (
+            "(no linked statute references on file. If the strategy "
+            "depends on a statute, list 'linked statutes' under "
+            "`missing_facts`.)"
+        )
+    if ctx.cause_list_snippets:
+        cause_lines: list[str] = []
+        for entry in ctx.cause_list_snippets:
+            bench_str = (
+                f" before {entry.bench_name}"
+                if entry.bench_name
+                else ""
+            )
+            stage_str = f" — {entry.stage}" if entry.stage else ""
+            cause_lines.append(
+                f"- {entry.listing_date.isoformat()} {entry.forum_name}"
+                f"{bench_str}{stage_str}"
+            )
+        cause_list_block = "\n".join(cause_lines)
+    else:
+        cause_list_block = (
+            "(no recent cause-list entries on file. If the strategy "
+            "depends on the next-listing bench composition, list "
+            "'cause-list / next bench' under `missing_facts`.)"
+        )
     sc_clause = (
         "SUPREME COURT routes (SLP under Article 136, Article 132/133/134 "
         "appeals, review under Article 137, curative under the Rupa Ashok "
@@ -332,6 +502,12 @@ def _build_prompt(
         f"DESCRIPTION: {(matter.description or '').strip() or 'none'}\n"
         f"STAGE: {matter.status or 'unknown'}\n\n"
         f"HEARINGS_RECENT_AND_UPCOMING:\n{hearing_block}\n\n"
+        f"MATTER_ATTACHMENTS (recent uploads, bounded excerpts):\n"
+        f"{attachment_block}\n\n"
+        f"LINKED_STATUTE_REFERENCES (matter-specific statutes; "
+        f"relevance is 'cited' / 'opposing' / 'context'):\n"
+        f"{statute_block}\n\n"
+        f"CAUSE_LIST_NEXT_BENCH (recent listings):\n{cause_list_block}\n\n"
         f"AVAILABLE_TEMPLATES (use only these template_type slugs in "
         f"recommended_drafts):\n{_available_templates_block()}\n\n"
         f"TEMPLATE_RECOMMENDER_DEFAULTS (starting suggestions, you may "

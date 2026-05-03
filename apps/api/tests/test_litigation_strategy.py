@@ -862,6 +862,233 @@ def test_strategy_refuses_when_forbidden_phrase_in_payload(
 
 
 # ---------------------------------------------------------------
+# Round-2 P2 #6: PRD-context ingestion. The strategy planner's
+# context block must include matter attachments, linked statute
+# references, and bench/cause-list entries when present.
+# ---------------------------------------------------------------
+
+
+def _seed_attachment(matter_id: str, *, filename: str, text: str) -> None:
+    """Helper: insert a MatterAttachment with extracted_text so the
+    strategy context-builder picks it up."""
+    factory = get_session_factory()
+    with factory() as session:
+        from caseops_api.db.models import MatterAttachment
+
+        session.add(
+            MatterAttachment(
+                matter_id=matter_id,
+                original_filename=filename,
+                storage_key=f"test-attach/{filename}-{hashlib.sha1(text.encode()).hexdigest()[:8]}",
+                content_type="application/pdf",
+                size_bytes=len(text),
+                sha256_hex=hashlib.sha256(text.encode()).hexdigest(),
+                processing_status="processed",
+                extracted_char_count=len(text),
+                extracted_text=text,
+            )
+        )
+        session.commit()
+
+
+def _seed_statute_reference(matter_id: str) -> None:
+    """Helper: insert a StatuteSection + Matter→section link."""
+    factory = get_session_factory()
+    with factory() as session:
+        from caseops_api.db.models import (
+            MatterStatuteReference,
+            Statute,
+            StatuteSection,
+        )
+
+        statute = Statute(
+            id="bnss-2023-test",
+            short_name="BNSS",
+            long_name="Bharatiya Nagarik Suraksha Sanhita 2023",
+            enacted_year=2023,
+        )
+        session.add(statute)
+        session.flush()
+        section = StatuteSection(
+            statute_id=statute.id,
+            section_number="528",
+            section_label="Inherent powers of High Court",
+            section_text=(
+                "Nothing in this Sanhita shall be deemed to limit or affect "
+                "the inherent powers of the High Court to make such orders "
+                "as may be necessary to give effect to any order under this "
+                "Sanhita, or to prevent abuse of the process of any Court "
+                "or otherwise to secure the ends of justice."
+            ),
+        )
+        session.add(section)
+        session.flush()
+        session.add(
+            MatterStatuteReference(
+                matter_id=matter_id,
+                section_id=section.id,
+                relevance="cited",
+            )
+        )
+        session.commit()
+
+
+def _seed_cause_list_entry(matter_id: str) -> None:
+    factory = get_session_factory()
+    with factory() as session:
+        from caseops_api.db.models import MatterCauseListEntry
+
+        session.add(
+            MatterCauseListEntry(
+                matter_id=matter_id,
+                listing_date=datetime.date(2026, 5, 15),
+                forum_name="Delhi High Court",
+                bench_name="Hon'ble Mr. Justice X",
+                courtroom="Court 12",
+                stage="For arguments",
+                source="hand-entered",
+            )
+        )
+        session.commit()
+
+
+def test_strategy_context_includes_attachments_statutes_and_cause_list_when_present(
+    client: TestClient, monkeypatch,
+) -> None:
+    """Round-2 P2 #6 happy path. With at least one attachment, one
+    statute reference, and one cause-list entry seeded against the
+    matter, the prompt MUST include the attachment title + an excerpt,
+    the statute identifier + section text slice, and the cause-list
+    listing.
+
+    We verify by intercepting the LLM provider mid-call so we can
+    inspect the prompt the service built. Fixture-style provider
+    install is inlined so we capture the messages passed in."""
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    citation = _seed_relevant_authority()
+    payload = _valid_strategy_payload(citation)
+
+    seen_messages: list[LLMMessage] = []
+
+    class _PromptCapturing:
+        name = "mock"
+        model = "mock-prompt"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            seen_messages.extend(messages)
+            return LLMCompletion(
+                text=json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=10,
+                completion_tokens=20,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _PromptCapturing(),
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.litigation_strategy.build_provider",
+        lambda *a, **kw: _PromptCapturing(),
+    )
+
+    token, _, matter_id = _setup_matter(client, forum_level="high_court")
+    # Seed all three new context kinds AFTER the matter exists.
+    _seed_attachment(
+        matter_id,
+        filename="HC_quashing_petition_filed.pdf",
+        text=(
+            "IN THE HIGH COURT OF DELHI. Cr.M.C. 1234/2026. "
+            "Petition under BNSS s.528 to quash FIR No. 12/2026..."
+        ),
+    )
+    _seed_statute_reference(matter_id)
+    _seed_cause_list_entry(matter_id)
+
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "litigation_strategy"},
+    )
+    assert response.status_code == 200, response.text
+
+    full_prompt = "\n".join(m.content for m in seen_messages)
+
+    # Attachment block: title + excerpt slice present.
+    assert "MATTER_ATTACHMENTS" in full_prompt
+    assert "HC_quashing_petition_filed.pdf" in full_prompt
+    assert "Cr.M.C. 1234/2026" in full_prompt
+
+    # Statute block: section identifier + text slice.
+    assert "LINKED_STATUTE_REFERENCES" in full_prompt
+    assert "BNSS s.528" in full_prompt
+    assert "Inherent powers of High Court" in full_prompt
+
+    # Cause list block: bench + stage.
+    assert "CAUSE_LIST_NEXT_BENCH" in full_prompt
+    assert "Hon'ble Mr. Justice X" in full_prompt
+    assert "For arguments" in full_prompt
+
+
+def test_strategy_context_says_none_on_file_when_no_attachments_statutes_or_cause_list(
+    client: TestClient, monkeypatch,
+) -> None:
+    """Round-2 P2 #6 zero-context path. With no attachments, no
+    statute refs, no cause-list entries, the prompt must explicitly
+    say 'none on file' for each block AND instruct the model to surface
+    the gap under `missing_facts`. Otherwise the planner silently
+    invents context and the partner-reviewer can't tell what was
+    missing."""
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    citation = _seed_relevant_authority()
+    payload = _valid_strategy_payload(citation)
+    seen_messages: list[LLMMessage] = []
+
+    class _PromptCapturing:
+        name = "mock"
+        model = "mock-prompt-zero"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            seen_messages.extend(messages)
+            return LLMCompletion(
+                text=json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=10,
+                completion_tokens=20,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _PromptCapturing(),
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.litigation_strategy.build_provider",
+        lambda *a, **kw: _PromptCapturing(),
+    )
+
+    token, _, matter_id = _setup_matter(client, forum_level="high_court")
+    # Deliberately seed nothing else.
+
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "litigation_strategy"},
+    )
+    assert response.status_code == 200, response.text
+
+    full_prompt = "\n".join(m.content for m in seen_messages)
+    assert "no matter attachments on file" in full_prompt
+    assert "no linked statute references on file" in full_prompt
+    assert "no recent cause-list entries on file" in full_prompt
+
+
+# ---------------------------------------------------------------
 # Round-2 P1 #4: per-item citation verification on forum_sequence,
 # limitation_flags, risks, and next_best_actions.
 # ---------------------------------------------------------------
