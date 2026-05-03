@@ -117,6 +117,73 @@ def test_document_processing_scanned_pdf_surfaces_empty_bounded_ocr(
     assert "page cap" in str(exc.value)
 
 
+def test_document_processing_scanned_pdf_falls_back_to_tesseract(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Regression guard: when no native OCR backend (rapidocr/paddle/...)
+    is loadable, ocr_pdf returns None — but a configured tesseract
+    binary must still be tried before declaring OCR unavailable."""
+    from caseops_api.services import document_processing
+
+    dummy = tmp_path / "doc.pdf"
+    dummy.write_bytes(b"%PDF-1.4\n%%EOF\n")
+    monkeypatch.setattr(
+        "caseops_api.services.ocr.ocr_pdf",
+        lambda path: None,
+    )
+    monkeypatch.setattr(
+        document_processing,
+        "_extract_scanned_pdf_text_via_tesseract",
+        lambda p: "fallback OCR text from tesseract",
+    )
+
+    assert (
+        document_processing._extract_scanned_pdf_text(dummy)
+        == "fallback OCR text from tesseract"
+    )
+
+
+def test_document_processing_scanned_pdf_raises_when_neither_backend_available(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from caseops_api.services import document_processing
+
+    dummy = tmp_path / "doc.pdf"
+    dummy.write_bytes(b"%PDF-1.4\n%%EOF\n")
+    monkeypatch.setattr(
+        "caseops_api.services.ocr.ocr_pdf",
+        lambda path: None,
+    )
+    monkeypatch.setattr(
+        document_processing,
+        "_extract_scanned_pdf_text_via_tesseract",
+        lambda p: "",
+    )
+
+    with pytest.raises(RuntimeError) as exc:
+        document_processing._extract_scanned_pdf_text(dummy)
+
+    assert "not configured" in str(exc.value).lower()
+
+
+def test_tesseract_fallback_returns_empty_when_command_missing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The fallback helper itself returns "" (not raise) when there is
+    no tesseract binary to invoke. The caller distinguishes empty -> raise."""
+    from caseops_api.services import document_processing
+
+    dummy = tmp_path / "doc.pdf"
+    dummy.write_bytes(b"%PDF-1.4\n%%EOF\n")
+    monkeypatch.setattr(
+        document_processing,
+        "_resolve_tesseract_command",
+        lambda: None,
+    )
+
+    assert document_processing._extract_scanned_pdf_text_via_tesseract(dummy) == ""
+
+
 # ---------------------------------------------------------------
 # Sprint Q4 — per-page OCR quality gate.
 # ---------------------------------------------------------------
