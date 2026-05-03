@@ -33,6 +33,7 @@ from sqlalchemy.orm import Session
 
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import AuthorityDocument, AuthorityDocumentChunk, ModelRun
+from caseops_api.db.session import get_session_factory
 from caseops_api.services.llm import (
     PURPOSE_METADATA_EXTRACT,
     LLMCallContext,
@@ -536,13 +537,15 @@ def extract_and_persist_structured(
 
     # Audit ledger: every Layer-2 LLM call must produce a row in
     # ``model_runs`` with ``purpose=PURPOSE_METADATA_EXTRACT`` so
-    # ``ensure_daily_cap_not_exceeded`` can see today's spend. The hook
-    # below stages the row inside the active session (no flush) so the
-    # caller's transaction owns it; the final ``session.flush()`` near
-    # the end of this function persists the success row, and the
-    # ``LLMResponseFormatError`` handler updates + flushes the same row
-    # before re-raising. Provider failures with no completion (network,
-    # quota, 5xx) leave no row — we will not invent token counts.
+    # ``ensure_daily_cap_not_exceeded`` can see today's spend.
+    #
+    # The audit row is committed in its OWN session, independent of
+    # the caller's document transaction. The real production caller
+    # (``backfill_corpus_quality._process``) calls
+    # ``worker_session.rollback()`` on any exception — including
+    # ``LLMResponseFormatError`` — which would wipe a row that we'd
+    # only flushed on the caller's session. Independent commit keeps
+    # the spend ledger durable across that rollback.
     prompt_hash = hashlib.sha256(
         json.dumps(
             [{"role": m.role, "content": m.content} for m in messages],
@@ -550,29 +553,34 @@ def extract_and_persist_structured(
             separators=(",", ":"),
         ).encode("utf-8")
     ).hexdigest()
-    captured_run: list[ModelRun] = []
+    captured_run_id: list[str] = []
 
     def _on_model_run(
         completion: LLMCompletion,
         _ctx: LLMCallContext,
         _msgs: list[LLMMessage],
     ) -> None:
-        run = ModelRun(
-            company_id=None,
-            matter_id=None,
-            actor_membership_id=None,
-            purpose=PURPOSE_METADATA_EXTRACT,
-            provider=completion.provider,
-            model=completion.model,
-            prompt_hash=prompt_hash,
-            prompt_tokens=completion.prompt_tokens,
-            completion_tokens=completion.completion_tokens,
-            latency_ms=completion.latency_ms,
-            status="ok",
-            error=None,
-        )
-        session.add(run)
-        captured_run.append(run)
+        audit_session = get_session_factory()()
+        try:
+            run = ModelRun(
+                company_id=None,
+                matter_id=None,
+                actor_membership_id=None,
+                purpose=PURPOSE_METADATA_EXTRACT,
+                provider=completion.provider,
+                model=completion.model,
+                prompt_hash=prompt_hash,
+                prompt_tokens=completion.prompt_tokens,
+                completion_tokens=completion.completion_tokens,
+                latency_ms=completion.latency_ms,
+                status="ok",
+                error=None,
+            )
+            audit_session.add(run)
+            audit_session.commit()
+            captured_run_id.append(run.id)
+        finally:
+            audit_session.close()
 
     try:
         payload, completion = generate_structured(
@@ -598,19 +606,23 @@ def extract_and_persist_structured(
             on_model_run=_on_model_run,
         )
     except LLMResponseFormatError as exc:
-        # The hook fired before parse failed, so the audit row is
-        # already staged. Promote it to the format_error status and
-        # flush before re-raising so the spend is visible to the cap
-        # query and to ops dashboards. ``str(exc)[:500]`` matches the
-        # column type (Text) while keeping the row narrow.
-        if captured_run:
-            captured_run[0].status = "format_error"
-            captured_run[0].error = str(exc)[:500]
-            session.flush()
+        # The hook fired and committed an ``ok`` row before parse
+        # failed. Promote that row to ``format_error`` in a fresh
+        # session so the update survives the caller's rollback.
+        if captured_run_id:
+            audit_session = get_session_factory()()
+            try:
+                row = audit_session.get(ModelRun, captured_run_id[0])
+                if row is not None:
+                    row.status = "format_error"
+                    row.error = str(exc)[:500]
+                    audit_session.commit()
+            finally:
+                audit_session.close()
         logger.exception("structured extraction returned malformed JSON for %s", document.id)
         raise
 
-    if not captured_run:
+    if not captured_run_id:
         # The hook is wrapped in a soft try/except inside
         # ``generate_structured`` so it cannot tank an unrelated
         # caller's pipeline. For Layer-2 the contract is the

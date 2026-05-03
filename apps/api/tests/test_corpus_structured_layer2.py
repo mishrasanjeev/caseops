@@ -430,14 +430,16 @@ def test_extract_audit_row_visible_to_daily_cap(
         s2.close()
 
 
-def test_extract_audit_row_marks_format_error_on_malformed_json(
+def test_extract_audit_row_survives_caller_rollback_on_format_error(
     client: TestClient,
 ) -> None:
-    """When the LLM returns text that won't parse, the audit row is
-    UPDATED in place to ``status='format_error'`` with a truncated
-    error message — and the LLMResponseFormatError is re-raised so the
-    caller's per-doc loop can skip + retry. The row still counts
-    toward the daily cap (we paid the tokens, even on garbage)."""
+    """Mirrors the real ``backfill_corpus_quality._process`` path: when
+    the LLM returns garbage, the caller catches ``LLMResponseFormatError``
+    and calls ``session.rollback()`` on the worker session. The audit
+    row MUST survive that rollback because it lives in an independent
+    transaction — otherwise the daily cap stays blind to format_error
+    spend and we lose the ledger entry for tokens we already paid for.
+    """
     _ = client
     from caseops_api.db.models import AuthorityDocument
     from caseops_api.services.corpus_structured import (
@@ -447,22 +449,37 @@ def test_extract_audit_row_marks_format_error_on_malformed_json(
 
     doc_id = _seed_doc_with_chunk()
     factory = get_session_factory()
-    s = factory()
+    # Pre-count from a fresh, isolated session so the count isn't
+    # influenced by the worker session's transaction state.
+    s_pre = factory()
     try:
-        before = s.execute(
+        before = s_pre.execute(
             text("SELECT count(*) FROM model_runs WHERE purpose='metadata_extract'")
         ).scalar_one()
-        doc = s.get(AuthorityDocument, doc_id)
+    finally:
+        s_pre.close()
+
+    worker_session = factory()
+    try:
+        doc = worker_session.get(AuthorityDocument, doc_id)
         assert doc is not None
         with pytest.raises(LLMResponseFormatError):
             extract_and_persist_structured(
-                s, document=doc, provider=_BrokenLayer2Provider(), tier="haiku",
+                worker_session, document=doc,
+                provider=_BrokenLayer2Provider(), tier="haiku",
             )
-        # Format-error path commits the audit row; we explicitly
-        # commit here so a fresh session sees it after rollback in the
-        # caller layer would otherwise have eaten it.
-        s.commit()
-        rows = s.execute(
+        # EXACTLY what the real backfill caller does on any
+        # extraction exception (apps/api/src/caseops_api/scripts/
+        # backfill_corpus_quality.py:327-332).
+        worker_session.rollback()
+    finally:
+        worker_session.close()
+
+    # Now read from a fresh session to prove the audit row outlived
+    # the worker rollback.
+    s_post = factory()
+    try:
+        rows = s_post.execute(
             text(
                 "SELECT provider, model, status, error, prompt_tokens "
                 "FROM model_runs WHERE purpose='metadata_extract' "
@@ -475,9 +492,67 @@ def test_extract_audit_row_marks_format_error_on_malformed_json(
         assert row.model == "test-stub-broken-1"
         assert row.status == "format_error"
         assert row.error is not None
-        # Truncated to ≤500 chars.
         assert len(row.error) <= 500
-        # Token counts from the (paid) provider call are preserved.
+        # Token counts from the (paid) provider call are preserved
+        # so the cap query still sees the spend on garbage outputs.
         assert row.prompt_tokens == 900
     finally:
-        s.close()
+        s_post.close()
+
+
+def test_extract_audit_row_survives_caller_rollback_on_success(
+    client: TestClient,
+) -> None:
+    """Symmetry check: the success-path audit row also lives in an
+    independent transaction, so even if the caller's main transaction
+    were to roll back AFTER ``extract_and_persist_structured`` returned
+    (e.g. a downstream commit failure on the doc-update side), the
+    spend ledger still records the call. Without this, a flaky DB
+    write on the doc/chunks would silently un-account a paid LLM call.
+    """
+    _ = client
+    from caseops_api.db.models import AuthorityDocument
+    from caseops_api.services.corpus_structured import (
+        extract_and_persist_structured,
+    )
+
+    doc_id = _seed_doc_with_chunk()
+    factory = get_session_factory()
+    s_pre = factory()
+    try:
+        before = s_pre.execute(
+            text("SELECT count(*) FROM model_runs WHERE purpose='metadata_extract'")
+        ).scalar_one()
+    finally:
+        s_pre.close()
+
+    worker_session = factory()
+    try:
+        doc = worker_session.get(AuthorityDocument, doc_id)
+        assert doc is not None
+        extract_and_persist_structured(
+            worker_session, document=doc,
+            provider=_ValidLayer2Provider(), tier="haiku",
+        )
+        # Roll back the worker session BEFORE commit — this discards
+        # the doc/chunk writes but must NOT touch the audit row.
+        worker_session.rollback()
+    finally:
+        worker_session.close()
+
+    s_post = factory()
+    try:
+        rows = s_post.execute(
+            text(
+                "SELECT provider, model, status, error "
+                "FROM model_runs WHERE purpose='metadata_extract' "
+                "ORDER BY created_at DESC"
+            )
+        ).fetchall()
+        assert len(rows) == before + 1
+        row = rows[0]
+        assert row.provider == "test-stub"
+        assert row.status == "ok"
+        assert row.error is None
+    finally:
+        s_post.close()
