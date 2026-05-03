@@ -5473,6 +5473,13 @@ export interface components {
          *     Order is meaningful — the list is the route through forums in
          *     chronological order. ``stage_label`` is a short tag the UI shows on
          *     the step (e.g. "First appeal", "SLP", "Review").
+         *
+         *     Round-2 P1 #4: the forum step's statutory / jurisdictional basis is
+         *     a legal claim and must be cited. ``supporting_citations`` is the
+         *     list of citations that the verifier confirmed against the retrieved
+         *     authority set. ``unverified=True`` is set when the LLM either
+         *     emitted no citation for this step or every citation it emitted
+         *     failed verification.
          */
         ForumStep: {
             /** Expected Filings */
@@ -5496,7 +5503,7 @@ export interface components {
              * Unverified
              * @default false
              */
-            unverified?: boolean;
+            unverified: boolean;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -6059,6 +6066,11 @@ export interface components {
          *     ``deadline_iso`` stays None and ``description`` calls out the
          *     missing fact (e.g. "limitation runs from impugned-order date,
          *     which is not on file").
+         *
+         *     Round-2 P1 #4: a limitation flag is a legal claim about a statutory
+         *     deadline. ``supporting_citations`` carries the verifier-confirmed
+         *     citations; ``unverified=True`` is set when the cited statute /
+         *     case did not verify against the retrieved authority set.
          */
         LimitationFlag: {
             /** Deadline Iso */
@@ -6081,7 +6093,7 @@ export interface components {
              * Unverified
              * @default false
              */
-            unverified?: boolean;
+            unverified: boolean;
         };
         /**
          * LitigationStrategyPayload
@@ -6105,10 +6117,7 @@ export interface components {
             limitation_flags?: components["schemas"]["LimitationFlag"][];
             /** Missing Facts */
             missing_facts?: string[];
-            /**
-             * Next Best Actions
-             * Round-2 P1 #4: structured next-best actions with verified citations.
-             */
+            /** Next Best Actions */
             next_best_actions?: components["schemas"]["NextBestAction"][];
             /** Recommended Drafts */
             recommended_drafts?: components["schemas"]["RecommendedDraft"][];
@@ -6117,21 +6126,6 @@ export interface components {
             required_documents?: string[];
             /** Risks */
             risks?: components["schemas"]["StrategyRisk"][];
-        };
-        /**
-         * NextBestAction
-         * Round-2 P1 #4. A concrete next step with optional verified citations.
-         */
-        NextBestAction: {
-            /** Action */
-            action: string;
-            /** Supporting Citations */
-            supporting_citations?: string[];
-            /**
-             * Unverified
-             * @default false
-             */
-            unverified?: boolean;
         };
         /** LoginRequest */
         LoginRequest: {
@@ -7107,6 +7101,28 @@ export interface components {
             label: string;
             /** Severity */
             severity: string;
+        };
+        /**
+         * NextBestAction
+         * @description A concrete next step the lawyer should take. Round-2 P1 #4
+         *     structurised this from a free string list so each action's
+         *     procedural basis can be cited and verified. ``unverified=True`` is
+         *     set when the LLM emitted a citation for the action that did not
+         *     verify against the retrieved authority set, OR when the action
+         *     makes a legal claim with no citation. Purely operational actions
+         *     (``"call the client back"``) are emitted with no citations and
+         *     ``unverified=False``.
+         */
+        NextBestAction: {
+            /** Action */
+            action: string;
+            /** Supporting Citations */
+            supporting_citations?: string[];
+            /**
+             * Unverified
+             * @default false
+             */
+            unverified: boolean;
         };
         /** ObligationExtractionResponse */
         ObligationExtractionResponse: {
@@ -8300,6 +8316,16 @@ export interface components {
          *     ``risk_notes`` on a route — those are per-route; these are
          *     cross-cutting risks (cost, reputational, parallel proceedings,
          *     counterclaim exposure).
+         *
+         *     Round-2 P1 #4: risks are sometimes purely factual (cost, client
+         *     withdrawal, reputational fallout) and need no citation. Other
+         *     times they are legal/procedural claims (parallel-proceedings bar,
+         *     counterclaim exposure under a specific section). When the LLM
+         *     chooses to emit ``supporting_citations`` for a risk, we run them
+         *     through the verifier; if every emitted citation fails, we set
+         *     ``unverified=True`` and drop the citations from the persisted
+         *     payload. Empty ``supporting_citations`` is the factual-risk path
+         *     and does not flip ``unverified``.
          */
         StrategyRisk: {
             /** Description */
@@ -8320,7 +8346,7 @@ export interface components {
              * Unverified
              * @default false
              */
-            unverified?: boolean;
+            unverified: boolean;
         };
         /**
          * StrategyRoute
