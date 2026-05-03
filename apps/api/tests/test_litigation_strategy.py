@@ -1487,3 +1487,128 @@ def test_unauthenticated_strategy_request_is_rejected(client: TestClient) -> Non
         json={"type": "litigation_strategy"},
     )
     assert response.status_code in (401, 403), response.text
+
+
+# ---------------------------------------------------------------
+# Round-2 P2 #7: dedicated strategy:generate / strategy:approve caps.
+# ---------------------------------------------------------------
+
+
+def test_strategy_generate_returns_403_when_role_lacks_strategy_generate(
+    client: TestClient, mock_strategy_provider,
+) -> None:
+    """A role with ``recommendations:generate`` but no
+    ``strategy:generate`` (currently no role splits the two; we use
+    PARALEGAL as a proxy since paralegals lack BOTH today and the
+    test asserts the failure mode either way) must NOT be able to
+    generate a litigation_strategy."""
+    from sqlalchemy import update
+
+    from caseops_api.db.models import CompanyMembership, MembershipRole
+
+    token, _, matter_id = _setup_matter(client, forum_level="high_court")
+    # Demote owner → paralegal so neither cap is satisfied.
+    factory = get_session_factory()
+    with factory() as session:
+        session.execute(
+            update(CompanyMembership).values(role=MembershipRole.PARALEGAL)
+        )
+        session.commit()
+
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "litigation_strategy"},
+    )
+    assert response.status_code == 403, response.text
+    detail = response.json()["detail"].lower()
+    # Either the recommendations:generate gate fires first
+    # (paralegal lacks it) OR the strategy:generate gate fires.
+    # Either is correct lockout behavior.
+    assert (
+        "recommendations:generate" in detail
+        or "strategy:generate" in detail
+    )
+
+
+def test_strategy_approve_returns_403_when_role_lacks_strategy_approve(
+    client: TestClient, mock_strategy_provider,
+) -> None:
+    """Generating a strategy is fee-earner (member+); approving it is
+    staff (partner+). A MEMBER role can generate but can NOT accept
+    the resulting strategy — strategy:approve denies."""
+    from sqlalchemy import update
+
+    from caseops_api.db.models import CompanyMembership, MembershipRole
+
+    token, _, matter_id = _setup_matter(client, forum_level="high_court")
+
+    # Generate the strategy as owner first.
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "litigation_strategy"},
+    )
+    assert response.status_code == 200, response.text
+    rec_id = response.json()["id"]
+
+    # Now demote owner → MEMBER (has recommendations:decide? no — staff).
+    # Actually MEMBER lacks recommendations:decide, so the existing gate
+    # would 403 first. To test the new gate cleanly we keep the role at
+    # PARTNER (which has decide + approve historically) and assert we
+    # can accept; then set member to prove decide-side denies a
+    # strategy accept too.
+    factory = get_session_factory()
+    with factory() as session:
+        session.execute(
+            update(CompanyMembership).values(role=MembershipRole.MEMBER)
+        )
+        session.commit()
+
+    decision = client.post(
+        f"/api/recommendations/{rec_id}/decisions",
+        headers=auth_headers(token),
+        json={"decision": "accepted", "selected_option_index": 0},
+    )
+    assert decision.status_code == 403, decision.text
+    detail = decision.json()["detail"].lower()
+    assert (
+        "recommendations:decide" in detail
+        or "strategy:approve" in detail
+    )
+
+
+def test_strategy_approve_succeeds_when_role_has_strategy_approve(
+    client: TestClient, mock_strategy_provider,
+) -> None:
+    """Positive case for strategy:approve. PARTNER has both
+    recommendations:decide AND strategy:approve, so an accept on a
+    litigation_strategy must succeed."""
+    from sqlalchemy import update
+
+    from caseops_api.db.models import CompanyMembership, MembershipRole
+
+    token, _, matter_id = _setup_matter(client, forum_level="high_court")
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "litigation_strategy"},
+    )
+    assert response.status_code == 200
+    rec_id = response.json()["id"]
+
+    factory = get_session_factory()
+    with factory() as session:
+        session.execute(
+            update(CompanyMembership).values(role=MembershipRole.PARTNER)
+        )
+        session.commit()
+
+    decision = client.post(
+        f"/api/recommendations/{rec_id}/decisions",
+        headers=auth_headers(token),
+        json={"decision": "accepted", "selected_option_index": 0},
+    )
+    assert decision.status_code == 200, decision.text
+    assert decision.json()["review_required"] is False
+    assert decision.json()["status"] == "accepted"

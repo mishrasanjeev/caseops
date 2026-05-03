@@ -115,13 +115,13 @@ export default function MatterStrategyPage() {
   const matterId = params.id;
   const queryClient = useQueryClient();
   const [lastError, setLastError] = useState<string | null>(null);
-  // Round-2 fix (P1 #3): partner-review approval is gated on the
-  // existing ``recommendations:decide`` capability. P2 #7 introduces
-  // a dedicated ``strategy:approve`` capability that will replace this
-  // gate; for the P1 #3 commit alone we ride the existing decide cap
-  // so the typecheck stays clean. (See the matching backend change in
-  // services/recommendations.record_recommendation_decision.)
-  const canApprove = useCapability("recommendations:decide");
+  // Round-2 P2 #7. Strategy generation + approval ride dedicated
+  // capabilities on top of the recommendations:* caps. The frontend
+  // mirrors the backend gate in apps/api/src/caseops_api/api/routes/
+  // recommendations.py: strategy:generate for the Generate button,
+  // strategy:approve for the Approve / Request changes bar.
+  const canGenerate = useCapability("strategy:generate");
+  const canApprove = useCapability("strategy:approve");
 
   const query = useQuery({
     queryKey: ["matters", matterId, "recommendations"],
@@ -251,23 +251,25 @@ export default function MatterStrategyPage() {
               signs off.
             </CardDescription>
           </div>
-          <Button
-            data-testid="strategy-generate"
-            onClick={() => generateMutation.mutate()}
-            disabled={generateMutation.isPending}
-          >
-            {generateMutation.isPending ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                Generating…
-              </>
-            ) : (
-              <>
-                <Sparkles className="h-4 w-4" aria-hidden />
-                {latest ? "Re-generate" : "Generate strategy"}
-              </>
-            )}
-          </Button>
+          {canGenerate ? (
+            <Button
+              data-testid="strategy-generate"
+              onClick={() => generateMutation.mutate()}
+              disabled={generateMutation.isPending}
+            >
+              {generateMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                  Generating…
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4" aria-hidden />
+                  {latest ? "Re-generate" : "Generate strategy"}
+                </>
+              )}
+            </Button>
+          ) : null}
         </CardHeader>
         <CardContent className="py-5 text-sm text-[var(--color-mute)]">
           {!latest ? (

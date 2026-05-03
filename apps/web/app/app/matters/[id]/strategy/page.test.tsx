@@ -316,7 +316,13 @@ describe("MatterStrategyPage", () => {
   });
 
   it("hides the Approve / Request changes bar when the user lacks strategy:approve", async () => {
-    useCapabilityMock.mockImplementation(() => false);
+    // Round-2 P2 #7. Two distinct caps now gate the page —
+    // strategy:generate (Generate button) and strategy:approve
+    // (approval bar). For this test we permit Generate so the page
+    // renders normally but withhold Approve.
+    useCapabilityMock.mockImplementation(
+      (cap: string) => cap !== "strategy:approve",
+    );
     listRecommendationsMock.mockResolvedValue({
       matter_id: "m-1",
       recommendations: [SAMPLE_STRATEGY],
@@ -332,6 +338,26 @@ describe("MatterStrategyPage", () => {
     // Review banner stays visible even though approval controls are hidden —
     // a non-approver can still see that review is required.
     expect(screen.getByTestId("strategy-review-required")).toBeInTheDocument();
+    // Generate button stays visible because canGenerate is still true.
+    expect(screen.getByTestId("strategy-generate")).toBeInTheDocument();
+  });
+
+  it("hides the Generate button when the user lacks strategy:generate", async () => {
+    // Round-2 P2 #7. With strategy:generate denied the empty state
+    // still renders (so the page is still informative) but the
+    // Generate button is hidden.
+    useCapabilityMock.mockImplementation(
+      (cap: string) => cap !== "strategy:generate",
+    );
+    listRecommendationsMock.mockResolvedValue({
+      matter_id: "m-1",
+      recommendations: [],
+    });
+    render(withClient(<StrategyPage />));
+    await waitFor(() =>
+      expect(screen.getByText(/No strategy yet/i)).toBeInTheDocument(),
+    );
+    expect(screen.queryByTestId("strategy-generate")).not.toBeInTheDocument();
   });
 
   it("clicking Approve calls recordRecommendationDecision and refreshes the list", async () => {

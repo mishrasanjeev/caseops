@@ -5490,6 +5490,13 @@ export interface components {
             stage_label: string;
             /** Statutory Basis */
             statutory_basis?: string[];
+            /** Supporting Citations */
+            supporting_citations?: string[];
+            /**
+             * Unverified
+             * @default false
+             */
+            unverified?: boolean;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -6068,6 +6075,13 @@ export interface components {
             severity: "info" | "warning" | "critical";
             /** Statutory Basis */
             statutory_basis?: string | null;
+            /** Supporting Citations */
+            supporting_citations?: string[];
+            /**
+             * Unverified
+             * @default false
+             */
+            unverified?: boolean;
         };
         /**
          * LitigationStrategyPayload
@@ -6091,8 +6105,11 @@ export interface components {
             limitation_flags?: components["schemas"]["LimitationFlag"][];
             /** Missing Facts */
             missing_facts?: string[];
-            /** Next Best Actions */
-            next_best_actions?: string[];
+            /**
+             * Next Best Actions
+             * Round-2 P1 #4: structured next-best actions with verified citations.
+             */
+            next_best_actions?: components["schemas"]["NextBestAction"][];
             /** Recommended Drafts */
             recommended_drafts?: components["schemas"]["RecommendedDraft"][];
             recommended_route: components["schemas"]["StrategyRoute"];
@@ -6100,6 +6117,21 @@ export interface components {
             required_documents?: string[];
             /** Risks */
             risks?: components["schemas"]["StrategyRisk"][];
+        };
+        /**
+         * NextBestAction
+         * Round-2 P1 #4. A concrete next step with optional verified citations.
+         */
+        NextBestAction: {
+            /** Action */
+            action: string;
+            /** Supporting Citations */
+            supporting_citations?: string[];
+            /**
+             * Unverified
+             * @default false
+             */
+            unverified?: boolean;
         };
         /** LoginRequest */
         LoginRequest: {
@@ -8282,6 +8314,13 @@ export interface components {
              * @enum {string}
              */
             severity: "low" | "medium" | "high";
+            /** Supporting Citations */
+            supporting_citations?: string[];
+            /**
+             * Unverified
+             * @default false
+             */
+            unverified?: boolean;
         };
         /**
          * StrategyRoute
