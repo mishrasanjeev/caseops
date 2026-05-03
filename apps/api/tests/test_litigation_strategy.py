@@ -712,6 +712,57 @@ def test_strategy_refuses_when_primary_route_uncited_even_if_alternative_cited(
 
 
 # ---------------------------------------------------------------
+# Round-2 P1 #2: SC plausibility / SC template availability must
+# stay in lock-step. Every forum that gets SC escalation strategy
+# must also be able to draft the SLP-pack templates.
+# ---------------------------------------------------------------
+
+
+def test_sc_plausible_forums_can_draft_the_sc_template_pack() -> None:
+    """For every forum_level that ``_assemble_context`` flags as
+    ``sc_route_plausible``, ``_is_template_available`` MUST allow the
+    SC-only templates. Otherwise we tell the user 'SC escalation is
+    plausible' but disable every draft button they would need.
+
+    Anchor: tribunal — the original PR included tribunal in
+    sc_route_plausible (NCLAT/AFT/APTEL → Article 136 SLP) but excluded
+    it from the SC template allowlist.
+    """
+    from caseops_api.services.litigation_strategy import (
+        _SC_ONLY_TEMPLATES,
+        _is_template_available,
+    )
+
+    # Mirror of ``_assemble_context.sc_route_plausible``. Keep this
+    # test fixture in sync with the production gate.
+    sc_plausible_forums = {
+        "high_court",
+        "supreme_court",
+        "tribunal",
+        "high_court_division_bench",
+        "high_court_single_bench",
+    }
+
+    # Use special_leave_petition as the canonical SC-pack template;
+    # if THAT one is locked the whole SC route is unusable from drafting.
+    canonical_sc_template = "special_leave_petition"
+    assert canonical_sc_template in _SC_ONLY_TEMPLATES, (
+        "Self-check: special_leave_petition must be in _SC_ONLY_TEMPLATES."
+    )
+
+    for forum in sc_plausible_forums:
+        available, reason = _is_template_available(
+            canonical_sc_template, forum
+        )
+        assert available, (
+            f"Forum {forum!r} is sc_route_plausible but the SC template "
+            f"{canonical_sc_template!r} was marked unavailable "
+            f"({reason!r}). The SLP / synopsis / list-of-dates pack "
+            f"must be available wherever SC escalation is plausible."
+        )
+
+
+# ---------------------------------------------------------------
 # SC-availability gate — drafts that are SC-only get marked
 # unavailable on a non-SC matter.
 # ---------------------------------------------------------------

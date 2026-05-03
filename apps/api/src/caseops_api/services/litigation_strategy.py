@@ -461,16 +461,25 @@ _SC_ONLY_TEMPLATES = frozenset(
 def _is_template_available(
     template_slug: str, forum_level: str
 ) -> tuple[bool, str]:
+    # Round-2 fix (P1 #2, 2026-05-03): the SC-allowlist must mirror
+    # ``_assemble_context.sc_route_plausible``. Appellate tribunals
+    # (NCLAT, AFT, APTEL, etc.) appeal to the Supreme Court under
+    # Article 136 (and statute-specific provisions), so a tribunal
+    # matter that just received SC-escalation strategy MUST also be
+    # able to draft the SLP / synopsis / list-of-dates pack. Excluding
+    # ``tribunal`` here was the inconsistency that left tribunal users
+    # with the SC route in their forum_sequence but no draft buttons.
     if template_slug in _SC_ONLY_TEMPLATES and forum_level not in {
         "supreme_court",
         "high_court",
         "high_court_single_bench",
         "high_court_division_bench",
+        "tribunal",
     }:
         return (
             False,
-            "This draft is for the Supreme Court / High Court appellate "
-            "stage. Move the matter to the appropriate forum first.",
+            "This draft is for the Supreme Court / High Court / appellate "
+            "tribunal stage. Move the matter to the appropriate forum first.",
         )
     return True, ""
 
