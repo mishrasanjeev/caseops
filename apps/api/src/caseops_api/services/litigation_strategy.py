@@ -1028,6 +1028,46 @@ def generate_litigation_strategy(
     # the partner reviewer knows what to vet.
     forum_steps_payload = _build_forum_steps(parsed.forum_sequence, retrieved)
 
+    # Round-5 R5 #1 (2026-05-03): all-forum-steps-dropped fail-closed.
+    # Round-4 tightened ``_build_forum_steps`` to drop every step that
+    # lacks a verified citation. That can leave ``forum_steps_payload``
+    # empty when the model emitted a ladder but no step's citation
+    # verified. The Pydantic model requires ``forum_sequence``
+    # min_length=1, so falling through would raise a ValidationError
+    # → 502 schema-malformed path. That's the wrong shape: the data
+    # IS valid, the model just produced no grounded forum step.
+    # Fail-closed with a clean 422 + X-Model-Run-Id header so the
+    # partner-reviewer (and the audit ledger) see this as a
+    # legal-grounding refusal, not a server bug.
+    if parsed.forum_sequence and not forum_steps_payload:
+        run = _write_model_run(
+            session,
+            context=context,
+            matter_id=matter.id,
+            purpose="recommendation:litigation_strategy",
+            completion=completion,
+            prompt_hash=prompt_hash,
+            status_label="rejected_no_verified_forum_steps",
+            error=(
+                "every forum_sequence step the model emitted was "
+                "dropped during citation verification; no grounded "
+                "forum ladder remains to persist"
+            ),
+        )
+        session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                "The strategy could not be persisted because no forum "
+                "step in the proposed ladder carried a citation that "
+                "verified against the retrieved authorities. Please "
+                "retry the strategy; if the problem persists, widen "
+                "the matter description so the retriever has more "
+                "context to work with."
+            ),
+            headers={"X-Model-Run-Id": run.id},
+        )
+
     # Round-4 R4 #3 (2026-05-03): forum_sequence coherence.
     # The system prompt promises that forum_sequence[0] is the
     # CURRENT forum / posture. After the per-step citation filter,
@@ -1058,16 +1098,18 @@ def generate_litigation_strategy(
                 "longer starts at the current forum"
             ),
         )
-        _ = run  # ledger row for audit; HTTPException carries the 422
         session.commit()
+        # Round-5: include X-Model-Run-Id and use the non-deprecated
+        # status constant (was HTTP_422_UNPROCESSABLE_ENTITY).
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=(
                 "Strategy ladder lost its starting forum after citation "
                 "verification. The first forum step must always be the "
                 "current matter forum; please retry the strategy and "
                 "verify the recommended starting point."
             ),
+            headers={"X-Model-Run-Id": run.id},
         )
 
     limitation_flags_payload = _build_limitation_flags(

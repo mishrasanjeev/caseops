@@ -2378,3 +2378,105 @@ def test_strategy_refuses_when_first_forum_step_dropped(
         "R4 #3: the 422 detail must explain that the ladder lost its "
         "starting forum, so the partner-reviewer knows what went wrong."
     )
+    # Round-5 R5 #1 also tightened this 422 path to include
+    # X-Model-Run-Id so the partner-reviewer (and ops) can pull the
+    # ledger row that captured the refusal.
+    assert response.headers.get("X-Model-Run-Id"), (
+        "R5: every Layer-2 refusal-style 422 must carry the audit "
+        "ledger row id in the X-Model-Run-Id response header."
+    )
+
+
+# ---------------------------------------------------------------
+# Round-5 (R5 #1, 2026-05-03): all-forum-steps-dropped fail-closed.
+# Round-4 made it possible for ``_build_forum_steps`` to return an
+# empty list (every step lacked a verified citation). The Pydantic
+# model requires forum_sequence min_length=1, so falling through to
+# the constructor would raise ValidationError → 502 schema-malformed.
+# That is the wrong shape: this is a legal-grounding refusal, not a
+# server bug. Fail-closed with 422 + X-Model-Run-Id instead.
+# ---------------------------------------------------------------
+
+
+def test_strategy_refuses_when_all_forum_steps_dropped(
+    client: TestClient, monkeypatch,
+) -> None:
+    """R5 #1. Poison every forum step's citation. After
+    ``_build_forum_steps`` runs, ``forum_steps_payload`` is empty —
+    the model emitted a forum ladder but no step's citation
+    verified. The service must fail-closed with HTTP 422 and the
+    ``rejected_no_verified_forum_steps`` ledger label, NOT 502 from
+    the LitigationStrategyPayload Pydantic constructor's
+    forum_sequence min_length=1 rule."""
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    citation = _seed_relevant_authority()
+    payload = _valid_strategy_payload(citation)
+    # Poison BOTH forum steps' citations. _build_forum_steps drops
+    # every entry (R4 #1) → forum_steps_payload is [].
+    payload["forum_sequence"][0]["supporting_citations"] = [
+        "Made Up Statute v. Nobody (2099)"
+    ]
+    payload["forum_sequence"][1]["supporting_citations"] = [
+        "Another Made Up Decision (2099)"
+    ]
+
+    class _AllForumDropped:
+        name = "mock"
+        model = "mock-r5-1"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            return LLMCompletion(
+                text=json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=10,
+                completion_tokens=20,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _AllForumDropped(),
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.litigation_strategy.build_provider",
+        lambda *a, **kw: _AllForumDropped(),
+    )
+
+    token, _, matter_id = _setup_matter(client, forum_level="high_court")
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "litigation_strategy"},
+    )
+    # 422 (legal-grounding refusal), NOT 502 (schema malformed).
+    assert response.status_code == 422, response.text
+    detail = response.json()["detail"]
+    assert "forum step" in detail.lower() or "ladder" in detail.lower(), (
+        "R5 #1: the 422 detail must explain that no forum step "
+        "carried a verified citation, so the partner-reviewer knows "
+        "this was a legal-grounding refusal, not a server bug."
+    )
+    # Audit-ledger handle for ops + partner.
+    assert response.headers.get("X-Model-Run-Id"), (
+        "R5 #1: the 422 must include X-Model-Run-Id so the "
+        "audit ledger row for this refusal is recoverable."
+    )
+
+    # Verify the model_run row landed with the right status_label.
+    factory = get_session_factory()
+    with factory() as audit_session:
+        from caseops_api.db.models import ModelRun
+
+        run = audit_session.scalar(
+            select(ModelRun)
+            .where(ModelRun.matter_id == matter_id)
+            .where(ModelRun.purpose == "recommendation:litigation_strategy")
+            .order_by(ModelRun.created_at.desc())
+        )
+    assert run is not None
+    assert run.status == "rejected_no_verified_forum_steps", (
+        f"R5 #1: ledger row must use the dedicated status_label "
+        f"'rejected_no_verified_forum_steps'; got {run.status!r}."
+    )
