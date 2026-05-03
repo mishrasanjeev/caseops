@@ -1168,15 +1168,19 @@ def _extract_template_slugs(parsed: _LLMStrategyResponse) -> list[str]:
 def _build_forum_steps(
     raw_steps: list[dict], retrieved: list[RetrievedAuthority]
 ) -> list[ForumStep]:
-    """Round-2 P1 #4. Coerce LLM forum_sequence dicts into ForumStep
-    models with verified citations and ``unverified`` flags.
+    """Round-2 P1 #4 + Round-3 P2 #R3-3. Coerce LLM forum_sequence dicts
+    into ForumStep models with verified citations and ``unverified``
+    flags.
 
-    A forum step's statutory / jurisdictional basis is a legal claim,
-    so we treat ``unverified=True`` as the default unless at least one
-    citation survives verification. Items with no citations OR whose
-    every citation fails verification are kept (the user still sees
-    the procedural narrative) but flagged so the partner-reviewer
-    knows to vet them.
+    Round-3 fix (P2 #R3-3, 2026-05-03): a forum step that emits
+    ``statutory_basis`` is making a legal claim about jurisdictional or
+    statutory authority (e.g. "File under Article 226", "Refer under
+    BNSS s.528"). An unverified legal claim about *which forum has
+    jurisdiction* is too risky to surface — fail-closed by dropping
+    those steps from the persisted strategy. Steps with NO
+    ``statutory_basis`` are operational/administrative ("Pay court
+    fees", "Obtain certified copy") and stay with ``unverified=True``
+    so the partner-reviewer can still see the procedural narrative.
     """
     out: list[ForumStep] = []
     for raw in raw_steps:
@@ -1188,16 +1192,21 @@ def _build_forum_steps(
         verified = _verify_item_citations(
             [c for c in raw_citations if isinstance(c, str)], retrieved
         )
+        statutory_basis = [
+            s for s in (raw.get("statutory_basis") or []) if isinstance(s, str)
+        ][:10]
         unverified_flag = len(verified) == 0
+        # Round-3 P2 #R3-3: legal forum step (non-empty statutory_basis)
+        # without any verified citation is fail-closed — drop it.
+        if unverified_flag and statutory_basis:
+            continue
         try:
             step = ForumStep(
                 forum_level=raw.get("forum_level", "other"),
                 stage_label=str(raw.get("stage_label", "Stage")),
                 forum_name=raw.get("forum_name"),
                 rationale=str(raw.get("rationale", "")),
-                statutory_basis=[
-                    s for s in (raw.get("statutory_basis") or []) if isinstance(s, str)
-                ][:10],
+                statutory_basis=statutory_basis,
                 expected_filings=[
                     s for s in (raw.get("expected_filings") or []) if isinstance(s, str)
                 ][:10],
@@ -1215,9 +1224,15 @@ def _build_forum_steps(
 def _build_limitation_flags(
     raw_flags: list[dict], retrieved: list[RetrievedAuthority]
 ) -> list[LimitationFlag]:
-    """Round-2 P1 #4. Limitation flags claim a statutory deadline; they
-    require a verified citation. Default ``unverified=True`` unless at
-    least one citation survives."""
+    """Round-2 P1 #4 + Round-3 P2 #R3-3. Limitation flags claim a
+    statutory deadline.
+
+    Round-3 fix (P2 #R3-3, 2026-05-03): an unverified limitation
+    deadline is the most dangerous output a planner can produce. A
+    lawyer-facing UI rendering an "Unverified" badge next to a
+    deadline date still anchors on the date. Drop unverified
+    limitation flags entirely (option (a) from the brief).
+    """
     out: list[LimitationFlag] = []
     for raw in raw_flags:
         if not isinstance(raw, dict):
@@ -1228,7 +1243,10 @@ def _build_limitation_flags(
         verified = _verify_item_citations(
             [c for c in raw_citations if isinstance(c, str)], retrieved
         )
-        unverified_flag = len(verified) == 0
+        # Round-3 P2 #R3-3: fail-closed on unverified limitation flags.
+        # No citation survived → don't show the flag at all.
+        if not verified:
+            continue
         try:
             flag = LimitationFlag(
                 label=str(raw.get("label", "Limitation")),
@@ -1237,7 +1255,7 @@ def _build_limitation_flags(
                 deadline_iso=raw.get("deadline_iso"),
                 severity=raw.get("severity", "info"),
                 supporting_citations=verified,
-                unverified=unverified_flag,
+                unverified=False,
             )
         except ValidationError:
             continue

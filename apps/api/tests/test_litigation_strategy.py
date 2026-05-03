@@ -1137,19 +1137,34 @@ def test_strategy_persists_verified_citations_on_every_item_kind(
 def test_strategy_flags_unverified_when_forum_step_citation_does_not_match(
     client: TestClient, monkeypatch,
 ) -> None:
-    """A forum step whose only citation is unverifiable must persist
-    with ``unverified=True`` and an empty ``supporting_citations``
-    list. The narrative is preserved so the partner-reviewer can still
-    see the procedural step that needs vetting."""
+    """A forum step that is OPERATIONAL (empty ``statutory_basis``)
+    whose only citation is unverifiable persists with ``unverified=True``
+    and an empty ``supporting_citations`` list. The narrative is
+    preserved so the partner-reviewer can still see the procedural
+    step that needs vetting.
+
+    Round-3 P2 #R3-3 splits the behavior: operational steps stay
+    flagged, LEGAL steps (non-empty ``statutory_basis``) get dropped
+    entirely. Asserted in test_strategy_drops_legal_forum_step_with_uncited_citation
+    below.
+    """
     from caseops_api.services.llm import LLMCompletion, LLMMessage
 
     citation = _seed_relevant_authority()
     payload = _valid_strategy_payload(citation)
-    # Primary route stays verified — we want the strategy to persist.
-    # But poison the FIRST forum step's citation.
-    payload["forum_sequence"][0]["supporting_citations"] = [
-        "Made Up Forum Step v. Nobody (2099)"
-    ]
+    # Replace the first forum step with an OPERATIONAL one (no
+    # statutory_basis) and poison its citation. Round-3 fail-closes
+    # legal forum steps without verified citations, so to test the
+    # "unverified flag" behavior we need an operational step.
+    payload["forum_sequence"][0] = {
+        "forum_level": "high_court_single_bench",
+        "stage_label": "Pay court fees",
+        "forum_name": "Delhi High Court Registry",
+        "rationale": "Court fees on the quashing petition.",
+        "statutory_basis": [],  # operational — no legal claim.
+        "expected_filings": [],
+        "supporting_citations": ["Made Up Forum Step v. Nobody (2099)"],
+    }
 
     class _PartialBad:
         name = "mock"
@@ -1188,6 +1203,9 @@ def test_strategy_flags_unverified_when_forum_step_citation_does_not_match(
     # The narrative is still there — the user can see what to vet.
     assert first_step["stage_label"]
     assert first_step["rationale"]
+    # The operational step has no statutory_basis — that's the signal
+    # that kept it from being fail-closed.
+    assert first_step["statutory_basis"] == []
 
 
 def test_strategy_flags_unverified_on_legal_risk_with_bad_citation(
@@ -1845,3 +1863,152 @@ def test_strategy_marks_structured_action_with_uncited_citation_unverified(
     assert len(actions) == 1
     assert actions[0]["unverified"] is True
     assert actions[0]["supporting_citations"] == []
+
+
+# ---------------------------------------------------------------
+# Round-3 P2 #R3-3: limitation flags + legal forum steps must be
+# fail-closed when the citation does not verify. Operational forum
+# steps (no statutory_basis) stay with unverified=True so the
+# narrative is still visible.
+# ---------------------------------------------------------------
+
+
+def test_strategy_drops_unverified_limitation_flag(
+    client: TestClient, monkeypatch,
+) -> None:
+    """An LLM that emits a limitation flag whose citation fails
+    verification is offering the lawyer an unverified DEADLINE. The
+    "Unverified" badge next to a date is not enough — drop the flag
+    entirely so it does not appear in the persisted strategy."""
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    citation = _seed_relevant_authority()
+    payload = _valid_strategy_payload(citation)
+    # Two limitation flags: one verifiable, one unverifiable. After
+    # persistence only the verified one should survive.
+    payload["limitation_flags"] = [
+        {
+            "label": "SLP filing window",
+            "description": (
+                "Article 132 of the Limitation Act prescribes 60 days "
+                "for criminal SLPs."
+            ),
+            "statutory_basis": "Limitation Act 1963 Article 132",
+            "deadline_iso": None,
+            "severity": "warning",
+            "supporting_citations": [f"[1] {citation}"],
+        },
+        {
+            "label": "Speculative phantom deadline",
+            "description": "An unverified statutory window the LLM invented.",
+            "statutory_basis": "Imaginary Statute s.99",
+            "deadline_iso": "2026-12-31",
+            "severity": "critical",
+            "supporting_citations": ["Imaginary Statute v. Bench (2099)"],
+        },
+    ]
+
+    class _MixedLimitations:
+        name = "mock"
+        model = "mock-mixed-limitations"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            return LLMCompletion(
+                text=json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=10,
+                completion_tokens=20,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _MixedLimitations(),
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.litigation_strategy.build_provider",
+        lambda *a, **kw: _MixedLimitations(),
+    )
+
+    token, _, matter_id = _setup_matter(client, forum_level="high_court")
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "litigation_strategy"},
+    )
+    assert response.status_code == 200, response.text
+    flags = response.json()["strategy_payload"]["limitation_flags"]
+    assert len(flags) == 1, (
+        "Unverified limitation flag must be DROPPED, not persisted with "
+        "unverified=True. Round-3 P2 #R3-3."
+    )
+    assert flags[0]["label"] == "SLP filing window"
+    assert flags[0]["unverified"] is False
+    assert len(flags[0]["supporting_citations"]) >= 1
+
+
+def test_strategy_drops_legal_forum_step_with_uncited_citation(
+    client: TestClient, monkeypatch,
+) -> None:
+    """A LEGAL forum step (non-empty ``statutory_basis``) whose only
+    citation is unverifiable must be dropped. An "Unverified" badge on
+    a statutory-basis claim about which forum has jurisdiction is too
+    risky to surface."""
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    citation = _seed_relevant_authority()
+    payload = _valid_strategy_payload(citation)
+    # forum_sequence[0] makes a legal claim under BNSS s.528 — poison
+    # its citation. forum_sequence[1] keeps a verifiable citation.
+    payload["forum_sequence"][0]["supporting_citations"] = [
+        "Made Up Statute v. Nobody (2099)"
+    ]
+
+    class _LegalStepUncited:
+        name = "mock"
+        model = "mock-legal-step-uncited"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            return LLMCompletion(
+                text=json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=10,
+                completion_tokens=20,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _LegalStepUncited(),
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.litigation_strategy.build_provider",
+        lambda *a, **kw: _LegalStepUncited(),
+    )
+
+    token, _, matter_id = _setup_matter(client, forum_level="high_court")
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "litigation_strategy"},
+    )
+    assert response.status_code == 200, response.text
+    steps = response.json()["strategy_payload"]["forum_sequence"]
+    # The poisoned legal step must be gone; the SC step survives.
+    stage_labels = [s["stage_label"] for s in steps]
+    assert "Quashing petition" not in stage_labels, (
+        "Legal forum step (statutory_basis=['BNSS s.528']) without a "
+        "verified citation must be dropped. Round-3 P2 #R3-3."
+    )
+    # The other (verified) step survives.
+    assert any(s["stage_label"] == "SLP if HC declines" for s in steps)
+    for step in steps:
+        # No surviving step has unverified=True with non-empty
+        # statutory_basis — that combination is forbidden by the new
+        # fail-closed rule.
+        assert not (step["unverified"] and step["statutory_basis"]), (
+            f"Legal forum step {step['stage_label']!r} must not persist "
+            f"with unverified=True + non-empty statutory_basis."
+        )
