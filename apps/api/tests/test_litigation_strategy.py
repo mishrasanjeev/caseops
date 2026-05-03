@@ -2012,3 +2012,194 @@ def test_strategy_drops_legal_forum_step_with_uncited_citation(
             f"Legal forum step {step['stage_label']!r} must not persist "
             f"with unverified=True + non-empty statutory_basis."
         )
+
+
+# ---------------------------------------------------------------
+# Round-3 P2 #R3-4: matter court orders must be in the strategy
+# prompt context. Court-sync orders are first-class records and
+# escalation strategy depends heavily on impugned/interim orders.
+# ---------------------------------------------------------------
+
+
+def _seed_court_order(
+    matter_id: str,
+    *,
+    title: str,
+    summary: str,
+    order_text: str | None,
+    order_date: datetime.date,
+    source: str = "test-seed",
+) -> None:
+    """Helper: insert a MatterCourtOrder against ``matter_id`` so the
+    strategy context-builder picks it up."""
+    factory = get_session_factory()
+    with factory() as session:
+        from caseops_api.db.models import MatterCourtOrder
+
+        session.add(
+            MatterCourtOrder(
+                matter_id=matter_id,
+                order_date=order_date,
+                title=title,
+                summary=summary,
+                order_text=order_text,
+                source=source,
+            )
+        )
+        session.commit()
+
+
+def test_strategy_context_includes_court_orders_when_present(
+    client: TestClient, monkeypatch,
+) -> None:
+    """Round-3 P2 #R3-4 happy path. With three court orders seeded
+    against the matter, the prompt MUST include the RECENT_COURT_ORDERS
+    block with each title + bounded summary + bounded order_text
+    excerpt. Most-recent first."""
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    citation = _seed_relevant_authority()
+    payload = _valid_strategy_payload(citation)
+
+    seen_messages: list[LLMMessage] = []
+
+    class _PromptCapturing:
+        name = "mock"
+        model = "mock-orders-prompt"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            seen_messages.extend(messages)
+            return LLMCompletion(
+                text=json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=10,
+                completion_tokens=20,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _PromptCapturing(),
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.litigation_strategy.build_provider",
+        lambda *a, **kw: _PromptCapturing(),
+    )
+
+    token, _, matter_id = _setup_matter(client, forum_level="high_court")
+
+    # Three orders with distinct dates — most recent should appear first.
+    _seed_court_order(
+        matter_id,
+        title="Interim stay vacated",
+        summary="HC vacated the interim stay on the FIR.",
+        order_text=(
+            "ORDER. The interim stay granted on 2026-02-01 is hereby "
+            "vacated. The petitioner is at liberty to move appropriately. "
+            "FILED in the registry."
+        ),
+        order_date=datetime.date(2026, 4, 20),
+        source="ecourts-sync",
+    )
+    _seed_court_order(
+        matter_id,
+        title="Notice issued",
+        summary="HC issued notice to the State.",
+        order_text="ORDER. Notice. Returnable in two weeks.",
+        order_date=datetime.date(2026, 1, 15),
+        source="ecourts-sync",
+    )
+    _seed_court_order(
+        matter_id,
+        title="Memo of appearance accepted",
+        summary="State counsel's memo accepted on the registry.",
+        order_text=None,
+        order_date=datetime.date(2025, 12, 1),
+        source="manual",
+    )
+
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "litigation_strategy"},
+    )
+    assert response.status_code == 200, response.text
+
+    full_prompt = "\n".join(m.content for m in seen_messages)
+
+    # Prompt block label must appear.
+    assert "RECENT_COURT_ORDERS" in full_prompt
+    # Each order title is rendered.
+    assert "Interim stay vacated" in full_prompt
+    assert "Notice issued" in full_prompt
+    assert "Memo of appearance accepted" in full_prompt
+    # Bounded order_text excerpt is present (we render it under EXCERPT).
+    assert "EXCERPT" in full_prompt
+    assert "interim stay granted on 2026-02-01" in full_prompt
+    # Most recent first — locate position of each title in the prompt.
+    pos_first = full_prompt.find("Interim stay vacated")
+    pos_second = full_prompt.find("Notice issued")
+    pos_third = full_prompt.find("Memo of appearance accepted")
+    assert 0 < pos_first < pos_second < pos_third, (
+        "Court orders must be rendered most-recent first in the prompt."
+    )
+
+
+def test_strategy_context_says_none_for_court_orders_and_flags_missing_at_appellate_forum(
+    client: TestClient, monkeypatch,
+) -> None:
+    """Round-3 P2 #R3-4 zero-context path at an appellate forum.
+
+    When the matter has zero court orders but is at HC/SC/tribunal,
+    the prompt must say so explicitly AND instruct the model to
+    surface the gap under `missing_facts`. An appellate strategy
+    without an impugned order is a documented gap, not a silent
+    absence."""
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    citation = _seed_relevant_authority()
+    payload = _valid_strategy_payload(citation)
+    seen_messages: list[LLMMessage] = []
+
+    class _PromptCapturing:
+        name = "mock"
+        model = "mock-orders-empty-appellate"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            seen_messages.extend(messages)
+            return LLMCompletion(
+                text=json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=10,
+                completion_tokens=20,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _PromptCapturing(),
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.litigation_strategy.build_provider",
+        lambda *a, **kw: _PromptCapturing(),
+    )
+
+    token, _, matter_id = _setup_matter(client, forum_level="high_court")
+    # Seed nothing.
+
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "litigation_strategy"},
+    )
+    assert response.status_code == 200, response.text
+
+    full_prompt = "\n".join(m.content for m in seen_messages)
+    assert "RECENT_COURT_ORDERS" in full_prompt
+    assert "no court orders synced" in full_prompt
+    # Heuristic: the appellate-forum branch instructs the model to add
+    # 'impugned order' to missing_facts.
+    assert "impugned order" in full_prompt
+    assert "missing_facts" in full_prompt

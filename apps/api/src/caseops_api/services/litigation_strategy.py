@@ -52,6 +52,7 @@ from caseops_api.db.models import (
     Matter,
     MatterAttachment,
     MatterCauseListEntry,
+    MatterCourtOrder,
     MatterHearing,
     MatterStatuteReference,
     Recommendation,
@@ -194,6 +195,15 @@ class _StatuteSnippet:
 
 
 @dataclass
+class _CourtOrderSnippet:
+    title: str
+    order_date: str
+    summary: str
+    order_text_excerpt: str | None
+    source: str
+
+
+@dataclass
 class _StrategyContext:
     matter: Matter
     hearings: list[MatterHearing]
@@ -202,6 +212,10 @@ class _StrategyContext:
     attachment_snippets: list[_AttachmentSnippet]
     statute_snippets: list[_StatuteSnippet]
     cause_list_snippets: list[MatterCauseListEntry]
+    # Round-3 P2 #R3-4: court-sync orders are first-class matter
+    # records and escalation strategy depends on impugned/interim
+    # orders. The Round-2 context block did not include them.
+    court_order_snippets: list[_CourtOrderSnippet]
 
 
 # Round-2 P2 #6 budget knobs. The PR's prompt already runs ~3000 chars
@@ -212,6 +226,12 @@ _MAX_ATTACHMENT_EXCERPT_CHARS = 600
 _MAX_STATUTE_REFS = 8
 _MAX_STATUTE_SECTION_TEXT_CHARS = 600
 _MAX_CAUSE_LIST_ENTRIES = 4
+# Round-3 P2 #R3-4 budget knobs. order_text can be very long — the
+# bounded excerpt keeps a doc-rich matter from blowing the prompt
+# window.
+_MAX_COURT_ORDERS = 5
+_MAX_COURT_ORDER_SUMMARY_CHARS = 200
+_MAX_COURT_ORDER_TEXT_CHARS = 500
 
 
 def _assemble_context(session: Session, matter: Matter) -> _StrategyContext:
@@ -309,6 +329,44 @@ def _assemble_context(session: Session, matter: Matter) -> _StrategyContext:
         )
     )
 
+    # Round-3 P2 #R3-4: court-sync orders. The most recent N
+    # impugned/interim orders are critical for escalation strategy —
+    # an SLP's substantial-question hook usually flows from the HC
+    # order being challenged. order_text is bounded so a long judgment
+    # does not blow the prompt window.
+    court_order_rows = list(
+        session.scalars(
+            select(MatterCourtOrder)
+            .where(MatterCourtOrder.matter_id == matter.id)
+            .order_by(
+                MatterCourtOrder.order_date.desc(),
+                MatterCourtOrder.created_at.desc(),
+            )
+            .limit(_MAX_COURT_ORDERS)
+        )
+    )
+    court_order_snippets: list[_CourtOrderSnippet] = []
+    for order in court_order_rows:
+        summary = (order.summary or "").strip()
+        if len(summary) > _MAX_COURT_ORDER_SUMMARY_CHARS:
+            summary = summary[:_MAX_COURT_ORDER_SUMMARY_CHARS] + "…"
+        excerpt: str | None = None
+        if order.order_text:
+            text = order.order_text.strip()
+            if text:
+                if len(text) > _MAX_COURT_ORDER_TEXT_CHARS:
+                    text = text[:_MAX_COURT_ORDER_TEXT_CHARS] + "…"
+                excerpt = text
+        court_order_snippets.append(
+            _CourtOrderSnippet(
+                title=order.title,
+                order_date=order.order_date.isoformat(),
+                summary=summary,
+                order_text_excerpt=excerpt,
+                source=order.source,
+            )
+        )
+
     # SC plausibility is a coarse heuristic on the matter forum_level
     # plus the practice area. Routes that escalate to SC are surfaced
     # only when this gate is open. The LLM can still REFUSE to
@@ -330,6 +388,7 @@ def _assemble_context(session: Session, matter: Matter) -> _StrategyContext:
         attachment_snippets=attachment_snippets,
         statute_snippets=statute_snippets,
         cause_list_snippets=cause_list_entries,
+        court_order_snippets=court_order_snippets,
     )
 
 
@@ -419,6 +478,48 @@ def _build_prompt(
             "depends on the next-listing bench composition, list "
             "'cause-list / next bench' under `missing_facts`.)"
         )
+
+    # Round-3 P2 #R3-4 — court orders. Most-recent first, bounded
+    # excerpts. When the matter is at a stage where an impugned order
+    # is the natural anchor (HC / tribunal / SC) and zero orders are
+    # on file, prompt the model to surface 'impugned order' under
+    # missing_facts.
+    if ctx.court_order_snippets:
+        order_lines: list[str] = []
+        for order in ctx.court_order_snippets:
+            base = (
+                f"- [{order.order_date}] {order.title} "
+                f"(source: {order.source})\n"
+                f"    SUMMARY: {order.summary}"
+            )
+            if order.order_text_excerpt:
+                base += f"\n    EXCERPT: {order.order_text_excerpt}"
+            order_lines.append(base)
+        court_orders_block = "\n".join(order_lines)
+    else:
+        # Heuristic: at HC / SC / tribunal forums an impugned order is
+        # almost always the anchor, so an empty corpus is a flag the
+        # model should surface in missing_facts.
+        forum_lower = (matter.forum_level or "").strip().lower()
+        appellate_forums = {
+            "high_court",
+            "supreme_court",
+            "tribunal",
+            "high_court_division_bench",
+            "high_court_single_bench",
+        }
+        if forum_lower in appellate_forums:
+            court_orders_block = (
+                "(no court orders synced for this matter. The current "
+                "forum_level normally requires an impugned/interim "
+                "order to anchor the strategy — list 'impugned order' "
+                "under `missing_facts` and proceed cautiously.)"
+            )
+        else:
+            court_orders_block = (
+                "(no court orders synced for this matter. The current "
+                "forum_level does not necessarily require one yet.)"
+            )
     sc_clause = (
         "SUPREME COURT routes (SLP under Article 136, Article 132/133/134 "
         "appeals, review under Article 137, curative under the Rupa Ashok "
@@ -512,6 +613,8 @@ def _build_prompt(
         f"relevance is 'cited' / 'opposing' / 'context'):\n"
         f"{statute_block}\n\n"
         f"CAUSE_LIST_NEXT_BENCH (recent listings):\n{cause_list_block}\n\n"
+        f"RECENT_COURT_ORDERS (most-recent impugned/interim orders, "
+        f"bounded excerpts):\n{court_orders_block}\n\n"
         f"AVAILABLE_TEMPLATES (use only these template_type slugs in "
         f"recommended_drafts):\n{_available_templates_block()}\n\n"
         f"TEMPLATE_RECOMMENDER_DEFAULTS (starting suggestions, you may "
