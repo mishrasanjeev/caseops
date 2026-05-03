@@ -24,6 +24,7 @@ Design notes:
 """
 from __future__ import annotations
 
+import re
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -250,6 +251,104 @@ FORBIDDEN_OUTCOME_PHRASES: tuple[str, ...] = (
     "without a lawyer",
 )
 
+# Round-2 P2 #5: outcome-PROBABILITY phrases. Strategy is about
+# routes / risks / procedural posture / evidence gaps — never about
+# outcome probability. The user-experience problem is real for legal
+# products: 'high likelihood of success' phrasing reads as a guarantee
+# to a non-lawyer reader. We scan the route rationale + risk-notes /
+# description fields specifically (not the whole payload) so legitimate
+# uses of words like 'likely' inside an authority excerpt or a
+# limitation description don't trip the gate. Each entry is a regex
+# pattern (case-insensitive) — we keep them strict to minimise false
+# positives.
+
+FORBIDDEN_PROBABILITY_PATTERNS: tuple[tuple[str, str], ...] = (
+    (
+        r"\b\d{1,3}\s*%\s*(?:chance|likelihood|probability|odds|"
+        r"likely|likely\s+to\s+win|likelihood\s+of\s+success)",
+        "percentage-based outcome ('30% chance', '70% likelihood')",
+    ),
+    (
+        r"\b\d{1,3}\s*percent\s+(?:chance|likelihood|probability|odds)",
+        "percent-based outcome ('30 percent chance')",
+    ),
+    (
+        r"\blikely\s+to\s+win\b",
+        "'likely to win'",
+    ),
+    (
+        r"\blikelihood\s+of\s+success\b",
+        "'likelihood of success'",
+    ),
+    (
+        r"\bprobability\s+of\s+success\b",
+        "'probability of success'",
+    ),
+    (
+        r"\bchance(?:s)?\s+of\s+success\b",
+        "'chance(s) of success'",
+    ),
+    (
+        r"\bodds\s+of\s+(?:winning|succeeding|success)\b",
+        "'odds of winning/succeeding/success'",
+    ),
+    (
+        r"\bhigh(?:ly)?\s+likely\s+to\s+(?:win|succeed|prevail)\b",
+        "'highly likely to win/succeed/prevail'",
+    ),
+)
+
+# Fields on the persisted strategy payload that the probability scan
+# walks. We deliberately avoid scanning ``required_documents``,
+# ``missing_facts``, and ``recommended_drafts.purpose`` because those
+# come from the registry / matter facts, not from the LLM's outcome
+# framing. We also DO NOT scan ``forum_sequence[*].statutory_basis``
+# entries (statute names like 'Limitation Act' — false positives).
+_PROBABILITY_SCAN_FIELDS: tuple[str, ...] = (
+    "current_posture",
+    "recommended_route.rationale",
+    "recommended_route.risk_notes",
+    "alternative_routes[].rationale",
+    "alternative_routes[].risk_notes",
+    "forum_sequence[].rationale",
+    "limitation_flags[].description",
+    "risks[].description",
+    "risks[].mitigation",
+    "next_best_actions[].action",
+    "disclaimer",
+)
+
+
+def _walk_probability_scan_fields(payload: LitigationStrategyPayload) -> list[str]:
+    """Yield the strings on ``payload`` that the probability scan
+    walks. Centralised so test_litigation_strategy can assert the same
+    fields the runtime scan covers."""
+    out: list[str] = [payload.current_posture, payload.disclaimer]
+    if payload.recommended_route.rationale:
+        out.append(payload.recommended_route.rationale)
+    if payload.recommended_route.risk_notes:
+        out.append(payload.recommended_route.risk_notes)
+    for alt in payload.alternative_routes:
+        if alt.rationale:
+            out.append(alt.rationale)
+        if alt.risk_notes:
+            out.append(alt.risk_notes)
+    for step in payload.forum_sequence:
+        if step.rationale:
+            out.append(step.rationale)
+    for flag in payload.limitation_flags:
+        if flag.description:
+            out.append(flag.description)
+    for risk in payload.risks:
+        if risk.description:
+            out.append(risk.description)
+        if risk.mitigation:
+            out.append(risk.mitigation)
+    for nba in payload.next_best_actions:
+        if nba.action:
+            out.append(nba.action)
+    return out
+
 
 def assert_no_forbidden_phrases(text: str) -> None:
     """Raise ``ValueError`` if any forbidden phrase appears in
@@ -268,8 +367,28 @@ def assert_no_forbidden_phrases(text: str) -> None:
             )
 
 
+def assert_no_probability_language(payload: LitigationStrategyPayload) -> None:
+    """Round-2 P2 #5. Scan the narrative fields on a built strategy
+    payload for outcome-probability phrasing and raise ``ValueError``
+    on the first hit. Called after assert_no_forbidden_phrases as a
+    second layer.
+    """
+    for value in _walk_probability_scan_fields(payload):
+        lowered = value.lower()
+        for pattern, description in FORBIDDEN_PROBABILITY_PATTERNS:
+            if re.search(pattern, lowered):
+                raise ValueError(
+                    "Strategy text used outcome-probability language "
+                    f"({description}). Strategy outputs are about routes, "
+                    "risks, procedural posture, and evidence gaps — not "
+                    "outcome probability. Rewrite without the probability "
+                    "framing."
+                )
+
+
 __all__ = [
     "FORBIDDEN_OUTCOME_PHRASES",
+    "FORBIDDEN_PROBABILITY_PATTERNS",
     "ForumStep",
     "ForumStepLevel",
     "LimitationFlag",
@@ -283,4 +402,5 @@ __all__ = [
     "StrategyRoute",
     "RiskSeverity",
     "assert_no_forbidden_phrases",
+    "assert_no_probability_language",
 ]

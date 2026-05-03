@@ -67,6 +67,7 @@ from caseops_api.schemas.litigation_strategy import (
     StrategyRisk,
     StrategyRoute,
     assert_no_forbidden_phrases,
+    assert_no_probability_language,
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.citations import (
@@ -820,6 +821,38 @@ def generate_litigation_strategy(
             detail=(
                 "Strategy generation produced disallowed outcome-promising "
                 "language and was refused. Please retry."
+            ),
+            headers={"X-Model-Run-Id": run.id},
+        ) from exc
+
+    # Round-2 P2 #5: scan the narrative fields specifically for
+    # outcome-PROBABILITY phrasing ('70% chance', 'likelihood of
+    # success'). The forbidden-phrase scanner above catches outcome
+    # GUARANTEES; this layer catches probability framing. Scoped to
+    # specific fields so a statute name like 'Limitation Act' or an
+    # excerpt with the word 'likely' inside it doesn't false-positive.
+    try:
+        assert_no_probability_language(payload)
+    except ValueError as exc:
+        run = _write_model_run(
+            session,
+            context=context,
+            matter_id=matter.id,
+            purpose="recommendation:litigation_strategy",
+            completion=completion,
+            prompt_hash=prompt_hash,
+            status_label="rejected_probability_language",
+            error=str(exc)[:500],
+        )
+        session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                "Strategy generation used outcome-probability language "
+                "('likely to win', 'X% chance of success', etc.) and "
+                "was refused. Strategy outputs are about routes, risks, "
+                "procedural posture, and evidence gaps — not outcome "
+                "probability. Please retry."
             ),
             headers={"X-Model-Run-Id": run.id},
         ) from exc

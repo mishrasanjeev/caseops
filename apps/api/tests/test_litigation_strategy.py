@@ -34,9 +34,14 @@ from caseops_api.db.models import (
 from caseops_api.db.session import get_session_factory
 from caseops_api.schemas.litigation_strategy import (
     FORBIDDEN_OUTCOME_PHRASES,
+    ForumStep,
+    LimitationFlag,
     LitigationStrategyPayload,
+    NextBestAction,
+    StrategyRisk,
     StrategyRoute,
     assert_no_forbidden_phrases,
+    assert_no_probability_language,
 )
 from tests.test_auth_company import auth_headers, bootstrap_company
 
@@ -366,6 +371,232 @@ def test_strategy_test_fixture_has_no_forbidden_phrases() -> None:
     fixture rather than the assertion."""
     payload = _valid_strategy_payload("X v. Y")
     assert_no_forbidden_phrases(json.dumps(payload))
+
+
+# ---------------------------------------------------------------
+# Round-2 P2 #5: outcome-probability language scan.
+# ---------------------------------------------------------------
+
+
+def test_assert_no_probability_language_blocks_percent_chance() -> None:
+    """Probability-phrase scan must trip on '70% chance', 'X% likelihood',
+    'likely to win', etc. — case-insensitive."""
+
+    def _payload_with_rationale(rationale: str) -> LitigationStrategyPayload:
+        return LitigationStrategyPayload(
+            current_posture="HC stage with FIR registered.",
+            recommended_route=StrategyRoute(
+                label="Quashing under BNSS s.528",
+                rationale=rationale,
+                confidence="medium",
+                availability="available",
+                supporting_citations=["Sushila Aggarwal v. State of NCT (2020)"],
+                risk_notes=None,
+            ),
+            forum_sequence=[
+                ForumStep(
+                    forum_level="high_court_single_bench",
+                    stage_label="Quashing",
+                    forum_name="Delhi HC",
+                    rationale="Inherent powers.",
+                    statutory_basis=["BNSS s.528"],
+                    expected_filings=["quashing_petition"],
+                    supporting_citations=["Sushila Aggarwal v. State of NCT (2020)"],
+                    unverified=False,
+                ),
+            ],
+            disclaimer="Lawyer review required.",
+        )
+
+    forbidden = [
+        "There is a 70% chance of success on these grounds.",
+        "The petition is highly likely to win at the HC.",
+        "We assess the probability of success at 60 percent.",
+        "Likelihood of success is high given the precedent.",
+        "Odds of winning at the SC are favourable.",
+        "Chances of success exceed 50%.",
+    ]
+    for rationale in forbidden:
+        with pytest.raises(ValueError, match="probability"):
+            assert_no_probability_language(_payload_with_rationale(rationale))
+
+
+def test_assert_no_probability_language_passes_clean_strategy() -> None:
+    """Negative case: a strategy whose narrative talks about routes /
+    risks / procedural posture without probability framing must pass."""
+    payload = LitigationStrategyPayload(
+        current_posture="HC stage; FIR registered under BNS s.318.",
+        recommended_route=StrategyRoute(
+            label="Quashing under BNSS s.528",
+            rationale=(
+                "The HC's inherent powers under BNSS s.528 cover this fact "
+                "pattern. The route depends on the HC's discretion; if "
+                "declined, the matter escalates to the SC under Article 136."
+            ),
+            confidence="medium",
+            availability="available",
+            supporting_citations=["Sushila Aggarwal v. State of NCT (2020)"],
+            risk_notes=(
+                "The bench's discretion is unpredictable; the petitioner "
+                "should be ready to escalate."
+            ),
+        ),
+        forum_sequence=[
+            ForumStep(
+                forum_level="high_court_single_bench",
+                stage_label="Quashing",
+                forum_name="Delhi HC",
+                rationale="Inherent powers under BNSS s.528.",
+                statutory_basis=["BNSS s.528"],
+                expected_filings=["quashing_petition"],
+                supporting_citations=["Sushila Aggarwal v. State of NCT (2020)"],
+                unverified=False,
+            ),
+        ],
+        disclaimer="Lawyer review required.",
+    )
+    assert_no_probability_language(payload)
+
+
+def test_strategy_refuses_when_probability_language_in_payload(
+    client: TestClient, monkeypatch,
+) -> None:
+    """Service-level guard: a payload with 'X% chance' phrasing must
+    be refused with HTTP 422 and persisted as a ModelRun row tagged
+    ``rejected_probability_language``."""
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    citation = _seed_relevant_authority()
+    payload = _valid_strategy_payload(citation)
+    payload["recommended_route"]["rationale"] += (
+        " There is a 75% chance of success on these grounds."
+    )
+
+    class _Probabilist:
+        name = "mock"
+        model = "mock-probabilist"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            return LLMCompletion(
+                text=json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=10,
+                completion_tokens=20,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _Probabilist(),
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.litigation_strategy.build_provider",
+        lambda *a, **kw: _Probabilist(),
+    )
+
+    token, _, matter_id = _setup_matter(client, forum_level="high_court")
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "litigation_strategy"},
+    )
+    assert response.status_code == 422, response.text
+    detail = response.json()["detail"].lower()
+    assert "probability" in detail or "outcome-probability" in detail
+
+    factory = get_session_factory()
+    with factory() as session:
+        runs = list(
+            session.scalars(
+                select(ModelRun).where(
+                    ModelRun.purpose == "recommendation:litigation_strategy",
+                )
+            )
+        )
+    assert any(
+        r.status == "rejected_probability_language" for r in runs
+    ), "Probability-language refusal must persist as a ModelRun row."
+
+
+def test_strategy_test_fixture_has_no_probability_language() -> None:
+    """Self-check on the test fixture so a future regression in the
+    sample payload (someone adding 'high probability of success') gets
+    caught HERE, not in production."""
+    raw = _valid_strategy_payload("Test v. Test (2026)")
+    # Self-construct the LitigationStrategyPayload from the raw fixture
+    # so the structural scan walks the same field set the runtime gate
+    # walks.
+    payload = LitigationStrategyPayload(
+        current_posture=raw["current_posture"],
+        recommended_route=StrategyRoute(
+            label=raw["recommended_route"]["label"],
+            rationale=raw["recommended_route"]["rationale"],
+            confidence=raw["recommended_route"]["confidence"],
+            availability=raw["recommended_route"]["availability"],
+            supporting_citations=raw["recommended_route"]["supporting_citations"],
+            risk_notes=raw["recommended_route"]["risk_notes"],
+        ),
+        alternative_routes=[
+            StrategyRoute(
+                label=alt["label"],
+                rationale=alt["rationale"],
+                confidence=alt["confidence"],
+                availability=alt["availability"],
+                supporting_citations=alt["supporting_citations"],
+                risk_notes=alt["risk_notes"],
+            )
+            for alt in raw["alternative_routes"]
+        ],
+        forum_sequence=[
+            ForumStep(
+                forum_level=step["forum_level"],
+                stage_label=step["stage_label"],
+                forum_name=step["forum_name"],
+                rationale=step["rationale"],
+                statutory_basis=step["statutory_basis"],
+                expected_filings=step["expected_filings"],
+                supporting_citations=step.get("supporting_citations", []),
+                unverified=False,
+            )
+            for step in raw["forum_sequence"]
+        ],
+        limitation_flags=[
+            LimitationFlag(
+                label=flag["label"],
+                description=flag["description"],
+                statutory_basis=flag["statutory_basis"],
+                deadline_iso=flag["deadline_iso"],
+                severity=flag["severity"],
+                supporting_citations=flag.get("supporting_citations", []),
+                unverified=False,
+            )
+            for flag in raw["limitation_flags"]
+        ],
+        risks=[
+            StrategyRisk(
+                label=risk["label"],
+                description=risk["description"],
+                severity=risk["severity"],
+                mitigation=risk["mitigation"],
+                supporting_citations=risk.get("supporting_citations", []),
+                unverified=False,
+            )
+            for risk in raw["risks"]
+        ],
+        next_best_actions=[
+            NextBestAction(
+                action=nba["action"] if isinstance(nba, dict) else nba,
+                supporting_citations=(
+                    nba.get("supporting_citations", []) if isinstance(nba, dict) else []
+                ),
+                unverified=False,
+            )
+            for nba in raw["next_best_actions"]
+        ],
+        disclaimer=raw["disclaimer"],
+    )
+    assert_no_probability_language(payload)
 
 
 def test_recommended_route_strategy_route_pydantic_rejects_extra() -> None:
