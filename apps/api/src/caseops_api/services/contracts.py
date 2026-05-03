@@ -824,7 +824,10 @@ def create_contract_attachment(
         )
         # §9.3: ClamAV scan on the persisted bytes. Skipped when
         # CASEOPS_CLAMAV_HOST is not set; raises 400 on infection.
-        from caseops_api.services.document_storage import resolve_storage_path
+        from caseops_api.services.document_storage import (
+            delete_stored_document,
+            resolve_storage_path,
+        )
         from caseops_api.services.virus_scan import reject_if_infected
 
         try:
@@ -835,9 +838,10 @@ def create_contract_attachment(
         except Exception:
             # On infection (HTTPException) or unexpected error, remove the
             # file we just wrote so nothing persists outside the DB row we
-            # are about to rollback.
+            # are about to rollback. This must delete the remote GCS blob as
+            # well as any local materialized cache.
             try:
-                resolve_storage_path(stored.storage_key).unlink(missing_ok=True)
+                delete_stored_document(stored.storage_key)
             except Exception:
                 pass
             raise

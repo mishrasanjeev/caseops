@@ -46,6 +46,14 @@ __pycache__/
 # audit; IDEs were flagging the 37 files as uncommitted changes.
 .pytest-tmp/
 apps/api/.pytest-tmp/
+*.tmp-pytest*/
+.tmp-audit-pytest/
+.tmp-pytest*/
+pytest-basetemp*/
+pytest-cache-files*/
+apps/api/.tmp-pytest*/
+apps/api/.tmp-review*/
+apps/api/pytest-cache-files*/
 pytest-basetemp-coverage/
 # Coverage JSON artifact written by `coverage json` during the gate
 # run; the per-CI artifact upload is the durable copy.

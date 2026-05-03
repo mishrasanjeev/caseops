@@ -18,8 +18,9 @@ scanning is §9.3 and runs as a downstream workflow step.
 """
 from __future__ import annotations
 
+import zipfile
 from dataclasses import dataclass
-from pathlib import PurePath
+from pathlib import PurePath, PurePosixPath
 from typing import BinaryIO
 
 from fastapi import HTTPException, status
@@ -107,6 +108,64 @@ def _kind_for_extension(ext_lower: str) -> UploadKind | None:
     return None
 
 
+def _validate_docx_container(stream: BinaryIO, *, max_uncompressed_bytes: int) -> None:
+    """Reject renamed ZIPs and obvious zip-bomb/path-traversal DOCX files."""
+    try:
+        with zipfile.ZipFile(stream) as archive:
+            infos = archive.infolist()
+    except zipfile.BadZipFile as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="DOCX upload is not a readable Office Open XML document.",
+        ) from exc
+    finally:
+        try:
+            stream.seek(0)
+        except (AttributeError, OSError):
+            pass
+
+    if len(infos) > 5000:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="DOCX upload contains too many internal entries.",
+        )
+
+    total_uncompressed = 0
+    names: set[str] = set()
+    for info in infos:
+        raw_name = info.filename
+        normalized = raw_name.replace("\\", "/")
+        if normalized.startswith("/") or normalized.startswith("\\"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="DOCX upload contains an absolute internal path.",
+            )
+        parts = PurePosixPath(normalized).parts
+        if (
+            not parts
+            or ":" in parts[0]
+            or any(part in {"", ".", ".."} for part in parts)
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="DOCX upload contains an unsafe internal path.",
+            )
+        names.add(normalized.rstrip("/"))
+        total_uncompressed += int(info.file_size)
+        if total_uncompressed > max_uncompressed_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="DOCX upload expands beyond the allowed processing size.",
+            )
+
+    required = {"[Content_Types].xml", "word/document.xml"}
+    if not required.issubset(names):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="DOCX upload is missing required Word document parts.",
+        )
+
+
 def verify_upload(
     *,
     filename: str,
@@ -188,11 +247,14 @@ def verify_upload(
     # full body.
     _CHUNK = 1024 * 1024
     seen = 0
+    contains_nul = False
     while True:
         chunk = stream.read(_CHUNK)
         if not chunk:
             break
         seen += len(chunk)
+        if ext == ".txt" and b"\x00" in chunk:
+            contains_nul = True
         if seen > max_bytes:
             raise HTTPException(
                 status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
@@ -208,6 +270,22 @@ def verify_upload(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Upload stream must be seekable after size check.",
         ) from exc
+
+    if contains_nul:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Plain-text uploads must not contain NUL bytes.",
+        )
+
+    if ext == ".docx":
+        _validate_docx_container(stream, max_uncompressed_bytes=max_bytes * 5)
+        try:
+            stream.seek(0)
+        except (AttributeError, OSError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Upload stream must be seekable after DOCX validation.",
+            ) from exc
 
 
 __all__ = [

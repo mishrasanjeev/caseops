@@ -8,6 +8,7 @@ from fastapi import HTTPException
 
 from caseops_api.core.settings import get_settings
 from caseops_api.services.document_storage import (
+    delete_stored_document,
     persist_workspace_attachment,
     resolve_storage_path,
 )
@@ -26,6 +27,9 @@ class _FakeBlob:
 
     def download_to_filename(self, filename: str) -> None:
         Path(filename).write_bytes(self._objects[self.name])
+
+    def delete(self) -> None:
+        self._objects.pop(self.name, None)
 
 
 class _FakeBucket:
@@ -91,6 +95,59 @@ def test_gcs_backend_persists_and_materializes_cached_download(
     cached_path = resolve_storage_path(stored.storage_key)
     assert cached_path == resolved_path
     assert cached_path.read_bytes() == b"matter evidence"
+
+
+def test_delete_stored_document_removes_gcs_blob_and_cache(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    reset_storage_settings,
+) -> None:
+    objects: dict[str, bytes] = {}
+    monkeypatch.setenv("CASEOPS_DOCUMENT_STORAGE_BACKEND", "gcs")
+    monkeypatch.setenv("CASEOPS_DOCUMENT_STORAGE_GCS_BUCKET", "caseops-documents")
+    monkeypatch.setenv("CASEOPS_DOCUMENT_STORAGE_GCS_PREFIX", "tenant-docs")
+    monkeypatch.setenv("CASEOPS_DOCUMENT_STORAGE_CACHE_PATH", (tmp_path / "cache").as_posix())
+    monkeypatch.setattr(
+        "caseops_api.services.document_storage.storage.Client",
+        lambda project=None: _FakeStorageClient(objects, project),
+    )
+
+    stored = persist_workspace_attachment(
+        company_id="company-1",
+        workspace_id="matter-1",
+        attachment_id="attachment-1",
+        filename="quarantine.pdf",
+        stream=io.BytesIO(b"%PDF-1.4 clean enough"),
+    )
+    cached_path = resolve_storage_path(stored.storage_key)
+    assert cached_path.exists()
+    assert objects
+
+    delete_stored_document(stored.storage_key)
+
+    assert not cached_path.exists()
+    assert objects == {}
+
+
+def test_persist_rejects_unsafe_storage_segments(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    reset_storage_settings,
+) -> None:
+    monkeypatch.setenv("CASEOPS_DOCUMENT_STORAGE_BACKEND", "local")
+    monkeypatch.setenv("CASEOPS_DOCUMENT_STORAGE_PATH", (tmp_path / "documents").as_posix())
+
+    with pytest.raises(HTTPException) as exc_info:
+        persist_workspace_attachment(
+            company_id="../company",
+            workspace_id="matter-1",
+            attachment_id="attachment-1",
+            filename="proof.pdf",
+            stream=io.BytesIO(b"%PDF-1.4"),
+        )
+
+    assert exc_info.value.status_code == 400
+    assert "company id" in exc_info.value.detail.lower()
 
 
 def test_resolve_storage_path_rejects_path_traversal(

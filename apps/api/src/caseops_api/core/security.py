@@ -22,13 +22,21 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(password: str, encoded_password: str) -> bool:
-    algorithm, salt_hex, key_hex = encoded_password.split("$", maxsplit=2)
+    try:
+        algorithm, salt_hex, key_hex = encoded_password.split("$", maxsplit=2)
+    except ValueError:
+        return False
     if algorithm != "scrypt":
         return False
 
-    salt = bytes.fromhex(salt_hex)
-    expected_key = bytes.fromhex(key_hex)
-    candidate_key = hashlib.scrypt(password.encode("utf-8"), salt=salt, n=2**14, r=8, p=1)
+    try:
+        salt = bytes.fromhex(salt_hex)
+        expected_key = bytes.fromhex(key_hex)
+        candidate_key = hashlib.scrypt(
+            password.encode("utf-8"), salt=salt, n=2**14, r=8, p=1
+        )
+    except (ValueError, TypeError):
+        return False
     return hmac.compare_digest(candidate_key, expected_key)
 
 

@@ -21,6 +21,8 @@ import type { NextConfig } from "next";
 //   - frame-ancestors 'none' = same as X-Frame-Options DENY
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+const shouldUpgradeInsecureRequests =
+  apiBaseUrl.startsWith("https://") && appUrl.startsWith("https://");
 
 const cspDirectives: string[] = [
   "default-src 'self'",
@@ -47,8 +49,11 @@ const cspDirectives: string[] = [
   "worker-src 'self' blob:",
   "media-src 'self'",
   "manifest-src 'self'",
-  "upgrade-insecure-requests",
 ];
+
+if (shouldUpgradeInsecureRequests) {
+  cspDirectives.push("upgrade-insecure-requests");
+}
 
 const securityHeaders = [
   // Strict-Transport-Security only meaningful over HTTPS; harmless
