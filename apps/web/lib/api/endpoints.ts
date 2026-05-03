@@ -967,7 +967,7 @@ export type TodayDraftInReview = {
   matter: TodayMatterRef;
   title: string;
   draft_type: string;
-  template_type: string | null;
+  template_type: DraftTemplateType | null;
   updated_at_iso: string;
 };
 
@@ -1063,7 +1063,7 @@ export type FilingChecklistItem = {
 export type FilingChecklistResponse = {
   matter_id: string;
   draft_id: string;
-  template_type: string;
+  template_type: DraftTemplateType;
   court_profile_key: string;
   court_display_name: string;
   items: FilingChecklistItem[];
@@ -2319,7 +2319,7 @@ export async function listDraftingTemplates(): Promise<DraftTemplateSummary[]> {
 
 // Format-to-forum recommender (PRD §16.3, 2026-04-26).
 export type TemplateRecommendation = {
-  template_type: string;
+  template_type: DraftTemplateType;
   relevance: "primary" | "secondary";
   reason: string;
 };

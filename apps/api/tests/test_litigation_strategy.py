@@ -1126,86 +1126,31 @@ def test_strategy_persists_verified_citations_on_every_item_kind(
     for risk in payload["risks"]:
         assert risk["unverified"] is False
         assert risk["supporting_citations"] == []
-    # next_best_actions: first is bare-string-style (no citation, not
-    # legal), second cites the seeded authority.
+    # next_best_actions: first action emits empty supporting_citations
+    # (factual/procedural reminder). Round-4 R4 #2 conservatively flags
+    # such structured actions as unverified=True so the partner-reviewer
+    # sees the amber Unverified badge — the LLM could equally have
+    # smuggled a legal claim through this shape ("File SLP within 60
+    # days"), so we never treat empty-citations as verified. The second
+    # action carries a verifiable citation and stays verified.
     actions = payload["next_best_actions"]
-    assert all(a["unverified"] is False for a in actions)
+    assert actions[0]["unverified"] is True
     assert actions[0]["supporting_citations"] == []
+    assert actions[1]["unverified"] is False
     assert len(actions[1]["supporting_citations"]) >= 1
 
 
-def test_strategy_flags_unverified_when_forum_step_citation_does_not_match(
-    client: TestClient, monkeypatch,
-) -> None:
-    """A forum step that is OPERATIONAL (empty ``statutory_basis``)
-    whose only citation is unverifiable persists with ``unverified=True``
-    and an empty ``supporting_citations`` list. The narrative is
-    preserved so the partner-reviewer can still see the procedural
-    step that needs vetting.
-
-    Round-3 P2 #R3-3 splits the behavior: operational steps stay
-    flagged, LEGAL steps (non-empty ``statutory_basis``) get dropped
-    entirely. Asserted in test_strategy_drops_legal_forum_step_with_uncited_citation
-    below.
-    """
-    from caseops_api.services.llm import LLMCompletion, LLMMessage
-
-    citation = _seed_relevant_authority()
-    payload = _valid_strategy_payload(citation)
-    # Replace the first forum step with an OPERATIONAL one (no
-    # statutory_basis) and poison its citation. Round-3 fail-closes
-    # legal forum steps without verified citations, so to test the
-    # "unverified flag" behavior we need an operational step.
-    payload["forum_sequence"][0] = {
-        "forum_level": "high_court_single_bench",
-        "stage_label": "Pay court fees",
-        "forum_name": "Delhi High Court Registry",
-        "rationale": "Court fees on the quashing petition.",
-        "statutory_basis": [],  # operational — no legal claim.
-        "expected_filings": [],
-        "supporting_citations": ["Made Up Forum Step v. Nobody (2099)"],
-    }
-
-    class _PartialBad:
-        name = "mock"
-        model = "mock-partial-bad"
-
-        def generate(self, messages: list[LLMMessage], **_kwargs):
-            return LLMCompletion(
-                text=json.dumps(payload),
-                provider=self.name,
-                model=self.model,
-                prompt_tokens=10,
-                completion_tokens=20,
-                latency_ms=5,
-            )
-
-    monkeypatch.setattr(
-        "caseops_api.services.recommendations.build_provider",
-        lambda *a, **kw: _PartialBad(),
-    )
-    monkeypatch.setattr(
-        "caseops_api.services.litigation_strategy.build_provider",
-        lambda *a, **kw: _PartialBad(),
-    )
-
-    token, _, matter_id = _setup_matter(client, forum_level="high_court")
-    response = client.post(
-        f"/api/matters/{matter_id}/recommendations",
-        headers=auth_headers(token),
-        json={"type": "litigation_strategy"},
-    )
-    assert response.status_code == 200, response.text
-    persisted = response.json()["strategy_payload"]
-    first_step = persisted["forum_sequence"][0]
-    assert first_step["unverified"] is True
-    assert first_step["supporting_citations"] == []
-    # The narrative is still there — the user can see what to vet.
-    assert first_step["stage_label"]
-    assert first_step["rationale"]
-    # The operational step has no statutory_basis — that's the signal
-    # that kept it from being fail-closed.
-    assert first_step["statutory_basis"] == []
+# NOTE — Round-4 (R4 #1, 2026-05-03) tightened the forum_sequence rule:
+# every forum step must carry at least one verified citation, regardless
+# of whether ``statutory_basis`` is populated. Operational items
+# ("Pay court fees", "Obtain certified copy") now belong in
+# ``next_best_actions``, not in ``forum_sequence``. The previous test
+# ``test_strategy_flags_unverified_when_forum_step_citation_does_not_match``
+# asserted the now-deleted "operational step survives with
+# unverified=True" path; it has been removed because R4 deletes that
+# behavior at source. The R4 #1 / R4 #3 paths are exercised by
+# ``test_strategy_drops_uncited_forum_step_without_statutory_basis``
+# and ``test_strategy_refuses_when_first_forum_step_dropped`` below.
 
 
 def test_strategy_flags_unverified_on_legal_risk_with_bad_citation(
@@ -1799,10 +1744,15 @@ def test_strategy_marks_bare_string_next_best_actions_unverified(
     )
     assert actions[0]["supporting_citations"] == []
 
-    # The structured factual action stays unverified=False (no citation
-    # claimed → nothing to verify → not flagged).
+    # Round-4 R4 #2: a structured action with empty supporting_citations
+    # is conservatively flagged unverified=True. The previous rule
+    # ("empty citations == operational == verified=True") was a citation
+    # bypass — the LLM could ship "File SLP within 60 days" as a
+    # structured object with empty citations and it would persist as
+    # trusted. Conservative rule now: zero verified citations on a
+    # structured action == unverified, regardless of intent.
     assert actions[1]["action"].startswith("Call the client")
-    assert actions[1]["unverified"] is False
+    assert actions[1]["unverified"] is True
     assert actions[1]["supporting_citations"] == []
 
     # The structured legal claim with a verifiable citation persists
@@ -1951,17 +1901,27 @@ def test_strategy_drops_unverified_limitation_flag(
 def test_strategy_drops_legal_forum_step_with_uncited_citation(
     client: TestClient, monkeypatch,
 ) -> None:
-    """A LEGAL forum step (non-empty ``statutory_basis``) whose only
-    citation is unverifiable must be dropped. An "Unverified" badge on
-    a statutory-basis claim about which forum has jurisdiction is too
-    risky to surface."""
+    """A LEGAL forum step whose only citation is unverifiable must be
+    dropped. An "Unverified" badge on a statutory-basis claim about
+    which forum has jurisdiction is too risky to surface.
+
+    Round-4 R4 #1 + #3: the test poisons forum_sequence[1] (the SC
+    step), not forum_sequence[0], so the ladder coherence guard is
+    NOT tripped. forum_sequence[0] (HC quashing) survives, the
+    poisoned SC step is dropped, and the response is a 200 OK with a
+    single-step ladder. (Poisoning [0] is the path exercised by
+    ``test_strategy_refuses_when_first_forum_step_dropped`` — that's
+    the 422 fail-closed path.)
+    """
     from caseops_api.services.llm import LLMCompletion, LLMMessage
 
     citation = _seed_relevant_authority()
     payload = _valid_strategy_payload(citation)
-    # forum_sequence[0] makes a legal claim under BNSS s.528 — poison
-    # its citation. forum_sequence[1] keeps a verifiable citation.
-    payload["forum_sequence"][0]["supporting_citations"] = [
+    # forum_sequence[1] makes a legal claim under Article 136 — poison
+    # its citation. forum_sequence[0] keeps a verifiable citation so
+    # the ladder still starts at the current HC forum and the R4 #3
+    # coherence guard does not trigger.
+    payload["forum_sequence"][1]["supporting_citations"] = [
         "Made Up Statute v. Nobody (2099)"
     ]
 
@@ -1996,22 +1956,21 @@ def test_strategy_drops_legal_forum_step_with_uncited_citation(
     )
     assert response.status_code == 200, response.text
     steps = response.json()["strategy_payload"]["forum_sequence"]
-    # The poisoned legal step must be gone; the SC step survives.
     stage_labels = [s["stage_label"] for s in steps]
-    assert "Quashing petition" not in stage_labels, (
-        "Legal forum step (statutory_basis=['BNSS s.528']) without a "
-        "verified citation must be dropped. Round-3 P2 #R3-3."
+    # The poisoned legal step must be gone.
+    assert "SLP if HC declines" not in stage_labels, (
+        "Legal forum step without a verified citation must be dropped. "
+        "Round-4 R4 #1."
     )
-    # The other (verified) step survives.
-    assert any(s["stage_label"] == "SLP if HC declines" for s in steps)
+    # The HC quashing step (verifiable) survives — ladder still starts
+    # at the current matter forum.
+    assert any(s["stage_label"] == "Quashing petition" for s in steps)
+    # Round-4 contract: every surviving step has verified citations
+    # and unverified=False (no surviving forum_sequence entry should
+    # carry unverified=True).
     for step in steps:
-        # No surviving step has unverified=True with non-empty
-        # statutory_basis — that combination is forbidden by the new
-        # fail-closed rule.
-        assert not (step["unverified"] and step["statutory_basis"]), (
-            f"Legal forum step {step['stage_label']!r} must not persist "
-            f"with unverified=True + non-empty statutory_basis."
-        )
+        assert step["unverified"] is False
+        assert len(step["supporting_citations"]) >= 1
 
 
 # ---------------------------------------------------------------
@@ -2203,3 +2162,219 @@ def test_strategy_context_says_none_for_court_orders_and_flags_missing_at_appell
     # 'impugned order' to missing_facts.
     assert "impugned order" in full_prompt
     assert "missing_facts" in full_prompt
+
+
+# ---------------------------------------------------------------
+# Round-4 fixes (2026-05-03):
+#   R4 #1: drop ALL uncited forum_sequence steps, not just legal ones
+#          (closes the empty-statutory_basis bypass).
+#   R4 #2: structured next_best_actions with empty supporting_citations
+#          persist as unverified=True (closes the citation bypass).
+#   R4 #3: if forum_sequence[0] gets filtered, fail-closed with 422
+#          rather than persist a ladder that no longer starts at the
+#          current forum.
+# ---------------------------------------------------------------
+
+
+def test_strategy_drops_uncited_forum_step_without_statutory_basis(
+    client: TestClient, monkeypatch,
+) -> None:
+    """R4 #1. The Round-3 gate dropped uncited forum steps only when
+    the LLM populated ``statutory_basis``. A model could side-step that
+    by emitting a legal claim in ``stage_label`` / ``rationale`` /
+    ``forum_level`` while leaving ``statutory_basis`` empty. The
+    R4 rule: ANY forum_sequence entry with zero verified citations is
+    dropped, regardless of statutory_basis."""
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    citation = _seed_relevant_authority()
+    payload = _valid_strategy_payload(citation)
+    # forum_sequence[0] keeps the verified citation (so it survives
+    # filtering and the ladder still starts at the current forum).
+    # forum_sequence[1] is the bypass attempt: legal claim in
+    # stage_label / rationale, EMPTY statutory_basis, unverifiable
+    # citation.
+    payload["forum_sequence"][1]["statutory_basis"] = []
+    payload["forum_sequence"][1]["stage_label"] = (
+        "SLP if HC declines"
+    )
+    payload["forum_sequence"][1]["rationale"] = (
+        "If the HC dismisses the writ, file a Special Leave Petition "
+        "under Article 136 within 90 days."
+    )
+    payload["forum_sequence"][1]["supporting_citations"] = [
+        "Made Up Statute v. Nobody (2099)"
+    ]
+
+    class _BypassAttempt:
+        name = "mock"
+        model = "mock-r4-1"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            return LLMCompletion(
+                text=json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=10,
+                completion_tokens=20,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _BypassAttempt(),
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.litigation_strategy.build_provider",
+        lambda *a, **kw: _BypassAttempt(),
+    )
+
+    token, _, matter_id = _setup_matter(client, forum_level="high_court")
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "litigation_strategy"},
+    )
+    assert response.status_code == 200, response.text
+    steps = response.json()["strategy_payload"]["forum_sequence"]
+    stage_labels = [s["stage_label"] for s in steps]
+    # The bypass step must be dropped despite empty statutory_basis.
+    assert "SLP if HC declines" not in stage_labels, (
+        "R4 #1: a forum_sequence entry with zero verified citations must "
+        "be dropped even when statutory_basis is empty. The Round-3 gate "
+        "let through legal claims hidden in stage_label/rationale."
+    )
+    # Round-4 also tightens the persisted-step contract: surviving
+    # steps always have verified citations (no unverified=True).
+    for step in steps:
+        assert step["unverified"] is False
+        assert len(step["supporting_citations"]) >= 1
+
+
+def test_strategy_marks_structured_action_with_empty_citations_unverified(
+    client: TestClient, monkeypatch,
+) -> None:
+    """R4 #2. A structured next_best_action with empty
+    supporting_citations is a citation bypass — the model can ship a
+    legal/procedural claim ('File SLP within 60 days') in the
+    structured form and it would have persisted as unverified=False
+    under Round-3. The R4 rule: zero verified citations on a structured
+    action == unverified=True, regardless of whether the LLM emitted
+    citations or not."""
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    citation = _seed_relevant_authority()
+    payload = _valid_strategy_payload(citation)
+    payload["next_best_actions"] = [
+        # Structured legal claim with no citations attempted.
+        {
+            "action": "File SLP within 60 days",
+            "supporting_citations": [],
+        },
+        # Structured action with a verifiable citation — still verified.
+        {
+            "action": "Prepare synopsis under SCR",
+            "supporting_citations": [f"[1] {citation}"],
+        },
+    ]
+
+    class _StructuredEmpty:
+        name = "mock"
+        model = "mock-r4-2"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            return LLMCompletion(
+                text=json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=10,
+                completion_tokens=20,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _StructuredEmpty(),
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.litigation_strategy.build_provider",
+        lambda *a, **kw: _StructuredEmpty(),
+    )
+
+    token, _, matter_id = _setup_matter(client, forum_level="high_court")
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "litigation_strategy"},
+    )
+    assert response.status_code == 200, response.text
+    actions = response.json()["strategy_payload"]["next_best_actions"]
+    assert len(actions) == 2
+
+    assert actions[0]["action"] == "File SLP within 60 days"
+    assert actions[0]["unverified"] is True, (
+        "R4 #2: structured action with empty supporting_citations is a "
+        "citation bypass; must persist with unverified=True so the "
+        "partner-reviewer sees the amber Unverified badge."
+    )
+    assert actions[0]["supporting_citations"] == []
+
+    # Structured action with a verifiable citation stays verified.
+    assert actions[1]["unverified"] is False
+    assert len(actions[1]["supporting_citations"]) >= 1
+
+
+def test_strategy_refuses_when_first_forum_step_dropped(
+    client: TestClient, monkeypatch,
+) -> None:
+    """R4 #3. If the citation filter drops forum_sequence[0] (the
+    current forum) but a later step survives, the ladder is incoherent
+    — it now starts at the wrong forum. Fail-closed with 422 rather
+    than persist a ladder that misrepresents the current posture."""
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    citation = _seed_relevant_authority()
+    payload = _valid_strategy_payload(citation)
+    # Poison the FIRST step's citation while keeping the second step's
+    # citation valid. The post-filter ladder will start at the SC step
+    # — which is wrong because the matter is at the HC.
+    payload["forum_sequence"][0]["supporting_citations"] = [
+        "Made Up Statute v. Nobody (2099)"
+    ]
+    # forum_sequence[1] keeps its valid citation from the helper.
+
+    class _DropFirstStep:
+        name = "mock"
+        model = "mock-r4-3"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            return LLMCompletion(
+                text=json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=10,
+                completion_tokens=20,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _DropFirstStep(),
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.litigation_strategy.build_provider",
+        lambda *a, **kw: _DropFirstStep(),
+    )
+
+    token, _, matter_id = _setup_matter(client, forum_level="high_court")
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "litigation_strategy"},
+    )
+    assert response.status_code == 422, response.text
+    detail = response.json()["detail"]
+    assert "ladder" in detail.lower() or "starting forum" in detail.lower(), (
+        "R4 #3: the 422 detail must explain that the ladder lost its "
+        "starting forum, so the partner-reviewer knows what went wrong."
+    )

@@ -573,7 +573,15 @@ def _build_prompt(
         "    the disclaimer.\n"
         f" 6. {sc_clause}\n"
         " 7. The strategy must list at least ONE forum step in "
-        "    `forum_sequence`. The first step is the CURRENT forum.\n"
+        "    `forum_sequence`. The first step is the CURRENT forum. "
+        "    `forum_sequence` is for LEGAL FORUM TRANSITIONS ONLY "
+        "    (e.g. trial court → first appeal, HC writ → SLP). EVERY "
+        "    forum_sequence entry MUST carry at least one verified "
+        "    `supporting_citations` entry; uncited forum steps are "
+        "    dropped by the post-processor. Operational items "
+        "    (filing fees, certified copy procurement, notice "
+        "    service) belong in `next_best_actions`, not in "
+        "    `forum_sequence`.\n"
         " 8. Recommended drafts MUST come from the supplied "
         "    AVAILABLE_TEMPLATES list. Do not invent template "
         "    identifiers. If a draft you would normally recommend is "
@@ -1019,6 +1027,49 @@ def generate_litigation_strategy(
     # persisted payload. The frontend renders an unverified badge so
     # the partner reviewer knows what to vet.
     forum_steps_payload = _build_forum_steps(parsed.forum_sequence, retrieved)
+
+    # Round-4 R4 #3 (2026-05-03): forum_sequence coherence.
+    # The system prompt promises that forum_sequence[0] is the
+    # CURRENT forum / posture. After the per-step citation filter,
+    # the original first step may have been dropped. A ladder that
+    # silently begins at the second forum (e.g. "HC dropped, ladder
+    # now starts at SC") is incoherent — it tells the lawyer the
+    # matter is already at the SC when it is not. Fail closed: if
+    # the first step survived filtering OR every step in the model
+    # output was dropped, the ladder is internally consistent. If
+    # the first step was dropped while a later step survived, refuse
+    # the strategy with HTTP 422.
+    if (
+        parsed.forum_sequence
+        and forum_steps_payload
+        and not _first_step_survived(parsed.forum_sequence, forum_steps_payload)
+    ):
+        run = _write_model_run(
+            session,
+            context=context,
+            matter_id=matter.id,
+            purpose="recommendation:litigation_strategy",
+            completion=completion,
+            prompt_hash=prompt_hash,
+            status_label="incoherent_forum_sequence",
+            error=(
+                "first forum_sequence step was dropped during citation "
+                "verification while later steps survived; ladder no "
+                "longer starts at the current forum"
+            ),
+        )
+        _ = run  # ledger row for audit; HTTPException carries the 422
+        session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Strategy ladder lost its starting forum after citation "
+                "verification. The first forum step must always be the "
+                "current matter forum; please retry the strategy and "
+                "verify the recommended starting point."
+            ),
+        )
+
     limitation_flags_payload = _build_limitation_flags(
         parsed.limitation_flags, retrieved
     )
@@ -1268,6 +1319,37 @@ def _extract_template_slugs(parsed: _LLMStrategyResponse) -> list[str]:
     return slugs
 
 
+def _first_step_survived(
+    parsed_steps: list[dict], surviving: list[ForumStep]
+) -> bool:
+    """Round-4 R4 #3 — ladder coherence.
+
+    Returns True iff the first entry in the LLM-emitted ``forum_sequence``
+    survived the per-step citation filter in ``_build_forum_steps``. The
+    rule: a strategy ladder must begin at the current forum / posture;
+    if filtering kept later steps but dropped the first, we have a
+    'starts mid-route' ladder and the caller fails closed.
+
+    Identity is approximate (we don't have stable IDs on LLM steps): we
+    consider the first step preserved iff a ``ForumStep`` exists in
+    ``surviving`` whose ``stage_label`` and ``forum_level`` match the
+    first parsed entry. That's a tight-enough match for the use case —
+    the ladder is short (<=10 steps) and the LLM rarely emits identical
+    (label, forum_level) pairs.
+    """
+    if not parsed_steps:
+        return True
+    first = parsed_steps[0]
+    if not isinstance(first, dict):
+        return True
+    first_label = str(first.get("stage_label", "Stage"))
+    first_forum = first.get("forum_level", "other")
+    return any(
+        s.stage_label == first_label and s.forum_level == first_forum
+        for s in surviving
+    )
+
+
 def _build_forum_steps(
     raw_steps: list[dict], retrieved: list[RetrievedAuthority]
 ) -> list[ForumStep]:
@@ -1277,13 +1359,26 @@ def _build_forum_steps(
 
     Round-3 fix (P2 #R3-3, 2026-05-03): a forum step that emits
     ``statutory_basis`` is making a legal claim about jurisdictional or
-    statutory authority (e.g. "File under Article 226", "Refer under
-    BNSS s.528"). An unverified legal claim about *which forum has
-    jurisdiction* is too risky to surface — fail-closed by dropping
-    those steps from the persisted strategy. Steps with NO
-    ``statutory_basis`` are operational/administrative ("Pay court
-    fees", "Obtain certified copy") and stay with ``unverified=True``
-    so the partner-reviewer can still see the procedural narrative.
+    statutory authority. An unverified legal claim about *which
+    forum has jurisdiction* is too risky to surface.
+
+    Round-3 fix (P2 #R3-3): drop forum steps where the LLM emitted a
+    non-empty ``statutory_basis`` but no citation survived verification.
+
+    Round-4 fix (R4 #1, 2026-05-03): the Round-3 gate was too narrow.
+    A model can omit ``statutory_basis`` while still expressing a
+    legal claim via ``stage_label``, ``rationale``, ``forum_level``,
+    or ``expected_filings`` ("SLP if HC declines" with no statute
+    field populated). The amber-badge UX is too weak for those — they
+    still appear in the main escalation ladder.
+
+    The rule now: ``forum_sequence`` is for **legal forum transitions
+    only**, and every legal forum transition must carry at least one
+    verified citation. Drop ANY forum step with zero verified
+    citations. Operational/administrative actions (filing fees,
+    certified-copy procurement, etc.) belong in ``next_best_actions``,
+    not in the forum ladder; the system prompt also instructs the
+    model to route them there.
     """
     out: list[ForumStep] = []
     for raw in raw_steps:
@@ -1298,10 +1393,12 @@ def _build_forum_steps(
         statutory_basis = [
             s for s in (raw.get("statutory_basis") or []) if isinstance(s, str)
         ][:10]
-        unverified_flag = len(verified) == 0
-        # Round-3 P2 #R3-3: legal forum step (non-empty statutory_basis)
-        # without any verified citation is fail-closed — drop it.
-        if unverified_flag and statutory_basis:
+        # Round-4 R4 #1: every forum_sequence entry is a legal forum
+        # transition; if no citation survives, drop it. This is
+        # fail-closed regardless of whether the LLM populated
+        # ``statutory_basis`` (the Round-3 gate let through "SLP if
+        # HC declines"-style steps that omitted the field).
+        if len(verified) == 0:
             continue
         try:
             step = ForumStep(
@@ -1314,7 +1411,7 @@ def _build_forum_steps(
                     s for s in (raw.get("expected_filings") or []) if isinstance(s, str)
                 ][:10],
                 supporting_citations=verified,
-                unverified=unverified_flag,
+                unverified=False,
             )
         except ValidationError:
             # Skip a malformed step rather than fail the whole strategy
@@ -1454,11 +1551,19 @@ def _build_next_best_actions(
             raw_citations = []
         cleaned_raw = [c for c in raw_citations if isinstance(c, str)]
         verified = _verify_item_citations(cleaned_raw, retrieved)
-        # If the model emitted citations on this action, treat the
-        # action as a legal/procedural claim. unverified flips when no
-        # citation survives. Empty cleaned_raw == operational action
-        # (factual / non-legal) and stays verified=True.
-        unverified_flag = len(cleaned_raw) > 0 and len(verified) == 0
+        # Round-4 R4 #2 (2026-05-03): a structured action with empty
+        # ``supporting_citations`` is a citation-bypass — the model
+        # ships a legal/procedural claim ("File SLP within 60 days")
+        # but offers no source the verifier can check. Round-3's
+        # rule-of-thumb (empty cleaned_raw == operational action
+        # stays verified=True) was too generous; in practice the
+        # model frequently emits time-bound legal advice in this
+        # shape. Conservative rule: ANY structured action with zero
+        # verified citations is unverified, so the partner-reviewer
+        # sees the amber Unverified badge regardless of whether the
+        # LLM emitted citations or not. Lawyers can still mark the
+        # action as a factual / operational reminder if it is one.
+        unverified_flag = len(verified) == 0
         try:
             out.append(
                 NextBestAction(
