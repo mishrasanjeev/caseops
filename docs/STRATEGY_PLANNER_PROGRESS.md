@@ -246,6 +246,111 @@ reviewer can map fix → commit one-to-one. Backend test count went from
   FORBIDDEN_PROBABILITY_PATTERNS, the prompt instructing the LLM, the
   service refusal copy, or an unrelated `appeal_strength.py` module.
 
+## Round 3 fixes (2026-05-03 — addressing PR #7 second-pass review)
+
+User-driven careful review of HEAD `1e9088d` surfaced 4 more issues (2 P1
++ 2 P2). All four landed as separate commits so the reviewer can map
+fix → commit one-to-one. No new Pydantic shape on the API contract, so
+`apps/web/lib/api/openapi-types.ts` did NOT need to be regenerated.
+
+### P1 #R3-1 — Drop uncited alternative routes
+- File: `apps/api/src/caseops_api/services/litigation_strategy.py`.
+- Approach (option (a) from the brief): drop alternative routes whose
+  citations all fail verification. The simpler, fail-closed answer.
+  Persisting an alternative with `supporting_citations=[]` showed an
+  uncited route to the lawyer as an available legal strategy.
+- Effect: `cleaned_alternatives` is filtered post-verification;
+  `Recommendation.options` ranks shrink with the surviving routes;
+  no frontend change needed (the contract is unchanged, the dropped
+  routes simply don't appear).
+- Test: `test_strategy_drops_uncited_alternative_routes` mocks 2 LLM
+  alternatives — 1 verifiable + 1 fictitious — and asserts persistence
+  keeps only the verified one (and that `Recommendation.options.rank`
+  collapses to `[0, 1]`).
+
+### P1 #R3-2 — Bare-string next_best_actions coerce to unverified=True
+- Files: `apps/api/src/caseops_api/services/litigation_strategy.py`,
+  `apps/api/tests/test_litigation_strategy.py`.
+- Approach (option (ii) from the brief): keep the schema flexible for
+  legacy LLM outputs but coerce every bare-string entry to
+  `unverified=True`. Round-2's path persisted bare strings as
+  `unverified=False`, which made an LLM emitting "File SLP within 60
+  days" as a bare string look corpus-grounded.
+- Also tightens the system prompt: instructs the model that
+  `next_best_actions` MUST be the structured object form. The post-
+  processor still tolerates bare strings (so a sloppy model does not
+  502 the request) — they are flagged.
+- Tests:
+  `test_strategy_marks_bare_string_next_best_actions_unverified`
+  covers the brief's exact example plus structured factual + structured
+  legal claim cases;
+  `test_strategy_marks_structured_action_with_uncited_citation_unverified`
+  is a regression so the bare-string coercion does not accidentally
+  widen to cover the structured form.
+
+### P2 #R3-3 — Drop unverified limitation flags + uncited legal forum steps
+- Files: `apps/api/src/caseops_api/services/litigation_strategy.py`,
+  `apps/api/tests/test_litigation_strategy.py`.
+- Approach (option (a) for limitation flags + legal-vs-operational
+  split for forum steps):
+  - `_build_limitation_flags`: drop any flag whose citations all fail
+    verification. No "Unverified" deadlines in the persisted payload.
+  - `_build_forum_steps`: split legal vs operational by the
+    `statutory_basis` signal. Non-empty = legal claim, fail-closed.
+    Empty = operational ("Pay court fees"), keep with
+    `unverified=True` so the procedural narrative is still visible.
+- Tests:
+  `test_strategy_drops_unverified_limitation_flag` (LLM emits 2 flags,
+  one verifiable + one fictitious; only the verified one persists);
+  `test_strategy_drops_legal_forum_step_with_uncited_citation` (poison
+  the BNSS s.528 step's citation; it disappears, the SC step
+  survives);
+  `test_strategy_flags_unverified_when_forum_step_citation_does_not_match`
+  updated to use an OPERATIONAL step (`statutory_basis=[]`) so it still
+  exercises the kept-with-unverified path.
+
+### P2 #R3-4 — Court orders in strategy context
+- Files: `apps/api/src/caseops_api/services/litigation_strategy.py`,
+  `apps/api/tests/test_litigation_strategy.py`.
+- Approach: `_assemble_context` pulls the most recent 5
+  `MatterCourtOrder` rows (ordered by `order_date desc, created_at
+  desc`); `_CourtOrderSnippet` bounds summary at 200 chars and
+  order_text excerpt at 500 chars; `_build_prompt` renders a
+  `RECENT_COURT_ORDERS` block. Empty path emits explicit copy and, at
+  appellate forum levels (HC / SC / tribunal), instructs the model to
+  add 'impugned order' to `missing_facts`.
+- Heuristic for the missing-facts hint: forum_level in
+  `{high_court, supreme_court, tribunal, high_court_*_bench}`. At
+  trial / lower-court forums the empty branch is silent — those
+  matters often pre-date any order.
+- Tests:
+  `test_strategy_context_includes_court_orders_when_present` (3 orders
+  seeded; asserts each title + EXCERPT renders, most-recent-first
+  ordering by string position);
+  `test_strategy_context_says_none_for_court_orders_and_flags_missing_at_appellate_forum`
+  (zero orders at `high_court`; asserts the empty block + missing-facts
+  hint).
+
+### Round 3 verification
+- Touched-modules backend suite:
+  `scripts/verify-backend.sh tests/test_litigation_strategy.py
+   tests/test_recommendations.py tests/test_role_guards.py
+   tests/test_sc_strategy_templates.py tests/test_template_recommender.py
+   tests/test_drafting_templates.py` — 180 passed.
+- Forbidden-phrase audit: every hit is FORBIDDEN_OUTCOME_PHRASES
+  itself, the prompt instructing the LLM, the docstring describing
+  the rule, drafting_prompts.py / drafting.py "do NOT promise..."
+  guidance, the seed data (statute names), or the frontend
+  forbidden-phrases test fixture.
+- Probability-phrase audit: every hit is FORBIDDEN_PROBABILITY_PATTERNS,
+  the prompt instructing the LLM, the refusal copy, docstrings, or the
+  unrelated `appeal_strength.py` module's own banned-phrase scrub.
+- `apps/web/lib/api/openapi-types.ts` is NOT regenerated. The fixes
+  are service-internal — `LitigationStrategyPayload`, `ForumStep`,
+  `LimitationFlag`, `NextBestAction` Pydantic models are unchanged on
+  the API contract. Service-internal `_LLMStrategyResponse` is not
+  exposed via the FastAPI app schema.
+
 ## Rollout notes
 
 1. Run the alembic migration `20260503_0001` on each environment:
