@@ -34,8 +34,10 @@ import json
 import logging
 import re
 import sys
+import threading
 import time
 from collections.abc import Iterable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from sqlalchemy import select
@@ -164,6 +166,7 @@ def _structured_pass(
     budget_usd: float,
     force_tier: str | None,
     year_range: tuple[int, int] | None,
+    concurrency: int = 1,
 ) -> dict:
     """Triage router over every doc that still needs structured data.
 
@@ -254,8 +257,15 @@ def _structured_pass(
         "quality_low": 0,
     }
 
+    totals_lock = threading.Lock()
+
     def _run_bucket(bucket: list[AuthorityDocument], tier: str) -> bool:
         """Returns True if the bucket finished, False if budget was hit."""
+        if concurrency <= 1:
+            return _run_bucket_sequential(bucket, tier)
+        return _run_bucket_concurrent(bucket, tier)
+
+    def _run_bucket_sequential(bucket: list[AuthorityDocument], tier: str) -> bool:
         t0 = time.time()
         for i, doc in enumerate(bucket, start=1):
             if totals["spent_usd"] >= budget_usd:
@@ -297,6 +307,125 @@ def _structured_pass(
         _emit_budget_snapshot(totals)
         return True
 
+    def _run_bucket_concurrent(bucket: list[AuthorityDocument], tier: str) -> bool:
+        """ThreadPool variant. Each worker opens its own SA session because
+        SA sessions are not thread-safe. Budget is checked under
+        ``totals_lock`` between submissions, so a budget-cap stops the run
+        cleanly without leaving in-flight workers orphaned."""
+        SessionFactory = get_session_factory()
+        doc_ids = [doc.id for doc in bucket]
+
+        def _process(doc_id: str) -> object | None:
+            with SessionFactory() as worker_session:
+                doc = worker_session.get(AuthorityDocument, doc_id)
+                if doc is None:
+                    return None
+                try:
+                    summary = extract_and_persist_structured(
+                        worker_session, document=doc, tier=tier,
+                    )
+                except Exception:
+                    logger.exception(
+                        "structured extraction failed for %s (tier=%s)",
+                        doc_id, tier,
+                    )
+                    worker_session.rollback()
+                    return "FAILED"
+                if not dry_run:
+                    worker_session.commit()
+                return summary
+
+        t0 = time.time()
+        idx = 0
+        in_flight: dict[object, str] = {}
+        with ThreadPoolExecutor(max_workers=concurrency) as ex:
+            # prime the pool
+            while idx < min(concurrency, len(doc_ids)):
+                fut = ex.submit(_process, doc_ids[idx])
+                in_flight[fut] = doc_ids[idx]
+                idx += 1
+
+            while in_flight:
+                # wait for at least one completion
+                done_iter = as_completed(list(in_flight.keys()), timeout=None)
+                fut = next(done_iter)
+                doc_id = in_flight.pop(fut)
+                try:
+                    summary = fut.result()
+                except Exception:
+                    logger.exception(
+                        "worker raised for %s (tier=%s)", doc_id, tier,
+                    )
+                    summary = "FAILED"
+
+                with totals_lock:
+                    if summary == "FAILED":
+                        totals["failures"] += 1
+                    elif summary is not None:
+                        totals[tier]["done"] += 1
+                        totals[tier]["cost_usd"] += summary.cost_usd
+                        totals["spent_usd"] += summary.cost_usd
+                        if summary.quality_score < 0.5:
+                            totals["quality_low"] += 1
+                            logger.info(
+                                "low quality (%.2f) on %s: %s",
+                                summary.quality_score, doc_id,
+                                list(summary.quality_issues),
+                            )
+                    done_count = totals[tier]["done"]
+                    over_budget = totals["spent_usd"] >= budget_usd
+                    if done_count and done_count % 10 == 0:
+                        rate = done_count / max(time.time() - t0, 1e-6)
+                        last_model = (
+                            summary.model
+                            if summary not in (None, "FAILED")
+                            else "?"
+                        )
+                        logger.info(
+                            "[%s] %d/%d done  spent=$%.2f  %.2f/s  "
+                            "concurrency=%d  last_model=%s",
+                            tier, done_count, len(bucket),
+                            totals["spent_usd"], rate, concurrency, last_model,
+                        )
+                        _emit_budget_snapshot(totals)
+
+                if over_budget:
+                    logger.warning(
+                        "budget ceiling $%.2f reached; stopping %s tier "
+                        "(submitted=%d, in_flight=%d)",
+                        budget_usd, tier, idx, len(in_flight),
+                    )
+                    # let already-in-flight workers finish; do not submit more
+                    for pending_fut in as_completed(list(in_flight.keys())):
+                        pending_id = in_flight.pop(pending_fut)
+                        try:
+                            pending_summary = pending_fut.result()
+                        except Exception:
+                            logger.exception(
+                                "drain worker raised for %s", pending_id,
+                            )
+                            with totals_lock:
+                                totals["failures"] += 1
+                            continue
+                        if pending_summary not in (None, "FAILED"):
+                            with totals_lock:
+                                totals[tier]["done"] += 1
+                                totals[tier]["cost_usd"] += pending_summary.cost_usd
+                                totals["spent_usd"] += pending_summary.cost_usd
+                                if pending_summary.quality_score < 0.5:
+                                    totals["quality_low"] += 1
+                    _emit_budget_snapshot(totals)
+                    return False
+
+                # submit next if any remain
+                if idx < len(doc_ids):
+                    fut = ex.submit(_process, doc_ids[idx])
+                    in_flight[fut] = doc_ids[idx]
+                    idx += 1
+
+        _emit_budget_snapshot(totals)
+        return True
+
     finished = True
     if sonnet_bucket:
         finished = _run_bucket(sonnet_bucket, "sonnet")
@@ -330,6 +459,7 @@ def run(
     budget_usd: float,
     force_tier: str | None,
     year_range: tuple[int, int] | None,
+    concurrency: int = 1,
 ) -> int:
     logging.basicConfig(
         level=logging.INFO,
@@ -350,6 +480,7 @@ def run(
                 limit=limit, dry_run=dry_run,
                 budget_usd=budget_usd, force_tier=force_tier,
                 year_range=year_range,
+                concurrency=concurrency,
             )
             sys.stdout.write(
                 "structured-pass: "
@@ -399,11 +530,22 @@ def main(argv: Iterable[str] | None = None) -> int:
             "--year-range 2020-2025."
         ),
     )
+    parser.add_argument(
+        "--concurrency", type=int, default=1,
+        help=(
+            "Run extraction with N parallel worker threads (each opens its "
+            "own SA session). Default 1 = sequential. Recommended 8 for the "
+            "104K-doc backfill on the ingest VM; budget is still enforced "
+            "atomically across workers and the run stops cleanly when the "
+            "ceiling is hit."
+        ),
+    )
     args = parser.parse_args(list(argv) if argv is not None else None)
     return run(
         stage=args.stage, limit=args.limit, dry_run=args.dry_run,
         budget_usd=args.budget_usd, force_tier=args.force_tier,
         year_range=_parse_year_range(args.year_range),
+        concurrency=max(1, args.concurrency),
     )
 
 
