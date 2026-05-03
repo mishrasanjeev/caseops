@@ -5,11 +5,23 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from caseops_api.schemas.litigation_strategy import LitigationStrategyPayload
+
 # Sprint 9 BG-023: four recommendation kinds land here. Each drives a
 # distinct retrieval query + prompt framing in the service layer; the
 # output schema is shared so the UI renders all four identically.
+#
+# MOD-LSE-1 (2026-05-03): the strategy planner adds
+# ``litigation_strategy`` as a fifth type. Strategy generation has its
+# own service path (``services/litigation_strategy.py``) that hydrates
+# a richer ``LitigationStrategyPayload`` alongside the shared
+# Recommendation/Option rows.
 RecommendationTypeLiteral = Literal[
-    "forum", "authority", "remedy", "next_best_action"
+    "forum",
+    "authority",
+    "remedy",
+    "next_best_action",
+    "litigation_strategy",
 ]
 ConfidenceLiteral = Literal["low", "medium", "high"]
 DecisionLiteral = Literal["accepted", "rejected", "edited", "deferred"]
@@ -58,6 +70,12 @@ class RecommendationRecord(BaseModel):
     # options[*].supporting_citations. Empty for legacy rows that
     # pre-date the PG-109 schema column.
     retrieved_authorities: list[str] = Field(default_factory=list)
+    # MOD-LSE-1 (2026-05-03) — set only for ``type='litigation_strategy'``.
+    # Holds the structured strategy payload (forum sequence, recommended
+    # drafts, limitation flags, etc.). Validated against
+    # ``LitigationStrategyPayload`` by the strategy service. ``None``
+    # on every non-strategy recommendation row.
+    strategy_payload: LitigationStrategyPayload | None = None
 
 
 class RecommendationListResponse(BaseModel):

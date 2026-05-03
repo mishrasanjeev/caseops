@@ -169,6 +169,15 @@ _MATRIX: dict[
          "Counter-affidavit by the State / authority respondents."),
         (DraftTemplateType.APPEAL_MEMORANDUM, "secondary",
          "Letters Patent appeal from a single judge's writ order."),
+        # MOD-LSE-4 (2026-05-03): if the HC writ does not succeed,
+        # the natural escalation is an SLP — surface as secondary so
+        # the strategy planner can recommend the SC pack.
+        (DraftTemplateType.SPECIAL_LEAVE_PETITION, "secondary",
+         "Article 136 SLP if the HC writ order is adverse — escalation route."),
+        (DraftTemplateType.INTERIM_RELIEF_APPLICATION, "secondary",
+         "Stay / status quo pending writ."),
+        (DraftTemplateType.CONTEMPT_PETITION, "secondary",
+         "Article 215 contempt — when respondents flout HC writ orders."),
     ],
     ("high_court", "banking"): [
         (DraftTemplateType.CHEQUE_BOUNCE_NOTICE, "primary",
@@ -181,10 +190,19 @@ _MATRIX: dict[
     ("high_court", "appellate"): [
         (DraftTemplateType.APPEAL_MEMORANDUM, "primary",
          "Generic appellate practice — first / second appeals."),
+        (DraftTemplateType.INTERIM_RELIEF_APPLICATION, "primary",
+         "Stay of impugned order pending appeal."),
         (DraftTemplateType.AFFIDAVIT, "secondary",
          "Stay-pending-appeal supporting affidavits."),
         (DraftTemplateType.REPLY_COUNTER_AFFIDAVIT, "secondary",
          "Replies to stay / interim applications by the appellate respondent."),
+        # MOD-LSE-4 (2026-05-03): SC escalation pack — secondary so it
+        # surfaces in the strategy planner without crowding the HC
+        # primary suggestions.
+        (DraftTemplateType.SPECIAL_LEAVE_PETITION, "secondary",
+         "Article 136 SLP if the HC appeal is adverse — escalation route."),
+        (DraftTemplateType.CONDONATION_OF_DELAY, "secondary",
+         "s.5 Limitation Act application when the appeal is filed late."),
     ],
     ("high_court", "property"): [
         (DraftTemplateType.PROPERTY_DISPUTE_NOTICE, "primary",
@@ -197,19 +215,60 @@ _MATRIX: dict[
          "First appeals from district-court property decrees."),
     ],
     # ---- Supreme Court ----
+    # MOD-LSE-4 (2026-05-03): SC entries now lead with the SC pack
+    # (SLP / supreme_court_appeal / synopsis / index / condonation /
+    # exemption / interim_relief). The legacy APPEAL_MEMORANDUM entry
+    # stays as a secondary because some firms still draft a generic
+    # memorandum-style document and adapt it.
     ("supreme_court", "criminal"): [
-        (DraftTemplateType.APPEAL_MEMORANDUM, "primary",
-         "Article 136 SLPs from HC criminal-side orders."),
+        (DraftTemplateType.SPECIAL_LEAVE_PETITION, "primary",
+         "Article 136 SLPs from HC criminal-side orders are the dominant SC criminal filing."),
+        (DraftTemplateType.SYNOPSIS_LIST_OF_DATES, "primary",
+         "Mandatory accompaniment to every SC SLP / appeal."),
+        (DraftTemplateType.CONDONATION_OF_DELAY, "primary",
+         "Section 5 Limitation Act application — needed when delay > 60/90 days."),
+        (DraftTemplateType.EXEMPTION_APPLICATION, "secondary",
+         "Exemption from filing certified copy / official translation."),
+        (DraftTemplateType.INTERIM_RELIEF_APPLICATION, "secondary",
+         "Stay-of-execution / interim release pending SLP."),
+        (DraftTemplateType.FILING_INDEX_CHECKLIST, "secondary",
+         "Registry-acceptance index + paginated checklist."),
         (DraftTemplateType.BAIL, "secondary",
          "Bail / anticipatory bail under SC's special powers."),
+        (DraftTemplateType.REVIEW_PETITION, "secondary",
+         "Article 137 review where the SC has already decided."),
+        (DraftTemplateType.CURATIVE_PETITION, "secondary",
+         "Rupa Ashok Hurra curative jurisdiction post-review."),
+        (DraftTemplateType.TRANSFER_PETITION, "secondary",
+         "Section 406 BNSS / 527 CrPC inter-state criminal transfer."),
         (DraftTemplateType.AFFIDAVIT, "secondary",
          "SLP-supporting affidavits."),
         (DraftTemplateType.REPLY_COUNTER_AFFIDAVIT, "secondary",
          "Replies to SLPs / counter-affidavits in caveat matters."),
     ],
     ("supreme_court", "civil"): [
-        (DraftTemplateType.APPEAL_MEMORANDUM, "primary",
-         "Article 136 SLPs + Article 132 substantial-question appeals."),
+        (DraftTemplateType.SPECIAL_LEAVE_PETITION, "primary",
+         "Article 136 SLPs from HC civil-side orders are the dominant SC civil filing."),
+        (DraftTemplateType.SUPREME_COURT_APPEAL, "primary",
+         "Article 132 / 133 substantial-question appeals on HC certificate."),
+        (DraftTemplateType.SYNOPSIS_LIST_OF_DATES, "primary",
+         "Mandatory accompaniment to every SC SLP / appeal."),
+        (DraftTemplateType.CONDONATION_OF_DELAY, "primary",
+         "Section 5 Limitation Act application — typical SLP delay."),
+        (DraftTemplateType.INTERIM_RELIEF_APPLICATION, "secondary",
+         "Stay of impugned order / status quo pending SLP."),
+        (DraftTemplateType.EXEMPTION_APPLICATION, "secondary",
+         "Exemption from certified copy / page limit."),
+        (DraftTemplateType.FILING_INDEX_CHECKLIST, "secondary",
+         "Registry-acceptance index + paginated checklist."),
+        (DraftTemplateType.REVIEW_PETITION, "secondary",
+         "Article 137 review post-decision."),
+        (DraftTemplateType.CURATIVE_PETITION, "secondary",
+         "Rupa Ashok Hurra curative post-review."),
+        (DraftTemplateType.TRANSFER_PETITION, "secondary",
+         "Section 25 CPC inter-state civil transfer."),
+        (DraftTemplateType.APPEAL_MEMORANDUM, "secondary",
+         "Generic appellate memorandum — adapt for SC where SLP is not the right route."),
         (DraftTemplateType.AFFIDAVIT, "secondary",
          "Stay + supporting affidavits."),
         (DraftTemplateType.REPLY_COUNTER_AFFIDAVIT, "secondary",
@@ -218,16 +277,48 @@ _MATRIX: dict[
     ("supreme_court", "writ"): [
         (DraftTemplateType.WRIT_PETITION, "primary",
          "Article 32 writ petition — SC's original constitutional jurisdiction."),
+        (DraftTemplateType.SPECIAL_LEAVE_PETITION, "primary",
+         "SLP from HC writ orders is the more common SC writ-related filing."),
+        (DraftTemplateType.SYNOPSIS_LIST_OF_DATES, "primary",
+         "Mandatory accompaniment to every SC SLP / petition."),
+        (DraftTemplateType.INTERIM_RELIEF_APPLICATION, "secondary",
+         "Stay / status quo pending writ."),
+        (DraftTemplateType.CONDONATION_OF_DELAY, "secondary",
+         "Section 5 Limitation Act when SLP is filed late."),
+        (DraftTemplateType.CONTEMPT_PETITION, "secondary",
+         "Article 129 contempt — when respondents flout SC orders."),
+        (DraftTemplateType.EXEMPTION_APPLICATION, "secondary",
+         "Exemption from filing requirements."),
+        (DraftTemplateType.FILING_INDEX_CHECKLIST, "secondary",
+         "Registry-acceptance index + paginated checklist."),
+        (DraftTemplateType.REVIEW_PETITION, "secondary",
+         "Article 137 review post-decision."),
         (DraftTemplateType.AFFIDAVIT, "secondary",
          "Affidavit verifying the petition + interim-relief supporting affidavits."),
         (DraftTemplateType.REPLY_COUNTER_AFFIDAVIT, "secondary",
          "Counter-affidavits by Union / State respondents."),
-        (DraftTemplateType.APPEAL_MEMORANDUM, "secondary",
-         "SLPs from HC writ orders."),
     ],
     ("supreme_court", "appellate"): [
-        (DraftTemplateType.APPEAL_MEMORANDUM, "primary",
-         "Every SC matter is appellate or special-leave."),
+        (DraftTemplateType.SPECIAL_LEAVE_PETITION, "primary",
+         "Most SC appellate work is by SLP under Article 136."),
+        (DraftTemplateType.SUPREME_COURT_APPEAL, "primary",
+         "Article 132 / 133 / 134 appeals where the HC certificates."),
+        (DraftTemplateType.SYNOPSIS_LIST_OF_DATES, "primary",
+         "Mandatory accompaniment to every SC SLP / appeal."),
+        (DraftTemplateType.CONDONATION_OF_DELAY, "primary",
+         "Section 5 Limitation Act for delays past Article 116/132."),
+        (DraftTemplateType.INTERIM_RELIEF_APPLICATION, "secondary",
+         "Stay of impugned order pending appeal."),
+        (DraftTemplateType.EXEMPTION_APPLICATION, "secondary",
+         "Exemption from filing requirements."),
+        (DraftTemplateType.FILING_INDEX_CHECKLIST, "secondary",
+         "Registry-acceptance index."),
+        (DraftTemplateType.REVIEW_PETITION, "secondary",
+         "Article 137 review post-decision."),
+        (DraftTemplateType.CURATIVE_PETITION, "secondary",
+         "Rupa Ashok Hurra curative post-review."),
+        (DraftTemplateType.APPEAL_MEMORANDUM, "secondary",
+         "Generic appellate memorandum — adapt where SLP/appeal templates do not fit."),
     ],
     # ---- Lower court ----
     ("lower_court", "criminal"): [
@@ -292,12 +383,36 @@ _MATRIX: dict[
          "Tribunal practice is affidavit-driven (DRT, NCLT, NCDRC)."),
         (DraftTemplateType.APPEAL_MEMORANDUM, "secondary",
          "Appeals against orders to the appellate tribunal."),
+        # MOD-LSE-4 (2026-05-03) — escalation pack from tribunal up.
+        (DraftTemplateType.SPECIAL_LEAVE_PETITION, "secondary",
+         "SLP from appellate tribunal orders is the SC escalation route."),
+        (DraftTemplateType.INTERIM_RELIEF_APPLICATION, "secondary",
+         "Stay pending appellate tribunal hearing."),
     ],
     ("tribunal", "commercial"): [
         (DraftTemplateType.AFFIDAVIT, "primary",
          "NCLT / NCDRC affidavits + supporting documents."),
         (DraftTemplateType.APPEAL_MEMORANDUM, "secondary",
          "Appeals to the appellate tribunal (NCLAT / NCDRC appellate)."),
+        # MOD-LSE-4 (2026-05-03): commercial tribunal → NCLAT → SC.
+        (DraftTemplateType.SPECIAL_LEAVE_PETITION, "secondary",
+         "SLP from NCLAT / appellate-tribunal orders."),
+        (DraftTemplateType.INTERIM_RELIEF_APPLICATION, "secondary",
+         "Stay pending tribunal / appellate tribunal hearing."),
+        (DraftTemplateType.CONDONATION_OF_DELAY, "secondary",
+         "s.5 Limitation Act for delayed tribunal appeals."),
+    ],
+    # MOD-LSE-4 (2026-05-03) — banking / consumer tribunals (DRT,
+    # DRAT, NCDRC). Same escalation backbone as commercial tribunals.
+    ("tribunal", "banking"): [
+        (DraftTemplateType.AFFIDAVIT, "primary",
+         "DRT / DRAT practice is affidavit-driven."),
+        (DraftTemplateType.APPEAL_MEMORANDUM, "primary",
+         "DRAT appeals from DRT orders."),
+        (DraftTemplateType.SPECIAL_LEAVE_PETITION, "secondary",
+         "SLP from DRAT / appellate-tribunal orders."),
+        (DraftTemplateType.INTERIM_RELIEF_APPLICATION, "secondary",
+         "Stay pending DRAT hearing."),
     ],
     # ---- Arbitration ----
     ("arbitration", "commercial"): [
@@ -309,6 +424,11 @@ _MATRIX: dict[
          "s.34 challenges to arbitral awards (HC forum, but flagged here)."),
         (DraftTemplateType.REPLY_COUNTER_AFFIDAVIT, "secondary",
          "Replies to s.9 / 11 / 34 applications."),
+        # MOD-LSE-4 (2026-05-03): post-s.34 escalation.
+        (DraftTemplateType.SPECIAL_LEAVE_PETITION, "secondary",
+         "SLP from HC s.34 / s.37 orders is the SC escalation route."),
+        (DraftTemplateType.INTERIM_RELIEF_APPLICATION, "secondary",
+         "Stay of award enforcement pending challenge."),
     ],
     # ---- Advisory ----
     ("advisory", "commercial"): [
@@ -379,10 +499,32 @@ def recommend_templates(
 ) -> list[TemplateRecommendation]:
     """Return ranked template recommendations for `(forum_level,
     practice_area)`. Stable ordering: primary first, secondary
-    second; first-match-wins inside each tier."""
+    second; first-match-wins inside each tier.
+
+    MOD-LSE-4 (2026-05-03) — unknown-forum fallback no longer returns
+    an empty list. The strategy planner uses this output as a starting
+    point for the recommended-drafts panel, and an empty starting point
+    poisons that panel. We return a minimal HC-shaped fallback in that
+    case so the planner has at least the universal accompaniments
+    (vakalatnama / affidavit / SLP) to consider."""
     forum_key = (forum_level or "").strip().lower()
     if forum_key not in _FORUM_DEFAULTS:
-        return []
+        # Unknown / unset forum — return a conservative fallback so
+        # the strategy planner has something to work with. Never
+        # invent specialist filings (bail / writ / SLP); stick to the
+        # universal accompaniments.
+        return [
+            TemplateRecommendation(
+                template_type=DraftTemplateType.VAKALATNAMA,
+                relevance="primary",
+                reason="Universal — required at every appearance.",
+            ),
+            TemplateRecommendation(
+                template_type=DraftTemplateType.AFFIDAVIT,
+                relevance="secondary",
+                reason="Universal supporting affidavit shape.",
+            ),
+        ]
 
     bucket = _bucket_for_practice_area(practice_area or "")
     raw = (

@@ -66,6 +66,33 @@ def _decision_record(decision) -> RecommendationDecisionRecord:
 
 
 def _recommendation_record(recommendation: Recommendation) -> RecommendationRecord:
+    # MOD-LSE-1 (2026-05-03): hydrate the strategy payload from the
+    # opaque JSON column when present. Pydantic validation rejects any
+    # legacy / corrupted payload — we surface that as ``None`` rather
+    # than crashing the list endpoint, but log it so an operator can
+    # follow up.
+    strategy_payload = None
+    raw_payload = recommendation.strategy_payload_json
+    if raw_payload:
+        import json as _json
+        import logging as _logging
+
+        from caseops_api.schemas.litigation_strategy import (
+            LitigationStrategyPayload,
+        )
+
+        try:
+            strategy_payload = LitigationStrategyPayload.model_validate(
+                _json.loads(raw_payload),
+            )
+        except Exception:  # noqa: BLE001
+            _logging.getLogger(__name__).warning(
+                "recommendation %s strategy_payload_json failed to validate; "
+                "returning None",
+                recommendation.id,
+            )
+            strategy_payload = None
+
     return RecommendationRecord(
         id=recommendation.id,
         matter_id=recommendation.matter_id,
@@ -85,6 +112,7 @@ def _recommendation_record(recommendation: Recommendation) -> RecommendationReco
         retrieved_authorities=parse_assumptions(
             recommendation.retrieved_authorities_json,
         ),
+        strategy_payload=strategy_payload,
     )
 
 

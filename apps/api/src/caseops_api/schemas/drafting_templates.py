@@ -61,6 +61,20 @@ class DraftTemplateType(StrEnum):
     AMENDMENT_OF_PLEADINGS = "amendment_of_pleadings"
     COMPROMISE_PETITION = "compromise_petition"
     PROBATE_PETITION = "probate_petition"
+    # MOD-LSE-3 (2026-05-03) — Supreme Court and escalation pack. Eleven
+    # templates that cover the SC appellate ladder + the procedural
+    # accompaniments that must be filed alongside an SLP / appeal.
+    SPECIAL_LEAVE_PETITION = "special_leave_petition"
+    SUPREME_COURT_APPEAL = "supreme_court_appeal"
+    REVIEW_PETITION = "review_petition"
+    CURATIVE_PETITION = "curative_petition"
+    TRANSFER_PETITION = "transfer_petition"
+    CONTEMPT_PETITION = "contempt_petition"
+    INTERIM_RELIEF_APPLICATION = "interim_relief_application"
+    CONDONATION_OF_DELAY = "condonation_of_delay"
+    EXEMPTION_APPLICATION = "exemption_application"
+    SYNOPSIS_LIST_OF_DATES = "synopsis_list_of_dates"
+    FILING_INDEX_CHECKLIST = "filing_index_checklist"
 
 
 DraftTemplateTypeLiteral = Literal[
@@ -84,6 +98,18 @@ DraftTemplateTypeLiteral = Literal[
     "amendment_of_pleadings",
     "compromise_petition",
     "probate_petition",
+    # MOD-LSE-3 (2026-05-03) — SC + escalation pack.
+    "special_leave_petition",
+    "supreme_court_appeal",
+    "review_petition",
+    "curative_petition",
+    "transfer_petition",
+    "contempt_petition",
+    "interim_relief_application",
+    "condonation_of_delay",
+    "exemption_application",
+    "synopsis_list_of_dates",
+    "filing_index_checklist",
 ]
 
 
@@ -772,6 +798,264 @@ class ProbatePetitionFacts(_TemplateFactsBase):
     )
     will_contested: bool = Field(default=False)
     court_name: str = Field(min_length=2, max_length=255)
+
+
+# ---------------------------------------------------------------
+# MOD-LSE-3 (2026-05-03) — Supreme Court and escalation pack
+# (11 templates). Each is appellate or accompaniment-grade.
+# ---------------------------------------------------------------
+
+
+class SpecialLeavePetitionFacts(_TemplateFactsBase):
+    """SLP under Article 136 (civil + criminal).
+
+    Article 136 SLPs are the highest-volume SC filing. The shape
+    captures the impugned-order anchor, questions of law, and the
+    common accompaniment fields (delay, stay, exemption) so the
+    drafting prompt can branch on them.
+    """
+
+    petitioner_name: str = Field(min_length=2, max_length=255)
+    respondent_name: str = Field(min_length=2, max_length=500)
+    slp_kind: Literal["civil", "criminal"] = "civil"
+    impugned_order_summary: str = Field(min_length=40, max_length=4000)
+    impugned_order_date: str = Field(min_length=10, max_length=10)
+    high_court_name: str = Field(
+        min_length=2,
+        max_length=255,
+        description="HC whose order is challenged (or other lower forum).",
+    )
+    high_court_case_number: str | None = Field(default=None, max_length=120)
+    questions_of_law: list[str] = Field(
+        min_length=1,
+        max_length=10,
+        description=(
+            "SC entertains SLPs only on substantial questions; list "
+            "each question on a separate line."
+        ),
+    )
+    grounds_brief: str = Field(min_length=80, max_length=8000)
+    interim_relief_sought: str | None = Field(default=None, max_length=2000)
+    delay_days: int | None = Field(default=None, ge=0, le=10000)
+    exemption_from_certified_copy: bool = Field(default=False)
+
+
+class SupremeCourtAppealFacts(_TemplateFactsBase):
+    """SC appeal under Articles 132 / 133 / 134 — substantial-question
+    appeals from the High Court (as distinct from Article 136 SLP)."""
+
+    appellant_name: str = Field(min_length=2, max_length=255)
+    respondent_name: str = Field(min_length=2, max_length=500)
+    constitutional_basis: Literal[
+        "article_132", "article_133", "article_134", "article_134A",
+    ] = "article_133"
+    impugned_order_summary: str = Field(min_length=40, max_length=4000)
+    impugned_order_date: str = Field(min_length=10, max_length=10)
+    high_court_name: str = Field(min_length=2, max_length=255)
+    high_court_case_number: str | None = Field(default=None, max_length=120)
+    certificate_of_fitness_granted: bool = Field(
+        default=False,
+        description=(
+            "Article 132/133/134 appeals require a HC certificate of "
+            "fitness. If false, the appeal must address why the SC "
+            "should grant leave."
+        ),
+    )
+    substantial_question: str = Field(min_length=40, max_length=2000)
+    grounds_brief: str = Field(min_length=80, max_length=8000)
+
+
+class ReviewPetitionFacts(_TemplateFactsBase):
+    """Review petition under Article 137 (SC) or Order XLVII Rule 1
+    CPC (HC). The forum field selects the format."""
+
+    petitioner_name: str = Field(min_length=2, max_length=255)
+    respondent_name: str = Field(min_length=2, max_length=500)
+    review_court: Literal["supreme_court", "high_court"] = "supreme_court"
+    impugned_judgment_date: str = Field(min_length=10, max_length=10)
+    impugned_judgment_citation: str | None = Field(default=None, max_length=400)
+    error_apparent_on_face_of_record: str = Field(
+        min_length=40,
+        max_length=4000,
+        description=(
+            "Review jurisdiction is narrow — the petition must point to "
+            "an error apparent on the face of the record, not a "
+            "rehearing of the merits."
+        ),
+    )
+    new_evidence_summary: str | None = Field(default=None, max_length=4000)
+    grounds_brief: str = Field(min_length=80, max_length=6000)
+    open_court_hearing_requested: bool = Field(default=False)
+
+
+class CurativePetitionFacts(_TemplateFactsBase):
+    """Curative petition under the Rupa Ashok Hurra (2002) framework.
+
+    Curative jurisdiction is post-review — invoked only when review
+    has been dismissed. Requires a senior advocate's certification.
+    """
+
+    petitioner_name: str = Field(min_length=2, max_length=255)
+    respondent_name: str = Field(min_length=2, max_length=500)
+    impugned_order_date: str = Field(min_length=10, max_length=10)
+    review_dismissed_date: str = Field(min_length=10, max_length=10)
+    senior_advocate_name: str = Field(
+        min_length=2,
+        max_length=255,
+        description=(
+            "Per Rupa Ashok Hurra v. Ashok Hurra (2002) 4 SCC 388, "
+            "a curative petition must be certified by a Senior Advocate."
+        ),
+    )
+    grounds_brief: str = Field(min_length=80, max_length=8000)
+    natural_justice_violation: str | None = Field(default=None, max_length=4000)
+    bias_grounds: str | None = Field(default=None, max_length=4000)
+
+
+class TransferPetitionFacts(_TemplateFactsBase):
+    """Transfer petition.
+
+    Branches on the constitutional / statutory basis:
+
+    - Article 139A: SC transfer between HCs / consolidation
+    - Section 25 CPC: SC inter-state civil transfer
+    - Section 406 BNSS / 527 CrPC: SC inter-state criminal transfer
+    """
+
+    petitioner_name: str = Field(min_length=2, max_length=255)
+    respondent_name: str = Field(min_length=2, max_length=500)
+    transfer_basis: Literal[
+        "article_139A",
+        "cpc_s_25",
+        "bnss_s_406",
+        "crpc_s_406",
+    ] = "cpc_s_25"
+    case_number_in_transferor_court: str = Field(
+        min_length=1, max_length=120,
+    )
+    transferor_court_name: str = Field(min_length=2, max_length=255)
+    transferee_court_proposed: str = Field(min_length=2, max_length=255)
+    grounds_for_transfer: str = Field(min_length=40, max_length=4000)
+    convenience_reasons: str | None = Field(default=None, max_length=2000)
+    safety_or_threat_reasons: str | None = Field(default=None, max_length=2000)
+
+
+class ContemptPetitionFacts(_TemplateFactsBase):
+    """Civil / criminal contempt under the Contempt of Courts Act 1971.
+
+    Article 129 vests contempt jurisdiction in the SC; Article 215 in
+    the HC. The forum field selects the cause-title format.
+    """
+
+    petitioner_name: str = Field(min_length=2, max_length=255)
+    contemnor_name: str = Field(min_length=2, max_length=500)
+    contempt_court: Literal["supreme_court", "high_court"] = "high_court"
+    contempt_kind: Literal["civil", "criminal"] = "civil"
+    underlying_order_date: str = Field(min_length=10, max_length=10)
+    underlying_order_summary: str = Field(min_length=40, max_length=4000)
+    breach_facts: str = Field(min_length=40, max_length=8000)
+    notice_to_contemnor_served: bool = Field(default=False)
+    relief_sought: str = Field(min_length=20, max_length=2000)
+
+
+class InterimReliefApplicationFacts(_TemplateFactsBase):
+    """Interim relief application — stay, status quo, ad-interim
+    injunction. Used at SC, HC, or trial court alongside the principal
+    proceeding."""
+
+    applicant_name: str = Field(min_length=2, max_length=255)
+    respondent_name: str = Field(min_length=2, max_length=500)
+    main_proceeding_number: str = Field(min_length=1, max_length=120)
+    main_proceeding_summary: str = Field(min_length=40, max_length=4000)
+    court_name: str = Field(min_length=2, max_length=255)
+    relief_kind: Literal[
+        "stay", "status_quo", "ad_interim_injunction",
+        "interim_mandatory_injunction", "exemption", "other",
+    ] = "stay"
+    prima_facie_case: str = Field(min_length=40, max_length=4000)
+    balance_of_convenience: str = Field(min_length=40, max_length=4000)
+    irreparable_injury: str = Field(min_length=40, max_length=4000)
+    undertaking_offered: str | None = Field(default=None, max_length=2000)
+
+
+class CondonationOfDelayFacts(_TemplateFactsBase):
+    """Application under Section 5 of the Limitation Act, 1963 to
+    condone delay in filing an appeal / SLP / petition."""
+
+    applicant_name: str = Field(min_length=2, max_length=255)
+    respondent_name: str = Field(min_length=2, max_length=500)
+    main_filing_kind: str = Field(
+        min_length=2,
+        max_length=120,
+        description="What is being filed late? e.g. 'SLP', 'appeal', 'review'.",
+    )
+    main_filing_court: str = Field(min_length=2, max_length=255)
+    delay_days: int = Field(ge=0, le=20000)
+    cause_of_delay: str = Field(min_length=40, max_length=4000)
+    diligence_explanation: str = Field(min_length=40, max_length=4000)
+    impugned_order_date: str = Field(min_length=10, max_length=10)
+
+
+class ExemptionApplicationFacts(_TemplateFactsBase):
+    """SC exemption application — typically filed alongside an SLP
+    seeking exemption from filing certified copy / from page-limit
+    rules / from official translation."""
+
+    applicant_name: str = Field(min_length=2, max_length=255)
+    respondent_name: str = Field(min_length=2, max_length=500)
+    main_filing_reference: str = Field(
+        min_length=2,
+        max_length=200,
+        description="Reference to the principal proceeding (e.g. 'SLP filed alongside').",
+    )
+    exemption_kind: Literal[
+        "certified_copy", "official_translation", "page_limit",
+        "court_fee", "filing_in_person", "other",
+    ] = "certified_copy"
+    grounds: str = Field(min_length=40, max_length=4000)
+    undertaking_offered: str | None = Field(default=None, max_length=2000)
+
+
+class SynopsisListOfDatesFacts(_TemplateFactsBase):
+    """Synopsis + list of dates accompaniment. Mandatory with every SC
+    SLP / appeal."""
+
+    case_title: str = Field(min_length=2, max_length=500)
+    petitioner_name: str = Field(min_length=2, max_length=255)
+    respondent_name: str = Field(min_length=2, max_length=500)
+    questions_of_law: list[str] = Field(min_length=1, max_length=10)
+    case_summary: str = Field(min_length=80, max_length=8000)
+    chronology: list[str] = Field(
+        min_length=2,
+        max_length=80,
+        description=(
+            "List of dates entries in 'YYYY-MM-DD: event' format, "
+            "chronological. The drafter pretty-prints these."
+        ),
+    )
+
+
+class FilingIndexChecklistFacts(_TemplateFactsBase):
+    """SC / HC filing index + paginated checklist. Drives the
+    registry-acceptance pre-flight."""
+
+    case_title: str = Field(min_length=2, max_length=500)
+    court_name: str = Field(min_length=2, max_length=255)
+    filing_kind: str = Field(
+        min_length=2,
+        max_length=120,
+        description="e.g. 'SLP', 'Writ Petition', 'Civil Appeal'.",
+    )
+    documents_to_index: list[str] = Field(
+        min_length=1,
+        max_length=80,
+        description=(
+            "Each document on its own line — the index is generated in "
+            "the same order. Include certified copies, vakalatnama, "
+            "court-fee receipt, etc."
+        ),
+    )
+    total_pages_estimate: int = Field(ge=1, le=10000)
 
 
 class DraftTemplateSchema(BaseModel):
@@ -1704,6 +1988,488 @@ _PROBATE_FIELDS: list[DraftingFieldSpec] = [
 
 
 # ---------------------------------------------------------------
+# MOD-LSE-3 (2026-05-03) — SC + escalation pack field specs.
+# Kept compact; the stepper renders them straight.
+# ---------------------------------------------------------------
+
+
+_SLP_FIELDS: list[DraftingFieldSpec] = [
+    DraftingFieldSpec(name="petitioner_name", label="Petitioner"),
+    DraftingFieldSpec(name="respondent_name", label="Respondent(s)"),
+    DraftingFieldSpec(
+        name="slp_kind",
+        label="SLP kind",
+        kind="enum",
+        enum_options=["civil", "criminal"],
+    ),
+    DraftingFieldSpec(
+        name="impugned_order_summary",
+        label="Impugned order — summary",
+        kind="text",
+        step_group="impugned",
+    ),
+    DraftingFieldSpec(
+        name="impugned_order_date",
+        label="Impugned order date",
+        kind="date",
+        step_group="impugned",
+    ),
+    DraftingFieldSpec(
+        name="high_court_name",
+        label="High Court (or other lower forum)",
+        step_group="impugned",
+    ),
+    DraftingFieldSpec(
+        name="high_court_case_number",
+        label="HC case number (optional)",
+        required=False,
+        step_group="impugned",
+    ),
+    DraftingFieldSpec(
+        name="questions_of_law",
+        label="Questions of law (one per line)",
+        help_text="Article 136 SLPs are entertained on substantial questions only.",
+        step_group="grounds",
+    ),
+    DraftingFieldSpec(
+        name="grounds_brief",
+        label="Grounds (brief)",
+        kind="text",
+        step_group="grounds",
+    ),
+    DraftingFieldSpec(
+        name="interim_relief_sought",
+        label="Interim relief (optional)",
+        kind="text",
+        required=False,
+        step_group="relief",
+    ),
+    DraftingFieldSpec(
+        name="delay_days",
+        label="Delay days (if condonation needed)",
+        kind="number",
+        required=False,
+        step_group="limitation",
+    ),
+    DraftingFieldSpec(
+        name="exemption_from_certified_copy",
+        label="Seek exemption from certified copy?",
+        kind="boolean",
+        required=False,
+        step_group="limitation",
+    ),
+]
+
+_SC_APPEAL_FIELDS: list[DraftingFieldSpec] = [
+    DraftingFieldSpec(name="appellant_name", label="Appellant"),
+    DraftingFieldSpec(name="respondent_name", label="Respondent(s)"),
+    DraftingFieldSpec(
+        name="constitutional_basis",
+        label="Constitutional basis",
+        kind="enum",
+        enum_options=[
+            "article_132", "article_133", "article_134", "article_134A",
+        ],
+    ),
+    DraftingFieldSpec(
+        name="impugned_order_summary",
+        label="Impugned order — summary",
+        kind="text",
+        step_group="impugned",
+    ),
+    DraftingFieldSpec(
+        name="impugned_order_date",
+        label="Impugned order date",
+        kind="date",
+        step_group="impugned",
+    ),
+    DraftingFieldSpec(
+        name="high_court_name", label="High Court", step_group="impugned",
+    ),
+    DraftingFieldSpec(
+        name="high_court_case_number",
+        label="HC case number (optional)",
+        required=False,
+        step_group="impugned",
+    ),
+    DraftingFieldSpec(
+        name="certificate_of_fitness_granted",
+        label="HC granted certificate of fitness?",
+        kind="boolean",
+        required=False,
+        step_group="impugned",
+        help_text="Required for Article 132/133/134 appeals.",
+    ),
+    DraftingFieldSpec(
+        name="substantial_question",
+        label="Substantial question of law",
+        kind="text",
+        step_group="grounds",
+    ),
+    DraftingFieldSpec(
+        name="grounds_brief",
+        label="Grounds (brief)",
+        kind="text",
+        step_group="grounds",
+    ),
+]
+
+_REVIEW_FIELDS: list[DraftingFieldSpec] = [
+    DraftingFieldSpec(name="petitioner_name", label="Petitioner"),
+    DraftingFieldSpec(name="respondent_name", label="Respondent(s)"),
+    DraftingFieldSpec(
+        name="review_court",
+        label="Review court",
+        kind="enum",
+        enum_options=["supreme_court", "high_court"],
+    ),
+    DraftingFieldSpec(
+        name="impugned_judgment_date",
+        label="Impugned judgment date",
+        kind="date",
+        step_group="impugned",
+    ),
+    DraftingFieldSpec(
+        name="impugned_judgment_citation",
+        label="Impugned judgment citation (optional)",
+        required=False,
+        step_group="impugned",
+    ),
+    DraftingFieldSpec(
+        name="error_apparent_on_face_of_record",
+        label="Error apparent on face of record",
+        kind="text",
+        step_group="grounds",
+        help_text="Review jurisdiction is narrow — point to the error, not a rehearing.",
+    ),
+    DraftingFieldSpec(
+        name="new_evidence_summary",
+        label="New evidence (optional)",
+        kind="text",
+        required=False,
+        step_group="grounds",
+    ),
+    DraftingFieldSpec(
+        name="grounds_brief",
+        label="Grounds (brief)",
+        kind="text",
+        step_group="grounds",
+    ),
+    DraftingFieldSpec(
+        name="open_court_hearing_requested",
+        label="Open-court hearing requested?",
+        kind="boolean",
+        required=False,
+    ),
+]
+
+_CURATIVE_FIELDS: list[DraftingFieldSpec] = [
+    DraftingFieldSpec(name="petitioner_name", label="Petitioner"),
+    DraftingFieldSpec(name="respondent_name", label="Respondent(s)"),
+    DraftingFieldSpec(
+        name="impugned_order_date",
+        label="Impugned order date",
+        kind="date",
+        step_group="impugned",
+    ),
+    DraftingFieldSpec(
+        name="review_dismissed_date",
+        label="Review-petition dismissal date",
+        kind="date",
+        step_group="impugned",
+        help_text="Curative jurisdiction is post-review.",
+    ),
+    DraftingFieldSpec(
+        name="senior_advocate_name",
+        label="Certifying Senior Advocate",
+        help_text="Per Rupa Ashok Hurra (2002) 4 SCC 388, certification is mandatory.",
+    ),
+    DraftingFieldSpec(
+        name="grounds_brief",
+        label="Grounds (brief)",
+        kind="text",
+        step_group="grounds",
+    ),
+    DraftingFieldSpec(
+        name="natural_justice_violation",
+        label="Natural justice violation (optional)",
+        kind="text",
+        required=False,
+        step_group="grounds",
+    ),
+    DraftingFieldSpec(
+        name="bias_grounds",
+        label="Bias / disqualification grounds (optional)",
+        kind="text",
+        required=False,
+        step_group="grounds",
+    ),
+]
+
+_TRANSFER_FIELDS: list[DraftingFieldSpec] = [
+    DraftingFieldSpec(name="petitioner_name", label="Petitioner"),
+    DraftingFieldSpec(name="respondent_name", label="Respondent(s)"),
+    DraftingFieldSpec(
+        name="transfer_basis",
+        label="Statutory basis",
+        kind="enum",
+        enum_options=[
+            "article_139A", "cpc_s_25", "bnss_s_406", "crpc_s_406",
+        ],
+    ),
+    DraftingFieldSpec(
+        name="case_number_in_transferor_court",
+        label="Case number in transferor court",
+        step_group="origin",
+    ),
+    DraftingFieldSpec(
+        name="transferor_court_name",
+        label="Transferor court (where the case currently sits)",
+        step_group="origin",
+    ),
+    DraftingFieldSpec(
+        name="transferee_court_proposed",
+        label="Transferee court (proposed)",
+        step_group="destination",
+    ),
+    DraftingFieldSpec(
+        name="grounds_for_transfer",
+        label="Grounds for transfer",
+        kind="text",
+        step_group="grounds",
+    ),
+    DraftingFieldSpec(
+        name="convenience_reasons",
+        label="Convenience reasons (optional)",
+        kind="text",
+        required=False,
+        step_group="grounds",
+    ),
+    DraftingFieldSpec(
+        name="safety_or_threat_reasons",
+        label="Safety / threat reasons (optional)",
+        kind="text",
+        required=False,
+        step_group="grounds",
+    ),
+]
+
+_CONTEMPT_FIELDS: list[DraftingFieldSpec] = [
+    DraftingFieldSpec(name="petitioner_name", label="Petitioner"),
+    DraftingFieldSpec(name="contemnor_name", label="Contemnor"),
+    DraftingFieldSpec(
+        name="contempt_court",
+        label="Court",
+        kind="enum",
+        enum_options=["supreme_court", "high_court"],
+    ),
+    DraftingFieldSpec(
+        name="contempt_kind",
+        label="Contempt kind",
+        kind="enum",
+        enum_options=["civil", "criminal"],
+    ),
+    DraftingFieldSpec(
+        name="underlying_order_date",
+        label="Underlying order date",
+        kind="date",
+        step_group="underlying",
+    ),
+    DraftingFieldSpec(
+        name="underlying_order_summary",
+        label="Underlying order — summary",
+        kind="text",
+        step_group="underlying",
+    ),
+    DraftingFieldSpec(
+        name="breach_facts",
+        label="Breach facts",
+        kind="text",
+        step_group="breach",
+    ),
+    DraftingFieldSpec(
+        name="notice_to_contemnor_served",
+        label="Notice to contemnor served?",
+        kind="boolean",
+        required=False,
+        step_group="breach",
+    ),
+    DraftingFieldSpec(
+        name="relief_sought",
+        label="Relief sought",
+        kind="text",
+        step_group="relief",
+    ),
+]
+
+_INTERIM_RELIEF_FIELDS: list[DraftingFieldSpec] = [
+    DraftingFieldSpec(name="applicant_name", label="Applicant"),
+    DraftingFieldSpec(name="respondent_name", label="Respondent(s)"),
+    DraftingFieldSpec(
+        name="main_proceeding_number",
+        label="Main proceeding number",
+        step_group="main",
+    ),
+    DraftingFieldSpec(
+        name="main_proceeding_summary",
+        label="Main proceeding — summary",
+        kind="text",
+        step_group="main",
+    ),
+    DraftingFieldSpec(name="court_name", label="Court"),
+    DraftingFieldSpec(
+        name="relief_kind",
+        label="Relief kind",
+        kind="enum",
+        enum_options=[
+            "stay", "status_quo", "ad_interim_injunction",
+            "interim_mandatory_injunction", "exemption", "other",
+        ],
+    ),
+    DraftingFieldSpec(
+        name="prima_facie_case",
+        label="Prima facie case",
+        kind="text",
+        step_group="three_factor",
+    ),
+    DraftingFieldSpec(
+        name="balance_of_convenience",
+        label="Balance of convenience",
+        kind="text",
+        step_group="three_factor",
+    ),
+    DraftingFieldSpec(
+        name="irreparable_injury",
+        label="Irreparable injury",
+        kind="text",
+        step_group="three_factor",
+    ),
+    DraftingFieldSpec(
+        name="undertaking_offered",
+        label="Cross-undertaking (optional)",
+        kind="text",
+        required=False,
+    ),
+]
+
+_CONDONATION_FIELDS: list[DraftingFieldSpec] = [
+    DraftingFieldSpec(name="applicant_name", label="Applicant"),
+    DraftingFieldSpec(name="respondent_name", label="Respondent(s)"),
+    DraftingFieldSpec(
+        name="main_filing_kind",
+        label="What is being filed late?",
+        placeholder="SLP / appeal / review",
+    ),
+    DraftingFieldSpec(name="main_filing_court", label="Filing court"),
+    DraftingFieldSpec(
+        name="delay_days",
+        label="Days of delay",
+        kind="number",
+        step_group="delay",
+    ),
+    DraftingFieldSpec(
+        name="cause_of_delay",
+        label="Cause of delay",
+        kind="text",
+        step_group="delay",
+    ),
+    DraftingFieldSpec(
+        name="diligence_explanation",
+        label="Diligence explanation",
+        kind="text",
+        step_group="delay",
+    ),
+    DraftingFieldSpec(
+        name="impugned_order_date",
+        label="Impugned order date",
+        kind="date",
+    ),
+]
+
+_EXEMPTION_FIELDS: list[DraftingFieldSpec] = [
+    DraftingFieldSpec(name="applicant_name", label="Applicant"),
+    DraftingFieldSpec(name="respondent_name", label="Respondent(s)"),
+    DraftingFieldSpec(
+        name="main_filing_reference",
+        label="Main filing reference",
+        placeholder="e.g. 'SLP filed alongside'",
+    ),
+    DraftingFieldSpec(
+        name="exemption_kind",
+        label="Exemption kind",
+        kind="enum",
+        enum_options=[
+            "certified_copy", "official_translation", "page_limit",
+            "court_fee", "filing_in_person", "other",
+        ],
+    ),
+    DraftingFieldSpec(
+        name="grounds",
+        label="Grounds for exemption",
+        kind="text",
+        step_group="grounds",
+    ),
+    DraftingFieldSpec(
+        name="undertaking_offered",
+        label="Cross-undertaking (optional)",
+        kind="text",
+        required=False,
+    ),
+]
+
+_SYNOPSIS_FIELDS: list[DraftingFieldSpec] = [
+    DraftingFieldSpec(
+        name="case_title",
+        label="Case title (A v. B)",
+        placeholder="Sharma v. State of Delhi",
+    ),
+    DraftingFieldSpec(name="petitioner_name", label="Petitioner"),
+    DraftingFieldSpec(name="respondent_name", label="Respondent(s)"),
+    DraftingFieldSpec(
+        name="questions_of_law",
+        label="Questions of law (one per line)",
+        step_group="questions",
+    ),
+    DraftingFieldSpec(
+        name="case_summary",
+        label="Case summary",
+        kind="text",
+        step_group="summary",
+    ),
+    DraftingFieldSpec(
+        name="chronology",
+        label="List of dates",
+        help_text="One entry per line in 'YYYY-MM-DD: event' format.",
+        step_group="dates",
+    ),
+]
+
+_FILING_INDEX_FIELDS: list[DraftingFieldSpec] = [
+    DraftingFieldSpec(
+        name="case_title",
+        label="Case title (A v. B)",
+    ),
+    DraftingFieldSpec(name="court_name", label="Court"),
+    DraftingFieldSpec(
+        name="filing_kind",
+        label="Filing kind",
+        placeholder="SLP / Writ Petition / Civil Appeal",
+    ),
+    DraftingFieldSpec(
+        name="documents_to_index",
+        label="Documents (one per line, in filing order)",
+        help_text="Include vakalatnama, certified copies, court-fee receipt, etc.",
+        step_group="documents",
+    ),
+    DraftingFieldSpec(
+        name="total_pages_estimate",
+        label="Total pages (estimate)",
+        kind="number",
+    ),
+]
+
+
+# ---------------------------------------------------------------
 # Registry — the template route reads this; nothing else should.
 # ---------------------------------------------------------------
 
@@ -1997,6 +2763,181 @@ _register(
 )
 
 
+_register(
+    DraftTemplateType.SPECIAL_LEAVE_PETITION,
+    display_name="Special Leave Petition (Article 136)",
+    summary=(
+        "SLP under Article 136 of the Constitution — civil or criminal "
+        "side. The drafting prompt enforces the substantial-question "
+        "framing and pulls condonation / stay / exemption boilerplate "
+        "where the facts call for it."
+    ),
+    statutory_basis=[
+        "Constitution Article 136",
+        "Supreme Court Rules 2013 Order XXI",
+        "Limitation Act 1963 Article 116 / Article 132 (where applicable)",
+    ],
+    fields=_SLP_FIELDS,
+    facts_model=SpecialLeavePetitionFacts,
+)
+_register(
+    DraftTemplateType.SUPREME_COURT_APPEAL,
+    display_name="Supreme Court Appeal (Article 132 / 133 / 134)",
+    summary=(
+        "Substantial-question appeal to the SC under Articles 132 / "
+        "133 / 134. Distinct from an Article 136 SLP — entry is by "
+        "right (with HC certificate) rather than by leave."
+    ),
+    statutory_basis=[
+        "Constitution Article 132 (constitutional appeals)",
+        "Constitution Article 133 (civil appeals)",
+        "Constitution Article 134 (criminal appeals)",
+        "Constitution Article 134A (HC certificate of fitness)",
+        "Supreme Court Rules 2013 Order XIX",
+    ],
+    fields=_SC_APPEAL_FIELDS,
+    facts_model=SupremeCourtAppealFacts,
+)
+_register(
+    DraftTemplateType.REVIEW_PETITION,
+    display_name="Review Petition",
+    summary=(
+        "Review under Article 137 (SC) or Order XLVII Rule 1 CPC (HC). "
+        "Narrow jurisdiction — error apparent on the face of the "
+        "record, not a rehearing of the merits."
+    ),
+    statutory_basis=[
+        "Constitution Article 137 (SC review)",
+        "Supreme Court Rules 2013 Order XLVII",
+        "CPC Order XLVII Rule 1 (HC review)",
+    ],
+    fields=_REVIEW_FIELDS,
+    facts_model=ReviewPetitionFacts,
+)
+_register(
+    DraftTemplateType.CURATIVE_PETITION,
+    display_name="Curative Petition",
+    summary=(
+        "Curative petition under the Rupa Ashok Hurra (2002) framework. "
+        "Post-review jurisdiction; requires Senior Advocate "
+        "certification."
+    ),
+    statutory_basis=[
+        "Rupa Ashok Hurra v. Ashok Hurra (2002) 4 SCC 388",
+        "Supreme Court Rules 2013 Order XLVIII",
+    ],
+    fields=_CURATIVE_FIELDS,
+    facts_model=CurativePetitionFacts,
+)
+_register(
+    DraftTemplateType.TRANSFER_PETITION,
+    display_name="Transfer Petition",
+    summary=(
+        "Transfer petition. Branches on the statutory basis: Article "
+        "139A (SC inter-HC consolidation), Section 25 CPC (civil), or "
+        "Section 406 BNSS / 527 CrPC (criminal)."
+    ),
+    statutory_basis=[
+        "Constitution Article 139A",
+        "CPC Section 25",
+        "BNSS Section 406 (CrPC s.406 historical)",
+    ],
+    fields=_TRANSFER_FIELDS,
+    facts_model=TransferPetitionFacts,
+)
+_register(
+    DraftTemplateType.CONTEMPT_PETITION,
+    display_name="Contempt Petition",
+    summary=(
+        "Civil / criminal contempt under the Contempt of Courts Act "
+        "1971. Forum is the SC (Article 129) or the HC (Article 215). "
+        "Branches on contempt_kind."
+    ),
+    statutory_basis=[
+        "Constitution Article 129 (SC contempt)",
+        "Constitution Article 215 (HC contempt)",
+        "Contempt of Courts Act 1971 sections 2, 12, 14, 15",
+    ],
+    fields=_CONTEMPT_FIELDS,
+    facts_model=ContemptPetitionFacts,
+)
+_register(
+    DraftTemplateType.INTERIM_RELIEF_APPLICATION,
+    display_name="Interim Relief Application",
+    summary=(
+        "Application for stay / status quo / ad-interim injunction. "
+        "Walks the three-factor test (prima facie case, balance of "
+        "convenience, irreparable injury) per Dalpat Kumar."
+    ),
+    statutory_basis=[
+        "CPC Order XXXIX Rules 1, 2 (civil interim injunction)",
+        "Supreme Court Rules 2013 Order XLVII (stay alongside SLP)",
+        "Dalpat Kumar v. Prahlad Singh (1992) 1 SCC 719",
+    ],
+    fields=_INTERIM_RELIEF_FIELDS,
+    facts_model=InterimReliefApplicationFacts,
+)
+_register(
+    DraftTemplateType.CONDONATION_OF_DELAY,
+    display_name="Application for Condonation of Delay",
+    summary=(
+        "Application under Section 5 of the Limitation Act, 1963 "
+        "seeking condonation of delay in filing an appeal / SLP / "
+        "review."
+    ),
+    statutory_basis=[
+        "Limitation Act 1963 Section 5",
+        "Collector, Land Acquisition v. Mst. Katiji (1987) 2 SCC 107 (sufficient cause test)",
+    ],
+    fields=_CONDONATION_FIELDS,
+    facts_model=CondonationOfDelayFacts,
+)
+_register(
+    DraftTemplateType.EXEMPTION_APPLICATION,
+    display_name="Exemption Application (SC)",
+    summary=(
+        "Application seeking exemption from filing certified copy / "
+        "official translation / page-limit / court-fee. Filed "
+        "alongside an SLP / appeal."
+    ),
+    statutory_basis=[
+        "Supreme Court Rules 2013 Order V (filing requirements)",
+        "Supreme Court Rules 2013 Order XV Rule 5 (certified copies)",
+    ],
+    fields=_EXEMPTION_FIELDS,
+    facts_model=ExemptionApplicationFacts,
+)
+_register(
+    DraftTemplateType.SYNOPSIS_LIST_OF_DATES,
+    display_name="Synopsis and List of Dates",
+    summary=(
+        "Mandatory accompaniment to every SC SLP / appeal — synopsis "
+        "of the case + chronological list of dates. Drives bench-"
+        "reading time."
+    ),
+    statutory_basis=[
+        "Supreme Court Rules 2013 Order V Rule 1(3)",
+        "Supreme Court Practice Directions on synopsis + list of dates",
+    ],
+    fields=_SYNOPSIS_FIELDS,
+    facts_model=SynopsisListOfDatesFacts,
+)
+_register(
+    DraftTemplateType.FILING_INDEX_CHECKLIST,
+    display_name="Filing Index and Checklist",
+    summary=(
+        "Paginated index + filing checklist — drives the registry-"
+        "acceptance pre-flight. Used at SC + HC."
+    ),
+    statutory_basis=[
+        "Supreme Court Rules 2013 Order IV (registrar's office)",
+        "Court-specific civil rules (HC paginated-index requirement)",
+    ],
+    fields=_FILING_INDEX_FIELDS,
+    facts_model=FilingIndexChecklistFacts,
+)
+
+
 def get_template_schema(template_type: DraftTemplateType) -> DraftTemplateSchema:
     """Return the form schema for ``template_type``.
 
@@ -2026,17 +2967,28 @@ __all__ = [
     "ChequeBounceNoticeFacts",
     "CivilSuitFacts",
     "CompromisePetitionFacts",
+    "CondonationOfDelayFacts",
+    "ContemptPetitionFacts",
     "CriminalComplaintFacts",
+    "CurativePetitionFacts",
     "DivorcePetitionFacts",
     "DraftTemplateSchema",
     "DraftTemplateType",
     "DraftTemplateTypeLiteral",
     "DraftingFieldSpec",
     "DvQuashingPetitionFacts",
+    "ExemptionApplicationFacts",
+    "FilingIndexChecklistFacts",
+    "InterimReliefApplicationFacts",
     "ProbatePetitionFacts",
     "PropertyDisputeNoticeFacts",
     "QuashingPetitionFacts",
     "ReplyCounterAffidavitFacts",
+    "ReviewPetitionFacts",
+    "SpecialLeavePetitionFacts",
+    "SupremeCourtAppealFacts",
+    "SynopsisListOfDatesFacts",
+    "TransferPetitionFacts",
     "VakalatnamaFacts",
     "WritPetitionFacts",
     "WrittenStatementFacts",

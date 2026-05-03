@@ -67,7 +67,18 @@ from caseops_api.services.llm import (
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_TYPES = {"forum", "authority", "remedy", "next_best_action"}
+SUPPORTED_TYPES = {
+    "forum",
+    "authority",
+    "remedy",
+    "next_best_action",
+    # MOD-LSE-1 (2026-05-03). Strategy generation runs through a
+    # dedicated service (``services/litigation_strategy.py``) but the
+    # type lands here so the supported-type validator + listing API
+    # stay unified. ``generate_recommendation`` dispatches to the
+    # strategy service when ``rec_type == 'litigation_strategy'``.
+    "litigation_strategy",
+}
 CONFIDENCE_LEVELS = ("low", "medium", "high")
 
 
@@ -518,6 +529,20 @@ def generate_recommendation(
 
     _validate_type(rec_type)
     _stage("validate_type")
+    # MOD-LSE-1 (2026-05-03): strategy generation has its own service.
+    # Dispatch immediately so the existing forum/authority/remedy/
+    # next_best_action paths below stay byte-for-byte unchanged.
+    if rec_type == "litigation_strategy":
+        from caseops_api.services.litigation_strategy import (
+            generate_litigation_strategy,
+        )
+
+        return generate_litigation_strategy(
+            session,
+            context=context,
+            matter_id=matter_id,
+            provider=provider,
+        )
     matter = _load_matter(session, context=context, matter_id=matter_id)
     _stage("load_matter")
     # BUG-015 deep dive: prior reproductions showed _gather_authorities
@@ -763,6 +788,19 @@ def _build_retrieval_query(matter: Matter, rec_type: str) -> str:
         parts.append(
             "procedural step next hearing filing deadline notice "
             "interlocutory application adjournment"
+        )
+    elif rec_type == "litigation_strategy":
+        # MOD-LSE-1: query expansion for strategy retrieval. Pulls
+        # authorities on forum-choice, escalation ladder, limitation,
+        # interim relief, and the highest-frequency SC routes (SLP /
+        # review / curative). Without this expansion the retrieval
+        # leans only on practice-area facts and misses the procedural
+        # backbone the strategy needs.
+        parts.append(
+            "litigation strategy escalation forum sequence "
+            "appeal special leave petition Article 136 review "
+            "Article 137 curative limitation condonation interim "
+            "stay status quo"
         )
     return " ".join(p for p in parts if p)
 

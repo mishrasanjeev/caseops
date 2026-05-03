@@ -46,8 +46,17 @@ def test_supreme_court_appellate_recommends_appeal_memorandum() -> None:
     recs = recommend_templates(
         forum_level="supreme_court", practice_area="Appellate",
     )
-    assert recs[0].template_type == DraftTemplateType.APPEAL_MEMORANDUM
-    assert recs[0].relevance == "primary"
+    # MOD-LSE-4 (2026-05-03): SC appellate now leads with the SC pack
+    # (SLP / SC appeal / synopsis / condonation). APPEAL_MEMORANDUM
+    # stays as a secondary fallback for firms that draft a generic
+    # memorandum.
+    primary_types = [r.template_type for r in recs if r.relevance == "primary"]
+    assert DraftTemplateType.SPECIAL_LEAVE_PETITION in primary_types
+    assert DraftTemplateType.SUPREME_COURT_APPEAL in primary_types
+    assert DraftTemplateType.SYNOPSIS_LIST_OF_DATES in primary_types
+    assert DraftTemplateType.CONDONATION_OF_DELAY in primary_types
+    secondary_types = [r.template_type for r in recs if r.relevance == "secondary"]
+    assert DraftTemplateType.APPEAL_MEMORANDUM in secondary_types
 
 
 def test_cheque_bounce_routes_to_ni_act_template() -> None:
@@ -89,13 +98,20 @@ def test_unknown_practice_area_falls_through_to_forum_default() -> None:
     assert recs[0].relevance == "primary"
 
 
-def test_unknown_forum_level_returns_empty() -> None:
-    assert recommend_templates(
-        forum_level="not-a-forum", practice_area="criminal",
-    ) == []
-    assert recommend_templates(
-        forum_level="", practice_area="criminal",
-    ) == []
+def test_unknown_forum_level_returns_universal_fallback() -> None:
+    """MOD-LSE-4 (2026-05-03): the empty-list behaviour was harmful
+    for the strategy planner — an empty starting point poisons the
+    recommended-drafts panel. Instead, unknown / unset forum returns
+    a conservative VAKALATNAMA + AFFIDAVIT fallback."""
+    for forum in ("not-a-forum", ""):
+        recs = recommend_templates(
+            forum_level=forum, practice_area="criminal",
+        )
+        assert len(recs) == 2
+        assert recs[0].template_type == DraftTemplateType.VAKALATNAMA
+        assert recs[0].relevance == "primary"
+        assert recs[1].template_type == DraftTemplateType.AFFIDAVIT
+        assert recs[1].relevance == "secondary"
 
 
 def test_route_returns_recommendation_shape(client: TestClient) -> None:
