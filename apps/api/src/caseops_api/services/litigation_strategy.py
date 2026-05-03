@@ -797,6 +797,14 @@ def _build_recommended_drafts(
 
     # If the LLM gave us nothing, OR every slug is unknown to the
     # registry, fall back to the deterministic recommender matrix.
+    # Bug from the first cut of this fix (caught in PR #8 review,
+    # 2026-05-03): we previously APPENDED fallback slugs after the
+    # unknown LLM slugs and only sliced [:12] at render time. With
+    # 12+ unknown LLM slugs, the fallback never made the slice and the
+    # panel stayed empty. Fix: when ``known_count == 0`` we REPLACE
+    # ``ordered_slugs`` with the fallback set entirely. The unknown
+    # LLM slugs are dead weight (they fail the ``schemas.get(slug)``
+    # check at render time anyway), so dropping them costs nothing.
     known_count = sum(1 for s in ordered_slugs if s in schemas)
     if known_count == 0:
         try:
@@ -811,6 +819,9 @@ def _build_recommended_drafts(
                 getattr(matter, "id", "?"),
             )
             fallback = []
+        # Replace, not append. The unknown LLM slugs are discarded.
+        ordered_slugs = []
+        seen = set()
         for tr in fallback:
             slug = (
                 tr.template_type.value

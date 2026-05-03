@@ -2601,3 +2601,69 @@ def test_recommended_drafts_keeps_llm_slugs_when_emitted(
     # LLM-emitted slugs land in the panel.
     assert "quashing_petition" in slugs
     assert "vakalatnama" in slugs
+
+
+def test_recommended_drafts_fallback_replaces_when_llm_emits_only_unknown_slugs(
+    client: TestClient, monkeypatch,
+) -> None:
+    """Bug caught in PR #8 review (2026-05-03): when the LLM emits 12+
+    UNKNOWN slugs, the previous fallback path APPENDED the matrix
+    slugs after the unknowns, and the [:12] slice at render time
+    discarded the fallback before any known template surfaced —
+    panel stayed empty.
+
+    Fix: when zero LLM-derived slugs match the registry, REPLACE
+    ordered_slugs with the fallback set. Test asserts that 16
+    fictitious slugs from the LLM still produce a non-empty
+    recommended_drafts list."""
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    citation = _seed_relevant_authority()
+    payload = _valid_strategy_payload(citation)
+    # 16 invented slugs the registry will reject. Spread across both
+    # forum_sequence steps so the dedupe logic is also exercised.
+    fake_slugs = [f"fictitious_template_{i}" for i in range(16)]
+    payload["forum_sequence"][0]["expected_filings"] = fake_slugs[:8]
+    payload["forum_sequence"][1]["expected_filings"] = fake_slugs[8:]
+
+    class _AllUnknownSlugs:
+        name = "mock"
+        model = "mock-all-unknown"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            return LLMCompletion(
+                text=json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=10,
+                completion_tokens=20,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _AllUnknownSlugs(),
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.litigation_strategy.build_provider",
+        lambda *a, **kw: _AllUnknownSlugs(),
+    )
+
+    token, _, matter_id = _setup_matter(client, forum_level="high_court")
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "litigation_strategy"},
+    )
+    assert response.status_code == 200, response.text
+    drafts = response.json()["strategy_payload"]["recommended_drafts"]
+    assert len(drafts) > 0, (
+        "PR #8 review bug: with 16 unknown LLM slugs, the fallback "
+        "must REPLACE (not append to) ordered_slugs so the [:12] "
+        "slice surfaces real templates rather than dropping the "
+        "fallback."
+    )
+    # No fictitious slug must appear — every entry is a real registered template.
+    slugs_in_panel = {d["template_type"] for d in drafts}
+    for fake in fake_slugs:
+        assert fake not in slugs_in_panel

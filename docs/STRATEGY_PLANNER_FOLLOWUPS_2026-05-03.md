@@ -32,7 +32,7 @@ is set but FastAPI's `RedirectResponse` doesn't consult it.
 
 ---
 
-## 2. Empty `recommended_drafts` on sparse-retrieval matters
+## 2. Empty `recommended_drafts` on sparse-retrieval matters — **CLOSED by PR #8**
 
 **Symptom:** Prod probe on matter `310b7c38-... (State v. Rahul Verma —
 Bail application under BNSS s.483)` got HTTP 200 strategy with
@@ -60,11 +60,11 @@ Strategy tab renders without any "Generate draft" buttons.
 - Frontend rendering: confirm the empty-drafts state has a clear copy,
   not just an empty list.
 
-**Owner:** TBD. Not a guardrail bug — but a UX gap.
+**Resolution:** PR #8 wires `recommend_templates(forum_level, practice_area)` as a fallback in `_build_recommended_drafts`. When zero LLM-derived slugs match the registry, the fallback REPLACES the LLM's slug list (a bug in the first cut where the fallback was *appended* and could be discarded by the `[:12]` slice — caught in PR #8 review and fixed in the same PR). The fallback path emits a `logger.info` so ops can correlate. Regression tests cover the empty-LLM-emission case AND the all-unknown-slugs case.
 
 ---
 
-## 3. Code-level reasoning-token budget handling in `services/llm.py`
+## 3. Code-level reasoning-token budget handling in `services/llm.py` — **CLOSED by PR #8**
 
 **Symptom:** gpt-5-mini (and any OpenAI reasoning model) bills hidden
 reasoning tokens against `max_completion_tokens`. With the default
@@ -84,12 +84,9 @@ content budget — pass `max_completion_tokens` AND `reasoning.effort`
 (or `reasoning.max_tokens` once the SDK exposes it) so the visible
 content isn't starved when reasoning expands.
 
-**Test:** add a regression case in `tests/test_corpus_structured_layer2.py`
-or wherever the OpenAI provider is unit-tested that asserts the call
-sets a `reasoning.effort` value when the configured model is in
-`{gpt-5, gpt-5-mini, gpt-5-nano, o1, o3, o3-mini}`.
+**Resolution:** PR #8 adds `_REASONING_PREFIXES` (`gpt-5`, `o1`, `o3`) and `_REASONING_MIN_COMPLETION_TOKENS=8192` to `OpenAIProvider`, plus an `_effective_max_completion_tokens(requested)` helper that floors the cap and emits a `logger.warning` when the operator's setting is below the floor. Operator can still set max_tokens above the floor; the floor only catches under-configured caps so a future cutover of any new purpose to a reasoning model can't re-trigger the empty-content trap. Regression tests cover gpt-5-mini / gpt-4o-mini pass-through / no-lower-on-16K / o3-mini in `tests/test_llm_provider.py`.
 
-**Owner:** TBD. P1 for any future purpose flipped to a reasoning model.
+**Note:** the env override `CASEOPS_LLM_MAX_OUTPUT_TOKENS_RECOMMENDATIONS=16384` on `caseops-api` becomes redundant for the floor case (the code now enforces 8192 minimum). The override can stay for the more-generous 16384 budget if you want headroom; either is correct.
 
 ---
 
