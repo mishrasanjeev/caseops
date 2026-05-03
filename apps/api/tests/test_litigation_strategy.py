@@ -1703,3 +1703,145 @@ def test_strategy_drops_uncited_alternative_routes(
             f"Recommendation.options ranks must be [0, 1] after dropping the "
             f"uncited alternative. Got {ranks!r}."
         )
+
+
+# ---------------------------------------------------------------
+# Round-3 P1 #R3-2: bare-string next_best_actions must persist as
+# unverified=True so the UX flags them. Structured (object) actions
+# follow the same rule as before.
+# ---------------------------------------------------------------
+
+
+def test_strategy_marks_bare_string_next_best_actions_unverified(
+    client: TestClient, monkeypatch,
+) -> None:
+    """LLM emits ``next_best_actions: ["File SLP within 60 days"]`` —
+    a bare string. The post-processor must coerce that into a
+    NextBestAction with ``unverified=True`` because the bare-string form
+    bypasses citation verification."""
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    citation = _seed_relevant_authority()
+    payload = _valid_strategy_payload(citation)
+    payload["next_best_actions"] = [
+        # A bare-string legal claim — the very thing the brief flagged.
+        "File SLP within 60 days",
+        # A structured factual action with no citation — stays verified
+        # as before because there's no cited claim to verify.
+        {
+            "action": "Call the client to confirm next steps",
+            "supporting_citations": [],
+        },
+        # A structured legal claim with a verifiable citation.
+        {
+            "action": "Prepare synopsis under SCR Order XXI",
+            "supporting_citations": [f"[1] {citation}"],
+        },
+    ]
+
+    class _BareStringActions:
+        name = "mock"
+        model = "mock-bare-actions"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            return LLMCompletion(
+                text=json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=10,
+                completion_tokens=20,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _BareStringActions(),
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.litigation_strategy.build_provider",
+        lambda *a, **kw: _BareStringActions(),
+    )
+
+    token, _, matter_id = _setup_matter(client, forum_level="high_court")
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "litigation_strategy"},
+    )
+    assert response.status_code == 200, response.text
+    actions = response.json()["strategy_payload"]["next_best_actions"]
+    assert len(actions) == 3
+
+    # The bare-string action must be coerced + flagged unverified.
+    assert actions[0]["action"] == "File SLP within 60 days"
+    assert actions[0]["unverified"] is True, (
+        "Bare-string next_best_actions bypass citation verification — "
+        "they must persist as unverified=True so the partner-reviewer "
+        "is warned. Round-3 P1 #R3-2."
+    )
+    assert actions[0]["supporting_citations"] == []
+
+    # The structured factual action stays unverified=False (no citation
+    # claimed → nothing to verify → not flagged).
+    assert actions[1]["action"].startswith("Call the client")
+    assert actions[1]["unverified"] is False
+    assert actions[1]["supporting_citations"] == []
+
+    # The structured legal claim with a verifiable citation persists
+    # verified.
+    assert actions[2]["unverified"] is False
+    assert len(actions[2]["supporting_citations"]) >= 1
+
+
+def test_strategy_marks_structured_action_with_uncited_citation_unverified(
+    client: TestClient, monkeypatch,
+) -> None:
+    """A structured action that emits an unverifiable citation must
+    persist with unverified=True (Round-2 P1 #4 behavior) — kept as a
+    regression in case the bare-string coercion accidentally widens to
+    cover the structured-form too."""
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    citation = _seed_relevant_authority()
+    payload = _valid_strategy_payload(citation)
+    payload["next_best_actions"] = [
+        {
+            "action": "Move under fictitious section",
+            "supporting_citations": ["Imaginary v. Statute (2099)"],
+        },
+    ]
+
+    class _BadCiteAction:
+        name = "mock"
+        model = "mock-bad-cite-action"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            return LLMCompletion(
+                text=json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=10,
+                completion_tokens=20,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _BadCiteAction(),
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.litigation_strategy.build_provider",
+        lambda *a, **kw: _BadCiteAction(),
+    )
+
+    token, _, matter_id = _setup_matter(client, forum_level="high_court")
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "litigation_strategy"},
+    )
+    assert response.status_code == 200, response.text
+    actions = response.json()["strategy_payload"]["next_best_actions"]
+    assert len(actions) == 1
+    assert actions[0]["unverified"] is True
+    assert actions[0]["supporting_citations"] == []

@@ -447,7 +447,11 @@ def _build_prompt(
         "    `forum_sequence[*].supporting_citations`, "
         "    `limitation_flags[*].supporting_citations`, "
         "    `next_best_actions[*].supporting_citations` AND any "
-        "    `risks[*].supporting_citations` you choose to emit.\n"
+        "    `risks[*].supporting_citations` you choose to emit. "
+        "    Each `next_best_actions` entry MUST be the structured "
+        "    object `{\"action\": str, \"supporting_citations\": [str]}` "
+        "    — never a bare string. A bare string action is treated "
+        "    as an UNVERIFIED legal claim by the post-processor.\n"
         " 2. NEVER use the phrases: 'perfect strategy', 'guaranteed', "
         "    'will win', 'will succeed', 'will be granted', 'certain "
         "    outcome', 'no lawyer needed', 'replace advocate', "
@@ -1285,26 +1289,35 @@ def _build_next_best_actions(
     raw_actions: list[str | dict],
     retrieved: list[RetrievedAuthority],
 ) -> list[NextBestAction]:
-    """Round-2 P1 #4. Convert the LLM next_best_actions into structured
-    ``NextBestAction`` records with verified citations.
+    """Round-2 P1 #4 + Round-3 P1 #R3-2. Convert the LLM next_best_actions
+    into structured ``NextBestAction`` records with verified citations.
 
     Accepts either ``[str]`` (legacy) or ``[{"action": str,
-    "supporting_citations": [str]}]``. Strings are wrapped with no
-    citations and ``unverified=False`` (a free-text action like 'Wait
-    for HC pronouncement' carries no legal claim). Structured items
-    follow the same rule as forum steps: at least one citation must
-    survive verification, otherwise ``unverified=True``.
+    "supporting_citations": [str]}]``.
+
+    Round-3 fix (P1 #R3-2, 2026-05-03): a bare-string entry like ``"File
+    SLP within 60 days"`` is a legal/procedural claim with no citation
+    attached. Persisting it as ``unverified=False`` made the LLM's
+    free-text legal claims look corpus-grounded. Coerce bare strings to
+    ``unverified=True`` so the frontend's amber Unverified badge appears
+    and the partner-reviewer knows to vet the claim. The structured
+    form (``{"action": ..., "supporting_citations": [...]}``) is the
+    schema we instruct the model to emit; it follows the same rule as
+    forum steps — at least one citation must survive verification,
+    otherwise ``unverified=True``.
     """
     out: list[NextBestAction] = []
     for raw in raw_actions:
         if isinstance(raw, str):
-            # Bare-string action — no citation, no legal claim flagged.
+            # Round-3 P1 #R3-2: bare-string actions bypass citation
+            # verification entirely. Mark them unverified so the UX is
+            # honest about what the corpus did NOT support.
             try:
                 out.append(
                     NextBestAction(
                         action=raw,
                         supporting_citations=[],
-                        unverified=False,
+                        unverified=True,
                     )
                 )
             except ValidationError:
