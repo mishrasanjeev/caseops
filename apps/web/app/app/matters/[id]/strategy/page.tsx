@@ -33,6 +33,8 @@ import {
   Loader2,
   ShieldCheck,
   Sparkles,
+  ThumbsUp,
+  Undo2,
   XCircle,
 } from "lucide-react";
 import { useParams } from "next/navigation";
@@ -55,6 +57,7 @@ import { apiErrorMessage } from "@/lib/api/config";
 import {
   generateRecommendation,
   listRecommendations,
+  recordRecommendationDecision,
 } from "@/lib/api/endpoints";
 import type {
   ForumStep,
@@ -65,6 +68,7 @@ import type {
   StrategyRisk,
   StrategyRoute,
 } from "@/lib/api/schemas";
+import { useCapability } from "@/lib/capabilities";
 import { cn } from "@/lib/cn";
 
 const FORUM_LEVEL_LABEL: Record<string, string> = {
@@ -111,6 +115,13 @@ export default function MatterStrategyPage() {
   const matterId = params.id;
   const queryClient = useQueryClient();
   const [lastError, setLastError] = useState<string | null>(null);
+  // Round-2 fix (P1 #3): partner-review approval is gated on the
+  // existing ``recommendations:decide`` capability. P2 #7 introduces
+  // a dedicated ``strategy:approve`` capability that will replace this
+  // gate; for the P1 #3 commit alone we ride the existing decide cap
+  // so the typecheck stays clean. (See the matching backend change in
+  // services/recommendations.record_recommendation_decision.)
+  const canApprove = useCapability("recommendations:decide");
 
   const query = useQuery({
     queryKey: ["matters", matterId, "recommendations"],
@@ -143,6 +154,33 @@ export default function MatterStrategyPage() {
       setLastError(message);
       toast.error(message);
     },
+  });
+
+  // Round-2 P1 #3: partner-review approval mutation. ``accepted``
+  // closes the review (backend clears review_required); ``edited``
+  // signals "request changes" — keeps the banner visible.
+  const decisionMutation = useMutation({
+    mutationFn: (input: {
+      recommendationId: string;
+      decision: "accepted" | "edited";
+    }) =>
+      recordRecommendationDecision({
+        recommendationId: input.recommendationId,
+        decision: input.decision,
+        selectedOptionIndex: 0,
+      }),
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: ["matters", matterId, "recommendations"],
+      });
+      toast.success(
+        variables.decision === "accepted"
+          ? "Strategy approved"
+          : "Strategy returned for changes",
+      );
+    },
+    onError: (err) =>
+      toast.error(apiErrorMessage(err, "Could not record the decision.")),
   });
 
   if (query.isPending) {
@@ -252,7 +290,23 @@ export default function MatterStrategyPage() {
       </Card>
 
       {latest ? (
-        <StrategyCard rec={latest} matterId={matterId} />
+        <StrategyCard
+          rec={latest}
+          matterId={matterId}
+          canApprove={canApprove}
+          onDecision={(decision) =>
+            decisionMutation.mutate({
+              recommendationId: latest.id,
+              decision,
+            })
+          }
+          decisionPending={decisionMutation.isPending}
+          pendingDecision={
+            decisionMutation.isPending
+              ? (decisionMutation.variables?.decision ?? null)
+              : null
+          }
+        />
       ) : null}
     </div>
   );
@@ -261,9 +315,17 @@ export default function MatterStrategyPage() {
 function StrategyCard({
   rec,
   matterId,
+  canApprove,
+  onDecision,
+  decisionPending,
+  pendingDecision,
 }: {
   rec: Recommendation;
   matterId: string;
+  canApprove: boolean;
+  onDecision: (decision: "accepted" | "edited") => void;
+  decisionPending: boolean;
+  pendingDecision: "accepted" | "edited" | null;
 }) {
   const payload = rec.strategy_payload;
   if (!payload) {
@@ -286,6 +348,21 @@ function StrategyCard({
     );
   }
 
+  // Round-2 fix (P1 #3): the most recent decision determines whether
+  // the strategy is currently approved. ``accepted`` clears
+  // ``review_required`` server-side; the local copy simply mirrors that.
+  // Decisions arrive newest-first per the backend ordering, but we
+  // sort defensively in case the API order changes.
+  const latestDecision = (() => {
+    const decisions = rec.decisions ?? [];
+    if (decisions.length === 0) return null;
+    const sorted = [...decisions].sort((a, b) =>
+      a.created_at < b.created_at ? 1 : -1,
+    );
+    return sorted[0] ?? null;
+  })();
+  const approved = !rec.review_required && latestDecision?.decision === "accepted";
+
   return (
     <Card data-testid="strategy-card">
       <CardHeader className="flex-row items-start justify-between gap-4">
@@ -301,12 +378,65 @@ function StrategyCard({
                 Partner review required
               </span>
             ) : null}
+            {approved ? (
+              <span
+                className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-800"
+                data-testid="strategy-approved-badge"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
+                Approved
+              </span>
+            ) : null}
           </div>
           <CardTitle className="mt-3 text-lg">{rec.title}</CardTitle>
           <CardDescription>
             Generated {formatDateTime(rec.created_at)}
           </CardDescription>
         </div>
+        {rec.review_required && canApprove ? (
+          <div
+            className="flex flex-wrap items-center gap-2"
+            data-testid="strategy-approval-bar"
+          >
+            <Button
+              size="sm"
+              data-testid="strategy-approve"
+              onClick={() => onDecision("accepted")}
+              disabled={decisionPending}
+            >
+              {pendingDecision === "accepted" ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                  Approving…
+                </>
+              ) : (
+                <>
+                  <ThumbsUp className="h-4 w-4" aria-hidden />
+                  Approve
+                </>
+              )}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              data-testid="strategy-request-changes"
+              onClick={() => onDecision("edited")}
+              disabled={decisionPending}
+            >
+              {pendingDecision === "edited" ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                  Submitting…
+                </>
+              ) : (
+                <>
+                  <Undo2 className="h-4 w-4" aria-hidden />
+                  Request changes
+                </>
+              )}
+            </Button>
+          </div>
+        ) : null}
       </CardHeader>
       <CardContent className="flex flex-col gap-6 py-5">
         <Section title="Current posture">

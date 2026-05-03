@@ -887,6 +887,17 @@ def record_recommendation_decision(
         recommendation.status = "edited"
     else:
         recommendation.status = "deferred"
+
+    # Round-2 fix (P1 #3, 2026-05-03). The PR set review_required=True
+    # on every litigation_strategy row but the decision endpoint only
+    # changed status; review_required stayed True forever. As a result
+    # the Strategy page kept showing the "Partner review required"
+    # badge even after a partner accepted the strategy. Acceptance is
+    # the decision that completes review, so clear the flag on
+    # ``accepted``. ``rejected`` / ``edited`` / ``deferred`` keep the
+    # flag — those are not approvals.
+    if decision == "accepted":
+        recommendation.review_required = False
     session.flush()
     from caseops_api.services.audit import record_from_context
 

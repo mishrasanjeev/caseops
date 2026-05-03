@@ -3,16 +3,26 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { listRecommendationsMock, generateRecommendationMock } = vi.hoisted(
-  () => ({
-    listRecommendationsMock: vi.fn(),
-    generateRecommendationMock: vi.fn(),
-  }),
-);
+const {
+  listRecommendationsMock,
+  generateRecommendationMock,
+  recordDecisionMock,
+  useCapabilityMock,
+} = vi.hoisted(() => ({
+  listRecommendationsMock: vi.fn(),
+  generateRecommendationMock: vi.fn(),
+  recordDecisionMock: vi.fn(),
+  useCapabilityMock: vi.fn(),
+}));
 
 vi.mock("@/lib/api/endpoints", () => ({
   listRecommendations: listRecommendationsMock,
   generateRecommendation: generateRecommendationMock,
+  recordRecommendationDecision: recordDecisionMock,
+}));
+
+vi.mock("@/lib/capabilities", () => ({
+  useCapability: useCapabilityMock,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -148,6 +158,11 @@ describe("MatterStrategyPage", () => {
   beforeEach(() => {
     listRecommendationsMock.mockReset();
     generateRecommendationMock.mockReset();
+    recordDecisionMock.mockReset();
+    // Default: assume the signed-in user has approval capability.
+    // Specific tests override this for the no-cap case.
+    useCapabilityMock.mockReset();
+    useCapabilityMock.mockImplementation(() => true);
   });
 
   it("renders the empty state when there is no strategy yet", async () => {
@@ -259,6 +274,140 @@ describe("MatterStrategyPage", () => {
       expect(screen.getByTestId("strategy-generate")).toBeInTheDocument(),
     );
     expect(screen.queryByTestId("strategy-card")).not.toBeInTheDocument();
+  });
+
+  // ---------------------------------------------------------------
+  // Round-2 P1 #3: partner-review approval controls.
+  // ---------------------------------------------------------------
+
+  it("renders the Approve / Request changes bar when the user has the strategy:approve capability", async () => {
+    listRecommendationsMock.mockResolvedValue({
+      matter_id: "m-1",
+      recommendations: [SAMPLE_STRATEGY],
+    });
+    render(withClient(<StrategyPage />));
+    await waitFor(() =>
+      expect(screen.getByTestId("strategy-card")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("strategy-approval-bar")).toBeInTheDocument();
+    expect(screen.getByTestId("strategy-approve")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("strategy-request-changes"),
+    ).toBeInTheDocument();
+  });
+
+  it("hides the Approve / Request changes bar when the user lacks strategy:approve", async () => {
+    useCapabilityMock.mockImplementation(() => false);
+    listRecommendationsMock.mockResolvedValue({
+      matter_id: "m-1",
+      recommendations: [SAMPLE_STRATEGY],
+    });
+    render(withClient(<StrategyPage />));
+    await waitFor(() =>
+      expect(screen.getByTestId("strategy-card")).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByTestId("strategy-approval-bar"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("strategy-approve")).not.toBeInTheDocument();
+    // Review banner stays visible even though approval controls are hidden —
+    // a non-approver can still see that review is required.
+    expect(screen.getByTestId("strategy-review-required")).toBeInTheDocument();
+  });
+
+  it("clicking Approve calls recordRecommendationDecision and refreshes the list", async () => {
+    listRecommendationsMock
+      .mockResolvedValueOnce({
+        matter_id: "m-1",
+        recommendations: [SAMPLE_STRATEGY],
+      })
+      // After invalidate the page re-fetches; this time the strategy
+      // is already approved.
+      .mockResolvedValueOnce({
+        matter_id: "m-1",
+        recommendations: [
+          {
+            ...SAMPLE_STRATEGY,
+            review_required: false,
+            status: "accepted" as const,
+            decisions: [
+              {
+                id: "d-1",
+                actor_membership_id: "mem-1",
+                decision: "accepted" as const,
+                selected_option_index: 0,
+                notes: null,
+                created_at: "2026-05-03T11:00:00Z",
+              },
+            ],
+          },
+        ],
+      });
+    recordDecisionMock.mockResolvedValue(SAMPLE_STRATEGY);
+    render(withClient(<StrategyPage />));
+    const approveBtn = await screen.findByTestId("strategy-approve");
+    fireEvent.click(approveBtn);
+    await waitFor(() =>
+      expect(recordDecisionMock).toHaveBeenCalledWith({
+        recommendationId: "rec-1",
+        decision: "accepted",
+        selectedOptionIndex: 0,
+      }),
+    );
+    // After re-fetch the partner-review banner should be gone and the
+    // approved badge should appear.
+    await waitFor(() =>
+      expect(screen.getByTestId("strategy-approved-badge")).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByTestId("strategy-review-required"),
+    ).not.toBeInTheDocument();
+    // The approval bar disappears once review is no longer required.
+    expect(
+      screen.queryByTestId("strategy-approval-bar"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the loading state on the Approve button while the decision is in-flight", async () => {
+    listRecommendationsMock.mockResolvedValue({
+      matter_id: "m-1",
+      recommendations: [SAMPLE_STRATEGY],
+    });
+    // Never-resolving mutation → stays pending so we can assert the
+    // spinner copy.
+    recordDecisionMock.mockReturnValue(new Promise(() => {}));
+    render(withClient(<StrategyPage />));
+    const approveBtn = await screen.findByTestId("strategy-approve");
+    fireEvent.click(approveBtn);
+    await waitFor(() =>
+      expect(screen.getByText(/Approving…/)).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("strategy-approve")).toBeDisabled();
+    // Request-changes button should also be disabled while the
+    // approve mutation is pending — defensive against double-submit.
+    expect(screen.getByTestId("strategy-request-changes")).toBeDisabled();
+  });
+
+  it("Request changes calls recordRecommendationDecision with edited and keeps review_required true", async () => {
+    listRecommendationsMock.mockResolvedValue({
+      matter_id: "m-1",
+      recommendations: [SAMPLE_STRATEGY],
+    });
+    recordDecisionMock.mockResolvedValue(SAMPLE_STRATEGY);
+    render(withClient(<StrategyPage />));
+    const requestChangesBtn = await screen.findByTestId(
+      "strategy-request-changes",
+    );
+    fireEvent.click(requestChangesBtn);
+    await waitFor(() =>
+      expect(recordDecisionMock).toHaveBeenCalledWith({
+        recommendationId: "rec-1",
+        decision: "edited",
+        selectedOptionIndex: 0,
+      }),
+    );
+    // Banner stays — Request changes is not an approval.
+    expect(screen.getByTestId("strategy-review-required")).toBeInTheDocument();
   });
 
   it("structural test: the strategy fixture contains no forbidden outcome-promising language", () => {
