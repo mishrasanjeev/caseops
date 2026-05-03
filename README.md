@@ -28,7 +28,8 @@ workspace — with tenant isolation, scoped agent grants, and audit by default.
 | Architecture | Stable | [`docs/architecture.md`](./docs/architecture.md) |
 | Work plan | Current | [`docs/WORK_TO_BE_DONE.md`](./docs/WORK_TO_BE_DONE.md) |
 | Strict bug ledger | Closed (10/10 Properly fixed) | [`docs/STRICT_BUG_TASKLIST_2026-04-22.md`](./docs/STRICT_BUG_TASKLIST_2026-04-22.md) |
-| Drafting studio (20 specialised templates + court-aware PDF + filing bundle + revision diff + bench-aware drafting + filing checklist + mobile + solo mode + governance + live-LLM eval) | Implemented (PG-005, 12 sprints, 2026-05-01) | [`docs/RELEASE_NOTES_2026-05-01.md`](./docs/RELEASE_NOTES_2026-05-01.md) |
+| Drafting studio (31 specialised templates including the SC escalation pack — SLP, supreme-court appeal, review, curative, transfer, contempt, interim relief, condonation of delay, exemption, synopsis / list of dates, filing index — plus court-aware PDF + filing bundle + revision diff + bench-aware drafting + filing checklist + mobile + solo mode + governance + live-LLM eval) | Implemented (PG-005, 12 sprints, 2026-05-01; SC pack 2026-05-03) | [`docs/RELEASE_NOTES_2026-05-01.md`](./docs/RELEASE_NOTES_2026-05-01.md) |
+| Litigation Strategy & Escalation Planner (matter-level strategy: current posture, primary + alternative routes, forum sequence up to Supreme Court, recommended draft pack with one-click generation, limitation flags, missing facts, risks, authorities, lawyer-review workflow) | Implemented (MOD-LSE, 2026-05-03) | [`docs/PRD_LITIGATION_STRATEGY_ESCALATION_PLANNER_2026-05-03.md`](./docs/PRD_LITIGATION_STRATEGY_ESCALATION_PLANNER_2026-05-03.md) |
 
 ---
 
@@ -299,6 +300,82 @@ for the full release notes.
 | 10 | Solo mode (`?solo=1` flattens stepper into one form) | same |
 | 11 | Template governance — admin can hide templates per tenant | `tenant_ai_policies.disabled_template_types_json` (Alembic `20260501_0003`) |
 | 12 | Live-LLM drafting quality harness (target 4.8/5) | `caseops_api.scripts.eval_drafting_quality` |
+
+---
+
+## Litigation Strategy and Escalation Planner
+
+The Strategy planner (PRD `docs/PRD_LITIGATION_STRATEGY_ESCALATION_PLANNER_2026-05-03.md`)
+turns a matter into a citation-grounded route plan. Distinct from the
+four classical recommendation types (`forum`, `authority`, `remedy`,
+`next_best_action`) because it produces a *route*, not a list of
+options:
+
+- **Current posture** — what stage the matter is at.
+- **Recommended route + alternatives** — each citation-anchored.
+- **Forum sequence** — escalation ladder up to Supreme Court level
+  (SLP / Article 132-134 appeal / review / curative) where legally
+  available.
+- **Recommended draft pack** — one-click links into the drafting
+  flow with the matter pre-filled. SC drafts grey out on lower-court
+  matters with a reason.
+- **Limitation flags, missing facts, risks, required documents.**
+
+### Hard product rules (non-negotiable)
+
+- Every strategy is `review_required=True` until a partner signs off.
+- Refuse / fail-closed on zero verified citations (HTTP 422).
+- Output must NOT contain `perfect strategy`, `guaranteed`,
+  `will win`, `certain outcome`, `no lawyer needed`, `replace
+  advocate`. A structural test (`assert_no_forbidden_phrases`)
+  enforces this both as a Pydantic post-processor and as a unit test.
+- Missing facts are listed; never invented.
+- Authorities, dates, forum names, remedies are never invented.
+- Supreme Court routes only where they are legally plausible
+  (Articles 132 / 133 / 134 / 136 / 137 / 142 etc.) — gated on the
+  matter's `forum_level`.
+
+### Where it lives
+
+- Backend service — `apps/api/src/caseops_api/services/litigation_strategy.py`
+- Pydantic schema — `apps/api/src/caseops_api/schemas/litigation_strategy.py`
+- Recommendation type — `litigation_strategy` in
+  `apps/api/src/caseops_api/services/recommendations.py` (`SUPPORTED_TYPES`)
+- Persistence — `recommendations.strategy_payload_json` (Alembic
+  `20260503_0001`); same `Recommendation` row carries the strategy
+  metadata, audit, and decision flow as the other four recommendation
+  types.
+- Frontend — `apps/web/app/app/matters/[id]/strategy/page.tsx`
+- Capability — `recommendations:generate` (read) and
+  `recommendations:decide` (approve / request changes).
+- Audit — `recommendation.generated` event with
+  `metadata.type='litigation_strategy'`.
+
+### SC + escalation drafting templates (11)
+
+Added alongside the strategy planner so the recommended-drafts panel
+has real targets:
+
+| Slug | Forum | Statutory anchor |
+| --- | --- | --- |
+| `special_leave_petition` | SC | Article 136 |
+| `supreme_court_appeal` | SC | Articles 132 / 133 / 134 |
+| `review_petition` | SC + HC | Article 137 / Order XLVII Rule 1 CPC |
+| `curative_petition` | SC | Rupa Ashok Hurra (2002) 4 SCC 388 |
+| `transfer_petition` | SC | Article 139A / s.25 CPC / s.406 BNSS |
+| `contempt_petition` | SC + HC | Articles 129 / 215, Contempt of Courts Act 1971 |
+| `interim_relief_application` | All | CPC Order XXXIX, Dalpat Kumar three-factor test |
+| `condonation_of_delay` | All | s.5 Limitation Act, Mst. Katiji |
+| `exemption_application` | SC | SC Rules 2013 Order V / Order XV |
+| `synopsis_list_of_dates` | SC | SC Rules 2013 Order V Rule 1(3) |
+| `filing_index_checklist` | SC + HC | SC Rules 2013 Order IV |
+
+### Tests
+
+- `apps/api/tests/test_litigation_strategy.py` — 14 tests
+- `apps/api/tests/test_sc_strategy_templates.py` — 61 tests
+- `apps/api/tests/test_template_recommender.py` — extended
+- `apps/web/app/app/matters/[id]/strategy/page.test.tsx` — 7 tests
 
 ---
 
