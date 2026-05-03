@@ -539,8 +539,18 @@ def test_strategy_refuses_when_no_citations_are_verified(
                 )
             )
         )
+    # Either ``rejected_primary_route_uncited`` (P1 #1, the per-route
+    # gate that fires first when the primary has zero citations) OR
+    # ``rejected_no_verified_citations`` (the original cross-route
+    # total-zero gate) is a valid audit row for this case. Both are
+    # correctness-preserving refusals — the test only requires that ONE
+    # of them was persisted.
     assert any(
-        r.status == "rejected_no_verified_citations" for r in runs
+        r.status in {
+            "rejected_no_verified_citations",
+            "rejected_primary_route_uncited",
+        }
+        for r in runs
     ), "Refusal must be persisted as a ModelRun row for audit."
 
 
@@ -608,6 +618,97 @@ def test_strategy_refuses_when_forbidden_phrase_in_payload(
     assert any(r.status == "rejected_forbidden_phrase" for r in runs), (
         "A forbidden-phrase refusal must persist as a ModelRun row."
     )
+
+
+# ---------------------------------------------------------------
+# Round-2 P1 #1: per-route citation verification on the PRIMARY.
+# A primary route with zero verified citations must NOT be saved
+# even if an alternative carries one verified citation.
+# ---------------------------------------------------------------
+
+
+def test_strategy_refuses_when_primary_route_uncited_even_if_alternative_cited(
+    client: TestClient, monkeypatch,
+) -> None:
+    """If the recommended_route's only citation is unverifiable but an
+    alternative_route's citation IS verified, the strategy must still
+    refuse with 422 + ``rejected_primary_route_uncited``. The primary
+    route is what the user reads first; we cannot lend it the support
+    of an alternative."""
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    citation = _seed_relevant_authority()  # alternative WILL match this.
+
+    payload = _valid_strategy_payload(citation)
+    # Primary route's only citation is unverifiable.
+    payload["recommended_route"]["supporting_citations"] = [
+        "Made Up v. Nobody (2099)",
+    ]
+    # Alternative carries the real, verifiable citation.
+    payload["alternative_routes"][0]["supporting_citations"] = [
+        f"[1] {citation}",
+    ]
+
+    class _PrimaryUncited:
+        name = "mock"
+        model = "mock-primary-uncited"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            return LLMCompletion(
+                text=json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=10,
+                completion_tokens=20,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _PrimaryUncited(),
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.litigation_strategy.build_provider",
+        lambda *a, **kw: _PrimaryUncited(),
+    )
+
+    token, _, matter_id = _setup_matter(client, forum_level="high_court")
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "litigation_strategy"},
+    )
+    assert response.status_code == 422, response.text
+    detail = response.json()["detail"]
+    assert "primary" in detail.lower()
+    assert "X-Model-Run-Id" in response.headers
+
+    factory = get_session_factory()
+    with factory() as session:
+        runs = list(
+            session.scalars(
+                select(ModelRun).where(
+                    ModelRun.purpose == "recommendation:litigation_strategy",
+                )
+            )
+        )
+    assert any(
+        r.status == "rejected_primary_route_uncited" for r in runs
+    ), (
+        "Primary-route-uncited refusal must persist as a ModelRun row."
+    )
+
+    # Strategy must NOT have been persisted.
+    factory = get_session_factory()
+    with factory() as session:
+        recs = list(
+            session.scalars(
+                select(Recommendation).where(
+                    Recommendation.type == "litigation_strategy",
+                )
+            )
+        )
+    assert recs == [], "Strategy with uncited primary must not persist."
 
 
 # ---------------------------------------------------------------

@@ -579,9 +579,45 @@ def generate_litigation_strategy(
     cleaned_routes, _report = _verify_routes(all_routes, retrieved)
     cleaned_recommended = cleaned_routes[0]
     cleaned_alternatives = cleaned_routes[1:]
+    primary_verified = len(cleaned_recommended.supporting_citations)
     total_verified = sum(
         len(r.supporting_citations) for r in cleaned_routes
     )
+
+    # Round-2 fix (P1 #1, 2026-05-03): citation verification is
+    # PER-ROUTE on the primary, not summed across alternatives. A
+    # primary route with zero verified citations cannot ride on an
+    # alternative's authority — the persisted recommendation would
+    # surface a top-of-screen route the corpus does not support. Fail
+    # closed when the primary has zero, even if alternatives carry one.
+    if primary_verified == 0:
+        run = _write_model_run(
+            session,
+            context=context,
+            matter_id=matter.id,
+            purpose="recommendation:litigation_strategy",
+            completion=completion,
+            prompt_hash=prompt_hash,
+            status_label="rejected_primary_route_uncited",
+            error=(
+                "Primary recommended route has zero verified citations; "
+                "alternatives carried "
+                f"{total_verified - primary_verified}."
+            ),
+        )
+        session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                "The recommended primary route has no verified authority "
+                "to stand on. CaseOps refuses strategies whose primary "
+                "route is uncited even if an alternative carries a "
+                "citation. Widen the matter description so retrieval "
+                "covers the primary route, or accept an alternative-only "
+                "answer by re-running with that posture."
+            ),
+            headers={"X-Model-Run-Id": run.id},
+        )
 
     if total_verified == 0:
         run = _write_model_run(
