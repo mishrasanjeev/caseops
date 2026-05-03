@@ -658,6 +658,74 @@ def test_decision_rejects_invalid_option_index(client: TestClient) -> None:
     assert bad.status_code == 400
 
 
+def test_accepted_decision_clears_review_required(client: TestClient) -> None:
+    """Round-2 P1 #3: an ``accepted`` decision must clear
+    ``review_required=False``. Until this fix the strategy page kept
+    surfacing the 'Partner review required' badge after acceptance."""
+    token, _, matter_id = _setup_matter(client)
+    _seed_relevant_authority()
+    created = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "authority"},
+    )
+    rec_id = created.json()["id"]
+    # Sanity check — review_required defaults to True for AI recs.
+    assert created.json()["review_required"] is True
+
+    decision = client.post(
+        f"/api/recommendations/{rec_id}/decisions",
+        headers=auth_headers(token),
+        json={"decision": "accepted", "selected_option_index": 0},
+    )
+    assert decision.status_code == 200, decision.text
+    body = decision.json()
+    assert body["status"] == "accepted"
+    assert body["review_required"] is False, (
+        "Acceptance must clear review_required so the partner-review "
+        "banner stops showing on the strategy / recommendations UI."
+    )
+
+    # Persisted state confirms the same.
+    factory = get_session_factory()
+    with factory() as session:
+        rec = session.scalar(
+            select(Recommendation).where(Recommendation.id == rec_id)
+        )
+        assert rec is not None
+        assert rec.review_required is False
+
+
+def test_non_accept_decisions_keep_review_required(client: TestClient) -> None:
+    """Round-2 P1 #3 negative case: ``rejected`` / ``edited`` /
+    ``deferred`` are not approvals — they keep review_required=True so
+    the strategy banner stays visible until a real acceptance lands.
+
+    We reuse one tenant + one matter and create a fresh recommendation
+    per decision kind to avoid fighting the bootstrap_company singleton
+    on duplicate slugs.
+    """
+    token, _, matter_id = _setup_matter(client)
+    _seed_relevant_authority()
+    for decision_kind in ("rejected", "edited", "deferred"):
+        created = client.post(
+            f"/api/matters/{matter_id}/recommendations",
+            headers=auth_headers(token),
+            json={"type": "authority"},
+        )
+        assert created.status_code == 200, created.text
+        rec_id = created.json()["id"]
+        decision = client.post(
+            f"/api/recommendations/{rec_id}/decisions",
+            headers=auth_headers(token),
+            json={"decision": decision_kind, "selected_option_index": 0},
+        )
+        assert decision.status_code == 200, decision.text
+        assert decision.json()["review_required"] is True, (
+            f"Decision {decision_kind!r} must NOT clear review_required."
+        )
+
+
 def test_generate_writes_a_model_run_record(client: TestClient) -> None:
     token, _, matter_id = _setup_matter(client)
     _seed_relevant_authority()

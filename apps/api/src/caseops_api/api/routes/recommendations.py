@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from caseops_api.api.dependencies import (
+    CAPABILITY_ROLES,
     DbSession,
     get_current_context,
     require_capability,
@@ -42,6 +43,28 @@ RecommendationDecider = Annotated[
 ]
 
 
+def _require_capability_inline(context: SessionContext, capability: str) -> None:
+    """Round-2 P2 #7 helper. ``require_capability`` is normally a
+    FastAPI dependency, but for litigation_strategy we need to run a
+    SECOND capability check inside the route handler (after the type
+    is known) — the dispatch is type-driven. This helper keeps the
+    behaviour identical to the dependency form."""
+    roles = CAPABILITY_ROLES.get(capability)
+    if roles is None:
+        raise RuntimeError(
+            f"Unknown capability {capability!r}; add it to CAPABILITY_ROLES.",
+        )
+    if context.membership.role not in roles:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"Capability {capability!r} requires role in "
+                f"{sorted(r.value for r in roles)}; you are "
+                f"{context.membership.role!r}."
+            ),
+        )
+
+
 def _option_record(option) -> RecommendationOptionRecord:
     return RecommendationOptionRecord(
         id=option.id,
@@ -66,6 +89,33 @@ def _decision_record(decision) -> RecommendationDecisionRecord:
 
 
 def _recommendation_record(recommendation: Recommendation) -> RecommendationRecord:
+    # MOD-LSE-1 (2026-05-03): hydrate the strategy payload from the
+    # opaque JSON column when present. Pydantic validation rejects any
+    # legacy / corrupted payload — we surface that as ``None`` rather
+    # than crashing the list endpoint, but log it so an operator can
+    # follow up.
+    strategy_payload = None
+    raw_payload = recommendation.strategy_payload_json
+    if raw_payload:
+        import json as _json
+        import logging as _logging
+
+        from caseops_api.schemas.litigation_strategy import (
+            LitigationStrategyPayload,
+        )
+
+        try:
+            strategy_payload = LitigationStrategyPayload.model_validate(
+                _json.loads(raw_payload),
+            )
+        except Exception:  # noqa: BLE001
+            _logging.getLogger(__name__).warning(
+                "recommendation %s strategy_payload_json failed to validate; "
+                "returning None",
+                recommendation.id,
+            )
+            strategy_payload = None
+
     return RecommendationRecord(
         id=recommendation.id,
         matter_id=recommendation.matter_id,
@@ -85,6 +135,7 @@ def _recommendation_record(recommendation: Recommendation) -> RecommendationReco
         retrieved_authorities=parse_assumptions(
             recommendation.retrieved_authorities_json,
         ),
+        strategy_payload=strategy_payload,
     )
 
 
@@ -120,6 +171,15 @@ async def create_recommendation(
     context: RecommendationGenerator,
     session: DbSession,
 ) -> RecommendationRecord:
+    # Round-2 P2 #7. Strategy generation requires a dedicated
+    # ``strategy:generate`` capability on top of the
+    # ``recommendations:generate`` gate the dependency above already
+    # asserted. The two are additive — if a future role tier (e.g.
+    # ``junior partner``) gains ``recommendations:generate`` but NOT
+    # ``strategy:generate``, the request still fails here.
+    if payload.type == "litigation_strategy":
+        _require_capability_inline(context, "strategy:generate")
+
     recommendation = generate_recommendation(
         session,
         context=context,
@@ -140,6 +200,25 @@ async def create_decision(
     context: RecommendationDecider,
     session: DbSession,
 ) -> RecommendationRecord:
+    # Round-2 P2 #7. Approving a litigation_strategy requires the
+    # dedicated ``strategy:approve`` capability in addition to the
+    # ``recommendations:decide`` gate the dependency already asserted.
+    # Non-strategy decisions and non-accept decisions on strategy rows
+    # ride the existing decide cap.
+    if payload.decision == "accepted":
+        # Pre-load just the type so the capability check fires before
+        # the full decision flow.
+        from sqlalchemy import select as _select
+
+        rec_type = session.scalar(
+            _select(Recommendation.type).where(
+                Recommendation.id == recommendation_id,
+                Recommendation.company_id == context.company.id,
+            )
+        )
+        if rec_type == "litigation_strategy":
+            _require_capability_inline(context, "strategy:approve")
+
     recommendation = record_recommendation_decision(
         session,
         context=context,

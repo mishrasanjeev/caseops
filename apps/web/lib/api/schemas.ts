@@ -79,11 +79,17 @@ export type MattersList = z.infer<typeof mattersList>;
 export const confidence = z.enum(["low", "medium", "high"]);
 // Sprint 9 BG-023 — four recommendation types. Keep the union in
 // lockstep with the backend's RecommendationTypeLiteral.
+//
+// MOD-LSE-1 (2026-05-03) — added ``litigation_strategy`` as a fifth
+// type. Strategy generation has its own service path on the backend
+// but rides the same /api/matters/{id}/recommendations route, so the
+// UI dispatches by type just like the other four.
 export const recommendationType = z.enum([
   "forum",
   "authority",
   "remedy",
   "next_best_action",
+  "litigation_strategy",
 ]);
 export const recommendationStatus = z.enum([
   "proposed",
@@ -113,6 +119,95 @@ export const recommendationDecision = z.object({
   created_at: z.string(),
 });
 
+// MOD-LSE-1 (2026-05-03) — strategy payload. Set only when
+// ``recommendation.type === 'litigation_strategy'``. Mirrors the
+// backend ``LitigationStrategyPayload`` Pydantic model.
+export const strategyRoute = z.object({
+  label: z.string(),
+  rationale: z.string(),
+  confidence: confidence,
+  availability: z.enum(["available", "uncertain", "not_available"]),
+  supporting_citations: z.array(z.string()),
+  risk_notes: z.string().nullable(),
+});
+
+export const forumStepLevel = z.enum([
+  "lower_court",
+  "tribunal",
+  "high_court_single_bench",
+  "high_court_division_bench",
+  "supreme_court",
+  "supreme_court_review",
+  "supreme_court_curative",
+  "arbitration",
+  "executive",
+  "other",
+]);
+
+export const forumStep = z.object({
+  forum_level: forumStepLevel,
+  stage_label: z.string(),
+  forum_name: z.string().nullable(),
+  rationale: z.string(),
+  statutory_basis: z.array(z.string()),
+  expected_filings: z.array(z.string()),
+  // Round-2 P1 #4: per-step citation verification.
+  supporting_citations: z.array(z.string()).default([]),
+  unverified: z.boolean().default(false),
+});
+
+export const recommendedDraft = z.object({
+  template_type: z.string(),
+  display_name: z.string(),
+  purpose: z.string(),
+  available: z.boolean(),
+  reason_unavailable: z.string().nullable(),
+});
+
+export const limitationFlag = z.object({
+  label: z.string(),
+  description: z.string(),
+  statutory_basis: z.string().nullable(),
+  deadline_iso: z.string().nullable(),
+  severity: z.enum(["info", "warning", "critical"]),
+  // Round-2 P1 #4: per-flag citation verification.
+  supporting_citations: z.array(z.string()).default([]),
+  unverified: z.boolean().default(false),
+});
+
+export const strategyRisk = z.object({
+  label: z.string(),
+  description: z.string(),
+  severity: z.enum(["low", "medium", "high"]),
+  mitigation: z.string().nullable(),
+  // Round-2 P1 #4: optional per-risk citation verification.
+  // Empty supporting_citations + unverified=false == factual risk.
+  supporting_citations: z.array(z.string()).default([]),
+  unverified: z.boolean().default(false),
+});
+
+export const nextBestAction = z.object({
+  action: z.string(),
+  supporting_citations: z.array(z.string()).default([]),
+  unverified: z.boolean().default(false),
+});
+
+export const litigationStrategyPayload = z.object({
+  current_posture: z.string(),
+  recommended_route: strategyRoute,
+  alternative_routes: z.array(strategyRoute),
+  forum_sequence: z.array(forumStep),
+  recommended_drafts: z.array(recommendedDraft),
+  limitation_flags: z.array(limitationFlag),
+  required_documents: z.array(z.string()),
+  missing_facts: z.array(z.string()),
+  risks: z.array(strategyRisk),
+  // Round-2 P1 #4: structured next_best_actions so each carries
+  // verified citations + an unverified flag.
+  next_best_actions: z.array(nextBestAction),
+  disclaimer: z.string(),
+});
+
 export const recommendation = z.object({
   id: z.string(),
   matter_id: z.string(),
@@ -132,6 +227,9 @@ export const recommendation = z.object({
   // PG-109 (2026-05-01) — full retrieved-authorities list. Default
   // empty for legacy rows.
   retrieved_authorities: z.array(z.string()).default([]),
+  // MOD-LSE-1 (2026-05-03) — populated only for
+  // ``type === 'litigation_strategy'`` rows.
+  strategy_payload: litigationStrategyPayload.nullable().optional(),
 });
 
 export const recommendationList = z.object({
@@ -145,6 +243,17 @@ export type RecommendationDecision = z.infer<typeof recommendationDecision>;
 export type RecommendationList = z.infer<typeof recommendationList>;
 export type RecommendationType = z.infer<typeof recommendationType>;
 export type DecisionKind = z.infer<typeof decisionKind>;
+
+// MOD-LSE-1 (2026-05-03) — strategy planner type exports.
+export type LitigationStrategyPayload = z.infer<typeof litigationStrategyPayload>;
+export type StrategyRoute = z.infer<typeof strategyRoute>;
+export type ForumStep = z.infer<typeof forumStep>;
+export type ForumStepLevel = z.infer<typeof forumStepLevel>;
+export type RecommendedDraft = z.infer<typeof recommendedDraft>;
+export type LimitationFlag = z.infer<typeof limitationFlag>;
+export type StrategyRisk = z.infer<typeof strategyRisk>;
+// Round-2 P1 #4 — structured next_best_actions.
+export type NextBestAction = z.infer<typeof nextBestAction>;
 
 export const contractStatus = z.enum([
   "draft",

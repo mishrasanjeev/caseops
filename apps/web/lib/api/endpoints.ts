@@ -967,7 +967,7 @@ export type TodayDraftInReview = {
   matter: TodayMatterRef;
   title: string;
   draft_type: string;
-  template_type: string | null;
+  template_type: DraftTemplateType | null;
   updated_at_iso: string;
 };
 
@@ -1063,7 +1063,7 @@ export type FilingChecklistItem = {
 export type FilingChecklistResponse = {
   matter_id: string;
   draft_id: string;
-  template_type: string;
+  template_type: DraftTemplateType;
   court_profile_key: string;
   court_display_name: string;
   items: FilingChecklistItem[];
@@ -2238,7 +2238,15 @@ export async function fetchContractAttachmentRedline(input: {
 // services.drafting_suggestions.TemplateSuggestions +
 // services.drafting_preview.DraftPreview.
 
+// Mirrors the backend ``DraftTemplateType`` enum. Kept in sync with
+// the canonical ``template_type`` union in ``openapi-types.ts``; if a
+// template is added on the backend, both this hand-written union AND
+// the regenerated openapi-types must be updated. Round-5 (2026-05-03)
+// refresh: Round-1 added 11 SC and escalation templates; the union
+// was still listing only 9 of the pre-Round-1 set, so the SC slugs
+// were typed as ``never`` outside the generated openapi-types file.
 export type DraftTemplateType =
+  // Original 20 (pre-Round-1).
   | "bail"
   | "anticipatory_bail"
   | "divorce_petition"
@@ -2248,7 +2256,30 @@ export type DraftTemplateType =
   | "criminal_complaint"
   | "civil_suit"
   // BAAD-001 (Sprint P5, 2026-04-25). Bench-aware appeal drafting.
-  | "appeal_memorandum";
+  | "appeal_memorandum"
+  | "writ_petition"
+  | "quashing_petition"
+  | "written_statement"
+  | "reply_counter_affidavit"
+  | "dv_quashing_petition"
+  | "arbitration_section_9"
+  | "caveat_petition"
+  | "vakalatnama"
+  | "amendment_of_pleadings"
+  | "compromise_petition"
+  | "probate_petition"
+  // PR #7 / Round-1 (2026-05-03) — SC + escalation drafting templates.
+  | "special_leave_petition"
+  | "supreme_court_appeal"
+  | "review_petition"
+  | "curative_petition"
+  | "transfer_petition"
+  | "contempt_petition"
+  | "interim_relief_application"
+  | "condonation_of_delay"
+  | "exemption_application"
+  | "synopsis_list_of_dates"
+  | "filing_index_checklist";
 
 export type DraftingFieldKind =
   | "string"
@@ -2319,7 +2350,7 @@ export async function listDraftingTemplates(): Promise<DraftTemplateSummary[]> {
 
 // Format-to-forum recommender (PRD §16.3, 2026-04-26).
 export type TemplateRecommendation = {
-  template_type: string;
+  template_type: DraftTemplateType;
   relevance: "primary" | "secondary";
   reason: string;
 };

@@ -5178,7 +5178,7 @@ export interface components {
              * Template Type
              * @enum {string}
              */
-            template_type: "bail" | "anticipatory_bail" | "divorce_petition" | "property_dispute_notice" | "cheque_bounce_notice" | "affidavit" | "criminal_complaint" | "civil_suit" | "appeal_memorandum" | "writ_petition" | "quashing_petition" | "written_statement" | "reply_counter_affidavit" | "dv_quashing_petition" | "arbitration_section_9" | "caveat_petition" | "vakalatnama" | "amendment_of_pleadings" | "compromise_petition" | "probate_petition";
+            template_type: "bail" | "anticipatory_bail" | "divorce_petition" | "property_dispute_notice" | "cheque_bounce_notice" | "affidavit" | "criminal_complaint" | "civil_suit" | "appeal_memorandum" | "writ_petition" | "quashing_petition" | "written_statement" | "reply_counter_affidavit" | "dv_quashing_petition" | "arbitration_section_9" | "caveat_petition" | "vakalatnama" | "amendment_of_pleadings" | "compromise_petition" | "probate_petition" | "special_leave_petition" | "supreme_court_appeal" | "review_petition" | "curative_petition" | "transfer_petition" | "contempt_petition" | "interim_relief_application" | "condonation_of_delay" | "exemption_application" | "synopsis_list_of_dates" | "filing_index_checklist";
         };
         /** DraftTemplateSummary */
         DraftTemplateSummary: {
@@ -5465,6 +5465,45 @@ export interface components {
             matter_id: string;
             /** Template Type */
             template_type: string;
+        };
+        /**
+         * ForumStep
+         * @description One node on the escalation ladder.
+         *
+         *     Order is meaningful — the list is the route through forums in
+         *     chronological order. ``stage_label`` is a short tag the UI shows on
+         *     the step (e.g. "First appeal", "SLP", "Review").
+         *
+         *     Round-2 P1 #4: the forum step's statutory / jurisdictional basis is
+         *     a legal claim and must be cited. ``supporting_citations`` is the
+         *     list of citations that the verifier confirmed against the retrieved
+         *     authority set. ``unverified=True`` is set when the LLM either
+         *     emitted no citation for this step or every citation it emitted
+         *     failed verification.
+         */
+        ForumStep: {
+            /** Expected Filings */
+            expected_filings?: string[];
+            /**
+             * Forum Level
+             * @enum {string}
+             */
+            forum_level: "lower_court" | "tribunal" | "high_court_single_bench" | "high_court_division_bench" | "supreme_court" | "supreme_court_review" | "supreme_court_curative" | "arbitration" | "executive" | "other";
+            /** Forum Name */
+            forum_name?: string | null;
+            /** Rationale */
+            rationale: string;
+            /** Stage Label */
+            stage_label: string;
+            /** Statutory Basis */
+            statutory_basis?: string[];
+            /** Supporting Citations */
+            supporting_citations?: string[];
+            /**
+             * Unverified
+             * @default false
+             */
+            unverified: boolean;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -6017,6 +6056,76 @@ export interface components {
         KycSubmitRequest: {
             /** Documents */
             documents?: components["schemas"]["KycDocumentRecord"][];
+        };
+        /**
+         * LimitationFlag
+         * @description A limitation / drop-dead deadline the matter must meet.
+         *
+         *     ``deadline_iso`` is an ISO yyyy-mm-dd date when the model can
+         *     compute it from facts. When it cannot, we DO NOT invent one —
+         *     ``deadline_iso`` stays None and ``description`` calls out the
+         *     missing fact (e.g. "limitation runs from impugned-order date,
+         *     which is not on file").
+         *
+         *     Round-2 P1 #4: a limitation flag is a legal claim about a statutory
+         *     deadline. ``supporting_citations`` carries the verifier-confirmed
+         *     citations; ``unverified=True`` is set when the cited statute /
+         *     case did not verify against the retrieved authority set.
+         */
+        LimitationFlag: {
+            /** Deadline Iso */
+            deadline_iso?: string | null;
+            /** Description */
+            description: string;
+            /** Label */
+            label: string;
+            /**
+             * Severity
+             * @default info
+             * @enum {string}
+             */
+            severity: "info" | "warning" | "critical";
+            /** Statutory Basis */
+            statutory_basis?: string | null;
+            /** Supporting Citations */
+            supporting_citations?: string[];
+            /**
+             * Unverified
+             * @default false
+             */
+            unverified: boolean;
+        };
+        /**
+         * LitigationStrategyPayload
+         * @description The structured output the strategy planner produces.
+         *
+         *     Pinned to ``recommendations.strategy_payload_json`` and validated
+         *     on every read and write. ``review_required`` is NOT on this model
+         *     because the parent ``Recommendation`` row carries it — strategy
+         *     rows are ALWAYS review_required=true.
+         */
+        LitigationStrategyPayload: {
+            /** Alternative Routes */
+            alternative_routes?: components["schemas"]["StrategyRoute"][];
+            /** Current Posture */
+            current_posture: string;
+            /** Disclaimer */
+            disclaimer: string;
+            /** Forum Sequence */
+            forum_sequence: components["schemas"]["ForumStep"][];
+            /** Limitation Flags */
+            limitation_flags?: components["schemas"]["LimitationFlag"][];
+            /** Missing Facts */
+            missing_facts?: string[];
+            /** Next Best Actions */
+            next_best_actions?: components["schemas"]["NextBestAction"][];
+            /** Recommended Drafts */
+            recommended_drafts?: components["schemas"]["RecommendedDraft"][];
+            recommended_route: components["schemas"]["StrategyRoute"];
+            /** Required Documents */
+            required_documents?: string[];
+            /** Risks */
+            risks?: components["schemas"]["StrategyRisk"][];
         };
         /** LoginRequest */
         LoginRequest: {
@@ -6993,6 +7102,28 @@ export interface components {
             /** Severity */
             severity: string;
         };
+        /**
+         * NextBestAction
+         * @description A concrete next step the lawyer should take. Round-2 P1 #4
+         *     structurised this from a free string list so each action's
+         *     procedural basis can be cited and verified. ``unverified=True`` is
+         *     set when the LLM emitted a citation for the action that did not
+         *     verify against the retrieved authority set, OR when the action
+         *     makes a legal claim with no citation. Purely operational actions
+         *     (``"call the client back"``) are emitted with no citations and
+         *     ``unverified=False``.
+         */
+        NextBestAction: {
+            /** Action */
+            action: string;
+            /** Supporting Citations */
+            supporting_citations?: string[];
+            /**
+             * Unverified
+             * @default false
+             */
+            unverified: boolean;
+        };
         /** ObligationExtractionResponse */
         ObligationExtractionResponse: {
             /** Contract Id */
@@ -7844,7 +7975,7 @@ export interface components {
              * @default authority
              * @enum {string}
              */
-            type: "forum" | "authority" | "remedy" | "next_best_action";
+            type: "forum" | "authority" | "remedy" | "next_best_action" | "litigation_strategy";
         };
         /** RecommendationListResponse */
         RecommendationListResponse: {
@@ -7912,13 +8043,40 @@ export interface components {
              * @enum {string}
              */
             status: "proposed" | "accepted" | "rejected" | "edited" | "deferred";
+            strategy_payload?: components["schemas"]["LitigationStrategyPayload"] | null;
             /** Title */
             title: string;
             /**
              * Type
              * @enum {string}
              */
-            type: "forum" | "authority" | "remedy" | "next_best_action";
+            type: "forum" | "authority" | "remedy" | "next_best_action" | "litigation_strategy";
+        };
+        /**
+         * RecommendedDraft
+         * @description A drafting template the user can launch from the strategy.
+         *
+         *     ``template_type`` matches a ``DraftTemplateType`` enum value — the
+         *     UI deep-links to ``/app/matters/{id}/drafts/new?type=<value>`` and
+         *     the stepper validates the type itself. ``available`` flips to
+         *     false for templates the user cannot complete (e.g. SC drafts on a
+         *     matter that is not yet at the SC stage); the UI greys out the
+         *     button + shows the reason.
+         */
+        RecommendedDraft: {
+            /**
+             * Available
+             * @default true
+             */
+            available: boolean;
+            /** Display Name */
+            display_name: string;
+            /** Purpose */
+            purpose: string;
+            /** Reason Unavailable */
+            reason_unavailable?: string | null;
+            /** Template Type */
+            template_type: string;
         };
         /** RedlineChangeRecord */
         RedlineChangeRecord: {
@@ -8150,6 +8308,76 @@ export interface components {
             /** Sections */
             sections: components["schemas"]["StatuteSectionListItem"][];
             statute: components["schemas"]["StatuteRecord"];
+        };
+        /**
+         * StrategyRisk
+         * @description One downside the lawyer must factor in before pursuing the
+         *     recommended route. Risks are deliberately distinct from
+         *     ``risk_notes`` on a route — those are per-route; these are
+         *     cross-cutting risks (cost, reputational, parallel proceedings,
+         *     counterclaim exposure).
+         *
+         *     Round-2 P1 #4: risks are sometimes purely factual (cost, client
+         *     withdrawal, reputational fallout) and need no citation. Other
+         *     times they are legal/procedural claims (parallel-proceedings bar,
+         *     counterclaim exposure under a specific section). When the LLM
+         *     chooses to emit ``supporting_citations`` for a risk, we run them
+         *     through the verifier; if every emitted citation fails, we set
+         *     ``unverified=True`` and drop the citations from the persisted
+         *     payload. Empty ``supporting_citations`` is the factual-risk path
+         *     and does not flip ``unverified``.
+         */
+        StrategyRisk: {
+            /** Description */
+            description: string;
+            /** Label */
+            label: string;
+            /** Mitigation */
+            mitigation?: string | null;
+            /**
+             * Severity
+             * @default medium
+             * @enum {string}
+             */
+            severity: "low" | "medium" | "high";
+            /** Supporting Citations */
+            supporting_citations?: string[];
+            /**
+             * Unverified
+             * @default false
+             */
+            unverified: boolean;
+        };
+        /**
+         * StrategyRoute
+         * @description One end-to-end route from current posture to terminal relief.
+         *
+         *     Each route is independently citable: the rationale must reference
+         *     at least one verified authority OR plead an explicit "no
+         *     grounding" risk note that the verifier honours. The list of
+         *     citations is the same shape the recommendation pipeline uses.
+         */
+        StrategyRoute: {
+            /**
+             * Availability
+             * @default uncertain
+             * @enum {string}
+             */
+            availability: "available" | "uncertain" | "not_available";
+            /**
+             * Confidence
+             * @default low
+             * @enum {string}
+             */
+            confidence: "low" | "medium" | "high";
+            /** Label */
+            label: string;
+            /** Rationale */
+            rationale: string;
+            /** Risk Notes */
+            risk_notes?: string | null;
+            /** Supporting Citations */
+            supporting_citations?: string[];
         };
         /** TeamCreateRequest */
         TeamCreateRequest: {

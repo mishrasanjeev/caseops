@@ -53,11 +53,15 @@ def test_registry_has_one_entry_per_template_type() -> None:
     types_in_registry = {s.template_type for s in schemas}
     expected = {t.value for t in DraftTemplateType}
     assert types_in_registry == expected
-    # 20 templates after PG-005 Sprint 2 (2026-05-01) added DV-quashing,
-    # Section 9 Arbitration, Caveat, Vakalatnama, Amendment of pleadings,
-    # Compromise, and Probate. Update this count + the route test below
-    # in lockstep when a new template lands.
-    assert len(schemas) == 20
+    # 31 templates after MOD-LSE-3 (2026-05-03) added the SC + escalation
+    # pack (special_leave_petition, supreme_court_appeal, review_petition,
+    # curative_petition, transfer_petition, contempt_petition,
+    # interim_relief_application, condonation_of_delay,
+    # exemption_application, synopsis_list_of_dates,
+    # filing_index_checklist) on top of the 20 previously-registered
+    # templates. Update this count + the route test below in lockstep
+    # when a new template lands.
+    assert len(schemas) == 31
 
 
 def test_every_template_has_fields_and_step_groups() -> None:
@@ -406,10 +410,9 @@ def test_facts_model_mapping_matches_enum() -> None:
 # ---------------------------------------------------------------
 
 
-def test_list_templates_route_returns_all_twenty(client: TestClient) -> None:
-    """20 templates after PG-005 Sprint 2 (2026-05-01) added DV-quashing,
-    Section 9 Arbitration, Caveat, Vakalatnama, Amendment of pleadings,
-    Compromise, and Probate."""
+def test_list_templates_route_returns_all_thirty_one(client: TestClient) -> None:
+    """31 templates after MOD-LSE-3 (2026-05-03) added the SC +
+    escalation pack on top of the 20 templates from PG-005 Sprint 2."""
     from tests.test_auth_company import auth_headers, bootstrap_company
 
     bootstrap = bootstrap_company(client)
@@ -419,7 +422,7 @@ def test_list_templates_route_returns_all_twenty(client: TestClient) -> None:
     resp = client.get("/api/drafting/templates", headers=headers)
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert len(body["templates"]) == 20
+    assert len(body["templates"]) == 31
     types = {t["template_type"] for t in body["templates"]}
     assert types == {t.value for t in DraftTemplateType}
 

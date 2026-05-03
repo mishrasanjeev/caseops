@@ -69,6 +69,11 @@ export type Capability =
   | "recommendations:generate"
   | "recommendations:decide"
   | "ai:generate"
+  // strategy planner (Round-2 P2 #7) — dedicated caps for the
+  // litigation_strategy + approval flow on top of
+  // recommendations:generate / recommendations:decide.
+  | "strategy:generate"
+  | "strategy:approve"
   // authority corpus
   | "authorities:search"
   | "authorities:ingest"
@@ -141,6 +146,8 @@ const CREATOR_ONLY: Capability[] = [
   "matters:create",
   "contracts:create",
   "recommendations:generate",
+  // Strategy generation rides the same role tier as recommendations:generate.
+  "strategy:generate",
 ];
 
 // Drafter caps — paralegals CAN draft but not finalize.
@@ -162,6 +169,8 @@ const STAFF: Capability[] = [
   "court_sync:run",
   "authorities:ingest",
   "recommendations:decide",
+  // Strategy approval rides the same role tier as recommendations:decide.
+  "strategy:approve",
   "intake:triage",
   "intake:promote",
   "clients:archive",

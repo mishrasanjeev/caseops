@@ -345,6 +345,238 @@
           "must_pass_rules": []
         }
       ]
+    },
+    "special_leave_petition": {
+      "scenarios": [
+        {
+          "key": "civil-slp-bombay-hc-stay-rejected",
+          "facts": {
+            "petitioner_name": "Aster Realty Holdings Pvt. Ltd.",
+            "respondent_name": "Vasai Municipal Corporation",
+            "slp_kind": "civil",
+            "impugned_order_summary": "Bombay High Court order dated 12 March 2026 in Writ Petition No. 4523/2025 dismissing the petitioner's challenge to the demolition notice issued by the respondent under Section 53 of the Maharashtra Regional and Town Planning Act, 1966.",
+            "impugned_order_date": "2026-03-12",
+            "high_court_name": "Bombay High Court",
+            "high_court_case_number": "WP No. 4523 of 2025",
+            "questions_of_law": [
+              "Whether the High Court erred in refusing to interfere with a demolition notice issued without compliance with the natural-justice requirements laid down in Olga Tellis v. Bombay Municipal Corporation (1985) 3 SCC 545.",
+              "Whether the proviso to Section 53 mandates a personal hearing before demolition can be ordered."
+            ],
+            "grounds_brief": "The High Court overlooked binding precedent on the natural-justice requirement before demolition. The order proceeds on the assumption that a written show-cause notice substitutes for the right to a personal hearing, which is contrary to Olga Tellis and the line of cases following it. The petition raises a substantial question of law of general public importance fit for adjudication under Article 136.",
+            "interim_relief_sought": "Stay of demolition pending disposal of the SLP.",
+            "delay_days": 0,
+            "exemption_from_certified_copy": false
+          },
+          "must_pass_rules": []
+        }
+      ]
+    },
+    "supreme_court_appeal": {
+      "scenarios": [
+        {
+          "key": "article-133-civil-appeal-with-fitness-certificate",
+          "facts": {
+            "appellant_name": "Krishna Mills Cooperative Society Ltd.",
+            "respondent_name": "State of Maharashtra and Ors.",
+            "constitutional_basis": "article_133",
+            "impugned_order_summary": "Bombay High Court Division Bench judgment dated 4 February 2026 in First Appeal No. 312/2024 reversing the trial court's decree of specific performance and remanding the matter for fresh consideration on quantum of damages. The High Court certified the matter as fit for appeal to the Supreme Court under Article 133.",
+            "impugned_order_date": "2026-02-04",
+            "high_court_name": "Bombay High Court",
+            "high_court_case_number": "FA No. 312 of 2024",
+            "certificate_of_fitness_granted": true,
+            "substantial_question": "Whether a remand limited to quantum amounts to a reversal on liability for the purposes of Section 100 CPC and whether such a partial remand can be made without first deciding the issue of breach.",
+            "grounds_brief": "The High Court's remand exceeds the scope permitted under Order XLI Rule 23A CPC. The substantial question of law concerns the boundary between a reversal on liability (which must be final) and a remand on quantum. The Supreme Court's settled position in Municipal Corporation, Hyderabad v. Sunder Singh Naharh (2008) 8 SCC 42 is at variance with the impugned approach."
+          },
+          "must_pass_rules": []
+        }
+      ]
+    },
+    "review_petition": {
+      "scenarios": [
+        {
+          "key": "sc-review-error-apparent-on-record",
+          "facts": {
+            "petitioner_name": "Saraswati Devi",
+            "respondent_name": "Union of India",
+            "review_court": "supreme_court",
+            "impugned_judgment_date": "2026-01-22",
+            "impugned_judgment_citation": "Civil Appeal No. 8821 of 2024",
+            "error_apparent_on_face_of_record": "The judgment proceeds on the recorded finding that the petitioner did not raise the limitation defence before the High Court. That finding is contrary to the record — paragraph 17 of the High Court order expressly notes the limitation argument and rejects it on merits. The mistake is a self-evident error apparent on the face of the record within the narrow band recognised in Northern India Caterers v. Lt. Governor of Delhi (1980) 2 SCC 167.",
+            "new_evidence_summary": null,
+            "grounds_brief": "Review jurisdiction under Article 137 is narrow; the petitioner does not seek a rehearing on merits. The petition is confined to the factual mistake that the limitation point was not raised — a mistake apparent from paragraph 17 of the impugned High Court order which is itself part of the record before this Hon'ble Court.",
+            "open_court_hearing_requested": false
+          },
+          "must_pass_rules": []
+        }
+      ]
+    },
+    "curative_petition": {
+      "scenarios": [
+        {
+          "key": "natural-justice-curative-after-review-dismissal",
+          "facts": {
+            "petitioner_name": "Mehta Brothers Steel Pvt. Ltd.",
+            "respondent_name": "Director General of Foreign Trade",
+            "impugned_order_date": "2025-08-14",
+            "review_dismissed_date": "2025-12-09",
+            "senior_advocate_name": "Sh. R. K. Anand, Senior Advocate",
+            "grounds_brief": "Per Rupa Ashok Hurra v. Ashok Hurra (2002) 4 SCC 388, the curative jurisdiction is invoked only when (a) there has been a violation of the principles of natural justice or (b) where the judge who passed the order failed to disclose facts giving rise to apprehension of bias. The present petition is grounded on (a) — the impugned order was passed without notice to the petitioner on the additional submission filed by the respondent on 11 August 2025.",
+            "natural_justice_violation": "The respondent's note of 11 August 2025 was placed on record after oral arguments concluded and before the judgment was reserved. The petitioner had no opportunity to respond. The judgment expressly relies on paragraphs 4 and 7 of that note for its reasoning on the licence cancellation.",
+            "bias_grounds": null
+          },
+          "must_pass_rules": []
+        }
+      ]
+    },
+    "transfer_petition": {
+      "scenarios": [
+        {
+          "key": "cpc-s25-matrimonial-transfer-safety",
+          "facts": {
+            "petitioner_name": "Smt. Anjali Verma",
+            "respondent_name": "Sh. Pradeep Verma",
+            "transfer_basis": "cpc_s_25",
+            "case_number_in_transferor_court": "HMA No. 421 of 2025",
+            "transferor_court_name": "Family Court, Ghaziabad, Uttar Pradesh",
+            "transferee_court_proposed": "Family Court, Saket, New Delhi",
+            "grounds_for_transfer": "The petitioner is a single mother residing with her infant daughter in New Delhi. Travel to Ghaziabad for each hearing requires a six-hour round trip and overnight childcare arrangements that the petitioner cannot afford. The respondent ordinarily works in Delhi NCR and would not be inconvenienced by transfer.",
+            "convenience_reasons": "Petitioner's permanent residence is in Saket; child is enrolled in a Delhi school; petitioner is the sole caregiver.",
+            "safety_or_threat_reasons": "Two FIRs registered against the respondent under Section 498A IPC (Ghaziabad) and Section 354 BNS (Saket). Petitioner has been advised by counsel against attending hearings in Ghaziabad without protection."
+          },
+          "must_pass_rules": []
+        }
+      ]
+    },
+    "contempt_petition": {
+      "scenarios": [
+        {
+          "key": "civil-contempt-hc-wilful-disobedience",
+          "facts": {
+            "petitioner_name": "Lakshmi Devi Charitable Trust",
+            "contemnor_name": "Greater Noida Industrial Development Authority and its Chief Executive Officer Sh. R. K. Sinha",
+            "contempt_court": "high_court",
+            "contempt_kind": "civil",
+            "underlying_order_date": "2025-11-04",
+            "underlying_order_summary": "Allahabad High Court order dated 4 November 2025 in Writ Petition No. 9876/2024 directing the respondent authority to release the petitioner's possession of Plot No. 14, Sector Beta-II within sixty days and pay arrears of compensation as quantified in paragraph 23 of the order.",
+            "breach_facts": "The sixty-day period expired on 3 January 2026. The respondent has neither restored possession nor paid the quantified compensation. Reminders dated 8 January 2026 and 22 February 2026 have been ignored. The breach is wilful — the respondent's standing counsel has confirmed in writing that the order will not be complied with pending an internal review which has no statutory basis.",
+            "notice_to_contemnor_served": true,
+            "relief_sought": "Adjudge and punish the contemnor for civil contempt under Section 12 of the Contempt of Courts Act, 1971; direct immediate compliance with the order dated 4 November 2025."
+          },
+          "must_pass_rules": []
+        }
+      ]
+    },
+    "interim_relief_application": {
+      "scenarios": [
+        {
+          "key": "stay-application-hc-tax-demand",
+          "facts": {
+            "applicant_name": "Sunrise Pharmaceuticals Ltd.",
+            "respondent_name": "Commissioner of Income Tax, Mumbai-1",
+            "main_proceeding_number": "WP No. 5423 of 2026",
+            "main_proceeding_summary": "Writ petition pending before the Bombay High Court challenging the demand notice dated 5 March 2026 for INR 47,82,00,000 raised under Section 156 of the Income Tax Act, 1961 pursuant to a reassessment order under Section 147. The petition pleads that the reassessment is barred by limitation under Section 149.",
+            "court_name": "Bombay High Court",
+            "relief_kind": "stay",
+            "prima_facie_case": "The reassessment notice was issued on 30 March 2025 — beyond the three-year ordinary limit under Section 149(1)(a). The Revenue's reliance on the extended ten-year limit under Section 149(1)(b) requires escaped income exceeding INR 50 lakh, which the impugned notice does not establish on its face. The petitioner has demonstrable arguable grounds.",
+            "balance_of_convenience": "Recovery of INR 47.82 crores from the petitioner's working capital would impair its production and supply commitments to government health agencies. The Revenue, by contrast, will not be prejudiced by stay during the pendency of a writ that is set down for final hearing within sixty days.",
+            "irreparable_injury": "Coercive recovery would force the petitioner into a default on its ongoing supply contracts, including price-controlled pharmaceutical contracts with state procurement agencies. Reputational and contractual injury cannot be undone by a later refund.",
+            "undertaking_offered": "The petitioner undertakes to deposit twenty per cent of the disputed demand within four weeks as a condition of stay, without prejudice to its rights."
+          },
+          "must_pass_rules": []
+        }
+      ]
+    },
+    "condonation_of_delay": {
+      "scenarios": [
+        {
+          "key": "slp-delay-medical-emergency",
+          "facts": {
+            "applicant_name": "Sh. Ramesh Chandra Tiwari",
+            "respondent_name": "State of Uttar Pradesh and Ors.",
+            "main_filing_kind": "SLP (Civil)",
+            "main_filing_court": "Supreme Court of India",
+            "delay_days": 47,
+            "cause_of_delay": "The applicant suffered a myocardial infarction on 18 January 2026 and was admitted to AIIMS, New Delhi for emergency cardiac care followed by a triple-bypass surgery on 22 January 2026. The applicant was discharged on 14 February 2026 and remained on prescribed bed rest until 28 February 2026. Discharge summary and medical certificate of the treating cardiologist (Dr. Amit Banerjee) are annexed.",
+            "diligence_explanation": "The applicant retained counsel within seven days of the impugned High Court order on 12 January 2026 and instructed counsel to brief Senior Advocate for the SLP. The drafting and certification work resumed immediately upon the applicant's clearance to travel on 1 March 2026; the SLP was finalised and filed on 19 March 2026 — within the shortest practicable window post-recovery.",
+            "impugned_order_date": "2026-01-12"
+          },
+          "must_pass_rules": []
+        }
+      ]
+    },
+    "exemption_application": {
+      "scenarios": [
+        {
+          "key": "exemption-from-certified-copy-slp",
+          "facts": {
+            "applicant_name": "Vrindavan Logistics Pvt. Ltd.",
+            "respondent_name": "Commissioner of GST, Central Excise, Mumbai South",
+            "main_filing_reference": "SLP (Civil) filed alongside, challenging the order dated 22 February 2026 of the Bombay High Court in WP No. 8472 of 2025.",
+            "exemption_kind": "certified_copy",
+            "grounds": "The Bombay High Court Registry has not issued the certified copy of the impugned order despite the applicant's certified-copy application dated 24 February 2026 and the registry receipt dated 24 February 2026 (annexed). The applicant is filing the SLP within the limitation period using the official downloaded copy from the High Court website. A certified copy will be filed within fourteen days of receipt from the Registry.",
+            "undertaking_offered": "The applicant undertakes to file the certified copy of the impugned order within fourteen days of its receipt from the Bombay High Court Registry, failing which the present application may be dismissed."
+          },
+          "must_pass_rules": []
+        }
+      ]
+    },
+    "synopsis_list_of_dates": {
+      "scenarios": [
+        {
+          "key": "slp-civil-synopsis-tax-reassessment",
+          "facts": {
+            "case_title": "Sunrise Pharmaceuticals Ltd. v. Commissioner of Income Tax, Mumbai-1",
+            "petitioner_name": "Sunrise Pharmaceuticals Ltd.",
+            "respondent_name": "Commissioner of Income Tax, Mumbai-1",
+            "questions_of_law": [
+              "Whether a reassessment notice under Section 147 of the Income Tax Act, 1961 issued beyond the three-year limit under Section 149(1)(a) can be sustained in the absence of a finding that the escaped income exceeds INR 50 lakh as required by Section 149(1)(b).",
+              "Whether the High Court was correct in declining to interfere with the demand notice when the underlying reassessment order is itself under challenge on limitation grounds."
+            ],
+            "case_summary": "The petitioner is a listed pharmaceutical company. For Assessment Year 2018-19 the original assessment was completed on 28 December 2020 under Section 143(3). On 30 March 2025 the Revenue issued a reassessment notice under Section 148 alleging escapement of income. The reassessment order followed on 28 February 2026 raising a demand of INR 47.82 crores. The petitioner challenged the reassessment before the Bombay High Court on limitation and jurisdictional grounds. The High Court dismissed the writ petition on 22 February 2026, leading to the present SLP.",
+            "chronology": [
+              "2020-12-28: Original assessment for AY 2018-19 completed under Section 143(3).",
+              "2025-03-30: Reassessment notice issued under Section 148 for AY 2018-19.",
+              "2025-04-25: Petitioner's reply to the reassessment notice filed.",
+              "2026-02-28: Reassessment order under Section 147 raising demand of INR 47.82 crores.",
+              "2026-03-05: Demand notice under Section 156 served on the petitioner.",
+              "2026-03-08: Writ petition WP No. 8472 of 2025 filed before the Bombay High Court.",
+              "2026-02-22: Bombay High Court order dismissing the writ petition (impugned).",
+              "2026-04-14: Present SLP filed before this Hon'ble Court."
+            ]
+          },
+          "must_pass_rules": []
+        }
+      ]
+    },
+    "filing_index_checklist": {
+      "scenarios": [
+        {
+          "key": "slp-filing-index-supreme-court",
+          "facts": {
+            "case_title": "Sunrise Pharmaceuticals Ltd. v. Commissioner of Income Tax, Mumbai-1",
+            "court_name": "Supreme Court of India",
+            "filing_kind": "SLP (Civil)",
+            "documents_to_index": [
+              "Cover page and memo of parties",
+              "Synopsis and list of dates",
+              "Special Leave Petition under Article 136",
+              "Annexure P-1: Bombay High Court order dated 22 February 2026 (impugned)",
+              "Annexure P-2: Reassessment notice dated 30 March 2025",
+              "Annexure P-3: Reassessment order dated 28 February 2026",
+              "Annexure P-4: Demand notice dated 5 March 2026 under Section 156",
+              "Annexure P-5: Petitioner's reply dated 25 April 2025 to reassessment notice",
+              "Application for stay of demand (interim relief)",
+              "Application for exemption from filing certified copy",
+              "Application for condonation of delay (if any)",
+              "Vakalatnama of counsel",
+              "Court-fee receipt",
+              "Affidavit verifying contents"
+            ],
+            "total_pages_estimate": 245
+          },
+          "must_pass_rules": []
+        }
+      ]
     }
   }
 }

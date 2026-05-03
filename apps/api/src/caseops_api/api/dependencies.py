@@ -159,6 +159,14 @@ CAPABILITY_ROLES: dict[str, frozenset[MembershipRole]] = {
     "recommendations:generate": frozenset({_OWNER, _ADMIN, _PARTNER, _MEMBER}),
     "recommendations:decide": _STAFF,
     "ai:generate": frozenset({_OWNER, _ADMIN, _PARTNER, _MEMBER, _PARALEGAL}),
+    # MOD-LSE Round-2 P2 #7 (2026-05-03) — dedicated capabilities for the
+    # litigation strategy planner. Keep them additive: the recommendations
+    # gates above still cover the four classical kinds; the two below
+    # gate strategy generation + approval specifically. Roles match the
+    # existing recommendations:* pattern (generate is fee-earner, approve
+    # is staff) so the role-graph stays coherent.
+    "strategy:generate": frozenset({_OWNER, _ADMIN, _PARTNER, _MEMBER}),
+    "strategy:approve": _STAFF,
     # --- authority corpus + tenant overlay --- viewer can read-search only
     "authorities:search": _ALL_AUTHENTICATED,
     "authorities:ingest": _STAFF,

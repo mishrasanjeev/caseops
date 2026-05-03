@@ -3,27 +3,40 @@
 Admin can hide drafting templates per tenant via PATCH
 /api/admin/tenant-ai-policy. The /api/drafting/templates endpoint
 filters its response on the disabled list.
+
+Counts here are derived from ``DraftTemplateType`` rather than
+hard-coded so the assertions track the registry. Hard-coding the
+count is what broke this file when the 11 SC/escalation templates
+expanded the registry from 20 -> 31 (PR #7, 2026-05-03).
 """
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from caseops_api.schemas.drafting_templates import DraftTemplateType
 from tests.test_auth_company import auth_headers, bootstrap_company
 
+# Total templates registered in DraftTemplateType. The drafting
+# endpoint surfaces every active template, so this is the expected
+# default count for a tenant with an empty ``disabled_template_types``
+# list. Computed once at import so a registry change is a single-
+# point update for every test in this file.
+_TOTAL_TEMPLATES = len(DraftTemplateType)
 
-def test_default_policy_lists_all_20_templates(client: TestClient) -> None:
+
+def test_default_policy_lists_every_template(client: TestClient) -> None:
     token = str(bootstrap_company(client)["access_token"])
     resp = client.get("/api/drafting/templates", headers=auth_headers(token))
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert len(body["templates"]) == 20
+    assert len(body["templates"]) == _TOTAL_TEMPLATES
 
 
 def test_admin_can_disable_a_template_and_it_drops_from_the_list(
     client: TestClient,
 ) -> None:
     """PATCH the policy with disabled_template_types=['vakalatnama'].
-    The /api/drafting/templates response should drop from 20 → 19,
+    The /api/drafting/templates response should drop by exactly one,
     with vakalatnama specifically absent."""
     token = str(bootstrap_company(client)["access_token"])
 
@@ -40,7 +53,7 @@ def test_admin_can_disable_a_template_and_it_drops_from_the_list(
     assert resp.status_code == 200
     types = {t["template_type"] for t in resp.json()["templates"]}
     assert "vakalatnama" not in types
-    assert len(types) == 19
+    assert len(types) == _TOTAL_TEMPLATES - 1
 
 
 def test_disabled_template_types_validates_against_canonical_set(
@@ -75,14 +88,14 @@ def test_disabling_then_re_enabling_template_round_trips(
     """Empty list re-enables all templates."""
     token = str(bootstrap_company(client)["access_token"])
 
-    # Disable.
+    # Disable two templates.
     client.patch(
         "/api/admin/tenant-ai-policy",
         headers=auth_headers(token),
         json={"disabled_template_types": ["bail", "anticipatory_bail"]},
     )
     resp1 = client.get("/api/drafting/templates", headers=auth_headers(token))
-    assert len(resp1.json()["templates"]) == 18
+    assert len(resp1.json()["templates"]) == _TOTAL_TEMPLATES - 2
 
     # Re-enable.
     client.patch(
@@ -91,7 +104,7 @@ def test_disabling_then_re_enabling_template_round_trips(
         json={"disabled_template_types": []},
     )
     resp2 = client.get("/api/drafting/templates", headers=auth_headers(token))
-    assert len(resp2.json()["templates"]) == 20
+    assert len(resp2.json()["templates"]) == _TOTAL_TEMPLATES
 
 
 def test_predictive_flag_unaffected_by_disabled_templates_patch(
@@ -162,5 +175,5 @@ def test_tenant_isolation_disabled_template_types(client: TestClient) -> None:
     b_types = {t["template_type"] for t in b_resp.json()["templates"]}
     assert "bail" not in a_types and "writ_petition" not in a_types
     assert "bail" in b_types and "writ_petition" in b_types
-    assert len(a_types) == 18
-    assert len(b_types) == 20
+    assert len(a_types) == _TOTAL_TEMPLATES - 2
+    assert len(b_types) == _TOTAL_TEMPLATES

@@ -2547,6 +2547,16 @@ class Recommendation(Base):
     retrieved_authorities_json: Mapped[str] = mapped_column(
         Text, nullable=False, default="[]"
     )
+    # MOD-LSE-1 (2026-05-03) — litigation strategy payload. Populated
+    # only for rows where ``type='litigation_strategy'``; null on every
+    # other recommendation row. Holds the JSON-serialised
+    # ``LitigationStrategyPayload`` (forum sequence, recommended
+    # drafts, limitation flags, etc.). The Pydantic schema on the
+    # strategy service validates the shape on read/write — the column
+    # itself is opaque JSON to the database.
+    strategy_payload_json: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
