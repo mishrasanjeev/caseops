@@ -122,7 +122,16 @@ def _extract_scanned_pdf_text(path: Path) -> str:
 
     result = ocr_pdf(path)
     if result is None:
-        raise RuntimeError("OCR is not configured for scanned PDF extraction.")
+        # ocr_pdf returns None when no native OCR backend (rapidocr,
+        # paddle, ...) is loadable. Keep OCR usable in slim container
+        # builds that ship without OCR extras by falling back to the
+        # legacy direct-tesseract path. Honors CASEOPS_OCR_MAX_PAGES /
+        # CASEOPS_OCR_RENDER_DPI so the resource caps from the upload-
+        # hardening pass still apply on the fallback.
+        text = _extract_scanned_pdf_text_via_tesseract(path)
+        if not text.strip():
+            raise RuntimeError("OCR is not configured for scanned PDF extraction.")
+        return text
     if not result.text.strip():
         scope = (
             f"{result.pages_processed}/{result.pages_total} pages"
@@ -132,6 +141,52 @@ def _extract_scanned_pdf_text(path: Path) -> str:
         suffix = " (truncated by configured OCR page cap)" if result.truncated else ""
         raise RuntimeError(f"OCR returned no accepted text after {scope}{suffix}.")
     return result.text
+
+
+def _extract_scanned_pdf_text_via_tesseract(path: Path) -> str:
+    """Last-resort tesseract fallback when ocr_pdf returns None.
+
+    Returns "" if tesseract is unavailable or no page yields text; the
+    caller treats empty as ``OCR is not configured``.
+    """
+    command = _resolve_tesseract_command()
+    if not command:
+        return ""
+
+    import tempfile
+
+    try:
+        import pypdfium2 as pdfium  # type: ignore[import-not-found]
+    except ImportError:
+        return ""
+
+    settings = get_settings()
+    scale = settings.ocr_render_dpi / 72
+    document = pdfium.PdfDocument(str(path))
+    page_texts: list[str] = []
+    try:
+        for page_index in range(min(len(document), settings.ocr_max_pages)):
+            page = document.get_page(page_index)
+            temp_path: Path | None = None
+            try:
+                bitmap = page.render(scale=scale)
+                image = bitmap.to_pil()
+                try:
+                    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as temp_file:
+                        temp_path = Path(temp_file.name)
+                    image.save(temp_path, format="PNG")
+                    text = _normalize_whitespace(_run_tesseract(command, temp_path))
+                finally:
+                    image.close()
+                    if temp_path is not None:
+                        temp_path.unlink(missing_ok=True)
+                if text:
+                    page_texts.append(text)
+            finally:
+                page.close()
+    finally:
+        document.close()
+    return "\n\n".join(page_texts)
 
 
 def _chunk_text(
