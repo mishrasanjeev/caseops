@@ -505,6 +505,19 @@ class OpenAIProvider:
         "o3",
     )
 
+    # Reasoning-class OpenAI models bill hidden reasoning tokens against
+    # ``max_completion_tokens``. Even with ``reasoning_effort=low`` the
+    # legal-strategy prompts emit ~2-4K reasoning tokens before any visible
+    # content. If the operator-configured ``max_tokens`` is below this
+    # floor, the model burns the whole budget on reasoning and returns an
+    # EMPTY content string with status=ok — the parser then raises
+    # LLMResponseFormatError on raw=''. PR #7 / 2026-05-03 prod incident:
+    # default 4096 was too low for the strategy planner; bumped to 16384
+    # via env override. Codify the floor so a future cutover to a reasoning
+    # model on ANY purpose can't repro this trap.
+    _REASONING_PREFIXES: tuple[str, ...] = ("gpt-5", "o1", "o3")
+    _REASONING_MIN_COMPLETION_TOKENS: int = 8192
+
     def __init__(
         self,
         *,
@@ -532,6 +545,31 @@ class OpenAIProvider:
         name = (self.model or "").lower()
         return any(name.startswith(p) for p in self._NO_TEMPERATURE_PREFIXES)
 
+    def _is_reasoning_model(self) -> bool:
+        name = (self.model or "").lower()
+        return any(name.startswith(p) for p in self._REASONING_PREFIXES)
+
+    def _effective_max_completion_tokens(self, requested: int) -> int:
+        """Floor for reasoning-class models. See ``_REASONING_MIN_COMPLETION_TOKENS``
+        for the rationale (PR #7 / 2026-05-03 prod incident)."""
+        if (
+            self._is_reasoning_model()
+            and requested < self._REASONING_MIN_COMPLETION_TOKENS
+        ):
+            logger.warning(
+                "openai: bumping max_completion_tokens %d -> %d for reasoning "
+                "model %s; the requested cap would have starved visible content "
+                "after reasoning_effort tokens. Set "
+                "CASEOPS_LLM_MAX_OUTPUT_TOKENS_<PURPOSE> >= %d in your env to "
+                "silence this warning.",
+                requested,
+                self._REASONING_MIN_COMPLETION_TOKENS,
+                self.model,
+                self._REASONING_MIN_COMPLETION_TOKENS,
+            )
+            return self._REASONING_MIN_COMPLETION_TOKENS
+        return requested
+
     def generate(
         self,
         messages: list[LLMMessage],
@@ -545,7 +583,7 @@ class OpenAIProvider:
         kwargs: dict[str, Any] = {
             "model": self.model,
             "messages": oai_messages,
-            "max_completion_tokens": max_tokens,
+            "max_completion_tokens": self._effective_max_completion_tokens(max_tokens),
         }
         if not self._model_rejects_temperature():
             kwargs["temperature"] = temperature

@@ -771,10 +771,66 @@ def _build_recommended_drafts(
     matter: Matter,
     template_slugs: list[str],
 ) -> list[RecommendedDraft]:
+    """Build the recommended-drafts panel for the persisted strategy.
+
+    Round-5 follow-up #2 (2026-05-03 prod incident on PR #7): the
+    panel was empty for sparse-retrieval matters because the LLM
+    emitted no ``expected_filings`` (or only registry-unknown slugs).
+    The deterministic ``template_recommender`` matrix already encodes
+    a sensible default pack per (forum_level, practice_area) — fall
+    back to it when the LLM-derived slug list is empty so the
+    Strategy tab always offers at least the universal accompaniments
+    (vakalatnama / affidavit / SC pack at SC stage). The fallback path
+    is logged so operations can correlate with thin-retrieval matters.
+    """
     schemas = {s.template_type: s for s in list_template_schemas()}
     forum = (matter.forum_level or "").strip().lower()
+    practice_area = getattr(matter, "practice_area", None)
+
+    # Dedupe input slugs while preserving order.
+    seen: set[str] = set()
+    ordered_slugs: list[str] = []
+    for slug in template_slugs:
+        if slug not in seen:
+            ordered_slugs.append(slug)
+            seen.add(slug)
+
+    # If the LLM gave us nothing, OR every slug is unknown to the
+    # registry, fall back to the deterministic recommender matrix.
+    known_count = sum(1 for s in ordered_slugs if s in schemas)
+    if known_count == 0:
+        try:
+            fallback = recommend_templates(
+                forum_level=matter.forum_level or "",
+                practice_area=practice_area,
+            )
+        except Exception:
+            logger.exception(
+                "litigation_strategy: template_recommender fallback "
+                "failed for matter %s; recommended_drafts will be empty",
+                getattr(matter, "id", "?"),
+            )
+            fallback = []
+        for tr in fallback:
+            slug = (
+                tr.template_type.value
+                if hasattr(tr.template_type, "value")
+                else str(tr.template_type)
+            )
+            if slug not in seen:
+                ordered_slugs.append(slug)
+                seen.add(slug)
+        if ordered_slugs:
+            logger.info(
+                "litigation_strategy: LLM emitted no recognised template "
+                "slugs for matter %s — using template_recommender fallback "
+                "(%d slugs)",
+                getattr(matter, "id", "?"),
+                len(ordered_slugs),
+            )
+
     drafts: list[RecommendedDraft] = []
-    for slug in template_slugs[:12]:  # bound the panel
+    for slug in ordered_slugs[:12]:  # bound the panel
         schema = schemas.get(slug)
         if schema is None:
             continue  # silently drop slugs the registry doesn't know

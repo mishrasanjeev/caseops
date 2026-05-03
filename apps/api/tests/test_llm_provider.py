@@ -178,3 +178,128 @@ def test_build_provider_rejects_unknown_name(
     get_settings.cache_clear()
     with pytest.raises(LLMProviderError):
         build_provider()
+
+
+# ---------------------------------------------------------------
+# OpenAI reasoning-model max_completion_tokens floor.
+#
+# Regression for the 2026-05-03 prod incident: gpt-5-mini bills
+# hidden reasoning tokens against ``max_completion_tokens``. With
+# the operator-configured cap of 4096, a 4200-token strategy prompt
+# exhausted the budget on reasoning and returned status=ok with an
+# empty content string. The OpenAIProvider now floors the cap at
+# ``_REASONING_MIN_COMPLETION_TOKENS`` for any model whose name
+# starts with the reasoning-class prefixes (gpt-5*, o1*, o3*).
+# ---------------------------------------------------------------
+
+
+def _install_fake_openai(monkeypatch: pytest.MonkeyPatch, captured: dict) -> None:
+    """Install a fake ``openai`` module so OpenAIProvider can be
+    constructed without the real SDK / a live API key. The fake
+    captures the kwargs passed to ``chat.completions.create`` so the
+    test can assert what landed on the wire."""
+
+    class _FakeCompletions:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            class _Choice:
+                class message:
+                    content = '{"ok": true}'
+            class _Resp:
+                choices = [_Choice()]
+                usage = type("U", (), {"prompt_tokens": 1, "completion_tokens": 1})()
+            return _Resp()
+
+    class _FakeChat:
+        completions = _FakeCompletions()
+
+    class _FakeClient:
+        def __init__(self, *_a, **_kw):
+            self.chat = _FakeChat()
+
+    fake_module = type(
+        "FakeOpenAIModule",
+        (),
+        {"OpenAI": _FakeClient},
+    )
+    import sys as _sys
+    monkeypatch.setitem(_sys.modules, "openai", fake_module)
+
+
+def test_openai_provider_floors_reasoning_model_max_completion_tokens(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """gpt-5-mini + max_tokens=2048 -> wire request must carry the
+    8192 floor, not the requested 2048. Catches regressions where a
+    future cutover to a reasoning model re-triggers the empty-content
+    trap (PR #7 / 2026-05-03)."""
+    from caseops_api.services.llm import OpenAIProvider
+
+    captured: dict = {}
+    _install_fake_openai(monkeypatch, captured)
+
+    provider = OpenAIProvider(model="gpt-5-mini", api_key="k")
+    provider.generate(
+        [LLMMessage(role="user", content="x")],
+        max_tokens=2048,
+    )
+    assert captured.get("max_completion_tokens") == 8192, (
+        f"reasoning model floor should bump max_completion_tokens to 8192; "
+        f"got {captured.get('max_completion_tokens')}"
+    )
+
+
+def test_openai_provider_passes_through_max_tokens_for_non_reasoning_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Non-reasoning models (e.g. gpt-4*) must pass max_tokens through
+    unchanged — only gpt-5*/o1*/o3* get the floor."""
+    from caseops_api.services.llm import OpenAIProvider
+
+    captured: dict = {}
+    _install_fake_openai(monkeypatch, captured)
+
+    provider = OpenAIProvider(model="gpt-4o-mini", api_key="k")
+    provider.generate(
+        [LLMMessage(role="user", content="x")],
+        max_tokens=2048,
+    )
+    assert captured.get("max_completion_tokens") == 2048, (
+        "non-reasoning model must pass max_tokens through unchanged"
+    )
+
+
+def test_openai_provider_does_not_lower_when_above_reasoning_floor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When the operator already configures a >=8192 cap, the floor
+    is a no-op — the configured value passes through."""
+    from caseops_api.services.llm import OpenAIProvider
+
+    captured: dict = {}
+    _install_fake_openai(monkeypatch, captured)
+
+    provider = OpenAIProvider(model="gpt-5-mini", api_key="k")
+    provider.generate(
+        [LLMMessage(role="user", content="x")],
+        max_tokens=16384,
+    )
+    assert captured.get("max_completion_tokens") == 16384
+
+
+def test_openai_provider_floor_applies_to_o3_models(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The floor must cover every reasoning-class prefix (gpt-5*, o1*,
+    o3*). o3-mini is the canonical "small reasoning" SKU."""
+    from caseops_api.services.llm import OpenAIProvider
+
+    captured: dict = {}
+    _install_fake_openai(monkeypatch, captured)
+
+    provider = OpenAIProvider(model="o3-mini", api_key="k")
+    provider.generate(
+        [LLMMessage(role="user", content="x")],
+        max_tokens=1024,
+    )
+    assert captured.get("max_completion_tokens") == 8192

@@ -2480,3 +2480,124 @@ def test_strategy_refuses_when_all_forum_steps_dropped(
         f"R5 #1: ledger row must use the dedicated status_label "
         f"'rejected_no_verified_forum_steps'; got {run.status!r}."
     )
+
+
+# ---------------------------------------------------------------
+# Round-5 follow-up #2 (2026-05-03): recommended_drafts fallback.
+# When the LLM emits no known template slugs in
+# ``forum_sequence[*].expected_filings``, the recommended_drafts
+# panel was previously empty. The deterministic
+# ``template_recommender`` matrix encodes per-forum sensible
+# defaults; the strategy service now uses it as a fallback so the
+# Strategy tab always offers at least the universal accompaniments.
+# ---------------------------------------------------------------
+
+
+def test_recommended_drafts_fallback_when_llm_emits_no_slugs(
+    client: TestClient, monkeypatch,
+) -> None:
+    """LLM emits a forum step with no ``expected_filings``. The
+    persisted ``recommended_drafts`` must NOT be empty — the
+    template_recommender matrix supplies sensible defaults for the
+    matter's forum_level."""
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    citation = _seed_relevant_authority()
+    payload = _valid_strategy_payload(citation)
+    # Strip every step's expected_filings to simulate an LLM that
+    # forgot to populate them. Keep citations intact so the steps
+    # still survive R4 #1 filtering.
+    for step in payload["forum_sequence"]:
+        step["expected_filings"] = []
+
+    class _NoSlugs:
+        name = "mock"
+        model = "mock-no-slugs"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            return LLMCompletion(
+                text=json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=10,
+                completion_tokens=20,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _NoSlugs(),
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.litigation_strategy.build_provider",
+        lambda *a, **kw: _NoSlugs(),
+    )
+
+    token, _, matter_id = _setup_matter(client, forum_level="high_court")
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "litigation_strategy"},
+    )
+    assert response.status_code == 200, response.text
+    drafts = response.json()["strategy_payload"]["recommended_drafts"]
+    assert len(drafts) > 0, (
+        "follow-up #2: when the LLM emits no expected_filings, "
+        "recommended_drafts must be populated from the template_recommender "
+        "fallback so the Strategy tab still offers at least the universal "
+        "accompaniments (vakalatnama / affidavit)."
+    )
+    # Every draft must be a real registered template.
+    for d in drafts:
+        assert d["template_type"]
+        assert d["display_name"]
+
+
+def test_recommended_drafts_keeps_llm_slugs_when_emitted(
+    client: TestClient, monkeypatch,
+) -> None:
+    """Symmetry check: when the LLM DOES emit valid slugs, those
+    slugs land in recommended_drafts (the fallback only fires when
+    the LLM-derived slug set yields zero registry-known templates)."""
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    citation = _seed_relevant_authority()
+    payload = _valid_strategy_payload(citation)
+    # The valid_strategy_payload already has expected_filings on
+    # forum_sequence[0]: ["quashing_petition", "vakalatnama", "affidavit"].
+
+    class _WithSlugs:
+        name = "mock"
+        model = "mock-with-slugs"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            return LLMCompletion(
+                text=json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=10,
+                completion_tokens=20,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _WithSlugs(),
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.litigation_strategy.build_provider",
+        lambda *a, **kw: _WithSlugs(),
+    )
+
+    token, _, matter_id = _setup_matter(client, forum_level="high_court")
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "litigation_strategy"},
+    )
+    assert response.status_code == 200, response.text
+    drafts = response.json()["strategy_payload"]["recommended_drafts"]
+    slugs = [d["template_type"] for d in drafts]
+    # LLM-emitted slugs land in the panel.
+    assert "quashing_petition" in slugs
+    assert "vakalatnama" in slugs
