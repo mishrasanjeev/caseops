@@ -207,12 +207,41 @@ Cross-cutting tests asserted in Phase A files (test cases above).
   `matter_strategy_drafts` tables. Reuses Recommendation per PRD §16.
 - No automated court filing, paid database integrations, or
   cross-tenant analytics (PRD §4.2 out-of-scope).
-- No `strategy:read` / `strategy:generate` / `strategy:approve`
+- ~~No `strategy:read` / `strategy:generate` / `strategy:approve`
   capability split — reuses `recommendations:generate` /
-  `recommendations:decide`. Tracked as a known limitation in the PR
-  body so the user can decide whether to upgrade later.
+  `recommendations:decide`.~~ Resolved in Round-2 P2 #7:
+  `strategy:generate` + `strategy:approve` are now distinct
+  capabilities, additive on top of `recommendations:*`. See
+  `STRATEGY_PLANNER_PROGRESS.md` Round-2 fixes section.
 - No PDF/DOCX export of the strategy itself in this PR (PRD §18 Q5
   remains open). The existing draft-export path covers each draft
   generated from the strategy.
 - No automatic task creation on approval (PRD §18 Q6 remains open).
 - No deploy. No merge.
+
+## Round-2 fixes — citation-verification scope (P1 #4)
+
+The first cut verified citations only on `recommended_route` +
+`alternative_routes`. Round-2 extends the verifier to `forum_sequence`,
+`limitation_flags`, `risks`, and `next_best_actions`.
+
+Approach picked (per the brief): **mark items as `unverified=True`
+rather than drop them.** Failed items keep their narrative content so
+the partner-reviewer can still see what to vet, but the
+`supporting_citations` list is stripped to canonical verified entries
+only and `unverified` flips to `True`. The frontend renders an amber
+"Unverified" badge.
+
+Convention by item kind:
+- `forum_sequence` + `limitation_flags`: legal claims by definition.
+  Default `unverified=True` unless at least one citation survives.
+- `risks` + `next_best_actions`: factual when the LLM emits no
+  citation (`unverified=False`); legal claim flagged
+  `unverified=True` only when the LLM tried to ground a claim and
+  every citation failed verification.
+
+The `_StrategyOption` shape on `recommended_route` /
+`alternative_routes` keeps its existing semantics — the citation list
+gets stripped in place but the narrative is preserved. The new P1 #1
+gate adds the per-route refusal: a primary with zero verified
+citations is rejected before the payload is built.
