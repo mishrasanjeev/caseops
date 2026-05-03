@@ -795,18 +795,29 @@ def _build_recommended_drafts(
             ordered_slugs.append(slug)
             seen.add(slug)
 
-    # If the LLM gave us nothing, OR every slug is unknown to the
-    # registry, fall back to the deterministic recommender matrix.
-    # Bug from the first cut of this fix (caught in PR #8 review,
-    # 2026-05-03): we previously APPENDED fallback slugs after the
-    # unknown LLM slugs and only sliced [:12] at render time. With
-    # 12+ unknown LLM slugs, the fallback never made the slice and the
-    # panel stayed empty. Fix: when ``known_count == 0`` we REPLACE
-    # ``ordered_slugs`` with the fallback set entirely. The unknown
-    # LLM slugs are dead weight (they fail the ``schemas.get(slug)``
-    # check at render time anyway), so dropping them costs nothing.
-    known_count = sum(1 for s in ordered_slugs if s in schemas)
-    if known_count == 0:
+    # Filter to slugs the registry recognises BEFORE slicing the
+    # render list. Two prior bugs were caught in PR #8 review:
+    #
+    #   (1) 2026-05-03 first cut: fallback slugs were APPENDED after
+    #   the unknown LLM slugs, and ``ordered_slugs[:12]`` then sliced
+    #   the unknowns first, dropping the fallback. Fixed by replacing
+    #   on the all-unknown path.
+    #
+    #   (2) 2026-05-03 second review: the all-unknown gate
+    #   (``known_count == 0``) didn't catch the MIXED case — 16 fake
+    #   slugs followed by ``vakalatnama`` (one known) gave
+    #   ``known_count == 1`` so the fallback didn't fire, and the
+    #   ``[:12]`` slice still consumed the first 12 unknowns and left
+    #   the panel empty.
+    #
+    # Final shape: filter ``ordered_slugs`` down to known templates
+    # FIRST, then either fall back when the filtered list is empty
+    # or slice it to the panel cap. The unknown LLM slugs are dead
+    # weight in every case (they would have failed ``schemas.get``
+    # at render time), so dropping them up front is correct AND
+    # makes the [:12] slice meaningful.
+    known_slugs = [s for s in ordered_slugs if s in schemas]
+    if not known_slugs:
         try:
             fallback = recommend_templates(
                 forum_level=matter.forum_level or "",
@@ -819,32 +830,28 @@ def _build_recommended_drafts(
                 getattr(matter, "id", "?"),
             )
             fallback = []
-        # Replace, not append. The unknown LLM slugs are discarded.
-        ordered_slugs = []
-        seen = set()
+        fallback_seen: set[str] = set()
         for tr in fallback:
             slug = (
                 tr.template_type.value
                 if hasattr(tr.template_type, "value")
                 else str(tr.template_type)
             )
-            if slug not in seen:
-                ordered_slugs.append(slug)
-                seen.add(slug)
-        if ordered_slugs:
+            if slug not in fallback_seen and slug in schemas:
+                known_slugs.append(slug)
+                fallback_seen.add(slug)
+        if known_slugs:
             logger.info(
                 "litigation_strategy: LLM emitted no recognised template "
                 "slugs for matter %s — using template_recommender fallback "
                 "(%d slugs)",
                 getattr(matter, "id", "?"),
-                len(ordered_slugs),
+                len(known_slugs),
             )
 
     drafts: list[RecommendedDraft] = []
-    for slug in ordered_slugs[:12]:  # bound the panel
-        schema = schemas.get(slug)
-        if schema is None:
-            continue  # silently drop slugs the registry doesn't know
+    for slug in known_slugs[:12]:  # bound the panel
+        schema = schemas[slug]  # already validated above; can't miss
         available, reason = _is_template_available(slug, forum)
         drafts.append(
             RecommendedDraft(

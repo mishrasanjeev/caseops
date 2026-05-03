@@ -2667,3 +2667,76 @@ def test_recommended_drafts_fallback_replaces_when_llm_emits_only_unknown_slugs(
     slugs_in_panel = {d["template_type"] for d in drafts}
     for fake in fake_slugs:
         assert fake not in slugs_in_panel
+
+
+def test_recommended_drafts_filters_unknowns_before_slicing_in_mixed_case(
+    client: TestClient, monkeypatch,
+) -> None:
+    """Bug caught in PR #8 second review (2026-05-03): the previous
+    fix only fired the fallback when ``known_count == 0``. In the
+    MIXED case — 16 unknown LLM slugs followed by 1 known slug
+    (e.g. ``vakalatnama``) — the gate read ``known_count == 1`` so
+    no fallback fired, and the ``[:12]`` slice consumed the first 12
+    unknowns. The known slug was beyond the slice horizon and the
+    panel still came up empty.
+
+    Final fix: filter ``ordered_slugs`` to registry-known slugs
+    BEFORE slicing. The known ``vakalatnama`` must surface even if
+    it sits at index 16 in the LLM output."""
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    citation = _seed_relevant_authority()
+    payload = _valid_strategy_payload(citation)
+    # Build the worst case: 16 fake slugs first, then one known
+    # ``vakalatnama`` deep in the list. Pre-filter must surface
+    # vakalatnama in the panel.
+    fake_slugs = [f"fictitious_template_{i}" for i in range(16)]
+    payload["forum_sequence"][0]["expected_filings"] = fake_slugs[:8]
+    payload["forum_sequence"][1]["expected_filings"] = [
+        *fake_slugs[8:],
+        "vakalatnama",
+    ]
+
+    class _MixedSlugs:
+        name = "mock"
+        model = "mock-mixed"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            return LLMCompletion(
+                text=json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=10,
+                completion_tokens=20,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _MixedSlugs(),
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.litigation_strategy.build_provider",
+        lambda *a, **kw: _MixedSlugs(),
+    )
+
+    token, _, matter_id = _setup_matter(client, forum_level="high_court")
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "litigation_strategy"},
+    )
+    assert response.status_code == 200, response.text
+    drafts = response.json()["strategy_payload"]["recommended_drafts"]
+    slugs_in_panel = [d["template_type"] for d in drafts]
+    # vakalatnama (the lone known slug, at LLM-output index 16) must
+    # surface in the panel — pre-filter rescues it from the [:12]
+    # slice that would otherwise consume only the unknown spam.
+    assert "vakalatnama" in slugs_in_panel, (
+        "PR #8 review bug: a registry-known slug at LLM-output index 16 "
+        "must surface in recommended_drafts. The fix must filter unknown "
+        "slugs BEFORE the [:12] slice, not after."
+    )
+    # No fictitious slug must appear.
+    for fake in fake_slugs:
+        assert fake not in slugs_in_panel

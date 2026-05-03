@@ -39,28 +39,34 @@ Bail application under BNSS s.483)` got HTTP 200 strategy with
 `forum_sequence` populated but `recommended_drafts: []`. UX consequence:
 Strategy tab renders without any "Generate draft" buttons.
 
-**Possible causes (need investigation):**
+**Original suspected causes** (kept for archival; the actual root
+cause turned out to be #2 below — `_extract_template_slugs` returning
+empty / all-unknown):
 
-1. The citation verifier is dropping every recommended-draft entry the
+1. The citation verifier dropping every recommended-draft entry the
    LLM emits because none of them tie to a verified authority in the
-   retrieval window (the matter has limited Layer-2 metadata until the
-   corpus backfill catches up).
-2. The template-recommender's matrix isn't returning anything for
+   retrieval window.
+2. The template-recommender's matrix not surfacing anything for
    single-step HC-bail matters.
-3. The strategy service post-filter (Round-3 / Round-4 fixes) is
-   correctly dropping uncited drafts but the result is unhelpful UX —
-   the tab should at least say "no grounded drafts available; pick a
-   template manually" rather than render an empty list.
+3. The strategy service post-filter dropping uncited drafts.
 
-**Diagnostics to run:**
+**Original diagnostics planned** (not run — the code-side fix
+landed first, retiring the need to investigate prod state):
 
-- `model_runs` row for the prod call showing the raw LLM
-  `recommended_drafts` array before the post-filter.
-- `template_recommender.recommend(matter)` output for this matter.
-- Frontend rendering: confirm the empty-drafts state has a clear copy,
-  not just an empty list.
+- `model_runs` row for the raw LLM `recommended_drafts` array.
+- `template_recommender.recommend(matter)` output.
+- Frontend empty-drafts copy.
 
-**Resolution:** PR #8 wires `recommend_templates(forum_level, practice_area)` as a fallback in `_build_recommended_drafts`. When zero LLM-derived slugs match the registry, the fallback REPLACES the LLM's slug list (a bug in the first cut where the fallback was *appended* and could be discarded by the `[:12]` slice — caught in PR #8 review and fixed in the same PR). The fallback path emits a `logger.info` so ops can correlate. Regression tests cover the empty-LLM-emission case AND the all-unknown-slugs case.
+**Resolution (PR #8):** `_build_recommended_drafts` now filters
+LLM-derived slugs to registry-known templates BEFORE the `[:12]` panel
+slice; when zero are known it falls back to
+`recommend_templates(forum_level, practice_area)`. Three review
+iterations on this single function (initial fix → append-vs-replace
+bug → mixed-case slice bug) are all locked down by regression tests:
+`test_recommended_drafts_fallback_when_llm_emits_no_slugs`,
+`test_recommended_drafts_keeps_llm_slugs_when_emitted`,
+`test_recommended_drafts_fallback_replaces_when_llm_emits_only_unknown_slugs`,
+`test_recommended_drafts_filters_unknowns_before_slicing_in_mixed_case`.
 
 ---
 
@@ -78,13 +84,16 @@ and raises `LLMResponseFormatError`.
 `CASEOPS_LLM_MAX_OUTPUT_TOKENS_RECOMMENDATIONS=16384` on revision
 `caseops-api-00119-4t6`. Strategy generation succeeds at 16K.
 
-**Proper fix (separate PR):** in `apps/api/src/caseops_api/services/llm.py`
-the OpenAI provider should split the reasoning budget from the visible-
+**Longer-term ideal fix (not adopted; the floor below is the accepted close):**
+the OpenAI provider could split the reasoning budget from the visible-
 content budget — pass `max_completion_tokens` AND `reasoning.effort`
 (or `reasoning.max_tokens` once the SDK exposes it) so the visible
-content isn't starved when reasoning expands.
+content isn't starved when reasoning expands. This wasn't pursued
+because the SDK doesn't yet expose a clean reasoning-budget knob and
+the 8192-floor approach already prevents the trap with much less
+code-surface risk.
 
-**Resolution:** PR #8 adds `_REASONING_PREFIXES` (`gpt-5`, `o1`, `o3`) and `_REASONING_MIN_COMPLETION_TOKENS=8192` to `OpenAIProvider`, plus an `_effective_max_completion_tokens(requested)` helper that floors the cap and emits a `logger.warning` when the operator's setting is below the floor. Operator can still set max_tokens above the floor; the floor only catches under-configured caps so a future cutover of any new purpose to a reasoning model can't re-trigger the empty-content trap. Regression tests cover gpt-5-mini / gpt-4o-mini pass-through / no-lower-on-16K / o3-mini in `tests/test_llm_provider.py`.
+**Resolution (PR #8):** adds `_REASONING_PREFIXES` (`gpt-5`, `o1`, `o3`) and `_REASONING_MIN_COMPLETION_TOKENS=8192` to `OpenAIProvider`, plus an `_effective_max_completion_tokens(requested)` helper that floors the cap and emits a `logger.warning` when the operator's setting is below the floor. Operator can still set max_tokens above the floor; the floor only catches under-configured caps so a future cutover of any new purpose to a reasoning model can't re-trigger the empty-content trap. Regression tests cover gpt-5-mini / gpt-4o-mini pass-through / no-lower-on-16K / o3-mini in `tests/test_llm_provider.py`.
 
 **Note:** the env override `CASEOPS_LLM_MAX_OUTPUT_TOKENS_RECOMMENDATIONS=16384` on `caseops-api` becomes redundant for the floor case (the code now enforces 8192 minimum). The override can stay for the more-generous 16384 budget if you want headroom; either is correct.
 
