@@ -241,3 +241,318 @@ def test_cap_default_is_20(client: TestClient) -> None:
     """Sanity: when the env var is unset the default is $20."""
     _ = client
     assert DEFAULT_LAYER2_DAILY_CAP_USD == 20.0
+
+
+# ---------- audit ledger: model_runs row per Layer-2 call ----------
+
+
+def _seed_doc_with_chunk() -> str:
+    """Seed one AuthorityDocument + one chunk; return doc id."""
+    from caseops_api.db.models import (
+        AuthorityDocument,
+        AuthorityDocumentChunk,
+        utcnow,
+    )
+    factory = get_session_factory()
+    s = factory()
+    try:
+        doc_id = f"audit-doc-{uuid.uuid4().hex[:8]}"
+        doc = AuthorityDocument(
+            id=doc_id,
+            source="test-fixture",
+            adapter_name="test",
+            court_name="Supreme Court of India",
+            forum_level="supreme_court",
+            document_type="judgment",
+            title="placeholder",
+            canonical_key=f"test::audit::{doc_id}",
+            summary="audit fixture",
+            structured_version=None,
+            document_text="x" * 200,
+            ingested_at=utcnow(),
+        )
+        s.add(doc)
+        s.flush()
+        chunk = AuthorityDocumentChunk(
+            authority_document_id=doc.id,
+            chunk_index=0,
+            chunk_role="metadata",
+            content="A short metadata chunk.",
+            created_at=datetime.now(UTC),
+        )
+        s.add(chunk)
+        s.commit()
+        return doc_id
+    finally:
+        s.close()
+
+
+class _ValidLayer2Provider:
+    """Test provider that returns a valid `_ExtractionPayload` shape."""
+
+    name = "test-stub"
+    model = "test-stub-1"
+
+    def __init__(self, *, prompt_tokens: int = 1000, completion_tokens: int = 200):
+        self._prompt_tokens = prompt_tokens
+        self._completion_tokens = completion_tokens
+
+    def generate(self, messages, **kwargs):  # type: ignore[no-untyped-def]
+        from caseops_api.services.llm import LLMCompletion
+        text = (
+            '{"case_title":"Foo v. Bar","judges":["Jane J."],'
+            '"parties":{"appellants":["Foo"],"respondents":["Bar"]},'
+            '"advocates":{"for_appellants":[],"for_respondents":[]},'
+            '"case_number":"C/123/2024","sections_cited":[],'
+            '"outcome":"Disposed",'
+            '"chunks":[{"chunk_index":0,"role":"facts",'
+            '"sections_cited":[],"authorities_cited":[],'
+            '"outcome_tag":null,"related_chunk_indexes":[]}]}'
+        )
+        return LLMCompletion(
+            text=text,
+            provider=self.name,
+            model=self.model,
+            prompt_tokens=self._prompt_tokens,
+            completion_tokens=self._completion_tokens,
+            latency_ms=7,
+        )
+
+
+class _BrokenLayer2Provider:
+    """Test provider that returns text that is not valid JSON."""
+
+    name = "test-stub-broken"
+    model = "test-stub-broken-1"
+
+    def generate(self, messages, **kwargs):  # type: ignore[no-untyped-def]
+        from caseops_api.services.llm import LLMCompletion
+        return LLMCompletion(
+            text="not json at all -- raw page header",
+            provider=self.name,
+            model=self.model,
+            prompt_tokens=900,
+            completion_tokens=10,
+            latency_ms=4,
+        )
+
+
+def test_extract_writes_model_run_audit_row(client: TestClient) -> None:
+    """Layer-2 extract MUST insert exactly one ``model_runs`` row with
+    ``purpose='metadata_extract'``, populated provider/model + token
+    counts, and ``status='ok'`` on the success path."""
+    _ = client
+    from caseops_api.db.models import AuthorityDocument
+    from caseops_api.services.corpus_structured import (
+        extract_and_persist_structured,
+    )
+
+    doc_id = _seed_doc_with_chunk()
+    factory = get_session_factory()
+    s = factory()
+    try:
+        before = s.execute(
+            text("SELECT count(*) FROM model_runs WHERE purpose='metadata_extract'")
+        ).scalar_one()
+        doc = s.get(AuthorityDocument, doc_id)
+        assert doc is not None
+        extract_and_persist_structured(
+            s, document=doc, provider=_ValidLayer2Provider(), tier="haiku",
+        )
+        s.commit()
+        rows = s.execute(
+            text(
+                "SELECT provider, model, purpose, status, error, "
+                "       prompt_tokens, completion_tokens, latency_ms, prompt_hash "
+                "FROM model_runs WHERE purpose='metadata_extract' "
+                "ORDER BY created_at DESC"
+            )
+        ).fetchall()
+        # Exactly one new row from this call.
+        assert len(rows) == before + 1
+        row = rows[0]
+        assert row.provider == "test-stub"
+        assert row.model == "test-stub-1"
+        assert row.status == "ok"
+        assert row.error is None
+        assert row.prompt_tokens == 1000
+        assert row.completion_tokens == 200
+        assert row.latency_ms == 7
+        # prompt_hash is sha256 hex (64 chars).
+        assert row.prompt_hash and len(row.prompt_hash) == 64
+    finally:
+        s.close()
+
+
+def test_extract_audit_row_visible_to_daily_cap(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Closes the audit-blind hole: after a Layer-2 call, the cap query
+    sees the spend. With a tiny cap, the next call is gated."""
+    _ = client
+    from caseops_api.db.models import AuthorityDocument
+    from caseops_api.services.corpus_structured import (
+        extract_and_persist_structured,
+    )
+
+    doc_id = _seed_doc_with_chunk()
+    factory = get_session_factory()
+    s = factory()
+    try:
+        doc = s.get(AuthorityDocument, doc_id)
+        assert doc is not None
+
+        class _PricedProvider(_ValidLayer2Provider):
+            name = "openai"
+            model = "gpt-5.1"
+
+        # 5K input + 1K output @ gpt-5.1 = $0.02 — picking a provider/
+        # model that resolves through the pricing table makes cap
+        # arithmetic non-zero so the assertion below is meaningful.
+        extract_and_persist_structured(
+            s, document=doc,
+            provider=_PricedProvider(prompt_tokens=5_000, completion_tokens=1_000),
+            tier="haiku",
+        )
+        s.commit()
+    finally:
+        s.close()
+
+    # Now a tiny cap should fire — proves the audit row IS visible.
+    monkeypatch.setenv("CASEOPS_LAYER2_DAILY_CAP_USD", "0.005")
+    get_settings.cache_clear()
+    s2 = factory()
+    try:
+        with pytest.raises(LLMProviderError) as exc:
+            ensure_daily_cap_not_exceeded(s2)
+        assert "daily cap reached" in str(exc.value).lower()
+    finally:
+        s2.close()
+
+
+def test_extract_audit_row_survives_caller_rollback_on_format_error(
+    client: TestClient,
+) -> None:
+    """Mirrors the real ``backfill_corpus_quality._process`` path: when
+    the LLM returns garbage, the caller catches ``LLMResponseFormatError``
+    and calls ``session.rollback()`` on the worker session. The audit
+    row MUST survive that rollback because it lives in an independent
+    transaction — otherwise the daily cap stays blind to format_error
+    spend and we lose the ledger entry for tokens we already paid for.
+    """
+    _ = client
+    from caseops_api.db.models import AuthorityDocument
+    from caseops_api.services.corpus_structured import (
+        extract_and_persist_structured,
+    )
+    from caseops_api.services.llm import LLMResponseFormatError
+
+    doc_id = _seed_doc_with_chunk()
+    factory = get_session_factory()
+    # Pre-count from a fresh, isolated session so the count isn't
+    # influenced by the worker session's transaction state.
+    s_pre = factory()
+    try:
+        before = s_pre.execute(
+            text("SELECT count(*) FROM model_runs WHERE purpose='metadata_extract'")
+        ).scalar_one()
+    finally:
+        s_pre.close()
+
+    worker_session = factory()
+    try:
+        doc = worker_session.get(AuthorityDocument, doc_id)
+        assert doc is not None
+        with pytest.raises(LLMResponseFormatError):
+            extract_and_persist_structured(
+                worker_session, document=doc,
+                provider=_BrokenLayer2Provider(), tier="haiku",
+            )
+        # EXACTLY what the real backfill caller does on any
+        # extraction exception (apps/api/src/caseops_api/scripts/
+        # backfill_corpus_quality.py:327-332).
+        worker_session.rollback()
+    finally:
+        worker_session.close()
+
+    # Now read from a fresh session to prove the audit row outlived
+    # the worker rollback.
+    s_post = factory()
+    try:
+        rows = s_post.execute(
+            text(
+                "SELECT provider, model, status, error, prompt_tokens "
+                "FROM model_runs WHERE purpose='metadata_extract' "
+                "ORDER BY created_at DESC"
+            )
+        ).fetchall()
+        assert len(rows) == before + 1
+        row = rows[0]
+        assert row.provider == "test-stub-broken"
+        assert row.model == "test-stub-broken-1"
+        assert row.status == "format_error"
+        assert row.error is not None
+        assert len(row.error) <= 500
+        # Token counts from the (paid) provider call are preserved
+        # so the cap query still sees the spend on garbage outputs.
+        assert row.prompt_tokens == 900
+    finally:
+        s_post.close()
+
+
+def test_extract_audit_row_survives_caller_rollback_on_success(
+    client: TestClient,
+) -> None:
+    """Symmetry check: the success-path audit row also lives in an
+    independent transaction, so even if the caller's main transaction
+    were to roll back AFTER ``extract_and_persist_structured`` returned
+    (e.g. a downstream commit failure on the doc-update side), the
+    spend ledger still records the call. Without this, a flaky DB
+    write on the doc/chunks would silently un-account a paid LLM call.
+    """
+    _ = client
+    from caseops_api.db.models import AuthorityDocument
+    from caseops_api.services.corpus_structured import (
+        extract_and_persist_structured,
+    )
+
+    doc_id = _seed_doc_with_chunk()
+    factory = get_session_factory()
+    s_pre = factory()
+    try:
+        before = s_pre.execute(
+            text("SELECT count(*) FROM model_runs WHERE purpose='metadata_extract'")
+        ).scalar_one()
+    finally:
+        s_pre.close()
+
+    worker_session = factory()
+    try:
+        doc = worker_session.get(AuthorityDocument, doc_id)
+        assert doc is not None
+        extract_and_persist_structured(
+            worker_session, document=doc,
+            provider=_ValidLayer2Provider(), tier="haiku",
+        )
+        # Roll back the worker session BEFORE commit — this discards
+        # the doc/chunk writes but must NOT touch the audit row.
+        worker_session.rollback()
+    finally:
+        worker_session.close()
+
+    s_post = factory()
+    try:
+        rows = s_post.execute(
+            text(
+                "SELECT provider, model, status, error "
+                "FROM model_runs WHERE purpose='metadata_extract' "
+                "ORDER BY created_at DESC"
+            )
+        ).fetchall()
+        assert len(rows) == before + 1
+        row = rows[0]
+        assert row.provider == "test-stub"
+        assert row.status == "ok"
+        assert row.error is None
+    finally:
+        s_post.close()

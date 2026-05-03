@@ -21,6 +21,7 @@ without flushing the entire 13 K corpus.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from dataclasses import dataclass
@@ -31,10 +32,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from caseops_api.core.settings import get_settings
-from caseops_api.db.models import AuthorityDocument, AuthorityDocumentChunk
+from caseops_api.db.models import AuthorityDocument, AuthorityDocumentChunk, ModelRun
+from caseops_api.db.session import get_session_factory
 from caseops_api.services.llm import (
     PURPOSE_METADATA_EXTRACT,
     LLMCallContext,
+    LLMCompletion,
     LLMMessage,
     LLMProvider,
     LLMProviderError,
@@ -532,6 +535,53 @@ def extract_and_persist_structured(
         ensure_daily_cap_not_exceeded(session)
     messages = _build_prompt(document=document, chunks=chunks)
 
+    # Audit ledger: every Layer-2 LLM call must produce a row in
+    # ``model_runs`` with ``purpose=PURPOSE_METADATA_EXTRACT`` so
+    # ``ensure_daily_cap_not_exceeded`` can see today's spend.
+    #
+    # The audit row is committed in its OWN session, independent of
+    # the caller's document transaction. The real production caller
+    # (``backfill_corpus_quality._process``) calls
+    # ``worker_session.rollback()`` on any exception — including
+    # ``LLMResponseFormatError`` — which would wipe a row that we'd
+    # only flushed on the caller's session. Independent commit keeps
+    # the spend ledger durable across that rollback.
+    prompt_hash = hashlib.sha256(
+        json.dumps(
+            [{"role": m.role, "content": m.content} for m in messages],
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    captured_run_id: list[str] = []
+
+    def _on_model_run(
+        completion: LLMCompletion,
+        _ctx: LLMCallContext,
+        _msgs: list[LLMMessage],
+    ) -> None:
+        audit_session = get_session_factory()()
+        try:
+            run = ModelRun(
+                company_id=None,
+                matter_id=None,
+                actor_membership_id=None,
+                purpose=PURPOSE_METADATA_EXTRACT,
+                provider=completion.provider,
+                model=completion.model,
+                prompt_hash=prompt_hash,
+                prompt_tokens=completion.prompt_tokens,
+                completion_tokens=completion.completion_tokens,
+                latency_ms=completion.latency_ms,
+                status="ok",
+                error=None,
+            )
+            audit_session.add(run)
+            audit_session.commit()
+            captured_run_id.append(run.id)
+        finally:
+            audit_session.close()
+
     try:
         payload, completion = generate_structured(
             llm,
@@ -553,10 +603,36 @@ def extract_and_persist_structured(
             # always paid; only docs that previously truncated will
             # spend more, and they're the ones we couldn't use before.
             max_tokens=16384,
+            on_model_run=_on_model_run,
         )
-    except LLMResponseFormatError:
+    except LLMResponseFormatError as exc:
+        # The hook fired and committed an ``ok`` row before parse
+        # failed. Promote that row to ``format_error`` in a fresh
+        # session so the update survives the caller's rollback.
+        if captured_run_id:
+            audit_session = get_session_factory()()
+            try:
+                row = audit_session.get(ModelRun, captured_run_id[0])
+                if row is not None:
+                    row.status = "format_error"
+                    row.error = str(exc)[:500]
+                    audit_session.commit()
+            finally:
+                audit_session.close()
         logger.exception("structured extraction returned malformed JSON for %s", document.id)
         raise
+
+    if not captured_run_id:
+        # The hook is wrapped in a soft try/except inside
+        # ``generate_structured`` so it cannot tank an unrelated
+        # caller's pipeline. For Layer-2 the contract is the
+        # opposite: if we cannot record the audit row, we refuse to
+        # proceed — otherwise the daily cap is blind and a future
+        # billing reconciliation has no ledger to compare to.
+        raise LLMProviderError(
+            "Layer-2 audit row was not recorded; refusing to persist "
+            f"structured payload for document {document.id}"
+        )
 
     # Doc-level fields — only overwrite if the new value is non-empty;
     # preserve any values set by earlier passes (e.g. metadata_extract
