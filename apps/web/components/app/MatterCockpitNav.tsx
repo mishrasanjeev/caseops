@@ -16,6 +16,8 @@ export function MatterCockpitNav({ matterId }: { matterId: string }) {
     { href: `${base}/drafts`, label: "Drafts" },
     { href: `${base}/hearings`, label: "Hearings" },
     { href: `${base}/recommendations`, label: "Recommendations" },
+    // MOD-LSE-5 (2026-05-03) — Litigation strategy + escalation planner.
+    { href: `${base}/strategy`, label: "Strategy" },
     // MOD-TS-017 Slice S4 (2026-04-25) — matter statute references.
     { href: `${base}/statutes`, label: "Statutes" },
     // Phase B / J12 / M11 — communications log.

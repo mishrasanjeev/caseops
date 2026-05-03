@@ -44,6 +44,10 @@ const TYPE_LABEL: Record<RecommendationType, string> = {
   authority: "Authority",
   remedy: "Remedy",
   next_best_action: "Next-best action",
+  // MOD-LSE-1 (2026-05-03) — strategy renders on its own page
+  // (/strategy) but historical strategy rows show up in this list,
+  // so the label must exist.
+  litigation_strategy: "Strategy",
 };
 
 const CONFIDENCE_TONE: Record<string, string> = {
