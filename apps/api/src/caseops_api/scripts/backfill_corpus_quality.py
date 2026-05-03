@@ -62,6 +62,106 @@ logger = logging.getLogger("caseops.backfill")
 _YEAR_RE = re.compile(r"(?:^|/)(\d{4})_")
 _BUDGET_LOG_PATH = Path("tmp/structured_budget.json")
 
+# Default forum scope for the EN-only backfill.
+_DEFAULT_FORUMS: frozenset[str] = frozenset({"supreme_court", "high_court"})
+
+# Default year window when ``--english-only`` is on and no explicit
+# ``--year-range`` was passed. Covers SC 1990-2025 + all HC 1990-2025
+# per the 2026-05-04 EN-only Layer-2 directive — older judgments are
+# both lower-quality OCR and rarely-cited authority.
+_DEFAULT_EN_YEAR_RANGE: tuple[int, int] = (1990, 2025)
+
+# Indic scripts in the Unicode plane. We use a single bracketed
+# character class instead of nine separate `\u` escapes because
+# `re.compile` interprets each range cleanly. A doc is rejected if its
+# title or its first ``_LANG_PROBE_CHARS`` contain ANY character in
+# this class — partial matches dominate Devanagari OCR output (each
+# vowel sign is its own codepoint).
+#
+# Coverage:
+#   U+0900-U+097F  Devanagari   (Hindi, Marathi, Sanskrit, Nepali)
+#   U+0980-U+09FF  Bengali / Assamese
+#   U+0A00-U+0A7F  Gurmukhi     (Punjabi)
+#   U+0A80-U+0AFF  Gujarati
+#   U+0B00-U+0B7F  Oriya
+#   U+0B80-U+0BFF  Tamil
+#   U+0C00-U+0C7F  Telugu
+#   U+0C80-U+0CFF  Kannada
+#   U+0D00-U+0D7F  Malayalam
+_INDIC_SCRIPT_RE = re.compile(
+    "["
+    "ऀ-ॿ"
+    "ঀ-৿"
+    "਀-੿"
+    "઀-૿"
+    "଀-୿"
+    "஀-௿"
+    "ఀ-౿"
+    "ಀ-೿"
+    "ഀ-ൿ"
+    "]"
+)
+_LANG_PROBE_CHARS = 2_000
+
+# SC corpus filename suffixes that explicitly mark a non-English
+# transcript (the SCI publishes parallel translations with these
+# language codes). A definitive non-EN suffix is a hard reject — the
+# Layer-2 prompt + ``_ExtractionPayload`` schema are English-shaped and
+# every observed call on a non-EN doc has produced malformed JSON
+# (Devanagari content gets emitted with invalid ``\\`` escape
+# sequences). Empirical evidence (2026-05-04 ingest VM corpus):
+#   _EN.pdf:  14 594 docs, 1 with Devanagari content  (clean signal)
+#   _NEP.pdf:    25 docs, 25 with Devanagari content  (clean signal)
+#   no-suffix: 87 242 docs, 38 132 with Devanagari    (mixed; needs
+#                                                       content probe)
+_NON_EN_FILE_SUFFIXES: tuple[str, ...] = (
+    "_hin.pdf",   # Hindi
+    "_pun.pdf",   # Punjabi
+    "_ben.pdf",   # Bengali
+    "_guj.pdf",   # Gujarati
+    "_tam.pdf",   # Tamil
+    "_tel.pdf",   # Telugu
+    "_kan.pdf",   # Kannada
+    "_mal.pdf",   # Malayalam
+    "_ori.pdf",   # Oriya
+    "_nep.pdf",   # Nepali
+    "_san.pdf",   # Sanskrit
+    "_urd.pdf",   # Urdu
+    "_asm.pdf",   # Assamese
+    "_mar.pdf",   # Marathi (where the SCI labels it explicitly)
+)
+_EN_FILE_SUFFIX = "_en.pdf"
+
+
+def _doc_appears_english(doc: AuthorityDocument) -> bool:
+    """Decide whether a document is in English.
+
+    Cheap path: file-suffix dispatch. Both ``_EN.pdf`` and the
+    explicit non-EN suffixes are decisive on their own.
+
+    Fallback: probe the first ``_LANG_PROBE_CHARS`` of ``title`` and
+    ``document_text`` for any Indic-script character. Even one
+    Devanagari / Tamil / etc. codepoint in the head of a judgment is
+    enough to fail the English check on this corpus — we have not
+    observed false positives where a head with Indic letters parsed
+    cleanly through Layer-2.
+
+    Returns True when the doc is English, False otherwise.
+    """
+    src = (doc.source_reference or "").lower()
+    if src.endswith(_EN_FILE_SUFFIX):
+        return True
+    for suffix in _NON_EN_FILE_SUFFIXES:
+        if src.endswith(suffix):
+            return False
+    title = doc.title or ""
+    if _INDIC_SCRIPT_RE.search(title[:_LANG_PROBE_CHARS]):
+        return False
+    text = doc.document_text or ""
+    if _INDIC_SCRIPT_RE.search(text[:_LANG_PROBE_CHARS]):
+        return False
+    return True
+
 
 def _clean_titles_and_dates(session: Session, *, dry_run: bool) -> tuple[int, int]:
     """Rewrite titles/dates on every doc whose text is available.
@@ -167,6 +267,8 @@ def _structured_pass(
     force_tier: str | None,
     year_range: tuple[int, int] | None,
     concurrency: int = 1,
+    english_only: bool = True,
+    forums: frozenset[str] | None = None,
 ) -> dict:
     """Triage router over every doc that still needs structured data.
 
@@ -216,18 +318,34 @@ def _structured_pass(
     # invocation into a no-op for ~9 days (2026-04-23 → 2026-05-02).
     sonnet_bucket: list[AuthorityDocument] = []
     haiku_bucket: list[AuthorityDocument] = []
+    forums_filter = forums if forums is not None else _DEFAULT_FORUMS
+    skipped_non_en = 0
+    skipped_forum = 0
+    skipped_year = 0
     for doc in all_docs:
         tier = force_tier or _tier_for_doc(doc)
         if _already_covered_at_tier(doc, tier):
             continue
+        if forums_filter and doc.forum_level not in forums_filter:
+            skipped_forum += 1
+            continue
         if year_range is not None:
             year = _year_for_doc(doc)
             if year is None or not (year_range[0] <= year <= year_range[1]):
+                skipped_year += 1
                 continue
+        if english_only and not _doc_appears_english(doc):
+            skipped_non_en += 1
+            continue
         if tier == "sonnet":
             sonnet_bucket.append(doc)
         else:
             haiku_bucket.append(doc)
+    if english_only or forums_filter or year_range is not None:
+        logger.info(
+            "filter rejections: forum=%d  year=%d  non_english=%d",
+            skipped_forum, skipped_year, skipped_non_en,
+        )
 
     # Sort each bucket by filename year DESC so newest lands before
     # oldest inside a multi-year bucket. NULL-dated docs without a
@@ -460,6 +578,8 @@ def run(
     force_tier: str | None,
     year_range: tuple[int, int] | None,
     concurrency: int = 1,
+    english_only: bool = True,
+    forums: frozenset[str] | None = None,
 ) -> int:
     logging.basicConfig(
         level=logging.INFO,
@@ -481,6 +601,8 @@ def run(
                 budget_usd=budget_usd, force_tier=force_tier,
                 year_range=year_range,
                 concurrency=concurrency,
+                english_only=english_only,
+                forums=forums,
             )
             sys.stdout.write(
                 "structured-pass: "
@@ -540,12 +662,53 @@ def main(argv: Iterable[str] | None = None) -> int:
             "ceiling is hit."
         ),
     )
+    parser.add_argument(
+        "--english-only", dest="english_only", action="store_true",
+        default=True,
+        help=(
+            "Skip non-English documents (default ON). Detection: filename "
+            "suffix ``_EN.pdf`` is a hard accept; ``_HIN/_PUN/_BEN/_TAM/...`` "
+            "is a hard reject; otherwise probe the title + first 2K chars of "
+            "document_text for any Devanagari/Tamil/Telugu/Kannada/Malayalam/"
+            "Bengali/Gurmukhi/Gujarati/Oriya character. Pass "
+            "``--no-english-only`` to disable."
+        ),
+    )
+    parser.add_argument(
+        "--no-english-only", dest="english_only", action="store_false",
+        help="Disable the English-only filter (process every language).",
+    )
+    parser.add_argument(
+        "--forums",
+        default=",".join(sorted(_DEFAULT_FORUMS)),
+        help=(
+            "Comma-separated allowlist of ``forum_level`` values to process. "
+            f"Default {sorted(_DEFAULT_FORUMS)} (SC + all HC). Pass "
+            "``--forums all`` to drop the filter entirely."
+        ),
+    )
     args = parser.parse_args(list(argv) if argv is not None else None)
+    forums: frozenset[str] | None
+    if args.forums.strip().lower() == "all":
+        forums = None
+    else:
+        forums = frozenset(
+            v.strip() for v in args.forums.split(",") if v.strip()
+        )
+    year_range = _parse_year_range(args.year_range)
+    if year_range is None and args.english_only:
+        # User-stated scope (2026-05-04): SC 2025-1990 + all HC 2025-1990,
+        # English only. When ``--english-only`` is on and no explicit range
+        # was passed, default to 1990-2025 so a bare invocation matches
+        # what the operator expects.
+        year_range = _DEFAULT_EN_YEAR_RANGE
     return run(
         stage=args.stage, limit=args.limit, dry_run=args.dry_run,
         budget_usd=args.budget_usd, force_tier=args.force_tier,
-        year_range=_parse_year_range(args.year_range),
+        year_range=year_range,
         concurrency=max(1, args.concurrency),
+        english_only=args.english_only,
+        forums=forums,
     )
 
 
