@@ -563,6 +563,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/authorities/{authority_document_id}/treatments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Good-law treatment summary for one authority (PG-006)
+         * @description Return the treatment counts + sample evidence for one authority.
+         *
+         *     PG-006 Phase 1B — reads from ``authority_citations.treatment``
+         *     (populated by Phase 1A's heuristic classifier). The response
+         *     powers the research-result badge and the per-authority "good
+         *     law?" panel. Permission gate is the same as authority search.
+         */
+        get: operations["get_authority_treatment_summary_api_authorities__authority_document_id__treatments_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/bootstrap/company": {
         parameters: {
             query?: never;
@@ -2057,6 +2082,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matters/{matter_id}/next-action": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Highest-priority item demanding attention on this matter (PG-004, 2026-05-01). Returns null when nothing is queued. */
+        get: operations["get_matter_next_action_api_matters__matter_id__next_action_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matters/{matter_id}/notes": {
         parameters: {
             query?: never;
@@ -3397,6 +3439,11 @@ export interface components {
         };
         /** AuthoritySearchResult */
         AuthoritySearchResult: {
+            /**
+             * Adverse Count
+             * @default 0
+             */
+            adverse_count: number;
             /** Authority Document Id */
             authority_document_id: string;
             /** Bench Name */
@@ -3431,6 +3478,8 @@ export interface components {
             summary: string;
             /** Title */
             title: string;
+            /** Worst Treatment */
+            worst_treatment?: ("followed" | "distinguished" | "overruled" | "doubted" | "reversed" | "dissented" | "considered" | "neutral") | null;
         };
         /** AuthoritySourceListResponse */
         AuthoritySourceListResponse: {
@@ -3470,6 +3519,53 @@ export interface components {
             neutral_citation: string | null;
             /** Title */
             title: string;
+        };
+        /** AuthorityTreatmentBucketRecord */
+        AuthorityTreatmentBucketRecord: {
+            /** Count */
+            count: number;
+            /** Samples */
+            samples: components["schemas"]["AuthorityTreatmentSampleRecord"][];
+            /**
+             * Treatment
+             * @enum {string}
+             */
+            treatment: "followed" | "distinguished" | "overruled" | "doubted" | "reversed" | "dissented" | "considered" | "neutral";
+        };
+        /** AuthorityTreatmentSampleRecord */
+        AuthorityTreatmentSampleRecord: {
+            /** Citation Text */
+            citation_text: string;
+            /** Citing Authority Document Id */
+            citing_authority_document_id: string;
+            /** Citing Neutral Citation */
+            citing_neutral_citation: string | null;
+            /** Citing Title */
+            citing_title: string | null;
+            /** Confidence */
+            confidence: number | null;
+            /** Evidence Text */
+            evidence_text: string | null;
+            /**
+             * Treatment
+             * @enum {string}
+             */
+            treatment: "followed" | "distinguished" | "overruled" | "doubted" | "reversed" | "dissented" | "considered" | "neutral";
+        };
+        /** AuthorityTreatmentSummaryResponse */
+        AuthorityTreatmentSummaryResponse: {
+            /** Adverse Count */
+            adverse_count: number;
+            /** Authority Document Id */
+            authority_document_id: string;
+            /** Buckets */
+            buckets: components["schemas"]["AuthorityTreatmentBucketRecord"][];
+            /** Has Adverse Treatment */
+            has_adverse_treatment: boolean;
+            /** Total Incoming */
+            total_incoming: number;
+            /** Worst Treatment */
+            worst_treatment: ("followed" | "distinguished" | "overruled" | "doubted" | "reversed" | "dissented" | "considered" | "neutral") | null;
         };
         /** BenchContextCitableAuthorityResponse */
         BenchContextCitableAuthorityResponse: {
@@ -6882,6 +6978,21 @@ export interface components {
             /** Role */
             role: string;
         };
+        /** NextActionResponse */
+        NextActionResponse: {
+            /** Detail */
+            detail: string;
+            /** Due On Iso */
+            due_on_iso?: string | null;
+            /** Href */
+            href: string;
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+            /** Severity */
+            severity: string;
+        };
         /** ObligationExtractionResponse */
         ObligationExtractionResponse: {
             /** Contract Id */
@@ -9540,6 +9651,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuthorityCorpusStats"];
+                };
+            };
+        };
+    };
+    get_authority_treatment_summary_api_authorities__authority_document_id__treatments_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                authority_document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthorityTreatmentSummaryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -12713,6 +12855,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InvoiceRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_matter_next_action_api_matters__matter_id__next_action_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NextActionResponse"] | null;
                 };
             };
             /** @description Validation Error */
