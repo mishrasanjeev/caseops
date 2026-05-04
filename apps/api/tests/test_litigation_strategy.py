@@ -2480,3 +2480,263 @@ def test_strategy_refuses_when_all_forum_steps_dropped(
         f"R5 #1: ledger row must use the dedicated status_label "
         f"'rejected_no_verified_forum_steps'; got {run.status!r}."
     )
+
+
+# ---------------------------------------------------------------
+# Round-5 follow-up #2 (2026-05-03): recommended_drafts fallback.
+# When the LLM emits no known template slugs in
+# ``forum_sequence[*].expected_filings``, the recommended_drafts
+# panel was previously empty. The deterministic
+# ``template_recommender`` matrix encodes per-forum sensible
+# defaults; the strategy service now uses it as a fallback so the
+# Strategy tab always offers at least the universal accompaniments.
+# ---------------------------------------------------------------
+
+
+def test_recommended_drafts_fallback_when_llm_emits_no_slugs(
+    client: TestClient, monkeypatch,
+) -> None:
+    """LLM emits a forum step with no ``expected_filings``. The
+    persisted ``recommended_drafts`` must NOT be empty — the
+    template_recommender matrix supplies sensible defaults for the
+    matter's forum_level."""
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    citation = _seed_relevant_authority()
+    payload = _valid_strategy_payload(citation)
+    # Strip every step's expected_filings to simulate an LLM that
+    # forgot to populate them. Keep citations intact so the steps
+    # still survive R4 #1 filtering.
+    for step in payload["forum_sequence"]:
+        step["expected_filings"] = []
+
+    class _NoSlugs:
+        name = "mock"
+        model = "mock-no-slugs"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            return LLMCompletion(
+                text=json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=10,
+                completion_tokens=20,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _NoSlugs(),
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.litigation_strategy.build_provider",
+        lambda *a, **kw: _NoSlugs(),
+    )
+
+    token, _, matter_id = _setup_matter(client, forum_level="high_court")
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "litigation_strategy"},
+    )
+    assert response.status_code == 200, response.text
+    drafts = response.json()["strategy_payload"]["recommended_drafts"]
+    assert len(drafts) > 0, (
+        "follow-up #2: when the LLM emits no expected_filings, "
+        "recommended_drafts must be populated from the template_recommender "
+        "fallback so the Strategy tab still offers at least the universal "
+        "accompaniments (vakalatnama / affidavit)."
+    )
+    # Every draft must be a real registered template.
+    for d in drafts:
+        assert d["template_type"]
+        assert d["display_name"]
+
+
+def test_recommended_drafts_keeps_llm_slugs_when_emitted(
+    client: TestClient, monkeypatch,
+) -> None:
+    """Symmetry check: when the LLM DOES emit valid slugs, those
+    slugs land in recommended_drafts (the fallback only fires when
+    the LLM-derived slug set yields zero registry-known templates)."""
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    citation = _seed_relevant_authority()
+    payload = _valid_strategy_payload(citation)
+    # The valid_strategy_payload already has expected_filings on
+    # forum_sequence[0]: ["quashing_petition", "vakalatnama", "affidavit"].
+
+    class _WithSlugs:
+        name = "mock"
+        model = "mock-with-slugs"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            return LLMCompletion(
+                text=json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=10,
+                completion_tokens=20,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _WithSlugs(),
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.litigation_strategy.build_provider",
+        lambda *a, **kw: _WithSlugs(),
+    )
+
+    token, _, matter_id = _setup_matter(client, forum_level="high_court")
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "litigation_strategy"},
+    )
+    assert response.status_code == 200, response.text
+    drafts = response.json()["strategy_payload"]["recommended_drafts"]
+    slugs = [d["template_type"] for d in drafts]
+    # LLM-emitted slugs land in the panel.
+    assert "quashing_petition" in slugs
+    assert "vakalatnama" in slugs
+
+
+def test_recommended_drafts_fallback_replaces_when_llm_emits_only_unknown_slugs(
+    client: TestClient, monkeypatch,
+) -> None:
+    """Bug caught in PR #8 review (2026-05-03): when the LLM emits 12+
+    UNKNOWN slugs, the previous fallback path APPENDED the matrix
+    slugs after the unknowns, and the [:12] slice at render time
+    discarded the fallback before any known template surfaced —
+    panel stayed empty.
+
+    Fix: when zero LLM-derived slugs match the registry, REPLACE
+    ordered_slugs with the fallback set. Test asserts that 16
+    fictitious slugs from the LLM still produce a non-empty
+    recommended_drafts list."""
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    citation = _seed_relevant_authority()
+    payload = _valid_strategy_payload(citation)
+    # 16 invented slugs the registry will reject. Spread across both
+    # forum_sequence steps so the dedupe logic is also exercised.
+    fake_slugs = [f"fictitious_template_{i}" for i in range(16)]
+    payload["forum_sequence"][0]["expected_filings"] = fake_slugs[:8]
+    payload["forum_sequence"][1]["expected_filings"] = fake_slugs[8:]
+
+    class _AllUnknownSlugs:
+        name = "mock"
+        model = "mock-all-unknown"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            return LLMCompletion(
+                text=json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=10,
+                completion_tokens=20,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _AllUnknownSlugs(),
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.litigation_strategy.build_provider",
+        lambda *a, **kw: _AllUnknownSlugs(),
+    )
+
+    token, _, matter_id = _setup_matter(client, forum_level="high_court")
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "litigation_strategy"},
+    )
+    assert response.status_code == 200, response.text
+    drafts = response.json()["strategy_payload"]["recommended_drafts"]
+    assert len(drafts) > 0, (
+        "PR #8 review bug: with 16 unknown LLM slugs, the fallback "
+        "must REPLACE (not append to) ordered_slugs so the [:12] "
+        "slice surfaces real templates rather than dropping the "
+        "fallback."
+    )
+    # No fictitious slug must appear — every entry is a real registered template.
+    slugs_in_panel = {d["template_type"] for d in drafts}
+    for fake in fake_slugs:
+        assert fake not in slugs_in_panel
+
+
+def test_recommended_drafts_filters_unknowns_before_slicing_in_mixed_case(
+    client: TestClient, monkeypatch,
+) -> None:
+    """Bug caught in PR #8 second review (2026-05-03): the previous
+    fix only fired the fallback when ``known_count == 0``. In the
+    MIXED case — 16 unknown LLM slugs followed by 1 known slug
+    (e.g. ``vakalatnama``) — the gate read ``known_count == 1`` so
+    no fallback fired, and the ``[:12]`` slice consumed the first 12
+    unknowns. The known slug was beyond the slice horizon and the
+    panel still came up empty.
+
+    Final fix: filter ``ordered_slugs`` to registry-known slugs
+    BEFORE slicing. The known ``vakalatnama`` must surface even if
+    it sits at index 16 in the LLM output."""
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    citation = _seed_relevant_authority()
+    payload = _valid_strategy_payload(citation)
+    # Build the worst case: 16 fake slugs first, then one known
+    # ``vakalatnama`` deep in the list. Pre-filter must surface
+    # vakalatnama in the panel.
+    fake_slugs = [f"fictitious_template_{i}" for i in range(16)]
+    payload["forum_sequence"][0]["expected_filings"] = fake_slugs[:8]
+    payload["forum_sequence"][1]["expected_filings"] = [
+        *fake_slugs[8:],
+        "vakalatnama",
+    ]
+
+    class _MixedSlugs:
+        name = "mock"
+        model = "mock-mixed"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            return LLMCompletion(
+                text=json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=10,
+                completion_tokens=20,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _MixedSlugs(),
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.litigation_strategy.build_provider",
+        lambda *a, **kw: _MixedSlugs(),
+    )
+
+    token, _, matter_id = _setup_matter(client, forum_level="high_court")
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "litigation_strategy"},
+    )
+    assert response.status_code == 200, response.text
+    drafts = response.json()["strategy_payload"]["recommended_drafts"]
+    slugs_in_panel = [d["template_type"] for d in drafts]
+    # vakalatnama (the lone known slug, at LLM-output index 16) must
+    # surface in the panel — pre-filter rescues it from the [:12]
+    # slice that would otherwise consume only the unknown spam.
+    assert "vakalatnama" in slugs_in_panel, (
+        "PR #8 review bug: a registry-known slug at LLM-output index 16 "
+        "must surface in recommended_drafts. The fix must filter unknown "
+        "slugs BEFORE the [:12] slice, not after."
+    )
+    # No fictitious slug must appear.
+    for fake in fake_slugs:
+        assert fake not in slugs_in_panel

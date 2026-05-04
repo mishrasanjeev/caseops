@@ -771,13 +771,87 @@ def _build_recommended_drafts(
     matter: Matter,
     template_slugs: list[str],
 ) -> list[RecommendedDraft]:
+    """Build the recommended-drafts panel for the persisted strategy.
+
+    Round-5 follow-up #2 (2026-05-03 prod incident on PR #7): the
+    panel was empty for sparse-retrieval matters because the LLM
+    emitted no ``expected_filings`` (or only registry-unknown slugs).
+    The deterministic ``template_recommender`` matrix already encodes
+    a sensible default pack per (forum_level, practice_area) — fall
+    back to it when the LLM-derived slug list is empty so the
+    Strategy tab always offers at least the universal accompaniments
+    (vakalatnama / affidavit / SC pack at SC stage). The fallback path
+    is logged so operations can correlate with thin-retrieval matters.
+    """
     schemas = {s.template_type: s for s in list_template_schemas()}
     forum = (matter.forum_level or "").strip().lower()
+    practice_area = getattr(matter, "practice_area", None)
+
+    # Dedupe input slugs while preserving order.
+    seen: set[str] = set()
+    ordered_slugs: list[str] = []
+    for slug in template_slugs:
+        if slug not in seen:
+            ordered_slugs.append(slug)
+            seen.add(slug)
+
+    # Filter to slugs the registry recognises BEFORE slicing the
+    # render list. Two prior bugs were caught in PR #8 review:
+    #
+    #   (1) 2026-05-03 first cut: fallback slugs were APPENDED after
+    #   the unknown LLM slugs, and ``ordered_slugs[:12]`` then sliced
+    #   the unknowns first, dropping the fallback. Fixed by replacing
+    #   on the all-unknown path.
+    #
+    #   (2) 2026-05-03 second review: the all-unknown gate
+    #   (``known_count == 0``) didn't catch the MIXED case — 16 fake
+    #   slugs followed by ``vakalatnama`` (one known) gave
+    #   ``known_count == 1`` so the fallback didn't fire, and the
+    #   ``[:12]`` slice still consumed the first 12 unknowns and left
+    #   the panel empty.
+    #
+    # Final shape: filter ``ordered_slugs`` down to known templates
+    # FIRST, then either fall back when the filtered list is empty
+    # or slice it to the panel cap. The unknown LLM slugs are dead
+    # weight in every case (they would have failed ``schemas.get``
+    # at render time), so dropping them up front is correct AND
+    # makes the [:12] slice meaningful.
+    known_slugs = [s for s in ordered_slugs if s in schemas]
+    if not known_slugs:
+        try:
+            fallback = recommend_templates(
+                forum_level=matter.forum_level or "",
+                practice_area=practice_area,
+            )
+        except Exception:
+            logger.exception(
+                "litigation_strategy: template_recommender fallback "
+                "failed for matter %s; recommended_drafts will be empty",
+                getattr(matter, "id", "?"),
+            )
+            fallback = []
+        fallback_seen: set[str] = set()
+        for tr in fallback:
+            slug = (
+                tr.template_type.value
+                if hasattr(tr.template_type, "value")
+                else str(tr.template_type)
+            )
+            if slug not in fallback_seen and slug in schemas:
+                known_slugs.append(slug)
+                fallback_seen.add(slug)
+        if known_slugs:
+            logger.info(
+                "litigation_strategy: LLM emitted no recognised template "
+                "slugs for matter %s — using template_recommender fallback "
+                "(%d slugs)",
+                getattr(matter, "id", "?"),
+                len(known_slugs),
+            )
+
     drafts: list[RecommendedDraft] = []
-    for slug in template_slugs[:12]:  # bound the panel
-        schema = schemas.get(slug)
-        if schema is None:
-            continue  # silently drop slugs the registry doesn't know
+    for slug in known_slugs[:12]:  # bound the panel
+        schema = schemas[slug]  # already validated above; can't miss
         available, reason = _is_template_available(slug, forum)
         drafts.append(
             RecommendedDraft(
