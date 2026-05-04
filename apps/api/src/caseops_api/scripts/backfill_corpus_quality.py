@@ -333,10 +333,13 @@ def _structured_pass(
     chronological order so recent judgments are covered before older
     ones if the budget runs out.
 
-    ``year_range`` (lo, hi inclusive): when set, only Sonnet candidates
-    whose filename year falls in [lo, hi] are processed, and the Haiku
-    bucket is skipped entirely. This is the per-bucket workflow — run
-    SC 2020-2025 first, audit, then SC 2015-2019, etc.
+    ``year_range`` (lo, hi inclusive): when set, BOTH tiers are
+    filtered — only docs whose extracted year (per
+    ``_year_and_source_for_doc``) falls in [lo, hi] are processed.
+    The 2026-05-02 fix corrected the prior Sonnet-only behaviour
+    that turned per-bucket haiku invocations into no-ops for ~9 days.
+    Use for per-bucket workflow, e.g. SC 2020-2025 first, audit,
+    then SC 2015-2019, etc.
     """
     # Candidate set: anything below the target tier's stamp.
     stmt = (
@@ -760,9 +763,12 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument(
         "--year-range", default=None,
         help=(
-            "Restrict the Sonnet pass to filename-year YYYY-YYYY (inclusive); "
-            "Haiku bucket is skipped. Use for per-bucket workflow, e.g. "
-            "--year-range 2020-2025."
+            "Restrict BOTH tiers to documents whose extracted year falls "
+            "in YYYY-YYYY (inclusive). Year is read from the SC filename "
+            "pattern, the HC trailing-date pattern, or the decision_date "
+            "column — whichever resolves first. With --english-only on, "
+            "the default is 1990-2025 (SC + all HC). Use for per-bucket "
+            "workflow, e.g. --year-range 2020-2025."
         ),
     )
     parser.add_argument(
