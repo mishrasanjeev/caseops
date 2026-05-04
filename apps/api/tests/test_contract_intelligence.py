@@ -478,6 +478,58 @@ def test_structured_with_retry_returns_actionable_422_when_provider_keeps_failin
         raise AssertionError("expected HTTPException 422 after both retries")
 
 
+def test_structured_with_retry_quota_returns_actionable_503_without_retry_or_raw_leak() -> None:
+    from fastapi import HTTPException
+    from pydantic import BaseModel
+
+    from caseops_api.services.llm import (
+        LLMCallContext,
+        LLMQuotaExhaustedError,
+    )
+
+    class _QuotaFails:
+        name = "openai"
+        model = "gpt-5-mini"
+        calls = 0
+
+        def generate(self, messages, **_kw):
+            self.calls += 1
+            raise LLMQuotaExhaustedError(
+                "OpenAI quota exhausted: Error code: 429 - {'error': "
+                "{'code': 'insufficient_quota', 'message': 'billing raw'}}"
+            )
+
+    class _Schema(BaseModel):
+        ok: bool
+
+    provider = _QuotaFails()
+    try:
+        _structured_with_retry(
+            provider,
+            schema=_Schema,
+            messages=[],
+            context=LLMCallContext(
+                purpose="metadata_extract",
+                tenant_id="t-test",
+                matter_id=None,
+            ),
+            temperature=0.0,
+            max_tokens=512,
+            session=None,
+            feature="extract clauses",
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 503
+        assert "provider quota is exhausted" in exc.detail
+        assert "contract intelligence result" in exc.detail
+        assert "insufficient_quota" not in exc.detail
+        assert "billing raw" not in exc.detail
+        assert "No output was saved" in exc.detail
+        assert provider.calls == 1
+    else:
+        raise AssertionError("expected HTTPException 503 for provider quota")
+
+
 def test_parse_redline_docx_recovers_insertions_and_deletions() -> None:
     # Build a tiny DOCX in-memory with tracked changes; python-docx has no
     # high-level API to author ins/del, so we write the XML by hand and

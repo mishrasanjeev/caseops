@@ -1793,7 +1793,11 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Save manual edits as a new draft revision
+         * @description Creates a new version from the lawyer-edited body, keeps finalized drafts immutable, and resets review_required so any prior approval does not silently carry over to changed text.
+         */
+        patch: operations["patch_current_company_matter_draft_api_matters__matter_id__drafts__draft_id__patch"];
         trace?: never;
     };
     "/api/matters/{matter_id}/drafts/{draft_id}/approve": {
@@ -5034,6 +5038,11 @@ export interface components {
             /** Text */
             text: string;
         };
+        /** DraftEditRequest */
+        DraftEditRequest: {
+            /** Body */
+            body: string;
+        };
         /**
          * DraftGenerateRequest
          * @description Body is empty today; kept to give room for future options —
@@ -5133,7 +5142,7 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "submit" | "request_changes" | "approve" | "finalize";
+            action: "edit" | "submit" | "request_changes" | "approve" | "finalize";
             /** Actor Membership Id */
             actor_membership_id: string | null;
             /**
@@ -12513,6 +12522,42 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_current_company_matter_draft_api_matters__matter_id__drafts__draft_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftEditRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

@@ -57,6 +57,7 @@ export type Capability =
   | "outside_counsel:recommend"
   // drafting
   | "drafts:create"
+  | "drafts:edit"
   | "drafts:generate"
   | "drafts:review"
   | "drafts:finalize"
@@ -151,7 +152,7 @@ const CREATOR_ONLY: Capability[] = [
 ];
 
 // Drafter caps — paralegals CAN draft but not finalize.
-const DRAFTER: Capability[] = ["drafts:create", "drafts:generate"];
+const DRAFTER: Capability[] = ["drafts:create", "drafts:edit", "drafts:generate"];
 
 // Ops-lead caps — owner / admin / partner only.
 const STAFF: Capability[] = [

@@ -92,6 +92,40 @@ describe("RecommendationsPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("BUG-005: quota exhaustion keeps actionable provider guidance instead of calling it grounding", async () => {
+    listRecommendationsMock.mockResolvedValue({
+      matter_id: "m-1",
+      recommendations: [],
+    });
+    generateRecommendationMock.mockRejectedValue({
+      name: "ApiError",
+      status: 503,
+      problemType: "llm_quota_exhausted",
+      detail:
+        "Could not generate the recommendation: the configured AI provider quota is exhausted. Restore or top up provider credits, then retry. No output was saved.",
+      data: {},
+    });
+
+    render(withClient(<RecommendationsPage />));
+    fireEvent.click(await screen.findByTestId("generate-remedy-recommendation"));
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("recommendation-last-error"),
+      ).toBeInTheDocument(),
+    );
+    expect(
+      screen.getByText(/Remedy generation is temporarily unavailable/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/needs more grounding/)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/provider quota is exhausted/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/No output was saved/i),
+    ).toBeInTheDocument();
+  });
+
   it("BUG-016: dismissing the error Card removes it without re-generating", async () => {
     listRecommendationsMock.mockResolvedValue({
       matter_id: "m-1",

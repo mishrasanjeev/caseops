@@ -651,6 +651,103 @@ def test_generate_increments_revision_and_keeps_history(client: TestClient) -> N
     assert second["current_version_id"] == newest["id"]
 
 
+def test_manual_edit_creates_new_revision_and_invalidates_prior_approval(
+    client: TestClient,
+) -> None:
+    token = str(bootstrap_company(client)["access_token"])
+    matter_id = _create_matter(client, token, "DS-EDIT")
+    citation = "2024 SCC OnLine SC 777"
+    _seed_authority(neutral_citation=citation)
+    draft = _create_draft(client, token, matter_id)
+    generated = _generate(client, token, matter_id, draft["id"])
+    original = generated["versions"][0]
+
+    client.post(
+        f"/api/matters/{matter_id}/drafts/{draft['id']}/submit",
+        headers=auth_headers(token),
+        json={},
+    )
+    approved = client.post(
+        f"/api/matters/{matter_id}/drafts/{draft['id']}/approve",
+        headers=auth_headers(token),
+        json={},
+    )
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["status"] == "approved"
+    assert approved.json()["review_required"] is False
+
+    edited_body = (
+        original["body"]
+        + "\n\nAdditional lawyer edit preserving citation "
+        + citation
+        + "."
+    )
+    edited = client.patch(
+        f"/api/matters/{matter_id}/drafts/{draft['id']}",
+        headers=auth_headers(token),
+        json={"body": edited_body},
+    )
+
+    assert edited.status_code == 200, edited.text
+    payload = edited.json()
+    assert payload["status"] == "draft"
+    assert payload["review_required"] is True
+    assert sorted(v["revision"] for v in payload["versions"]) == [1, 2]
+    newest = next(v for v in payload["versions"] if v["revision"] == 2)
+    assert payload["current_version_id"] == newest["id"]
+    assert newest["body"] == edited_body
+    assert newest["model_run_id"] is None
+    assert newest["verified_citation_count"] >= 1
+    assert [r["action"] for r in payload["reviews"]][-1] == "edit"
+
+
+def test_manual_edit_drops_removed_citations_and_finalized_is_immutable(
+    client: TestClient,
+) -> None:
+    token = str(bootstrap_company(client)["access_token"])
+    matter_id = _create_matter(client, token, "DS-EDIT-FINAL")
+    _seed_authority(neutral_citation="2024 SCC OnLine SC 778")
+    draft = _create_draft(client, token, matter_id)
+    _generate(client, token, matter_id, draft["id"])
+
+    removed_citation = client.patch(
+        f"/api/matters/{matter_id}/drafts/{draft['id']}",
+        headers=auth_headers(token),
+        json={"body": "Manual draft text with no retained authority string."},
+    )
+    assert removed_citation.status_code == 200, removed_citation.text
+    newest = max(removed_citation.json()["versions"], key=lambda v: v["revision"])
+    assert newest["citations"] == []
+    assert newest["verified_citation_count"] == 0
+
+    _seed_authority(neutral_citation="2024 SCC OnLine SC 779")
+    _generate(client, token, matter_id, draft["id"])
+    client.post(
+        f"/api/matters/{matter_id}/drafts/{draft['id']}/submit",
+        headers=auth_headers(token),
+        json={},
+    )
+    client.post(
+        f"/api/matters/{matter_id}/drafts/{draft['id']}/approve",
+        headers=auth_headers(token),
+        json={},
+    )
+    finalized = client.post(
+        f"/api/matters/{matter_id}/drafts/{draft['id']}/finalize",
+        headers=auth_headers(token),
+        json={},
+    )
+    assert finalized.status_code == 200, finalized.text
+
+    edit_final = client.patch(
+        f"/api/matters/{matter_id}/drafts/{draft['id']}",
+        headers=auth_headers(token),
+        json={"body": "Should not be saved."},
+    )
+    assert edit_final.status_code == 409
+    assert edit_final.json()["type"] == "draft_finalized_immutable"
+
+
 def test_generate_draft_provider_error_returns_actionable_422(
     client: TestClient, monkeypatch,
 ) -> None:
@@ -706,6 +803,47 @@ def test_generate_draft_provider_error_returns_actionable_422(
     assert "LLMProviderError" in detail
     lowered = detail.lower()
     assert "retry" in lowered or "support" in lowered
+
+
+def test_generate_draft_quota_error_returns_actionable_503_without_raw_provider_leak(
+    client: TestClient, monkeypatch,
+) -> None:
+    from caseops_api.services.llm import LLMMessage, LLMQuotaExhaustedError
+
+    token = str(bootstrap_company(client)["access_token"])
+    matter_id = _create_matter(client, token, "DS-QUOTA-503")
+    _seed_authority(neutral_citation="2024 SCC OnLine SC 504")
+    draft = _create_draft(client, token, matter_id)
+
+    class _QuotaProvider:
+        name = "openai"
+        model = "gpt-5-mini"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            raise LLMQuotaExhaustedError(
+                "OpenAI quota exhausted: Error code: 429 - {'error': "
+                "{'code': 'insufficient_quota', 'message': 'billing raw'}}"
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.drafting.build_provider",
+        lambda *a, **kw: _QuotaProvider(),
+    )
+
+    resp = client.post(
+        f"/api/matters/{matter_id}/drafts/{draft['id']}/generate",
+        headers=auth_headers(token),
+        json={},
+    )
+
+    assert resp.status_code == 503, resp.text
+    body = resp.json()
+    assert body["type"] == "llm_quota_exhausted"
+    assert "provider quota is exhausted" in body["detail"]
+    assert "draft" in body["detail"]
+    assert "insufficient_quota" not in body["detail"]
+    assert "billing raw" not in body["detail"]
+    assert "No output was saved" in body["detail"]
 
 
 def test_create_draft_stepper_facts_passthrough(client: TestClient) -> None:

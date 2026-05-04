@@ -26,7 +26,7 @@ import {
 import { EmptyState } from "@/components/ui/EmptyState";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { apiErrorMessage } from "@/lib/api/config";
+import { apiErrorMessage, isApiErrorShape } from "@/lib/api/config";
 import {
   generateRecommendation,
   listRecommendations,
@@ -84,6 +84,7 @@ export default function MatterRecommendationsPage() {
   const [lastError, setLastError] = useState<{
     type: RecommendationType;
     message: string;
+    problemType: string | null;
   } | null>(null);
 
   const query = useQuery({
@@ -116,7 +117,11 @@ export default function MatterRecommendationsPage() {
       const message = apiErrorMessage(
         err, "Could not generate a recommendation.",
       );
-      setLastError({ type, message });
+      setLastError({
+        type,
+        message,
+        problemType: isApiErrorShape(err) ? err.problemType : null,
+      });
       toast.error(message);
     },
   });
@@ -148,7 +153,9 @@ export default function MatterRecommendationsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base text-amber-900">
               <XCircle className="h-4 w-4" aria-hidden />
-              {TYPE_LABEL[lastError.type]} generation needs more grounding
+              {lastError.problemType === "llm_quota_exhausted"
+                ? `${TYPE_LABEL[lastError.type]} generation is temporarily unavailable`
+                : `${TYPE_LABEL[lastError.type]} generation needs more grounding`}
             </CardTitle>
             <CardDescription className="text-amber-800">
               {lastError.message}

@@ -268,6 +268,38 @@ describe("MatterStrategyPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("BUG-031: quota exhaustion keeps actionable provider guidance instead of calling it grounding", async () => {
+    listRecommendationsMock.mockResolvedValue({
+      matter_id: "m-1",
+      recommendations: [],
+    });
+    generateRecommendationMock.mockRejectedValue({
+      name: "ApiError",
+      status: 503,
+      problemType: "llm_quota_exhausted",
+      detail:
+        "Could not generate the strategy: the configured AI provider quota is exhausted. Restore or top up provider credits, then retry. No output was saved.",
+      data: {},
+    });
+
+    render(withClient(<StrategyPage />));
+    fireEvent.click(await screen.findByTestId("strategy-generate"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("strategy-last-error")).toBeInTheDocument(),
+    );
+    expect(
+      screen.getByText(/Strategy generation is temporarily unavailable/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/needs more grounding/)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/provider quota is exhausted/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/No output was saved/i),
+    ).toBeInTheDocument();
+  });
+
   it("shows a loading skeleton while the query is pending", () => {
     listRecommendationsMock.mockReturnValue(
       // never-resolving promise → query stays pending

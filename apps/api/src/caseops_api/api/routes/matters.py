@@ -34,6 +34,7 @@ from caseops_api.schemas.billing import (
 )
 from caseops_api.schemas.drafts import (
     DraftCreateRequest,
+    DraftEditRequest,
     DraftGenerateRequest,
     DraftListResponse,
     DraftRecord,
@@ -92,6 +93,7 @@ from caseops_api.services.draft_compare import (
 from caseops_api.services.draft_pdf_export import render_version_pdf
 from caseops_api.services.drafting import (
     create_draft,
+    edit_draft_version,
     generate_draft_version,
     get_draft,
     list_drafts,
@@ -167,6 +169,7 @@ MatterCreator = Annotated[SessionContext, Depends(require_capability("matters:cr
 MatterWriter = Annotated[SessionContext, Depends(require_capability("matters:write"))]
 MatterEditor = Annotated[SessionContext, Depends(require_capability("matters:edit"))]
 DraftCreator = Annotated[SessionContext, Depends(require_capability("drafts:create"))]
+DraftEditor = Annotated[SessionContext, Depends(require_capability("drafts:edit"))]
 DraftGenerator = Annotated[SessionContext, Depends(require_capability("drafts:generate"))]
 DraftReviewer = Annotated[SessionContext, Depends(require_capability("drafts:review"))]
 DraftFinalizer = Annotated[SessionContext, Depends(require_capability("drafts:finalize"))]
@@ -1554,6 +1557,33 @@ async def get_current_company_matter_draft(
 ) -> DraftRecord:
     draft = get_draft(
         session, context=context, matter_id=matter_id, draft_id=draft_id
+    )
+    return DraftRecord.model_validate(load_draft_record(draft))
+
+
+@router.patch(
+    "/{matter_id}/drafts/{draft_id}",
+    response_model=DraftRecord,
+    summary="Save manual edits as a new draft revision",
+    description=(
+        "Creates a new version from the lawyer-edited body, keeps finalized "
+        "drafts immutable, and resets review_required so any prior approval "
+        "does not silently carry over to changed text."
+    ),
+)
+async def patch_current_company_matter_draft(
+    matter_id: str,
+    draft_id: str,
+    payload: DraftEditRequest,
+    context: DraftEditor,
+    session: DbSession,
+) -> DraftRecord:
+    draft = edit_draft_version(
+        session,
+        context=context,
+        matter_id=matter_id,
+        draft_id=draft_id,
+        body=payload.body,
     )
     return DraftRecord.model_validate(load_draft_record(draft))
 

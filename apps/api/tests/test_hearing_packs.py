@@ -261,3 +261,43 @@ def test_hearing_pack_provider_error_returns_actionable_422(
     assert "LLMProviderError" in detail
     lowered = detail.lower()
     assert "retry" in lowered or "support" in lowered
+
+
+def test_hearing_pack_quota_error_returns_actionable_503_without_raw_provider_leak(
+    client: TestClient, monkeypatch,
+) -> None:
+    from caseops_api.services.llm import LLMMessage, LLMQuotaExhaustedError
+
+    token = str(bootstrap_company(client)["access_token"])
+    matter_id = _create_matter(client, token, "HP-QUOTA-503")
+    hearing_id = _create_hearing(client, token, matter_id)
+
+    class _QuotaProvider:
+        name = "openai"
+        model = "gpt-5-mini"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            raise LLMQuotaExhaustedError(
+                "OpenAI quota exhausted: Error code: 429 - {'error': "
+                "{'code': 'insufficient_quota', 'message': 'billing raw'}}"
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.hearing_packs.build_provider",
+        lambda *a, **kw: _QuotaProvider(),
+    )
+
+    resp = client.post(
+        f"/api/matters/{matter_id}/hearings/{hearing_id}/pack",
+        headers=auth_headers(token),
+        json={},
+    )
+
+    assert resp.status_code == 503, resp.text
+    body = resp.json()
+    assert body["type"] == "llm_quota_exhausted"
+    assert "provider quota is exhausted" in body["detail"]
+    assert "hearing pack" in body["detail"]
+    assert "insufficient_quota" not in body["detail"]
+    assert "billing raw" not in body["detail"]
+    assert "No output was saved" in body["detail"]

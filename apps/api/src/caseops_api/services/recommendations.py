@@ -64,6 +64,7 @@ from caseops_api.services.llm import (
     build_provider,
     generate_structured,
 )
+from caseops_api.services.llm_http import provider_failure_http_exception
 
 logger = logging.getLogger(__name__)
 
@@ -623,13 +624,9 @@ def generate_recommendation(
                 getattr(llm, "model", "<unknown>"),
                 type(retry_exc).__name__,
             )
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=(
-                    f"Could not generate the recommendation: "
-                    f"{type(retry_exc).__name__}: {retry_exc}. Please "
-                    f"retry in a minute."
-                ),
+            raise provider_failure_http_exception(
+                noun="recommendation",
+                exc=retry_exc,
             ) from retry_exc
     except LLMProviderError as exc:
         logger.warning(
@@ -638,12 +635,9 @@ def generate_recommendation(
             getattr(llm, "model", "<unknown>"),
             type(exc).__name__,
         )
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=(
-                f"Could not generate the recommendation: "
-                f"{type(exc).__name__}: {exc}. Please retry in a minute."
-            ),
+        raise provider_failure_http_exception(
+            noun="recommendation",
+            exc=exc,
         ) from exc
 
     cleaned_options, report = _filter_and_verify_options(parsed.options, retrieved)

@@ -354,6 +354,44 @@ def test_recommendation_provider_error_returns_actionable_502(
     assert "retry" in detail.lower()
 
 
+def test_recommendation_quota_error_returns_actionable_503_without_raw_provider_leak(
+    client: TestClient, monkeypatch,
+) -> None:
+    from caseops_api.services.llm import LLMMessage, LLMQuotaExhaustedError
+
+    _seed_relevant_authority()
+
+    class _QuotaProvider:
+        name = "openai"
+        model = "gpt-5-mini"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            raise LLMQuotaExhaustedError(
+                "OpenAI quota exhausted: Error code: 429 - {'error': "
+                "{'code': 'insufficient_quota', 'message': 'billing raw'}}"
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _QuotaProvider(),
+    )
+
+    token, _, matter_id = _setup_matter(client)
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "authority"},
+    )
+
+    assert response.status_code == 503, response.text
+    body = response.json()
+    assert body["type"] == "llm_quota_exhausted"
+    assert "provider quota is exhausted" in body["detail"]
+    assert "insufficient_quota" not in body["detail"]
+    assert "billing raw" not in body["detail"]
+    assert "No output was saved" in body["detail"]
+
+
 def test_shared_citation_credits_every_option_that_cites_it(
     client: TestClient, monkeypatch
 ) -> None:

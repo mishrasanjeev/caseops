@@ -147,6 +147,33 @@ describe("MatterDocumentsPage", () => {
     expect(reindexMock).toHaveBeenCalledWith({ matterId: "m1", attachmentId: "a1" });
   });
 
+  it("BUG-038: PDF attachments are opened through the dedicated viewer route", () => {
+    useCapabilityMock.mockImplementation(() => false);
+    attachments([
+      {
+        id: "a1",
+        original_filename: "court-order.pdf",
+        mime_type: "application/pdf",
+        size_bytes: 2048,
+        processing_status: "indexed",
+        created_at: new Date().toISOString(),
+      },
+    ]);
+
+    render(withClient(<MatterDocumentsPage />));
+
+    const nameLink = screen.getByTestId("matter-attachment-name-a1");
+    const viewLink = screen.getByTestId("matter-attachment-view-a1");
+    expect(nameLink).toHaveAttribute(
+      "href",
+      "/app/matters/m1/documents/a1/view",
+    );
+    expect(viewLink).toHaveAttribute(
+      "href",
+      "/app/matters/m1/documents/a1/view",
+    );
+  });
+
   it("hides action column entirely for members without documents:manage", () => {
     useCapabilityMock.mockImplementation((cap: string) => cap === "documents:upload");
     attachments([

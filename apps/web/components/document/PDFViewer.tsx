@@ -241,14 +241,27 @@ export function PDFViewer({
           </Button>
         </form>
         {filename ? (
-          <a
-            href={url}
-            download={filename}
-            aria-label="Download PDF"
-            className="inline-flex h-8 items-center rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm font-medium hover:bg-[var(--color-surface-raised)]"
-          >
-            Download
-          </a>
+          <>
+            <a
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Open original PDF"
+              data-testid="pdf-open-original"
+              className="inline-flex h-8 items-center rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm font-medium hover:bg-[var(--color-surface-raised)]"
+            >
+              Open original
+            </a>
+            <a
+              href={url}
+              download={filename}
+              aria-label="Download PDF"
+              data-testid="pdf-download-original"
+              className="inline-flex h-8 items-center rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm font-medium hover:bg-[var(--color-surface-raised)]"
+            >
+              Download
+            </a>
+          </>
         ) : null}
       </div>
 

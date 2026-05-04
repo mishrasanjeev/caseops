@@ -854,6 +854,21 @@ export async function generateDraftVersion(input: {
   return draft.parse(data);
 }
 
+export async function saveDraftEdits(input: {
+  matterId: string;
+  draftId: string;
+  body: string;
+}): Promise<Draft> {
+  const data = await apiRequest<unknown>(
+    `/api/matters/${input.matterId}/drafts/${input.draftId}`,
+    {
+      method: "PATCH",
+      body: { body: input.body },
+    },
+  );
+  return draft.parse(data);
+}
+
 type Transition = "submit" | "request-changes" | "approve" | "finalize";
 
 async function transitionDraft(

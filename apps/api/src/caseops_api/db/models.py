@@ -2720,6 +2720,7 @@ class DraftType(StrEnum):
 
 
 class DraftReviewAction(StrEnum):
+    EDIT = "edit"
     SUBMIT = "submit"
     REQUEST_CHANGES = "request_changes"
     APPROVE = "approve"

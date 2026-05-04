@@ -54,9 +54,11 @@ from caseops_api.services.llm import (
     LLMCallContext,
     LLMMessage,
     LLMProviderError,
+    LLMQuotaExhaustedError,
     build_provider,
     generate_structured,
 )
+from caseops_api.services.llm_http import provider_failure_http_exception
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +88,11 @@ def _structured_with_retry(
         )
     try:
         return _call(provider)
+    except LLMQuotaExhaustedError as exc:
+        raise provider_failure_http_exception(
+            noun="contract intelligence result",
+            exc=exc,
+        ) from exc
     except LLMProviderError as exc:
         logger.warning(
             "%s: provider failed (%s: %s); retrying once",
@@ -93,6 +100,11 @@ def _structured_with_retry(
         )
         try:
             return _call(provider)
+        except LLMQuotaExhaustedError as retry_exc:
+            raise provider_failure_http_exception(
+                noun="contract intelligence result",
+                exc=retry_exc,
+            ) from retry_exc
         except LLMProviderError as retry_exc:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
