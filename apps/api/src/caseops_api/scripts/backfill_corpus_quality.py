@@ -464,6 +464,41 @@ def _structured_pass(
             "triage_only": True,
         }
 
+    if concurrency > 1:
+        # Release the read-only triage transaction so the long-lived
+        # connection isn't held idle-in-transaction for the duration
+        # of the worker run. Workers in ``_run_bucket_concurrent`` use
+        # their own sessions opened via ``SessionFactory()``; this
+        # ``session`` is not used again by ``_structured_pass``.
+        #
+        # Anchor: 2026-05-04 c=16 run on the ingest VM held the
+        # triage connection idle-in-transaction for 30+ minutes
+        # (state=idle in transaction, wait_event=Client/ClientRead)
+        # because the SELECT loaded 43,984 candidate rows then
+        # ``all_docs.all()`` returned but no COMMIT/ROLLBACK was
+        # issued. With Cloud SQL ``max_connections=100`` and
+        # several other VM jobs alive, every held connection
+        # matters.
+        #
+        # We use ``rollback()`` not ``close()`` because the caller
+        # owns the session via ``with SessionFactory() as session:``
+        # in ``run()``. Closing here would invalidate the caller's
+        # context manager. ``rollback()`` ends the current
+        # transaction and returns the connection to the pool while
+        # leaving the session object usable. ``expire_on_commit``
+        # is False on the engine (see ``db/session.py``) so any
+        # ORM attribute access on the in-memory bucket docs that
+        # remains (e.g. ``_year_for_doc(d)`` was already called for
+        # the sort above) does not trigger a re-query.
+        #
+        # Sequential mode (``concurrency == 1``) keeps the prior
+        # behaviour: ``_run_bucket_sequential`` reuses the SAME
+        # ``session`` to call ``extract_and_persist_structured``
+        # and ``session.commit()``, so releasing the transaction
+        # here would flush a stale state on the very next
+        # statement.
+        session.rollback()
+
     totals = {
         "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "budget_usd": budget_usd,
