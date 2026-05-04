@@ -55,6 +55,16 @@ from caseops_api.services.corpus_structured import (
     SONNET_VERSION,
     extract_and_persist_structured,
 )
+from caseops_api.services.llm import (
+    LLMDailyCapReachedError,
+    LLMQuotaExhaustedError,
+)
+
+# Sentinel returned by ``_process`` when an upstream stop signal
+# fires (operator daily cap or upstream provider quota). The driver
+# uses this to drain in-flight workers and exit cleanly without
+# marking docs as ordinary failures.
+_STOP_SIGNAL = "DAILY_CAP_REACHED"
 
 logger = logging.getLogger("caseops.backfill")
 
@@ -495,6 +505,23 @@ def _structured_pass(
                 summary = extract_and_persist_structured(
                     session, document=doc, tier=tier,
                 )
+            except (LLMDailyCapReachedError, LLMQuotaExhaustedError) as exc:
+                # Hard stop signal — daily cap reached, or upstream
+                # provider rejected with insufficient_quota /
+                # credit-balance-too-low. Continuing the loop would
+                # spin every remaining doc into the same failure
+                # without any chance of recovery. Roll back, log a
+                # single warning, and exit the bucket. Do NOT
+                # increment totals["failures"]; this is operational,
+                # not a per-doc parse / network blip.
+                logger.warning(
+                    "%s after %d/%d %s docs (%s): %s — stopping bucket",
+                    type(exc).__name__, i - 1, len(bucket), tier,
+                    exc.__class__.__module__, exc,
+                )
+                session.rollback()
+                _emit_budget_snapshot(totals)
+                return False
             except Exception:
                 logger.exception(
                     "structured extraction failed for %s (tier=%s)",
@@ -541,6 +568,21 @@ def _structured_pass(
                     summary = extract_and_persist_structured(
                         worker_session, document=doc, tier=tier,
                     )
+                except (LLMDailyCapReachedError, LLMQuotaExhaustedError) as exc:
+                    # Hard stop signal — daily cap reached, or
+                    # upstream provider quota exhausted. Surface to
+                    # the driver via a typed sentinel so it can
+                    # drain in-flight work and exit cleanly. Do NOT
+                    # log a noisy traceback here (the driver will
+                    # emit a single summary line) and do NOT
+                    # increment failures (this is operational, not
+                    # a per-doc bug).
+                    logger.warning(
+                        "stop signal %s for %s: %s",
+                        type(exc).__name__, doc_id, exc,
+                    )
+                    worker_session.rollback()
+                    return _STOP_SIGNAL
                 except Exception:
                     logger.exception(
                         "structured extraction failed for %s (tier=%s)",
@@ -576,7 +618,13 @@ def _structured_pass(
                     summary = "FAILED"
 
                 with totals_lock:
-                    if summary == "FAILED":
+                    if summary == _STOP_SIGNAL:
+                        # Hard stop: do NOT count toward failures and
+                        # do NOT advance done. The flag is set so the
+                        # block below drains in-flight without
+                        # submitting more.
+                        pass
+                    elif summary == "FAILED":
                         totals["failures"] += 1
                     elif summary is not None:
                         totals[tier]["done"] += 1
@@ -591,11 +639,12 @@ def _structured_pass(
                             )
                     done_count = totals[tier]["done"]
                     over_budget = totals["spent_usd"] >= budget_usd
+                    stop_signal = summary == _STOP_SIGNAL
                     if done_count and done_count % 10 == 0:
                         rate = done_count / max(time.time() - t0, 1e-6)
                         last_model = (
                             summary.model
-                            if summary not in (None, "FAILED")
+                            if summary not in (None, "FAILED", _STOP_SIGNAL)
                             else "?"
                         )
                         logger.info(
@@ -606,12 +655,20 @@ def _structured_pass(
                         )
                         _emit_budget_snapshot(totals)
 
-                if over_budget:
-                    logger.warning(
-                        "budget ceiling $%.2f reached; stopping %s tier "
-                        "(submitted=%d, in_flight=%d)",
-                        budget_usd, tier, idx, len(in_flight),
-                    )
+                if stop_signal or over_budget:
+                    if stop_signal:
+                        logger.warning(
+                            "stop signal received on %s tier "
+                            "(daily cap or upstream quota); "
+                            "draining in-flight (submitted=%d, in_flight=%d)",
+                            tier, idx, len(in_flight),
+                        )
+                    else:
+                        logger.warning(
+                            "budget ceiling $%.2f reached; stopping %s tier "
+                            "(submitted=%d, in_flight=%d)",
+                            budget_usd, tier, idx, len(in_flight),
+                        )
                     # let already-in-flight workers finish; do not submit more
                     for pending_fut in as_completed(list(in_flight.keys())):
                         pending_id = in_flight.pop(pending_fut)
@@ -623,6 +680,10 @@ def _structured_pass(
                             )
                             with totals_lock:
                                 totals["failures"] += 1
+                            continue
+                        if pending_summary == _STOP_SIGNAL:
+                            # In-flight worker also hit the cap — same
+                            # treatment as above: don't count, don't fail.
                             continue
                         if pending_summary not in (None, "FAILED"):
                             with totals_lock:

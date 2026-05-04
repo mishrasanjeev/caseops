@@ -50,6 +50,20 @@ class LLMQuotaExhaustedError(LLMProviderError):
     (Haiku) would hit the same wall."""
 
 
+class LLMDailyCapReachedError(LLMProviderError):
+    """Raised by ``ensure_daily_cap_not_exceeded`` when the
+    operator-configured daily spend ceiling
+    (``CASEOPS_LAYER2_DAILY_CAP_USD``) has been reached for today's
+    ``metadata_extract`` calls.
+
+    Distinct from ``LLMQuotaExhaustedError`` (upstream provider hard
+    stop) but treated identically by the Layer-2 backfill driver:
+    BOTH are stop signals that should drain in-flight workers and
+    exit cleanly without marking docs as ordinary failures. A typed
+    subclass beats string-matching the exception message — the
+    message text is operator-facing and may be reworded later."""
+
+
 @dataclass(frozen=True)
 class LLMMessage:
     role: str  # "system" | "user" | "assistant"
@@ -1082,6 +1096,7 @@ __all__ = [
     "LLMCompletion",
     "LLMMessage",
     "LLMProvider",
+    "LLMDailyCapReachedError",
     "LLMProviderError",
     "LLMQuotaExhaustedError",
     "LLMResponseFormatError",

@@ -38,6 +38,7 @@ from caseops_api.services.llm import (
     PURPOSE_METADATA_EXTRACT,
     LLMCallContext,
     LLMCompletion,
+    LLMDailyCapReachedError,
     LLMMessage,
     LLMProvider,
     LLMProviderError,
@@ -343,7 +344,13 @@ def ensure_daily_cap_not_exceeded(session) -> None:  # type: ignore[no-untyped-d
             int(completion_tokens or 0),
         )
     if spent >= cap:
-        raise LLMProviderError(
+        # ``LLMDailyCapReachedError`` is a typed subclass of
+        # ``LLMProviderError`` — the Layer-2 backfill driver
+        # (``backfill_corpus_quality._process``) catches it as a
+        # hard stop signal, drains in-flight workers, and exits
+        # cleanly without marking docs as ordinary failures. A typed
+        # subclass beats string-matching on this message text.
+        raise LLMDailyCapReachedError(
             f"Layer 2 daily cap reached: ${spent:.2f} spent today "
             f"(cap ${cap:.2f}). Set CASEOPS_LAYER2_DAILY_CAP_USD "
             f"to raise the limit; default is "
