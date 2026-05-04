@@ -10,14 +10,33 @@ from caseops_api.core.settings import get_settings
 from caseops_api.db import models  # noqa: F401
 from caseops_api.db.base import Base
 
-_ENGINE_CACHE: dict[str, Engine] = {}
+# Cache key includes pool settings so that an env change between
+# tests / processes produces a fresh engine instead of returning the
+# stale one. Production use only constructs the engine once per
+# process (settings are env-frozen) so this has no overhead in real
+# deployments. Tests that monkeypatch CASEOPS_DB_POOL_SIZE etc. get
+# a fresh engine without needing ``clear_engine_cache()``.
+_EngineCacheKey = tuple[str, int, int, int]
+_ENGINE_CACHE: dict[_EngineCacheKey, Engine] = {}
 
 
 def get_engine(database_url: str | None = None) -> Engine:
-    resolved_url = database_url or get_settings().database_url
-    if resolved_url not in _ENGINE_CACHE:
+    settings = get_settings()
+    resolved_url = database_url or settings.database_url
+    cache_key: _EngineCacheKey = (
+        resolved_url,
+        settings.db_pool_size,
+        settings.db_max_overflow,
+        settings.db_pool_timeout,
+    )
+    if cache_key not in _ENGINE_CACHE:
         if resolved_url.startswith("sqlite"):
             connect_args: dict[str, object] = {"check_same_thread": False}
+            # SQLite uses StaticPool / SingletonThreadPool depending on
+            # url; explicit pool_size/max_overflow/pool_timeout don't
+            # apply (and SQLAlchemy will raise if passed). Keep SQLite
+            # kwargs minimal — every pool tuning knob in this file is
+            # for the Postgres-backed engines only.
             engine_kwargs: dict[str, object] = {"future": True}
         else:
             # TCP keepalive on the Postgres socket. Without these, a long-
@@ -52,15 +71,28 @@ def get_engine(database_url: str | None = None) -> Engine:
             # (5min) recycle is well under any reasonable idle-timeout
             # threshold and the ~3ms cost of reconnecting is negligible
             # vs the cost of a failed insert + retry.
+            #
+            # 2026-05-04: pool_size / max_overflow / pool_timeout
+            # surfaced as env-tunable settings. Defaults still match
+            # SQLAlchemy's own (5 / 10 / 30) so Cloud Run instance
+            # multiplication doesn't pin Cloud SQL. The ingest VM
+            # overrides these via env before launching concurrent
+            # backfill workers — PR #9's independent audit-row session
+            # means each Layer-2 call needs 2 connections at peak, so
+            # the rule of thumb is pool_size + max_overflow >=
+            # 2 * concurrency + buffer.
             engine_kwargs = {
                 "future": True,
                 "pool_pre_ping": True,
                 "pool_recycle": 300,
+                "pool_size": settings.db_pool_size,
+                "max_overflow": settings.db_max_overflow,
+                "pool_timeout": settings.db_pool_timeout,
             }
-        _ENGINE_CACHE[resolved_url] = create_engine(
+        _ENGINE_CACHE[cache_key] = create_engine(
             resolved_url, connect_args=connect_args, **engine_kwargs
         )
-    return _ENGINE_CACHE[resolved_url]
+    return _ENGINE_CACHE[cache_key]
 
 
 def get_session_factory(database_url: str | None = None) -> sessionmaker[Session]:

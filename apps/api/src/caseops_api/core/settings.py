@@ -48,6 +48,17 @@ class Settings(BaseSettings):
     api_docs_enabled: bool | None = Field(default=None)
     public_app_url: AnyHttpUrl = Field(default="http://localhost:3000")
     database_url: str = Field(default=LOCAL_POSTGRES_DATABASE_URL)
+    # SQLAlchemy connection pool sizing for non-SQLite engines.
+    # Defaults match SQLAlchemy's own defaults (pool_size=5,
+    # max_overflow=10, pool_timeout=30) and stay conservative for
+    # Cloud Run / API where each instance multiplies connections.
+    # The ingest VM overrides via env when running concurrent
+    # backfill workers — see PR #13 anchor (2026-05-04 c=16 attempt
+    # exhausted the default 15-connection pool because PR #9's
+    # independent audit-row session doubles per-call demand).
+    db_pool_size: int = Field(default=5, ge=1)
+    db_max_overflow: int = Field(default=10, ge=0)
+    db_pool_timeout: int = Field(default=30, ge=1)
     auth_secret: str = Field(default=PLACEHOLDER_AUTH_SECRET, min_length=32)
     access_token_ttl_minutes: int = Field(default=120)
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
