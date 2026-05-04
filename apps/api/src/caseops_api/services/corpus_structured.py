@@ -101,6 +101,83 @@ def _coerce_to_dict(v):  # noqa: ANN001
         return v
     return {}
 
+
+def _coerce_to_optional_str(v):  # noqa: ANN001
+    """Accept the shapes gpt-5-mini emits for a single-string field
+    and return either a non-empty string or None.
+
+    The recurring real-world failure (2026-05-04, ~10-15% of SC
+    judgments) is consolidated appeals where the model produces
+
+        "case_number": [
+            "Crl. Appeal No. 2056 of 2014",
+            "Crl. Appeal Nos. 2057-58 of 2014",
+            "SLP (Crl.) No. 553/2011"
+        ]
+
+    against a schema that declares ``case_number: str | None``. Losing
+    every consolidated SC appeal to a list-vs-string nit is the wrong
+    trade — we want the *content*, not the shape. This validator runs
+    before pydantic so the typed schema is happy and the persist code
+    (``[:255]``) trims to DB-safe length downstream.
+
+    Coercion rules:
+
+    - ``None`` / ``""``                         -> ``None``
+    - ``str``                                   -> stripped, ``None`` if blank
+    - ``list`` / ``tuple``                      -> ``"; "``-joined non-empty
+                                                   stripped scalar items;
+                                                   ``None`` if no items survive
+    - ``dict``                                  -> ``None`` (no obvious
+                                                   single value to pick;
+                                                   discarding is safer than
+                                                   guessing the wrong key)
+    - any other scalar (int, float, bool, etc.) -> ``str(value)`` stripped
+    """
+    if v is None:
+        return None
+    if isinstance(v, str):
+        s = v.strip()
+        return s or None
+    if isinstance(v, (list, tuple)):
+        parts: list[str] = []
+        for item in v:
+            if item is None:
+                continue
+            if isinstance(item, (list, tuple, dict)):
+                # Don't recurse — flattening structured items risks
+                # serialising inner dicts as ``{'k': 'v'}``-style
+                # debug strings. Drop them; the model should have
+                # emitted scalars here.
+                continue
+            s = str(item).strip()
+            if s:
+                parts.append(s)
+        if not parts:
+            return None
+        # Trim at item boundaries so pydantic's smallest field cap
+        # (``outcome.max_length=240``) does not reject the whole
+        # payload when a consolidated appeal list joins past 240
+        # chars. case_title (max 800) and case_number (max 480) get
+        # the same conservative cap — the persist step in
+        # ``extract_and_persist_structured`` trims further to the
+        # column-specific DB length (case_title/case_number ``[:255]``,
+        # outcome ``[:120]``) before assignment, so a 240-char ceiling
+        # here doesn't cost any column data.
+        joined = "; ".join(parts)
+        if len(joined) > 240:
+            while len(parts) > 1 and len("; ".join(parts)) > 240:
+                parts.pop()
+            joined = "; ".join(parts)
+            if len(joined) > 240:
+                # Single surviving item is itself too long — hard cut.
+                joined = joined[:240]
+        return joined
+    if isinstance(v, dict):
+        return None
+    s = str(v).strip()
+    return s or None
+
 # Version stamp encodes extraction tier so we never downgrade a
 # Sonnet-annotated doc with a later Haiku pass:
 #   1 = Haiku 4.5 (the budget tier)
@@ -335,6 +412,14 @@ class _ExtractionPayload(BaseModel):
     _coerce_doc_secs = field_validator("sections_cited", mode="before")(_coerce_str_list)
     _coerce_parties = field_validator("parties", mode="before")(_coerce_to_dict)
     _coerce_advocates = field_validator("advocates", mode="before")(_coerce_to_dict)
+    # Single-string fields: gpt-5-mini routinely emits a list when the
+    # underlying judgment has multiple values (consolidated appeals
+    # for case_number, multi-line head for case_title, multi-clause
+    # disposition for outcome). The validator joins list items rather
+    # than rejecting; the persist step trims to the DB-safe length.
+    _coerce_case_number = field_validator("case_number", mode="before")(_coerce_to_optional_str)
+    _coerce_case_title = field_validator("case_title", mode="before")(_coerce_to_optional_str)
+    _coerce_outcome = field_validator("outcome", mode="before")(_coerce_to_optional_str)
     outcome: str | None = Field(default=None, max_length=240)
     chunks: list[_ChunkAnnotation] = Field(default_factory=list, max_length=600)
 
