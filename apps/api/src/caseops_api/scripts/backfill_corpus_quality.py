@@ -39,6 +39,7 @@ import time
 from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from typing import Literal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -57,9 +58,34 @@ from caseops_api.services.corpus_structured import (
 
 logger = logging.getLogger("caseops.backfill")
 
-# Year encoded as the leading 4 digits of the filename stem, produced
-# by the ecourts adapter (e.g. ``2025_12_593_610_EN.pdf``).
-_YEAR_RE = re.compile(r"(?:^|/)(\d{4})_")
+# Year extraction has three sources, tried in order:
+#
+# 1. SC filename pattern: ``2025_12_593_610_EN.pdf`` — ecourts SC
+#    adapter packs the year into the leading 4 digits of the filename
+#    stem. Matches against ``(?:^|/)(\d{4})_`` so paths like
+#    ``sc/2024/2025_X_Y_Z.pdf`` still resolve to 2025.
+# 2. HC trailing-date pattern: ``DLHC010000672024_1_2024-02-08.pdf`` —
+#    Delhi HC and other state HCs prefix the filename with the court
+#    code + case ID, then append ``_YYYY-MM-DD.pdf`` for the decision
+#    date. The 2026-05-04 corpus probe showed 100 % (45,392 / 45,392)
+#    of HC docs match this pattern; the SC regex above misses every
+#    one of them.
+# 3. ``decision_date`` column fallback. ~60 % of HC docs and most
+#    older SC docs have ``decision_date`` populated by the ingest
+#    adapter even when the filename year is unparseable. This catches
+#    the long tail (notably old SC ``S_1995_...`` outliers).
+#
+# Returns ``None`` only when ALL three sources fail. Callers track
+# the source label for the per-source counter line at triage time so
+# operators can see which patterns the corpus is actually hitting.
+_SC_FILENAME_YEAR_RE = re.compile(r"(?:^|/)(\d{4})_")
+_HC_TRAILING_DATE_RE = re.compile(r"_(\d{4})-\d{2}-\d{2}(?:\.pdf)?$", re.IGNORECASE)
+# Legacy alias retained so any external import doesn't break.
+_YEAR_RE = _SC_FILENAME_YEAR_RE
+
+YearSource = Literal[
+    "sc_filename", "hc_trailing_date", "decision_date", "unparseable",
+]
 _BUDGET_LOG_PATH = Path("tmp/structured_budget.json")
 
 # Default forum scope for the EN-only backfill.
@@ -213,17 +239,46 @@ class _FakePath:
         return name
 
 
-def _year_for_doc(doc: AuthorityDocument) -> int | None:
-    """Decode the filename year from ``source_reference`` (e.g.
-    ``2025_12_593_610_EN.pdf`` → 2025). Returns None if absent."""
+def _year_and_source_for_doc(
+    doc: AuthorityDocument,
+) -> tuple[int | None, YearSource]:
+    """Return ``(year, source)`` for a doc using three sources in order.
+
+    See ``_SC_FILENAME_YEAR_RE`` / ``_HC_TRAILING_DATE_RE`` /
+    ``AuthorityDocument.decision_date`` block comment above for the
+    rationale of each source. ``source`` is always a non-None label so
+    triage counters can attribute every doc to exactly one bucket
+    (including ``"unparseable"`` for the rejected tail).
+    """
     ref = doc.source_reference or ""
-    m = _YEAR_RE.search("/" + ref)
-    if not m:
-        return None
-    try:
-        return int(m.group(1))
-    except ValueError:
-        return None
+    if ref:
+        m = _SC_FILENAME_YEAR_RE.search("/" + ref)
+        if m:
+            try:
+                return int(m.group(1)), "sc_filename"
+            except ValueError:
+                pass
+        m = _HC_TRAILING_DATE_RE.search(ref)
+        if m:
+            try:
+                return int(m.group(1)), "hc_trailing_date"
+            except ValueError:
+                pass
+    dd = doc.decision_date
+    if dd is not None:
+        return dd.year, "decision_date"
+    return None, "unparseable"
+
+
+def _year_for_doc(doc: AuthorityDocument) -> int | None:
+    """Backward-compatible single-int accessor.
+
+    Kept so existing callers (sort keys, etc.) don't change. New
+    code that needs to count per-source uses
+    ``_year_and_source_for_doc``.
+    """
+    year, _ = _year_and_source_for_doc(doc)
+    return year
 
 
 def _tier_for_doc(doc: AuthorityDocument) -> str:
@@ -269,6 +324,7 @@ def _structured_pass(
     concurrency: int = 1,
     english_only: bool = True,
     forums: frozenset[str] | None = None,
+    triage_only: bool = False,
 ) -> dict:
     """Triage router over every doc that still needs structured data.
 
@@ -277,10 +333,13 @@ def _structured_pass(
     chronological order so recent judgments are covered before older
     ones if the budget runs out.
 
-    ``year_range`` (lo, hi inclusive): when set, only Sonnet candidates
-    whose filename year falls in [lo, hi] are processed, and the Haiku
-    bucket is skipped entirely. This is the per-bucket workflow — run
-    SC 2020-2025 first, audit, then SC 2015-2019, etc.
+    ``year_range`` (lo, hi inclusive): when set, BOTH tiers are
+    filtered — only docs whose extracted year (per
+    ``_year_and_source_for_doc``) falls in [lo, hi] are processed.
+    The 2026-05-02 fix corrected the prior Sonnet-only behaviour
+    that turned per-bucket haiku invocations into no-ops for ~9 days.
+    Use for per-bucket workflow, e.g. SC 2020-2025 first, audit,
+    then SC 2015-2019, etc.
     """
     # Candidate set: anything below the target tier's stamp.
     stmt = (
@@ -322,6 +381,16 @@ def _structured_pass(
     skipped_non_en = 0
     skipped_forum = 0
     skipped_year = 0
+    # Per-source counters: how many docs got a year from each of the
+    # three sources, vs how many were rejected as unparseable. Reported
+    # alongside the triage line so a future ingest format change is
+    # caught at scan time rather than at structured-extraction time.
+    year_source_counts: dict[YearSource, int] = {
+        "sc_filename": 0,
+        "hc_trailing_date": 0,
+        "decision_date": 0,
+        "unparseable": 0,
+    }
     for doc in all_docs:
         tier = force_tier or _tier_for_doc(doc)
         if _already_covered_at_tier(doc, tier):
@@ -330,7 +399,8 @@ def _structured_pass(
             skipped_forum += 1
             continue
         if year_range is not None:
-            year = _year_for_doc(doc)
+            year, year_src = _year_and_source_for_doc(doc)
+            year_source_counts[year_src] += 1
             if year is None or not (year_range[0] <= year <= year_range[1]):
                 skipped_year += 1
                 continue
@@ -346,6 +416,15 @@ def _structured_pass(
             "filter rejections: forum=%d  year=%d  non_english=%d",
             skipped_forum, skipped_year, skipped_non_en,
         )
+        if year_range is not None:
+            logger.info(
+                "year sources: sc_filename=%d  hc_trailing_date=%d  "
+                "decision_date=%d  unparseable=%d",
+                year_source_counts["sc_filename"],
+                year_source_counts["hc_trailing_date"],
+                year_source_counts["decision_date"],
+                year_source_counts["unparseable"],
+            )
 
     # Sort each bucket by filename year DESC so newest lands before
     # oldest inside a multi-year bucket. NULL-dated docs without a
@@ -364,6 +443,26 @@ def _structured_pass(
             "triage: %d sonnet candidates, %d haiku candidates, budget=$%.2f",
             len(sonnet_bucket), len(haiku_bucket), budget_usd,
         )
+
+    if triage_only:
+        # Diagnostic mode: print the candidate counts + per-source
+        # breakdown, then exit before any LLM call. Used to validate
+        # candidate-selection changes (year parser, EN filter, forum
+        # filter) without burning OpenAI tokens.
+        return {
+            "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "budget_usd": budget_usd,
+            "spent_usd": 0.0,
+            "sonnet": {"done": 0, "cost_usd": 0.0, "candidates": len(sonnet_bucket)},
+            "haiku": {"done": 0, "cost_usd": 0.0, "candidates": len(haiku_bucket)},
+            "failures": 0,
+            "quality_low": 0,
+            "year_sources": dict(year_source_counts),
+            "skipped_forum": skipped_forum,
+            "skipped_year": skipped_year,
+            "skipped_non_english": skipped_non_en,
+            "triage_only": True,
+        }
 
     totals = {
         "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -580,6 +679,7 @@ def run(
     concurrency: int = 1,
     english_only: bool = True,
     forums: frozenset[str] | None = None,
+    triage_only: bool = False,
 ) -> int:
     logging.basicConfig(
         level=logging.INFO,
@@ -603,16 +703,32 @@ def run(
                 concurrency=concurrency,
                 english_only=english_only,
                 forums=forums,
+                triage_only=triage_only,
             )
-            sys.stdout.write(
-                "structured-pass: "
-                f"sonnet_done={totals['sonnet']['done']}/{totals['sonnet']['candidates']} "
-                f"(${totals['sonnet']['cost_usd']:.2f}) "
-                f"haiku_done={totals['haiku']['done']}/{totals['haiku']['candidates']} "
-                f"(${totals['haiku']['cost_usd']:.2f}) "
-                f"total=${totals['spent_usd']:.2f} "
-                f"failures={totals['failures']} quality_low={totals['quality_low']}\n"
-            )
+            if totals.get("triage_only"):
+                ys = totals.get("year_sources", {})
+                sys.stdout.write(
+                    "triage-only: "
+                    f"sonnet_candidates={totals['sonnet']['candidates']} "
+                    f"haiku_candidates={totals['haiku']['candidates']} "
+                    f"skipped_forum={totals.get('skipped_forum', 0)} "
+                    f"skipped_year={totals.get('skipped_year', 0)} "
+                    f"skipped_non_english={totals.get('skipped_non_english', 0)} "
+                    f"year_sources(sc={ys.get('sc_filename', 0)}, "
+                    f"hc={ys.get('hc_trailing_date', 0)}, "
+                    f"dd={ys.get('decision_date', 0)}, "
+                    f"unparseable={ys.get('unparseable', 0)})\n"
+                )
+            else:
+                sys.stdout.write(
+                    "structured-pass: "
+                    f"sonnet_done={totals['sonnet']['done']}/{totals['sonnet']['candidates']} "
+                    f"(${totals['sonnet']['cost_usd']:.2f}) "
+                    f"haiku_done={totals['haiku']['done']}/{totals['haiku']['candidates']} "
+                    f"(${totals['haiku']['cost_usd']:.2f}) "
+                    f"total=${totals['spent_usd']:.2f} "
+                    f"failures={totals['failures']} quality_low={totals['quality_low']}\n"
+                )
     return 0
 
 
@@ -647,9 +763,12 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument(
         "--year-range", default=None,
         help=(
-            "Restrict the Sonnet pass to filename-year YYYY-YYYY (inclusive); "
-            "Haiku bucket is skipped. Use for per-bucket workflow, e.g. "
-            "--year-range 2020-2025."
+            "Restrict BOTH tiers to documents whose extracted year falls "
+            "in YYYY-YYYY (inclusive). Year is read from the SC filename "
+            "pattern, the HC trailing-date pattern, or the decision_date "
+            "column — whichever resolves first. With --english-only on, "
+            "the default is 1990-2025 (SC + all HC). Use for per-bucket "
+            "workflow, e.g. --year-range 2020-2025."
         ),
     )
     parser.add_argument(
@@ -677,6 +796,15 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument(
         "--no-english-only", dest="english_only", action="store_false",
         help="Disable the English-only filter (process every language).",
+    )
+    parser.add_argument(
+        "--triage-only", dest="triage_only", action="store_true",
+        help=(
+            "Print the candidate counts + per-source year-extraction "
+            "breakdown and exit before any LLM call. Used to validate "
+            "candidate-selection changes (year parser, EN filter, forum "
+            "filter) without burning OpenAI tokens."
+        ),
     )
     parser.add_argument(
         "--forums",
@@ -709,6 +837,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         concurrency=max(1, args.concurrency),
         english_only=args.english_only,
         forums=forums,
+        triage_only=args.triage_only,
     )
 
 
