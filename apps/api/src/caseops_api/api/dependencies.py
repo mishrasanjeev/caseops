@@ -147,6 +147,7 @@ CAPABILITY_ROLES: dict[str, frozenset[MembershipRole]] = {
     "outside_counsel:recommend": _ALL_FEE_EARNERS,
     # --- drafting --- paralegals can draft but not review/finalize
     "drafts:create": frozenset({_OWNER, _ADMIN, _PARTNER, _MEMBER, _PARALEGAL}),
+    "drafts:edit": frozenset({_OWNER, _ADMIN, _PARTNER, _MEMBER, _PARALEGAL}),
     "drafts:generate": frozenset({_OWNER, _ADMIN, _PARTNER, _MEMBER, _PARALEGAL}),
     "drafts:review": _STAFF,
     "drafts:finalize": _STAFF,

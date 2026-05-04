@@ -53,7 +53,7 @@ import {
 import { EmptyState } from "@/components/ui/EmptyState";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { apiErrorMessage } from "@/lib/api/config";
+import { apiErrorMessage, isApiErrorShape } from "@/lib/api/config";
 import {
   generateRecommendation,
   listRecommendations,
@@ -114,7 +114,10 @@ export default function MatterStrategyPage() {
   const params = useParams<{ id: string }>();
   const matterId = params.id;
   const queryClient = useQueryClient();
-  const [lastError, setLastError] = useState<string | null>(null);
+  const [lastError, setLastError] = useState<{
+    message: string;
+    problemType: string | null;
+  } | null>(null);
   // Round-2 P2 #7. Strategy generation + approval ride dedicated
   // capabilities on top of the recommendations:* caps. The frontend
   // mirrors the backend gate in apps/api/src/caseops_api/api/routes/
@@ -151,7 +154,10 @@ export default function MatterStrategyPage() {
         err,
         "Could not generate the strategy.",
       );
-      setLastError(message);
+      setLastError({
+        message,
+        problemType: isApiErrorShape(err) ? err.problemType : null,
+      });
       toast.error(message);
     },
   });
@@ -214,10 +220,12 @@ export default function MatterStrategyPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base text-amber-900">
               <XCircle className="h-4 w-4" aria-hidden />
-              Strategy generation needs more grounding
+              {lastError.problemType === "llm_quota_exhausted"
+                ? "Strategy generation is temporarily unavailable"
+                : "Strategy generation needs more grounding"}
             </CardTitle>
             <CardDescription className="text-amber-800">
-              {lastError}
+              {lastError.message}
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap items-center gap-2">

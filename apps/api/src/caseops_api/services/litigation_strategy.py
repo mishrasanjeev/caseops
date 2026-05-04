@@ -94,6 +94,7 @@ from caseops_api.services.llm import (
     build_provider,
     generate_structured,
 )
+from caseops_api.services.llm_http import provider_failure_http_exception
 from caseops_api.services.recommendations import (
     CONFIDENCE_LEVELS,
     RetrievedAuthority,
@@ -994,21 +995,14 @@ def generate_litigation_strategy(
         try:
             parsed, completion = _invoke(llm)
         except LLMProviderError as retry_exc:
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=(
-                    f"Could not generate the strategy: "
-                    f"{type(retry_exc).__name__}: {retry_exc}. Please "
-                    f"retry in a minute."
-                ),
+            raise provider_failure_http_exception(
+                noun="strategy",
+                exc=retry_exc,
             ) from retry_exc
     except LLMProviderError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=(
-                f"Could not generate the strategy: "
-                f"{type(exc).__name__}: {exc}. Please retry in a minute."
-            ),
+        raise provider_failure_http_exception(
+            noun="strategy",
+            exc=exc,
         ) from exc
 
     # Verify citations on the recommended route + alternatives.

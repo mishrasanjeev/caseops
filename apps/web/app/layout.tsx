@@ -23,6 +23,8 @@ import "@fontsource/libre-caslon-text/700.css";
 import "@fontsource/libre-caslon-text/400-italic.css";
 import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/500.css";
+import "react-pdf/dist/Page/AnnotationLayer.css";
+import "react-pdf/dist/Page/TextLayer.css";
 
 import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 

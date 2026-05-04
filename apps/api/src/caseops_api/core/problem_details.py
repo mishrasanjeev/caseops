@@ -76,6 +76,8 @@ PROBLEM_TYPE_MAP: list[tuple[int, str, str]] = [
     (403, "Managing matter access", "capability_required"),
     # 429.
     (429, "Rate limit", "rate_limited"),
+    # 503.
+    (503, "provider quota is exhausted", "llm_quota_exhausted"),
     # 400.
     (400, "must be an ISO-8601", "invalid_parameter"),
     (400, "password", "password_policy_violation"),
@@ -90,6 +92,7 @@ STATUS_TITLES: dict[int, str] = {
     409: "Conflict",
     422: "Unprocessable content",
     429: "Too many requests",
+    503: "Service unavailable",
     500: "Internal server error",
 }
 

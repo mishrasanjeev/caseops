@@ -13,7 +13,13 @@ DraftStatusLiteral = Literal[
     "finalized",
 ]
 DraftTypeLiteral = Literal["brief", "notice", "reply", "memo", "other"]
-DraftReviewActionLiteral = Literal["submit", "request_changes", "approve", "finalize"]
+DraftReviewActionLiteral = Literal[
+    "edit",
+    "submit",
+    "request_changes",
+    "approve",
+    "finalize",
+]
 
 
 class DraftCreateRequest(BaseModel):
@@ -56,6 +62,10 @@ class DraftGenerateRequest(BaseModel):
 
 class DraftReviewRequest(BaseModel):
     notes: str | None = Field(default=None, max_length=4000)
+
+
+class DraftEditRequest(BaseModel):
+    body: str = Field(min_length=1, max_length=524_288)
 
 
 class DraftVersionRecord(BaseModel):

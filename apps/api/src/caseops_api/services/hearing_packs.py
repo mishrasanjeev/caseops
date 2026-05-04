@@ -49,11 +49,13 @@ from caseops_api.services.llm import (
     LLMMessage,
     LLMProvider,
     LLMProviderError,
+    LLMQuotaExhaustedError,
     LLMResponseFormatError,
     build_provider,
     generate_structured,
     max_tokens_for_purpose,
 )
+from caseops_api.services.llm_http import provider_failure_http_exception
 from caseops_api.services.matter_access import assert_access
 
 logger = logging.getLogger(__name__)
@@ -387,6 +389,11 @@ def generate_hearing_pack(
                 type(retry_exc).__name__,
                 retry_exc,
             )
+            if isinstance(retry_exc, LLMQuotaExhaustedError):
+                raise provider_failure_http_exception(
+                    noun="hearing pack",
+                    exc=retry_exc,
+                ) from retry_exc
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=(
@@ -402,6 +409,11 @@ def generate_hearing_pack(
             type(exc).__name__,
             exc,
         )
+        if isinstance(exc, LLMQuotaExhaustedError):
+            raise provider_failure_http_exception(
+                noun="hearing pack",
+                exc=exc,
+            ) from exc
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=(

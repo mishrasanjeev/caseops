@@ -75,11 +75,13 @@ from caseops_api.services.llm import (
     LLMMessage,
     LLMProvider,
     LLMProviderError,
+    LLMQuotaExhaustedError,
     LLMResponseFormatError,
     build_provider,
     generate_structured,
     max_tokens_for_purpose,
 )
+from caseops_api.services.llm_http import provider_failure_http_exception
 from caseops_api.services.matter_access import assert_access
 
 logger = logging.getLogger(__name__)
@@ -1043,6 +1045,11 @@ def generate_draft_version(
                 type(retry_exc).__name__,
                 retry_exc,
             )
+            if isinstance(retry_exc, LLMQuotaExhaustedError):
+                raise provider_failure_http_exception(
+                    noun="draft",
+                    exc=retry_exc,
+                ) from retry_exc
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=(
@@ -1058,6 +1065,11 @@ def generate_draft_version(
             type(exc).__name__,
             exc,
         )
+        if isinstance(exc, LLMQuotaExhaustedError):
+            raise provider_failure_http_exception(
+                noun="draft",
+                exc=exc,
+            ) from exc
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=(
@@ -1126,6 +1138,107 @@ def generate_draft_version(
             "revision": version.revision,
             "verified_citation_count": version.verified_citation_count,
             "cited_count": len(surviving),
+        },
+    )
+    session.commit()
+    session.refresh(draft)
+    return draft
+
+
+def _citations_still_present(body: str, citations: list[str]) -> list[str]:
+    """Keep only previously verified citations still visible in the body."""
+    haystack = body.casefold()
+    return [
+        citation
+        for citation in dict.fromkeys(c.strip() for c in citations if c and c.strip())
+        if citation.casefold() in haystack
+    ]
+
+
+def edit_draft_version(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+    draft_id: str,
+    body: str,
+) -> Draft:
+    matter = _load_matter(session, context, matter_id)
+    draft = _load_draft(session, matter, draft_id)
+
+    if draft.status == DraftStatus.FINALIZED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Finalized drafts cannot be edited.",
+        )
+
+    current = _assert_current_version(draft)
+    if not body.strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Draft body cannot be empty.",
+        )
+    edited_body = body
+    if edited_body == current.body:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Edited draft body is identical to the current version.",
+        )
+
+    try:
+        previous_citations = (
+            json.loads(current.citations_json) if current.citations_json else []
+        )
+    except json.JSONDecodeError:
+        previous_citations = []
+    candidate_citations = _citations_still_present(edited_body, previous_citations)
+    surviving, verified_count = _verify_version_citations(session, candidate_citations)
+    findings = run_validators(edited_body, surviving)
+    findings.extend(check_adverse_treatment(session, surviving))
+    summary = _augment_summary_with_findings(
+        "Manual edit saved as a new revision. Prior approval, if any, was "
+        "invalidated and partner review is required again.",
+        findings,
+    )
+
+    next_revision = max((v.revision for v in draft.versions), default=0) + 1
+    version = DraftVersion(
+        draft_id=draft.id,
+        generated_by_membership_id=context.membership.id,
+        model_run_id=None,
+        revision=next_revision,
+        body=edited_body,
+        citations_json=json.dumps(surviving),
+        verified_citation_count=verified_count,
+        summary=summary,
+    )
+    session.add(version)
+    session.flush()
+
+    draft.current_version_id = version.id
+    draft.status = DraftStatus.DRAFT
+    draft.review_required = True
+    draft.updated_at = datetime.now(UTC)
+    _record_review(
+        session,
+        draft=draft,
+        version_id=version.id,
+        action=DraftReviewAction.EDIT,
+        context=context,
+        notes="Manual body edit saved.",
+    )
+    record_from_context(
+        session,
+        context,
+        action="draft.edited",
+        target_type="draft",
+        target_id=draft.id,
+        matter_id=matter.id,
+        metadata={
+            "revision": version.revision,
+            "previous_version_id": current.id,
+            "verified_citation_count": verified_count,
+            "status_after": draft.status,
         },
     )
     session.commit()

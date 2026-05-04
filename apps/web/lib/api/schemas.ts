@@ -453,6 +453,7 @@ export const draftStatus = z.enum([
 ]);
 export const draftType = z.enum(["brief", "notice", "reply", "memo", "other"]);
 export const draftReviewAction = z.enum([
+  "edit",
   "submit",
   "request_changes",
   "approve",

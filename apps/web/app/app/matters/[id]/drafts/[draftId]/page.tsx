@@ -5,16 +5,20 @@ import {
   ArrowLeft,
   CheckCircle2,
   Download,
+  Edit3,
   FolderArchive,
   Lock,
   Loader2,
   RefreshCcw,
+  Save,
   Send,
   ShieldCheck,
   Undo2,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -41,11 +45,14 @@ import {
   finalizeDraft,
   generateDraftVersion,
   requestDraftChanges,
+  saveDraftEdits,
   submitDraft,
 } from "@/lib/api/endpoints";
 import type { Draft, DraftStatus } from "@/lib/api/schemas";
+import { useCapability } from "@/lib/capabilities";
 
 const ACTION_LABEL: Record<string, string> = {
+  edit: "Edited",
   submit: "Submitted for review",
   request_changes: "Requested changes",
   approve: "Approved",
@@ -113,6 +120,11 @@ export default function MatterDraftDetailPage() {
     onSuccess: makeSuccess("Draft finalized"),
     onError: makeError("Could not finalize draft."),
   });
+  const saveEdit = useMutation({
+    mutationFn: (body: string) => saveDraftEdits({ matterId, draftId, body }),
+    onSuccess: makeSuccess("Draft edits saved as a new revision"),
+    onError: makeError("Could not save draft edits."),
+  });
 
   return (
     <div className="flex flex-col gap-5">
@@ -144,12 +156,15 @@ export default function MatterDraftDetailPage() {
           onRequestChanges={() => requestChanges.mutate()}
           onApprove={() => approve.mutate()}
           onFinalize={() => finalize.mutate()}
+          onSaveEdit={(body) => saveEdit.mutateAsync(body)}
           generating={generate.isPending}
+          savingEdit={saveEdit.isPending}
           transitioning={
             submit.isPending ||
             requestChanges.isPending ||
             approve.isPending ||
-            finalize.isPending
+            finalize.isPending ||
+            saveEdit.isPending
           }
         />
       ) : null}
@@ -165,7 +180,9 @@ function DraftBody({
   onRequestChanges,
   onApprove,
   onFinalize,
+  onSaveEdit,
   generating,
+  savingEdit,
   transitioning,
 }: {
   draft: Draft;
@@ -175,15 +192,26 @@ function DraftBody({
   onRequestChanges: () => void;
   onApprove: () => void;
   onFinalize: () => void;
+  onSaveEdit: (body: string) => Promise<Draft>;
   generating: boolean;
+  savingEdit: boolean;
   transitioning: boolean;
 }) {
   const currentVersion = draft.versions.find(
     (v) => v.id === draft.current_version_id,
   );
+  const canEditDraft = useCapability("drafts:edit");
+  const [editing, setEditing] = useState(false);
+  const [editBody, setEditBody] = useState(currentVersion?.body ?? "");
+  useEffect(() => {
+    setEditBody(currentVersion?.body ?? "");
+    setEditing(false);
+  }, [currentVersion?.id, currentVersion?.body]);
+
   const status: DraftStatus = draft.status;
   const isFinalized = status === "finalized";
   const canRegenerate = !isFinalized;
+  const canEdit = canEditDraft && !!currentVersion && !isFinalized;
   const canSubmit =
     !isFinalized && (status === "draft" || status === "changes_requested");
   const canRequestChanges = status === "in_review";
@@ -203,7 +231,7 @@ function DraftBody({
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--color-mute)]">
             <span className="capitalize">{draft.draft_type}</span>
             <span>·</span>
-            <span>
+            <span data-testid="draft-current-revision">
               {currentVersion
                 ? `Revision ${currentVersion.revision}`
                 : "No version generated yet"}
@@ -272,6 +300,24 @@ function DraftBody({
               <Lock className="h-4 w-4" aria-hidden /> Finalize
             </Button>
           ) : null}
+          {canEdit ? (
+            <Button
+              variant="outline"
+              onClick={() => setEditing((value) => !value)}
+              disabled={transitioning}
+              data-testid="draft-edit-toggle"
+            >
+              {editing ? (
+                <>
+                  <X className="h-4 w-4" aria-hidden /> Cancel edit
+                </>
+              ) : (
+                <>
+                  <Edit3 className="h-4 w-4" aria-hidden /> Edit
+                </>
+              )}
+            </Button>
+          ) : null}
           {canExport ? (
             <>
               <Button
@@ -337,9 +383,70 @@ function DraftBody({
           </CardHeader>
           <CardContent>
             {currentVersion ? (
-              <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-[var(--color-ink-2)]">
-                {currentVersion.body}
-              </pre>
+              editing ? (
+                <form
+                  className="flex flex-col gap-3"
+                  onSubmit={async (event) => {
+                    event.preventDefault();
+                    await onSaveEdit(editBody);
+                    setEditing(false);
+                  }}
+                >
+                  <textarea
+                    value={editBody}
+                    onChange={(event) => setEditBody(event.target.value)}
+                    className="min-h-[460px] w-full resize-y rounded-md border border-[var(--color-line)] bg-white px-3 py-2 font-sans text-sm leading-relaxed text-[var(--color-ink)] shadow-inner outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
+                    data-testid="draft-body-editor"
+                    aria-label="Draft body editor"
+                  />
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs text-[var(--color-mute)]">
+                      Saving creates a new revision and requires review again.
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => {
+                          setEditBody(currentVersion.body);
+                          setEditing(false);
+                        }}
+                        disabled={savingEdit}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="submit"
+                        disabled={
+                          savingEdit ||
+                          editBody.trim().length === 0 ||
+                          editBody === currentVersion.body
+                        }
+                        data-testid="draft-save-edit"
+                      >
+                        {savingEdit ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                            Saving...
+                          </>
+                        ) : (
+                          <>
+                            <Save className="h-4 w-4" aria-hidden />
+                            Save revision
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </form>
+              ) : (
+                <pre
+                  className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-[var(--color-ink-2)]"
+                  data-testid="draft-body-readonly"
+                >
+                  {currentVersion.body}
+                </pre>
+              )
             ) : (
               <p className="text-sm text-[var(--color-mute)]">
                 Click <em>Generate</em> to draft the first version using the

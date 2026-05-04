@@ -318,6 +318,54 @@ def test_litigation_strategy_is_a_supported_recommendation_type() -> None:
     assert "litigation_strategy" in SUPPORTED_TYPES
 
 
+def test_strategy_quota_error_returns_actionable_503_without_raw_provider_leak(
+    client: TestClient, monkeypatch,
+) -> None:
+    """BUG-031 (Hari VII, 2026-05-04). Upstream OpenAI quota is not a
+    malformed strategy and not a grounding refusal. It must surface as
+    a sanitized 503 so lawyers see the operational action, while raw
+    provider billing strings stay out of the product response."""
+
+    from caseops_api.services.llm import LLMMessage, LLMQuotaExhaustedError
+
+    _seed_relevant_authority()
+
+    class _QuotaProvider:
+        name = "openai"
+        model = "gpt-5-mini"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            raise LLMQuotaExhaustedError(
+                "OpenAI quota exhausted: Error code: 429 - {'error': "
+                "{'code': 'insufficient_quota', 'message': 'billing raw'}}"
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _QuotaProvider(),
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.litigation_strategy.build_provider",
+        lambda *a, **kw: _QuotaProvider(),
+    )
+
+    token, _, matter_id = _setup_matter(client)
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "litigation_strategy"},
+    )
+
+    assert response.status_code == 503, response.text
+    body = response.json()
+    assert body["type"] == "llm_quota_exhausted"
+    assert "provider quota is exhausted" in body["detail"]
+    assert "strategy" in body["detail"]
+    assert "insufficient_quota" not in body["detail"]
+    assert "billing raw" not in body["detail"]
+    assert "No output was saved" in body["detail"]
+
+
 def test_strategy_retrieval_query_expansion_includes_escalation_terms() -> None:
     from caseops_api.db.models import Matter
     from caseops_api.services.recommendations import _build_retrieval_query
