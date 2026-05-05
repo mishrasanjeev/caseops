@@ -10,8 +10,25 @@ type DemoRequestPayload = {
   role?: string;
 };
 
+function hasWhitespace(value: string): boolean {
+  for (const char of value) {
+    if (char.trim() === "") return true;
+  }
+  return false;
+}
+
 function isValidEmail(value: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+  if (value.length < 3 || value.length > 200) return false;
+  if (hasWhitespace(value)) return false;
+
+  const at = value.indexOf("@");
+  if (at <= 0 || at !== value.lastIndexOf("@") || at === value.length - 1) {
+    return false;
+  }
+
+  const domain = value.slice(at + 1);
+  if (domain.startsWith(".") || domain.endsWith(".")) return false;
+  return domain.includes(".");
 }
 
 // Codex's 2026-04-19 cybersecurity review (finding #10) flagged that
@@ -160,11 +177,11 @@ export async function POST(request: Request) {
   if (!name || !email || !company || !role) {
     return NextResponse.json({ error: "All fields are required." }, { status: 400 });
   }
-  if (!isValidEmail(email)) {
-    return NextResponse.json({ error: "Please provide a valid work email." }, { status: 400 });
-  }
   if (name.length > 200 || email.length > 200 || company.length > 200 || role.length > 200) {
     return NextResponse.json({ error: "Field too long." }, { status: 400 });
+  }
+  if (!isValidEmail(email)) {
+    return NextResponse.json({ error: "Please provide a valid work email." }, { status: 400 });
   }
 
   // PII-redacted log line. Email hash lets ops correlate a dupe-burst

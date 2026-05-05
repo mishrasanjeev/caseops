@@ -30,11 +30,102 @@ describe("AdminPage audit export (P0-001 cookie-auth regression)", () => {
   let originalCreateObjectURL: typeof URL.createObjectURL;
   let originalRevokeObjectURL: typeof URL.revokeObjectURL;
   const fetchMock = vi.fn();
+  let auditResponse: () => Promise<Response | {
+    ok: boolean;
+    status: number;
+    headers?: { get: (key: string) => string | null };
+    blob?: () => Promise<Blob>;
+    json?: () => Promise<unknown>;
+  }>;
+
+  function jsonResponse(data: unknown, status = 200): Response {
+    return new Response(JSON.stringify(data), {
+      status,
+      headers: { "content-type": "application/json" },
+    });
+  }
 
   beforeEach(() => {
     capabilityMock.mockReset();
     capabilityMock.mockImplementation(() => true);
     fetchMock.mockReset();
+    auditResponse = async () => ({
+      ok: true,
+      status: 200,
+      headers: {
+        get: (k: string) =>
+          k.toLowerCase() === "content-disposition"
+            ? 'attachment; filename="audit-export.jsonl"'
+            : null,
+      },
+      blob: async () => new Blob(["row\n"], { type: "application/jsonl" }),
+    });
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/admin/tenant-ai-policy")) {
+        return jsonResponse({
+          company_id: "company-1",
+          predictive_bench_strategy_enabled: false,
+        });
+      }
+      if (url.includes("/api/matters/")) {
+        return jsonResponse({
+          matters: [
+            {
+              id: "matter-1",
+              matter_code: "EXT-001",
+              title: "External access matter",
+              client_name: "Client",
+              opposing_party: "Counterparty",
+              status: "active",
+              practice_area: "Commercial",
+              forum_level: "high_court",
+              court_name: "Delhi High Court",
+              judge_name: null,
+              description: null,
+              next_hearing_on: null,
+              created_at: "2026-05-05T00:00:00Z",
+            },
+          ],
+          next_cursor: null,
+        });
+      }
+      if (url.includes("/api/admin/portal/invitations")) {
+        const body = typeof init?.body === "string" ? JSON.parse(init.body) : {};
+        return jsonResponse(
+          {
+            portal_user: {
+              id: "portal-user-1",
+              company_id: "company-1",
+              email: body.email,
+              full_name: body.full_name,
+              role: body.role,
+              last_signed_in_at: null,
+            },
+            grants: [
+              {
+                id: "grant-1",
+                matter_id: body.matter_ids?.[0],
+                role: body.role,
+                scope_json: {
+                  can_upload: body.can_upload,
+                  can_invoice: body.can_invoice,
+                  can_reply: body.can_reply,
+                },
+                granted_at: "2026-05-05T00:00:00Z",
+                revoked_at: null,
+              },
+            ],
+            debug_token: "debug-token",
+          },
+          201,
+        );
+      }
+      if (url.includes("/api/admin/audit/export")) {
+        return auditResponse();
+      }
+      return jsonResponse({});
+    });
     originalFetch = globalThis.fetch;
     globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
     originalCreateObjectURL = URL.createObjectURL;
@@ -50,30 +141,27 @@ describe("AdminPage audit export (P0-001 cookie-auth regression)", () => {
   });
 
   it("downloads via credentials:'include' (no Authorization header)", async () => {
-    // jsdom's Response cannot wrap a Blob directly — use a plain
-    // string body and stub blob() to return what the page expects.
-    fetchMock.mockResolvedValue({
-      ok: true,
-      status: 200,
-      headers: {
-        get: (k: string) =>
-          k.toLowerCase() === "content-disposition"
-            ? 'attachment; filename="audit-export.jsonl"'
-            : null,
-      },
-      blob: async () => new Blob(["row\n"], { type: "application/jsonl" }),
-    });
     const user = userEvent.setup();
     renderWithQuery(<AdminPage />);
     await user.click(screen.getByTestId("download-audit-export"));
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const [, init] = fetchMock.mock.calls[0];
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([input]) =>
+          String(input).includes("/api/admin/audit/export"),
+        ),
+      ).toBe(true),
+    );
+    const auditCall = fetchMock.mock.calls.find(([input]) =>
+      String(input).includes("/api/admin/audit/export"),
+    );
+    expect(auditCall).toBeDefined();
+    const [, init] = auditCall!;
     expect(init.credentials).toBe("include");
     expect(init.headers?.Authorization).toBeUndefined();
   });
 
   it("surfaces an actionable error on 401 instead of throwing 'session expired'", async () => {
-    fetchMock.mockResolvedValue({
+    auditResponse = async () => ({
       ok: false,
       status: 401,
       json: async () => ({ detail: "no" }),
@@ -90,7 +178,7 @@ describe("AdminPage audit export (P0-001 cookie-auth regression)", () => {
   });
 
   it("surfaces an actionable error on 403 with the capability hint", async () => {
-    fetchMock.mockResolvedValue({
+    auditResponse = async () => ({
       ok: false,
       status: 403,
       json: async () => ({ detail: "denied" }),
@@ -104,6 +192,43 @@ describe("AdminPage audit export (P0-001 cookie-auth regression)", () => {
         expect.stringMatching(/audit:export/i),
       ),
     );
+  });
+
+  it("invites outside counsel with a selected matter grant and OC permissions", async () => {
+    const user = userEvent.setup();
+    renderWithQuery(<AdminPage />);
+
+    await user.type(screen.getByTestId("portal-invite-name"), "Counsel One");
+    await user.type(screen.getByTestId("portal-invite-email"), "oc@example.com");
+    await user.selectOptions(screen.getByTestId("portal-invite-role"), "outside_counsel");
+    await waitFor(() =>
+      expect(screen.getByTestId("portal-invite-matter")).not.toBeDisabled(),
+    );
+    await user.selectOptions(screen.getByTestId("portal-invite-matter"), "matter-1");
+    await user.click(screen.getByTestId("portal-invite-submit"));
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([input]) =>
+          String(input).includes("/api/admin/portal/invitations"),
+        ),
+      ).toBe(true),
+    );
+    const inviteCall = fetchMock.mock.calls.find(([input]) =>
+      String(input).includes("/api/admin/portal/invitations"),
+    );
+    expect(inviteCall).toBeDefined();
+    const [, init] = inviteCall!;
+    const body = JSON.parse(String(init.body));
+    expect(body).toMatchObject({
+      email: "oc@example.com",
+      full_name: "Counsel One",
+      role: "outside_counsel",
+      matter_ids: ["matter-1"],
+      can_upload: true,
+      can_invoice: true,
+      can_reply: false,
+    });
   });
 });
 

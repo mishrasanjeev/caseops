@@ -32,6 +32,90 @@ Current evidence from 2026-04-22 verification:
 
 ## Stop-Ship and High-Priority Items
 
+### 0. Hari 2026-05-05 BUG-026 / BUG-027 - Client and outside-counsel portal access
+
+Status: Properly fixed
+
+Root cause of the reopen:
+
+- The backend portal, portal users, magic-link auth, and matter grants existed,
+  so the earlier closure treated the report as stale.
+- That was too shallow. The app UI still had no obvious staff-facing place to
+  invite a client or outside counsel and grant a matter, so a real user working
+  only through `caseops.ai/app` could reasonably conclude that no client/OC
+  login workflow existed.
+- Outside-counsel magic-link verification also landed on `/portal`, the client
+  portal. The OC user then saw an empty client-matter list instead of the
+  assigned-matters workspace at `/portal/oc`.
+- The grant flags `can_upload` and `can_invoice` were recorded but not enforced
+  by the OC portal mutation services, so "scoped access" was not actually
+  scoped for uploads, invoices, or time entries.
+
+Implementation:
+
+- `apps/web/app/app/admin/page.tsx` now includes an "External portal access"
+  card gated by `portal:invite`. Owners/admins can invite a client or outside
+  counsel, choose the matter grant, and set reply/upload/invoice permissions.
+- `apps/web/lib/api/portal.ts` now exposes `invitePortalUser`, matching
+  `/api/admin/portal/invitations`.
+- `apps/web/app/portal/verify/page.tsx` redirects outside-counsel users to
+  `/portal/oc` after magic-link verification; `apps/web/app/portal/page.tsx`
+  also redirects already-signed-in OC users away from the client portal.
+- `apps/api/src/caseops_api/services/portal_outside_counsel.py` enforces
+  `can_upload` for work-product upload and `can_invoice` for invoice/time
+  submission.
+
+Adjacent-path audit:
+
+- Verified existing client portal routes, OC portal routes, admin invitation
+  API, matter assignment API, generated frontend portal helpers, and existing
+  Playwright coverage.
+- Added explicit denial tests for OC uploads/invoices/time entries when the
+  grant flags are false so the recorded scope cannot silently drift from
+  enforcement again.
+
+Verification:
+
+- `npm run typecheck:web` - PASS.
+- `npm run build:web` - PASS.
+- `npm run test:web -- --run app/app/admin/page.test.tsx app/portal/verify/page.test.tsx app/portal/page.test.tsx` - PASS 12/12.
+- `uv --directory apps/api run pytest -q tests/test_portal_outside_counsel.py tests/test_code_scanning_regressions.py ...` - PASS 19/19.
+- `npm run test:e2e:app -- tests/e2e/portal-invite-access.spec.ts tests/e2e/oc-portal.spec.ts` - PASS 2/2. This is the browser-level proof for BUG-026/027 and the adjacent OC portal workflow: owner invites client + OC from Admin, client signs into `/portal`, OC signs into `/portal/oc`, both see only the scoped matter, and the OC can still upload work product, submit an invoice, and log time when grant flags allow it.
+
+Security alert addendum from the same 2026-05-05 pass:
+
+- GitHub code scanning still showed 17 open alerts because these fixes were
+  local and unpushed at the time of review. Treat the GitHub count as
+  authoritative until the fixed commit reaches `main` and CodeQL reruns on that
+  SHA.
+- Closed the remaining alert classes locally: explicit workflow token
+  permissions, demo-request email ReDoS, Python HTML/tag cleanup, whitespace
+  ReDoS normalisers, matter-code trailing-number ReDoS, sensitive judge-date
+  script output, and incomplete Pine Labs URL host checking in tests.
+- Added source/runtime regressions in
+  `apps/api/tests/test_code_scanning_regressions.py`,
+  `apps/api/tests/test_retrieval_normalisers.py`,
+  `apps/api/tests/test_intake.py`, `apps/api/tests/test_hari_ii_regressions.py`,
+  and `tests/e2e/marketing.spec.ts`.
+
+Final local verification before commit:
+
+- `uv --directory apps/api run pytest -q tests/test_code_scanning_regressions.py tests/test_retrieval_normalisers.py tests/test_intake.py::test_matter_code_available_endpoint tests/test_hari_ii_regressions.py::test_pine_labs_parses_plural_v2_native_field_names ...` - PASS 25/25.
+- `uv --directory apps/api run ruff check src tests` - PASS.
+- `npm run typecheck:web` - PASS.
+- `npm run build:web` - PASS.
+- `npm run test:e2e:marketing -- tests/e2e/marketing.spec.ts` - PASS 13/13.
+- `npm run test:e2e:app -- tests/e2e/portal-invite-access.spec.ts tests/e2e/oc-portal.spec.ts` - PASS 2/2.
+- `git diff --check` - PASS (line-ending warnings only).
+
+Done when:
+
+- ✅ A staff user can create a client portal login and grant a matter from the app UI.
+- ✅ A staff user can create an outside-counsel portal login and grant a matter from the app UI.
+- ✅ Outside counsel magic-link sign-in lands on `/portal/oc`, not the client portal.
+- ✅ OC upload/invoice/time actions honor grant flags.
+- ✅ Regression coverage includes API permission tests, web unit tests, and Playwright end-user workflow proof.
+
 ### 1. BUG-011 - Fresh matter overview still shows empty-state court-order UI
 
 Status: Properly fixed

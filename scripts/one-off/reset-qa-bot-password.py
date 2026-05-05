@@ -104,8 +104,10 @@ def main() -> int:
             return 4
 
     print(f"secret {SECRET_NAME} latest version pushed")
-    print("To fetch:")
-    print(f"  gcloud secrets versions access latest --secret={SECRET_NAME} --project={PROJECT}")
+    print(
+        "Fetch the secret from Secret Manager using the documented "
+        "caseops-qa-password runbook."
+    )
     return 0
 
 

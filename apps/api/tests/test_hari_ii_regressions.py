@@ -18,6 +18,8 @@ of bug can't re-occur without the test going red first.
 """
 from __future__ import annotations
 
+from urllib.parse import urlparse
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -290,7 +292,9 @@ def test_pine_labs_parses_plural_v2_native_field_names() -> None:
                 webhook_url="https://api.caseops.ai/webhook",
             )
         assert result.provider_order_id == "pl-v1-xyz"
-        assert result.payment_url.startswith("https://pbl.v2.pinepg.in")
+        parsed_payment_url = urlparse(result.payment_url)
+        assert parsed_payment_url.scheme == "https"
+        assert parsed_payment_url.hostname == "pbl.v2.pinepg.in"
         assert result.status == "created"
     finally:
         _BearerTokenCache.clear()

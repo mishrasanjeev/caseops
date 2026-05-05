@@ -117,6 +117,37 @@ export async function fetchPortalSession(): Promise<PortalSession> {
   return apiRequest<PortalSession>("/api/portal/me");
 }
 
+// ---------- Admin portal invitation helpers ----------
+
+export type PortalInviteResult = {
+  portal_user: PortalUserProfile;
+  grants: PortalGrant[];
+  debug_token: string | null;
+};
+
+export async function invitePortalUser(input: {
+  email: string;
+  fullName: string;
+  role: PortalUserRole;
+  matterIds: string[];
+  canUpload?: boolean;
+  canInvoice?: boolean;
+  canReply?: boolean;
+}): Promise<PortalInviteResult> {
+  return apiRequest<PortalInviteResult>("/api/admin/portal/invitations", {
+    method: "POST",
+    body: {
+      email: input.email,
+      full_name: input.fullName,
+      role: input.role,
+      matter_ids: input.matterIds,
+      can_upload: Boolean(input.canUpload),
+      can_invoice: Boolean(input.canInvoice),
+      can_reply: input.canReply ?? true,
+    },
+  });
+}
+
 // ---------- Phase C-2 (MOD-TS-015) — client portal matter surface ----------
 
 export type PortalMatter = {

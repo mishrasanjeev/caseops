@@ -77,6 +77,8 @@ async function inviteOcPortalUser(
       full_name: "Counsel One",
       role: "outside_counsel",
       matter_ids: [matterId],
+      can_upload: true,
+      can_invoice: true,
     },
   });
   if (resp.status() !== 201) {

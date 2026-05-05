@@ -49,6 +49,8 @@ def _invite_oc_portal_user(
     matter_id: str,
     *,
     email: str = "oc@portal.example",
+    can_upload: bool = True,
+    can_invoice: bool = True,
 ) -> tuple[str, str]:
     resp = client.post(
         "/api/admin/portal/invitations",
@@ -58,6 +60,8 @@ def _invite_oc_portal_user(
             "full_name": "OC Counsel",
             "role": "outside_counsel",
             "matter_ids": [matter_id],
+            "can_upload": can_upload,
+            "can_invoice": can_invoice,
         },
     )
     assert resp.status_code == 201, resp.text
@@ -179,6 +183,29 @@ def test_oc_upload_requires_portal_csrf(client: TestClient) -> None:
     )
     assert no_csrf.status_code == 403
     assert "CSRF" in no_csrf.json()["detail"]
+
+
+def test_oc_upload_respects_can_upload_scope(client: TestClient) -> None:
+    boot = _bootstrap(client, slug="c3-upload-scope", email="c3-us@firm.example")
+    token = str(boot["access_token"])
+    matter_id = _seed_matter(boot["company"]["id"], code="C3-US-1")
+    _, debug = _invite_oc_portal_user(
+        client,
+        token,
+        matter_id,
+        can_upload=False,
+        can_invoice=True,
+    )
+    _verify_and_session(client, debug)
+
+    pdf = b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\ntrailer<<>>\n%%EOF"
+    denied = client.post(
+        f"/api/portal/oc/matters/{matter_id}/work-product",
+        files={"file": ("brief.pdf", pdf, "application/pdf")},
+        headers=_portal_csrf_headers(client),
+    )
+    assert denied.status_code == 403
+    assert "can_upload" in denied.json()["detail"]
 
 
 # ---------- cross-counsel isolation ----------
@@ -304,6 +331,51 @@ def test_oc_invoice_rejects_empty_line_items(client: TestClient) -> None:
         headers=_portal_csrf_headers(client),
     )
     assert resp.status_code == 422
+
+
+def test_oc_invoice_and_time_respect_can_invoice_scope(
+    client: TestClient,
+) -> None:
+    boot = _bootstrap(client, slug="c3-inv-scope", email="c3-is@firm.example")
+    token = str(boot["access_token"])
+    matter_id = _seed_matter(boot["company"]["id"], code="C3-IS-1")
+    _, debug = _invite_oc_portal_user(
+        client,
+        token,
+        matter_id,
+        can_upload=True,
+        can_invoice=False,
+    )
+    _verify_and_session(client, debug)
+    headers = _portal_csrf_headers(client)
+
+    invoice = client.post(
+        f"/api/portal/oc/matters/{matter_id}/invoices",
+        json={
+            "invoice_number": "OC-SCOPE-1",
+            "issued_on": "2026-04-25",
+            "currency": "INR",
+            "line_items": [{"description": "x", "amount_minor": 1000}],
+        },
+        headers=headers,
+    )
+    assert invoice.status_code == 403
+    assert "can_invoice" in invoice.json()["detail"]
+
+    time_entry = client.post(
+        f"/api/portal/oc/matters/{matter_id}/time-entries",
+        json={
+            "work_date": "2026-04-25",
+            "description": "Reviewed records",
+            "duration_minutes": 60,
+            "billable": True,
+            "rate_currency": "INR",
+            "rate_amount_minor": 500000,
+        },
+        headers=headers,
+    )
+    assert time_entry.status_code == 403
+    assert "can_invoice" in time_entry.json()["detail"]
 
 
 # ---------- time entries ----------

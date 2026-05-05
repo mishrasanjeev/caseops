@@ -203,10 +203,10 @@ def main() -> int:
         # Preserve existing non-null values; fill only nulls
         if not rec.get("date_of_birth") and parsed["date_of_birth"]:
             rec["date_of_birth"] = parsed["date_of_birth"]
-            print(f"    DOB: {parsed['date_of_birth']}")
+            print("    DOB: filled")
         if not rec.get("date_of_appointment_sc") and parsed["date_of_appointment_sc"]:
             rec["date_of_appointment_sc"] = parsed["date_of_appointment_sc"]
-            print(f"    APPT: {parsed['date_of_appointment_sc']}")
+            print("    APPT: filled")
         # Do NOT overwrite parent_high_court — it already holds a useful sentence fragment.
 
         # Recompute retirement from DOB (SC retirement age = 65)

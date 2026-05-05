@@ -27,6 +27,7 @@ export default defineConfig({
     /drafting\.spec\.ts/,
     /baad-appeal\.spec\.ts/,
     /oc-portal\.spec\.ts/,
+    /portal-invite-access\.spec\.ts/,
     /bootstrap-and-upload\.spec\.ts/,
     /m2-polish\.spec\.ts/,
     /intake\.spec\.ts/,

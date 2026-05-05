@@ -735,13 +735,12 @@ def _next_available_code(
     suggest the same value on a duplicate. Returns None when no
     trailing number is found OR the bump search is exhausted (very
     unlikely — the cap is just a hard safety stop)."""
-    import re
-
-    match = re.match(r"^(.*?)(\d+)$", code)
-    if not match:
+    trailing_digits = len(code) - len(code.rstrip("0123456789"))
+    if trailing_digits == 0:
         return None
-    prefix = match.group(1)
-    digits = match.group(2)
+
+    prefix = code[:-trailing_digits]
+    digits = code[-trailing_digits:]
     width = len(digits)
     n = int(digits)
     for _ in range(max_iters):

@@ -109,6 +109,17 @@ test.describe("Marketing site", () => {
       data: { name: "x", email: "not-an-email", company: "c", role: "r" },
     });
     expect(badEmail.status()).toBe(400);
+
+    const longEmail = await request.post("/api/demo-request", {
+      data: {
+        name: "x",
+        email: `${"a".repeat(201)}@example.com`,
+        company: "c",
+        role: "r",
+      },
+    });
+    expect(longEmail.status()).toBe(400);
+    expect(await longEmail.json()).toEqual({ error: "Field too long." });
   });
 
   test("demo form on the landing page submits successfully", async ({ page }) => {

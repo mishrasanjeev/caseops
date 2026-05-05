@@ -26,6 +26,7 @@ import re
 import sys
 import time
 import urllib.request
+from html.parser import HTMLParser
 from pathlib import Path
 
 JSON_PATH = (
@@ -54,6 +55,35 @@ def _slug_from_anchor(href: str) -> str | None:
     """``/web/Judges/justice-prathiba-m-singh`` -> ``justice-prathiba-m-singh``."""
     m = re.match(r"^/web/Judges/(.+)$", href.strip())
     return m.group(1) if m else None
+
+
+class _VisibleTextExtractor(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self._hidden_depth = 0
+        self._chunks: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs) -> None:  # noqa: ANN001
+        if tag.lower() in {"script", "style"}:
+            self._hidden_depth += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() in {"script", "style"} and self._hidden_depth > 0:
+            self._hidden_depth -= 1
+
+    def handle_data(self, data: str) -> None:
+        if self._hidden_depth == 0 and data.strip():
+            self._chunks.append(data)
+
+    def text(self) -> str:
+        return " ".join(" ".join(self._chunks).split())
+
+
+def _html_to_visible_text(html: str) -> str:
+    parser = _VisibleTextExtractor()
+    parser.feed(html)
+    parser.close()
+    return parser.text()
 
 
 def collect_profile_urls() -> dict[str, str]:
@@ -97,10 +127,7 @@ def collect_profile_urls() -> dict[str, str]:
 
 
 def extract_bio(html: str) -> str | None:
-    clean = re.sub(r"<script[\s\S]*?</script>", "", html, flags=re.IGNORECASE)
-    clean = re.sub(r"<style[\s\S]*?</style>", "", clean, flags=re.IGNORECASE)
-    text = re.sub(r"<[^>]+>", " ", clean)
-    text = re.sub(r"\s+", " ", text)
+    text = _html_to_visible_text(html)
     text = (
         text.replace("\u00a0", " ")
         .replace("&#039;", "'")

@@ -36,6 +36,9 @@ concurrency:
   group: prod-verify
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   prod-playwright:
     name: Prod-Playwright (ram-batch suite)

@@ -5,11 +5,13 @@ import {
   ArrowUpRight,
   Briefcase,
   CalendarDays,
+  Loader2,
   LogOut,
   ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -46,10 +48,11 @@ export default function PortalLandingPage() {
     onSuccess: () => router.replace("/portal/sign-in"),
   });
   const portalUser = sessionQuery.data?.portal_user;
+  const isOutsideCounsel = portalUser?.role === "outside_counsel";
   const mattersQuery = useQuery({
     queryKey: ["portal", "matters"],
     queryFn: () => fetchPortalMatters(),
-    enabled: Boolean(portalUser),
+    enabled: Boolean(portalUser) && !isOutsideCounsel,
   });
   const roleLabel =
     portalUser?.role === "outside_counsel"
@@ -59,6 +62,12 @@ export default function PortalLandingPage() {
         : "Portal user";
   const matters: PortalMatter[] = mattersQuery.data?.matters ?? [];
 
+  useEffect(() => {
+    if (isOutsideCounsel) {
+      router.replace("/portal/oc");
+    }
+  }, [isOutsideCounsel, router]);
+
   if (sessionQuery.isError) {
     return (
       <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-6 px-6 py-10">
@@ -67,6 +76,17 @@ export default function PortalLandingPage() {
           title="Sign in to your portal"
           onRetry={() => router.push("/portal/sign-in")}
         />
+      </main>
+    );
+  }
+
+  if (isOutsideCounsel) {
+    return (
+      <main className="mx-auto flex min-h-screen max-w-3xl flex-col justify-center gap-3 px-6 py-10">
+        <p className="flex items-center gap-2 text-sm text-[var(--color-ink-2)]">
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          Opening outside-counsel portal
+        </p>
       </main>
     );
   }

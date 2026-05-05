@@ -279,7 +279,11 @@ def _normalize_text(text: str) -> str:
 
 def _strip_html(value: str) -> str:
     plain = unescape(HTML_TAG_PATTERN.sub(" ", value))
-    return re.sub(r"\s+", " ", plain).strip()
+    return _collapse_ws(plain)
+
+
+def _collapse_ws(value: str) -> str:
+    return " ".join(value.split())
 
 
 def _extract_anchor_rows(html: str) -> list[tuple[str, str]]:
@@ -287,7 +291,7 @@ def _extract_anchor_rows(html: str) -> list[tuple[str, str]]:
     for match in ANCHOR_TEXT_PATTERN.finditer(html):
         href = unescape(match.group("href")).strip()
         text = unescape(HTML_TAG_PATTERN.sub(" ", match.group("text"))).strip()
-        text = re.sub(r"\s+", " ", text)
+        text = _collapse_ws(text)
         if text:
             rows.append((href, text))
     return rows
@@ -312,7 +316,7 @@ def _extract_case_anchor_contexts(
     for index, match in enumerate(case_matches):
         href = urljoin(base_url, unescape(match.group("href")).strip())
         text = unescape(HTML_TAG_PATTERN.sub(" ", match.group("text"))).strip()
-        text = re.sub(r"\s+", " ", text)
+        text = _collapse_ws(text)
         next_start = (
             case_matches[index + 1].start()
             if index + 1 < len(case_matches)
@@ -320,7 +324,7 @@ def _extract_case_anchor_contexts(
         )
         fragment = html[match.start() : min(next_start, match.start() + context_chars)]
         context = unescape(HTML_TAG_PATTERN.sub(" ", fragment))
-        context = re.sub(r"\s+", " ", context).strip()
+        context = _collapse_ws(context)
         if text and context:
             contexts.append((href, text, context))
     return contexts
@@ -349,7 +353,7 @@ def _extract_party_names(value: str) -> list[str]:
     candidates: list[str] = []
     for segment in re.split(r"\b(?:vs\.?|v\.?|versus)\b", value, flags=re.IGNORECASE):
         cleaned = re.sub(r"[^A-Za-z0-9\s&()./-]", " ", segment)
-        cleaned = re.sub(r"\s+", " ", cleaned).strip(" -,.")
+        cleaned = _collapse_ws(cleaned).strip(" -,.")
         if len(cleaned) >= 4:
             lowered = cleaned.lower()
             if lowered not in candidates:
@@ -499,7 +503,7 @@ def _extract_courtroom(text: str) -> str | None:
 def _extract_bench_name(text: str, fallback: str | None) -> str | None:
     match = BENCH_PATTERN.search(text)
     if match:
-        return re.sub(r"\s+", " ", match.group(1)).strip()
+        return _collapse_ws(match.group(1))
     return fallback
 
 
@@ -524,7 +528,7 @@ def _parse_bombay_recent_orders_page(html: str) -> list[BombayRecentOrderCandida
         if case_match is None:
             continue
 
-        case_reference = re.sub(r"\s+", "", case_match.group(0)).upper()
+        case_reference = "".join(case_match.group(0).split()).upper()
         date_match = BOMBAY_ROW_DATE_PATTERN.search(context)
         order_date: str | None = None
         kind: str | None = None
@@ -540,7 +544,7 @@ def _parse_bombay_recent_orders_page(html: str) -> list[BombayRecentOrderCandida
             else None
         )
         coram_match = BOMBAY_CORAM_PATTERN.search(context)
-        coram = re.sub(r"\s+", " ", coram_match.group("coram")).strip() if coram_match else None
+        coram = _collapse_ws(coram_match.group("coram")) if coram_match else None
 
         title_context = context
         title_context = re.sub(re.escape(case_match.group(0)), " ", title_context, count=1)
@@ -550,7 +554,7 @@ def _parse_bombay_recent_orders_page(html: str) -> list[BombayRecentOrderCandida
             title_context = title_context.replace(coram_match.group("coram"), " ", 1)
         if date_match:
             title_context = title_context.replace(date_match.group(0), " ", 1)
-        title_context = re.sub(r"\s+", " ", title_context).strip(" -,:")
+        title_context = _collapse_ws(title_context).strip(" -,:")
         title = f"{case_reference} - {title_context}" if title_context else case_reference
 
         candidates.append(
@@ -690,7 +694,7 @@ def _parse_delhi_cause_list_page(html: str) -> list[tuple[str, str, str]]:
 
     for line in lines:
         plain_line = unescape(HTML_TAG_PATTERN.sub(" ", line))
-        plain_line = re.sub(r"\s+", " ", plain_line).strip()
+        plain_line = _collapse_ws(plain_line)
         row_match = DELHI_ROW_PATTERN.search(plain_line)
         if row_match:
             pending_title = (row_match.group("title").strip(), row_match.group("date"))

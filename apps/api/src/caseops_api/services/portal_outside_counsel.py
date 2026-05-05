@@ -63,6 +63,28 @@ from caseops_api.services.file_security import verify_upload
 from caseops_api.services.virus_scan import reject_if_infected
 
 
+class PortalOcPermissionDenied(HTTPException):
+    def __init__(self, permission: str) -> None:
+        super().__init__(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"This outside-counsel grant does not include {permission}. "
+                "Ask the firm to update the matter grant."
+            ),
+        )
+
+
+def _grant_allows(grant: MatterPortalGrant, permission: str) -> bool:
+    if grant.scope_json is None:
+        return True
+    return bool(grant.scope_json.get(permission, True))
+
+
+def _require_grant_permission(grant: MatterPortalGrant, permission: str) -> None:
+    if not _grant_allows(grant, permission):
+        raise PortalOcPermissionDenied(permission)
+
+
 def _assert_oc_grant(
     session: Session, *, portal_user: PortalUser, matter_id: str
 ) -> tuple[Matter, MatterPortalGrant]:
@@ -138,6 +160,7 @@ def upload_oc_work_product(
     matter, _grant = _assert_oc_grant(
         session, portal_user=portal_user, matter_id=matter_id,
     )
+    _require_grant_permission(_grant, "can_upload")
     verify_upload(filename=filename, content_type=content_type, stream=stream)
 
     attachment = MatterAttachment(
@@ -246,6 +269,7 @@ def submit_oc_invoice(
     matter, _grant = _assert_oc_grant(
         session, portal_user=portal_user, matter_id=matter_id,
     )
+    _require_grant_permission(_grant, "can_invoice")
     if not invoice_number.strip():
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -358,6 +382,7 @@ def submit_oc_time_entry(
     matter, _grant = _assert_oc_grant(
         session, portal_user=portal_user, matter_id=matter_id,
     )
+    _require_grant_permission(_grant, "can_invoice")
     if duration_minutes <= 0:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

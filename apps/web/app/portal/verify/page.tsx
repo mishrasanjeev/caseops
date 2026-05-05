@@ -36,8 +36,12 @@ function PortalVerifyInner() {
 
   const mutation = useMutation({
     mutationFn: () => verifyPortalMagicLink(token),
-    onSuccess: () => {
-      router.replace("/portal");
+    onSuccess: (session) => {
+      router.replace(
+        session.portal_user.role === "outside_counsel"
+          ? "/portal/oc"
+          : "/portal",
+      );
     },
   });
 

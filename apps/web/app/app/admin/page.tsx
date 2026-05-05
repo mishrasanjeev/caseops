@@ -1,6 +1,7 @@
 "use client";
 
-import { Download, Shield, Users as UsersIcon, Wrench } from "lucide-react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Download, MailPlus, Shield, Users as UsersIcon, Wrench } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -18,7 +19,12 @@ import {
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { API_BASE_URL } from "@/lib/api/config";
+import { API_BASE_URL, apiErrorMessage } from "@/lib/api/config";
+import { listMatters } from "@/lib/api/endpoints";
+import {
+  invitePortalUser,
+  type PortalUserRole,
+} from "@/lib/api/portal";
 import { useCapability } from "@/lib/capabilities";
 
 function sinceIsoOrNull(local: string): string | null {
@@ -41,11 +47,60 @@ export default function AdminPage() {
   const canAdmin = useCapability("workspace:admin");
   const canAudit = useCapability("audit:export");
   const canTeamsManage = useCapability("teams:manage");
+  const canPortalInvite = useCapability("portal:invite");
   const [since, setSince] = useState("");
   const [until, setUntil] = useState("");
   const [action, setAction] = useState("");
   const [format, setFormat] = useState<"jsonl" | "csv">("jsonl");
   const [busy, setBusy] = useState(false);
+  const [portalEmail, setPortalEmail] = useState("");
+  const [portalFullName, setPortalFullName] = useState("");
+  const [portalRole, setPortalRole] = useState<PortalUserRole>("client");
+  const [portalMatterId, setPortalMatterId] = useState("");
+  const [portalCanReply, setPortalCanReply] = useState(true);
+  const [portalCanUpload, setPortalCanUpload] = useState(false);
+  const [portalCanInvoice, setPortalCanInvoice] = useState(false);
+
+  const portalMattersQuery = useQuery({
+    queryKey: ["admin", "portal-invite", "matters"],
+    queryFn: () => listMatters({ limit: 100 }),
+    enabled: canPortalInvite,
+  });
+  const portalMatterOptions = portalMattersQuery.data?.matters ?? [];
+
+  const portalInviteMutation = useMutation({
+    mutationFn: () =>
+      invitePortalUser({
+        email: portalEmail.trim().toLowerCase(),
+        fullName: portalFullName.trim(),
+        role: portalRole,
+        matterIds: [portalMatterId],
+        canReply: portalCanReply,
+        canUpload: portalRole === "outside_counsel" && portalCanUpload,
+        canInvoice: portalRole === "outside_counsel" && portalCanInvoice,
+      }),
+    onSuccess: (result) => {
+      toast.success(
+        `${result.portal_user.full_name} invited to the ${portalRole === "outside_counsel" ? "outside-counsel" : "client"} portal.`,
+      );
+      setPortalEmail("");
+      setPortalFullName("");
+      setPortalMatterId("");
+      setPortalRole("client");
+      setPortalCanReply(true);
+      setPortalCanUpload(false);
+      setPortalCanInvoice(false);
+    },
+    onError: (err) => {
+      toast.error(apiErrorMessage(err, "Could not invite portal user."));
+    },
+  });
+
+  const portalInviteReady =
+    portalEmail.includes("@") &&
+    portalFullName.trim().length > 0 &&
+    portalMatterId.trim().length > 0 &&
+    !portalInviteMutation.isPending;
 
   async function handleDownload() {
     // P0-001 (2026-04-24): EG-001 cookie migration removed the
@@ -218,6 +273,151 @@ export default function AdminPage() {
                   {busy
                     ? "Downloading…"
                     : `Download audit trail (${format.toUpperCase()})`}
+                </Button>
+              </div>
+            </form>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex-row items-start justify-between gap-4">
+          <div>
+            <CardTitle as="h2">External portal access</CardTitle>
+            <CardDescription>
+              Invite a client or outside counsel and grant access to one
+              matter. Clients land in the read-only matter portal; outside
+              counsel land in the assigned-matters portal.
+            </CardDescription>
+          </div>
+          <MailPlus className="h-5 w-5 text-[var(--color-brand-700)]" aria-hidden />
+        </CardHeader>
+        <CardContent>
+          {!canPortalInvite ? (
+            <p className="text-sm text-[var(--color-mute)]">
+              Your role does not include <code>portal:invite</code>. Ask
+              the workspace owner or admin to invite external users.
+            </p>
+          ) : (
+            <form
+              className="grid gap-4 md:grid-cols-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (!portalInviteReady) {
+                  toast.error("Name, email, and matter are required.");
+                  return;
+                }
+                portalInviteMutation.mutate();
+              }}
+            >
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="portal-invite-name">Full name</Label>
+                <Input
+                  id="portal-invite-name"
+                  value={portalFullName}
+                  onChange={(e) => setPortalFullName(e.target.value)}
+                  placeholder="Asha Rao"
+                  data-testid="portal-invite-name"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="portal-invite-email">Email</Label>
+                <Input
+                  id="portal-invite-email"
+                  type="email"
+                  value={portalEmail}
+                  onChange={(e) => setPortalEmail(e.target.value)}
+                  placeholder="asha@example.com"
+                  data-testid="portal-invite-email"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="portal-invite-role">Portal role</Label>
+                <select
+                  id="portal-invite-role"
+                  className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm"
+                  value={portalRole}
+                  onChange={(e) => {
+                    const next = e.target.value as PortalUserRole;
+                    setPortalRole(next);
+                    setPortalCanReply(next === "client");
+                    setPortalCanUpload(next === "outside_counsel");
+                    setPortalCanInvoice(next === "outside_counsel");
+                  }}
+                  data-testid="portal-invite-role"
+                >
+                  <option value="client">Client portal</option>
+                  <option value="outside_counsel">Outside counsel portal</option>
+                </select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="portal-invite-matter">Matter grant</Label>
+                <select
+                  id="portal-invite-matter"
+                  className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm"
+                  value={portalMatterId}
+                  onChange={(e) => setPortalMatterId(e.target.value)}
+                  disabled={portalMattersQuery.isPending}
+                  data-testid="portal-invite-matter"
+                >
+                  <option value="">
+                    {portalMattersQuery.isPending
+                      ? "Loading matters..."
+                      : "Select a matter"}
+                  </option>
+                  {portalMatterOptions.map((matter) => (
+                    <option key={matter.id} value={matter.id}>
+                      {[matter.matter_code, matter.title]
+                        .filter(Boolean)
+                        .join(" - ")}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="md:col-span-2">
+                <fieldset className="grid gap-2 rounded-md border border-[var(--color-line)] px-3 py-2 text-sm sm:grid-cols-3">
+                  <legend className="px-1 text-xs font-medium text-[var(--color-mute)]">
+                    Grant options
+                  </legend>
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={portalCanReply}
+                      onChange={(e) => setPortalCanReply(e.target.checked)}
+                      data-testid="portal-invite-can-reply"
+                    />
+                    Can reply
+                  </label>
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={portalCanUpload}
+                      disabled={portalRole !== "outside_counsel"}
+                      onChange={(e) => setPortalCanUpload(e.target.checked)}
+                      data-testid="portal-invite-can-upload"
+                    />
+                    Can upload
+                  </label>
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={portalCanInvoice}
+                      disabled={portalRole !== "outside_counsel"}
+                      onChange={(e) => setPortalCanInvoice(e.target.checked)}
+                      data-testid="portal-invite-can-invoice"
+                    />
+                    Can invoice
+                  </label>
+                </fieldset>
+              </div>
+              <div className="md:col-span-2">
+                <Button
+                  type="submit"
+                  disabled={!portalInviteReady}
+                  data-testid="portal-invite-submit"
+                >
+                  <MailPlus className="h-4 w-4" aria-hidden />
+                  {portalInviteMutation.isPending ? "Sending..." : "Send portal invite"}
                 </Button>
               </div>
             </form>

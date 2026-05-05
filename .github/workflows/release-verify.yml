@@ -31,6 +31,9 @@ concurrency:
   group: release-verify
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   release-playwright:
     name: Release-Playwright (provider-mandatory)

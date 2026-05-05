@@ -51,15 +51,28 @@ _SCR_CITATION_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Pure-numeric ``YYYY N NNN`` citation (SC INSC / cause-title shorthand).
-# Year + 2-3 digit case number + 2-4 digit page / order number.
-_NUMERIC_CITATION_RE = re.compile(
-    r"^\s*(?P<year>\d{4})\s+(?P<volume>\d{1,3})\s+(?P<page>\d{1,5})\s*$",
-)
-
 # Alpha detector — if any Latin / Indic letter appears, the numeric-only
 # rule must not fire (protects topical queries like "bail 2022 15 827").
 _ANY_ALPHA_RE = re.compile(r"[^\W\d_]", re.UNICODE)
+
+
+def _numeric_citation_parts(value: str) -> tuple[str, str, str] | None:
+    """Parse pure-numeric ``YYYY N NNN`` citations without regex backtracking."""
+    parts = value.split()
+    if len(parts) != 3:
+        return None
+
+    year, volume, page = parts
+    if not (
+        year.isdigit()
+        and len(year) == 4
+        and volume.isdigit()
+        and 1 <= len(volume) <= 3
+        and page.isdigit()
+        and 1 <= len(page) <= 5
+    ):
+        return None
+    return year, volume, page
 
 
 def normalise_citation_query(q: str) -> list[str]:
@@ -96,12 +109,9 @@ def normalise_citation_query(q: str) -> list[str]:
 
     # Pure-numeric only if the query has no alpha at all. This stops
     # "bail 2022 15 827" from being rewritten as a citation probe.
-    if _NUMERIC_CITATION_RE.match(stripped) and not _ANY_ALPHA_RE.search(stripped):
-        numeric_match = _NUMERIC_CITATION_RE.match(stripped)
-        assert numeric_match is not None  # narrowing for type checker
-        year = numeric_match.group("year")
-        volume = numeric_match.group("volume")
-        page = numeric_match.group("page")
+    numeric_parts = _numeric_citation_parts(stripped)
+    if numeric_parts and not _ANY_ALPHA_RE.search(stripped):
+        year, volume, page = numeric_parts
         variants = [
             f"{year} {volume} {page}",
             f"{year} {volume} SCR {page}",
