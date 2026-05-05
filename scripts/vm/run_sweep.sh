@@ -69,8 +69,9 @@ parse_probe() {
   echo "rating=$rating recall@10=$recall_frac MRR=${mrr:-NA} rank=${rank:-NA}"
 }
 
-# Returns 0 if bucket-already-ingested (processed=0, skipped>0, no crash)
-# Returns 2 if real failure.
+# Returns 0 if the ingester emitted its structured summary, including
+# partial success with corrupt PDFs skipped. Returns 1 if it crashed before
+# a summary, which is the failure mode that should stop this bucket attempt.
 # Logs to master regardless.
 ingest_is_benign() {
   local ingest_log="$1"
@@ -98,12 +99,12 @@ run_bucket() {
   log "START $label"
 
   # 1. INGEST
-  if PY caseops_api.scripts.ingest_corpus "${ingest_args[@]}" >> "$ingest_log" 2>&1; then
+  if PY caseops_api.scripts.ingest_corpus "${ingest_args[@]}" > "$ingest_log" 2>&1; then
     log "INGEST-OK $label"
   else
     local rc=$?
     if ingest_is_benign "$ingest_log"; then
-      log "INGEST-DUP $label (exit $rc tolerated — all docs already in corpus)"
+      log "INGEST-NONFATAL $label (exit $rc tolerated - structured summary emitted)"
     else
       log "INGEST-FAIL $label (exit $rc)"
       return 2
@@ -177,7 +178,7 @@ for year in 2023 2022 2021 2020 2019 2018 2017 2016 2015 2014 2013 2012 2011 201
     continue
   fi
   run_bucket "$label" "$year-$year" \
-    --from-s3 --court sc --year "$year" --min-chars 4000 --limit 2000
+    --from-s3 --court sc --year "$year" --min-chars 4000 --limit 2000 --language-suffix EN
   rc=$?
   if [[ $rc -ne 0 ]]; then
     log "SWEEP HALTED at $label (rc=$rc)"

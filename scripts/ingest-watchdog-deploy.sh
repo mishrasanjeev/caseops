@@ -47,6 +47,13 @@ gcloud run jobs $ACTION "${JOB}" \
   --set-env-vars="PROJECT=${PROJECT},ZONE=${VM_ZONE},INSTANCE=${VM_NAME},STALE_THRESHOLD_SEC=7200,RESET_COOLDOWN_SEC=1800" \
   --memory=512Mi --cpu=1 --task-timeout=300s --max-retries=0 --quiet
 
+echo "=== grant scheduler permission to run ${JOB} (idempotent) ==="
+gcloud run jobs add-iam-policy-binding "${JOB}" \
+  --region="${REGION}" --project="${PROJECT}" \
+  --member="serviceAccount:${SA}" \
+  --role="roles/run.jobsExecutor" \
+  --quiet >/dev/null
+
 echo "=== schedule (every 15 min) ==="
 RUN_URI="https://${REGION}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${PROJECT}/jobs/${JOB}:run"
 ACTION_S=$(gcloud scheduler jobs describe "${SCHEDULER_JOB}" \

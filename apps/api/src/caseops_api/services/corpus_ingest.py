@@ -624,6 +624,12 @@ def ingest_local_directory(
 
     for path in pdfs:
         try:
+            canonical_key = _canonical_key_for(path, court, year)
+            if _already_indexed(session, canonical_key):
+                summary.skipped_files += 1
+                if delete_after:
+                    path.unlink(missing_ok=True)
+                continue
             parsed = parse_judgment_pdf(
                 path,
                 court=court,
@@ -638,11 +644,6 @@ def ingest_local_directory(
                 # Short procedural orders add retrieval noise and cost
                 # Voyage credits for no precedent-weight gain. Skip before
                 # we chunk/embed, but record so the summary is honest.
-                summary.skipped_files += 1
-                if delete_after:
-                    path.unlink(missing_ok=True)
-                continue
-            if _already_indexed(session, parsed.canonical_key):
                 summary.skipped_files += 1
                 if delete_after:
                     path.unlink(missing_ok=True)

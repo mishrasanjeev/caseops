@@ -56,7 +56,31 @@ def test_ocr_pdf_returns_none_when_backend_missing(
     get_settings.cache_clear()
     dummy = tmp_path / "doc.pdf"
     dummy.write_bytes(b"%PDF-1.4\n%%EOF\n")
+    monkeypatch.setattr(
+        "caseops_api.services.ocr._render_pdf_pages",
+        lambda *args, **kwargs: ([object()], 1, False),
+    )
     with patch("caseops_api.services.ocr._build_backend", side_effect=RuntimeError("nope")):
+        assert ocr_pdf(dummy) is None
+
+
+def test_ocr_pdf_does_not_load_backend_when_render_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("CASEOPS_OCR_PROVIDER", "rapidocr")
+    get_settings.cache_clear()
+    dummy = tmp_path / "corrupt.pdf"
+    dummy.write_bytes(b"not a real pdf")
+
+    monkeypatch.setattr(
+        "caseops_api.services.ocr._render_pdf_pages",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("bad pdf")),
+    )
+
+    with patch(
+        "caseops_api.services.ocr._build_backend",
+        side_effect=AssertionError("backend should not load before render succeeds"),
+    ):
         assert ocr_pdf(dummy) is None
 
 

@@ -8,8 +8,12 @@
 #   memory: $20/day Voyage cap.
 #
 # 2026-04-29: scope expansion (corpus converged at 99,242 docs under
-#   prior scope; need MORE volume). Three knobs lifted:
-#     - drop --language-suffix EN (ingest Devanagari/regional too)
+#   prior scope; need MORE volume). HC stayed all-language, but SC is
+#   back to --language-suffix EN after the 2026-05-05 stuck-ingest
+#   incident: old SC tarballs contain thousands of regional/corrupt PDFs
+#   that repeatedly fall through pdfminer + OCR and starve English
+#   progress. Regional SC needs a separate language-tagged pipeline.
+#   The other expansion knobs remain:
 #     - lower --min-chars 4000 → 2000 (procedural orders included)
 #     - --limit 2000 → 20000 (mirrors run_sweep_hc_all.sh — original
 #       2000-cap silently halted at S3-list head and missed real new
@@ -87,7 +91,7 @@ record_attempt() {
   echo "$current"
 }
 
-log "EN-SWEEP START (SC 2024-1990 + HC 2025-2000, ALL-LANGUAGES, min-chars=2000, voyage_cap=$CASEOPS_VOYAGE_DAILY_CAP_USD, progress=$PROGRESS_FILE)"
+log "EN-SWEEP START (SC 2024-1990 EN-only + HC 2025-2000 all-languages, min-chars=2000, voyage_cap=$CASEOPS_VOYAGE_DAILY_CAP_USD, progress=$PROGRESS_FILE)"
 
 # SC: skip years already rated >=4.5 in prior runs (per ratings.log).
 # Skipped: 2024 (script-flagged), 2023 (sweep-state SKIP), 2021/2020/
@@ -113,7 +117,7 @@ for year in 2024 2023 2022 2021 2020 2019 2018 2017 2016 2015 2014 2013 2012 201
   # a single bucket is stuck. The attempt counter is persistent so a
   # subsequent restart picks up where we left off.
   run_bucket "$label" "$year-$year" \
-    --from-s3 --court sc --year "$year" --min-chars 2000 --limit 20000
+    --from-s3 --court sc --year "$year" --min-chars 2000 --limit 20000 --language-suffix EN
   rc=$?
   if [[ $rc -ne 0 ]]; then
     log "BUCKET-FAIL $label (rc=$rc, attempt=$attempts) — continuing"

@@ -356,12 +356,7 @@ def ocr_pdf(path: Path) -> OcrResult | None:
     single bad page abort a whole document.
     """
     settings = get_settings()
-    try:
-        backend = _build_backend(settings.ocr_provider)
-    except RuntimeError as exc:
-        logger.warning("OCR unavailable (%s); skipping %s.", exc, path.name)
-        return None
-    if backend is None:
+    if settings.ocr_provider.lower().strip() in {"none", "off", ""}:
         return None
 
     try:
@@ -372,6 +367,14 @@ def ocr_pdf(path: Path) -> OcrResult | None:
         )
     except Exception as exc:
         logger.warning("Could not render %s for OCR: %s", path.name, exc)
+        return None
+
+    try:
+        backend = _build_backend(settings.ocr_provider)
+    except RuntimeError as exc:
+        logger.warning("OCR unavailable (%s); skipping %s.", exc, path.name)
+        return None
+    if backend is None:
         return None
 
     try:

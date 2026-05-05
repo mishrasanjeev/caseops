@@ -51,7 +51,7 @@ if [ -d "$HOME/caseops/.git" ]; then
     && git reset --hard origin/main 2>/dev/null \
     && echo "git: $(git rev-parse --short=7 HEAD)" ) || \
     echo "git: pull failed; proceeding with on-disk ~/run_sweep_*.sh"
-  for f in run_sweep_en.sh run_sweep_hc_all.sh; do
+  for f in run_sweep.sh run_sweep_en.sh run_sweep_hc_all.sh; do
     if [ -f "$HOME/caseops/scripts/vm/$f" ]; then
       cp -f "$HOME/caseops/scripts/vm/$f" "$HOME/$f"
       chmod +x "$HOME/$f"
@@ -64,17 +64,22 @@ fi
 # rare case where the script gets re-invoked manually).
 ensure_screen() {
   local name="$1"; shift
+  local process_pattern="$1"; shift
   local cmd="$*"
   if screen -ls 2>/dev/null | grep -q "\.${name}\b"; then
-    echo "ensure_screen: ${name} already running"
-    return 0
+    if pgrep -f "$process_pattern" >/dev/null 2>&1; then
+      echo "ensure_screen: ${name} already running"
+      return 0
+    fi
+    echo "ensure_screen: ${name} screen exists but process is gone; relaunching"
+    screen -S "$name" -X quit >/dev/null 2>&1 || true
   fi
   screen -dmS "$name" bash -c "$cmd; exec bash"
   echo "ensure_screen: ${name} launched"
 }
 
 # 1) cloud-sql-proxy (must come first; sweeps depend on :5432).
-ensure_screen sql_proxy 'cloud-sql-proxy --port 5432 perfect-period-305406:asia-south1:caseops-db'
+ensure_screen sql_proxy 'cloud-sql-proxy --port 5432' 'cloud-sql-proxy --port 5432 perfect-period-305406:asia-south1:caseops-db'
 
 # Wait up to 30s for proxy to be listening before kicking sweeps.
 for i in $(seq 1 15); do
@@ -90,8 +95,8 @@ if ! ss -lnt | grep -q ':5432'; then
 fi
 
 # 2) EN sweep + HC-all sweep.
-ensure_screen en_sweep 'cd ~ && ~/run_sweep_en.sh'
-ensure_screen hc_sweep_all 'cd ~ && ~/run_sweep_hc_all.sh'
+ensure_screen en_sweep 'run_sweep_en.sh' 'cd ~ && ~/run_sweep_en.sh'
+ensure_screen hc_sweep_all 'run_sweep_hc_all.sh' 'cd ~ && ~/run_sweep_hc_all.sh'
 
 screen -ls
 EOF
