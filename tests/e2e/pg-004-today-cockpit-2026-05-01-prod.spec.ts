@@ -50,6 +50,25 @@ async function firstMatterId(page: Page): Promise<string | null> {
   return matters[0]?.id ?? null;
 }
 
+async function firstActiveMatterId(page: Page): Promise<string | null> {
+  const resp = await page.context().request.get(
+    `${PROD_API_BASE_URL}/api/matters/`,
+    {
+      headers: {
+        Cookie: await cookieHeader(page),
+        Accept: "application/json",
+      },
+    },
+  );
+  if (!resp.ok()) return null;
+  const body = await resp.json();
+  const matters = body?.matters ?? [];
+  return (
+    matters.find((matter: { status?: string }) => matter.status === "active")
+      ?.id ?? null
+  );
+}
+
 test.describe("PG-004 — Today cockpit prod verification", () => {
   test("GET /api/me/today returns the 5-stream payload", async ({ page }) => {
     const resp = await page.context().request.get(
@@ -107,9 +126,9 @@ test.describe("PG-004 — Today cockpit prod verification", () => {
   test("/app redirects to /app/today when workspace has ≥1 active matter", async ({
     page,
   }) => {
-    const matterId = await firstMatterId(page);
+    const matterId = await firstActiveMatterId(page);
     if (!matterId) {
-      test.skip(true, "QA workspace has no matters; redirect path doesn't apply.");
+      test.skip(true, "QA workspace has no active matters; redirect path doesn't apply.");
       return;
     }
 

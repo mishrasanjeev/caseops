@@ -3,6 +3,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { ArrowUpRight, Briefcase, Gavel, LibraryBig, Sparkles } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -18,6 +20,7 @@ import { useSession } from "@/lib/use-session";
 
 export default function DashboardPage() {
   const session = useSession();
+  const router = useRouter();
   // The dashboard wants a single flat list for its stat cards; the
   // /app/matters page wants pagination. If both share ["matters",
   // "list"] react-query tries to reconcile a plain `MattersList` with
@@ -38,6 +41,12 @@ export default function DashboardPage() {
 
   const matters = mattersQuery.data?.matters ?? [];
   const activeCount = matters.filter((m) => m.status === "active").length;
+
+  useEffect(() => {
+    if (mattersQuery.isSuccess && activeCount > 0) {
+      router.replace("/app/today");
+    }
+  }, [activeCount, mattersQuery.isSuccess, router]);
 
   const upcoming = [...matters]
     .filter((m) => !!m.next_hearing_on)

@@ -114,6 +114,14 @@ test.describe("App spine", () => {
     await expect(dialog).toBeHidden();
     await expect(page.getByText(code, { exact: false }).first()).toBeVisible();
 
+    // PG-004: active workspaces should land on the Today cockpit when
+    // they hit /app. First-time empty workspaces stay on the dashboard
+    // above; this branch protects the active-workspace redirect.
+    await page.goto("/app");
+    await page.waitForURL(/\/app\/today$/);
+    await page.goto("/app/matters");
+    await page.waitForURL("**/app/matters");
+
     // Open the cockpit by clicking the matter row.
     await page.getByText("Spine matter", { exact: false }).first().click();
     await page.waitForURL(/\/app\/matters\/[0-9a-f-]+/);
