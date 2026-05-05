@@ -70,7 +70,7 @@ parse_probe() {
 }
 
 # Returns 0 if bucket-already-ingested (processed=0, skipped>0, no crash)
-# Returns 1 if real failure.
+# Returns 2 if real failure.
 # Logs to master regardless.
 ingest_is_benign() {
   local ingest_log="$1"
@@ -105,7 +105,7 @@ run_bucket() {
     if ingest_is_benign "$ingest_log"; then
       log "INGEST-DUP $label (exit $rc tolerated — all docs already in corpus)"
     else
-      log "INGEST-FAIL $label (exit $rc) — stopping sweep"
+      log "INGEST-FAIL $label (exit $rc)"
       return 2
     fi
   fi

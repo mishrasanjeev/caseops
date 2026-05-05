@@ -35,6 +35,7 @@ END_LINE=$((END_LINE - 1))
 # with the SC en_sweep state.
 STATE=~/logs/sweep_state.hc_all.txt
 RATINGS=~/logs/ratings.hc_all.log
+HC_MASTER_LOG=~/logs/hc_sweep_master.log
 FLOOR="4.5"
 
 # 2026-05-01: PROGRESS RESUME (state file). Pre-fix every reboot
@@ -53,7 +54,7 @@ touch "$PROGRESS_FILE"
 ATTEMPTS_FILE=~/logs/sweep_attempts.hc_all.txt
 touch "$ATTEMPTS_FILE"
 
-log() { echo "[$(date -Iseconds)] $*" | tee -a "$STATE"; }
+log() { echo "[$(date -Iseconds)] $*" | tee -a "$STATE" "$HC_MASTER_LOG"; }
 
 bucket_done() {
   grep -qx "DONE-$1" "$PROGRESS_FILE"
@@ -77,9 +78,20 @@ record_attempt() {
   echo "$current"
 }
 
+should_skip_bucket() {
+  local court="$1"
+  local year="$2"
+  local label="$3"
+  if [[ "$court" == "uttarakhand" && "$year" -lt 2000 ]]; then
+    log "SKIP-NOT-YET-ESTABLISHED $label (Uttarakhand HC established in 2000; no pre-2000 S3 bucket expected)"
+    return 0
+  fi
+  return 1
+}
+
 export CASEOPS_VOYAGE_DAILY_CAP_USD=20
 
-log "HC-ALL SWEEP START (24 HCs × 2025-2000, ALL-LANGUAGES, min-chars=2000, floor=$FLOOR warn-only, voyage_cap=$CASEOPS_VOYAGE_DAILY_CAP_USD, progress=$PROGRESS_FILE)"
+log "HC-ALL SWEEP START (24 HCs x 2025-1990, ALL-LANGUAGES, min-chars=2000, floor=$FLOOR warn-only, voyage_cap=$CASEOPS_VOYAGE_DAILY_CAP_USD, progress=$PROGRESS_FILE)"
 
 # All 24 distinct High Courts in HC_COURT_CATALOG (services/corpus_ingest.py).
 # Aliases (mumbai, chennai, bangalore, kolkata, odisha) excluded — they
@@ -105,6 +117,10 @@ YEAR_LIST=(2025 2024 2023 2022 2021 2020 2019 2018 2017 2016 2015 2014 2013 2012
 run_bucket_with_floor_halt() {
   local label="$1"; shift
   run_bucket "$label" "" "$@"
+  local rc=$?
+  if [[ $rc -ne 0 ]]; then
+    return "$rc"
+  fi
   # Pull the most recent RATING line for this bucket from the master
   # ratings log to enforce the floor. parse_probe inside run_bucket
   # writes one line per bucket to RATINGS via "echo ... >> $RATINGS"
@@ -144,6 +160,10 @@ for court in "${HC_LIST[@]}"; do
       log "RESUME-SKIP $label (marked DONE in $PROGRESS_FILE)"
       continue
     fi
+    if should_skip_bucket "$court" "$year" "$label"; then
+      mark_done "$label"
+      continue
+    fi
     attempts=$(record_attempt "$label")
     if (( attempts > 3 )); then
       log "SKIP-MAX-ATTEMPTS $label (attempts=$attempts; investigate offline)"
@@ -167,6 +187,11 @@ for court in "${HC_LIST[@]}"; do
     run_bucket_with_floor_halt "$label" \
       --from-s3 --court hc --hc-courts "$court" --year "$year" \
       --min-chars 2000 --limit 20000
+    rc=$?
+    if [[ $rc -ne 0 ]]; then
+      log "BUCKET-FAIL $label (rc=$rc, attempt=$attempts) - continuing"
+      continue
+    fi
     mark_done "$label"
   done
 done

@@ -715,7 +715,12 @@ def _open_s3_client():
         ) from exc
     return boto3.client(
         "s3",
-        config=Config(signature_version=UNSIGNED),
+        config=Config(
+            signature_version=UNSIGNED,
+            connect_timeout=10,
+            read_timeout=60,
+            retries={"max_attempts": 10, "mode": "standard"},
+        ),
         region_name="us-east-1",
     )
 
