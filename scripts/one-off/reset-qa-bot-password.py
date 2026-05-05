@@ -103,7 +103,7 @@ def main() -> int:
             print("ERROR pushing secret:", proc.stderr.decode(), file=sys.stderr)
             return 4
 
-    print(f"secret {SECRET_NAME} latest version pushed")
+    print("Credential latest version pushed")
     print(
         "Fetch the secret from Secret Manager using the documented "
         "caseops-qa-password runbook."

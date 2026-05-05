@@ -43,17 +43,40 @@ logger = logging.getLogger(__name__)
 # SC-style citation with optional bracket / paren wrapping and dots inside
 # ``S.C.R.``. Matches ``[2019] 1 S.C.R. 1001``, ``(2021) 1 SCR 694``,
 # ``2019 1 SCR 1001``. Year → volume → reporter-tag → page.
-_SCR_CITATION_RE = re.compile(
-    r"^\s*[\[\(]?\s*(?P<year>\d{4})\s*[\]\)]?\s*"
-    r"(?P<volume>\d+)\s*"
-    r"S\.?\s*C\.?\s*R\.?\s*"
-    r"(?P<page>\d+)\s*$",
-    re.IGNORECASE,
-)
-
 # Alpha detector — if any Latin / Indic letter appears, the numeric-only
 # rule must not fire (protects topical queries like "bail 2022 15 827").
 _ANY_ALPHA_RE = re.compile(r"[^\W\d_]", re.UNICODE)
+
+
+def _scr_citation_parts(value: str) -> tuple[str, str, str] | None:
+    """Parse SC reporter citations without regex backtracking."""
+    normalized = (
+        value.replace("[", " ")
+        .replace("]", " ")
+        .replace("(", " ")
+        .replace(")", " ")
+        .replace(".", "")
+    )
+    parts = normalized.split()
+    if len(parts) == 4:
+        year, volume, reporter, page = parts
+        if reporter.upper() != "SCR":
+            return None
+    elif len(parts) == 6:
+        year, volume, s_part, c_part, r_part, page = parts
+        if (s_part + c_part + r_part).upper() != "SCR":
+            return None
+    else:
+        return None
+
+    if not (
+        year.isdigit()
+        and len(year) == 4
+        and volume.isdigit()
+        and page.isdigit()
+    ):
+        return None
+    return year, volume, page
 
 
 def _numeric_citation_parts(value: str) -> tuple[str, str, str] | None:
@@ -93,11 +116,9 @@ def normalise_citation_query(q: str) -> list[str]:
     if not stripped:
         return [q]
 
-    scr_match = _SCR_CITATION_RE.match(stripped)
-    if scr_match:
-        year = scr_match.group("year")
-        volume = scr_match.group("volume")
-        page = scr_match.group("page")
+    scr_parts = _scr_citation_parts(stripped)
+    if scr_parts:
+        year, volume, page = scr_parts
         variants = [
             f"{year} {volume} SCR {page}",
             f"[{year}] {volume} SCR {page}",

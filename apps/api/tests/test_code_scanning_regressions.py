@@ -4,7 +4,7 @@ import ast
 from pathlib import Path
 
 from caseops_api.scripts.enrich_delhi_hc_judges import extract_bio
-from caseops_api.services.court_sync_sources import _strip_html
+from caseops_api.services.court_sync_sources import _extract_case_references, _strip_html
 from caseops_api.services.retrieval_normalisers import normalise_citation_query
 
 
@@ -45,6 +45,28 @@ def test_numeric_citation_normaliser_avoids_whitespace_regex_redos() -> None:
     assert "2022 15 827" in normalise_citation_query(query)
 
 
+def test_scr_citation_normaliser_avoids_whitespace_regex_redos() -> None:
+    query = (
+        "[2019]" + (" " * 20_000) + "1 S. C. R." + (" " * 20_000) + "1001"
+    )
+
+    assert "2019 1 SCR 1001" in normalise_citation_query(query)
+
+
+def test_case_reference_extractor_avoids_whitespace_regex_redos() -> None:
+    query = (
+        "W.P.(C)"
+        + (" " * 20_000)
+        + "123"
+        + (" " * 20_000)
+        + "OF"
+        + (" " * 20_000)
+        + "2024"
+    )
+
+    assert "wpc1232024" in _extract_case_references(query)
+
+
 def test_matter_code_suggestion_does_not_use_trailing_digit_regex() -> None:
     source = (
         Path(__file__).resolve().parents[1]
@@ -69,6 +91,7 @@ def test_qa_password_reset_does_not_print_secret_fetch_command() -> None:
         "gcloud secrets versions access" not in source
         for source in _print_arg_sources(script)
     )
+    assert all("SECRET_NAME" not in source for source in _print_arg_sources(script))
 
 
 def test_sci_judge_enrichment_does_not_print_sensitive_dates() -> None:

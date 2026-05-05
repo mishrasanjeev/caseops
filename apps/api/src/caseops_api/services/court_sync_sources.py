@@ -71,8 +71,8 @@ BENCH_PATTERN = re.compile(
     re.IGNORECASE,
 )
 CASE_NUMBER_PATTERN = re.compile(
-    r"\b(?P<prefix>[A-Z][A-Z0-9.'()/-]*(?:\s+[A-Z][A-Z0-9.'()/-]*){0,4})"
-    r"\s*(?:[-/ ]\s*)?(?P<number>\d{1,6}[A-Z]?)\s*(?:/|-|\bOF\b)\s*(?P<year>\d{4})\b",
+    r"\b(?P<prefix>[A-Z][A-Z0-9.'()/-]*(?: [A-Z][A-Z0-9.'()/-]*){0,4})"
+    r" ?(?:[-/ ] ?)?(?P<number>\d{1,6}[A-Z]?) ?(?:/|-| OF ) ?(?P<year>\d{4})\b",
     re.IGNORECASE,
 )
 BOMBAY_BENCH_LOCATION_PATTERN = re.compile(
@@ -308,7 +308,7 @@ def _extract_case_anchor_contexts(
         match
         for match in raw_matches
         if CASE_NUMBER_PATTERN.search(
-            unescape(HTML_TAG_PATTERN.sub(" ", match.group("text"))).strip()
+            _collapse_ws(unescape(HTML_TAG_PATTERN.sub(" ", match.group("text"))))
         )
     ]
 
@@ -338,7 +338,8 @@ def _normalize_case_reference(value: str) -> str:
 
 def _extract_case_references(value: str) -> list[str]:
     refs: set[str] = set()
-    for match in CASE_NUMBER_PATTERN.finditer(value):
+    normalized_value = _collapse_ws(value)
+    for match in CASE_NUMBER_PATTERN.finditer(normalized_value):
         refs.add(_normalize_case_reference(match.group(0)))
 
         prefix = _normalize_case_reference(match.group("prefix"))
@@ -524,7 +525,9 @@ def _parse_bombay_recent_orders_page(html: str) -> list[BombayRecentOrderCandida
         html,
         base_url=BOMBAY_BASE_URL,
     ):
-        case_match = CASE_NUMBER_PATTERN.search(anchor_text) or CASE_NUMBER_PATTERN.search(context)
+        case_match = CASE_NUMBER_PATTERN.search(_collapse_ws(anchor_text))
+        if case_match is None:
+            case_match = CASE_NUMBER_PATTERN.search(_collapse_ws(context))
         if case_match is None:
             continue
 
