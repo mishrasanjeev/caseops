@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -52,3 +52,27 @@ class AuditExportJobRecord(BaseModel):
 
 class AuditExportJobListResponse(BaseModel):
     jobs: list[AuditExportJobRecord]
+
+
+class MatterAuditEventRecord(BaseModel):
+    id: str
+    company_id: str
+    actor_type: str
+    actor_membership_id: str | None
+    actor_label: str | None
+    matter_id: str | None
+    action: str
+    target_type: str
+    target_id: str | None
+    result: str
+    metadata: dict[str, Any] | None = None
+    request_id: str | None = None
+    created_at: datetime
+
+
+class MatterAuditListResponse(BaseModel):
+    matter_id: str
+    events: list[MatterAuditEventRecord]
+    total: int
+    limit: int
+    offset: int

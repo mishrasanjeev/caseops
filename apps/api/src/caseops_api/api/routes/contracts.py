@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, UploadFile
 from fastapi.responses import FileResponse
 
 from caseops_api.api.dependencies import (
@@ -11,16 +12,23 @@ from caseops_api.api.dependencies import (
     require_capability,
 )
 from caseops_api.schemas.contracts import (
+    ContractAttachmentMetadataUpdateRequest,
     ContractAttachmentRecord,
     ContractClauseCreateRequest,
     ContractClauseRecord,
     ContractCreateRequest,
+    ContractLegalReferenceCreateRequest,
+    ContractLegalReferenceRecord,
+    ContractLegalReferenceUpdateRequest,
     ContractListResponse,
+    ContractMetadataUpdateRequest,
     ContractObligationCreateRequest,
     ContractObligationRecord,
     ContractPlaybookRuleCreateRequest,
     ContractPlaybookRuleRecord,
     ContractRecord,
+    ContractTermSuggestionCreateRequest,
+    ContractTermSuggestionRecord,
     ContractUpdateRequest,
     ContractWorkspaceResponse,
     RedlineChangeRecord,
@@ -31,14 +39,21 @@ from caseops_api.services.contracts import (
     create_contract,
     create_contract_attachment,
     create_contract_clause,
+    create_contract_legal_reference,
     create_contract_obligation,
     create_contract_playbook_rule,
+    create_contract_term_suggestion,
     get_contract,
     get_contract_attachment_download,
     get_contract_workspace,
+    list_contract_legal_references,
     list_contracts,
     request_contract_attachment_processing,
+    review_contract_term_suggestion,
     update_contract,
+    update_contract_attachment_metadata,
+    update_contract_legal_reference,
+    update_contract_metadata,
 )
 from caseops_api.services.document_jobs import run_document_processing_job
 from caseops_api.services.identity import SessionContext
@@ -110,6 +125,141 @@ async def patch_current_company_contract(
     return update_contract(session, context=context, contract_id=contract_id, payload=payload)
 
 
+@router.patch(
+    "/{contract_id}/metadata",
+    response_model=ContractRecord,
+    summary="Update contract metadata",
+)
+async def patch_current_company_contract_metadata(
+    contract_id: str,
+    payload: ContractMetadataUpdateRequest,
+    context: ContractEditor,
+    session: DbSession,
+) -> ContractRecord:
+    return update_contract_metadata(
+        session,
+        context=context,
+        contract_id=contract_id,
+        payload=payload,
+    )
+
+
+@router.get(
+    "/{contract_id}/legal-references",
+    response_model=list[ContractLegalReferenceRecord],
+    summary="List legal references for a contract",
+)
+async def get_current_company_contract_legal_references(
+    contract_id: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> list[ContractLegalReferenceRecord]:
+    return list_contract_legal_references(
+        session,
+        context=context,
+        contract_id=contract_id,
+    )
+
+
+@router.post(
+    "/{contract_id}/legal-references",
+    response_model=ContractLegalReferenceRecord,
+    summary="Add a legal reference to a contract",
+)
+async def post_current_company_contract_legal_reference(
+    contract_id: str,
+    payload: ContractLegalReferenceCreateRequest,
+    context: ContractEditor,
+    session: DbSession,
+) -> ContractLegalReferenceRecord:
+    return create_contract_legal_reference(
+        session,
+        context=context,
+        contract_id=contract_id,
+        payload=payload,
+    )
+
+
+@router.patch(
+    "/{contract_id}/legal-references/{reference_id}",
+    response_model=ContractLegalReferenceRecord,
+    summary="Update a contract legal reference",
+)
+async def patch_current_company_contract_legal_reference(
+    contract_id: str,
+    reference_id: str,
+    payload: ContractLegalReferenceUpdateRequest,
+    context: ContractEditor,
+    session: DbSession,
+) -> ContractLegalReferenceRecord:
+    return update_contract_legal_reference(
+        session,
+        context=context,
+        contract_id=contract_id,
+        reference_id=reference_id,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/{contract_id}/term-suggestions",
+    response_model=ContractTermSuggestionRecord,
+    summary="Create a reviewable contract term suggestion",
+)
+async def post_current_company_contract_term_suggestion(
+    contract_id: str,
+    payload: ContractTermSuggestionCreateRequest,
+    context: ContractEditor,
+    session: DbSession,
+) -> ContractTermSuggestionRecord:
+    return create_contract_term_suggestion(
+        session,
+        context=context,
+        contract_id=contract_id,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/{contract_id}/term-suggestions/{suggestion_id}/accept",
+    response_model=ContractTermSuggestionRecord,
+    summary="Accept a contract term suggestion",
+)
+async def accept_current_company_contract_term_suggestion(
+    contract_id: str,
+    suggestion_id: str,
+    context: ContractEditor,
+    session: DbSession,
+) -> ContractTermSuggestionRecord:
+    return review_contract_term_suggestion(
+        session,
+        context=context,
+        contract_id=contract_id,
+        suggestion_id=suggestion_id,
+        accepted=True,
+    )
+
+
+@router.post(
+    "/{contract_id}/term-suggestions/{suggestion_id}/reject",
+    response_model=ContractTermSuggestionRecord,
+    summary="Reject a contract term suggestion",
+)
+async def reject_current_company_contract_term_suggestion(
+    contract_id: str,
+    suggestion_id: str,
+    context: ContractEditor,
+    session: DbSession,
+) -> ContractTermSuggestionRecord:
+    return review_contract_term_suggestion(
+        session,
+        context=context,
+        contract_id=contract_id,
+        suggestion_id=suggestion_id,
+        accepted=False,
+    )
+
+
 @router.post(
     "/{contract_id}/clauses",
     response_model=ContractClauseRecord,
@@ -178,6 +328,10 @@ async def post_current_company_contract_attachment(
     background_tasks: BackgroundTasks,
     context: DocumentUploader,
     session: DbSession,
+    attachment_role: Annotated[str | None, Form()] = None,
+    parent_attachment_id: Annotated[str | None, Form()] = None,
+    document_date: Annotated[date | None, Form()] = None,
+    notes: Annotated[str | None, Form()] = None,
 ) -> ContractAttachmentRecord:
     attachment, job_id = create_contract_attachment(
         session,
@@ -186,9 +340,34 @@ async def post_current_company_contract_attachment(
         filename=file.filename or "document",
         content_type=file.content_type,
         stream=file.file,
+        attachment_role=attachment_role,
+        parent_attachment_id=parent_attachment_id,
+        document_date=document_date,
+        notes=notes,
     )
     background_tasks.add_task(run_document_processing_job, job_id)
     return attachment
+
+
+@router.patch(
+    "/{contract_id}/attachments/{attachment_id}/metadata",
+    response_model=ContractAttachmentRecord,
+    summary="Update contract attachment metadata",
+)
+async def patch_current_company_contract_attachment_metadata(
+    contract_id: str,
+    attachment_id: str,
+    payload: ContractAttachmentMetadataUpdateRequest,
+    context: ContractEditor,
+    session: DbSession,
+) -> ContractAttachmentRecord:
+    return update_contract_attachment_metadata(
+        session,
+        context=context,
+        contract_id=contract_id,
+        attachment_id=attachment_id,
+        payload=payload,
+    )
 
 
 @router.post(

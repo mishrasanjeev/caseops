@@ -12,14 +12,32 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { fetchCalendarEventsMock } = vi.hoisted(() => ({
+const {
+  fetchCalendarEventsMock,
+  fetchCalendarSyncStatusMock,
+  listCalendarConnectionsMock,
+  startOutlookCalendarConnectionMock,
+  useCapabilityMock,
+} = vi.hoisted(() => ({
   fetchCalendarEventsMock: vi.fn(),
+  fetchCalendarSyncStatusMock: vi.fn(),
+  listCalendarConnectionsMock: vi.fn(),
+  startOutlookCalendarConnectionMock: vi.fn(),
+  useCapabilityMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api/endpoints", () => ({
   fetchCalendarEvents: fetchCalendarEventsMock,
+  fetchCalendarSyncStatus: fetchCalendarSyncStatusMock,
+  listCalendarConnections: listCalendarConnectionsMock,
+  revokeCalendarConnection: vi.fn(),
+  startOutlookCalendarConnection: startOutlookCalendarConnectionMock,
+}));
+
+vi.mock("@/lib/capabilities", () => ({
+  useCapability: useCapabilityMock,
 }));
 
 import CalendarPage from "./page";
@@ -37,6 +55,28 @@ function isoToday(): string {
 }
 
 describe("CalendarPage", () => {
+  beforeEach(() => {
+    fetchCalendarEventsMock.mockReset();
+    fetchCalendarSyncStatusMock.mockReset();
+    listCalendarConnectionsMock.mockReset();
+    startOutlookCalendarConnectionMock.mockReset();
+    useCapabilityMock.mockReset();
+    useCapabilityMock.mockReturnValue(true);
+    listCalendarConnectionsMock.mockResolvedValue({
+      provider: "outlook",
+      provider_available: true,
+      unavailable_reason: null,
+      durable_automation: "blocked_pending_temporal",
+      connections: [],
+    });
+    fetchCalendarSyncStatusMock.mockResolvedValue({
+      provider_available: true,
+      durable_automation: "blocked_pending_temporal",
+      connections: [],
+      syncs: [],
+    });
+  });
+
   it("renders the current month label and a Today affordance", async () => {
     fetchCalendarEventsMock.mockResolvedValueOnce({
       range_from: "2026-04-01",
@@ -51,6 +91,28 @@ describe("CalendarPage", () => {
     expect(screen.getByTestId("calendar-today")).toBeTruthy();
     expect(screen.getByTestId("calendar-prev-month")).toBeTruthy();
     expect(screen.getByTestId("calendar-next-month")).toBeTruthy();
+    expect(await screen.findByTestId("calendar-outlook-panel")).toBeTruthy();
+    expect(screen.getByTestId("calendar-ics-download")).toBeTruthy();
+  });
+
+  it("shows Outlook unavailable state without hiding ICS export", async () => {
+    fetchCalendarEventsMock.mockResolvedValueOnce({
+      range_from: "2026-04-01",
+      range_to: "2026-05-31",
+      events: [],
+    });
+    listCalendarConnectionsMock.mockResolvedValueOnce({
+      provider: "outlook",
+      provider_available: false,
+      unavailable_reason: "Microsoft Graph OAuth is not configured.",
+      durable_automation: "blocked_pending_temporal",
+      connections: [],
+    });
+    render(withClient(<CalendarPage />));
+    expect(
+      await screen.findByText(/Microsoft Graph OAuth is not configured/i),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("calendar-ics-download")).toBeInTheDocument();
   });
 
   it("renders an event chip for each event returned by the API", async () => {

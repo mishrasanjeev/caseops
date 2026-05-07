@@ -18,6 +18,10 @@ from caseops_api.core.security import (
 )
 from caseops_api.db.models import MembershipRole, PortalUser
 from caseops_api.db.session import get_db_session
+from caseops_api.services.capabilities import (
+    list_static_capabilities,
+    membership_has_capability,
+)
 from caseops_api.services.identity import SessionContext, get_session_context
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -56,7 +60,7 @@ def get_current_context(
     context = get_session_context(
         session,
         claims["membership_id"],
-        token_issued_at=int(claims["issued_at"]),
+        token_issued_at=float(claims["issued_at_precise"]),
     )
     # Plant tenant identifiers into the request's logging context so
     # every downstream log line (services, worker background tasks
@@ -154,6 +158,10 @@ CAPABILITY_ROLES: dict[str, frozenset[MembershipRole]] = {
     # --- hearing packs ---
     "hearing_packs:generate": _ALL_FEE_EARNERS,
     "hearing_packs:review": _STAFF,
+    # --- calendar + notifications (LW-S10) ---
+    "calendar:view": _ALL_AUTHENTICATED,
+    "calendar:sync": _ALL_FEE_EARNERS,
+    "notifications:manage": _OWNER_ADMIN,
     # --- court sync --- ops action, not for paralegals
     "court_sync:run": _STAFF,
     # --- recommendations + AI ---
@@ -261,8 +269,9 @@ def require_capability(
 
     def _dep(
         context: Annotated[SessionContext, Depends(get_current_context)],
+        session: DbSession,
     ) -> SessionContext:
-        if context.membership.role not in roles:
+        if not membership_has_capability(session, context.membership, capability):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=(
@@ -278,8 +287,7 @@ def require_capability(
 
 def list_capabilities(roles: Iterable[MembershipRole]) -> list[str]:
     """Helper for sanity checks / tests."""
-    role_set = frozenset(roles)
-    return sorted(cap for cap, rs in CAPABILITY_ROLES.items() if role_set & rs)
+    return list_static_capabilities(roles)
 
 
 # ---------------------------------------------------------------

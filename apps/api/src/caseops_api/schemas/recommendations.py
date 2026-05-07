@@ -28,6 +28,8 @@ DecisionLiteral = Literal["accepted", "rejected", "edited", "deferred"]
 StatusLiteral = Literal[
     "proposed", "accepted", "rejected", "edited", "deferred"
 ]
+StrategyEntryTypeLiteral = Literal["plan", "decision", "note"]
+StrategyEntryStatusLiteral = Literal["draft", "active", "archived"]
 
 
 class RecommendationOptionRecord(BaseModel):
@@ -91,3 +93,45 @@ class RecommendationDecisionRequest(BaseModel):
     decision: DecisionLiteral
     selected_option_index: int | None = Field(default=None, ge=0, le=20)
     notes: str | None = Field(default=None, max_length=2000)
+
+
+class MatterStrategyEntryCreateRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+    body: str = Field(min_length=1, max_length=10000)
+    entry_type: StrategyEntryTypeLiteral = "plan"
+    status: StrategyEntryStatusLiteral = "active"
+    owner_membership_id: str | None = None
+    source_recommendation_id: str | None = None
+
+
+class MatterStrategyEntryUpdateRequest(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    body: str | None = Field(default=None, min_length=1, max_length=10000)
+    entry_type: StrategyEntryTypeLiteral | None = None
+    status: StrategyEntryStatusLiteral | None = None
+    owner_membership_id: str | None = None
+    source_recommendation_id: str | None = None
+
+
+class MatterStrategyEntryRecord(BaseModel):
+    id: str
+    company_id: str
+    matter_id: str
+    title: str
+    body: str
+    entry_type: StrategyEntryTypeLiteral
+    status: StrategyEntryStatusLiteral
+    owner_membership_id: str | None
+    owner_name: str | None
+    created_by_membership_id: str | None
+    created_by_name: str | None
+    updated_by_membership_id: str | None
+    updated_by_name: str | None
+    source_recommendation_id: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class MatterStrategyEntryListResponse(BaseModel):
+    matter_id: str
+    entries: list[MatterStrategyEntryRecord]

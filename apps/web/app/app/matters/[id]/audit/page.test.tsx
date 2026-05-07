@@ -1,14 +1,22 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { useMatterWorkspaceMock } = vi.hoisted(() => ({
-  useMatterWorkspaceMock: vi.fn(),
+const { listMatterAuditEventsMock, matterAuditExportUrlMock, useCapabilityMock } =
+  vi.hoisted(() => ({
+    listMatterAuditEventsMock: vi.fn(),
+    matterAuditExportUrlMock: vi.fn(),
+    useCapabilityMock: vi.fn(),
+  }));
+
+vi.mock("@/lib/api/endpoints", () => ({
+  listMatterAuditEvents: listMatterAuditEventsMock,
+  matterAuditExportUrl: matterAuditExportUrlMock,
 }));
 
-vi.mock("@/lib/use-matter-workspace", () => ({
-  useMatterWorkspace: useMatterWorkspaceMock,
+vi.mock("@/lib/capabilities", () => ({
+  useCapability: useCapabilityMock,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -24,60 +32,122 @@ function withClient(children: ReactNode) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
-const BASE_MATTER = { id: "m-1", title: "Test Matter", matter_code: "T-1" };
+const EMPTY_RESPONSE = {
+  matter_id: "m-1",
+  events: [],
+  total: 0,
+  limit: 50,
+  offset: 0,
+};
 
 describe("MatterAuditPage", () => {
   beforeEach(() => {
-    useMatterWorkspaceMock.mockReset();
+    listMatterAuditEventsMock.mockReset();
+    matterAuditExportUrlMock.mockReset();
+    useCapabilityMock.mockReset();
+    useCapabilityMock.mockReturnValue(true);
+    matterAuditExportUrlMock.mockImplementation(
+      (matterId: string, filters: { format?: "jsonl" | "csv" }) =>
+        `/api/matters/${matterId}/audit-events/export?format=${filters.format}`,
+    );
+    listMatterAuditEventsMock.mockResolvedValue(EMPTY_RESPONSE);
   });
 
-  it("renders nothing while workspace data is loading", () => {
-    useMatterWorkspaceMock.mockReturnValue({ data: undefined });
-    const { container } = render(withClient(<MatterAuditPage />));
-    expect(container.firstChild).toBeNull();
-  });
-
-  it("renders empty-state copy when activity feed is empty", () => {
-    useMatterWorkspaceMock.mockReturnValue({
-      data: { matter: BASE_MATTER, activity: [] },
-    });
+  it("renders audit filter controls and scoped export links", async () => {
     render(withClient(<MatterAuditPage />));
-    expect(screen.getByText(/Audit trail/i)).toBeInTheDocument();
-    expect(screen.getByText(/No activity yet/i)).toBeInTheDocument();
+
+    expect(await screen.findByText("Matter audit")).toBeInTheDocument();
+    expect(screen.getByTestId("audit-filter-since")).toBeInTheDocument();
+    expect(screen.getByTestId("audit-filter-until")).toBeInTheDocument();
+    expect(screen.getByTestId("audit-filter-actor")).toBeInTheDocument();
+    expect(screen.getByTestId("audit-filter-action")).toBeInTheDocument();
+    expect(screen.getByTestId("audit-filter-keyword")).toBeInTheDocument();
+    expect(screen.getByTestId("matter-audit-export-jsonl")).toHaveAttribute(
+      "href",
+      "/api/matters/m-1/audit-events/export?format=jsonl",
+    );
+    expect(screen.getByTestId("matter-audit-export-csv")).toHaveAttribute(
+      "href",
+      "/api/matters/m-1/audit-events/export?format=csv",
+    );
   });
 
-  it("renders activity entries with actor, type, and detail", () => {
-    useMatterWorkspaceMock.mockReturnValue({
-      data: {
-        matter: BASE_MATTER,
-        activity: [
-          {
-            id: "a-1",
-            title: "Matter created",
-            event_type: "matter.created",
-            detail: "Initial intake from client",
-            actor_name: "Lawyer A",
-            created_at: "2026-04-15T10:30:00.000Z",
-          },
-          {
-            id: "a-2",
-            title: "Document uploaded",
-            event_type: "matter.document.uploaded",
-            detail: null,
-            actor_name: null,
-            created_at: "2026-04-16T14:00:00.000Z",
-          },
-        ],
-      },
-    });
+  it("calls audit API with date actor action and keyword filters", async () => {
     render(withClient(<MatterAuditPage />));
-    expect(screen.getByText("Matter created")).toBeInTheDocument();
-    expect(screen.getByText("Document uploaded")).toBeInTheDocument();
-    expect(screen.getByText(/Initial intake from client/)).toBeInTheDocument();
-    expect(screen.getByText("matter.created")).toBeInTheDocument();
-    // Anonymous events fall back to "system" in the actor row.
-    const systemActor = screen.getAllByText(/^system /).length;
-    expect(systemActor).toBeGreaterThanOrEqual(1);
+    await screen.findByText("Matter audit");
+
+    fireEvent.change(screen.getByTestId("audit-filter-since"), {
+      target: { value: "2026-05-01" },
+    });
+    fireEvent.change(screen.getByTestId("audit-filter-until"), {
+      target: { value: "2026-05-07" },
+    });
+    fireEvent.change(screen.getByTestId("audit-filter-actor"), {
+      target: { value: "Priya" },
+    });
+    fireEvent.change(screen.getByTestId("audit-filter-action"), {
+      target: { value: "matter.updated" },
+    });
+    fireEvent.change(screen.getByTestId("audit-filter-keyword"), {
+      target: { value: "claim" },
+    });
+
+    await waitFor(() =>
+      expect(listMatterAuditEventsMock).toHaveBeenLastCalledWith("m-1", {
+        since: "2026-05-01T00:00:00Z",
+        until: "2026-05-07T23:59:59Z",
+        actor: "Priya",
+        action: "matter.updated",
+        keyword: "claim",
+        limit: 50,
+        offset: 0,
+      }),
+    );
+  });
+
+  it("renders audit events with actor metadata and empty state", async () => {
+    listMatterAuditEventsMock.mockResolvedValueOnce({
+      matter_id: "m-1",
+      total: 1,
+      limit: 50,
+      offset: 0,
+      events: [
+        {
+          id: "evt-1",
+          company_id: "c-1",
+          actor_type: "human",
+          actor_membership_id: "mem-1",
+          actor_label: "Lawyer A",
+          matter_id: "m-1",
+          action: "matter_strategy.created",
+          target_type: "matter_strategy_entry",
+          target_id: "s-1",
+          result: "success",
+          metadata: { title: "Settlement posture" },
+          request_id: null,
+          created_at: "2026-05-07T10:30:00Z",
+        },
+      ],
+    });
+
+    render(withClient(<MatterAuditPage />));
+
+    expect(await screen.findByText("matter_strategy.created")).toBeInTheDocument();
+    expect(screen.getByText(/Settlement posture/)).toBeInTheDocument();
     expect(screen.getByText(/Lawyer A/)).toBeInTheDocument();
+
+    listMatterAuditEventsMock.mockResolvedValue(EMPTY_RESPONSE);
+    fireEvent.change(screen.getByTestId("audit-filter-keyword"), {
+      target: { value: "missing" },
+    });
+    expect(await screen.findByText(/No audit events match/i)).toBeInTheDocument();
+  });
+
+  it("hides export controls when audit export capability is absent", async () => {
+    useCapabilityMock.mockReturnValue(false);
+    render(withClient(<MatterAuditPage />));
+    expect(await screen.findByText("Matter audit")).toBeInTheDocument();
+    expect(screen.queryByTestId("matter-audit-export-jsonl")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("matter-audit-export-csv")).not.toBeInTheDocument();
   });
 });

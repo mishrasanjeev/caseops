@@ -3,9 +3,10 @@ import { render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { useMatterWorkspaceMock, fetchBenchStrategyMock } = vi.hoisted(() => ({
+const { useMatterWorkspaceMock, fetchBenchStrategyMock, useCapabilityMock } = vi.hoisted(() => ({
   useMatterWorkspaceMock: vi.fn(),
   fetchBenchStrategyMock: vi.fn(),
+  useCapabilityMock: vi.fn(),
 }));
 
 vi.mock("@/lib/use-matter-workspace", () => ({
@@ -14,10 +15,16 @@ vi.mock("@/lib/use-matter-workspace", () => ({
 
 vi.mock("@/lib/api/endpoints", () => ({
   fetchBenchStrategy: fetchBenchStrategyMock,
+  fetchForumCatalog: vi.fn(),
+  updateMatter: vi.fn(),
   fetchCounselRecommendations: vi.fn().mockResolvedValue({
     matter_id: "m-1",
     recommendations: [],
   }),
+}));
+
+vi.mock("@/lib/capabilities", () => ({
+  useCapability: (capability: string) => useCapabilityMock(capability),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -53,6 +60,8 @@ describe("MatterOverviewPage", () => {
   beforeEach(() => {
     useMatterWorkspaceMock.mockReset();
     fetchBenchStrategyMock.mockReset();
+    useCapabilityMock.mockReset();
+    useCapabilityMock.mockImplementation(() => false);
   });
 
   it("renders the matter summary card with the description text", async () => {

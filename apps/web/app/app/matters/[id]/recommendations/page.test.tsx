@@ -61,6 +61,72 @@ describe("RecommendationsPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("labels AI recommendations distinctly and excludes lawyer strategy entries", async () => {
+    listRecommendationsMock.mockResolvedValue({
+      matter_id: "m-1",
+      recommendations: [
+        {
+          id: "rec-1",
+          matter_id: "m-1",
+          type: "authority",
+          title: "Authority support",
+          rationale: "Use cited authority.",
+          primary_option_index: 0,
+          assumptions: [],
+          missing_facts: [],
+          confidence: "medium",
+          review_required: true,
+          status: "proposed",
+          next_action: null,
+          created_at: "2026-05-07T00:00:00Z",
+          options: [
+            {
+              id: "opt-1",
+              rank: 0,
+              label: "File reply",
+              rationale: "Grounded option.",
+              confidence: "medium",
+              supporting_citations: ["A v B"],
+              risk_notes: null,
+            },
+          ],
+          decisions: [],
+          retrieved_authorities: ["A v B"],
+          strategy_payload: null,
+        },
+        {
+          id: "rec-2",
+          matter_id: "m-1",
+          type: "litigation_strategy",
+          title: "Legacy AI strategy row",
+          rationale: "Should live on the Strategy tab.",
+          primary_option_index: 0,
+          assumptions: [],
+          missing_facts: [],
+          confidence: "low",
+          review_required: true,
+          status: "proposed",
+          next_action: null,
+          created_at: "2026-05-07T00:00:00Z",
+          options: [],
+          decisions: [],
+          retrieved_authorities: [],
+          strategy_payload: null,
+        },
+      ],
+    });
+
+    render(withClient(<RecommendationsPage />));
+
+    expect(await screen.findByText("Authority support")).toBeInTheDocument();
+    expect(screen.getByText("AI Recommendations")).toBeInTheDocument();
+    expect(screen.getByText(/not lawyer-owned strategy/i)).toBeInTheDocument();
+    expect(screen.queryByText("Legacy AI strategy row")).not.toBeInTheDocument();
+    expect(screen.getByTestId("ai-recommendations-disclaimer")).toHaveTextContent(
+      /does not create or approve a lawyer-owned strategy entry/i,
+    );
+  });
+
   it("BUG-016: shows persistent error Card with Try-again button after a failed generate", async () => {
     listRecommendationsMock.mockResolvedValue({
       matter_id: "m-1",

@@ -3,8 +3,12 @@ import { API_BASE_URL } from "./config";
 import {
   type AuthContext,
   type AuthSession,
+  type CalendarConnectionListResponse,
+  type CalendarConnectionRecord,
   type CalendarEventKind,
   type CalendarEventListResponse,
+  type CalendarEventSyncResponse,
+  type CalendarSyncStatusResponse,
   type CommunicationChannel,
   type CommunicationDirection,
   type CommunicationListResponse,
@@ -18,16 +22,31 @@ import {
   type EmailTemplateListResponse,
   type EmailTemplateRecord,
   type EmailTemplateVariable,
+  type ForumCatalogResponse,
   type HearingPack,
   type Matter,
+  type MatterAuditList,
+  type MatterStrategyEntry,
+  type MatterStrategyEntryList,
+  type MatterStrategyEntryStatus,
+  type MatterStrategyEntryType,
+  type MatterTimelineResponse,
+  type MatterTagsList,
   type MattersList,
+  type NotificationRuleListResponse,
+  type NotificationRuleRecord,
   type OutsideCounselWorkspace,
   type Recommendation,
   type RecommendationList,
   type RecommendationType,
   authContext,
   authSession,
+  calendarConnectionRecord,
+  calendarConnectionListResponse,
+  calendarConnectionStartResponse,
   calendarEventListResponse,
+  calendarEventSyncResponse,
+  calendarSyncStatusResponse,
   communicationListResponse,
   communicationRecord,
   contractsList,
@@ -36,9 +55,17 @@ import {
   emailRenderResponse,
   emailTemplateListResponse,
   emailTemplateRecord,
+  forumCatalogResponse,
   hearingPack,
   matter,
+  matterAuditList,
+  matterStrategyEntry,
+  matterStrategyEntryList,
+  matterTimelineResponse,
+  matterTagsList,
   mattersList,
+  notificationRuleListResponse,
+  notificationRuleRecord,
   outsideCounselWorkspace,
   recommendation,
   recommendationList,
@@ -89,20 +116,106 @@ export async function fetchAuthContext(token?: string | null): Promise<AuthConte
   return authContext.parse(data);
 }
 
-export async function listMatters(
-  params?: { limit?: number; cursor?: string | null },
-): Promise<MattersList> {
+export async function fetchForumCatalog(): Promise<ForumCatalogResponse> {
+  const data = await apiRequest<unknown>("/api/courts/forum-catalog");
+  return forumCatalogResponse.parse(data);
+}
+
+export type MatterListParams = {
+  limit?: number;
+  cursor?: string | null;
+  q?: string;
+  client_name?: string;
+  opposing_party?: string;
+  forum_level?: string;
+  court_id?: string;
+  status?: string;
+  created_from?: string;
+  created_to?: string;
+  next_hearing_from?: string;
+  next_hearing_to?: string;
+  tag?: string;
+  has_stay?: boolean;
+  min_claim_amount_minor?: number;
+  max_claim_amount_minor?: number;
+};
+
+function appendMatterListParam(
+  qs: URLSearchParams,
+  key: keyof MatterListParams,
+  value: MatterListParams[keyof MatterListParams],
+) {
+  if (value === undefined || value === null || value === "") return;
+  qs.set(key, String(value));
+}
+
+export async function listMatters(params?: MatterListParams): Promise<MattersList> {
   const qs = new URLSearchParams();
-  if (params?.limit) qs.set("limit", String(params.limit));
-  if (params?.cursor) qs.set("cursor", params.cursor);
+  appendMatterListParam(qs, "limit", params?.limit);
+  appendMatterListParam(qs, "cursor", params?.cursor);
+  appendMatterListParam(qs, "q", params?.q);
+  appendMatterListParam(qs, "client_name", params?.client_name);
+  appendMatterListParam(qs, "opposing_party", params?.opposing_party);
+  appendMatterListParam(qs, "forum_level", params?.forum_level);
+  appendMatterListParam(qs, "court_id", params?.court_id);
+  appendMatterListParam(qs, "status", params?.status);
+  appendMatterListParam(qs, "created_from", params?.created_from);
+  appendMatterListParam(qs, "created_to", params?.created_to);
+  appendMatterListParam(qs, "next_hearing_from", params?.next_hearing_from);
+  appendMatterListParam(qs, "next_hearing_to", params?.next_hearing_to);
+  appendMatterListParam(qs, "tag", params?.tag);
+  appendMatterListParam(qs, "has_stay", params?.has_stay);
+  appendMatterListParam(qs, "min_claim_amount_minor", params?.min_claim_amount_minor);
+  appendMatterListParam(qs, "max_claim_amount_minor", params?.max_claim_amount_minor);
   const path = qs.toString() ? `/api/matters/?${qs.toString()}` : "/api/matters/";
   const data = await apiRequest<unknown>(path);
   return mattersList.parse(data);
 }
 
+export async function listMatterTags(): Promise<MatterTagsList> {
+  const data = await apiRequest<unknown>("/api/matter-tags/");
+  return matterTagsList.parse(data);
+}
+
+export async function bulkAssignMatterTag(input: {
+  matterIds: string[];
+  tagId: string;
+}): Promise<{ assigned_count: number; skipped_count: number }> {
+  return apiRequest<{ assigned_count: number; skipped_count: number }>(
+    "/api/matters/bulk-tags",
+    {
+      method: "POST",
+      body: {
+        matter_ids: input.matterIds,
+        tag_id: input.tagId,
+        source: "bulk",
+      },
+    },
+  );
+}
+
 export async function fetchMatter(matterId: string): Promise<Matter> {
   const data = await apiRequest<unknown>(`/api/matters/${matterId}`);
   return matter.parse(data);
+}
+
+export async function fetchMatterTimeline(input: {
+  matterId: string;
+  sort?: "asc" | "desc";
+  type?: string;
+  cursor?: string | null;
+  limit?: number;
+}): Promise<MatterTimelineResponse> {
+  const qs = new URLSearchParams();
+  if (input.sort) qs.set("sort", input.sort);
+  if (input.type && input.type !== "all") qs.set("types", input.type);
+  if (input.cursor) qs.set("cursor", input.cursor);
+  if (input.limit) qs.set("limit", String(input.limit));
+  const path = `/api/matters/${input.matterId}/timeline${
+    qs.toString() ? `?${qs.toString()}` : ""
+  }`;
+  const data = await apiRequest<unknown>(path);
+  return matterTimelineResponse.parse(data);
 }
 
 // Phase C-3c (MOD-TS-016, 2026-04-25): toggle the per-matter
@@ -384,6 +497,47 @@ export async function fetchMatterWorkspace(matterId: string): Promise<unknown> {
   return apiRequest<unknown>(`/api/matters/${matterId}/workspace`);
 }
 
+export type MatterAuditFilters = {
+  since?: string;
+  until?: string;
+  actor?: string;
+  action?: string;
+  keyword?: string;
+  limit?: number;
+  offset?: number;
+};
+
+function matterAuditParams(filters?: MatterAuditFilters): URLSearchParams {
+  const params = new URLSearchParams();
+  if (!filters) return params;
+  for (const [key, value] of Object.entries(filters)) {
+    if (value === undefined || value === null || value === "") continue;
+    params.set(key, String(value));
+  }
+  return params;
+}
+
+export async function listMatterAuditEvents(
+  matterId: string,
+  filters?: MatterAuditFilters,
+): Promise<MatterAuditList> {
+  const params = matterAuditParams(filters);
+  const query = params.toString();
+  const data = await apiRequest<unknown>(
+    `/api/matters/${matterId}/audit-events${query ? `?${query}` : ""}`,
+  );
+  return matterAuditList.parse(data);
+}
+
+export function matterAuditExportUrl(
+  matterId: string,
+  filters?: MatterAuditFilters & { format?: "jsonl" | "csv" },
+): string {
+  const params = matterAuditParams(filters);
+  params.set("format", filters?.format ?? "jsonl");
+  return `${API_BASE_URL}/api/matters/${matterId}/audit-events/export?${params.toString()}`;
+}
+
 export async function listRecommendations(matterId: string): Promise<RecommendationList> {
   const data = await apiRequest<unknown>(`/api/matters/${matterId}/recommendations`);
   return recommendationList.parse(data);
@@ -421,6 +575,57 @@ export async function recordRecommendationDecision(input: {
     },
   );
   return recommendation.parse(data);
+}
+
+export type MatterStrategyEntryInput = {
+  title: string;
+  body: string;
+  entry_type?: MatterStrategyEntryType;
+  status?: MatterStrategyEntryStatus;
+  owner_membership_id?: string | null;
+  source_recommendation_id?: string | null;
+};
+
+export async function listStrategyEntries(
+  matterId: string,
+): Promise<MatterStrategyEntryList> {
+  const data = await apiRequest<unknown>(
+    `/api/matters/${matterId}/strategy-entries`,
+  );
+  return matterStrategyEntryList.parse(data);
+}
+
+export async function createStrategyEntry(input: {
+  matterId: string;
+  entry: MatterStrategyEntryInput;
+}): Promise<MatterStrategyEntry> {
+  const data = await apiRequest<unknown>(
+    `/api/matters/${input.matterId}/strategy-entries`,
+    { method: "POST", body: input.entry },
+  );
+  return matterStrategyEntry.parse(data);
+}
+
+export async function updateStrategyEntry(input: {
+  matterId: string;
+  entryId: string;
+  entry: Partial<MatterStrategyEntryInput>;
+}): Promise<MatterStrategyEntry> {
+  const data = await apiRequest<unknown>(
+    `/api/matters/${input.matterId}/strategy-entries/${input.entryId}`,
+    { method: "PATCH", body: input.entry },
+  );
+  return matterStrategyEntry.parse(data);
+}
+
+export async function deleteStrategyEntry(input: {
+  matterId: string;
+  entryId: string;
+}): Promise<void> {
+  await apiRequest<unknown>(
+    `/api/matters/${input.matterId}/strategy-entries/${input.entryId}`,
+    { method: "DELETE" },
+  );
 }
 
 export async function listContracts(
@@ -1144,6 +1349,32 @@ export type MatterAttachmentProcessingStatus =
   | "needs_ocr"
   | "failed";
 
+export type MatterDocumentType =
+  | "complaint_petition"
+  | "notice"
+  | "vakalatnama"
+  | "pleading_reply"
+  | "affidavit"
+  | "evidence"
+  | "written_submission"
+  | "interim_application"
+  | "order_judgment"
+  | "correspondence"
+  | "research"
+  | "billing"
+  | "other";
+
+export type MatterLifecycleStage =
+  | "initiation"
+  | "pleadings"
+  | "interim_applications"
+  | "evidence"
+  | "arguments"
+  | "orders"
+  | "post_order"
+  | "administrative"
+  | "other";
+
 export type MatterAttachmentRecord = {
   id: string;
   matter_id: string;
@@ -1152,18 +1383,54 @@ export type MatterAttachmentRecord = {
   size_bytes: number;
   processing_status: MatterAttachmentProcessingStatus;
   extraction_error: string | null;
+  document_type: MatterDocumentType | null;
+  lifecycle_stage: MatterLifecycleStage | null;
+  document_date: string | null;
+  sequence_index: number | null;
+  linked_court_order_id: string | null;
   created_at: string;
 };
 
 export async function uploadMatterAttachment(input: {
   matterId: string;
   file: File;
+  documentType?: MatterDocumentType | null;
+  lifecycleStage?: MatterLifecycleStage | null;
+  documentDate?: string | null;
+  sequenceIndex?: number | null;
+  linkedCourtOrderId?: string | null;
 }): Promise<MatterAttachmentRecord> {
   const body = new FormData();
   body.append("file", input.file);
+  if (input.documentType) body.append("document_type", input.documentType);
+  if (input.lifecycleStage) body.append("lifecycle_stage", input.lifecycleStage);
+  if (input.documentDate) body.append("document_date", input.documentDate);
+  if (input.sequenceIndex !== undefined && input.sequenceIndex !== null) {
+    body.append("sequence_index", String(input.sequenceIndex));
+  }
+  if (input.linkedCourtOrderId) {
+    body.append("linked_court_order_id", input.linkedCourtOrderId);
+  }
   const data = await apiRequest<unknown>(
     `/api/matters/${input.matterId}/attachments`,
     { method: "POST", body },
+  );
+  return data as MatterAttachmentRecord;
+}
+
+export async function updateMatterAttachmentMetadata(input: {
+  matterId: string;
+  attachmentId: string;
+  document_type?: MatterDocumentType | null;
+  lifecycle_stage?: MatterLifecycleStage | null;
+  document_date?: string | null;
+  sequence_index?: number | null;
+  linked_court_order_id?: string | null;
+}): Promise<MatterAttachmentRecord> {
+  const { matterId, attachmentId, ...body } = input;
+  const data = await apiRequest<unknown>(
+    `/api/matters/${matterId}/attachments/${attachmentId}/metadata`,
+    { method: "PATCH", body },
   );
   return data as MatterAttachmentRecord;
 }
@@ -1729,6 +1996,422 @@ export async function listJudgeAliases(): Promise<JudgeAliasListResponse> {
   return apiRequest("/api/courts/judges/aliases");
 }
 
+// --- LW-S5: employee directory + secure setup/reset links ---
+
+export type EmployeeEmploymentStatus = "invited" | "active" | "inactive" | "offboarding";
+export type EmployeeRole = "owner" | "admin" | "partner" | "member" | "paralegal" | "viewer";
+export type AssignableEmployeeRole = Exclude<EmployeeRole, "owner">;
+
+export type EmployeeRecord = {
+  company_id: string;
+  membership_id: string;
+  user_id: string;
+  email: string;
+  full_name: string;
+  role: EmployeeRole;
+  custom_role_id: string | null;
+  custom_role_name: string | null;
+  membership_active: boolean;
+  user_active: boolean;
+  mobile: string | null;
+  designation: string | null;
+  department: string | null;
+  employee_code: string | null;
+  manager_membership_id: string | null;
+  manager_name: string | null;
+  joined_on: string | null;
+  employment_status: EmployeeEmploymentStatus;
+  last_login_at: string | null;
+  setup_sent_at: string | null;
+  setup_completed_at: string | null;
+  password_reset_sent_at: string | null;
+  force_password_change: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type EmployeeTokenDelivery = {
+  delivered: boolean;
+  delivery_error: string | null;
+  expires_at: string;
+  debug_token: string | null;
+};
+
+export type EmployeeCreateResult = {
+  employee: EmployeeRecord;
+  setup: EmployeeTokenDelivery;
+};
+
+export type EmployeeImportRowStatus = "valid" | "invalid" | "created" | "failed";
+export type EmployeeImportJobStatus =
+  | "previewed"
+  | "committing"
+  | "committed"
+  | "cancelled"
+  | "failed";
+
+export type EmployeeImportRowPreview = {
+  id: string;
+  row_number: number;
+  raw: Record<string, unknown>;
+  normalized: Record<string, unknown>;
+  errors: string[];
+  status: EmployeeImportRowStatus;
+  created_membership_id: string | null;
+};
+
+export type EmployeeImportJob = {
+  id: string;
+  company_id: string;
+  filename: string;
+  content_type: string | null;
+  status: EmployeeImportJobStatus;
+  total_rows: number;
+  valid_rows: number;
+  invalid_rows: number;
+  created_count: number;
+  failed_count: number;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+  expires_at: string;
+  committed_at: string | null;
+  cancelled_at: string | null;
+  rows: EmployeeImportRowPreview[];
+};
+
+export type EmployeeImportCommitResult = {
+  job: EmployeeImportJob;
+  created_employees: EmployeeCreateResult[];
+};
+
+export type EmployeeOffboardingObject = {
+  object_type: string;
+  id: string;
+  label: string;
+  relation: string;
+  supported: boolean;
+  matter_id: string | null;
+};
+
+export type EmployeeOffboardingPreview = {
+  employee: EmployeeRecord;
+  reassign_to: EmployeeRecord | null;
+  supported_objects: EmployeeOffboardingObject[];
+  unsupported_objects: EmployeeOffboardingObject[];
+  supported_counts: Record<string, number>;
+  unsupported_counts: Record<string, number>;
+  blockers: string[];
+  can_commit: boolean;
+};
+
+export type EmployeeOffboardingCommitResult = {
+  employee: EmployeeRecord;
+  reassigned_to: EmployeeRecord;
+  preview: EmployeeOffboardingPreview;
+  deactivated: boolean;
+  sessions_revoked: boolean;
+};
+
+export type EmployeeAuditEvent = {
+  id: string;
+  action: string;
+  actor_membership_id: string | null;
+  actor_label: string | null;
+  target_type: string;
+  target_id: string | null;
+  result: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+};
+
+export type EmployeeAuditResult = {
+  employee: EmployeeRecord;
+  events: EmployeeAuditEvent[];
+};
+
+export type EmployeeListResult = {
+  employees: EmployeeRecord[];
+};
+
+export type CapabilityRecord = {
+  capability: string;
+  group: string;
+  label: string;
+  owner_only: boolean;
+};
+
+export type CapabilityCatalogResult = {
+  capabilities: CapabilityRecord[];
+};
+
+export type CustomRoleRecord = {
+  id: string;
+  company_id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  base_role: AssignableEmployeeRole | null;
+  permissions: string[];
+  is_system: boolean;
+  is_active: boolean;
+  assigned_count: number;
+  created_by_membership_id: string | null;
+  updated_by_membership_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CustomRoleListResult = {
+  roles: CustomRoleRecord[];
+};
+
+export type EmployeeListParams = {
+  q?: string;
+  role?: EmployeeRole | "";
+  status?: EmployeeEmploymentStatus | "";
+  department?: string;
+};
+
+export async function listEmployees(params?: EmployeeListParams): Promise<EmployeeListResult> {
+  const qs = new URLSearchParams();
+  if (params?.q) qs.set("q", params.q);
+  if (params?.role) qs.set("role", params.role);
+  if (params?.status) qs.set("status", params.status);
+  if (params?.department) qs.set("department", params.department);
+  return apiRequest<EmployeeListResult>(
+    `/api/companies/current/employees${qs.toString() ? `?${qs.toString()}` : ""}`,
+  );
+}
+
+export async function createEmployee(input: {
+  fullName: string;
+  email: string;
+  role: AssignableEmployeeRole;
+  mobile?: string | null;
+  designation?: string | null;
+  department?: string | null;
+  employeeCode?: string | null;
+  managerMembershipId?: string | null;
+  joinedOn?: string | null;
+}): Promise<EmployeeCreateResult> {
+  return apiRequest<EmployeeCreateResult>("/api/companies/current/employees", {
+    method: "POST",
+    body: {
+      full_name: input.fullName,
+      email: input.email,
+      role: input.role,
+      mobile: input.mobile ?? null,
+      designation: input.designation ?? null,
+      department: input.department ?? null,
+      employee_code: input.employeeCode ?? null,
+      manager_membership_id: input.managerMembershipId ?? null,
+      joined_on: input.joinedOn ?? null,
+    },
+  });
+}
+
+export async function updateEmployee(input: {
+  membershipId: string;
+  fullName?: string;
+  role?: AssignableEmployeeRole;
+  mobile?: string | null;
+  designation?: string | null;
+  department?: string | null;
+  employeeCode?: string | null;
+  managerMembershipId?: string | null;
+  joinedOn?: string | null;
+  employmentStatus?: EmployeeEmploymentStatus;
+}): Promise<EmployeeRecord> {
+  return apiRequest<EmployeeRecord>(
+    `/api/companies/current/employees/${input.membershipId}`,
+    {
+      method: "PATCH",
+      body: {
+        full_name: input.fullName,
+        role: input.role,
+        mobile: input.mobile,
+        designation: input.designation,
+        department: input.department,
+        employee_code: input.employeeCode,
+        manager_membership_id: input.managerMembershipId,
+        joined_on: input.joinedOn,
+        employment_status: input.employmentStatus,
+      },
+    },
+  );
+}
+
+export async function resendEmployeeSetup(membershipId: string): Promise<EmployeeTokenDelivery> {
+  return apiRequest<EmployeeTokenDelivery>(
+    `/api/companies/current/employees/${membershipId}/resend-setup`,
+    { method: "POST" },
+  );
+}
+
+export async function resetEmployeePassword(membershipId: string): Promise<EmployeeTokenDelivery> {
+  return apiRequest<EmployeeTokenDelivery>(
+    `/api/companies/current/employees/${membershipId}/reset-password`,
+    { method: "POST" },
+  );
+}
+
+export async function listEmployeeAudit(
+  membershipId: string,
+): Promise<EmployeeAuditResult> {
+  return apiRequest<EmployeeAuditResult>(
+    `/api/companies/current/employees/${membershipId}/audit`,
+  );
+}
+
+export async function previewEmployeeOffboarding(input: {
+  membershipId: string;
+  reassignToMembershipId?: string | null;
+  notes?: string | null;
+}): Promise<EmployeeOffboardingPreview> {
+  return apiRequest<EmployeeOffboardingPreview>(
+    `/api/companies/current/employees/${input.membershipId}/offboarding/preview`,
+    {
+      method: "POST",
+      body: {
+        reassign_to_membership_id: input.reassignToMembershipId ?? null,
+        notes: input.notes ?? null,
+      },
+    },
+  );
+}
+
+export async function commitEmployeeOffboarding(input: {
+  membershipId: string;
+  reassignToMembershipId: string;
+  notes?: string | null;
+}): Promise<EmployeeOffboardingCommitResult> {
+  return apiRequest<EmployeeOffboardingCommitResult>(
+    `/api/companies/current/employees/${input.membershipId}/offboarding/commit`,
+    {
+      method: "POST",
+      body: {
+        reassign_to_membership_id: input.reassignToMembershipId,
+        deactivate: true,
+        revoke_sessions: true,
+        notes: input.notes ?? null,
+      },
+    },
+  );
+}
+
+export async function downloadEmployeeImportTemplate(
+  format: "csv" | "xlsx",
+): Promise<Blob> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/companies/current/employees/import-template?format=${format}`,
+    {
+      method: "GET",
+      credentials: "include",
+      headers: { Accept: format === "csv" ? "text/csv" : "application/octet-stream" },
+    },
+  );
+  if (!response.ok) {
+    throw new Error(`Template download failed (${response.status}).`);
+  }
+  return response.blob();
+}
+
+export async function previewEmployeeImport(file: File): Promise<EmployeeImportJob> {
+  const body = new FormData();
+  body.append("file", file);
+  return apiRequest<EmployeeImportJob>(
+    "/api/companies/current/employees/imports/preview",
+    { method: "POST", body },
+  );
+}
+
+export async function commitEmployeeImport(
+  jobId: string,
+): Promise<EmployeeImportCommitResult> {
+  return apiRequest<EmployeeImportCommitResult>(
+    `/api/companies/current/employees/imports/${jobId}/commit`,
+    { method: "POST" },
+  );
+}
+
+export async function cancelEmployeeImport(jobId: string): Promise<EmployeeImportJob> {
+  return apiRequest<EmployeeImportJob>(
+    `/api/companies/current/employees/imports/${jobId}/cancel`,
+    { method: "POST" },
+  );
+}
+
+export async function listCapabilityCatalog(): Promise<CapabilityCatalogResult> {
+  return apiRequest<CapabilityCatalogResult>("/api/companies/current/capabilities");
+}
+
+export async function listCustomRoles(params?: {
+  includeInactive?: boolean;
+}): Promise<CustomRoleListResult> {
+  const qs = new URLSearchParams();
+  if (params?.includeInactive) qs.set("include_inactive", "true");
+  return apiRequest<CustomRoleListResult>(
+    `/api/companies/current/roles${qs.toString() ? `?${qs.toString()}` : ""}`,
+  );
+}
+
+export async function createCustomRole(input: {
+  name: string;
+  description?: string | null;
+  baseRole?: AssignableEmployeeRole | null;
+  permissions: string[];
+}): Promise<CustomRoleRecord> {
+  return apiRequest<CustomRoleRecord>("/api/companies/current/roles", {
+    method: "POST",
+    body: {
+      name: input.name,
+      description: input.description ?? null,
+      base_role: input.baseRole ?? null,
+      permissions: input.permissions,
+    },
+  });
+}
+
+export async function updateCustomRole(input: {
+  roleId: string;
+  name?: string;
+  description?: string | null;
+  baseRole?: AssignableEmployeeRole | null;
+  permissions?: string[];
+  isActive?: boolean;
+}): Promise<CustomRoleRecord> {
+  return apiRequest<CustomRoleRecord>(`/api/companies/current/roles/${input.roleId}`, {
+    method: "PATCH",
+    body: {
+      name: input.name,
+      description: input.description,
+      base_role: input.baseRole,
+      permissions: input.permissions,
+      is_active: input.isActive,
+    },
+  });
+}
+
+export async function deleteCustomRole(roleId: string): Promise<CustomRoleRecord> {
+  return apiRequest<CustomRoleRecord>(`/api/companies/current/roles/${roleId}`, {
+    method: "DELETE",
+  });
+}
+
+export async function assignEmployeeCustomRole(input: {
+  membershipId: string;
+  customRoleId: string | null;
+}): Promise<EmployeeRecord> {
+  return apiRequest<EmployeeRecord>(
+    `/api/companies/current/employees/${input.membershipId}/role`,
+    {
+      method: "POST",
+      body: { custom_role_id: input.customRoleId },
+    },
+  );
+}
+
 // --- Sprint 8c BG-026: teams + team scoping ---
 
 export type TeamKind = "team" | "department" | "practice_area";
@@ -2116,6 +2799,80 @@ export type ContractIntelligenceSummary = {
   model: string;
 };
 
+export const CONTRACT_TYPE_OPTIONS = [
+  { value: "agreement", label: "Agreement" },
+  { value: "nda", label: "NDA" },
+  { value: "addendum", label: "Addendum" },
+  { value: "purchase_order", label: "Purchase order" },
+  { value: "master_services_agreement", label: "Master services agreement" },
+  { value: "statement_of_work", label: "Statement of work" },
+  { value: "lease", label: "Lease" },
+  { value: "employment", label: "Employment" },
+  { value: "settlement", label: "Settlement" },
+  { value: "amendment", label: "Amendment" },
+  { value: "other", label: "Other" },
+] as const;
+
+export const CONTRACT_ATTACHMENT_ROLE_OPTIONS = [
+  { value: "primary_contract", label: "Primary contract" },
+  { value: "amendment", label: "Amendment" },
+  { value: "addendum", label: "Addendum" },
+  { value: "annexure", label: "Annexure" },
+  { value: "email_approval", label: "Email approval" },
+  { value: "board_resolution", label: "Board resolution" },
+  { value: "purchase_order", label: "Purchase order" },
+  { value: "statement_of_work", label: "Statement of work" },
+  { value: "supporting_document", label: "Supporting document" },
+  { value: "other", label: "Other" },
+] as const;
+
+export type ContractTypeKey = (typeof CONTRACT_TYPE_OPTIONS)[number]["value"];
+export type ContractAttachmentRole =
+  (typeof CONTRACT_ATTACHMENT_ROLE_OPTIONS)[number]["value"];
+export type ContractReviewStatus = "suggested" | "accepted" | "rejected";
+export type ContractLegalReferenceSource = "manual" | "ai_suggested" | "imported";
+
+export type ContractLegalReferenceRecord = {
+  id: string;
+  company_id: string;
+  contract_id: string;
+  act_name: string;
+  section_label: string | null;
+  clause_label: string | null;
+  authority_id: string | null;
+  statute_id: string | null;
+  source: ContractLegalReferenceSource;
+  confidence: number | null;
+  evidence_attachment_id: string | null;
+  evidence_attachment_name: string | null;
+  evidence_quote: string | null;
+  status: ContractReviewStatus;
+  created_by_membership_id: string | null;
+  reviewed_by_membership_id: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ContractTermSuggestionRecord = {
+  id: string;
+  company_id: string;
+  contract_id: string;
+  source_attachment_id: string | null;
+  source_attachment_name: string | null;
+  suggested_effective_on: string | null;
+  suggested_expires_on: string | null;
+  suggested_renewal_on: string | null;
+  suggested_duration_months: number | null;
+  evidence_json: Record<string, unknown>;
+  status: ContractReviewStatus;
+  created_by_membership_id: string | null;
+  reviewed_by_membership_id: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export async function fetchContractWorkspace(contractId: string): Promise<unknown> {
   return apiRequest<unknown>(`/api/contracts/${contractId}/workspace`);
 }
@@ -2124,12 +2881,14 @@ export async function createContract(input: {
   title: string;
   contractCode: string;
   contractType: string;
+  contractTypeKey?: ContractTypeKey | null;
+  contractTypeNotes?: string | null;
   counterpartyName?: string | null;
-  status?: "draft" | "in_review" | "executed" | "expired" | "terminated" | "renewed";
+  status?: "draft" | "under_review" | "negotiation" | "executed" | "expired" | "terminated";
   effectiveOn?: string | null;
   expiresOn?: string | null;
   renewalOn?: string | null;
-  governingLaw?: string | null;
+  jurisdiction?: string | null;
   currency?: string;
   totalValueMinor?: number | null;
   summary?: string | null;
@@ -2141,16 +2900,18 @@ export async function createContract(input: {
       title: input.title,
       contract_code: input.contractCode,
       contract_type: input.contractType,
+      contract_type_key: input.contractTypeKey ?? null,
+      contract_type_notes: input.contractTypeNotes ?? null,
       counterparty_name: input.counterpartyName ?? null,
       status: input.status ?? "draft",
       effective_on: input.effectiveOn ?? null,
       expires_on: input.expiresOn ?? null,
       renewal_on: input.renewalOn ?? null,
-      governing_law: input.governingLaw ?? null,
+      jurisdiction: input.jurisdiction ?? null,
       currency: input.currency ?? "INR",
       total_value_minor: input.totalValueMinor ?? null,
       summary: input.summary ?? null,
-      matter_id: input.matterId ?? null,
+      linked_matter_id: input.matterId ?? null,
     },
   });
 }
@@ -2158,13 +2919,119 @@ export async function createContract(input: {
 export async function uploadContractAttachment(input: {
   contractId: string;
   file: File;
+  attachmentRole?: ContractAttachmentRole | null;
+  parentAttachmentId?: string | null;
+  documentDate?: string | null;
+  notes?: string | null;
 }): Promise<unknown> {
   const body = new FormData();
   body.append("file", input.file);
+  if (input.attachmentRole) body.append("attachment_role", input.attachmentRole);
+  if (input.parentAttachmentId) body.append("parent_attachment_id", input.parentAttachmentId);
+  if (input.documentDate) body.append("document_date", input.documentDate);
+  if (input.notes) body.append("notes", input.notes);
   return apiRequest<unknown>(`/api/contracts/${input.contractId}/attachments`, {
     method: "POST",
     body,
   });
+}
+
+export async function updateContractMetadata(input: {
+  contractId: string;
+  contract_type?: string;
+  contract_type_key?: ContractTypeKey | null;
+  contract_type_notes?: string | null;
+  effective_on?: string | null;
+  expires_on?: string | null;
+  renewal_on?: string | null;
+  auto_renewal?: boolean;
+}): Promise<unknown> {
+  const { contractId, ...body } = input;
+  return apiRequest<unknown>(`/api/contracts/${contractId}/metadata`, {
+    method: "PATCH",
+    body,
+  });
+}
+
+export async function createContractLegalReference(input: {
+  contractId: string;
+  act_name: string;
+  section_label?: string | null;
+  clause_label?: string | null;
+  source?: ContractLegalReferenceSource;
+  confidence?: number | null;
+  evidence_attachment_id?: string | null;
+  evidence_quote?: string | null;
+  status?: ContractReviewStatus | null;
+}): Promise<ContractLegalReferenceRecord> {
+  const { contractId, ...body } = input;
+  return apiRequest<ContractLegalReferenceRecord>(
+    `/api/contracts/${contractId}/legal-references`,
+    { method: "POST", body },
+  );
+}
+
+export async function updateContractLegalReference(input: {
+  contractId: string;
+  referenceId: string;
+  status?: ContractReviewStatus;
+}): Promise<ContractLegalReferenceRecord> {
+  const { contractId, referenceId, ...body } = input;
+  return apiRequest<ContractLegalReferenceRecord>(
+    `/api/contracts/${contractId}/legal-references/${referenceId}`,
+    { method: "PATCH", body },
+  );
+}
+
+export async function createContractTermSuggestion(input: {
+  contractId: string;
+  source_attachment_id?: string | null;
+  suggested_effective_on?: string | null;
+  suggested_expires_on?: string | null;
+  suggested_renewal_on?: string | null;
+  suggested_duration_months?: number | null;
+  evidence_json?: Record<string, unknown>;
+}): Promise<ContractTermSuggestionRecord> {
+  const { contractId, ...body } = input;
+  return apiRequest<ContractTermSuggestionRecord>(
+    `/api/contracts/${contractId}/term-suggestions`,
+    { method: "POST", body: { ...body, evidence_json: body.evidence_json ?? {} } },
+  );
+}
+
+export async function acceptContractTermSuggestion(input: {
+  contractId: string;
+  suggestionId: string;
+}): Promise<ContractTermSuggestionRecord> {
+  return apiRequest<ContractTermSuggestionRecord>(
+    `/api/contracts/${input.contractId}/term-suggestions/${input.suggestionId}/accept`,
+    { method: "POST", body: {} },
+  );
+}
+
+export async function rejectContractTermSuggestion(input: {
+  contractId: string;
+  suggestionId: string;
+}): Promise<ContractTermSuggestionRecord> {
+  return apiRequest<ContractTermSuggestionRecord>(
+    `/api/contracts/${input.contractId}/term-suggestions/${input.suggestionId}/reject`,
+    { method: "POST", body: {} },
+  );
+}
+
+export async function updateContractAttachmentMetadata(input: {
+  contractId: string;
+  attachmentId: string;
+  attachment_role?: ContractAttachmentRole | null;
+  parent_attachment_id?: string | null;
+  document_date?: string | null;
+  notes?: string | null;
+}): Promise<unknown> {
+  const { contractId, attachmentId, ...body } = input;
+  return apiRequest<unknown>(
+    `/api/contracts/${contractId}/attachments/${attachmentId}/metadata`,
+    { method: "PATCH", body },
+  );
 }
 
 export async function extractContractClauses(input: {
@@ -2425,17 +3292,50 @@ export async function createMatter(input: {
   matter_code: string;
   practice_area?: string;
   forum_level?: string;
+  court_id?: string | null;
   client_name?: string;
   opposing_party?: string;
   description?: string;
   court_name?: string;
+  forum_catalog_entry_id?: string | null;
+  forum_state?: string | null;
+  forum_district?: string | null;
+  forum_city?: string | null;
+  forum_consumer_level?: string | null;
   judge_name?: string;
   next_hearing_on?: string | null;
+  claim_amount_minor?: number | null;
+  claim_currency?: string;
+  claim_amount_notes?: string | null;
   status: "intake" | "active" | "on_hold" | "closed";
 }): Promise<Matter> {
   const data = await apiRequest<unknown>("/api/matters/", {
     method: "POST",
     body: input,
+  });
+  return matter.parse(data);
+}
+
+export async function updateMatter(input: {
+  matterId: string;
+  title?: string;
+  practice_area?: string;
+  forum_level?: string | null;
+  court_id?: string | null;
+  court_name?: string | null;
+  forum_catalog_entry_id?: string | null;
+  forum_state?: string | null;
+  forum_district?: string | null;
+  forum_city?: string | null;
+  forum_consumer_level?: string | null;
+  judge_name?: string | null;
+  description?: string | null;
+  status?: "intake" | "active" | "on_hold" | "closed";
+}): Promise<Matter> {
+  const { matterId, ...body } = input;
+  const data = await apiRequest<unknown>(`/api/matters/${matterId}`, {
+    method: "PATCH",
+    body,
   });
   return matter.parse(data);
 }
@@ -2621,6 +3521,90 @@ export async function fetchCalendarEvents(input: {
 }
 
 // Phase B / J12 / M11 — communications log endpoints.
+export async function listCalendarConnections(): Promise<CalendarConnectionListResponse> {
+  const data = await apiRequest<unknown>("/api/calendar/connections");
+  return calendarConnectionListResponse.parse(data);
+}
+
+export async function startOutlookCalendarConnection(): Promise<{
+  provider: "outlook";
+  provider_available: boolean;
+  auth_url?: string | null;
+  unavailable_reason?: string | null;
+}> {
+  const data = await apiRequest<unknown>(
+    "/api/calendar/connections/outlook/start",
+    { method: "POST", body: {} },
+  );
+  return calendarConnectionStartResponse.parse(data);
+}
+
+export async function revokeCalendarConnection(
+  connectionId: string,
+): Promise<CalendarConnectionRecord> {
+  const data = await apiRequest<unknown>(
+    `/api/calendar/connections/${connectionId}`,
+    { method: "DELETE" },
+  );
+  return calendarConnectionRecord.parse(data);
+}
+
+export async function syncHearingToOutlook(
+  hearingId: string,
+): Promise<CalendarEventSyncResponse> {
+  const data = await apiRequest<unknown>(
+    `/api/calendar/sync/hearings/${hearingId}`,
+    { method: "POST", body: {} },
+  );
+  return calendarEventSyncResponse.parse(data);
+}
+
+export async function fetchCalendarSyncStatus(): Promise<CalendarSyncStatusResponse> {
+  const data = await apiRequest<unknown>("/api/calendar/sync-status");
+  return calendarSyncStatusResponse.parse(data);
+}
+
+export type NotificationRuleInput = {
+  scope_type: "company" | "matter" | "user";
+  scope_id?: string | null;
+  event_type: "hearing_upcoming" | "new_order_uploaded" | "stay_status_changed";
+  channels: Array<"in_app" | "email" | "sms" | "whatsapp">;
+  offset_minutes?: number | null;
+  enabled?: boolean;
+};
+
+export async function listNotificationRules(): Promise<NotificationRuleListResponse> {
+  const data = await apiRequest<unknown>("/api/notification-rules");
+  return notificationRuleListResponse.parse(data);
+}
+
+export async function createNotificationRule(
+  input: NotificationRuleInput,
+): Promise<NotificationRuleRecord> {
+  const data = await apiRequest<unknown>("/api/notification-rules", {
+    method: "POST",
+    body: input,
+  });
+  return notificationRuleRecord.parse(data);
+}
+
+export async function updateNotificationRule(
+  ruleId: string,
+  input: Partial<NotificationRuleInput>,
+): Promise<NotificationRuleRecord> {
+  const data = await apiRequest<unknown>(`/api/notification-rules/${ruleId}`, {
+    method: "PATCH",
+    body: input,
+  });
+  return notificationRuleRecord.parse(data);
+}
+
+export async function deleteNotificationRule(ruleId: string): Promise<void> {
+  await apiRequest<void>(`/api/notification-rules/${ruleId}`, {
+    method: "DELETE",
+  });
+}
+
 export async function fetchMatterCommunications(
   matterId: string,
 ): Promise<CommunicationListResponse> {

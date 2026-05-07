@@ -1,18 +1,24 @@
 from __future__ import annotations
 
-from typing import Annotated
+import csv
+import io
+import json
+from datetime import UTC, date, datetime
+from typing import Annotated, Literal
 
 from fastapi import (
     APIRouter,
     BackgroundTasks,
     Depends,
     File,
+    Form,
     HTTPException,
+    Query,
     Request,
     UploadFile,
     status,
 )
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
@@ -26,6 +32,7 @@ from caseops_api.core.rate_limit import (
     limiter,
     tenant_aware_key,
 )
+from caseops_api.schemas.audit import MatterAuditListResponse
 from caseops_api.schemas.billing import (
     InvoiceCreateRequest,
     InvoiceRecord,
@@ -52,16 +59,29 @@ from caseops_api.schemas.matter_access import (
     MatterAccessPanelResponse,
     MatterRestrictedAccessRequest,
 )
+from caseops_api.schemas.matter_tags import (
+    MatterBulkTagAssignRequest,
+    MatterBulkTagAssignResponse,
+    MatterTagAssignmentCreateRequest,
+    MatterTagAssignmentRecord,
+    MatterTagSuggestionsResponse,
+)
 from caseops_api.schemas.matters import (
+    MatterAttachmentMetadataUpdateRequest,
     MatterAttachmentRecord,
+    MatterCourtOrderRecord,
+    MatterCourtOrderUpdateRequest,
     MatterCourtSyncImportRequest,
     MatterCourtSyncJobRecord,
     MatterCourtSyncPullRequest,
     MatterCourtSyncRunRecord,
     MatterCreateRequest,
+    MatterDocumentTypeLiteral,
     MatterHearingCreateRequest,
     MatterHearingRecord,
     MatterHearingUpdateRequest,
+    MatterLifecycleStageLiteral,
+    MatterListFilters,
     MatterListResponse,
     MatterNoteCreateRequest,
     MatterNoteRecord,
@@ -69,9 +89,11 @@ from caseops_api.schemas.matters import (
     MatterTaskCreateRequest,
     MatterTaskRecord,
     MatterTaskUpdateRequest,
+    MatterTimelineResponse,
     MatterUpdateRequest,
     MatterWorkspaceResponse,
 )
+from caseops_api.services.audit import record_from_context
 from caseops_api.services.bench_matcher import (
     BenchSuggestion as BenchSuggestionDC,
 )
@@ -127,6 +149,11 @@ from caseops_api.services.matter_attachment_annotations import (
     create_annotation,
     list_annotations,
 )
+from caseops_api.services.matter_audit import (
+    export_matter_audit_events,
+    list_matter_audit_events,
+    matter_audit_event_dict,
+)
 from caseops_api.services.matter_summary import (
     MatterExecutiveSummary,
     generate_matter_summary,
@@ -135,7 +162,18 @@ from caseops_api.services.matter_summary_export import (
     render_summary_docx,
     render_summary_pdf,
 )
-from caseops_api.services.matter_timeline import build_matter_timeline_by_id
+from caseops_api.services.matter_tags import (
+    assign_tag_to_matter,
+    bulk_assign_tag,
+    remove_tag_from_matter,
+    suggest_tags_for_matter,
+)
+from caseops_api.services.matter_timeline import (
+    build_matter_timeline_by_id,
+    parse_timeline_types,
+    timeline_response,
+    timeline_source_limit,
+)
 from caseops_api.services.matters import (
     create_matter,
     create_matter_attachment,
@@ -152,6 +190,8 @@ from caseops_api.services.matters import (
     matter_code_available,
     request_matter_attachment_processing,
     update_matter,
+    update_matter_attachment_metadata,
+    update_matter_court_order,
     update_matter_hearing,
     update_matter_task,
 )
@@ -197,16 +237,26 @@ DocumentManager = Annotated[
 MatterAccessManager = Annotated[
     SessionContext, Depends(require_capability("matter_access:manage"))
 ]
+MatterAuditExporter = Annotated[
+    SessionContext, Depends(require_capability("audit:export"))
+]
 
 
 @router.get("/", response_model=MatterListResponse, summary="List matters for the current company")
 async def current_company_matters(
     context: CurrentContext,
     session: DbSession,
+    filters: Annotated[MatterListFilters, Depends()],
     limit: int | None = None,
     cursor: str | None = None,
 ) -> MatterListResponse:
-    return list_matters(session, context=context, limit=limit, cursor=cursor)
+    return list_matters(
+        session,
+        context=context,
+        limit=limit,
+        cursor=cursor,
+        filters=filters,
+    )
 
 
 @router.post(
@@ -249,6 +299,21 @@ async def check_matter_code_available(
     session: DbSession,
 ) -> dict:
     return matter_code_available(session, context=context, code=code)
+
+
+@router.post(
+    "/bulk-tags",
+    response_model=MatterBulkTagAssignResponse,
+    summary="Assign one tag to multiple visible matters",
+)
+async def post_current_company_matter_bulk_tags(
+    payload: MatterBulkTagAssignRequest,
+    context: MatterEditor,
+    session: DbSession,
+) -> MatterBulkTagAssignResponse:
+    result = bulk_assign_tag(session, context=context, payload=payload)
+    session.commit()
+    return result
 
 
 @router.get(
@@ -308,6 +373,178 @@ async def get_current_company_matter(
 
 
 @router.get(
+    "/{matter_id}/audit-events",
+    response_model=MatterAuditListResponse,
+    summary="List AuditEvent rows scoped to one visible matter",
+)
+async def get_current_company_matter_audit_events(
+    matter_id: str,
+    context: CurrentContext,
+    session: DbSession,
+    since: datetime | None = None,
+    until: datetime | None = None,
+    actor: str | None = Query(default=None, max_length=255),
+    action: str | None = Query(default=None, max_length=120),
+    keyword: str | None = Query(default=None, max_length=255),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> MatterAuditListResponse:
+    return list_matter_audit_events(
+        session,
+        context=context,
+        matter_id=matter_id,
+        since=since,
+        until=until,
+        actor=actor,
+        action=action,
+        keyword=keyword,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get(
+    "/{matter_id}/audit-events/export",
+    summary="Export AuditEvent rows scoped to one visible matter",
+)
+async def export_current_company_matter_audit_events(
+    matter_id: str,
+    context: MatterAuditExporter,
+    session: DbSession,
+    since: datetime | None = None,
+    until: datetime | None = None,
+    actor: str | None = Query(default=None, max_length=255),
+    action: str | None = Query(default=None, max_length=120),
+    keyword: str | None = Query(default=None, max_length=255),
+    format: Literal["jsonl", "csv"] = "jsonl",
+    limit: int = Query(default=10_000, ge=1, le=10_000),
+) -> StreamingResponse:
+    events = export_matter_audit_events(
+        session,
+        context=context,
+        matter_id=matter_id,
+        since=since,
+        until=until,
+        actor=actor,
+        action=action,
+        keyword=keyword,
+        limit=limit,
+    )
+    exported_at = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    record_from_context(
+        session,
+        context,
+        action="matter.audit.exported",
+        target_type="matter",
+        target_id=matter_id,
+        matter_id=matter_id,
+        metadata={
+            "format": format,
+            "row_count": len(events),
+            "filters": {
+                "since": since.isoformat() if since else None,
+                "until": until.isoformat() if until else None,
+                "actor": actor,
+                "action": action,
+                "keyword": keyword,
+                "limit": limit,
+            },
+        },
+    )
+    session.commit()
+    filename = f"matter-audit-{matter_id}-{exported_at}.{format}"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    if format == "csv":
+        buffer = io.StringIO()
+        writer = csv.DictWriter(
+            buffer,
+            fieldnames=[
+                "id",
+                "created_at",
+                "company_id",
+                "matter_id",
+                "actor_type",
+                "actor_membership_id",
+                "actor_label",
+                "action",
+                "target_type",
+                "target_id",
+                "result",
+                "request_id",
+                "metadata",
+            ],
+        )
+        writer.writeheader()
+        for event in events:
+            row = matter_audit_event_dict(event)
+            row["metadata"] = json.dumps(row.get("metadata") or {}, sort_keys=True)
+            writer.writerow(row)
+        buffer.seek(0)
+        return StreamingResponse(
+            iter([buffer.getvalue()]),
+            media_type="text/csv",
+            headers=headers,
+        )
+    lines = "\n".join(json.dumps(matter_audit_event_dict(event)) for event in events)
+    if lines:
+        lines += "\n"
+    return StreamingResponse(
+        iter([lines]),
+        media_type="application/x-ndjson",
+        headers=headers,
+    )
+
+
+@router.post(
+    "/{matter_id}/tags",
+    response_model=MatterTagAssignmentRecord,
+    summary="Assign a tenant-scoped tag to a matter",
+)
+async def post_current_company_matter_tag(
+    matter_id: str,
+    payload: MatterTagAssignmentCreateRequest,
+    context: MatterEditor,
+    session: DbSession,
+) -> MatterTagAssignmentRecord:
+    result = assign_tag_to_matter(
+        session, context=context, matter_id=matter_id, payload=payload
+    )
+    session.commit()
+    return result
+
+
+@router.delete(
+    "/{matter_id}/tags/{tag_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Remove a tenant-scoped tag from a matter",
+)
+async def delete_current_company_matter_tag(
+    matter_id: str,
+    tag_id: str,
+    context: MatterEditor,
+    session: DbSession,
+) -> Response:
+    remove_tag_from_matter(
+        session, context=context, matter_id=matter_id, tag_id=tag_id
+    )
+    session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get(
+    "/{matter_id}/tag-suggestions",
+    response_model=MatterTagSuggestionsResponse,
+    summary="Return deterministic tenant-scoped tag suggestions",
+)
+async def get_current_company_matter_tag_suggestions(
+    matter_id: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> MatterTagSuggestionsResponse:
+    return suggest_tags_for_matter(session, context=context, matter_id=matter_id)
+
+
+@router.get(
     "/{matter_id}/workspace",
     response_model=MatterWorkspaceResponse,
     summary="Get the full workspace for a matter",
@@ -318,6 +555,35 @@ async def get_current_company_matter_workspace(
     session: DbSession,
 ) -> MatterWorkspaceResponse:
     return get_matter_workspace(session, context=context, matter_id=matter_id)
+
+
+@router.get(
+    "/{matter_id}/timeline",
+    response_model=MatterTimelineResponse,
+    summary="LegalWorkspace LW-S2 matter timeline",
+)
+async def get_current_company_matter_timeline(
+    matter_id: str,
+    context: CurrentContext,
+    session: DbSession,
+    from_date: Annotated[date | None, Query(alias="from")] = None,
+    to: date | None = None,
+    types: str | None = None,
+    sort: Literal["asc", "desc"] = "asc",
+    limit: int = 100,
+    cursor: str | None = None,
+) -> MatterTimelineResponse:
+    timeline = build_matter_timeline_by_id(
+        session=session,
+        context=context,
+        matter_id=matter_id,
+        sort=sort,
+        from_date=from_date,
+        to_date=to,
+        event_types=parse_timeline_types(types),
+        source_limit=timeline_source_limit(limit=limit, cursor=cursor),
+    )
+    return timeline_response(timeline, limit=limit, cursor=cursor)
 
 
 @router.get(
@@ -1286,6 +1552,27 @@ async def import_current_company_matter_court_sync(
     )
 
 
+@router.patch(
+    "/{matter_id}/court-orders/{order_id}",
+    response_model=MatterCourtOrderRecord,
+    summary="Update court order metadata, interim flag, and stay status",
+)
+async def patch_current_company_matter_court_order(
+    matter_id: str,
+    order_id: str,
+    payload: MatterCourtOrderUpdateRequest,
+    context: MatterEditor,
+    session: DbSession,
+) -> MatterCourtOrderRecord:
+    return update_matter_court_order(
+        session,
+        context=context,
+        matter_id=matter_id,
+        order_id=order_id,
+        payload=payload,
+    )
+
+
 @router.post(
     "/{matter_id}/court-sync/pull",
     response_model=MatterCourtSyncJobRecord,
@@ -1334,6 +1621,11 @@ async def post_current_company_matter_attachment(
     background_tasks: BackgroundTasks,
     context: DocumentUploader,
     session: DbSession,
+    document_type: Annotated[MatterDocumentTypeLiteral | None, Form()] = None,
+    lifecycle_stage: Annotated[MatterLifecycleStageLiteral | None, Form()] = None,
+    document_date: Annotated[date | None, Form()] = None,
+    sequence_index: Annotated[int | None, Form(ge=0)] = None,
+    linked_court_order_id: Annotated[str | None, Form(max_length=36)] = None,
 ) -> MatterAttachmentRecord:
     attachment, job_id = create_matter_attachment(
         session,
@@ -1342,9 +1634,35 @@ async def post_current_company_matter_attachment(
         filename=file.filename or "document",
         content_type=file.content_type,
         stream=file.file,
+        document_type=document_type,
+        lifecycle_stage=lifecycle_stage,
+        document_date=document_date,
+        sequence_index=sequence_index,
+        linked_court_order_id=linked_court_order_id,
     )
     background_tasks.add_task(run_document_processing_job, job_id)
     return attachment
+
+
+@router.patch(
+    "/{matter_id}/attachments/{attachment_id}/metadata",
+    response_model=MatterAttachmentRecord,
+    summary="Update document lifecycle metadata for a matter attachment",
+)
+async def patch_current_company_matter_attachment_metadata(
+    matter_id: str,
+    attachment_id: str,
+    payload: MatterAttachmentMetadataUpdateRequest,
+    context: DocumentManager,
+    session: DbSession,
+) -> MatterAttachmentRecord:
+    return update_matter_attachment_metadata(
+        session,
+        context=context,
+        matter_id=matter_id,
+        attachment_id=attachment_id,
+        payload=payload,
+    )
 
 
 @router.post(

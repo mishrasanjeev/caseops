@@ -50,6 +50,9 @@ _PROTECTED_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 _EXEMPT_PATHS = frozenset({
     "/api/auth/login",
     "/api/auth/refresh",
+    "/api/auth/account-setup/complete",
+    "/api/auth/password-reset/start",
+    "/api/auth/password-reset/complete",
     "/api/bootstrap/company",
 })
 _EXEMPT_PREFIXES = (

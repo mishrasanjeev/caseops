@@ -24,7 +24,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { Logo } from "@/components/marketing/Logo";
-import { type Capability, can, useRole } from "@/lib/capabilities";
+import {
+  type Capability,
+  can,
+  useResolvedCapabilities,
+  useRole,
+} from "@/lib/capabilities";
 import { cn } from "@/lib/cn";
 
 type NavItem = {
@@ -106,8 +111,12 @@ export function SidebarBody({
   onNavigate?: () => void;
 }) {
   const role = useRole();
+  const resolvedCapabilities = useResolvedCapabilities();
   const visible = NAV.filter((item) => {
     if (!item.requiresCapability) return true;
+    if (resolvedCapabilities) {
+      return resolvedCapabilities.includes(item.requiresCapability);
+    }
     return can(role, item.requiresCapability);
   });
   const grouped = Object.entries(SECTION_LABEL)

@@ -1,7 +1,15 @@
 "use client";
 
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Download, MailPlus, Shield, Users as UsersIcon, Wrench } from "lucide-react";
+import {
+  Download,
+  MailPlus,
+  Shield,
+  ShieldCheck,
+  UserPlus,
+  Users as UsersIcon,
+  Wrench,
+} from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -46,8 +54,10 @@ function untilIsoOrNull(local: string): string | null {
 export default function AdminPage() {
   const canAdmin = useCapability("workspace:admin");
   const canAudit = useCapability("audit:export");
+  const canManageUsers = useCapability("company:manage_users");
   const canTeamsManage = useCapability("teams:manage");
   const canPortalInvite = useCapability("portal:invite");
+  const canManageNotifications = useCapability("notifications:manage");
   const [since, setSince] = useState("");
   const [until, setUntil] = useState("");
   const [action, setAction] = useState("");
@@ -172,12 +182,30 @@ export default function AdminPage() {
         description="Audit trail export is live. Tenant profile, SSO, AI policy, and plan management follow in §10.1–§10.3."
         actions={
           <div className="flex items-center gap-2">
-            <Link
-              href="/app/admin/notifications"
-              className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-line)] bg-white px-3 py-1.5 text-sm font-medium text-[var(--color-ink-2)] hover:bg-[var(--color-bg-2)]"
-            >
-              Notifications
-            </Link>
+            {canManageNotifications ? (
+              <Link
+                href="/app/admin/notifications"
+                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-line)] bg-white px-3 py-1.5 text-sm font-medium text-[var(--color-ink-2)] hover:bg-[var(--color-bg-2)]"
+              >
+                Notifications
+              </Link>
+            ) : null}
+            {canManageUsers ? (
+              <Link
+                href="/app/admin/employees"
+                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-line)] bg-white px-3 py-1.5 text-sm font-medium text-[var(--color-ink-2)] hover:bg-[var(--color-bg-2)]"
+              >
+                <UserPlus className="h-4 w-4" aria-hidden /> Employees
+              </Link>
+            ) : null}
+            {canManageUsers ? (
+              <Link
+                href="/app/admin/roles"
+                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-line)] bg-white px-3 py-1.5 text-sm font-medium text-[var(--color-ink-2)] hover:bg-[var(--color-bg-2)]"
+              >
+                <ShieldCheck className="h-4 w-4" aria-hidden /> Roles
+              </Link>
+            ) : null}
             {canTeamsManage ? (
               <Link
                 href="/app/admin/teams"
@@ -443,10 +471,10 @@ export default function AdminPage() {
         icon={Wrench}
         eyebrow="Coming soon"
         title="More admin controls on the way"
-        description="User directory + ethical walls UI, SSO, tenant AI policy, and plan management are next."
+        description="Ethical walls UI, SSO, tenant AI policy, and plan management are next."
         prdSection="§10.9"
         bullets={[
-          "User directory with team-based scoping; ethical walls are wired on the API today and will surface here next.",
+          "Ethical walls are wired on the API today and will surface here next.",
           "OIDC / SAML with JIT provisioning and role mapping.",
           "Tenant AI policy — allowed models, prompt audit, external-share approvals.",
           "Plan entitlements — seat limits, matter limits, feature flags.",

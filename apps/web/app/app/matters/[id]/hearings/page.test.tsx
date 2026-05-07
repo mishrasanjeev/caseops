@@ -1,9 +1,18 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { workspaceData, useCapabilityMock } = vi.hoisted(() => ({
+const {
+  fetchCalendarSyncStatusMock,
+  listMatterRemindersMock,
+  syncHearingToOutlookMock,
+  workspaceData,
+  useCapabilityMock,
+} = vi.hoisted(() => ({
+  fetchCalendarSyncStatusMock: vi.fn(),
+  listMatterRemindersMock: vi.fn(),
+  syncHearingToOutlookMock: vi.fn(),
   workspaceData: {
     current: {
       matter: { id: "m1", matter_code: "X", title: "T", status: "active" },
@@ -23,7 +32,10 @@ const { workspaceData, useCapabilityMock } = vi.hoisted(() => ({
 
 vi.mock("@/lib/api/endpoints", () => ({
   createMatterHearing: vi.fn(),
+  fetchCalendarSyncStatus: fetchCalendarSyncStatusMock,
+  listMatterReminders: listMatterRemindersMock,
   pullMatterCourtSync: vi.fn(),
+  syncHearingToOutlook: syncHearingToOutlookMock,
 }));
 
 vi.mock("@/lib/use-matter-workspace", () => ({
@@ -53,14 +65,137 @@ function withClient(children: ReactNode) {
 
 describe("MatterHearingsPage", () => {
   beforeEach(() => {
+    fetchCalendarSyncStatusMock.mockReset();
+    listMatterRemindersMock.mockReset();
+    syncHearingToOutlookMock.mockReset();
+    listMatterRemindersMock.mockResolvedValue({ matter_id: "m1", reminders: [] });
+    fetchCalendarSyncStatusMock.mockResolvedValue({
+      provider_available: true,
+      durable_automation: "blocked_pending_temporal",
+      connections: [],
+      syncs: [],
+    });
     useCapabilityMock.mockReset();
     useCapabilityMock.mockImplementation(() => false);
+    workspaceData.current = {
+      matter: { id: "m1", matter_code: "X", title: "T", status: "active" },
+      hearings: [],
+      attachments: [],
+      invoices: [],
+      time_entries: [],
+      activity: [],
+      tasks: [],
+      notes: [],
+      court_orders: [],
+      cause_list_entries: [],
+    } as unknown;
+  });
+
+  it("renders Outlook sync action and per-hearing status for calendar sync users", async () => {
+    useCapabilityMock.mockImplementation((cap: string) => cap === "calendar:sync");
+    workspaceData.current = {
+      ...(workspaceData.current as { matter: unknown }),
+      hearings: [
+        {
+          id: "h-sync",
+          hearing_on: "2026-06-10",
+          purpose: "Arguments",
+          status: "scheduled",
+        },
+      ],
+      court_orders: [],
+      cause_list_entries: [],
+    } as unknown;
+    fetchCalendarSyncStatusMock.mockResolvedValue({
+      provider_available: true,
+      durable_automation: "blocked_pending_temporal",
+      connections: [],
+      syncs: [
+        {
+          id: "sync-1",
+          company_id: "c1",
+          calendar_connection_id: "conn-1",
+          source_type: "matter_hearing",
+          source_id: "h-sync",
+          provider_event_id: "remote-1",
+          sync_status: "synced",
+          last_error: null,
+          last_synced_at: "2026-05-07T10:00:00Z",
+          created_at: "2026-05-07T09:00:00Z",
+          updated_at: "2026-05-07T10:00:00Z",
+        },
+      ],
+    });
+
+    render(withClient(<MatterHearingsPage />));
+
+    expect(await screen.findByTestId("hearing-outlook-sync-h-sync")).toBeInTheDocument();
+    expect(await screen.findByText(/synced/i)).toBeInTheDocument();
   });
 
   it("renders the Scheduled hearings card and the Schedule hearing trigger", () => {
     render(withClient(<MatterHearingsPage />));
-    expect(screen.getByText(/Scheduled hearings/i)).toBeInTheDocument();
+    expect(screen.getByText(/Upcoming hearings/i)).toBeInTheDocument();
     expect(screen.getByTestId("schedule-hearing-open")).toBeInTheDocument();
+  });
+
+  it("splits completed and upcoming hearings and sorts orders", () => {
+    workspaceData.current = {
+      ...(workspaceData.current as { matter: unknown }),
+      hearings: [
+        {
+          id: "h-upcoming",
+          hearing_on: "2026-06-10",
+          purpose: "Arguments",
+          status: "scheduled",
+        },
+        {
+          id: "h-completed",
+          hearing_on: "2026-05-01",
+          purpose: "Interim hearing",
+          status: "completed",
+          outcome_note: "Stay continued.",
+        },
+      ],
+      court_orders: [
+        {
+          id: "o-new",
+          title: "New stay order",
+          order_date: "2026-06-01",
+          order_kind: "interim_order",
+          is_interim_order: true,
+          stay_status: "granted",
+          summary: "Stay granted.",
+        },
+        {
+          id: "o-old",
+          title: "Old daily order",
+          order_date: "2026-05-01",
+          order_kind: "daily_order",
+          stay_status: "none",
+          summary: "Directions issued.",
+        },
+      ],
+      cause_list_entries: [],
+    } as unknown;
+
+    render(withClient(<MatterHearingsPage />));
+
+    expect(screen.getByText(/Upcoming hearings/i)).toBeInTheDocument();
+    expect(screen.getByText(/Completed hearings/i)).toBeInTheDocument();
+    expect(screen.getByText("Arguments")).toBeInTheDocument();
+    expect(screen.getByText("Interim hearing")).toBeInTheDocument();
+    expect(screen.getByText("Interim order")).toBeInTheDocument();
+    expect(screen.getByText("Stay granted")).toBeInTheDocument();
+    expect(screen.getAllByText(/New stay order|Old daily order/)[0]).toHaveTextContent(
+      "New stay order",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Oldest" }));
+
+    expect(screen.getAllByText(/New stay order|Old daily order/)[0]).toHaveTextContent(
+      "Old daily order",
+    );
   });
 
   it("renders cause-list bench as clickable judge links when resolved", () => {

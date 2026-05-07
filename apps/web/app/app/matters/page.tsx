@@ -1,31 +1,61 @@
 "use client";
 
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Briefcase } from "lucide-react";
+import { Briefcase, Filter, RotateCcw, Tags } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { toast } from "sonner";
 
 import { NewMatterDialog } from "@/components/app/NewMatterDialog";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { DataTable } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { listMatters } from "@/lib/api/endpoints";
+import { bulkAssignMatterTag, listMatterTags, listMatters } from "@/lib/api/endpoints";
 import type { Matter } from "@/lib/api/schemas";
 import { useCapability } from "@/lib/capabilities";
 import { formatLegalDate } from "@/lib/dates";
 
 const PAGE_SIZE = 50;
+const CLAIM_CURRENCY_PATTERN = /^[A-Z]{3}$/;
 
 const FORUMS: Record<string, string> = {
   lower_court: "Lower",
   high_court: "High Court",
   supreme_court: "Supreme Court",
   tribunal: "Tribunal",
+};
+
+type FilterState = {
+  q: string;
+  status: string;
+  forum_level: string;
+  tag: string;
+  min_claim_amount: string;
+  max_claim_amount: string;
+};
+
+const EMPTY_FILTERS: FilterState = {
+  q: "",
+  status: "all",
+  forum_level: "all",
+  tag: "all",
+  min_claim_amount: "",
+  max_claim_amount: "",
 };
 
 function formatDate(value: string | null | undefined): string {
@@ -38,8 +68,68 @@ function formatDate(value: string | null | undefined): string {
   });
 }
 
+function toMinor(value: string): number | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed) || parsed < 0) return undefined;
+  return Math.round(parsed * 100);
+}
+
+function formatClaimAmount(matter: Matter): string {
+  if (matter.claim_amount_minor == null) return "—";
+  const currency =
+    matter.claim_currency && CLAIM_CURRENCY_PATTERN.test(matter.claim_currency)
+      ? matter.claim_currency
+      : "INR";
+  try {
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 0,
+    }).format(matter.claim_amount_minor / 100);
+  } catch {
+    return `INR ${(matter.claim_amount_minor / 100).toLocaleString("en-IN", {
+      maximumFractionDigits: 0,
+    })}`;
+  }
+}
+
+function TagCell({ matter }: { matter: Matter }) {
+  const tags = matter.tags ?? [];
+  if (tags.length === 0) return <span className="text-[var(--color-mute-2)]">—</span>;
+  return (
+    <div className="flex max-w-52 flex-wrap gap-1">
+      {tags.slice(0, 2).map((tag) => (
+        <Badge key={tag.id} tone="neutral" className="py-0.5">
+          {tag.name}
+        </Badge>
+      ))}
+      {tags.length > 2 ? (
+        <span className="text-xs text-[var(--color-mute)]">+{tags.length - 2}</span>
+      ) : null}
+    </div>
+  );
+}
+
 export default function MattersPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const [draftFilters, setDraftFilters] = useState<FilterState>(EMPTY_FILTERS);
+  const [appliedFilters, setAppliedFilters] = useState<FilterState>(EMPTY_FILTERS);
+  const [bulkTagId, setBulkTagId] = useState<string>("none");
+  const listParams = useMemo(
+    () => ({
+      q: appliedFilters.q.trim() || undefined,
+      status: appliedFilters.status === "all" ? undefined : appliedFilters.status,
+      forum_level:
+        appliedFilters.forum_level === "all" ? undefined : appliedFilters.forum_level,
+      tag: appliedFilters.tag === "all" ? undefined : appliedFilters.tag,
+      min_claim_amount_minor: toMinor(appliedFilters.min_claim_amount),
+      max_claim_amount_minor: toMinor(appliedFilters.max_claim_amount),
+    }),
+    [appliedFilters],
+  );
   const {
     data,
     isPending,
@@ -50,11 +140,15 @@ export default function MattersPage() {
     isFetchingNextPage,
     refetch,
   } = useInfiniteQuery({
-    queryKey: ["matters", "list"],
+    queryKey: ["matters", "list", listParams],
     queryFn: ({ pageParam }) =>
-      listMatters({ limit: PAGE_SIZE, cursor: pageParam ?? null }),
+      listMatters({ limit: PAGE_SIZE, cursor: pageParam ?? null, ...listParams }),
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
+  });
+  const { data: tagData } = useQuery({
+    queryKey: ["matter-tags"],
+    queryFn: listMatterTags,
   });
 
   const columns = useMemo<ColumnDef<Matter>[]>(
@@ -100,6 +194,37 @@ export default function MattersPage() {
         cell: (ctx) => formatDate(ctx.getValue<string | null>()),
       },
       {
+        accessorKey: "claim_amount_minor",
+        header: "Claim",
+        cell: (ctx) => (
+          <span className="tabular-nums text-[var(--color-ink-2)]">
+            {formatClaimAmount(ctx.row.original)}
+          </span>
+        ),
+      },
+      {
+        id: "tags",
+        header: "Tags",
+        cell: (ctx) => <TagCell matter={ctx.row.original} />,
+      },
+      {
+        accessorKey: "has_stay",
+        header: "Interim/stay",
+        cell: (ctx) => {
+          const matter = ctx.row.original;
+          return matter.has_stay || matter.has_interim_order ? (
+            <div className="flex flex-wrap gap-1">
+              {matter.has_stay ? <Badge tone="warning">Stay</Badge> : null}
+              {matter.has_interim_order ? (
+                <Badge tone="brand">Interim</Badge>
+              ) : null}
+            </div>
+          ) : (
+            <span className="text-[var(--color-mute-2)]">—</span>
+          );
+        },
+      },
+      {
         accessorKey: "status",
         header: "Status",
         cell: (ctx) => <StatusBadge status={ctx.getValue<string>()} />,
@@ -113,6 +238,183 @@ export default function MattersPage() {
     [data],
   );
   const canCreateMatter = useCapability("matters:create");
+  const canEditMatters = useCapability("matters:edit");
+  const matterTags = tagData?.tags ?? [];
+  const bulkMutation = useMutation({
+    mutationFn: () =>
+      bulkAssignMatterTag({
+        matterIds: matters.map((matter) => matter.id),
+        tagId: bulkTagId,
+      }),
+    onSuccess: async (result) => {
+      await queryClient.invalidateQueries({ queryKey: ["matters"] });
+      toast.success(
+        `Tagged ${result.assigned_count} visible matter${result.assigned_count === 1 ? "" : "s"}`,
+      );
+    },
+  });
+  const hasActiveFilters = Object.entries(appliedFilters).some(
+    ([key, value]) => value !== EMPTY_FILTERS[key as keyof FilterState],
+  );
+
+  function applyFilters() {
+    setAppliedFilters({ ...draftFilters });
+  }
+
+  function clearFilters() {
+    setDraftFilters(EMPTY_FILTERS);
+    setAppliedFilters(EMPTY_FILTERS);
+  }
+
+  const filterPanel = (
+    <div className="flex flex-col gap-3 rounded-lg border border-[var(--color-line)] bg-white p-3">
+      <div className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_150px_170px_180px_140px_140px_auto_auto]">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="matter-filter-q">Search</Label>
+          <Input
+            id="matter-filter-q"
+            value={draftFilters.q}
+            onChange={(event) =>
+              setDraftFilters((prev) => ({ ...prev, q: event.target.value }))
+            }
+            placeholder="Party, code, court"
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label>Status</Label>
+          <Select
+            value={draftFilters.status}
+            onValueChange={(value) =>
+              setDraftFilters((prev) => ({ ...prev, status: value }))
+            }
+          >
+            <SelectTrigger aria-label="Matter status filter">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="intake">Intake</SelectItem>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="on_hold">On hold</SelectItem>
+              <SelectItem value="closed">Closed</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label>Forum</Label>
+          <Select
+            value={draftFilters.forum_level}
+            onValueChange={(value) =>
+              setDraftFilters((prev) => ({ ...prev, forum_level: value }))
+            }
+          >
+            <SelectTrigger aria-label="Forum filter">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              {Object.entries(FORUMS).map(([value, label]) => (
+                <SelectItem key={value} value={value}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label>Tag</Label>
+          <Select
+            value={draftFilters.tag}
+            onValueChange={(value) =>
+              setDraftFilters((prev) => ({ ...prev, tag: value }))
+            }
+          >
+            <SelectTrigger aria-label="Tag filter">
+              <SelectValue placeholder="All tags" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All tags</SelectItem>
+              {matterTags.map((tag) => (
+                <SelectItem key={tag.id} value={tag.slug}>
+                  {tag.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="matter-filter-min-claim">Min claim</Label>
+          <Input
+            id="matter-filter-min-claim"
+            inputMode="numeric"
+            type="number"
+            min={0}
+            value={draftFilters.min_claim_amount}
+            onChange={(event) =>
+              setDraftFilters((prev) => ({
+                ...prev,
+                min_claim_amount: event.target.value,
+              }))
+            }
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="matter-filter-max-claim">Max claim</Label>
+          <Input
+            id="matter-filter-max-claim"
+            inputMode="numeric"
+            type="number"
+            min={0}
+            value={draftFilters.max_claim_amount}
+            onChange={(event) =>
+              setDraftFilters((prev) => ({
+                ...prev,
+                max_claim_amount: event.target.value,
+              }))
+            }
+          />
+        </div>
+        <div className="flex items-end gap-2">
+          <Button type="button" variant="outline" onClick={applyFilters}>
+            <Filter className="h-4 w-4" /> Apply
+          </Button>
+          {hasActiveFilters ? (
+            <Button type="button" variant="ghost" onClick={clearFilters}>
+              <RotateCcw className="h-4 w-4" /> Reset
+            </Button>
+          ) : null}
+        </div>
+      </div>
+      {canEditMatters && matterTags.length > 0 ? (
+        <div className="flex flex-wrap items-end gap-2 border-t border-[var(--color-line)] pt-3">
+          <div className="w-56">
+            <Label>Bulk tag visible rows</Label>
+            <Select value={bulkTagId} onValueChange={setBulkTagId}>
+              <SelectTrigger aria-label="Bulk tag">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Choose tag</SelectItem>
+                {matterTags.map((tag) => (
+                  <SelectItem key={tag.id} value={tag.id}>
+                    {tag.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={bulkTagId === "none" || matters.length === 0 || bulkMutation.isPending}
+            onClick={() => bulkMutation.mutate()}
+          >
+            <Tags className="h-4 w-4" /> Tag visible
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -122,6 +424,8 @@ export default function MattersPage() {
         description="Every matter in your workspace. Click a row to open the cockpit."
         actions={canCreateMatter ? <NewMatterDialog /> : null}
       />
+
+      {!isPending && !isError ? filterPanel : null}
 
       {isPending ? (
         <div className="flex flex-col gap-3">
@@ -137,13 +441,23 @@ export default function MattersPage() {
       ) : matters.length === 0 ? (
         <EmptyState
           icon={Briefcase}
-          title="No matters yet"
+          title={hasActiveFilters ? "No matters match these filters" : "No matters yet"}
           description={
-            canCreateMatter
-              ? "Create your first matter to start tracking hearings, drafts, and billing."
-              : "No matters are assigned to you yet. Ask an admin to add you to a matter."
+            hasActiveFilters
+              ? "Adjust or reset filters to return to the full matter portfolio."
+              : canCreateMatter
+                ? "Create your first matter to start tracking hearings, drafts, and billing."
+                : "No matters are assigned to you yet. Ask an admin to add you to a matter."
           }
-          action={canCreateMatter ? <NewMatterDialog /> : null}
+          action={
+            hasActiveFilters ? (
+              <Button type="button" variant="outline" onClick={clearFilters}>
+                <RotateCcw className="h-4 w-4" /> Reset filters
+              </Button>
+            ) : canCreateMatter ? (
+              <NewMatterDialog />
+            ) : null
+          }
         />
       ) : (
         <>

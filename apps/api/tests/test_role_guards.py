@@ -33,6 +33,12 @@ PUBLIC_MUTATING_ROUTES: set[tuple[str, str]] = {
     # EG-001 (2026-04-23) — logout clears the session cookie.
     # Anyone may log themselves out; idempotent server-side.
     ("POST", "/api/auth/logout"),
+    # LW-S5 employee onboarding. The one-time token is the auth factor
+    # for setup/reset completion; start is enumeration-safe and rate-
+    # limited, returning the same shape on hit/miss.
+    ("POST", "/api/auth/account-setup/complete"),
+    ("POST", "/api/auth/password-reset/start"),
+    ("POST", "/api/auth/password-reset/complete"),
     ("POST", "/api/bootstrap/company"),
     # Pine Labs payment notifications — their own signature is the
     # auth layer; the handler enforces cross-tenant + idempotency.

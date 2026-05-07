@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from caseops_api.api.dependencies import (
     CAPABILITY_ROLES,
@@ -17,6 +17,10 @@ from caseops_api.core.rate_limit import (
 )
 from caseops_api.db.models import Recommendation
 from caseops_api.schemas.recommendations import (
+    MatterStrategyEntryCreateRequest,
+    MatterStrategyEntryListResponse,
+    MatterStrategyEntryRecord,
+    MatterStrategyEntryUpdateRequest,
     RecommendationDecisionRecord,
     RecommendationDecisionRequest,
     RecommendationGenerateRequest,
@@ -24,6 +28,7 @@ from caseops_api.schemas.recommendations import (
     RecommendationOptionRecord,
     RecommendationRecord,
 )
+from caseops_api.services.capabilities import membership_has_capability
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.recommendations import (
     generate_recommendation,
@@ -31,6 +36,12 @@ from caseops_api.services.recommendations import (
     parse_assumptions,
     parse_citations,
     record_recommendation_decision,
+)
+from caseops_api.services.strategy_entries import (
+    create_strategy_entry,
+    delete_strategy_entry,
+    list_strategy_entries,
+    update_strategy_entry,
 )
 
 router = APIRouter()
@@ -41,9 +52,14 @@ RecommendationGenerator = Annotated[
 RecommendationDecider = Annotated[
     SessionContext, Depends(require_capability("recommendations:decide"))
 ]
+StrategyWriter = Annotated[SessionContext, Depends(require_capability("strategy:approve"))]
 
 
-def _require_capability_inline(context: SessionContext, capability: str) -> None:
+def _require_capability_inline(
+    session: DbSession,
+    context: SessionContext,
+    capability: str,
+) -> None:
     """Round-2 P2 #7 helper. ``require_capability`` is normally a
     FastAPI dependency, but for litigation_strategy we need to run a
     SECOND capability check inside the route handler (after the type
@@ -54,7 +70,7 @@ def _require_capability_inline(context: SessionContext, capability: str) -> None
         raise RuntimeError(
             f"Unknown capability {capability!r}; add it to CAPABILITY_ROLES.",
         )
-    if context.membership.role not in roles:
+    if not membership_has_capability(session, context.membership, capability):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=(
@@ -158,6 +174,79 @@ async def list_recommendations(
     )
 
 
+@router.get(
+    "/matters/{matter_id}/strategy-entries",
+    response_model=MatterStrategyEntryListResponse,
+    summary="List lawyer-owned strategy entries for a matter",
+)
+async def list_matter_strategy_entries(
+    matter_id: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> MatterStrategyEntryListResponse:
+    return list_strategy_entries(session, context=context, matter_id=matter_id)
+
+
+@router.post(
+    "/matters/{matter_id}/strategy-entries",
+    response_model=MatterStrategyEntryRecord,
+    summary="Create a lawyer-owned strategy entry for a matter",
+)
+async def create_matter_strategy_entry(
+    matter_id: str,
+    payload: MatterStrategyEntryCreateRequest,
+    context: StrategyWriter,
+    session: DbSession,
+) -> MatterStrategyEntryRecord:
+    return create_strategy_entry(
+        session,
+        context=context,
+        matter_id=matter_id,
+        payload=payload,
+    )
+
+
+@router.patch(
+    "/matters/{matter_id}/strategy-entries/{entry_id}",
+    response_model=MatterStrategyEntryRecord,
+    summary="Update a lawyer-owned strategy entry for a matter",
+)
+async def update_matter_strategy_entry(
+    matter_id: str,
+    entry_id: str,
+    payload: MatterStrategyEntryUpdateRequest,
+    context: StrategyWriter,
+    session: DbSession,
+) -> MatterStrategyEntryRecord:
+    return update_strategy_entry(
+        session,
+        context=context,
+        matter_id=matter_id,
+        entry_id=entry_id,
+        payload=payload,
+    )
+
+
+@router.delete(
+    "/matters/{matter_id}/strategy-entries/{entry_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a lawyer-owned strategy entry for a matter",
+)
+async def delete_matter_strategy_entry(
+    matter_id: str,
+    entry_id: str,
+    context: StrategyWriter,
+    session: DbSession,
+) -> Response:
+    delete_strategy_entry(
+        session,
+        context=context,
+        matter_id=matter_id,
+        entry_id=entry_id,
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.post(
     "/matters/{matter_id}/recommendations",
     response_model=RecommendationRecord,
@@ -178,7 +267,7 @@ async def create_recommendation(
     # ``junior partner``) gains ``recommendations:generate`` but NOT
     # ``strategy:generate``, the request still fails here.
     if payload.type == "litigation_strategy":
-        _require_capability_inline(context, "strategy:generate")
+        _require_capability_inline(session, context, "strategy:generate")
 
     recommendation = generate_recommendation(
         session,
@@ -217,7 +306,7 @@ async def create_decision(
             )
         )
         if rec_type == "litigation_strategy":
-            _require_capability_inline(context, "strategy:approve")
+            _require_capability_inline(session, context, "strategy:approve")
 
     recommendation = record_recommendation_decision(
         session,

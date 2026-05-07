@@ -49,6 +49,7 @@ def create_access_token(*, user_id: str, company_id: str, membership_id: str, ro
         "membership_id": membership_id,
         "role": role,
         "iat": issued_at,
+        "iat_ts": issued_at.timestamp(),
         "exp": issued_at + timedelta(minutes=settings.access_token_ttl_minutes),
     }
     return jwt.encode(payload, settings.auth_secret, algorithm="HS256")
@@ -71,6 +72,7 @@ def decode_access_token(token: str) -> dict[str, str]:
         "membership_id": str(payload["membership_id"]),
         "role": str(payload["role"]),
         "issued_at": str(payload["iat"]),
+        "issued_at_precise": str(payload.get("iat_ts", payload["iat"])),
     }
 
 

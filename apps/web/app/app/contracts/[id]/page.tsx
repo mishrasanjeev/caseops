@@ -7,15 +7,17 @@ import {
   Clock,
   FileText,
   Gavel,
+  Link2,
   Loader2,
   Scale,
+  Save,
   Sparkles,
   Upload,
   XCircle,
 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/Button";
@@ -31,17 +33,41 @@ import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
+import { Textarea } from "@/components/ui/Textarea";
 import { apiErrorMessage } from "@/lib/api/config";
 import {
+  CONTRACT_ATTACHMENT_ROLE_OPTIONS,
+  CONTRACT_TYPE_OPTIONS,
+  acceptContractTermSuggestion,
   comparePlaybook,
+  createContractLegalReference,
   extractContractClauses,
   extractContractObligations,
   fetchContractAttachmentRedline,
   fetchContractWorkspace,
   installDefaultPlaybook,
+  rejectContractTermSuggestion,
   type ContractRedlineChange,
   type PlaybookFinding,
+  updateContractAttachmentMetadata,
+  updateContractLegalReference,
+  updateContractMetadata,
   uploadContractAttachment,
+} from "@/lib/api/endpoints";
+import type {
+  ContractAttachmentRole,
+  ContractLegalReferenceRecord,
+  ContractTermSuggestionRecord,
+  ContractTypeKey,
 } from "@/lib/api/endpoints";
 import { useCapability } from "@/lib/capabilities";
 
@@ -51,11 +77,15 @@ type Workspace = {
     contract_code: string;
     title: string;
     contract_type: string;
+    contract_type_key: ContractTypeKey | null;
+    contract_type_notes: string | null;
     counterparty_name: string | null;
     status: string;
     effective_on: string | null;
     expires_on: string | null;
-    governing_law: string | null;
+    renewal_on: string | null;
+    auto_renewal: boolean;
+    jurisdiction: string | null;
     summary: string | null;
   };
   attachments: Array<{
@@ -64,6 +94,10 @@ type Workspace = {
     content_type: string | null;
     size_bytes: number;
     processing_status: string;
+    attachment_role: ContractAttachmentRole | null;
+    parent_attachment_id: string | null;
+    document_date: string | null;
+    notes: string | null;
     created_at: string;
   }>;
   clauses: Array<{
@@ -91,7 +125,11 @@ type Workspace = {
     expected_position: string;
     severity: string;
   }>;
+  legal_references: ContractLegalReferenceRecord[];
+  term_suggestions: ContractTermSuggestionRecord[];
 };
+
+type WorkspaceAttachment = Workspace["attachments"][number];
 
 export default function ContractDetailPage() {
   const params = useParams<{ id: string }>();
@@ -106,6 +144,16 @@ export default function ContractDetailPage() {
     null,
   );
   const [redlineAttachmentId, setRedlineAttachmentId] = useState<string | null>(null);
+  const [contractTypeKey, setContractTypeKey] =
+    useState<ContractTypeKey>("agreement");
+  const [contractTypeNotes, setContractTypeNotes] = useState("");
+  const [legalReferenceDraft, setLegalReferenceDraft] = useState({
+    act_name: "",
+    section_label: "",
+    clause_label: "",
+    evidence_attachment_id: "__none",
+    evidence_quote: "",
+  });
 
   const workspaceQuery = useQuery({
     queryKey: ["contracts", contractId, "workspace"],
@@ -114,6 +162,97 @@ export default function ContractDetailPage() {
 
   const invalidateWorkspace = () =>
     queryClient.invalidateQueries({ queryKey: ["contracts", contractId, "workspace"] });
+
+  const metadataMutation = useMutation({
+    mutationFn: () => {
+      const selectedType = CONTRACT_TYPE_OPTIONS.find(
+        (option) => option.value === contractTypeKey,
+      );
+      const notes = contractTypeNotes.trim() || null;
+      return updateContractMetadata({
+        contractId,
+        contract_type:
+          contractTypeKey === "other" && notes
+            ? notes
+            : selectedType?.label ?? "Agreement",
+        contract_type_key: contractTypeKey,
+        contract_type_notes: notes,
+      });
+    },
+    onSuccess: async () => {
+      await invalidateWorkspace();
+      toast.success("Contract metadata saved.");
+    },
+    onError: (err) =>
+      toast.error(apiErrorMessage(err, "Could not save contract metadata.")),
+  });
+
+  const createLegalReferenceMutation = useMutation({
+    mutationFn: () =>
+      createContractLegalReference({
+        contractId,
+        act_name: legalReferenceDraft.act_name.trim(),
+        section_label: legalReferenceDraft.section_label.trim() || null,
+        clause_label: legalReferenceDraft.clause_label.trim() || null,
+        evidence_attachment_id:
+          legalReferenceDraft.evidence_attachment_id === "__none"
+            ? null
+            : legalReferenceDraft.evidence_attachment_id,
+        evidence_quote: legalReferenceDraft.evidence_quote.trim() || null,
+        source: "manual",
+        status: "accepted",
+      }),
+    onSuccess: async () => {
+      await invalidateWorkspace();
+      setLegalReferenceDraft({
+        act_name: "",
+        section_label: "",
+        clause_label: "",
+        evidence_attachment_id: "__none",
+        evidence_quote: "",
+      });
+      toast.success("Legal reference saved.");
+    },
+    onError: (err) =>
+      toast.error(apiErrorMessage(err, "Could not save legal reference.")),
+  });
+
+  const updateLegalReferenceMutation = useMutation({
+    mutationFn: (input: { referenceId: string; status: "accepted" | "rejected" }) =>
+      updateContractLegalReference({
+        contractId,
+        referenceId: input.referenceId,
+        status: input.status,
+      }),
+    onSuccess: async () => {
+      await invalidateWorkspace();
+      toast.success("Legal reference review saved.");
+    },
+    onError: (err) =>
+      toast.error(apiErrorMessage(err, "Could not review legal reference.")),
+  });
+
+  const acceptTermSuggestionMutation = useMutation({
+    mutationFn: (suggestionId: string) =>
+      acceptContractTermSuggestion({ contractId, suggestionId }),
+    onSuccess: async () => {
+      await invalidateWorkspace();
+      toast.success("Term suggestion accepted.");
+    },
+    onError: (err) =>
+      toast.error(apiErrorMessage(err, "Could not accept term suggestion.")),
+  });
+
+  const rejectTermSuggestionMutation = useMutation({
+    mutationFn: (suggestionId: string) =>
+      rejectContractTermSuggestion({ contractId, suggestionId }),
+    onSuccess: async () => {
+      await invalidateWorkspace();
+      toast.success("Term suggestion rejected.");
+    },
+    onError: (err) =>
+      toast.error(apiErrorMessage(err, "Could not reject term suggestion.")),
+  });
 
   const uploadMutation = useMutation({
     mutationFn: (file: File) => uploadContractAttachment({ contractId, file }),
@@ -188,6 +327,20 @@ export default function ContractDetailPage() {
     enabled: Boolean(redlineAttachmentId),
   });
 
+  useEffect(() => {
+    const contract = workspaceQuery.data?.contract;
+    if (!contract) return;
+    setContractTypeKey(contract.contract_type_key ?? "other");
+    setContractTypeNotes(
+      contract.contract_type_notes ??
+        (contract.contract_type_key ? "" : contract.contract_type),
+    );
+  }, [
+    workspaceQuery.data?.contract?.contract_type,
+    workspaceQuery.data?.contract?.contract_type_key,
+    workspaceQuery.data?.contract?.contract_type_notes,
+  ]);
+
   if (workspaceQuery.isPending) {
     return (
       <div className="flex flex-col gap-3">
@@ -207,7 +360,16 @@ export default function ContractDetailPage() {
   }
   const workspace = workspaceQuery.data;
   if (!workspace) return null;
-  const { contract, attachments, clauses, obligations, playbook_rules } = workspace;
+  const {
+    contract,
+    attachments,
+    clauses,
+    obligations,
+    playbook_rules,
+    legal_references = [],
+    term_suggestions = [],
+  } = workspace;
+  const attachmentGroups = groupAttachmentsByRole(attachments);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selected = event.target.files?.[0];
@@ -265,6 +427,12 @@ export default function ContractDetailPage() {
           <TabsTrigger value="obligations">
             Obligations ({obligations.length})
           </TabsTrigger>
+          <TabsTrigger value="terms">
+            Terms ({term_suggestions.length})
+          </TabsTrigger>
+          <TabsTrigger value="legal">
+            Legal refs ({legal_references.length})
+          </TabsTrigger>
           <TabsTrigger value="playbook">
             Playbook ({playbook_rules.length})
           </TabsTrigger>
@@ -273,20 +441,95 @@ export default function ContractDetailPage() {
 
         <TabsContent value="overview">
           <Card>
-            <CardContent className="flex flex-col gap-4 py-6 text-sm text-[var(--color-ink-2)]">
-              <p>
-                Upload the contract under <strong>Attachments</strong>. After
-                processing, run <em>Extract clauses</em> and{" "}
-                <em>Extract obligations</em>. Install the default Indian
-                commercial playbook to enable playbook comparison; you can
-                edit the rules afterwards.
-              </p>
-              <p>
-                For counterparty-redlined DOCX files, upload them as
-                attachments and switch to the <strong>Redline</strong> tab to
-                see every tracked change with author, timestamp, and inline
-                context.
-              </p>
+            <CardContent className="grid gap-4 py-6 lg:grid-cols-[1.1fr_0.9fr]">
+              <section className="rounded-lg border border-[var(--color-line)] bg-white p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-sm font-semibold text-[var(--color-ink)]">
+                      Contract metadata
+                    </h2>
+                    <p className="mt-1 text-xs text-[var(--color-mute)]">
+                      Controlled type is stored beside the legacy label.
+                    </p>
+                  </div>
+                  {contract.contract_type_key ? (
+                    <StatusBadge status={contract.contract_type_key} />
+                  ) : (
+                    <StatusBadge status="legacy" />
+                  )}
+                </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="contract-type-key">Controlled type</Label>
+                    <Select
+                      value={contractTypeKey}
+                      disabled={!canEdit}
+                      onValueChange={(value) =>
+                        setContractTypeKey(value as ContractTypeKey)
+                      }
+                    >
+                      <SelectTrigger id="contract-type-key">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CONTRACT_TYPE_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="contract-type-notes">Legacy / other label</Label>
+                    <Input
+                      id="contract-type-notes"
+                      value={contractTypeNotes}
+                      disabled={!canEdit}
+                      onChange={(event) => setContractTypeNotes(event.target.value)}
+                      placeholder={contract.contract_type}
+                    />
+                  </div>
+                </div>
+                {canEdit ? (
+                  <Button
+                    size="sm"
+                    className="mt-3"
+                    disabled={metadataMutation.isPending}
+                    onClick={() => metadataMutation.mutate()}
+                    data-testid="contract-save-metadata"
+                  >
+                    {metadataMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Saving
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-4 w-4" aria-hidden /> Save metadata
+                      </>
+                    )}
+                  </Button>
+                ) : null}
+              </section>
+
+              <section className="rounded-lg border border-[var(--color-line)] bg-white p-4">
+                <h2 className="text-sm font-semibold text-[var(--color-ink)]">
+                  Canonical terms
+                </h2>
+                <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                  <TermStat label="Effective" value={contract.effective_on} />
+                  <TermStat label="Expiry" value={contract.expires_on} />
+                  <TermStat label="Renewal" value={contract.renewal_on} />
+                  <TermStat
+                    label="Auto-renewal"
+                    value={contract.auto_renewal ? "Yes" : "No"}
+                  />
+                </dl>
+                <p className="mt-3 text-xs leading-relaxed text-[var(--color-mute)]">
+                  Suggested dates stay outside canonical fields until a reviewer
+                  accepts them in the Terms tab.
+                </p>
+              </section>
             </CardContent>
           </Card>
         </TabsContent>
@@ -338,11 +581,28 @@ export default function ContractDetailPage() {
                   description="Upload the contract PDF or DOCX to enable clause / obligation extraction and redline parsing."
                 />
               ) : (
-                <ul className="divide-y divide-[var(--color-line-2)]">
-                  {attachments.map((a) => (
+                <div className="flex flex-col gap-5">
+                  {attachmentGroups.map((group) => (
+                    <section
+                      key={group.key}
+                      aria-labelledby={`contract-attachment-group-${group.key}`}
+                    >
+                      <div className="flex items-center justify-between gap-3 border-b border-[var(--color-line-2)] pb-2">
+                        <h3
+                          id={`contract-attachment-group-${group.key}`}
+                          className="text-sm font-semibold text-[var(--color-ink)]"
+                        >
+                          {group.label}
+                        </h3>
+                        <span className="text-xs tabular-nums text-[var(--color-mute)]">
+                          {group.attachments.length}
+                        </span>
+                      </div>
+                      <ul className="divide-y divide-[var(--color-line-2)]">
+                  {group.attachments.map((a) => (
                     <li
                       key={a.id}
-                      className="flex items-center justify-between gap-3 py-3"
+                      className="flex flex-col gap-3 py-3 lg:flex-row lg:items-start lg:justify-between"
                     >
                       <div className="flex items-center gap-2">
                         <FileText className="h-4 w-4 text-[var(--color-mute)]" aria-hidden />
@@ -350,6 +610,17 @@ export default function ContractDetailPage() {
                           <div className="text-sm font-medium text-[var(--color-ink)]">
                             {a.original_filename}
                           </div>
+                          <div className="mt-0.5 text-xs font-medium text-[var(--color-ink-2)]">
+                            {formatAttachmentRole(a.attachment_role ?? "unclassified")}
+                            {a.parent_attachment_id
+                              ? ` linked to ${attachmentName(attachments, a.parent_attachment_id)}`
+                              : ""}
+                          </div>
+                          {a.notes ? (
+                            <div className="mt-0.5 text-xs text-[var(--color-mute)]">
+                              {a.notes}
+                            </div>
+                          ) : null}
                           <div className="text-xs text-[var(--color-mute)]">
                             {a.content_type ?? "—"} · {(a.size_bytes / 1024).toFixed(0)} KB
                           </div>
@@ -368,9 +639,20 @@ export default function ContractDetailPage() {
                           </Button>
                         ) : null}
                       </div>
+                      {canEdit ? (
+                        <AttachmentMetadataEditor
+                          contractId={contractId}
+                          attachment={a}
+                          attachments={attachments}
+                          onSaved={invalidateWorkspace}
+                        />
+                      ) : null}
                     </li>
                   ))}
-                </ul>
+                      </ul>
+                    </section>
+                  ))}
+                </div>
               )}
             </CardContent>
           </Card>
@@ -502,6 +784,266 @@ export default function ContractDetailPage() {
                           <div>Due: {o.due_on ?? "—"}</div>
                           <div className="capitalize">{o.priority}</div>
                         </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="terms">
+          <Card>
+            <CardHeader>
+              <CardTitle>Term suggestions</CardTitle>
+              <CardDescription>
+                Suggested dates are reviewable and do not become canonical until accepted.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {term_suggestions.length === 0 ? (
+                <EmptyState
+                  icon={Clock}
+                  title="No term suggestions"
+                  description="AI or manual extraction can add suggested effective, expiry, renewal, and duration values for review."
+                />
+              ) : (
+                <ul className="flex flex-col gap-2">
+                  {term_suggestions.map((suggestion) => (
+                    <li
+                      key={suggestion.id}
+                      className="rounded-lg border border-[var(--color-line)] bg-white p-3"
+                    >
+                      <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-start">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <StatusBadge status={suggestion.status} />
+                            {suggestion.source_attachment_name ? (
+                              <span className="text-xs text-[var(--color-mute)]">
+                                Source: {suggestion.source_attachment_name}
+                              </span>
+                            ) : null}
+                          </div>
+                          <dl className="mt-2 grid gap-2 text-sm sm:grid-cols-4">
+                            <TermStat label="Effective" value={suggestion.suggested_effective_on} />
+                            <TermStat label="Expiry" value={suggestion.suggested_expires_on} />
+                            <TermStat label="Renewal" value={suggestion.suggested_renewal_on} />
+                            <TermStat
+                              label="Duration"
+                              value={
+                                suggestion.suggested_duration_months === null
+                                  ? null
+                                  : `${suggestion.suggested_duration_months} months`
+                              }
+                            />
+                          </dl>
+                          {suggestion.evidence_json?.quote ? (
+                            <p className="mt-2 text-xs leading-relaxed text-[var(--color-ink-2)]">
+                              {String(suggestion.evidence_json.quote)}
+                            </p>
+                          ) : null}
+                        </div>
+                        {canEdit && suggestion.status === "suggested" ? (
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              size="sm"
+                              onClick={() => acceptTermSuggestionMutation.mutate(suggestion.id)}
+                              data-testid={`accept-term-suggestion-${suggestion.id}`}
+                            >
+                              Accept
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => rejectTermSuggestionMutation.mutate(suggestion.id)}
+                            >
+                              Reject
+                            </Button>
+                          </div>
+                        ) : null}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="legal">
+          <Card>
+            <CardHeader>
+              <CardTitle>Legal references</CardTitle>
+              <CardDescription>
+                Acts, sections, clauses, and source evidence for contract classification.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-5">
+              {canEdit ? (
+                <div className="grid gap-3 rounded-lg border border-[var(--color-line)] bg-white p-3 lg:grid-cols-[1fr_0.7fr_0.7fr]">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="legal-act-name">Act</Label>
+                    <Input
+                      id="legal-act-name"
+                      value={legalReferenceDraft.act_name}
+                      onChange={(event) =>
+                        setLegalReferenceDraft((draft) => ({
+                          ...draft,
+                          act_name: event.target.value,
+                        }))
+                      }
+                      placeholder="Indian Contract Act, 1872"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="legal-section">Section</Label>
+                    <Input
+                      id="legal-section"
+                      value={legalReferenceDraft.section_label}
+                      onChange={(event) =>
+                        setLegalReferenceDraft((draft) => ({
+                          ...draft,
+                          section_label: event.target.value,
+                        }))
+                      }
+                      placeholder="Section 73"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="legal-clause">Clause</Label>
+                    <Input
+                      id="legal-clause"
+                      value={legalReferenceDraft.clause_label}
+                      onChange={(event) =>
+                        setLegalReferenceDraft((draft) => ({
+                          ...draft,
+                          clause_label: event.target.value,
+                        }))
+                      }
+                      placeholder="Limitation of liability"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5 lg:col-span-2">
+                    <Label htmlFor="legal-evidence">Evidence quote</Label>
+                    <Textarea
+                      id="legal-evidence"
+                      rows={2}
+                      value={legalReferenceDraft.evidence_quote}
+                      onChange={(event) =>
+                        setLegalReferenceDraft((draft) => ({
+                          ...draft,
+                          evidence_quote: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="legal-source-attachment">Source document</Label>
+                    <Select
+                      value={legalReferenceDraft.evidence_attachment_id}
+                      onValueChange={(value) =>
+                        setLegalReferenceDraft((draft) => ({
+                          ...draft,
+                          evidence_attachment_id: value,
+                        }))
+                      }
+                    >
+                      <SelectTrigger id="legal-source-attachment">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none">No attachment</SelectItem>
+                        {attachments.map((attachment) => (
+                          <SelectItem key={attachment.id} value={attachment.id}>
+                            {attachment.original_filename}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button
+                    size="sm"
+                    className="lg:col-span-3"
+                    disabled={
+                      createLegalReferenceMutation.isPending ||
+                      legalReferenceDraft.act_name.trim().length < 2
+                    }
+                    onClick={() => createLegalReferenceMutation.mutate()}
+                    data-testid="contract-add-legal-reference"
+                  >
+                    Save legal reference
+                  </Button>
+                </div>
+              ) : null}
+
+              {legal_references.length === 0 ? (
+                <EmptyState
+                  icon={Scale}
+                  title="No legal references"
+                  description="Record the legal basis and source excerpt before using classification in review."
+                />
+              ) : (
+                <ul className="flex flex-col gap-2">
+                  {legal_references.map((reference) => (
+                    <li
+                      key={reference.id}
+                      className="rounded-lg border border-[var(--color-line)] bg-white p-3"
+                    >
+                      <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-start">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-semibold text-[var(--color-ink)]">
+                              {reference.act_name}
+                            </span>
+                            <StatusBadge status={reference.status} />
+                            <span className="text-xs text-[var(--color-mute)]">
+                              {reference.source.replace(/_/g, " ")}
+                            </span>
+                          </div>
+                          <div className="mt-1 text-xs text-[var(--color-ink-2)]">
+                            {[reference.section_label, reference.clause_label]
+                              .filter(Boolean)
+                              .join(" - ") || "No section or clause label"}
+                          </div>
+                          {reference.evidence_quote ? (
+                            <p className="mt-2 text-xs leading-relaxed text-[var(--color-ink-2)]">
+                              {reference.evidence_quote}
+                            </p>
+                          ) : null}
+                          {reference.evidence_attachment_name ? (
+                            <div className="mt-1 text-xs text-[var(--color-mute)]">
+                              Source: {reference.evidence_attachment_name}
+                            </div>
+                          ) : null}
+                        </div>
+                        {canEdit && reference.status === "suggested" ? (
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              size="sm"
+                              onClick={() =>
+                                updateLegalReferenceMutation.mutate({
+                                  referenceId: reference.id,
+                                  status: "accepted",
+                                })
+                              }
+                            >
+                              Accept
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() =>
+                                updateLegalReferenceMutation.mutate({
+                                  referenceId: reference.id,
+                                  status: "rejected",
+                                })
+                              }
+                            >
+                              Reject
+                            </Button>
+                          </div>
+                        ) : null}
                       </div>
                     </li>
                   ))}
@@ -689,6 +1231,182 @@ export default function ContractDetailPage() {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+function TermStat({ label, value }: { label: string; value: string | null }) {
+  return (
+    <div>
+      <dt className="text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--color-mute)]">
+        {label}
+      </dt>
+      <dd className="mt-0.5 text-sm font-semibold text-[var(--color-ink)]">
+        {value ?? "Not set"}
+      </dd>
+    </div>
+  );
+}
+
+function AttachmentMetadataEditor({
+  contractId,
+  attachment,
+  attachments,
+  onSaved,
+}: {
+  contractId: string;
+  attachment: WorkspaceAttachment;
+  attachments: WorkspaceAttachment[];
+  onSaved: () => Promise<unknown>;
+}) {
+  const [role, setRole] = useState<ContractAttachmentRole | "__none">(
+    attachment.attachment_role ?? "__none",
+  );
+  const [parentAttachmentId, setParentAttachmentId] = useState(
+    attachment.parent_attachment_id ?? "__none",
+  );
+  const [documentDate, setDocumentDate] = useState(attachment.document_date ?? "");
+  const [notes, setNotes] = useState(attachment.notes ?? "");
+
+  useEffect(() => {
+    setRole(attachment.attachment_role ?? "__none");
+    setParentAttachmentId(attachment.parent_attachment_id ?? "__none");
+    setDocumentDate(attachment.document_date ?? "");
+    setNotes(attachment.notes ?? "");
+  }, [
+    attachment.attachment_role,
+    attachment.document_date,
+    attachment.notes,
+    attachment.parent_attachment_id,
+  ]);
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      updateContractAttachmentMetadata({
+        contractId,
+        attachmentId: attachment.id,
+        attachment_role: role === "__none" ? null : role,
+        parent_attachment_id:
+          parentAttachmentId === "__none" ? null : parentAttachmentId,
+        document_date: documentDate || null,
+        notes: notes.trim() || null,
+      }),
+    onSuccess: async () => {
+      await onSaved();
+      toast.success("Attachment metadata saved.");
+    },
+    onError: (err) =>
+      toast.error(apiErrorMessage(err, "Could not save attachment metadata.")),
+  });
+
+  return (
+    <div className="mt-3 grid gap-2 rounded-md bg-[var(--color-bg-2)] p-3 sm:grid-cols-[0.9fr_0.9fr_0.7fr_1fr_auto]">
+      <Select value={role} onValueChange={(value) => setRole(value as typeof role)}>
+        <SelectTrigger aria-label={`Role for ${attachment.original_filename}`}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="__none">Unclassified</SelectItem>
+          {CONTRACT_ATTACHMENT_ROLE_OPTIONS.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select
+        value={parentAttachmentId}
+        onValueChange={(value) => setParentAttachmentId(value)}
+      >
+        <SelectTrigger aria-label={`Parent for ${attachment.original_filename}`}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="__none">No parent</SelectItem>
+          {attachments
+            .filter(
+              (candidate) =>
+                candidate.id !== attachment.id &&
+                !attachmentHasAncestor(attachments, candidate.id, attachment.id),
+            )
+            .map((candidate) => (
+              <SelectItem key={candidate.id} value={candidate.id}>
+                {candidate.original_filename}
+              </SelectItem>
+            ))}
+        </SelectContent>
+      </Select>
+      <Input
+        type="date"
+        value={documentDate}
+        onChange={(event) => setDocumentDate(event.target.value)}
+        aria-label={`Date for ${attachment.original_filename}`}
+      />
+      <Input
+        value={notes}
+        onChange={(event) => setNotes(event.target.value)}
+        placeholder="Notes"
+        aria-label={`Notes for ${attachment.original_filename}`}
+      />
+      <Button
+        size="sm"
+        disabled={mutation.isPending}
+        onClick={() => mutation.mutate()}
+        data-testid={`save-contract-attachment-metadata-${attachment.id}`}
+      >
+        Save
+      </Button>
+    </div>
+  );
+}
+
+function attachmentName(attachments: WorkspaceAttachment[], attachmentId: string): string {
+  return (
+    attachments.find((attachment) => attachment.id === attachmentId)?.original_filename ??
+    "another document"
+  );
+}
+
+function groupAttachmentsByRole(attachments: WorkspaceAttachment[]) {
+  const roleOrder = [
+    ...CONTRACT_ATTACHMENT_ROLE_OPTIONS.map((option) => option.value),
+    "unclassified",
+  ];
+  return roleOrder
+    .map((role) => {
+      const groupAttachments = attachments.filter(
+        (attachment) => (attachment.attachment_role ?? "unclassified") === role,
+      );
+      return {
+        key: role,
+        label: formatAttachmentRole(role),
+        attachments: groupAttachments,
+      };
+    })
+    .filter((group) => group.attachments.length > 0);
+}
+
+function attachmentHasAncestor(
+  attachments: WorkspaceAttachment[],
+  attachmentId: string,
+  ancestorId: string,
+): boolean {
+  const byId = new Map(attachments.map((attachment) => [attachment.id, attachment]));
+  let current = byId.get(attachmentId)?.parent_attachment_id ?? null;
+  const seen = new Set<string>();
+  while (current) {
+    if (current === ancestorId) return true;
+    if (seen.has(current)) return true;
+    seen.add(current);
+    current = byId.get(current)?.parent_attachment_id ?? null;
+  }
+  return false;
+}
+
+function formatAttachmentRole(role: string): string {
+  if (role === "unclassified") return "Unclassified";
+  return (
+    CONTRACT_ATTACHMENT_ROLE_OPTIONS.find((option) => option.value === role)?.label ??
+    role.replace(/_/g, " ")
   );
 }
 

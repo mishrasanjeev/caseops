@@ -35,6 +35,7 @@ from caseops_api.schemas.calendar import (
     CalendarEventRecord,
 )
 from caseops_api.services.identity import SessionContext
+from caseops_api.services.matter_access import visible_matters_filter
 
 
 def aggregate_calendar_events(
@@ -55,15 +56,14 @@ def aggregate_calendar_events(
     if range_from > range_to:
         return []
     selected_kinds = set(kinds) if kinds else {"hearing", "task", "deadline"}
-    company_id = context.company.id
     events: list[CalendarEventRecord] = []
 
     if "hearing" in selected_kinds:
-        events.extend(_collect_hearings(session, company_id, range_from, range_to))
+        events.extend(_collect_hearings(session, context, range_from, range_to))
     if "task" in selected_kinds:
-        events.extend(_collect_tasks(session, company_id, range_from, range_to))
+        events.extend(_collect_tasks(session, context, range_from, range_to))
     if "deadline" in selected_kinds:
-        events.extend(_collect_deadlines(session, company_id, range_from, range_to))
+        events.extend(_collect_deadlines(session, context, range_from, range_to))
 
     # Stable sort: date first, then kind to keep multiple events on
     # the same day grouped predictably (hearings render above tasks
@@ -75,7 +75,7 @@ def aggregate_calendar_events(
 
 def _collect_hearings(
     session: Session,
-    company_id: str,
+    context: SessionContext,
     range_from: date,
     range_to: date,
 ) -> list[CalendarEventRecord]:
@@ -83,7 +83,8 @@ def _collect_hearings(
         select(MatterHearing, Matter)
         .join(Matter, Matter.id == MatterHearing.matter_id)
         .where(
-            Matter.company_id == company_id,
+            Matter.company_id == context.company.id,
+            visible_matters_filter(session, context=context),
             MatterHearing.hearing_on >= range_from,
             MatterHearing.hearing_on <= range_to,
         )
@@ -115,7 +116,7 @@ def _collect_hearings(
 
 def _collect_tasks(
     session: Session,
-    company_id: str,
+    context: SessionContext,
     range_from: date,
     range_to: date,
 ) -> list[CalendarEventRecord]:
@@ -123,7 +124,8 @@ def _collect_tasks(
         select(MatterTask, Matter)
         .join(Matter, Matter.id == MatterTask.matter_id)
         .where(
-            Matter.company_id == company_id,
+            Matter.company_id == context.company.id,
+            visible_matters_filter(session, context=context),
             MatterTask.due_on.is_not(None),
             MatterTask.due_on >= range_from,
             MatterTask.due_on <= range_to,
@@ -150,7 +152,7 @@ def _collect_tasks(
 
 def _collect_deadlines(
     session: Session,
-    company_id: str,
+    context: SessionContext,
     range_from: date,
     range_to: date,
 ) -> list[CalendarEventRecord]:
@@ -158,7 +160,8 @@ def _collect_deadlines(
         select(MatterDeadline, Matter)
         .join(Matter, Matter.id == MatterDeadline.matter_id)
         .where(
-            Matter.company_id == company_id,
+            Matter.company_id == context.company.id,
+            visible_matters_filter(session, context=context),
             MatterDeadline.due_on >= range_from,
             MatterDeadline.due_on <= range_to,
         )

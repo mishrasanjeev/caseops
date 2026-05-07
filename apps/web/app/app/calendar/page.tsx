@@ -6,8 +6,9 @@
 // across hearings + tasks + matter_deadlines.
 // Slice 2b (this file): adds Week + Day views and an .ics subscribe link.
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  CalendarCheck,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
@@ -22,9 +23,16 @@ import { useMemo, useState } from "react";
 
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { fetchCalendarEvents } from "@/lib/api/endpoints";
+import {
+  fetchCalendarEvents,
+  fetchCalendarSyncStatus,
+  listCalendarConnections,
+  revokeCalendarConnection,
+  startOutlookCalendarConnection,
+} from "@/lib/api/endpoints";
 import type { CalendarEventKind, CalendarEventRecord } from "@/lib/api/schemas";
 import { API_BASE_URL } from "@/lib/api/config";
+import { useCapability } from "@/lib/capabilities";
 import { cn } from "@/lib/cn";
 
 type ViewMode = "month" | "week" | "day";
@@ -60,6 +68,20 @@ function isoDate(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+function formatDateTime(value: string | null): string {
+  if (!value) return "—";
+  try {
+    return new Date(value).toLocaleString(undefined, {
+      day: "2-digit",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return value;
+  }
+}
+
 function buildMonthGrid(monthStart: Date): Date[] {
   const firstWeekday = monthStart.getDay();
   const offsetToMonday = (firstWeekday + 6) % 7;
@@ -81,6 +103,9 @@ const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 export default function CalendarPage() {
   const [view, setView] = useState<ViewMode>("month");
   const [cursor, setCursor] = useState<Date>(() => new Date());
+  const [outlookMessage, setOutlookMessage] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const canSyncCalendar = useCapability("calendar:sync");
 
   // Compute the [from, to] range for the current view. The same
   // /api/calendar/events endpoint serves all three; only the slice
@@ -118,6 +143,36 @@ export default function CalendarPage() {
     queryKey: ["calendar", view, isoDate(rangeFrom), isoDate(rangeTo)],
     queryFn: () =>
       fetchCalendarEvents({ from: isoDate(rangeFrom), to: isoDate(rangeTo) }),
+  });
+  const connectionsQuery = useQuery({
+    queryKey: ["calendar", "connections"],
+    queryFn: listCalendarConnections,
+  });
+  const syncStatusQuery = useQuery({
+    queryKey: ["calendar", "sync-status"],
+    queryFn: fetchCalendarSyncStatus,
+  });
+  const startOutlookMutation = useMutation({
+    mutationFn: startOutlookCalendarConnection,
+    onSuccess: (result) => {
+      if (result.auth_url) {
+        window.location.assign(result.auth_url);
+        return;
+      }
+      setOutlookMessage(
+        result.unavailable_reason ?? "Outlook calendar sync is unavailable.",
+      );
+    },
+    onError: (error) => setOutlookMessage(String(error)),
+  });
+  const revokeOutlookMutation = useMutation({
+    mutationFn: revokeCalendarConnection,
+    onSuccess: () => {
+      setOutlookMessage("Outlook connection revoked.");
+      void queryClient.invalidateQueries({ queryKey: ["calendar", "connections"] });
+      void queryClient.invalidateQueries({ queryKey: ["calendar", "sync-status"] });
+    },
+    onError: (error) => setOutlookMessage(String(error)),
   });
 
   const eventsByDay = useMemo(() => {
@@ -244,6 +299,90 @@ export default function CalendarPage() {
           );
         })}
       </div>
+
+      <section
+        className="rounded-lg border border-[var(--color-line-2)] bg-white px-4 py-3"
+        data-testid="calendar-outlook-panel"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-sm font-semibold text-[var(--color-ink)]">
+              <CalendarCheck className="h-4 w-4" aria-hidden />
+              Outlook calendar
+            </div>
+            <div className="mt-1 text-xs text-[var(--color-mute)]">
+              {connectionsQuery.isPending ? (
+                "Checking connection..."
+              ) : connectionsQuery.data?.provider_available === false ? (
+                connectionsQuery.data.unavailable_reason ??
+                "Microsoft Graph configuration required."
+              ) : connectionsQuery.data?.connections.some((c) => c.status === "connected") ? (
+                <>
+                  Connected as{" "}
+                  {connectionsQuery.data.connections.find((c) => c.status === "connected")
+                    ?.display_email ?? "Outlook account"}
+                  {connectionsQuery.data.connections.find((c) => c.status === "connected")
+                    ?.last_sync_at
+                    ? ` · Last sync ${formatDateTime(
+                        connectionsQuery.data.connections.find((c) => c.status === "connected")
+                          ?.last_sync_at ?? null,
+                      )}`
+                    : ""}
+                </>
+              ) : (
+                "Manual hearing sync is available after an Outlook connection is added."
+              )}
+            </div>
+            <div className="mt-1 text-xs text-[var(--color-mute)]">
+              Durable automated delivery and retry are blocked pending Temporal.
+              {syncStatusQuery.data?.syncs.find((s) => s.sync_status === "failed")?.last_error
+                ? ` Latest error: ${
+                    syncStatusQuery.data.syncs.find((s) => s.sync_status === "failed")
+                      ?.last_error
+                  }`
+                : ""}
+            </div>
+            {outlookMessage ? (
+              <div className="mt-1 text-xs text-[var(--color-warning-700,#8a5a00)]">
+                {outlookMessage}
+              </div>
+            ) : null}
+          </div>
+          {canSyncCalendar ? (
+            <div className="flex items-center gap-2">
+              {connectionsQuery.data?.connections.some((c) => c.status === "connected") ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const connection = connectionsQuery.data?.connections.find(
+                      (c) => c.status === "connected",
+                    );
+                    if (connection) revokeOutlookMutation.mutate(connection.id);
+                  }}
+                  disabled={revokeOutlookMutation.isPending}
+                  className="inline-flex h-8 items-center rounded-md border border-[var(--color-line-2)] px-3 text-xs font-medium text-[var(--color-ink)] hover:bg-[var(--color-line-1)] disabled:opacity-60"
+                  data-testid="calendar-outlook-revoke"
+                >
+                  Revoke
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => startOutlookMutation.mutate()}
+                  disabled={
+                    startOutlookMutation.isPending ||
+                    connectionsQuery.data?.provider_available === false
+                  }
+                  className="inline-flex h-8 items-center rounded-md bg-[var(--color-ink)] px-3 text-xs font-medium text-white hover:bg-[var(--color-ink-2)] disabled:opacity-60"
+                  data-testid="calendar-outlook-connect"
+                >
+                  Connect Outlook
+                </button>
+              )}
+            </div>
+          ) : null}
+        </div>
+      </section>
 
       {query.isError ? (
         <QueryErrorState

@@ -143,6 +143,10 @@ describe("AdminPage audit export (P0-001 cookie-auth regression)", () => {
   it("downloads via credentials:'include' (no Authorization header)", async () => {
     const user = userEvent.setup();
     renderWithQuery(<AdminPage />);
+    expect(screen.getByRole("link", { name: /roles/i })).toHaveAttribute(
+      "href",
+      "/app/admin/roles",
+    );
     await user.click(screen.getByTestId("download-audit-export"));
     await waitFor(() =>
       expect(

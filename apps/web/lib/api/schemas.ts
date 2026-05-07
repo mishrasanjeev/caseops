@@ -33,12 +33,14 @@ export const authSession = z.object({
   company: companySummary,
   user: userSummary,
   membership: membershipSummary,
+  capabilities: z.array(z.string()).optional(),
 });
 
 export const authContext = z.object({
   company: companySummary,
   user: userSummary,
   membership: membershipSummary,
+  capabilities: z.array(z.string()).optional(),
 });
 
 export const matter = z.object({
@@ -50,10 +52,34 @@ export const matter = z.object({
   status: z.string(),
   practice_area: z.string().nullable().optional(),
   forum_level: z.string().nullable().optional(),
+  court_id: z.string().nullable().optional(),
   court_name: z.string().nullable().optional(),
+  forum_catalog_entry_id: z.string().nullable().optional(),
+  forum_state: z.string().nullable().optional(),
+  forum_district: z.string().nullable().optional(),
+  forum_city: z.string().nullable().optional(),
+  forum_consumer_level: z.string().nullable().optional(),
   judge_name: z.string().nullable().optional(),
   description: z.string().nullable().optional(),
   next_hearing_on: z.string().nullable().optional(),
+  claim_amount_minor: z.number().int().nullable().optional(),
+  claim_currency: z.string().optional().default("INR"),
+  claim_amount_notes: z.string().nullable().optional(),
+  tags: z
+    .array(
+      z.object({
+        id: z.string(),
+        company_id: z.string(),
+        name: z.string(),
+        slug: z.string(),
+        color_key: z.string().nullable().optional(),
+        created_at: z.string().optional(),
+      }),
+    )
+    .optional()
+    .default([]),
+  has_stay: z.boolean().optional().default(false),
+  has_interim_order: z.boolean().optional().default(false),
   assignee_membership_id: z.string().nullable().optional(),
   // Phase C-3c (MOD-TS-016, 2026-04-25). Per-matter outside-counsel
   // cross-visibility flag. Defaults False on read (backend's DB
@@ -68,6 +94,40 @@ export const mattersList = z.object({
   next_cursor: z.string().nullable().optional(),
 });
 
+export const matterTag = z.object({
+  id: z.string(),
+  company_id: z.string(),
+  name: z.string(),
+  slug: z.string(),
+  color_key: z.string().nullable().optional(),
+  created_at: z.string().optional(),
+});
+
+export const matterTagsList = z.object({
+  tags: z.array(matterTag),
+});
+
+export const forumCatalogEntry = z.object({
+  id: z.string(),
+  parent_id: z.string().nullable().optional(),
+  court_id: z.string().nullable().optional(),
+  name: z.string(),
+  forum_type: z.string(),
+  forum_level: z.string(),
+  state: z.string().nullable().optional(),
+  district: z.string().nullable().optional(),
+  city: z.string().nullable().optional(),
+  consumer_level: z.string().nullable().optional(),
+  source_name: z.string(),
+  source_url: z.string().nullable().optional(),
+  lineage: z.string(),
+  display_order: z.number().int(),
+});
+
+export const forumCatalogResponse = z.object({
+  entries: z.array(forumCatalogEntry),
+});
+
 export type CompanySummary = z.infer<typeof companySummary>;
 export type UserSummary = z.infer<typeof userSummary>;
 export type MembershipSummary = z.infer<typeof membershipSummary>;
@@ -75,6 +135,51 @@ export type AuthSession = z.infer<typeof authSession>;
 export type AuthContext = z.infer<typeof authContext>;
 export type Matter = z.infer<typeof matter>;
 export type MattersList = z.infer<typeof mattersList>;
+export type MatterTag = z.infer<typeof matterTag>;
+export type MatterTagsList = z.infer<typeof matterTagsList>;
+export type ForumCatalogEntry = z.infer<typeof forumCatalogEntry>;
+export type ForumCatalogResponse = z.infer<typeof forumCatalogResponse>;
+
+export const matterTimelineItem = z.object({
+  id: z.string(),
+  event_type: z.enum([
+    "hearing",
+    "court_order",
+    "document",
+    "deadline",
+    "task",
+    "activity",
+  ]),
+  event_date: z.string(),
+  event_time: z.string().nullable().optional(),
+  title: z.string(),
+  status: z.string().nullable().optional(),
+  summary: z.string().nullable().optional(),
+  source_type: z.string(),
+  source_id: z.string().nullable().optional(),
+  badges: z.array(z.string()).optional().default([]),
+  links: z.object({
+    matter: z.string(),
+    document: z.string().nullable().optional(),
+  }),
+  order_kind: z.string().nullable().optional(),
+  is_interim_order: z.boolean().optional().default(false),
+  stay_status: z.string().nullable().optional(),
+  stay_effective_until: z.string().nullable().optional(),
+  linked_attachment_id: z.string().nullable().optional(),
+  metadata: z.record(z.string(), z.union([z.string(), z.boolean(), z.number(), z.null()])).optional().default({}),
+});
+
+export const matterTimelineResponse = z.object({
+  matter_id: z.string(),
+  sort: z.enum(["asc", "desc"]),
+  items: z.array(matterTimelineItem),
+  next_cursor: z.string().nullable().optional(),
+  generated_at: z.string(),
+});
+
+export type MatterTimelineItem = z.infer<typeof matterTimelineItem>;
+export type MatterTimelineResponse = z.infer<typeof matterTimelineResponse>;
 
 export const confidence = z.enum(["low", "medium", "high"]);
 // Sprint 9 BG-023 — four recommendation types. Keep the union in
@@ -237,12 +342,69 @@ export const recommendationList = z.object({
   recommendations: z.array(recommendation),
 });
 
+export const matterAuditEvent = z.object({
+  id: z.string(),
+  company_id: z.string(),
+  actor_type: z.string(),
+  actor_membership_id: z.string().nullable(),
+  actor_label: z.string().nullable(),
+  matter_id: z.string().nullable(),
+  action: z.string(),
+  target_type: z.string(),
+  target_id: z.string().nullable(),
+  result: z.string(),
+  metadata: z.record(z.string(), z.unknown()).nullable().optional(),
+  request_id: z.string().nullable().optional(),
+  created_at: z.string(),
+});
+
+export const matterAuditList = z.object({
+  matter_id: z.string(),
+  events: z.array(matterAuditEvent),
+  total: z.number().int(),
+  limit: z.number().int(),
+  offset: z.number().int(),
+});
+
+export const matterStrategyEntryType = z.enum(["plan", "decision", "note"]);
+export const matterStrategyEntryStatus = z.enum(["draft", "active", "archived"]);
+
+export const matterStrategyEntry = z.object({
+  id: z.string(),
+  company_id: z.string(),
+  matter_id: z.string(),
+  title: z.string(),
+  body: z.string(),
+  entry_type: matterStrategyEntryType,
+  status: matterStrategyEntryStatus,
+  owner_membership_id: z.string().nullable(),
+  owner_name: z.string().nullable(),
+  created_by_membership_id: z.string().nullable(),
+  created_by_name: z.string().nullable(),
+  updated_by_membership_id: z.string().nullable(),
+  updated_by_name: z.string().nullable(),
+  source_recommendation_id: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const matterStrategyEntryList = z.object({
+  matter_id: z.string(),
+  entries: z.array(matterStrategyEntry),
+});
+
 export type Recommendation = z.infer<typeof recommendation>;
 export type RecommendationOption = z.infer<typeof recommendationOption>;
 export type RecommendationDecision = z.infer<typeof recommendationDecision>;
 export type RecommendationList = z.infer<typeof recommendationList>;
 export type RecommendationType = z.infer<typeof recommendationType>;
 export type DecisionKind = z.infer<typeof decisionKind>;
+export type MatterAuditEvent = z.infer<typeof matterAuditEvent>;
+export type MatterAuditList = z.infer<typeof matterAuditList>;
+export type MatterStrategyEntry = z.infer<typeof matterStrategyEntry>;
+export type MatterStrategyEntryList = z.infer<typeof matterStrategyEntryList>;
+export type MatterStrategyEntryType = z.infer<typeof matterStrategyEntryType>;
+export type MatterStrategyEntryStatus = z.infer<typeof matterStrategyEntryStatus>;
 
 // MOD-LSE-1 (2026-05-03) — strategy planner type exports.
 export type LitigationStrategyPayload = z.infer<typeof litigationStrategyPayload>;
@@ -257,11 +419,11 @@ export type NextBestAction = z.infer<typeof nextBestAction>;
 
 export const contractStatus = z.enum([
   "draft",
-  "in_review",
+  "under_review",
+  "negotiation",
   "executed",
   "expired",
   "terminated",
-  "archived",
 ]);
 
 export const contract = z.object({
@@ -273,6 +435,8 @@ export const contract = z.object({
   contract_code: z.string(),
   counterparty_name: z.string().nullable(),
   contract_type: z.string(),
+  contract_type_key: z.string().nullable().optional(),
+  contract_type_notes: z.string().nullable().optional(),
   status: contractStatus,
   jurisdiction: z.string().nullable(),
   effective_on: z.string().nullable(),
@@ -538,9 +702,96 @@ export const calendarEventListResponse = z.object({
   events: z.array(calendarEventRecord),
 });
 
+export const calendarConnectionRecord = z.object({
+  id: z.string(),
+  company_id: z.string(),
+  membership_id: z.string(),
+  provider: z.literal("outlook"),
+  provider_account_id: z.string().nullable(),
+  display_email: z.string().nullable(),
+  status: z.enum(["connected", "revoked", "error"]),
+  scopes: z.array(z.string()).default([]),
+  connected_at: z.string().nullable(),
+  last_sync_at: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const calendarConnectionListResponse = z.object({
+  provider: z.literal("outlook").default("outlook"),
+  provider_available: z.boolean(),
+  unavailable_reason: z.string().nullable().optional(),
+  durable_automation: z.literal("blocked_pending_temporal"),
+  connections: z.array(calendarConnectionRecord),
+});
+
+export const calendarConnectionStartResponse = z.object({
+  provider: z.literal("outlook").default("outlook"),
+  provider_available: z.boolean(),
+  auth_url: z.string().nullable().optional(),
+  unavailable_reason: z.string().nullable().optional(),
+});
+
+export const calendarEventSyncRecord = z.object({
+  id: z.string(),
+  company_id: z.string(),
+  calendar_connection_id: z.string(),
+  source_type: z.enum(["matter_hearing", "matter_deadline", "matter_task"]),
+  source_id: z.string(),
+  provider_event_id: z.string().nullable(),
+  sync_status: z.enum(["pending", "synced", "failed", "deleted"]),
+  last_error: z.string().nullable(),
+  last_synced_at: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const calendarEventSyncResponse = z.object({
+  sync: calendarEventSyncRecord,
+});
+
+export const calendarSyncStatusResponse = z.object({
+  provider_available: z.boolean(),
+  durable_automation: z.literal("blocked_pending_temporal"),
+  connections: z.array(calendarConnectionRecord),
+  syncs: z.array(calendarEventSyncRecord),
+});
+
+export const notificationRuleRecord = z.object({
+  id: z.string(),
+  company_id: z.string(),
+  scope_type: z.enum(["matter", "company", "user"]),
+  scope_id: z.string().nullable(),
+  event_type: z.enum([
+    "hearing_upcoming",
+    "new_order_uploaded",
+    "stay_status_changed",
+  ]),
+  channels: z.array(z.enum(["in_app", "email", "sms", "whatsapp"])),
+  offset_minutes: z.number().int().nullable(),
+  enabled: z.boolean(),
+  created_by_membership_id: z.string().nullable(),
+  durable_delivery: z.literal("blocked_pending_temporal"),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const notificationRuleListResponse = z.object({
+  durable_delivery: z.literal("blocked_pending_temporal"),
+  rules: z.array(notificationRuleRecord),
+});
+
 export type CalendarEventKind = z.infer<typeof calendarEventKind>;
 export type CalendarEventRecord = z.infer<typeof calendarEventRecord>;
 export type CalendarEventListResponse = z.infer<typeof calendarEventListResponse>;
+export type CalendarConnectionRecord = z.infer<typeof calendarConnectionRecord>;
+export type CalendarConnectionListResponse = z.infer<typeof calendarConnectionListResponse>;
+export type CalendarConnectionStartResponse = z.infer<typeof calendarConnectionStartResponse>;
+export type CalendarEventSyncRecord = z.infer<typeof calendarEventSyncRecord>;
+export type CalendarEventSyncResponse = z.infer<typeof calendarEventSyncResponse>;
+export type CalendarSyncStatusResponse = z.infer<typeof calendarSyncStatusResponse>;
+export type NotificationRuleRecord = z.infer<typeof notificationRuleRecord>;
+export type NotificationRuleListResponse = z.infer<typeof notificationRuleListResponse>;
 
 // Phase B / J12 / M11 — communications log.
 export const communicationDirection = z.enum(["outbound", "inbound"]);

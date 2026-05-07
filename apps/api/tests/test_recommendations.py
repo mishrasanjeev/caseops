@@ -6,9 +6,12 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from caseops_api.db.models import (
+    AuditEvent,
     AuthorityDocument,
     AuthorityDocumentChunk,
     AuthorityDocumentType,
+    Matter,
+    MatterStrategyEntry,
     ModelRun,
     Recommendation,
 )
@@ -78,6 +81,86 @@ def _setup_matter(client: TestClient) -> tuple[str, str, str]:
     )
     assert matter.status_code == 200, matter.text
     return token, company_slug, str(matter.json()["id"])
+
+
+def _create_matter(client: TestClient, token: str, *, code: str) -> str:
+    response = client.post(
+        "/api/matters/",
+        headers=auth_headers(token),
+        json={
+            "title": f"Matter {code}",
+            "matter_code": code,
+            "practice_area": "Arbitration",
+            "forum_level": "high_court",
+            "court_name": "Delhi High Court",
+            "client_name": "Aster Legal",
+            "opposing_party": "NHAI",
+            "description": "Access control regression matter.",
+            "status": "active",
+        },
+    )
+    assert response.status_code == 200, response.text
+    return str(response.json()["id"])
+
+
+def _create_company_user(
+    client: TestClient,
+    owner_token: str,
+    *,
+    company_slug: str,
+    email: str,
+    role: str = "partner",
+) -> tuple[str, str]:
+    create = client.post(
+        "/api/companies/current/users",
+        headers=auth_headers(owner_token),
+        json={
+            "full_name": email.split("@")[0].replace("-", " ").title(),
+            "email": email,
+            "password": "MemberPass123!",
+            "role": role,
+        },
+    )
+    assert create.status_code == 200, create.text
+    login = client.post(
+        "/api/auth/login",
+        json={
+            "email": email,
+            "password": "MemberPass123!",
+            "company_slug": company_slug,
+        },
+    )
+    assert login.status_code == 200, login.text
+    return str(create.json()["membership_id"]), str(login.json()["access_token"])
+
+
+def _seed_recommendation_for_matter(
+    matter_id: str,
+    *,
+    rec_type: str = "authority",
+) -> str:
+    factory = get_session_factory()
+    with factory() as session:
+        company_id = session.scalar(
+            select(Matter.company_id).where(Matter.id == matter_id)
+        )
+        assert company_id is not None
+        recommendation = Recommendation(
+            company_id=company_id,
+            matter_id=matter_id,
+            type=rec_type,
+            title="Seeded recommendation",
+            rationale="Seeded for access-control regression.",
+            primary_option_index=0,
+            assumptions_json="[]",
+            missing_facts_json="[]",
+            confidence="low",
+            review_required=True,
+            status="proposed",
+        )
+        session.add(recommendation)
+        session.commit()
+        return recommendation.id
 
 
 def _seed_relevant_authority() -> None:
@@ -794,3 +877,301 @@ def test_unsupported_type_is_rejected(client: TestClient) -> None:
     )
     # Pydantic literal validation rejects on schema
     assert response.status_code == 422
+
+
+def test_strategy_entry_crud_is_access_gated_and_audited(
+    client: TestClient,
+) -> None:
+    token, slug, matter_id = _setup_matter(client)
+    member_resp = client.post(
+        "/api/companies/current/users",
+        headers=auth_headers(token),
+        json={
+            "full_name": "Strategy Member",
+            "email": "strategy-member@example.com",
+            "password": "MemberPass123!",
+            "role": "member",
+        },
+    )
+    assert member_resp.status_code == 200, member_resp.text
+    member_login = client.post(
+        "/api/auth/login",
+        json={
+            "email": "strategy-member@example.com",
+            "password": "MemberPass123!",
+            "company_slug": slug,
+        },
+    )
+    assert member_login.status_code == 200, member_login.text
+    member_token = str(member_login.json()["access_token"])
+
+    denied = client.post(
+        f"/api/matters/{matter_id}/strategy-entries",
+        headers=auth_headers(member_token),
+        json={
+            "title": "Member-owned plan",
+            "body": "This should be blocked for v1 strategy writes.",
+        },
+    )
+    assert denied.status_code == 403
+
+    created = client.post(
+        f"/api/matters/{matter_id}/strategy-entries",
+        headers=auth_headers(token),
+        json={
+            "title": "Settlement posture",
+            "body": "Counsel-owned work product, not an AI recommendation.",
+            "entry_type": "plan",
+        },
+    )
+    assert created.status_code == 200, created.text
+    entry = created.json()
+    assert entry["entry_type"] == "plan"
+    assert entry["owner_membership_id"] is not None
+
+    listed = client.get(
+        f"/api/matters/{matter_id}/strategy-entries",
+        headers=auth_headers(token),
+    )
+    assert listed.status_code == 200, listed.text
+    assert [item["id"] for item in listed.json()["entries"]] == [entry["id"]]
+
+    updated = client.patch(
+        f"/api/matters/{matter_id}/strategy-entries/{entry['id']}",
+        headers=auth_headers(token),
+        json={"status": "active", "entry_type": "decision", "title": "Decision log"},
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["entry_type"] == "decision"
+    assert updated.json()["title"] == "Decision log"
+
+    deleted = client.delete(
+        f"/api/matters/{matter_id}/strategy-entries/{entry['id']}",
+        headers=auth_headers(token),
+    )
+    assert deleted.status_code == 204
+
+    factory = get_session_factory()
+    with factory() as session:
+        actions = [
+            row.action
+            for row in session.scalars(
+                select(AuditEvent)
+                .where(AuditEvent.matter_id == matter_id)
+                .order_by(AuditEvent.created_at.asc())
+            )
+        ]
+    assert "matter_strategy.created" in actions
+    assert "matter_strategy.updated" in actions
+    assert "matter_strategy.deleted" in actions
+
+
+def test_recommendation_decision_does_not_create_lawyer_strategy_entry(
+    client: TestClient,
+) -> None:
+    token, _, matter_id = _setup_matter(client)
+    factory = get_session_factory()
+    with factory() as session:
+        company_id = session.scalar(
+            select(Recommendation.company_id).where(Recommendation.matter_id == matter_id)
+        )
+        if company_id is None:
+            from caseops_api.db.models import Matter
+
+            company_id = session.scalar(
+                select(Matter.company_id).where(Matter.id == matter_id)
+            )
+        assert company_id is not None
+        recommendation = Recommendation(
+            company_id=company_id,
+            matter_id=matter_id,
+            type="litigation_strategy",
+            title="AI escalation plan",
+            rationale="Generated support only.",
+            primary_option_index=0,
+            assumptions_json="[]",
+            missing_facts_json="[]",
+            confidence="low",
+            review_required=True,
+            status="proposed",
+        )
+        session.add(recommendation)
+        session.commit()
+        rec_id = recommendation.id
+
+    decision = client.post(
+        f"/api/recommendations/{rec_id}/decisions",
+        headers=auth_headers(token),
+        json={"decision": "accepted", "notes": "Accept AI recommendation only."},
+    )
+    assert decision.status_code == 200, decision.text
+    assert decision.json()["status"] == "accepted"
+
+    entries = client.get(
+        f"/api/matters/{matter_id}/strategy-entries",
+        headers=auth_headers(token),
+    )
+    assert entries.status_code == 200, entries.text
+    assert entries.json()["entries"] == []
+    with factory() as session:
+        assert session.scalar(select(MatterStrategyEntry.id)) is None
+
+
+def test_recommendation_decision_requires_visible_matter_for_restricted_and_walled(
+    client: TestClient,
+) -> None:
+    owner_token, company_slug, visible_matter_id = _setup_matter(client)
+    decider_mid, decider_token = _create_company_user(
+        client,
+        owner_token,
+        company_slug=company_slug,
+        email="recommendation-decider@example.com",
+        role="partner",
+    )
+    restricted_matter_id = _create_matter(
+        client, owner_token, code="REC-DEC-RESTRICTED"
+    )
+    walled_matter_id = _create_matter(client, owner_token, code="REC-DEC-WALLED")
+    visible_rec_id = _seed_recommendation_for_matter(visible_matter_id)
+    restricted_rec_id = _seed_recommendation_for_matter(restricted_matter_id)
+    walled_rec_id = _seed_recommendation_for_matter(walled_matter_id)
+
+    restricted = client.post(
+        f"/api/matters/{restricted_matter_id}/access/restricted",
+        headers=auth_headers(owner_token),
+        json={"restricted": True},
+    )
+    assert restricted.status_code == 200, restricted.text
+    wall = client.post(
+        f"/api/matters/{walled_matter_id}/access/walls",
+        headers=auth_headers(owner_token),
+        json={"excluded_membership_id": decider_mid, "reason": "Conflict."},
+    )
+    assert wall.status_code == 200, wall.text
+
+    allowed = client.post(
+        f"/api/recommendations/{visible_rec_id}/decisions",
+        headers=auth_headers(decider_token),
+        json={"decision": "accepted", "notes": "Visible matter decision."},
+    )
+    assert allowed.status_code == 200, allowed.text
+    assert allowed.json()["status"] == "accepted"
+
+    restricted_denied = client.post(
+        f"/api/recommendations/{restricted_rec_id}/decisions",
+        headers=auth_headers(decider_token),
+        json={"decision": "accepted", "notes": "Should not mutate."},
+    )
+    assert restricted_denied.status_code == 404
+    walled_denied = client.post(
+        f"/api/recommendations/{walled_rec_id}/decisions",
+        headers=auth_headers(decider_token),
+        json={"decision": "rejected", "notes": "Should not mutate."},
+    )
+    assert walled_denied.status_code == 404
+
+    factory = get_session_factory()
+    with factory() as session:
+        restricted_rec = session.get(Recommendation, restricted_rec_id)
+        walled_rec = session.get(Recommendation, walled_rec_id)
+        assert restricted_rec is not None
+        assert walled_rec is not None
+        assert restricted_rec.status == "proposed"
+        assert restricted_rec.review_required is True
+        assert walled_rec.status == "proposed"
+        assert walled_rec.review_required is True
+
+
+def test_recommendation_decision_requires_visible_matter_for_team_scoping(
+    client: TestClient,
+) -> None:
+    owner_token, company_slug, _ = _setup_matter(client)
+    decider_mid, decider_token = _create_company_user(
+        client,
+        owner_token,
+        company_slug=company_slug,
+        email="team-hidden-recommendation-decider@example.com",
+        role="partner",
+    )
+    owner_headers = auth_headers(owner_token)
+    litigation_team = client.post(
+        "/api/teams/",
+        headers=owner_headers,
+        json={"name": "Litigation", "slug": "litigation"},
+    )
+    assert litigation_team.status_code == 201, litigation_team.text
+    team_id = litigation_team.json()["id"]
+    matter_id = _create_matter(client, owner_token, code="REC-DEC-TEAM")
+    assign_team = client.patch(
+        f"/api/matters/{matter_id}",
+        headers=owner_headers,
+        json={"team_id": team_id},
+    )
+    assert assign_team.status_code == 200, assign_team.text
+    recommendation_id = _seed_recommendation_for_matter(matter_id)
+    scoping = client.put(
+        "/api/teams/scoping",
+        headers=owner_headers,
+        json={"enabled": True},
+    )
+    assert scoping.status_code == 200, scoping.text
+
+    hidden = client.post(
+        f"/api/recommendations/{recommendation_id}/decisions",
+        headers=auth_headers(decider_token),
+        json={"decision": "accepted", "notes": "Should be team-hidden."},
+    )
+    assert hidden.status_code == 404
+
+    add_to_team = client.post(
+        f"/api/teams/{team_id}/members",
+        headers=owner_headers,
+        json={"membership_id": decider_mid},
+    )
+    assert add_to_team.status_code == 200, add_to_team.text
+    visible = client.post(
+        f"/api/recommendations/{recommendation_id}/decisions",
+        headers=auth_headers(decider_token),
+        json={"decision": "accepted", "notes": "Now visible."},
+    )
+    assert visible.status_code == 200, visible.text
+    assert visible.json()["status"] == "accepted"
+
+
+def test_strategy_entries_are_tenant_scoped(client: TestClient) -> None:
+    token_a, _, matter_id_a = _setup_matter(client)
+    created = client.post(
+        f"/api/matters/{matter_id_a}/strategy-entries",
+        headers=auth_headers(token_a),
+        json={
+            "title": "Tenant A plan",
+            "body": "Must remain scoped to tenant A.",
+        },
+    )
+    assert created.status_code == 200, created.text
+
+    tenant_b = client.post(
+        "/api/bootstrap/company",
+        json={
+            "company_name": "Strategy Tenant B",
+            "company_slug": "strategy-tenant-b",
+            "company_type": "law_firm",
+            "owner_full_name": "Tenant B Owner",
+            "owner_email": "owner@strategy-tenant-b.example",
+            "owner_password": "TenantBPass123!",
+        },
+    )
+    assert tenant_b.status_code == 200, tenant_b.text
+    token_b = str(tenant_b.json()["access_token"])
+
+    listing = client.get(
+        f"/api/matters/{matter_id_a}/strategy-entries",
+        headers=auth_headers(token_b),
+    )
+    assert listing.status_code == 404
+    cross_tenant_create = client.post(
+        f"/api/matters/{matter_id_a}/strategy-entries",
+        headers=auth_headers(token_b),
+        json={"title": "Leaked plan", "body": "Should not write."},
+    )
+    assert cross_tenant_create.status_code == 404

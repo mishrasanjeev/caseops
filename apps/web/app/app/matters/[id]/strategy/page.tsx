@@ -31,9 +31,12 @@ import {
   FileQuestion,
   FileText,
   Loader2,
+  Pencil,
+  Plus,
   ShieldCheck,
   Sparkles,
   ThumbsUp,
+  Trash2,
   Undo2,
   XCircle,
 } from "lucide-react";
@@ -51,18 +54,29 @@ import {
   CardTitle,
 } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { Textarea } from "@/components/ui/Textarea";
 import { apiErrorMessage, isApiErrorShape } from "@/lib/api/config";
 import {
+  createStrategyEntry,
+  deleteStrategyEntry,
   generateRecommendation,
+  listStrategyEntries,
   listRecommendations,
   recordRecommendationDecision,
+  updateStrategyEntry,
 } from "@/lib/api/endpoints";
 import type {
   ForumStep,
   LimitationFlag,
   LitigationStrategyPayload,
+  MatterStrategyEntry,
+  MatterStrategyEntryStatus,
+  MatterStrategyEntryType,
   Recommendation,
   RecommendedDraft,
   StrategyRisk,
@@ -125,10 +139,29 @@ export default function MatterStrategyPage() {
   // strategy:approve for the Approve / Request changes bar.
   const canGenerate = useCapability("strategy:generate");
   const canApprove = useCapability("strategy:approve");
+  const canManageStrategy = useCapability("strategy:approve");
+  const [entryForm, setEntryForm] = useState<{
+    title: string;
+    body: string;
+    entry_type: MatterStrategyEntryType;
+    status: MatterStrategyEntryStatus;
+  }>({
+    title: "",
+    body: "",
+    entry_type: "plan",
+    status: "active",
+  });
+  const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
 
   const query = useQuery({
     queryKey: ["matters", matterId, "recommendations"],
     queryFn: () => listRecommendations(matterId),
+    enabled: Boolean(matterId),
+  });
+
+  const strategyEntriesQuery = useQuery({
+    queryKey: ["matters", matterId, "strategy-entries"],
+    queryFn: () => listStrategyEntries(matterId),
     enabled: Boolean(matterId),
   });
 
@@ -187,6 +220,55 @@ export default function MatterStrategyPage() {
     },
     onError: (err) =>
       toast.error(apiErrorMessage(err, "Could not record the decision.")),
+  });
+
+  const resetEntryForm = () => {
+    setEntryForm({
+      title: "",
+      body: "",
+      entry_type: "plan",
+      status: "active",
+    });
+    setEditingEntryId(null);
+  };
+
+  const saveEntryMutation = useMutation({
+    mutationFn: () => {
+      const payload = {
+        title: entryForm.title,
+        body: entryForm.body,
+        entry_type: entryForm.entry_type,
+        status: entryForm.status,
+      };
+      return editingEntryId
+        ? updateStrategyEntry({
+            matterId,
+            entryId: editingEntryId,
+            entry: payload,
+          })
+        : createStrategyEntry({ matterId, entry: payload });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["matters", matterId, "strategy-entries"],
+      });
+      resetEntryForm();
+      toast.success(editingEntryId ? "Strategy entry updated" : "Strategy entry added");
+    },
+    onError: (err) =>
+      toast.error(apiErrorMessage(err, "Could not save strategy entry.")),
+  });
+
+  const deleteEntryMutation = useMutation({
+    mutationFn: (entryId: string) => deleteStrategyEntry({ matterId, entryId }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["matters", matterId, "strategy-entries"],
+      });
+      toast.success("Strategy entry deleted");
+    },
+    onError: (err) =>
+      toast.error(apiErrorMessage(err, "Could not delete strategy entry.")),
   });
 
   if (query.isPending) {
@@ -251,12 +333,170 @@ export default function MatterStrategyPage() {
       <Card>
         <CardHeader className="flex-row items-start justify-between gap-4">
           <div>
-            <CardTitle>Litigation strategy</CardTitle>
+            <CardTitle>Strategy Plan</CardTitle>
             <CardDescription>
-              Citation-grounded strategy and escalation plan up to Supreme
-              Court level where legally available. Every strategy carries
-              <em className="ml-1">review_required</em> until a partner
-              signs off.
+              Lawyer-owned work product for this matter. Entries are human-authored,
+              auditable, and separate from AI recommendations.
+            </CardDescription>
+          </div>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          {canManageStrategy ? (
+            <div
+              className="grid gap-3 rounded-md border border-[var(--color-line)] bg-[var(--color-bg)] p-3 md:grid-cols-[minmax(0,1fr)_9rem_9rem_auto]"
+              data-testid="strategy-entry-form"
+            >
+              <div className="space-y-1.5">
+                <Label htmlFor="strategy-entry-title">Title</Label>
+                <Input
+                  id="strategy-entry-title"
+                  value={entryForm.title}
+                  onChange={(event) =>
+                    setEntryForm((current) => ({
+                      ...current,
+                      title: event.target.value,
+                    }))
+                  }
+                  placeholder="Decision, plan, or note title"
+                  data-testid="strategy-entry-title"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="strategy-entry-type">Type</Label>
+                <select
+                  id="strategy-entry-type"
+                  className="h-10 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
+                  value={entryForm.entry_type}
+                  onChange={(event) =>
+                    setEntryForm((current) => ({
+                      ...current,
+                      entry_type: event.target.value as MatterStrategyEntryType,
+                    }))
+                  }
+                  data-testid="strategy-entry-type"
+                >
+                  <option value="plan">Plan</option>
+                  <option value="decision">Decision</option>
+                  <option value="note">Note</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="strategy-entry-status">Status</Label>
+                <select
+                  id="strategy-entry-status"
+                  className="h-10 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
+                  value={entryForm.status}
+                  onChange={(event) =>
+                    setEntryForm((current) => ({
+                      ...current,
+                      status: event.target.value as MatterStrategyEntryStatus,
+                    }))
+                  }
+                  data-testid="strategy-entry-status"
+                >
+                  <option value="draft">Draft</option>
+                  <option value="active">Active</option>
+                  <option value="archived">Archived</option>
+                </select>
+              </div>
+              <div className="flex items-end gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => saveEntryMutation.mutate()}
+                  disabled={
+                    saveEntryMutation.isPending ||
+                    entryForm.title.trim().length === 0 ||
+                    entryForm.body.trim().length === 0
+                  }
+                  data-testid="strategy-entry-save"
+                >
+                  {saveEntryMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                  ) : editingEntryId ? (
+                    <Pencil className="h-4 w-4" aria-hidden />
+                  ) : (
+                    <Plus className="h-4 w-4" aria-hidden />
+                  )}
+                  {editingEntryId ? "Update" : "Add"}
+                </Button>
+                {editingEntryId ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={resetEntryForm}
+                    data-testid="strategy-entry-cancel"
+                  >
+                    Cancel
+                  </Button>
+                ) : null}
+              </div>
+              <div className="space-y-1.5 md:col-span-4">
+                <Label htmlFor="strategy-entry-body">Entry</Label>
+                <Textarea
+                  id="strategy-entry-body"
+                  value={entryForm.body}
+                  onChange={(event) =>
+                    setEntryForm((current) => ({
+                      ...current,
+                      body: event.target.value,
+                    }))
+                  }
+                  placeholder="Record counsel-owned strategy, assumptions, decisions, or next steps."
+                  data-testid="strategy-entry-body"
+                />
+              </div>
+            </div>
+          ) : null}
+
+          {strategyEntriesQuery.isPending ? (
+            <Skeleton className="h-28 w-full" data-testid="strategy-entries-loading" />
+          ) : strategyEntriesQuery.isError ? (
+            <QueryErrorState
+              title="Could not load strategy entries"
+              error={strategyEntriesQuery.error}
+              onRetry={() => strategyEntriesQuery.refetch()}
+            />
+          ) : strategyEntriesQuery.data.entries.length === 0 ? (
+            <EmptyState
+              icon={ClipboardCheck}
+              title="No strategy entries yet"
+              description="Counsel-authored plans, decisions, and notes will appear here."
+            />
+          ) : (
+            <div className="flex flex-col divide-y divide-[var(--color-line)]">
+              {strategyEntriesQuery.data.entries.map((entry) => (
+                <StrategyEntryRow
+                  key={entry.id}
+                  entry={entry}
+                  canManage={canManageStrategy}
+                  isDeleting={
+                    deleteEntryMutation.isPending &&
+                    deleteEntryMutation.variables === entry.id
+                  }
+                  onEdit={() => {
+                    setEditingEntryId(entry.id);
+                    setEntryForm({
+                      title: entry.title,
+                      body: entry.body,
+                      entry_type: entry.entry_type,
+                      status: entry.status,
+                    });
+                  }}
+                  onDelete={() => deleteEntryMutation.mutate(entry.id)}
+                />
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex-row items-start justify-between gap-4">
+          <div>
+            <CardTitle>AI strategy support</CardTitle>
+            <CardDescription>
+              System-generated litigation strategy support. It remains
+              review-required and does not become the lawyer-owned Strategy Plan.
             </CardDescription>
           </div>
           {canGenerate ? (
@@ -273,7 +513,7 @@ export default function MatterStrategyPage() {
               ) : (
                 <>
                   <Sparkles className="h-4 w-4" aria-hidden />
-                  {latest ? "Re-generate" : "Generate strategy"}
+                  {latest ? "Re-generate AI support" : "Generate AI support"}
                 </>
               )}
             </Button>
@@ -283,8 +523,8 @@ export default function MatterStrategyPage() {
           {!latest ? (
             <EmptyState
               icon={ClipboardCheck}
-              title="No strategy yet"
-              description="Generate a citation-grounded litigation strategy. CaseOps will surface the route plan, escalation ladder, and recommended drafts."
+              title="No AI strategy support yet"
+              description="Generate citation-grounded support for counsel review. Human strategy entries stay in the Strategy Plan above."
             />
           ) : (
             <div className="flex items-center gap-2 text-xs">
@@ -611,6 +851,76 @@ function StrategyCard({
         </p>
       </CardContent>
     </Card>
+  );
+}
+
+function StrategyEntryRow({
+  entry,
+  canManage,
+  isDeleting,
+  onEdit,
+  onDelete,
+}: {
+  entry: MatterStrategyEntry;
+  canManage: boolean;
+  isDeleting: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <article
+      className="grid gap-3 py-3 md:grid-cols-[minmax(0,1fr)_auto]"
+      data-testid="strategy-entry-row"
+    >
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge tone={entry.status === "active" ? "success" : "neutral"}>
+            {entry.entry_type}
+          </Badge>
+          <StatusBadge status={entry.status} />
+          <span className="text-xs text-[var(--color-mute-2)]">
+            Updated {formatDateTime(entry.updated_at)}
+          </span>
+        </div>
+        <h3 className="mt-2 text-sm font-semibold text-[var(--color-ink)]">
+          {entry.title}
+        </h3>
+        <p className="mt-1 whitespace-pre-line text-sm leading-relaxed text-[var(--color-ink-2)]">
+          {entry.body}
+        </p>
+        <p className="mt-2 text-xs text-[var(--color-mute-2)]">
+          Owner: {entry.owner_name ?? "Unassigned"} | Last updated by:{" "}
+          {entry.updated_by_name ?? entry.created_by_name ?? "Unknown"}
+        </p>
+      </div>
+      {canManage ? (
+        <div className="flex items-start gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onEdit}
+            data-testid="strategy-entry-edit"
+          >
+            <Pencil className="h-4 w-4" aria-hidden />
+            Edit
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onDelete}
+            disabled={isDeleting}
+            data-testid="strategy-entry-delete"
+          >
+            {isDeleting ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            ) : (
+              <Trash2 className="h-4 w-4" aria-hidden />
+            )}
+            Delete
+          </Button>
+        </div>
+      ) : null}
+    </article>
   );
 }
 

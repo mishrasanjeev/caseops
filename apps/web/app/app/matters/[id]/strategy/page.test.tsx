@@ -4,21 +4,33 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
+  createStrategyEntryMock,
+  deleteStrategyEntryMock,
+  listStrategyEntriesMock,
   listRecommendationsMock,
   generateRecommendationMock,
   recordDecisionMock,
+  updateStrategyEntryMock,
   useCapabilityMock,
 } = vi.hoisted(() => ({
+  createStrategyEntryMock: vi.fn(),
+  deleteStrategyEntryMock: vi.fn(),
+  listStrategyEntriesMock: vi.fn(),
   listRecommendationsMock: vi.fn(),
   generateRecommendationMock: vi.fn(),
   recordDecisionMock: vi.fn(),
+  updateStrategyEntryMock: vi.fn(),
   useCapabilityMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api/endpoints", () => ({
+  createStrategyEntry: createStrategyEntryMock,
+  deleteStrategyEntry: deleteStrategyEntryMock,
+  listStrategyEntries: listStrategyEntriesMock,
   listRecommendations: listRecommendationsMock,
   generateRecommendation: generateRecommendationMock,
   recordRecommendationDecision: recordDecisionMock,
+  updateStrategyEntry: updateStrategyEntryMock,
 }));
 
 vi.mock("@/lib/capabilities", () => ({
@@ -162,6 +174,25 @@ const SAMPLE_STRATEGY = {
   strategy_payload: SAMPLE_PAYLOAD,
 };
 
+const SAMPLE_ENTRY = {
+  id: "entry-1",
+  company_id: "c-1",
+  matter_id: "m-1",
+  title: "Human plan",
+  body: "Counsel-owned next steps.",
+  entry_type: "plan" as const,
+  status: "active" as const,
+  owner_membership_id: "mem-1",
+  owner_name: "Strategy Owner",
+  created_by_membership_id: "mem-1",
+  created_by_name: "Strategy Owner",
+  updated_by_membership_id: "mem-1",
+  updated_by_name: "Strategy Owner",
+  source_recommendation_id: null,
+  created_at: "2026-05-07T00:00:00Z",
+  updated_at: "2026-05-07T01:00:00Z",
+};
+
 const FORBIDDEN_PHRASES = [
   "perfect strategy",
   "guaranteed",
@@ -175,9 +206,17 @@ const FORBIDDEN_PHRASES = [
 
 describe("MatterStrategyPage", () => {
   beforeEach(() => {
+    createStrategyEntryMock.mockReset();
+    deleteStrategyEntryMock.mockReset();
+    listStrategyEntriesMock.mockReset();
     listRecommendationsMock.mockReset();
     generateRecommendationMock.mockReset();
     recordDecisionMock.mockReset();
+    updateStrategyEntryMock.mockReset();
+    listStrategyEntriesMock.mockResolvedValue({
+      matter_id: "m-1",
+      entries: [],
+    });
     // Default: assume the signed-in user has approval capability.
     // Specific tests override this for the no-cap case.
     useCapabilityMock.mockReset();
@@ -193,7 +232,85 @@ describe("MatterStrategyPage", () => {
     await waitFor(() =>
       expect(screen.getByTestId("strategy-generate")).toBeInTheDocument(),
     );
-    expect(screen.getByText(/No strategy yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/No AI strategy support yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/No strategy entries yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/Lawyer-owned work product/i)).toBeInTheDocument();
+  });
+
+  it("renders lawyer-owned strategy entries and supports create edit delete", async () => {
+    listRecommendationsMock.mockResolvedValue({
+      matter_id: "m-1",
+      recommendations: [],
+    });
+    listStrategyEntriesMock.mockResolvedValue({
+      matter_id: "m-1",
+      entries: [SAMPLE_ENTRY],
+    });
+    createStrategyEntryMock.mockResolvedValue({
+      ...SAMPLE_ENTRY,
+      id: "entry-2",
+      title: "New human plan",
+    });
+    updateStrategyEntryMock.mockResolvedValue({
+      ...SAMPLE_ENTRY,
+      title: "Edited plan",
+      entry_type: "decision",
+    });
+    deleteStrategyEntryMock.mockResolvedValue(undefined);
+
+    render(withClient(<StrategyPage />));
+
+    expect(await screen.findByText("Strategy Plan")).toBeInTheDocument();
+    expect(screen.getByText("Human plan")).toBeInTheDocument();
+    expect(screen.getByText(/Counsel-owned next steps/)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByTestId("strategy-entry-title"), {
+      target: { value: "New human plan" },
+    });
+    fireEvent.change(screen.getByTestId("strategy-entry-body"), {
+      target: { value: "Draft settlement lane." },
+    });
+    fireEvent.click(screen.getByTestId("strategy-entry-save"));
+    await waitFor(() =>
+      expect(createStrategyEntryMock).toHaveBeenCalledWith({
+        matterId: "m-1",
+        entry: {
+          title: "New human plan",
+          body: "Draft settlement lane.",
+          entry_type: "plan",
+          status: "active",
+        },
+      }),
+    );
+
+    fireEvent.click(screen.getByTestId("strategy-entry-edit"));
+    fireEvent.change(screen.getByTestId("strategy-entry-title"), {
+      target: { value: "Edited plan" },
+    });
+    fireEvent.change(screen.getByTestId("strategy-entry-type"), {
+      target: { value: "decision" },
+    });
+    fireEvent.click(screen.getByTestId("strategy-entry-save"));
+    await waitFor(() =>
+      expect(updateStrategyEntryMock).toHaveBeenCalledWith({
+        matterId: "m-1",
+        entryId: "entry-1",
+        entry: {
+          title: "Edited plan",
+          body: "Counsel-owned next steps.",
+          entry_type: "decision",
+          status: "active",
+        },
+      }),
+    );
+
+    fireEvent.click(screen.getByTestId("strategy-entry-delete"));
+    await waitFor(() =>
+      expect(deleteStrategyEntryMock).toHaveBeenCalledWith({
+        matterId: "m-1",
+        entryId: "entry-1",
+      }),
+    );
   });
 
   it("renders the strategy card with route timeline + recommended drafts", async () => {
@@ -387,7 +504,7 @@ describe("MatterStrategyPage", () => {
     });
     render(withClient(<StrategyPage />));
     await waitFor(() =>
-      expect(screen.getByText(/No strategy yet/i)).toBeInTheDocument(),
+      expect(screen.getByText(/No AI strategy support yet/i)).toBeInTheDocument(),
     );
     expect(screen.queryByTestId("strategy-generate")).not.toBeInTheDocument();
   });

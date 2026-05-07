@@ -20,6 +20,12 @@ It consolidates:
 - `C:\Users\mishr\Downloads\CaseOps - Law Firm Feedback Gap Analysis.md`
 - the live codebase in `apps/api` and `apps/web`
 
+Related execution addenda:
+
+- `docs/PRD_LEGALWORKSPACE_ENHANCEMENTS_2026-05-05.md` - maps the LegalWorkspace
+  functional-flow and employee/RBAC feedback documents to CaseOps development
+  slices, story IDs, test IDs, and current repo truth.
+
 No future feature work should treat any one of those inputs as sufficient on its
 own. This document is the merged source of truth for Claude Code execution.
 
