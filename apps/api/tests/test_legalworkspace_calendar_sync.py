@@ -469,7 +469,7 @@ def test_new_order_upload_creates_in_app_notification_when_rule_enabled(
 ) -> None:
     bootstrap = bootstrap_company(client)
     token = str(bootstrap["access_token"])
-    matter = _create_matter(client, token, "LW-S10-NOTIFY")
+    matter = _create_matter(client, token, "notify-matter")
     order_id = _seed_order(str(matter["id"]))
     rule = client.post(
         "/api/notification-rules",

@@ -351,7 +351,7 @@ def test_ungrounded_term_suggestion_cannot_be_canonicalized(
 ) -> None:
     bootstrap = bootstrap_company(client)
     token = str(bootstrap["access_token"])
-    contract = _create_contract(client, token, "CTR-LW9-UNGROUNDED")
+    contract = _create_contract(client, token, "ungrounded-contract")
 
     suggestion_response = client.post(
         f"/api/contracts/{contract['id']}/term-suggestions",
