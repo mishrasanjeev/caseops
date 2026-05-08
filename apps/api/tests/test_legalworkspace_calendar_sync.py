@@ -262,6 +262,10 @@ def test_manual_hearing_sync_is_idempotent_and_audited(client: TestClient) -> No
         assert second.json()["sync"]["provider_event_id"] == "remote-event-1"
         assert provider.calls[1]["existing"] == "remote-event-1"
 
+        status = client.get("/api/calendar/sync-status", headers=_auth(token))
+        assert status.status_code == 200, status.text
+        assert status.json()["syncs"][0]["source_id"] == hearing["id"]
+
         factory = get_session_factory()
         with factory() as session:
             rows = list(session.scalars(select(CalendarEventSync)))

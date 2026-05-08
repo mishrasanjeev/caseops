@@ -348,7 +348,13 @@ def test_employee_update_reset_and_password_reset_start_are_secure(
         full_name="Reset User",
     )
     membership_id = created["employee"]["membership_id"]
-    setup_token = created["setup"]["debug_token"]
+    resend = client.post(
+        f"/api/companies/current/employees/{membership_id}/resend-setup",
+        headers=auth_headers(owner_token),
+    )
+    assert resend.status_code == 200, resend.text
+    setup_token = resend.json()["debug_token"]
+    assert setup_token
     assert client.post(
         "/api/auth/account-setup/complete",
         json={"token": setup_token, "password": "Original123!"},

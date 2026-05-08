@@ -108,6 +108,15 @@ def test_custom_role_assignment_changes_server_resolved_capabilities_and_route_g
 ) -> None:
     boot = _bootstrap(client)
     owner_token = str(boot["access_token"])
+    catalog = client.get(
+        "/api/companies/current/capabilities",
+        headers=auth_headers(owner_token),
+    )
+    assert catalog.status_code == 200, catalog.text
+    assert any(
+        row["capability"] == "matters:create"
+        for row in catalog.json()["capabilities"]
+    )
     viewer = _create_user(
         client,
         owner_token,
