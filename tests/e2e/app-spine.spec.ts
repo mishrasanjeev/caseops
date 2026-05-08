@@ -140,17 +140,17 @@ test.describe("App spine", () => {
 
     const cockpitTabs = page.getByRole("navigation", { name: /Matter cockpit tabs/i });
     await cockpitTabs
-      .getByRole("link", { name: "Recommendations", exact: true })
+      .getByRole("link", { name: "AI Recommendations", exact: true })
       .click();
     await page.waitForURL(/\/matters\/[0-9a-f-]+\/recommendations$/);
     await expect(
-      page.getByRole("heading", { name: "Recommendations", exact: true }),
+      page.getByRole("heading", { name: "AI Recommendations", exact: true }),
     ).toBeVisible();
-    await expect(page.getByText(/No recommendations yet/i)).toBeVisible();
+    await expect(page.getByText(/No AI recommendations yet/i)).toBeVisible();
 
-    await cockpitTabs.getByRole("link", { name: "Audit", exact: true }).click();
+    await cockpitTabs.getByRole("link", { name: "Matter Audit", exact: true }).click();
     await page.waitForURL(/\/audit$/);
-    await expect(page.getByRole("heading", { name: "Audit trail" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Matter audit" })).toBeVisible();
 
     await page.getByRole("link", { name: "Overview", exact: true }).click();
     await page.waitForURL(/\/matters\/[0-9a-f-]+$/);
