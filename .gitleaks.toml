@@ -20,11 +20,15 @@
 useDefault = true
 
 [allowlist]
-description = "Skip eval-suite scenario keys that look like API keys"
+description = "Skip known non-secret test identifiers that look like API keys"
 paths = [
     '''apps/api/src/caseops_api/scripts/eval_citations\.py''',
     '''apps/api/src/caseops_api/scripts/eval_drafting\.py''',
     '''apps/api/src/caseops_api/scripts/eval_recommendations\.py''',
     '''apps/api/src/caseops_api/scripts/eval_hearing_packs\.py''',
     '''apps/api/tests/fixtures/.*''',
+]
+regexes = [
+    '''LW-S10-NOTIFY''',
+    '''CTR-LW9-UNGROUNDED''',
 ]
