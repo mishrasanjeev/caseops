@@ -12,6 +12,11 @@ const { createMock, toastSuccess, toastError, routerPush } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/api/endpoints", () => ({
+  CONTRACT_TYPE_OPTIONS: [
+    { value: "agreement", label: "Agreement" },
+    { value: "master_services_agreement", label: "Master services agreement" },
+    { value: "other", label: "Other" },
+  ],
   createContract: createMock,
 }));
 
@@ -60,6 +65,7 @@ describe("NewContractDialog", { timeout: 15_000 }, () => {
     const call = createMock.mock.calls[0][0];
     expect(call.contractCode).toBe("C-ACME-001");
     expect(call.title).toBe("MSA with Acme India");
+    expect(call.contractTypeKey).toBe("master_services_agreement");
     expect(call.counterpartyName).toBe("Acme India Pvt Ltd");
     await waitFor(() => expect(routerPush).toHaveBeenCalledWith("/app/contracts/c-123"));
   });

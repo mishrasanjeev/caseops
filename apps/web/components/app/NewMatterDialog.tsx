@@ -1,9 +1,9 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus } from "lucide-react";
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -28,8 +28,15 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
+import {
+  EMPTY_FORUM_SELECTION,
+  ForumSelector,
+  forumSelectionFromEntry,
+  isLegacyForumSelection,
+  type ForumSelection,
+} from "@/components/matters/ForumSelector";
 import { apiErrorMessage } from "@/lib/api/config";
-import { createMatter } from "@/lib/api/endpoints";
+import { createMatter, fetchForumCatalog } from "@/lib/api/endpoints";
 
 const schema = z.object({
   title: z.string().min(3, "At least 3 characters."),
@@ -40,19 +47,12 @@ const schema = z.object({
   practice_area: z.string().min(2, "Practice area helps classify the work."),
   client_name: z.string().optional(),
   opposing_party: z.string().optional(),
-  forum_level: z.enum(["lower_court", "high_court", "supreme_court", "tribunal"]),
   status: z.enum(["intake", "active", "on_hold", "closed"]),
   description: z.string().max(2000).optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
 
-const FORUMS: { value: FormValues["forum_level"]; label: string }[] = [
-  { value: "lower_court", label: "Lower court" },
-  { value: "high_court", label: "High Court" },
-  { value: "supreme_court", label: "Supreme Court" },
-  { value: "tribunal", label: "Tribunal" },
-];
 const STATUSES: { value: FormValues["status"]; label: string }[] = [
   { value: "intake", label: "Intake" },
   { value: "active", label: "Active" },
@@ -62,7 +62,14 @@ const STATUSES: { value: FormValues["status"]; label: string }[] = [
 
 export function NewMatterDialog() {
   const [open, setOpen] = useState(false);
+  const [forumSelection, setForumSelection] =
+    useState<ForumSelection>(EMPTY_FORUM_SELECTION);
   const queryClient = useQueryClient();
+  const forumCatalogQuery = useQuery({
+    queryKey: ["courts", "forum-catalog"],
+    queryFn: fetchForumCatalog,
+    enabled: open,
+  });
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -71,11 +78,46 @@ export function NewMatterDialog() {
       client_name: "",
       opposing_party: "",
       practice_area: "",
-      forum_level: "high_court",
       status: "active",
       description: "",
     },
   });
+  const forumCatalogEntries = forumCatalogQuery.data?.entries ?? [];
+  const forumCatalogEmpty =
+    forumCatalogQuery.isSuccess && forumCatalogEntries.length === 0;
+  const forumCatalogFailed = forumCatalogQuery.isError;
+  const forumCatalogUnavailable = forumCatalogFailed || forumCatalogEmpty;
+  const legacyFallbackSelected = isLegacyForumSelection(forumSelection);
+  const legacyFallbackIncomplete =
+    forumCatalogUnavailable &&
+    legacyFallbackSelected &&
+    !forumSelection.court_name?.trim();
+  const forumSubmissionBlocked =
+    forumCatalogQuery.isPending ||
+    (forumCatalogUnavailable && !legacyFallbackSelected) ||
+    legacyFallbackIncomplete;
+  const forumCatalogStatusMessage = forumCatalogQuery.isPending
+    ? "Loading forum catalog before matter creation."
+    : forumCatalogFailed
+      ? "Forum catalog could not be loaded. Select Other / uncatalogued and enter a court or forum name to use the legacy fallback."
+      : forumCatalogEmpty
+        ? "Forum catalog is empty. Select Other / uncatalogued and enter a court or forum name to use the legacy fallback."
+        : null;
+  const forumCatalogStatusTone = forumCatalogFailed
+    ? "error"
+    : forumCatalogEmpty
+      ? "warning"
+      : "info";
+
+  useEffect(() => {
+    if (!open || forumSelection.forum_catalog_entry_id) return;
+    const entries = forumCatalogQuery.data?.entries ?? [];
+    const defaultEntry =
+      entries.find((entry) => entry.id === "hc:delhi") ??
+      entries.find((entry) => entry.forum_type === "high_court") ??
+      entries[0];
+    if (defaultEntry) setForumSelection(forumSelectionFromEntry(defaultEntry));
+  }, [forumCatalogQuery.data?.entries, forumSelection.forum_catalog_entry_id, open]);
 
   const mutation = useMutation({
     mutationFn: (values: FormValues) =>
@@ -86,13 +128,21 @@ export function NewMatterDialog() {
         opposing_party: values.opposing_party?.trim() || undefined,
         practice_area: values.practice_area?.trim() || undefined,
         description: values.description?.trim() || undefined,
-        forum_level: values.forum_level,
+        forum_level: forumSelection.forum_level,
+        court_id: forumSelection.court_id,
+        court_name: forumSelection.court_name || undefined,
+        forum_catalog_entry_id: forumSelection.forum_catalog_entry_id,
+        forum_state: forumSelection.forum_state,
+        forum_district: forumSelection.forum_district,
+        forum_city: forumSelection.forum_city,
+        forum_consumer_level: forumSelection.forum_consumer_level,
         status: values.status,
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["matters"] });
       toast.success("Matter created");
       form.reset();
+      setForumSelection(EMPTY_FORUM_SELECTION);
       setOpen(false);
     },
     onError: (err) => {
@@ -177,25 +227,17 @@ export function NewMatterDialog() {
               />
             )}
           </Field>
-          <Field label="Forum">
-            {({ fieldId }) => (
-              <Select
-                value={form.watch("forum_level")}
-                onValueChange={(v) => form.setValue("forum_level", v as FormValues["forum_level"])}
-              >
-                <SelectTrigger id={fieldId}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {FORUMS.map((f) => (
-                    <SelectItem key={f.value} value={f.value}>
-                      {f.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          </Field>
+          <div className="md:col-span-2">
+            <ForumSelector
+              entries={forumCatalogEntries}
+              value={forumSelection}
+              onChange={setForumSelection}
+              disabled={forumCatalogQuery.isPending}
+              idPrefix="new-matter-forum"
+              statusMessage={forumCatalogStatusMessage}
+              statusTone={forumCatalogStatusTone}
+            />
+          </div>
           <Field label="Status">
             {({ fieldId }) => (
               <Select
@@ -242,7 +284,7 @@ export function NewMatterDialog() {
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={mutation.isPending}>
+            <Button type="submit" disabled={mutation.isPending || forumSubmissionBlocked}>
               {mutation.isPending ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" /> Creating…

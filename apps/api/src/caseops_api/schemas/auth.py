@@ -43,12 +43,14 @@ class AuthSessionResponse(BaseModel):
     company: CompanySummary
     user: UserSummary
     membership: MembershipSummary
+    capabilities: list[str]
 
 
 class AuthContextResponse(BaseModel):
     company: CompanySummary
     user: UserSummary
     membership: MembershipSummary
+    capabilities: list[str]
 
 
 class LoginRequest(BaseModel):

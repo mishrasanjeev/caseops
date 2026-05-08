@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Calendar,
+  CalendarCheck,
   Gavel,
   Loader2,
   RefreshCw,
@@ -14,6 +15,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { HearingPackDialog } from "@/components/app/HearingPackDialog";
+import { OrderBadges } from "@/components/matters/OrderBadges";
 import { ScheduleHearingDialog } from "@/components/matters/ScheduleHearingDialog";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -21,11 +23,15 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { apiErrorMessage } from "@/lib/api/config";
 import {
+  fetchCalendarSyncStatus,
   listMatterReminders,
   type MatterCourtSyncJob,
   type MatterReminderRecord,
   pullMatterCourtSync,
+  syncHearingToOutlook,
 } from "@/lib/api/endpoints";
+import type { CalendarEventSyncRecord } from "@/lib/api/schemas";
+import type { WorkspaceCourtOrder, WorkspaceHearing } from "@/lib/api/workspace-types";
 import { useCapability } from "@/lib/capabilities";
 import { formatLegalDate } from "@/lib/dates";
 import { useMatterWorkspace } from "@/lib/use-matter-workspace";
@@ -41,12 +47,39 @@ function formatDateTime(value: string | null | undefined): string {
   });
 }
 
+function hearingTitle(hearing: WorkspaceHearing): string {
+  return hearing.purpose ?? hearing.hearing_type ?? "Hearing";
+}
+
+function hearingOutcome(hearing: WorkspaceHearing): string | null | undefined {
+  return hearing.outcome_note ?? hearing.outcome_notes;
+}
+
+function hearingDate(hearing: WorkspaceHearing): string | null | undefined {
+  return hearing.hearing_on ?? hearing.scheduled_for ?? hearing.listing_date;
+}
+
+function sortOrders(
+  orders: WorkspaceCourtOrder[],
+  orderSort: "latest" | "oldest",
+): WorkspaceCourtOrder[] {
+  return [...orders].sort((a, b) => {
+    const aDate = a.order_date ?? "";
+    const bDate = b.order_date ?? "";
+    return orderSort === "latest"
+      ? bDate.localeCompare(aDate)
+      : aDate.localeCompare(bDate);
+  });
+}
+
 export default function MatterHearingsPage() {
   const params = useParams<{ id: string }>();
   const matterId = params.id;
   const queryClient = useQueryClient();
   const canRunSync = useCapability("court_sync:run");
+  const canSyncOutlook = useCapability("calendar:sync");
   const [lastJob, setLastJob] = useState<MatterCourtSyncJob | null>(null);
+  const [orderSort, setOrderSort] = useState<"latest" | "oldest">("latest");
   const { data } = useMatterWorkspace(matterId);
   // Strict Ledger #5 (BUG-013 in-app visibility, 2026-04-22):
   // per-matter reminder rows. Re-fetched on a 30s polling cadence
@@ -58,6 +91,17 @@ export default function MatterHearingsPage() {
     refetchInterval: 30_000,
     enabled: Boolean(matterId),
   });
+  const outlookStatusQuery = useQuery({
+    queryKey: ["calendar", "sync-status"],
+    queryFn: fetchCalendarSyncStatus,
+    enabled: canSyncOutlook,
+  });
+  const outlookSyncsByHearing = new Map<string, CalendarEventSyncRecord>();
+  for (const sync of outlookStatusQuery.data?.syncs ?? []) {
+    if (sync.source_type === "matter_hearing") {
+      outlookSyncsByHearing.set(sync.source_id, sync);
+    }
+  }
   const remindersByHearing = new Map<string, MatterReminderRecord[]>();
   for (const r of remindersQuery.data?.reminders ?? []) {
     const list = remindersByHearing.get(r.hearing_id) ?? [];
@@ -82,8 +126,25 @@ export default function MatterHearingsPage() {
       toast.error(apiErrorMessage(err, "Could not run court sync."));
     },
   });
+  const outlookSyncMutation = useMutation({
+    mutationFn: syncHearingToOutlook,
+    onSuccess: async (result) => {
+      await queryClient.invalidateQueries({ queryKey: ["calendar", "sync-status"] });
+      if (result.sync.sync_status === "failed") {
+        toast.error(result.sync.last_error ?? "Outlook sync failed.");
+      } else {
+        toast.success("Hearing synced to Outlook.");
+      }
+    },
+    onError: (err) => {
+      toast.error(apiErrorMessage(err, "Could not sync hearing to Outlook."));
+    },
+  });
 
   if (!data) return null;
+  const completedHearings = data.hearings.filter((hearing) => hearing.status === "completed");
+  const upcomingHearings = data.hearings.filter((hearing) => hearing.status !== "completed");
+  const sortedOrders = sortOrders(data.court_orders, orderSort);
 
   // Courts with a live court-sync adapter wired on the backend. Must
   // stay in sync with `court_sync_sources._COURT_NAME_TO_SOURCE`.
@@ -190,7 +251,7 @@ export default function MatterHearingsPage() {
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
           <div>
-            <CardTitle>Scheduled hearings</CardTitle>
+            <CardTitle>Upcoming hearings</CardTitle>
             <CardDescription>
               All hearings tracked on this matter — imported from the
               court sync above, or added here manually.
@@ -199,7 +260,7 @@ export default function MatterHearingsPage() {
           <ScheduleHearingDialog matterId={matterId} />
         </CardHeader>
         <CardContent>
-          {data.hearings.length === 0 ? (
+          {upcomingHearings.length === 0 ? (
             <EmptyState
               icon={Gavel}
               title="No hearings yet"
@@ -207,31 +268,91 @@ export default function MatterHearingsPage() {
             />
           ) : (
             <ul className="flex flex-col gap-3">
-              {data.hearings.map((h) => (
+              {upcomingHearings.map((h) => (
                 <li
                   key={h.id}
                   className="flex items-start justify-between gap-3 rounded-xl border border-[var(--color-line)] bg-white p-4"
                 >
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-semibold text-[var(--color-ink)]">
-                      {h.hearing_type ?? "Hearing"}
+                      {hearingTitle(h)}
                     </div>
                     <div className="mt-1 text-xs text-[var(--color-mute)]">
-                      Scheduled: {formatDateTime(h.hearing_on ?? h.scheduled_for)}
+                      Scheduled: {formatDateTime(hearingDate(h))}
                     </div>
-                    {h.outcome_notes ? (
+                    {hearingOutcome(h) ? (
                       <p className="mt-2 line-clamp-3 text-sm text-[var(--color-ink-2)]">
-                        {h.outcome_notes}
+                        {hearingOutcome(h)}
                       </p>
                     ) : null}
                     <HearingReminderStrip
                       reminders={remindersByHearing.get(h.id) ?? []}
                     />
+                    {canSyncOutlook ? (
+                      <HearingOutlookSync
+                        hearing={h}
+                        sync={outlookSyncsByHearing.get(h.id)}
+                        isPending={
+                          outlookSyncMutation.isPending &&
+                          outlookSyncMutation.variables === h.id
+                        }
+                        onSync={() => outlookSyncMutation.mutate(h.id)}
+                      />
+                    ) : null}
                     <div className="mt-3">
                       <HearingPackDialog matterId={matterId} hearingId={h.id} />
                     </div>
                   </div>
                   <StatusBadge status={h.status ?? "pending"} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Completed hearings</CardTitle>
+          <CardDescription>Closed listings and recorded outcomes.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {completedHearings.length === 0 ? (
+            <p className="text-sm text-[var(--color-mute)]">
+              No completed hearings yet.
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-3">
+              {completedHearings.map((h) => (
+                <li
+                  key={h.id}
+                  className="flex items-start justify-between gap-3 rounded-xl border border-[var(--color-line)] bg-[var(--color-bg)] p-4"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-semibold text-[var(--color-ink)]">
+                      {hearingTitle(h)}
+                    </div>
+                    <div className="mt-1 text-xs text-[var(--color-mute)]">
+                      Heard: {formatDateTime(hearingDate(h))}
+                    </div>
+                    {hearingOutcome(h) ? (
+                      <p className="mt-2 line-clamp-3 text-sm text-[var(--color-ink-2)]">
+                        {hearingOutcome(h)}
+                      </p>
+                    ) : null}
+                    {canSyncOutlook ? (
+                      <HearingOutlookSync
+                        hearing={h}
+                        sync={outlookSyncsByHearing.get(h.id)}
+                        isPending={
+                          outlookSyncMutation.isPending &&
+                          outlookSyncMutation.variables === h.id
+                        }
+                        onSync={() => outlookSyncMutation.mutate(h.id)}
+                      />
+                    ) : null}
+                  </div>
+                  <StatusBadge status={h.status ?? "completed"} />
                 </li>
               ))}
             </ul>
@@ -307,9 +428,31 @@ export default function MatterHearingsPage() {
       </Card>
 
       <Card className="lg:col-span-2">
-        <CardHeader>
-          <CardTitle>Orders on file</CardTitle>
-          <CardDescription>Most recent orders first.</CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+          <div>
+            <CardTitle>Orders on file</CardTitle>
+            <CardDescription>
+              Order sheet metadata, interim flags, and stay status.
+            </CardDescription>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant={orderSort === "latest" ? "secondary" : "outline"}
+              onClick={() => setOrderSort("latest")}
+            >
+              Latest
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={orderSort === "oldest" ? "secondary" : "outline"}
+              onClick={() => setOrderSort("oldest")}
+            >
+              Oldest
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {data.court_orders.length === 0 ? (
@@ -320,7 +463,7 @@ export default function MatterHearingsPage() {
             />
           ) : (
             <ul className="flex flex-col gap-3">
-              {data.court_orders.map((order) => (
+              {sortedOrders.map((order) => (
                 <li
                   key={order.id}
                   className="rounded-xl border border-[var(--color-line)] bg-white p-4"
@@ -333,6 +476,16 @@ export default function MatterHearingsPage() {
                       {order.order_date ?? "—"}
                     </span>
                   </div>
+                  <div className="mt-2">
+                    <OrderBadges order={order} />
+                  </div>
+                  {order.bench_name || order.judge_names?.length ? (
+                    <p className="mt-1.5 text-xs text-[var(--color-mute-2)]">
+                      {[order.bench_name, ...(order.judge_names ?? [])]
+                        .filter(Boolean)
+                        .join(" - ")}
+                    </p>
+                  ) : null}
                   {order.summary ? (
                     <p className="mt-1.5 text-sm leading-relaxed text-[var(--color-mute)]">
                       {order.summary}
@@ -362,6 +515,61 @@ export default function MatterHearingsPage() {
 // the offset relative to the hearing date so the user can verify
 // at a glance that T-24h and T-1h are queued for tomorrow's 4pm
 // listing without opening the admin dashboard.
+function HearingOutlookSync({
+  hearing,
+  sync,
+  isPending,
+  onSync,
+}: {
+  hearing: WorkspaceHearing;
+  sync: CalendarEventSyncRecord | undefined;
+  isPending: boolean;
+  onSync: () => void;
+}) {
+  const lastSynced = sync?.last_synced_at
+    ? new Date(sync.last_synced_at).toLocaleString(undefined, {
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
+  return (
+    <div
+      className="mt-3 flex flex-wrap items-center gap-2 text-xs"
+      data-testid={`hearing-outlook-status-${hearing.id}`}
+    >
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={isPending}
+        onClick={onSync}
+        data-testid={`hearing-outlook-sync-${hearing.id}`}
+      >
+        {isPending ? (
+          <>
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> Syncing
+          </>
+        ) : (
+          <>
+            <CalendarCheck className="h-3.5 w-3.5" aria-hidden /> Sync to Outlook
+          </>
+        )}
+      </Button>
+      {sync ? (
+        <span className="text-[var(--color-mute)]">
+          {sync.sync_status}
+          {lastSynced ? ` · ${lastSynced}` : ""}
+          {sync.last_error ? ` · ${sync.last_error}` : ""}
+        </span>
+      ) : (
+        <span className="text-[var(--color-mute)]">Not synced</span>
+      )}
+    </div>
+  );
+}
+
 function HearingReminderStrip({
   reminders,
 }: {

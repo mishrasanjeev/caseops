@@ -23,26 +23,37 @@ from sqlalchemy.orm import selectinload
 
 from caseops_api.api.dependencies import (
     DbSession,
-    get_current_context,
     require_capability,
 )
 from caseops_api.core.settings import get_settings, is_non_local_env
 from caseops_api.db.models import HearingReminder
+from caseops_api.schemas.calendar import (
+    NotificationRuleCreateRequest,
+    NotificationRuleListResponse,
+    NotificationRuleRecord,
+    NotificationRuleUpdateRequest,
+)
 from caseops_api.services.communications import (
     apply_sendgrid_communication_event,
 )
 from caseops_api.services.hearing_reminders import apply_sendgrid_event
 from caseops_api.services.identity import SessionContext
+from caseops_api.services.notification_rules import (
+    create_notification_rule,
+    delete_notification_rule,
+    list_notification_rules,
+    update_notification_rule,
+)
 
 logger = logging.getLogger(__name__)
 
 
 webhook_router = APIRouter()
 admin_router = APIRouter()
+rules_router = APIRouter()
 
-CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
 AdminContext = Annotated[
-    SessionContext, Depends(require_capability("workspace:admin"))
+    SessionContext, Depends(require_capability("notifications:manage"))
 ]
 
 
@@ -288,3 +299,60 @@ async def list_admin_notifications(
         total_delivered=totals["delivered"],
         total_failed=totals["failed"],
     )
+
+
+@rules_router.get(
+    "",
+    response_model=NotificationRuleListResponse,
+    summary="List tenant-scoped notification rules.",
+)
+async def list_rules(
+    context: AdminContext,
+    session: DbSession,
+) -> NotificationRuleListResponse:
+    return list_notification_rules(session, context=context)
+
+
+@rules_router.post(
+    "",
+    response_model=NotificationRuleRecord,
+    summary="Create a tenant-scoped notification rule.",
+)
+async def create_rule(
+    context: AdminContext,
+    session: DbSession,
+    payload: NotificationRuleCreateRequest,
+) -> NotificationRuleRecord:
+    return create_notification_rule(session, context=context, payload=payload)
+
+
+@rules_router.patch(
+    "/{rule_id}",
+    response_model=NotificationRuleRecord,
+    summary="Update a tenant-scoped notification rule.",
+)
+async def patch_rule(
+    context: AdminContext,
+    session: DbSession,
+    rule_id: str,
+    payload: NotificationRuleUpdateRequest,
+) -> NotificationRuleRecord:
+    return update_notification_rule(
+        session,
+        context=context,
+        rule_id=rule_id,
+        payload=payload,
+    )
+
+
+@rules_router.delete(
+    "/{rule_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a tenant-scoped notification rule.",
+)
+async def delete_rule(
+    context: AdminContext,
+    session: DbSession,
+    rule_id: str,
+) -> None:
+    delete_notification_rule(session, context=context, rule_id=rule_id)

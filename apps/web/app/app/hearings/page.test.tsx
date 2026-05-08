@@ -3,12 +3,17 @@ import { render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { listMattersMock } = vi.hoisted(() => ({
+const { listMattersMock, useCapabilityMock } = vi.hoisted(() => ({
   listMattersMock: vi.fn(),
+  useCapabilityMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api/endpoints", () => ({
   listMatters: listMattersMock,
+}));
+
+vi.mock("@/lib/capabilities", () => ({
+  useCapability: useCapabilityMock,
 }));
 
 import HearingsPage from "@/app/app/hearings/page";
@@ -23,6 +28,8 @@ function withClient(children: ReactNode) {
 describe("HearingsPage (portfolio aggregate)", () => {
   beforeEach(() => {
     listMattersMock.mockReset();
+    useCapabilityMock.mockReset();
+    useCapabilityMock.mockReturnValue(false);
   });
 
   it("renders the Hearings header and aggregates matters", async () => {
@@ -46,6 +53,27 @@ describe("HearingsPage (portfolio aggregate)", () => {
       screen.getByText(/Hearings across your portfolio/i),
     ).toBeInTheDocument();
     await waitFor(() => expect(listMattersMock).toHaveBeenCalled());
+  });
+
+  it("shows the sync-in-matter affordance only when calendar:sync is resolved", async () => {
+    useCapabilityMock.mockImplementation((cap: string) => cap === "calendar:sync");
+    listMattersMock.mockResolvedValue({
+      matters: [
+        {
+          id: "m1",
+          matter_code: "ACME-1",
+          title: "Acme v Smith",
+          status: "active",
+          practice_area: "Commercial",
+          forum_level: "high_court",
+          next_hearing_on: "2026-05-01",
+          created_at: "2026-04-01T00:00:00Z",
+          updated_at: "2026-04-15T00:00:00Z",
+        },
+      ],
+    });
+    render(withClient(<HearingsPage />));
+    expect(await screen.findByTestId("hearings-sync-affordance")).toBeInTheDocument();
   });
 
   it("surfaces an error state when listMatters fails", async () => {

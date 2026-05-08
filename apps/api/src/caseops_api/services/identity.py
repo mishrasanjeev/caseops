@@ -45,7 +45,13 @@ def _raise_unauthorized(message: str) -> None:
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=message)
 
 
-def _build_auth_response(context: SessionContext) -> AuthSessionResponse:
+def _resolved_capabilities(session: Session, context: SessionContext) -> list[str]:
+    from caseops_api.services.capabilities import resolve_membership_capabilities
+
+    return sorted(resolve_membership_capabilities(session, context.membership))
+
+
+def _build_auth_response(session: Session, context: SessionContext) -> AuthSessionResponse:
     token = create_access_token(
         user_id=context.user.id,
         company_id=context.company.id,
@@ -58,25 +64,27 @@ def _build_auth_response(context: SessionContext) -> AuthSessionResponse:
         company=context.company,
         user=context.user,
         membership=context.membership,
+        capabilities=_resolved_capabilities(session, context),
     )
 
 
-def build_auth_context(context: SessionContext) -> AuthContextResponse:
+def build_auth_context(session: Session, context: SessionContext) -> AuthContextResponse:
     return AuthContextResponse(
         company=context.company,
         user=context.user,
         membership=context.membership,
+        capabilities=_resolved_capabilities(session, context),
     )
 
 
-def refresh_auth_session(context: SessionContext) -> AuthSessionResponse:
+def refresh_auth_session(session: Session, context: SessionContext) -> AuthSessionResponse:
     """Issue a fresh access token for a still-authenticated caller.
 
     Requires a valid current token (enforced by the dependency layer) so
     only live sessions can extend themselves; once a token has hard-
     expired, the client must sign in again.
     """
-    return _build_auth_response(context)
+    return _build_auth_response(session, context)
 
 
 def _require_policy_compliant_password(password: str) -> None:
@@ -121,7 +129,10 @@ def register_company_owner(
     session.refresh(user)
     session.refresh(membership)
 
-    return _build_auth_response(SessionContext(company=company, user=user, membership=membership))
+    return _build_auth_response(
+        session,
+        SessionContext(company=company, user=user, membership=membership),
+    )
 
 
 def authenticate_user(
@@ -137,7 +148,11 @@ def authenticate_user(
 
     membership_query = (
         select(CompanyMembership)
-        .options(joinedload(CompanyMembership.company), joinedload(CompanyMembership.user))
+        .options(
+            joinedload(CompanyMembership.company),
+            joinedload(CompanyMembership.user),
+            joinedload(CompanyMembership.employee_profile),
+        )
         .where(CompanyMembership.user_id == user.id, CompanyMembership.is_active.is_(True))
     )
 
@@ -162,7 +177,11 @@ def authenticate_user(
         _raise_bad_request("Multiple company memberships found. Please specify a company slug.")
 
     membership = memberships[0]
+    from caseops_api.services.employees import record_employee_login
+
+    record_employee_login(session, membership=membership)
     return _build_auth_response(
+        session,
         SessionContext(company=membership.company, user=membership.user, membership=membership)
     )
 
@@ -171,7 +190,7 @@ def get_session_context(
     session: Session,
     membership_id: str,
     *,
-    token_issued_at: int | None = None,
+    token_issued_at: float | None = None,
 ) -> SessionContext:
     membership = session.scalar(
         select(CompanyMembership)
@@ -192,7 +211,7 @@ def get_session_context(
         valid_after = membership.sessions_valid_after
         if valid_after.tzinfo is None:
             valid_after = valid_after.replace(tzinfo=UTC)
-        if token_issued_at < int(valid_after.timestamp()):
+        if token_issued_at < valid_after.timestamp():
             _raise_unauthorized("This session has been revoked. Please sign in again.")
 
     return SessionContext(company=membership.company, user=membership.user, membership=membership)
@@ -321,6 +340,17 @@ def create_company_user(
 
     session.add_all([user, membership])
     session.flush()
+    from caseops_api.db.models import EmployeeEmploymentStatus, EmployeeProfile
+
+    profile = EmployeeProfile(
+        company_id=context.company.id,
+        membership_id=membership.id,
+        employment_status=EmployeeEmploymentStatus.ACTIVE,
+        force_password_change=False,
+        setup_completed_at=membership.created_at,
+    )
+    session.add(profile)
+    session.flush()
     from caseops_api.services.audit import record_from_context
 
     record_from_context(
@@ -385,6 +415,20 @@ def update_company_user(
         membership.user.is_active = payload.is_active
         if payload.is_active is False:
             membership.sessions_valid_after = datetime.now(UTC)
+        from caseops_api.db.models import EmployeeEmploymentStatus, EmployeeProfile
+
+        profile = session.scalar(
+            select(EmployeeProfile).where(
+                EmployeeProfile.company_id == context.company.id,
+                EmployeeProfile.membership_id == membership.id,
+            )
+        )
+        if profile is not None:
+            profile.employment_status = (
+                EmployeeEmploymentStatus.ACTIVE
+                if payload.is_active
+                else EmployeeEmploymentStatus.INACTIVE
+            )
 
     session.add(membership)
     session.flush()

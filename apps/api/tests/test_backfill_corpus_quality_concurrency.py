@@ -5,7 +5,7 @@ Three invariants must hold across sequential and concurrent paths:
 
 1. Same set of documents is processed when budget is ample.
 2. Budget ceiling stops the run cleanly under concurrency overshoot.
-3. Concurrency actually parallelizes (i.e. faster on slow LLM calls).
+3. Concurrency actually parallelizes slow LLM calls.
 
 We stub ``extract_and_persist_structured`` with a fake that returns a
 deterministic per-doc cost so we can assert the totals exactly.
@@ -153,36 +153,54 @@ def test_sequential_mode_unchanged(
 def test_concurrency_actually_parallelizes(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Sleep 50ms inside each fake LLM call. concurrency=4 over 20 docs
-    must finish noticeably faster than sequential."""
+    """concurrency=4 must overlap fake LLM calls instead of running serially."""
     _ = client
     _seed(20)
+    active = 0
+    max_active = 0
+    active_lock = threading.Lock()
 
     def _slow_summary(session, *, document, tier):
+        nonlocal active, max_active
+        with active_lock:
+            active += 1
+            max_active = max(max_active, active)
         time.sleep(0.05)
-        return _fake_summary(session, document=document, tier=tier)
+        try:
+            return _fake_summary(session, document=document, tier=tier)
+        finally:
+            with active_lock:
+                active -= 1
 
     monkeypatch.setattr(mod, "extract_and_persist_structured", _slow_summary)
 
     factory = get_session_factory()
     with factory() as session:
-        t0 = time.time()
         mod._structured_pass(
-            session, limit=None, dry_run=True, budget_usd=10.0,
-            force_tier="haiku", year_range=None, concurrency=1,
+            session,
+            limit=None,
+            dry_run=True,
+            budget_usd=10.0,
+            force_tier="haiku",
+            year_range=None,
+            concurrency=1,
         )
-        seq_elapsed = time.time() - t0
+        sequential_max_active = max_active
+
+    active = 0
+    max_active = 0
 
     with factory() as session:
-        t0 = time.time()
         mod._structured_pass(
-            session, limit=None, dry_run=True, budget_usd=10.0,
-            force_tier="haiku", year_range=None, concurrency=4,
+            session,
+            limit=None,
+            dry_run=True,
+            budget_usd=10.0,
+            force_tier="haiku",
+            year_range=None,
+            concurrency=4,
         )
-        par_elapsed = time.time() - t0
+        parallel_max_active = max_active
 
-    # Loose 1.8x speedup bound to avoid CI flake from scheduler jitter.
-    assert par_elapsed * 1.8 < seq_elapsed, (
-        f"concurrent {par_elapsed:.3f}s vs sequential {seq_elapsed:.3f}s — "
-        f"speedup {seq_elapsed / par_elapsed:.2f}x is below 1.8x threshold"
-    )
+    assert sequential_max_active == 1
+    assert parallel_max_active > 1

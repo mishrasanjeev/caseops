@@ -1,9 +1,10 @@
 "use client";
 
-import { ArrowLeft, Briefcase, ExternalLink, Gavel, Scale, User } from "lucide-react";
+import { ArrowLeft, Banknote, Briefcase, ExternalLink, Gavel, Scale, User } from "lucide-react";
 import Link from "next/link";
 
 import { MatterTeamPicker } from "@/components/app/MatterTeamPicker";
+import { Badge } from "@/components/ui/Badge";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { cn } from "@/lib/cn";
 import type { WorkspaceMatter } from "@/lib/api/workspace-types";
@@ -15,6 +16,7 @@ const FORUM_LABEL: Record<string, string> = {
   supreme_court: "Supreme Court",
   tribunal: "Tribunal",
 };
+const CLAIM_CURRENCY_PATTERN = /^[A-Z]{3}$/;
 
 function formatDate(value: string | null | undefined): string {
   // next_hearing_on is a SQL Date — parse local to avoid the off-by-
@@ -26,6 +28,25 @@ function formatDate(value: string | null | undefined): string {
   });
 }
 
+function formatClaimAmount(matter: WorkspaceMatter): string {
+  if (matter.claim_amount_minor == null) return "—";
+  const currency =
+    matter.claim_currency && CLAIM_CURRENCY_PATTERN.test(matter.claim_currency)
+      ? matter.claim_currency
+      : "INR";
+  try {
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 0,
+    }).format(matter.claim_amount_minor / 100);
+  } catch {
+    return `INR ${(matter.claim_amount_minor / 100).toLocaleString("en-IN", {
+      maximumFractionDigits: 0,
+    })}`;
+  }
+}
+
 export function MatterHeader({ matter }: { matter: WorkspaceMatter }) {
   const forumLabel = matter.forum_level ? FORUM_LABEL[matter.forum_level] ?? matter.forum_level : null;
   const facts: { icon: typeof Briefcase; label: string; value: string }[] = [
@@ -33,6 +54,7 @@ export function MatterHeader({ matter }: { matter: WorkspaceMatter }) {
     { icon: Scale, label: "Forum", value: forumLabel ?? "—" },
     { icon: Gavel, label: "Next hearing", value: formatDate(matter.next_hearing_on) },
     { icon: User, label: "Client", value: matter.client_name ?? "—" },
+    { icon: Banknote, label: "Claim", value: formatClaimAmount(matter) },
   ];
 
   return (
@@ -52,6 +74,10 @@ export function MatterHeader({ matter }: { matter: WorkspaceMatter }) {
               <span className="inline-flex items-center rounded-full border border-[var(--color-line)] bg-white px-2.5 py-0.5 text-xs font-medium text-[var(--color-ink-2)]">
                 {matter.practice_area}
               </span>
+            ) : null}
+            {matter.has_stay ? <Badge tone="warning">Stay active</Badge> : null}
+            {matter.has_interim_order ? (
+              <Badge tone="brand">Interim order</Badge>
             ) : null}
           </div>
           <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-ink)] md:text-3xl">
@@ -73,7 +99,7 @@ export function MatterHeader({ matter }: { matter: WorkspaceMatter }) {
         </div>
       </div>
 
-      <dl className="grid gap-2 md:grid-cols-4">
+      <dl className="grid gap-2 md:grid-cols-5">
         {facts.map((fact) => (
           <div
             key={fact.label}

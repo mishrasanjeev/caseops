@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from typing import BinaryIO
 
 from fastapi import HTTPException, status
@@ -11,28 +12,42 @@ from caseops_api.db.models import (
     Contract,
     ContractActivity,
     ContractAttachment,
+    ContractAttachmentRole,
     ContractClause,
+    ContractLegalReference,
+    ContractLegalReferenceSource,
     ContractObligation,
     ContractPlaybookRule,
+    ContractReviewStatus,
+    ContractTermSuggestion,
+    ContractTypeKey,
     DocumentProcessingAction,
     DocumentProcessingTargetType,
     Matter,
     MembershipRole,
+    utcnow,
 )
 from caseops_api.schemas.contracts import (
     ContractActivityRecord,
+    ContractAttachmentMetadataUpdateRequest,
     ContractAttachmentRecord,
     ContractClauseCreateRequest,
     ContractClauseRecord,
     ContractCreateRequest,
+    ContractLegalReferenceCreateRequest,
+    ContractLegalReferenceRecord,
+    ContractLegalReferenceUpdateRequest,
     ContractLinkedMatterRecord,
     ContractListResponse,
+    ContractMetadataUpdateRequest,
     ContractObligationCreateRequest,
     ContractObligationRecord,
     ContractPlaybookHitRecord,
     ContractPlaybookRuleCreateRequest,
     ContractPlaybookRuleRecord,
     ContractRecord,
+    ContractTermSuggestionCreateRequest,
+    ContractTermSuggestionRecord,
     ContractUpdateRequest,
     ContractWorkspaceMembership,
     ContractWorkspaceResponse,
@@ -51,8 +66,70 @@ from caseops_api.services.document_storage import (
 from caseops_api.services.identity import SessionContext
 
 
+def _normalize_contract_type_label(value: str | None) -> str:
+    if not value:
+        return ""
+    normalized = value.strip().lower().replace("_", " ").replace("-", " ")
+    return " ".join(normalized.split())
+
+
+_CONTRACT_TYPE_KEY_BY_LEGACY_LABEL = {
+    "agreement": ContractTypeKey.AGREEMENT,
+    "general agreement": ContractTypeKey.AGREEMENT,
+    "nda": ContractTypeKey.NDA,
+    "non disclosure agreement": ContractTypeKey.NDA,
+    "nondisclosure agreement": ContractTypeKey.NDA,
+    "addendum": ContractTypeKey.ADDENDUM,
+    "purchase order": ContractTypeKey.PURCHASE_ORDER,
+    "po": ContractTypeKey.PURCHASE_ORDER,
+    "master services agreement": ContractTypeKey.MASTER_SERVICES_AGREEMENT,
+    "master service agreement": ContractTypeKey.MASTER_SERVICES_AGREEMENT,
+    "msa": ContractTypeKey.MASTER_SERVICES_AGREEMENT,
+    "statement of work": ContractTypeKey.STATEMENT_OF_WORK,
+    "sow": ContractTypeKey.STATEMENT_OF_WORK,
+    "lease": ContractTypeKey.LEASE,
+    "lease agreement": ContractTypeKey.LEASE,
+    "employment": ContractTypeKey.EMPLOYMENT,
+    "employment agreement": ContractTypeKey.EMPLOYMENT,
+    "settlement": ContractTypeKey.SETTLEMENT,
+    "settlement agreement": ContractTypeKey.SETTLEMENT,
+    "amendment": ContractTypeKey.AMENDMENT,
+}
+
+
+def _resolve_contract_type_values(
+    contract_type: str | None,
+    contract_type_key: str | None,
+    contract_type_notes: str | None,
+) -> tuple[str, str | None]:
+    cleaned_key = contract_type_key.strip() if isinstance(contract_type_key, str) else None
+    cleaned_notes = contract_type_notes.strip() if isinstance(contract_type_notes, str) else None
+    cleaned_notes = cleaned_notes or None
+    if cleaned_key:
+        return cleaned_key, cleaned_notes
+
+    mapped_key = _CONTRACT_TYPE_KEY_BY_LEGACY_LABEL.get(
+        _normalize_contract_type_label(contract_type)
+    )
+    if mapped_key:
+        return mapped_key.value, cleaned_notes
+
+    legacy_label = contract_type.strip() if isinstance(contract_type, str) else None
+    return ContractTypeKey.OTHER.value, cleaned_notes or legacy_label
+
+
 def _contract_record(contract: Contract) -> ContractRecord:
-    return ContractRecord.model_validate(contract)
+    resolved_key, resolved_notes = _resolve_contract_type_values(
+        contract.contract_type,
+        contract.contract_type_key,
+        contract.contract_type_notes,
+    )
+    return ContractRecord.model_validate(contract).model_copy(
+        update={
+            "contract_type_key": resolved_key,
+            "contract_type_notes": resolved_notes,
+        }
+    )
 
 
 def _membership_summary(membership: CompanyMembership) -> ContractWorkspaceMembership:
@@ -177,9 +254,69 @@ def _attachment_record_with_job(
         processing_status=attachment.processing_status,
         extracted_char_count=attachment.extracted_char_count,
         extraction_error=attachment.extraction_error,
+        attachment_role=attachment.attachment_role,
+        parent_attachment_id=attachment.parent_attachment_id,
+        document_date=attachment.document_date,
+        notes=attachment.notes,
         processed_at=attachment.processed_at,
         latest_job=latest_job,
         created_at=attachment.created_at,
+    )
+
+
+def _legal_reference_record(
+    reference: ContractLegalReference,
+) -> ContractLegalReferenceRecord:
+    evidence_attachment = reference.evidence_attachment
+    return ContractLegalReferenceRecord(
+        id=reference.id,
+        company_id=reference.company_id,
+        contract_id=reference.contract_id,
+        act_name=reference.act_name,
+        section_label=reference.section_label,
+        clause_label=reference.clause_label,
+        authority_id=reference.authority_id,
+        statute_id=reference.statute_id,
+        source=reference.source,
+        confidence=float(reference.confidence) if reference.confidence is not None else None,
+        evidence_attachment_id=reference.evidence_attachment_id,
+        evidence_attachment_name=(
+            evidence_attachment.original_filename if evidence_attachment else None
+        ),
+        evidence_quote=reference.evidence_quote,
+        status=reference.status,
+        created_by_membership_id=reference.created_by_membership_id,
+        reviewed_by_membership_id=reference.reviewed_by_membership_id,
+        reviewed_at=reference.reviewed_at,
+        created_at=reference.created_at,
+        updated_at=reference.updated_at,
+    )
+
+
+def _term_suggestion_record(
+    suggestion: ContractTermSuggestion,
+) -> ContractTermSuggestionRecord:
+    source_attachment = suggestion.source_attachment
+    evidence_json = suggestion.evidence_json if isinstance(suggestion.evidence_json, dict) else {}
+    return ContractTermSuggestionRecord(
+        id=suggestion.id,
+        company_id=suggestion.company_id,
+        contract_id=suggestion.contract_id,
+        source_attachment_id=suggestion.source_attachment_id,
+        source_attachment_name=(
+            source_attachment.original_filename if source_attachment else None
+        ),
+        suggested_effective_on=suggestion.suggested_effective_on,
+        suggested_expires_on=suggestion.suggested_expires_on,
+        suggested_renewal_on=suggestion.suggested_renewal_on,
+        suggested_duration_months=suggestion.suggested_duration_months,
+        evidence_json=evidence_json,
+        status=suggestion.status,
+        created_by_membership_id=suggestion.created_by_membership_id,
+        reviewed_by_membership_id=suggestion.reviewed_by_membership_id,
+        reviewed_at=suggestion.reviewed_at,
+        created_at=suggestion.created_at,
+        updated_at=suggestion.updated_at,
     )
 
 
@@ -282,6 +419,12 @@ def _get_contract_model(session: Session, *, context: SessionContext, contract_i
             selectinload(Contract.playbook_rules)
             .joinedload(ContractPlaybookRule.created_by_membership)
             .joinedload(CompanyMembership.user),
+            selectinload(Contract.legal_references).joinedload(
+                ContractLegalReference.evidence_attachment
+            ),
+            selectinload(Contract.term_suggestions).joinedload(
+                ContractTermSuggestion.source_attachment
+            ),
             selectinload(Contract.activity_events)
             .joinedload(ContractActivity.actor_membership)
             .joinedload(CompanyMembership.user),
@@ -321,6 +464,217 @@ def _get_contract_attachment_model(
             detail="Contract attachment not found.",
         )
     return attachment
+
+
+def _validated_contract_attachment_id(
+    session: Session,
+    *,
+    context: SessionContext,
+    contract_id: str,
+    attachment_id: str | None,
+    not_found_detail: str = "Contract attachment was not found in this workspace.",
+) -> str | None:
+    if not attachment_id:
+        return None
+    attachment = _get_contract_attachment_model(
+        session,
+        context=context,
+        contract_id=contract_id,
+        attachment_id=attachment_id,
+    )
+    if attachment.contract_id != contract_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=not_found_detail)
+    return attachment.id
+
+
+def _ensure_attachment_parent_does_not_cycle(
+    session: Session,
+    *,
+    context: SessionContext,
+    contract_id: str,
+    attachment_id: str,
+    parent_attachment_id: str | None,
+) -> None:
+    current_parent_id = parent_attachment_id
+    seen: set[str] = set()
+    while current_parent_id:
+        if current_parent_id == attachment_id:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Contract attachment parent links cannot create a cycle.",
+            )
+        if current_parent_id in seen:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Contract attachment parent links cannot create a cycle.",
+            )
+        seen.add(current_parent_id)
+        current_parent_id = session.scalar(
+            select(ContractAttachment.parent_attachment_id)
+            .join(Contract, Contract.id == ContractAttachment.contract_id)
+            .where(
+                ContractAttachment.id == current_parent_id,
+                ContractAttachment.contract_id == contract_id,
+                Contract.company_id == context.company.id,
+            )
+        )
+
+
+def _get_contract_legal_reference_model(
+    session: Session,
+    *,
+    context: SessionContext,
+    contract_id: str,
+    reference_id: str,
+) -> ContractLegalReference:
+    reference = session.scalar(
+        select(ContractLegalReference)
+        .options(joinedload(ContractLegalReference.evidence_attachment))
+        .where(
+            ContractLegalReference.id == reference_id,
+            ContractLegalReference.contract_id == contract_id,
+            ContractLegalReference.company_id == context.company.id,
+        )
+    )
+    if reference is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Contract legal reference not found.",
+        )
+    return reference
+
+
+def _get_contract_term_suggestion_model(
+    session: Session,
+    *,
+    context: SessionContext,
+    contract_id: str,
+    suggestion_id: str,
+) -> ContractTermSuggestion:
+    suggestion = session.scalar(
+        select(ContractTermSuggestion)
+        .options(joinedload(ContractTermSuggestion.source_attachment))
+        .where(
+            ContractTermSuggestion.id == suggestion_id,
+            ContractTermSuggestion.contract_id == contract_id,
+            ContractTermSuggestion.company_id == context.company.id,
+        )
+    )
+    if suggestion is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Contract term suggestion not found.",
+        )
+    return suggestion
+
+
+def _contract_metadata_snapshot(contract: Contract) -> dict[str, object]:
+    return {
+        "contract_type": contract.contract_type,
+        "contract_type_key": contract.contract_type_key,
+        "contract_type_notes": contract.contract_type_notes,
+        "effective_on": contract.effective_on,
+        "expires_on": contract.expires_on,
+        "renewal_on": contract.renewal_on,
+        "auto_renewal": contract.auto_renewal,
+    }
+
+
+def _legal_reference_snapshot(reference: ContractLegalReference) -> dict[str, object]:
+    return {
+        "act_name": reference.act_name,
+        "section_label": reference.section_label,
+        "clause_label": reference.clause_label,
+        "authority_id": reference.authority_id,
+        "statute_id": reference.statute_id,
+        "source": reference.source,
+        "confidence": float(reference.confidence) if reference.confidence is not None else None,
+        "evidence_attachment_id": reference.evidence_attachment_id,
+        "evidence_quote": reference.evidence_quote,
+        "status": reference.status,
+    }
+
+
+def _term_suggestion_snapshot(suggestion: ContractTermSuggestion) -> dict[str, object]:
+    evidence_json = suggestion.evidence_json if isinstance(suggestion.evidence_json, dict) else {}
+    return {
+        "source_attachment_id": suggestion.source_attachment_id,
+        "suggested_effective_on": suggestion.suggested_effective_on,
+        "suggested_expires_on": suggestion.suggested_expires_on,
+        "suggested_renewal_on": suggestion.suggested_renewal_on,
+        "suggested_duration_months": suggestion.suggested_duration_months,
+        "evidence_json": evidence_json,
+        "status": suggestion.status,
+    }
+
+
+def _attachment_metadata_snapshot(attachment: ContractAttachment) -> dict[str, object]:
+    return {
+        "attachment_role": attachment.attachment_role,
+        "parent_attachment_id": attachment.parent_attachment_id,
+        "document_date": attachment.document_date,
+        "notes": attachment.notes,
+    }
+
+
+def _canonical_term_snapshot(contract: Contract) -> dict[str, object]:
+    return {
+        "effective_on": contract.effective_on,
+        "expires_on": contract.expires_on,
+        "renewal_on": contract.renewal_on,
+    }
+
+
+def _term_suggestion_canonical_updates(
+    suggestion: ContractTermSuggestion,
+) -> dict[str, date | None]:
+    updates: dict[str, date | None] = {}
+    if suggestion.suggested_effective_on is not None:
+        updates["effective_on"] = suggestion.suggested_effective_on
+    if suggestion.suggested_expires_on is not None:
+        updates["expires_on"] = suggestion.suggested_expires_on
+    if suggestion.suggested_renewal_on is not None:
+        updates["renewal_on"] = suggestion.suggested_renewal_on
+    return updates
+
+
+def _legal_reference_has_source_grounding(reference: ContractLegalReference) -> bool:
+    has_source_pointer = bool(
+        reference.evidence_attachment_id or reference.authority_id or reference.statute_id
+    )
+    has_quote = bool(reference.evidence_quote and reference.evidence_quote.strip())
+    return has_source_pointer and has_quote
+
+
+def _ensure_ai_legal_reference_can_be_accepted(reference: ContractLegalReference) -> None:
+    if (
+        reference.source == ContractLegalReferenceSource.AI_SUGGESTED
+        and reference.status == ContractReviewStatus.ACCEPTED
+        and not _legal_reference_has_source_grounding(reference)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "AI-suggested legal references require source lineage and an evidence "
+                "quote before acceptance."
+            ),
+        )
+
+
+def _term_suggestion_has_source_grounding(suggestion: ContractTermSuggestion) -> bool:
+    evidence = suggestion.evidence_json if isinstance(suggestion.evidence_json, dict) else {}
+    return bool(suggestion.source_attachment_id and evidence)
+
+
+def _ensure_term_suggestion_can_be_accepted(suggestion: ContractTermSuggestion) -> None:
+    if not _term_suggestion_has_source_grounding(suggestion):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Term suggestions require a source attachment and evidence before "
+                "they can update canonical contract dates."
+            ),
+        )
 
 
 def _build_playbook_hits(contract: Contract) -> list[ContractPlaybookHitRecord]:
@@ -452,6 +806,11 @@ def create_contract(
             not_found_detail="Contract owner membership was not found in the current company.",
         ).id
 
+    contract_type_key, contract_type_notes = _resolve_contract_type_values(
+        payload.contract_type,
+        payload.contract_type_key,
+        payload.contract_type_notes,
+    )
     contract = Contract(
         company_id=context.company.id,
         linked_matter_id=linked_matter.id if linked_matter else None,
@@ -460,6 +819,8 @@ def create_contract(
         contract_code=payload.contract_code.strip(),
         counterparty_name=payload.counterparty_name.strip() if payload.counterparty_name else None,
         contract_type=payload.contract_type.strip(),
+        contract_type_key=contract_type_key,
+        contract_type_notes=contract_type_notes,
         status=payload.status,
         jurisdiction=payload.jurisdiction.strip() if payload.jurisdiction else None,
         effective_on=payload.effective_on,
@@ -490,6 +851,8 @@ def create_contract(
             "contract_code": contract.contract_code,
             "status": contract.status,
             "linked_matter_id": contract.linked_matter_id,
+            "contract_type": contract.contract_type,
+            "contract_type_key": contract.contract_type_key,
         },
     )
     session.commit()
@@ -558,6 +921,8 @@ def update_contract(
 ) -> ContractRecord:
     contract = _get_contract_model(session, context=context, contract_id=contract_id)
     raw_updates = payload.model_dump(exclude_unset=True)
+    original_update_keys = set(raw_updates.keys())
+    metadata_before = _contract_metadata_snapshot(contract)
 
     if "linked_matter_id" in raw_updates:
         linked_matter_id = raw_updates.pop("linked_matter_id")
@@ -585,6 +950,19 @@ def update_contract(
             value = value.strip()
         setattr(contract, field_name, value)
 
+    if original_update_keys & {
+        "contract_type",
+        "contract_type_key",
+        "contract_type_notes",
+    }:
+        contract_type_key, contract_type_notes = _resolve_contract_type_values(
+            contract.contract_type,
+            contract.contract_type_key,
+            contract.contract_type_notes,
+        )
+        contract.contract_type_key = contract_type_key
+        contract.contract_type_notes = contract_type_notes
+
     if contract.currency:
         contract.currency = contract.currency.upper()
 
@@ -609,6 +987,25 @@ def update_contract(
             "fields": sorted(raw_updates.keys()),
         },
     )
+    metadata_after = _contract_metadata_snapshot(contract)
+    metadata_fields = {
+        "contract_type",
+        "contract_type_key",
+        "contract_type_notes",
+        "effective_on",
+        "expires_on",
+        "renewal_on",
+        "auto_renewal",
+    }
+    if original_update_keys & metadata_fields and metadata_after != metadata_before:
+        record_from_context(
+            session,
+            context,
+            action="contract.metadata.updated",
+            target_type="contract",
+            target_id=contract.id,
+            metadata={"before": metadata_before, "after": metadata_after},
+        )
     session.commit()
     session.refresh(contract)
     return _contract_record(contract)
@@ -648,8 +1045,443 @@ def get_contract_workspace(
         obligations=[_obligation_record(obligation) for obligation in contract.obligations],
         playbook_rules=[_playbook_rule_record(rule) for rule in contract.playbook_rules],
         playbook_hits=_build_playbook_hits(contract),
+        legal_references=[
+            _legal_reference_record(reference) for reference in contract.legal_references
+        ],
+        term_suggestions=[
+            _term_suggestion_record(suggestion) for suggestion in contract.term_suggestions
+        ],
         activity=[_activity_record(activity) for activity in contract.activity_events],
     )
+
+
+def update_contract_metadata(
+    session: Session,
+    *,
+    context: SessionContext,
+    contract_id: str,
+    payload: ContractMetadataUpdateRequest,
+) -> ContractRecord:
+    contract = _get_contract_model(session, context=context, contract_id=contract_id)
+    before = _contract_metadata_snapshot(contract)
+    updates = payload.model_dump(exclude_unset=True)
+    for field_name, value in updates.items():
+        if isinstance(value, str):
+            value = value.strip() or None
+        setattr(contract, field_name, value)
+    if {"contract_type", "contract_type_key", "contract_type_notes"} & set(updates):
+        contract_type_key, contract_type_notes = _resolve_contract_type_values(
+            contract.contract_type,
+            contract.contract_type_key,
+            contract.contract_type_notes,
+        )
+        contract.contract_type_key = contract_type_key
+        contract.contract_type_notes = contract_type_notes
+
+    after = _contract_metadata_snapshot(contract)
+    if after != before:
+        session.add(contract)
+        _append_activity(
+            session,
+            contract_id=contract.id,
+            actor_membership_id=context.membership.id,
+            event_type="contract_metadata_updated",
+            title="Contract metadata updated",
+            detail="Contract type or term metadata changed.",
+        )
+        record_from_context(
+            session,
+            context,
+            action="contract.metadata.updated",
+            target_type="contract",
+            target_id=contract.id,
+            metadata={"before": before, "after": after},
+        )
+    session.commit()
+    session.refresh(contract)
+    return _contract_record(contract)
+
+
+def list_contract_legal_references(
+    session: Session,
+    *,
+    context: SessionContext,
+    contract_id: str,
+) -> list[ContractLegalReferenceRecord]:
+    contract = _get_contract_model(session, context=context, contract_id=contract_id)
+    rows = list(
+        session.scalars(
+            select(ContractLegalReference)
+            .options(joinedload(ContractLegalReference.evidence_attachment))
+            .where(
+                ContractLegalReference.company_id == context.company.id,
+                ContractLegalReference.contract_id == contract.id,
+            )
+            .order_by(
+                ContractLegalReference.created_at.desc(),
+                ContractLegalReference.id.desc(),
+            )
+        )
+    )
+    return [_legal_reference_record(row) for row in rows]
+
+
+def create_contract_legal_reference(
+    session: Session,
+    *,
+    context: SessionContext,
+    contract_id: str,
+    payload: ContractLegalReferenceCreateRequest,
+) -> ContractLegalReferenceRecord:
+    contract = _get_contract_model(session, context=context, contract_id=contract_id)
+    evidence_attachment_id = _validated_contract_attachment_id(
+        session,
+        context=context,
+        contract_id=contract.id,
+        attachment_id=payload.evidence_attachment_id,
+    )
+    reference_status = payload.status
+    if payload.source == ContractLegalReferenceSource.AI_SUGGESTED:
+        reference_status = ContractReviewStatus.SUGGESTED
+    elif reference_status is None:
+        reference_status = (
+            ContractReviewStatus.SUGGESTED
+            if payload.source == ContractLegalReferenceSource.AI_SUGGESTED
+            else ContractReviewStatus.ACCEPTED
+        )
+    reviewed_by_membership_id = (
+        context.membership.id if reference_status != ContractReviewStatus.SUGGESTED else None
+    )
+    reviewed_at = utcnow() if reviewed_by_membership_id else None
+    reference = ContractLegalReference(
+        company_id=context.company.id,
+        contract_id=contract.id,
+        act_name=payload.act_name.strip(),
+        section_label=payload.section_label.strip() if payload.section_label else None,
+        clause_label=payload.clause_label.strip() if payload.clause_label else None,
+        authority_id=payload.authority_id,
+        statute_id=payload.statute_id,
+        source=payload.source,
+        confidence=payload.confidence,
+        evidence_attachment_id=evidence_attachment_id,
+        evidence_quote=payload.evidence_quote.strip() if payload.evidence_quote else None,
+        status=reference_status,
+        created_by_membership_id=context.membership.id,
+        reviewed_by_membership_id=reviewed_by_membership_id,
+        reviewed_at=reviewed_at,
+    )
+    session.add(reference)
+    session.flush()
+    snapshot = _legal_reference_snapshot(reference)
+    _append_activity(
+        session,
+        contract_id=contract.id,
+        actor_membership_id=context.membership.id,
+        event_type="contract_legal_reference_added",
+        title="Legal reference recorded",
+        detail=f"{reference.act_name} {reference.section_label or ''}".strip(),
+    )
+    record_from_context(
+        session,
+        context,
+        action="contract.legal_reference.created",
+        target_type="contract_legal_reference",
+        target_id=reference.id,
+        metadata=snapshot,
+    )
+    session.commit()
+    refreshed = _get_contract_legal_reference_model(
+        session,
+        context=context,
+        contract_id=contract.id,
+        reference_id=reference.id,
+    )
+    return _legal_reference_record(refreshed)
+
+
+def update_contract_legal_reference(
+    session: Session,
+    *,
+    context: SessionContext,
+    contract_id: str,
+    reference_id: str,
+    payload: ContractLegalReferenceUpdateRequest,
+) -> ContractLegalReferenceRecord:
+    _get_contract_model(session, context=context, contract_id=contract_id)
+    reference = _get_contract_legal_reference_model(
+        session,
+        context=context,
+        contract_id=contract_id,
+        reference_id=reference_id,
+    )
+    before = _legal_reference_snapshot(reference)
+    updates = payload.model_dump(exclude_unset=True)
+    if "evidence_attachment_id" in updates:
+        updates["evidence_attachment_id"] = _validated_contract_attachment_id(
+            session,
+            context=context,
+            contract_id=contract_id,
+            attachment_id=updates["evidence_attachment_id"],
+        )
+    for field_name, value in updates.items():
+        if isinstance(value, str):
+            value = value.strip() or None
+        setattr(reference, field_name, value)
+    if "status" in updates:
+        reference.reviewed_by_membership_id = context.membership.id
+        reference.reviewed_at = utcnow()
+    _ensure_ai_legal_reference_can_be_accepted(reference)
+    after = _legal_reference_snapshot(reference)
+    if after != before:
+        session.add(reference)
+        _append_activity(
+            session,
+            contract_id=contract_id,
+            actor_membership_id=context.membership.id,
+            event_type="contract_legal_reference_updated",
+            title="Legal reference updated",
+            detail=reference.act_name,
+        )
+        record_from_context(
+            session,
+            context,
+            action="contract.legal_reference.updated",
+            target_type="contract_legal_reference",
+            target_id=reference.id,
+            metadata={"before": before, "after": after},
+        )
+    session.commit()
+    refreshed = _get_contract_legal_reference_model(
+        session,
+        context=context,
+        contract_id=contract_id,
+        reference_id=reference.id,
+    )
+    return _legal_reference_record(refreshed)
+
+
+def create_contract_term_suggestion(
+    session: Session,
+    *,
+    context: SessionContext,
+    contract_id: str,
+    payload: ContractTermSuggestionCreateRequest,
+) -> ContractTermSuggestionRecord:
+    contract = _get_contract_model(session, context=context, contract_id=contract_id)
+    source_attachment_id = _validated_contract_attachment_id(
+        session,
+        context=context,
+        contract_id=contract.id,
+        attachment_id=payload.source_attachment_id,
+    )
+    suggestion = ContractTermSuggestion(
+        company_id=context.company.id,
+        contract_id=contract.id,
+        source_attachment_id=source_attachment_id,
+        suggested_effective_on=payload.suggested_effective_on,
+        suggested_expires_on=payload.suggested_expires_on,
+        suggested_renewal_on=payload.suggested_renewal_on,
+        suggested_duration_months=payload.suggested_duration_months,
+        evidence_json=payload.evidence_json,
+        status=ContractReviewStatus.SUGGESTED,
+        created_by_membership_id=context.membership.id,
+    )
+    session.add(suggestion)
+    session.flush()
+    _append_activity(
+        session,
+        contract_id=contract.id,
+        actor_membership_id=context.membership.id,
+        event_type="contract_term_suggestion_added",
+        title="Contract term suggestion recorded",
+        detail="Suggested terms are pending human review.",
+    )
+    record_from_context(
+        session,
+        context,
+        action="contract.term_suggestion.created",
+        target_type="contract_term_suggestion",
+        target_id=suggestion.id,
+        metadata=_term_suggestion_snapshot(suggestion),
+    )
+    session.commit()
+    refreshed = _get_contract_term_suggestion_model(
+        session,
+        context=context,
+        contract_id=contract.id,
+        suggestion_id=suggestion.id,
+    )
+    return _term_suggestion_record(refreshed)
+
+
+def review_contract_term_suggestion(
+    session: Session,
+    *,
+    context: SessionContext,
+    contract_id: str,
+    suggestion_id: str,
+    accepted: bool,
+) -> ContractTermSuggestionRecord:
+    contract = _get_contract_model(session, context=context, contract_id=contract_id)
+    suggestion = _get_contract_term_suggestion_model(
+        session,
+        context=context,
+        contract_id=contract.id,
+        suggestion_id=suggestion_id,
+    )
+    desired_status = (
+        ContractReviewStatus.ACCEPTED if accepted else ContractReviewStatus.REJECTED
+    )
+    if suggestion.status in {
+        ContractReviewStatus.ACCEPTED,
+        ContractReviewStatus.REJECTED,
+    }:
+        if suggestion.status == desired_status:
+            return _term_suggestion_record(suggestion)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Contract term suggestions cannot change after review.",
+        )
+    if accepted:
+        _ensure_term_suggestion_can_be_accepted(suggestion)
+    before_suggestion = _term_suggestion_snapshot(suggestion)
+    before_terms = _canonical_term_snapshot(contract)
+    suggestion.status = desired_status
+    suggestion.reviewed_by_membership_id = context.membership.id
+    suggestion.reviewed_at = utcnow()
+    if accepted:
+        for field_name, value in _term_suggestion_canonical_updates(suggestion).items():
+            setattr(contract, field_name, value)
+    after_suggestion = _term_suggestion_snapshot(suggestion)
+    after_terms = _canonical_term_snapshot(contract)
+    session.add(suggestion)
+    session.add(contract)
+    _append_activity(
+        session,
+        contract_id=contract.id,
+        actor_membership_id=context.membership.id,
+        event_type=(
+            "contract_term_suggestion_accepted"
+            if accepted
+            else "contract_term_suggestion_rejected"
+        ),
+        title=(
+            "Contract term suggestion accepted"
+            if accepted
+            else "Contract term suggestion rejected"
+        ),
+        detail="Canonical term dates updated." if accepted else "No canonical dates changed.",
+    )
+    record_from_context(
+        session,
+        context,
+        action=(
+            "contract.term_suggestion.accepted"
+            if accepted
+            else "contract.term_suggestion.rejected"
+        ),
+        target_type="contract_term_suggestion",
+        target_id=suggestion.id,
+        metadata={
+            "before": before_suggestion,
+            "after": after_suggestion,
+            "contract_terms_before": before_terms,
+            "contract_terms_after": after_terms,
+        },
+    )
+    if accepted and after_terms != before_terms:
+        record_from_context(
+            session,
+            context,
+            action="contract.metadata.updated",
+            target_type="contract",
+            target_id=contract.id,
+            metadata={"before": before_terms, "after": after_terms},
+        )
+    session.commit()
+    refreshed = _get_contract_term_suggestion_model(
+        session,
+        context=context,
+        contract_id=contract.id,
+        suggestion_id=suggestion.id,
+    )
+    return _term_suggestion_record(refreshed)
+
+
+def update_contract_attachment_metadata(
+    session: Session,
+    *,
+    context: SessionContext,
+    contract_id: str,
+    attachment_id: str,
+    payload: ContractAttachmentMetadataUpdateRequest,
+) -> ContractAttachmentRecord:
+    _get_contract_model(session, context=context, contract_id=contract_id)
+    attachment = _get_contract_attachment_model(
+        session,
+        context=context,
+        contract_id=contract_id,
+        attachment_id=attachment_id,
+    )
+    before = _attachment_metadata_snapshot(attachment)
+    updates = payload.model_dump(exclude_unset=True)
+    if "parent_attachment_id" in updates:
+        parent_attachment_id = _validated_contract_attachment_id(
+            session,
+            context=context,
+            contract_id=contract_id,
+            attachment_id=updates["parent_attachment_id"],
+            not_found_detail="Parent contract attachment was not found in this workspace.",
+        )
+        if parent_attachment_id == attachment.id:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="A contract attachment cannot be its own parent.",
+            )
+        _ensure_attachment_parent_does_not_cycle(
+            session,
+            context=context,
+            contract_id=contract_id,
+            attachment_id=attachment.id,
+            parent_attachment_id=parent_attachment_id,
+        )
+        updates["parent_attachment_id"] = parent_attachment_id
+    for field_name, value in updates.items():
+        if isinstance(value, str):
+            value = value.strip() or None
+        setattr(attachment, field_name, value)
+    after = _attachment_metadata_snapshot(attachment)
+    if after != before:
+        session.add(attachment)
+        _append_activity(
+            session,
+            contract_id=contract_id,
+            actor_membership_id=context.membership.id,
+            event_type="contract_attachment_metadata_updated",
+            title="Contract attachment metadata updated",
+            detail=attachment.original_filename,
+        )
+        record_from_context(
+            session,
+            context,
+            action="contract_attachment.metadata.updated",
+            target_type="contract_attachment",
+            target_id=attachment.id,
+            metadata={"before": before, "after": after},
+        )
+    session.commit()
+    refreshed = _get_contract_attachment_model(
+        session,
+        context=context,
+        contract_id=contract_id,
+        attachment_id=attachment.id,
+    )
+    latest_jobs = load_latest_processing_jobs(
+        session,
+        target_type=DocumentProcessingTargetType.CONTRACT_ATTACHMENT,
+        attachment_ids=[refreshed.id],
+    )
+    return _attachment_record_with_job(refreshed, latest_job=latest_jobs.get(refreshed.id))
 
 
 def create_contract_clause(
@@ -796,12 +1628,31 @@ def create_contract_attachment(
     filename: str,
     content_type: str | None,
     stream: BinaryIO,
+    attachment_role: str | None = None,
+    parent_attachment_id: str | None = None,
+    document_date: date | None = None,
+    notes: str | None = None,
 ) -> tuple[ContractAttachmentRecord, str]:
     contract = _get_contract_model(session, context=context, contract_id=contract_id)
     # §6.3: reject uploads that lie about themselves before disk write.
     from caseops_api.services.file_security import verify_upload
 
     verify_upload(filename=filename, content_type=content_type, stream=stream)
+    normalized_role = attachment_role.strip() if isinstance(attachment_role, str) else None
+    if normalized_role == "":
+        normalized_role = None
+    if normalized_role and normalized_role not in {role.value for role in ContractAttachmentRole}:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Unsupported contract attachment role.",
+        )
+    validated_parent_attachment_id = _validated_contract_attachment_id(
+        session,
+        context=context,
+        contract_id=contract.id,
+        attachment_id=parent_attachment_id,
+        not_found_detail="Parent contract attachment was not found in this workspace.",
+    )
     attachment = ContractAttachment(
         contract_id=contract.id,
         uploaded_by_membership_id=context.membership.id,
@@ -810,6 +1661,10 @@ def create_contract_attachment(
         content_type=content_type,
         size_bytes=0,
         sha256_hex="0" * 64,
+        attachment_role=normalized_role,
+        parent_attachment_id=validated_parent_attachment_id,
+        document_date=document_date,
+        notes=notes.strip() if notes else None,
     )
     session.add(attachment)
     session.flush()
@@ -868,6 +1723,20 @@ def create_contract_attachment(
                 "and queued for processing."
             ),
         )
+        if _attachment_metadata_snapshot(attachment) != {
+            "attachment_role": None,
+            "parent_attachment_id": None,
+            "document_date": None,
+            "notes": None,
+        }:
+            record_from_context(
+                session,
+                context,
+                action="contract_attachment.metadata.updated",
+                target_type="contract_attachment",
+                target_id=attachment.id,
+                metadata={"after": _attachment_metadata_snapshot(attachment)},
+            )
         session.commit()
     except Exception:
         session.rollback()

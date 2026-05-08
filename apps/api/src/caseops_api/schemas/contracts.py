@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from caseops_api.schemas.document_processing import DocumentProcessingJobRecord
 
@@ -20,6 +20,40 @@ ContractObligationStatusLiteral = Literal["pending", "in_progress", "completed",
 ContractObligationPriorityLiteral = Literal["low", "medium", "high"]
 ContractPlaybookSeverityLiteral = Literal["low", "medium", "high"]
 ContractPlaybookHitStatusLiteral = Literal["matched", "flagged", "missing"]
+ContractTypeKeyLiteral = Literal[
+    "agreement",
+    "nda",
+    "addendum",
+    "purchase_order",
+    "master_services_agreement",
+    "statement_of_work",
+    "lease",
+    "employment",
+    "settlement",
+    "amendment",
+    "other",
+]
+ContractLegalReferenceSourceLiteral = Literal["manual", "ai_suggested", "imported"]
+ContractReviewStatusLiteral = Literal["suggested", "accepted", "rejected"]
+ContractAttachmentRoleLiteral = Literal[
+    "primary_contract",
+    "amendment",
+    "addendum",
+    "annexure",
+    "email_approval",
+    "board_resolution",
+    "purchase_order",
+    "statement_of_work",
+    "supporting_document",
+    "other",
+]
+
+
+def _blank_to_none(value: object) -> object:
+    if isinstance(value, str):
+        cleaned = value.strip()
+        return cleaned or None
+    return value
 
 
 class ContractCreateRequest(BaseModel):
@@ -29,6 +63,8 @@ class ContractCreateRequest(BaseModel):
     owner_membership_id: str | None = None
     counterparty_name: str | None = Field(default=None, min_length=2, max_length=255)
     contract_type: str = Field(min_length=2, max_length=120)
+    contract_type_key: ContractTypeKeyLiteral | None = None
+    contract_type_notes: str | None = Field(default=None, max_length=1000)
     status: ContractStatusLiteral = "draft"
     jurisdiction: str | None = Field(default=None, min_length=2, max_length=255)
     effective_on: date | None = None
@@ -39,6 +75,11 @@ class ContractCreateRequest(BaseModel):
     total_value_minor: int | None = Field(default=None, ge=0)
     summary: str | None = Field(default=None, max_length=4000)
 
+    @field_validator("contract_type_key", "contract_type_notes", mode="before")
+    @classmethod
+    def normalize_optional_text(cls, value: object) -> object:
+        return _blank_to_none(value)
+
 
 class ContractUpdateRequest(BaseModel):
     title: str | None = Field(default=None, min_length=3, max_length=255)
@@ -46,6 +87,8 @@ class ContractUpdateRequest(BaseModel):
     owner_membership_id: str | None = None
     counterparty_name: str | None = Field(default=None, min_length=2, max_length=255)
     contract_type: str | None = Field(default=None, min_length=2, max_length=120)
+    contract_type_key: ContractTypeKeyLiteral | None = None
+    contract_type_notes: str | None = Field(default=None, max_length=1000)
     status: ContractStatusLiteral | None = None
     jurisdiction: str | None = Field(default=None, min_length=2, max_length=255)
     effective_on: date | None = None
@@ -55,6 +98,11 @@ class ContractUpdateRequest(BaseModel):
     currency: str | None = Field(default=None, min_length=3, max_length=8)
     total_value_minor: int | None = Field(default=None, ge=0)
     summary: str | None = Field(default=None, max_length=4000)
+
+    @field_validator("contract_type_key", "contract_type_notes", mode="before")
+    @classmethod
+    def normalize_optional_text(cls, value: object) -> object:
+        return _blank_to_none(value)
 
 
 class ContractRecord(BaseModel):
@@ -68,6 +116,8 @@ class ContractRecord(BaseModel):
     contract_code: str
     counterparty_name: str | None
     contract_type: str
+    contract_type_key: ContractTypeKeyLiteral | None = None
+    contract_type_notes: str | None = None
     status: ContractStatusLiteral
     jurisdiction: str | None
     effective_on: date | None
@@ -116,6 +166,10 @@ class ContractAttachmentRecord(BaseModel):
     processing_status: Literal["pending", "indexed", "needs_ocr", "failed"]
     extracted_char_count: int
     extraction_error: str | None
+    attachment_role: ContractAttachmentRoleLiteral | None = None
+    parent_attachment_id: str | None = None
+    document_date: date | None = None
+    notes: str | None = None
     processed_at: datetime | None
     latest_job: DocumentProcessingJobRecord | None
     created_at: datetime
@@ -213,6 +267,157 @@ class ContractActivityRecord(BaseModel):
     created_at: datetime
 
 
+class ContractMetadataUpdateRequest(BaseModel):
+    contract_type: str | None = Field(default=None, min_length=2, max_length=120)
+    contract_type_key: ContractTypeKeyLiteral | None = None
+    contract_type_notes: str | None = Field(default=None, max_length=1000)
+    effective_on: date | None = None
+    expires_on: date | None = None
+    renewal_on: date | None = None
+    auto_renewal: bool | None = None
+
+    @field_validator("contract_type_key", "contract_type_notes", mode="before")
+    @classmethod
+    def normalize_optional_text(cls, value: object) -> object:
+        return _blank_to_none(value)
+
+
+class ContractLegalReferenceCreateRequest(BaseModel):
+    act_name: str = Field(min_length=2, max_length=255)
+    section_label: str | None = Field(default=None, max_length=120)
+    clause_label: str | None = Field(default=None, max_length=120)
+    authority_id: str | None = Field(default=None, max_length=36)
+    statute_id: str | None = Field(default=None, max_length=64)
+    source: ContractLegalReferenceSourceLiteral = "manual"
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    evidence_attachment_id: str | None = Field(default=None, max_length=36)
+    evidence_quote: str | None = Field(default=None, max_length=1000)
+    status: ContractReviewStatusLiteral | None = None
+
+    @field_validator(
+        "section_label",
+        "clause_label",
+        "authority_id",
+        "statute_id",
+        "evidence_attachment_id",
+        "evidence_quote",
+        mode="before",
+    )
+    @classmethod
+    def normalize_optional_text(cls, value: object) -> object:
+        return _blank_to_none(value)
+
+
+class ContractLegalReferenceUpdateRequest(BaseModel):
+    act_name: str | None = Field(default=None, min_length=2, max_length=255)
+    section_label: str | None = Field(default=None, max_length=120)
+    clause_label: str | None = Field(default=None, max_length=120)
+    authority_id: str | None = Field(default=None, max_length=36)
+    statute_id: str | None = Field(default=None, max_length=64)
+    source: ContractLegalReferenceSourceLiteral | None = None
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    evidence_attachment_id: str | None = Field(default=None, max_length=36)
+    evidence_quote: str | None = Field(default=None, max_length=1000)
+    status: ContractReviewStatusLiteral | None = None
+
+    @field_validator(
+        "section_label",
+        "clause_label",
+        "authority_id",
+        "statute_id",
+        "evidence_attachment_id",
+        "evidence_quote",
+        mode="before",
+    )
+    @classmethod
+    def normalize_optional_text(cls, value: object) -> object:
+        return _blank_to_none(value)
+
+
+class ContractLegalReferenceRecord(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    company_id: str
+    contract_id: str
+    act_name: str
+    section_label: str | None
+    clause_label: str | None
+    authority_id: str | None
+    statute_id: str | None
+    source: ContractLegalReferenceSourceLiteral
+    confidence: float | None
+    evidence_attachment_id: str | None
+    evidence_attachment_name: str | None = None
+    evidence_quote: str | None
+    status: ContractReviewStatusLiteral
+    created_by_membership_id: str | None
+    reviewed_by_membership_id: str | None
+    reviewed_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ContractTermSuggestionCreateRequest(BaseModel):
+    source_attachment_id: str | None = Field(default=None, max_length=36)
+    suggested_effective_on: date | None = None
+    suggested_expires_on: date | None = None
+    suggested_renewal_on: date | None = None
+    suggested_duration_months: int | None = Field(default=None, ge=0, le=1200)
+    evidence_json: dict[str, object] = Field(default_factory=dict)
+
+    @field_validator("source_attachment_id", mode="before")
+    @classmethod
+    def normalize_optional_text(cls, value: object) -> object:
+        return _blank_to_none(value)
+
+    @model_validator(mode="after")
+    def require_suggested_term(self) -> ContractTermSuggestionCreateRequest:
+        if not any(
+            (
+                self.suggested_effective_on,
+                self.suggested_expires_on,
+                self.suggested_renewal_on,
+                self.suggested_duration_months is not None,
+            )
+        ):
+            raise ValueError("At least one suggested contract term is required.")
+        return self
+
+
+class ContractTermSuggestionRecord(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    company_id: str
+    contract_id: str
+    source_attachment_id: str | None
+    source_attachment_name: str | None = None
+    suggested_effective_on: date | None
+    suggested_expires_on: date | None
+    suggested_renewal_on: date | None
+    suggested_duration_months: int | None
+    evidence_json: dict[str, object]
+    status: ContractReviewStatusLiteral
+    created_by_membership_id: str | None
+    reviewed_by_membership_id: str | None
+    reviewed_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ContractAttachmentMetadataUpdateRequest(BaseModel):
+    attachment_role: ContractAttachmentRoleLiteral | None = None
+    parent_attachment_id: str | None = Field(default=None, max_length=36)
+    document_date: date | None = None
+    notes: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("parent_attachment_id", "notes", mode="before")
+    @classmethod
+    def normalize_optional_text(cls, value: object) -> object:
+        return _blank_to_none(value)
+
+
 class ContractWorkspaceResponse(BaseModel):
     contract: ContractRecord
     linked_matter: ContractLinkedMatterRecord | None
@@ -223,6 +428,8 @@ class ContractWorkspaceResponse(BaseModel):
     obligations: list[ContractObligationRecord]
     playbook_rules: list[ContractPlaybookRuleRecord]
     playbook_hits: list[ContractPlaybookHitRecord]
+    legal_references: list[ContractLegalReferenceRecord] = Field(default_factory=list)
+    term_suggestions: list[ContractTermSuggestionRecord] = Field(default_factory=list)
     activity: list[ContractActivityRecord]
 
 

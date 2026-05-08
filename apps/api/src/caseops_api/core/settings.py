@@ -139,6 +139,14 @@ class Settings(BaseSettings):
     msg91_auth_key: str | None = Field(default=None)
     msg91_sender_id: str | None = Field(default=None)
 
+    # LW-S10: Outlook calendar sync. Manual sync is enabled only when
+    # these Microsoft Graph OAuth settings are present. Durable automated
+    # sync/retry remains blocked until Temporal exists.
+    outlook_client_id: str | None = Field(default=None)
+    outlook_client_secret: str | None = Field(default=None)
+    outlook_tenant_id: str = Field(default="organizations")
+    outlook_redirect_uri: str | None = Field(default=None)
+
     auth_rate_limit_login_per_minute: int = Field(default=20, ge=1)
     auth_rate_limit_bootstrap_per_hour: int = Field(default=10, ge=1)
     auth_rate_limit_enabled: bool = Field(default=True)

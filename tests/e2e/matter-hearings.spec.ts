@@ -69,7 +69,7 @@ test.describe("Matter hearings (BUG-004 manual schedule)", () => {
     // Hearings tab of the matter.
     await page.goto(`/app/matters/${matter.id}/hearings`);
     await expect(
-      page.getByRole("heading", { name: /Scheduled hearings/i }),
+      page.getByRole("heading", { name: /Upcoming hearings/i }),
     ).toBeVisible({ timeout: 15_000 });
 
     // Open the schedule dialog.
@@ -92,17 +92,17 @@ test.describe("Matter hearings (BUG-004 manual schedule)", () => {
     await dialog.getByTestId("schedule-hearing-submit").click();
     await expect(dialog).toBeHidden({ timeout: 15_000 });
 
-    // The new hearing row appears under Scheduled hearings. The row
+    // The new hearing row appears under Upcoming hearings. The row
     // renders hearing_type (defaulted to "Hearing" when not supplied)
     // and the scheduled-for date — asserting the formatted date is the
     // most robust signal that the row landed. The ul sits inside the
     // Card's CardContent, which is a sibling of the CardHeader that
     // holds the heading — so we walk up to the enclosing Card before
     // searching for the row text.
-    const scheduledCard = page
-      .getByRole("heading", { name: /Scheduled hearings/i })
+    const upcomingCard = page
+      .getByRole("heading", { name: /Upcoming hearings/i })
       .locator("xpath=ancestor::*[.//ul][1]");
-    await expect(scheduledCard.getByText(/Scheduled:/).first()).toBeVisible({
+    await expect(upcomingCard.getByText(/Scheduled:/).first()).toBeVisible({
       timeout: 15_000,
     });
   });

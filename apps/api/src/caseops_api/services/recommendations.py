@@ -838,6 +838,7 @@ def _load_recommendation(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Recommendation not found.",
         )
+    _load_matter(session, context=context, matter_id=recommendation.matter_id)
     return recommendation
 
 

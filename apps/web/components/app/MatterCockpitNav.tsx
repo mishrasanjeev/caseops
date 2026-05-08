@@ -12,18 +12,19 @@ export function MatterCockpitNav({ matterId }: { matterId: string }) {
   const base = `/app/matters/${matterId}`;
   const tabs: Tab[] = [
     { href: base, label: "Overview" },
+    { href: `${base}/timeline`, label: "Timeline" },
     { href: `${base}/documents`, label: "Documents" },
     { href: `${base}/drafts`, label: "Drafts" },
     { href: `${base}/hearings`, label: "Hearings" },
-    { href: `${base}/recommendations`, label: "Recommendations" },
+    { href: `${base}/recommendations`, label: "AI Recommendations" },
     // MOD-LSE-5 (2026-05-03) — Litigation strategy + escalation planner.
-    { href: `${base}/strategy`, label: "Strategy" },
+    { href: `${base}/strategy`, label: "Strategy Plan" },
     // MOD-TS-017 Slice S4 (2026-04-25) — matter statute references.
     { href: `${base}/statutes`, label: "Statutes" },
     // Phase B / J12 / M11 — communications log.
     { href: `${base}/communications`, label: "Communications" },
     { href: `${base}/billing`, label: "Billing" },
-    { href: `${base}/audit`, label: "Audit" },
+    { href: `${base}/audit`, label: "Matter Audit" },
   ];
 
   return (

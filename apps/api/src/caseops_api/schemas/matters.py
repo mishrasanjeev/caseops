@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import re
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from caseops_api.schemas.billing import InvoiceRecord, TimeEntryRecord
 from caseops_api.schemas.document_processing import DocumentProcessingJobRecord
+from caseops_api.schemas.matter_tags import MatterTagRecord
 
 MatterStatusLiteral = Literal["intake", "active", "on_hold", "closed"]
 MatterForumLevelLiteral = Literal[
@@ -19,6 +21,74 @@ MatterForumLevelLiteral = Literal[
 ]
 MatterTaskStatusLiteral = Literal["todo", "in_progress", "blocked", "completed"]
 MatterTaskPriorityLiteral = Literal["low", "medium", "high", "urgent"]
+MatterCourtOrderKindLiteral = Literal[
+    "daily_order",
+    "interim_order",
+    "stay_order",
+    "final_judgment",
+    "other",
+]
+MatterStayStatusLiteral = Literal[
+    "none",
+    "granted",
+    "continued",
+    "modified",
+    "vacated",
+    "unknown",
+]
+MatterDocumentTypeLiteral = Literal[
+    "complaint_petition",
+    "notice",
+    "vakalatnama",
+    "pleading_reply",
+    "affidavit",
+    "evidence",
+    "written_submission",
+    "interim_application",
+    "order_judgment",
+    "correspondence",
+    "research",
+    "billing",
+    "other",
+]
+MatterLifecycleStageLiteral = Literal[
+    "initiation",
+    "pleadings",
+    "interim_applications",
+    "evidence",
+    "arguments",
+    "orders",
+    "post_order",
+    "administrative",
+    "other",
+]
+MatterTimelineEventTypeLiteral = Literal[
+    "hearing",
+    "court_order",
+    "document",
+    "deadline",
+    "task",
+    "activity",
+]
+_CLAIM_CURRENCY_PATTERN = re.compile(r"^[A-Z]{3}$")
+
+
+def _normalize_claim_currency(value: object) -> str:
+    if value is None:
+        raise ValueError("claim_currency must not be null")
+    if not isinstance(value, str):
+        raise ValueError("claim_currency must be a 3-letter currency code")
+    normalized = value.strip().upper()
+    if not _CLAIM_CURRENCY_PATTERN.fullmatch(normalized):
+        raise ValueError("claim_currency must be a 3-letter currency code")
+    return normalized
+
+
+def _clean_judge_names(value: list[str] | None) -> list[str] | None:
+    if value is None:
+        return None
+    cleaned = [str(name).strip() for name in value if str(name).strip()]
+    return cleaned or None
 
 
 class MatterCreateRequest(BaseModel):
@@ -29,10 +99,24 @@ class MatterCreateRequest(BaseModel):
     status: MatterStatusLiteral = "intake"
     practice_area: str = Field(min_length=2, max_length=120)
     forum_level: MatterForumLevelLiteral
+    court_id: str | None = Field(default=None, max_length=36)
     court_name: str | None = Field(default=None, min_length=2, max_length=255)
+    forum_catalog_entry_id: str | None = Field(default=None, max_length=120)
+    forum_state: str | None = Field(default=None, max_length=120)
+    forum_district: str | None = Field(default=None, max_length=120)
+    forum_city: str | None = Field(default=None, max_length=120)
+    forum_consumer_level: Literal["national", "state", "district"] | None = None
     judge_name: str | None = Field(default=None, min_length=2, max_length=255)
     description: str | None = Field(default=None, max_length=4000)
     next_hearing_on: date | None = None
+    claim_amount_minor: int | None = Field(default=None, ge=0)
+    claim_currency: str = Field(default="INR", min_length=3, max_length=3)
+    claim_amount_notes: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("claim_currency", mode="before")
+    @classmethod
+    def normalize_claim_currency(cls, value: object) -> str:
+        return _normalize_claim_currency(value)
 
     model_config = {
         "json_schema_extra": {
@@ -66,10 +150,19 @@ class MatterUpdateRequest(BaseModel):
     status: MatterStatusLiteral | None = None
     practice_area: str | None = Field(default=None, min_length=2, max_length=120)
     forum_level: MatterForumLevelLiteral | None = None
+    court_id: str | None = Field(default=None, max_length=36)
     court_name: str | None = Field(default=None, min_length=2, max_length=255)
+    forum_catalog_entry_id: str | None = Field(default=None, max_length=120)
+    forum_state: str | None = Field(default=None, max_length=120)
+    forum_district: str | None = Field(default=None, max_length=120)
+    forum_city: str | None = Field(default=None, max_length=120)
+    forum_consumer_level: Literal["national", "state", "district"] | None = None
     judge_name: str | None = Field(default=None, min_length=2, max_length=255)
     description: str | None = Field(default=None, max_length=4000)
     next_hearing_on: date | None = None
+    claim_amount_minor: int | None = Field(default=None, ge=0)
+    claim_currency: str | None = Field(default=None, min_length=3, max_length=3)
+    claim_amount_notes: str | None = Field(default=None, max_length=2000)
     is_active: bool | None = None
     # Sprint 8c: optional team assignment. Pass null to detach; omit
     # the field to leave unchanged.
@@ -80,6 +173,11 @@ class MatterUpdateRequest(BaseModel):
     # invoices, and time entries. Default False — each OC sees only
     # their own.
     oc_cross_visibility_enabled: bool | None = None
+
+    @field_validator("claim_currency", mode="before")
+    @classmethod
+    def normalize_claim_currency(cls, value: object) -> str:
+        return _normalize_claim_currency(value)
 
 
 class MatterRecord(BaseModel):
@@ -124,10 +222,24 @@ class MatterRecord(BaseModel):
     status: MatterStatusLiteral
     practice_area: str
     forum_level: MatterForumLevelLiteral
+    court_id: str | None = None
     court_name: str | None
+    forum_catalog_entry_id: str | None = None
+    forum_state: str | None = None
+    forum_district: str | None = None
+    forum_city: str | None = None
+    forum_consumer_level: str | None = None
     judge_name: str | None
     description: str | None
     next_hearing_on: date | None
+    claim_amount_minor: int | None = None
+    claim_currency: str = "INR"
+    claim_amount_notes: str | None = None
+    tags: list[MatterTagRecord] = Field(default_factory=list)
+    # LW-S1 keeps a stable list column for the LW-S2 stay/order work
+    # without inventing stay state before the order model lands.
+    has_stay: bool = False
+    has_interim_order: bool = False
     is_active: bool
     team_id: str | None = None
     # Phase C-3c (MOD-TS-016, 2026-04-25). See MatterUpdateRequest for
@@ -145,6 +257,23 @@ class MatterListResponse(BaseModel):
     # calls. Keeping it opaque means we can change the encoding later
     # without breaking clients.
     next_cursor: str | None = None
+
+
+class MatterListFilters(BaseModel):
+    q: str | None = Field(default=None, max_length=255)
+    client_name: str | None = Field(default=None, max_length=255)
+    opposing_party: str | None = Field(default=None, max_length=255)
+    forum_level: MatterForumLevelLiteral | None = None
+    court_id: str | None = Field(default=None, max_length=36)
+    status: MatterStatusLiteral | None = None
+    created_from: date | None = None
+    created_to: date | None = None
+    next_hearing_from: date | None = None
+    next_hearing_to: date | None = None
+    tag: str | None = Field(default=None, max_length=120)
+    has_stay: bool | None = None
+    min_claim_amount_minor: int | None = Field(default=None, ge=0)
+    max_claim_amount_minor: int | None = Field(default=None, ge=0)
 
 
 class MatterWorkspaceMembership(BaseModel):
@@ -266,6 +395,22 @@ class MatterCourtOrderSyncItem(BaseModel):
     summary: str = Field(min_length=2, max_length=6000)
     order_text: str | None = Field(default=None, max_length=12000)
     source_reference: str | None = Field(default=None, max_length=500)
+    bench_name: str | None = Field(default=None, min_length=2, max_length=255)
+    judge_names: list[str] | None = Field(default=None, max_length=12)
+    order_attachment_id: str | None = Field(default=None, max_length=36)
+    order_kind: MatterCourtOrderKindLiteral = "daily_order"
+    is_interim_order: bool = False
+    stay_status: MatterStayStatusLiteral = "none"
+    stay_effective_until: date | None = None
+
+    @field_validator("judge_names", mode="before")
+    @classmethod
+    def clean_judge_names(cls, value: object) -> list[str] | None:
+        if value is None:
+            return None
+        if not isinstance(value, list):
+            raise ValueError("judge_names must be a list of names")
+        return _clean_judge_names(value)
 
 
 class MatterCourtSyncImportRequest(BaseModel):
@@ -319,8 +464,67 @@ class MatterCourtOrderRecord(BaseModel):
     order_text: str | None
     source: str
     source_reference: str | None
+    bench_name: str | None = None
+    judge_names: list[str] | None = None
+    order_attachment_id: str | None = None
+    order_kind: MatterCourtOrderKindLiteral | None = None
+    is_interim_order: bool = False
+    stay_status: MatterStayStatusLiteral | None = None
+    stay_effective_until: date | None = None
     synced_at: datetime
     created_at: datetime
+
+
+class MatterCourtOrderUpdateRequest(BaseModel):
+    bench_name: str | None = Field(default=None, min_length=2, max_length=255)
+    judge_names: list[str] | None = Field(default=None, max_length=12)
+    order_attachment_id: str | None = Field(default=None, max_length=36)
+    order_kind: MatterCourtOrderKindLiteral | None = None
+    is_interim_order: bool | None = None
+    stay_status: MatterStayStatusLiteral | None = None
+    stay_effective_until: date | None = None
+
+    @field_validator("judge_names", mode="before")
+    @classmethod
+    def clean_judge_names(cls, value: object) -> list[str] | None:
+        if value is None:
+            return None
+        if not isinstance(value, list):
+            raise ValueError("judge_names must be a list of names")
+        return _clean_judge_names(value)
+
+
+class MatterTimelineLinkRecord(BaseModel):
+    matter: str
+    document: str | None = None
+
+
+class MatterTimelineItemRecord(BaseModel):
+    id: str
+    event_type: MatterTimelineEventTypeLiteral
+    event_date: date
+    event_time: datetime | None = None
+    title: str
+    status: str | None = None
+    summary: str | None = None
+    source_type: str
+    source_id: str | None = None
+    badges: list[str] = Field(default_factory=list)
+    links: MatterTimelineLinkRecord
+    order_kind: MatterCourtOrderKindLiteral | None = None
+    is_interim_order: bool = False
+    stay_status: MatterStayStatusLiteral | None = None
+    stay_effective_until: date | None = None
+    linked_attachment_id: str | None = None
+    metadata: dict[str, str | bool | int | None] = Field(default_factory=dict)
+
+
+class MatterTimelineResponse(BaseModel):
+    matter_id: str
+    sort: Literal["asc", "desc"]
+    items: list[MatterTimelineItemRecord]
+    next_cursor: str | None = None
+    generated_at: datetime
 
 
 class MatterCourtSyncRunRecord(BaseModel):
@@ -380,7 +584,20 @@ class MatterAttachmentRecord(BaseModel):
     extraction_error: str | None
     processed_at: datetime | None
     latest_job: DocumentProcessingJobRecord | None
+    document_type: MatterDocumentTypeLiteral | None = None
+    lifecycle_stage: MatterLifecycleStageLiteral | None = None
+    document_date: date | None = None
+    sequence_index: int | None = None
+    linked_court_order_id: str | None = None
     created_at: datetime
+
+
+class MatterAttachmentMetadataUpdateRequest(BaseModel):
+    document_type: MatterDocumentTypeLiteral | None = None
+    lifecycle_stage: MatterLifecycleStageLiteral | None = None
+    document_date: date | None = None
+    sequence_index: int | None = Field(default=None, ge=0)
+    linked_court_order_id: str | None = Field(default=None, max_length=36)
 
 
 class MatterWorkspaceResponse(BaseModel):

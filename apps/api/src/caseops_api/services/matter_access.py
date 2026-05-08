@@ -1,28 +1,17 @@
-"""Matter-level access control (PRD §13.4, §5.6).
+"""Matter-level access control.
 
-The tenant boundary is already enforced by `company_id` on every
-matter query — this module adds the two finer layers on top:
+Tenant ownership is enforced by ``company_id`` at the matter lookup
+edge. This module adds the finer visibility rules used by both list and
+direct matter endpoints:
 
-- **Grants** (`MatterAccessGrant`) open a restricted matter to a
-  specific membership.
-- **Walls** (`EthicalWall`) block a specific membership regardless of
-  grants, so a firm can conflict-wall an associate off a sensitive
-  matter without revoking their broader access.
+- ethical walls hide a matter from a specific membership;
+- restricted matters require assignee status or an explicit grant;
+- team-scoped tenants require firm-wide matters, team membership,
+  assignee status, or an explicit grant;
+- company owners bypass these gates so they cannot lock themselves out.
 
-Decision rule for a given (membership, matter):
-
-    owner of the company  →   ALLOW  (bypasses walls; owners cannot be
-                                       locked out of their own firm)
-    assignee of the matter →  ALLOW  (ditto — the responsible lawyer
-                                       cannot be walled from the matter
-                                       they're accountable for)
-    wall matches           →  DENY   (audited)
-    matter not restricted  →  ALLOW  (current default behaviour)
-    grant exists           →  ALLOW
-    otherwise              →  DENY   (audited)
-
-The `denied` path records an `audit.access_denied` row every time so
-the compliance view shows who tried.
+The denied path records an ``audit.access_denied`` event before raising
+a 404, matching the tenant-isolation pattern.
 """
 from __future__ import annotations
 
@@ -58,39 +47,20 @@ def can_access(
     """Return True if the signed-in membership may act on this matter.
 
     Assumes `matter.company_id == context.company.id` has already been
-    checked by the caller (every matter lookup does this via
-    `_get_matter_model`). This helper only layers on the grant/wall
-    rules.
+    checked by the caller. Direct matter reads/writes intentionally reuse
+    the same SQL visibility predicate as list endpoints so team scoping,
+    restricted access, grants, and ethical walls cannot drift by route.
     """
-    membership_id = context.membership.id
-
-    # Owners always win so they can't lose access to their own firm.
-    if _is_owner(context):
-        return True
-    # The matter's assignee is never walled from their own matter.
-    if matter.assignee_membership_id == membership_id:
-        return True
-
-    # Walls are checked before grants.
-    wall_exists = session.scalar(
-        select(exists().where(
-            EthicalWall.matter_id == matter.id,
-            EthicalWall.excluded_membership_id == membership_id,
-        ))
+    visible = session.scalar(
+        select(Matter.id)
+        .where(
+            Matter.id == matter.id,
+            Matter.company_id == context.company.id,
+            visible_matters_filter(session, context=context),
+        )
+        .limit(1)
     )
-    if wall_exists:
-        return False
-
-    if not matter.restricted_access:
-        return True
-
-    grant_exists = session.scalar(
-        select(exists().where(
-            MatterAccessGrant.matter_id == matter.id,
-            MatterAccessGrant.membership_id == membership_id,
-        ))
-    )
-    return bool(grant_exists)
+    return visible is not None
 
 
 def assert_access(
@@ -114,7 +84,7 @@ def assert_access(
         target_id=matter.id,
         matter_id=matter.id,
         result="denied",
-        metadata={"reason": "ethical_wall_or_missing_grant"},
+        metadata={"reason": "matter_visibility_denied"},
         commit=True,
     )
     # Pretend the matter does not exist rather than leaking that it does

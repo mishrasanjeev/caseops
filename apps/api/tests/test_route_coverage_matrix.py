@@ -91,7 +91,11 @@ def _route_pattern(path: str) -> re.Pattern[str]:
     ``{param}`` placeholders converted into ``[^"'\\s/]+`` so test
     files that interpolate a UUID into the path still match."""
     pattern = re.escape(path)
-    pattern = re.sub(r"\\\{[^}]+\\\}", r"[^\"'\\s/]+", pattern)
+    pattern = re.sub(
+        r"\\\{[^}]+\\\}",
+        r"(?:\{[^}\n]+\}|[^\"'\\s/]+)",
+        pattern,
+    )
     return re.compile(pattern)
 
 

@@ -30,7 +30,11 @@ import {
 } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
 import { apiErrorMessage } from "@/lib/api/config";
-import { createContract } from "@/lib/api/endpoints";
+import {
+  CONTRACT_TYPE_OPTIONS,
+  createContract,
+  type ContractTypeKey,
+} from "@/lib/api/endpoints";
 
 const schema = z.object({
   title: z.string().min(3, "At least 3 characters."),
@@ -39,12 +43,25 @@ const schema = z.object({
     .min(2, "At least 2 characters.")
     .max(40, "Keep it short and unique.")
     .regex(/^[A-Za-z0-9\-_/]+$/, "Letters, digits, hyphen, underscore, slash only."),
-  contract_type: z.string().min(2, "Contract type helps classify."),
+  contract_type_key: z.enum([
+    "agreement",
+    "nda",
+    "addendum",
+    "purchase_order",
+    "master_services_agreement",
+    "statement_of_work",
+    "lease",
+    "employment",
+    "settlement",
+    "amendment",
+    "other",
+  ]),
+  contract_type_notes: z.string().max(1000).optional().or(z.literal("")),
   counterparty_name: z.string().min(2).max(255).optional().or(z.literal("")),
-  status: z.enum(["draft", "in_review", "executed", "expired", "terminated", "renewed"]),
+  status: z.enum(["draft", "under_review", "negotiation", "executed", "expired", "terminated"]),
   effective_on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal("")),
   expires_on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal("")),
-  governing_law: z.string().max(120).optional().or(z.literal("")),
+  jurisdiction: z.string().max(120).optional().or(z.literal("")),
   summary: z.string().max(2000).optional().or(z.literal("")),
 });
 
@@ -59,29 +76,40 @@ export function NewContractDialog() {
     defaultValues: {
       title: "",
       contract_code: "",
-      contract_type: "msa",
+      contract_type_key: "master_services_agreement",
+      contract_type_notes: "",
       counterparty_name: "",
       status: "draft",
       effective_on: "",
       expires_on: "",
-      governing_law: "India",
+      jurisdiction: "India",
       summary: "",
     },
   });
 
   const mutation = useMutation({
-    mutationFn: (values: FormValues) =>
-      createContract({
+    mutationFn: (values: FormValues) => {
+      const selectedType = CONTRACT_TYPE_OPTIONS.find(
+        (option) => option.value === values.contract_type_key,
+      );
+      const typeNotes = values.contract_type_notes?.trim() || null;
+      return createContract({
         title: values.title.trim(),
         contractCode: values.contract_code.trim().toUpperCase(),
-        contractType: values.contract_type.trim(),
+        contractType:
+          values.contract_type_key === "other" && typeNotes
+            ? typeNotes
+            : selectedType?.label ?? "Agreement",
+        contractTypeKey: values.contract_type_key,
+        contractTypeNotes: typeNotes,
         counterpartyName: values.counterparty_name?.trim() || null,
         status: values.status,
         effectiveOn: values.effective_on || null,
         expiresOn: values.expires_on || null,
-        governingLaw: values.governing_law?.trim() || null,
+        jurisdiction: values.jurisdiction?.trim() || null,
         summary: values.summary?.trim() || null,
-      }),
+      });
+    },
     onSuccess: async (contract) => {
       await queryClient.invalidateQueries({ queryKey: ["contracts", "list"] });
       toast.success("Contract created");
@@ -150,13 +178,35 @@ export function NewContractDialog() {
               />
             </Field>
             <Field id="contract-type" label="Type">
-              <Input
-                id="contract-type"
-                placeholder="msa / nda / sow"
-                {...form.register("contract_type")}
-              />
+              <Select
+                value={form.watch("contract_type_key")}
+                onValueChange={(value) =>
+                  form.setValue("contract_type_key", value as ContractTypeKey)
+                }
+              >
+                <SelectTrigger id="contract-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CONTRACT_TYPE_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </Field>
           </div>
+
+          {form.watch("contract_type_key") === "other" ? (
+            <Field id="contract-type-notes" label="Other type label">
+              <Input
+                id="contract-type-notes"
+                placeholder="Distribution agreement"
+                {...form.register("contract_type_notes")}
+              />
+            </Field>
+          ) : null}
 
           <Field id="counterparty" label="Counterparty (optional)">
             <Input
@@ -195,17 +245,17 @@ export function NewContractDialog() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="draft">Draft</SelectItem>
-                <SelectItem value="in_review">In review</SelectItem>
+                <SelectItem value="under_review">Under review</SelectItem>
+                <SelectItem value="negotiation">Negotiation</SelectItem>
                 <SelectItem value="executed">Executed</SelectItem>
                 <SelectItem value="expired">Expired</SelectItem>
                 <SelectItem value="terminated">Terminated</SelectItem>
-                <SelectItem value="renewed">Renewed</SelectItem>
               </SelectContent>
             </Select>
           </Field>
 
-          <Field id="governing-law" label="Governing law">
-            <Input id="governing-law" {...form.register("governing_law")} />
+          <Field id="jurisdiction" label="Jurisdiction">
+            <Input id="jurisdiction" {...form.register("jurisdiction")} />
           </Field>
 
           <Field id="contract-summary" label="Summary (optional)">

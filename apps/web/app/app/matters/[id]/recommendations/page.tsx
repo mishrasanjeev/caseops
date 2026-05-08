@@ -142,6 +142,9 @@ export default function MatterRecommendationsPage() {
   });
 
   const recommendations = query.data?.recommendations ?? [];
+  const aiRecommendations = recommendations.filter(
+    (rec) => rec.type !== "litigation_strategy",
+  );
 
   return (
     <div className="flex flex-col gap-5">
@@ -184,10 +187,10 @@ export default function MatterRecommendationsPage() {
       <Card>
         <CardHeader className="flex-row items-start justify-between gap-4">
           <div>
-            <CardTitle>Recommendations</CardTitle>
+            <CardTitle>AI Recommendations</CardTitle>
             <CardDescription>
-              Grounded options with verified citations. Every output carries
-              <em className="ml-1">review_required</em> until a human signs off.
+              System-generated decision support with verified citations. These
+              rows are not lawyer-owned strategy work product.
             </CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -234,11 +237,11 @@ export default function MatterRecommendationsPage() {
               error={query.error}
               onRetry={query.refetch}
             />
-          ) : recommendations.length === 0 ? (
+          ) : aiRecommendations.length === 0 ? (
             <EmptyState
               icon={ClipboardCheck}
-              title="No recommendations yet"
-              description="Generate a citation-grounded recommendation from the retrieved authorities. Outputs are always marked for partner review."
+              title="No AI recommendations yet"
+              description="Generate citation-grounded decision support from the retrieved authorities. Outputs remain review-required until a human decision."
             />
           ) : (
             <div className="flex items-center gap-2 text-xs">
@@ -246,13 +249,21 @@ export default function MatterRecommendationsPage() {
                 className="h-4 w-4 text-[var(--color-brand-600)]"
                 aria-hidden
               />
-              Every option below was filtered through CaseOps' citation verifier.
+              AI support below is evidence-aware and remains separate from the Strategy Plan.
             </div>
           )}
         </CardContent>
       </Card>
 
-      {recommendations.map((rec) => (
+      <p
+        className="rounded-md border border-[var(--color-line)] bg-[var(--color-bg)] px-3 py-2 text-xs text-[var(--color-mute)]"
+        data-testid="ai-recommendations-disclaimer"
+      >
+        Accepting, rejecting, or editing an AI recommendation records a review
+        decision; it does not create or approve a lawyer-owned strategy entry.
+      </p>
+
+      {aiRecommendations.map((rec) => (
         <RecommendationCard
           key={rec.id}
           rec={rec}

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
 from uuid import uuid4
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     Boolean,
     Date,
     DateTime,
@@ -45,6 +46,33 @@ class MembershipRole(StrEnum):
     MEMBER = "member"
     PARALEGAL = "paralegal"
     VIEWER = "viewer"
+
+
+class EmployeeEmploymentStatus(StrEnum):
+    INVITED = "invited"
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    OFFBOARDING = "offboarding"
+
+
+class AccountSetupTokenPurpose(StrEnum):
+    ACCOUNT_SETUP = "account_setup"
+    PASSWORD_RESET = "password_reset"
+
+
+class EmployeeImportJobStatus(StrEnum):
+    PREVIEWED = "previewed"
+    COMMITTING = "committing"
+    COMMITTED = "committed"
+    CANCELLED = "cancelled"
+    FAILED = "failed"
+
+
+class EmployeeImportRowStatus(StrEnum):
+    VALID = "valid"
+    INVALID = "invalid"
+    CREATED = "created"
+    FAILED = "failed"
 
 
 class MatterIntakeStatus(StrEnum):
@@ -117,6 +145,51 @@ class MatterConflictCheckStatus(StrEnum):
 class MatterCourtSyncStatus(StrEnum):
     COMPLETED = "completed"
     FAILED = "failed"
+
+
+class MatterCourtOrderKind(StrEnum):
+    DAILY_ORDER = "daily_order"
+    INTERIM_ORDER = "interim_order"
+    STAY_ORDER = "stay_order"
+    FINAL_JUDGMENT = "final_judgment"
+    OTHER = "other"
+
+
+class MatterStayStatus(StrEnum):
+    NONE = "none"
+    GRANTED = "granted"
+    CONTINUED = "continued"
+    MODIFIED = "modified"
+    VACATED = "vacated"
+    UNKNOWN = "unknown"
+
+
+class MatterDocumentType(StrEnum):
+    COMPLAINT_PETITION = "complaint_petition"
+    NOTICE = "notice"
+    VAKALATNAMA = "vakalatnama"
+    PLEADING_REPLY = "pleading_reply"
+    AFFIDAVIT = "affidavit"
+    EVIDENCE = "evidence"
+    WRITTEN_SUBMISSION = "written_submission"
+    INTERIM_APPLICATION = "interim_application"
+    ORDER_JUDGMENT = "order_judgment"
+    CORRESPONDENCE = "correspondence"
+    RESEARCH = "research"
+    BILLING = "billing"
+    OTHER = "other"
+
+
+class MatterDocumentLifecycleStage(StrEnum):
+    INITIATION = "initiation"
+    PLEADINGS = "pleadings"
+    INTERIM_APPLICATIONS = "interim_applications"
+    EVIDENCE = "evidence"
+    ARGUMENTS = "arguments"
+    ORDERS = "orders"
+    POST_ORDER = "post_order"
+    ADMINISTRATIVE = "administrative"
+    OTHER = "other"
 
 
 class MatterCourtSyncJobStatus(StrEnum):
@@ -203,6 +276,45 @@ class ContractPlaybookSeverity(StrEnum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
+
+
+class ContractTypeKey(StrEnum):
+    AGREEMENT = "agreement"
+    NDA = "nda"
+    ADDENDUM = "addendum"
+    PURCHASE_ORDER = "purchase_order"
+    MASTER_SERVICES_AGREEMENT = "master_services_agreement"
+    STATEMENT_OF_WORK = "statement_of_work"
+    LEASE = "lease"
+    EMPLOYMENT = "employment"
+    SETTLEMENT = "settlement"
+    AMENDMENT = "amendment"
+    OTHER = "other"
+
+
+class ContractLegalReferenceSource(StrEnum):
+    MANUAL = "manual"
+    AI_SUGGESTED = "ai_suggested"
+    IMPORTED = "imported"
+
+
+class ContractReviewStatus(StrEnum):
+    SUGGESTED = "suggested"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+
+
+class ContractAttachmentRole(StrEnum):
+    PRIMARY_CONTRACT = "primary_contract"
+    AMENDMENT = "amendment"
+    ADDENDUM = "addendum"
+    ANNEXURE = "annexure"
+    EMAIL_APPROVAL = "email_approval"
+    BOARD_RESOLUTION = "board_resolution"
+    PURCHASE_ORDER = "purchase_order"
+    STATEMENT_OF_WORK = "statement_of_work"
+    SUPPORTING_DOCUMENT = "supporting_document"
+    OTHER = "other"
 
 
 class OutsideCounselPanelStatus(StrEnum):
@@ -336,6 +448,15 @@ class Company(Base):
         back_populates="company",
         cascade="all, delete-orphan",
     )
+    employee_import_jobs: Mapped[list[EmployeeBulkImportJob]] = relationship(
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
+    custom_roles: Mapped[list[CustomRole]] = relationship(
+        back_populates="company",
+        cascade="all, delete-orphan",
+        foreign_keys="CustomRole.company_id",
+    )
 
 
 class User(Base):
@@ -374,6 +495,11 @@ class CompanyMembership(Base):
         index=True,
     )
     role: Mapped[str] = mapped_column(String(20), nullable=False)
+    custom_role_id: Mapped[str | None] = mapped_column(
+        ForeignKey("custom_roles.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
     sessions_valid_after: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
@@ -461,6 +587,362 @@ class CompanyMembership(Base):
         back_populates="recorded_by_membership",
         foreign_keys="OutsideCounselSpendRecord.recorded_by_membership_id",
     )
+    employee_profile: Mapped[EmployeeProfile | None] = relationship(
+        back_populates="membership",
+        uselist=False,
+        foreign_keys="EmployeeProfile.membership_id",
+    )
+    custom_role: Mapped[CustomRole | None] = relationship(
+        back_populates="assigned_memberships",
+        foreign_keys=[custom_role_id],
+    )
+
+
+class CustomRole(Base):
+    """Tenant-scoped custom role template over approved server capabilities."""
+
+    __tablename__ = "custom_roles"
+    __table_args__ = (
+        UniqueConstraint("company_id", "slug", name="uq_custom_roles_company_slug"),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    slug: Mapped[str] = mapped_column(String(140), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    base_role: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    permissions_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    is_system: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    updated_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship(
+        back_populates="custom_roles",
+        foreign_keys=[company_id],
+    )
+    assigned_memberships: Mapped[list[CompanyMembership]] = relationship(
+        back_populates="custom_role",
+        foreign_keys="CompanyMembership.custom_role_id",
+    )
+    created_by_membership: Mapped[CompanyMembership | None] = relationship(
+        foreign_keys=[created_by_membership_id],
+    )
+    updated_by_membership: Mapped[CompanyMembership | None] = relationship(
+        foreign_keys=[updated_by_membership_id],
+    )
+
+
+class EmployeeProfile(Base):
+    """Tenant-scoped employee metadata layered beside CompanyMembership.
+
+    Membership remains the auth/RBAC object. This profile stores HR-facing
+    directory fields and account setup state without changing the canonical
+    fixed-role membership model.
+    """
+
+    __tablename__ = "employee_profiles"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            "membership_id",
+            name="uq_employee_profiles_company_membership",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "employee_code",
+            name="uq_employee_profiles_company_employee_code",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    membership_id: Mapped[str] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    mobile: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    designation: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    department: Mapped[str | None] = mapped_column(String(160), nullable=True, index=True)
+    employee_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    manager_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    joined_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    employment_status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=EmployeeEmploymentStatus.INVITED,
+        index=True,
+    )
+    last_login_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    setup_sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    setup_completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    password_reset_sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    force_password_change: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship()
+    membership: Mapped[CompanyMembership] = relationship(
+        back_populates="employee_profile",
+        foreign_keys=[membership_id],
+    )
+    manager_membership: Mapped[CompanyMembership | None] = relationship(
+        foreign_keys=[manager_membership_id],
+    )
+
+
+class AccountSetupToken(Base):
+    """Single-use account setup/reset token.
+
+    Only the SHA-256 hash is stored. The plaintext token is returned once to
+    the mailer/debug response path and cannot be reconstructed from this row.
+    """
+
+    __tablename__ = "account_setup_tokens"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    membership_id: Mapped[str] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    token_hash: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        unique=True,
+    )
+    purpose: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        index=True,
+    )
+    used_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+    )
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship()
+    user: Mapped[User] = relationship()
+    membership: Mapped[CompanyMembership] = relationship(
+        foreign_keys=[membership_id],
+    )
+    created_by_membership: Mapped[CompanyMembership | None] = relationship(
+        foreign_keys=[created_by_membership_id],
+    )
+
+
+class EmployeeBulkImportJob(Base):
+    """Tenant-scoped employee import preview/commit job."""
+
+    __tablename__ = "employee_bulk_import_jobs"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_type: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    file_size_bytes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=EmployeeImportJobStatus.PREVIEWED,
+        index=True,
+    )
+    total_rows: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    valid_rows: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    invalid_rows: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    failed_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: utcnow() + timedelta(hours=24),
+        nullable=False,
+    )
+    committed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    cancelled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    company: Mapped[Company] = relationship(back_populates="employee_import_jobs")
+    created_by_membership: Mapped[CompanyMembership | None] = relationship(
+        foreign_keys=[created_by_membership_id],
+    )
+    rows: Mapped[list[EmployeeBulkImportRow]] = relationship(
+        back_populates="job",
+        cascade="all, delete-orphan",
+        order_by="EmployeeBulkImportRow.row_number",
+    )
+
+
+class EmployeeBulkImportRow(Base):
+    """One parsed row in a tenant-scoped employee import job."""
+
+    __tablename__ = "employee_bulk_import_rows"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    job_id: Mapped[str] = mapped_column(
+        ForeignKey("employee_bulk_import_jobs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    row_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    raw_json: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
+    normalized_json: Mapped[dict[str, object]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=dict,
+    )
+    errors_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=EmployeeImportRowStatus.INVALID,
+        index=True,
+    )
+    created_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship()
+    job: Mapped[EmployeeBulkImportJob] = relationship(back_populates="rows")
+    created_membership: Mapped[CompanyMembership | None] = relationship(
+        foreign_keys=[created_membership_id],
+    )
 
 
 class Matter(Base):
@@ -489,6 +971,11 @@ class Matter(Base):
     judge_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     next_hearing_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    claim_amount_minor: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    claim_currency: Mapped[str] = mapped_column(
+        String(3), nullable=False, default="INR"
+    )
+    claim_amount_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
     # PRD §13.4 / §5.6: when True, only explicit matter_access_grants
     # open the matter; when False (default) every company member with
@@ -510,6 +997,15 @@ class Matter(Base):
         ForeignKey("courts.id", ondelete="SET NULL"),
         nullable=True,
     )
+    forum_catalog_entry_id: Mapped[str | None] = mapped_column(
+        ForeignKey("forum_catalog_entries.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    forum_state: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    forum_district: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    forum_city: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    forum_consumer_level: Mapped[str | None] = mapped_column(String(24), nullable=True)
     # Sprint 8c: optional team ownership. When the tenant has
     # team_scoping_enabled=True, visibility for non-owners is gated on
     # team membership. Null means firm-wide (visible to every member
@@ -554,6 +1050,9 @@ class Matter(Base):
         back_populates="assigned_matters",
         foreign_keys=[assignee_membership_id],
     )
+    forum_catalog_entry: Mapped[ForumCatalogEntry | None] = relationship(
+        foreign_keys=[forum_catalog_entry_id]
+    )
     tasks: Mapped[list[MatterTask]] = relationship(
         back_populates="matter",
         cascade="all, delete-orphan",
@@ -574,6 +1073,11 @@ class Matter(Base):
         back_populates="matter",
         cascade="all, delete-orphan",
         order_by="desc(MatterActivity.created_at)",
+    )
+    tag_assignments: Mapped[list[MatterTagAssignment]] = relationship(
+        back_populates="matter",
+        cascade="all, delete-orphan",
+        order_by="asc(MatterTagAssignment.created_at)",
     )
     cause_list_entries: Mapped[list[MatterCauseListEntry]] = relationship(
         back_populates="matter",
@@ -627,6 +1131,86 @@ class Matter(Base):
         cascade="all, delete-orphan",
         order_by="desc(OutsideCounselSpendRecord.updated_at)",
     )
+
+
+class MatterTag(Base):
+    __tablename__ = "matter_tags"
+    __table_args__ = (
+        UniqueConstraint("company_id", "slug", name="uq_matter_tags_company_slug"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    slug: Mapped[str] = mapped_column(String(120), nullable=False)
+    color_key: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship()
+    created_by_membership: Mapped[CompanyMembership | None] = relationship()
+    assignments: Mapped[list[MatterTagAssignment]] = relationship(
+        back_populates="tag",
+        cascade="all, delete-orphan",
+    )
+
+
+class MatterTagAssignment(Base):
+    __tablename__ = "matter_tag_assignments"
+    __table_args__ = (
+        UniqueConstraint("matter_id", "tag_id", name="uq_matter_tag_assignment"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    tag_id: Mapped[str] = mapped_column(
+        ForeignKey("matter_tags.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    source: Mapped[str] = mapped_column(String(24), nullable=False, default="manual")
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship()
+    matter: Mapped[Matter] = relationship(back_populates="tag_assignments")
+    tag: Mapped[MatterTag] = relationship(back_populates="assignments")
+    created_by_membership: Mapped[CompanyMembership | None] = relationship()
 
 
 class MatterNote(Base):
@@ -832,6 +1416,46 @@ class HearingReminderStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
+class CalendarProvider(StrEnum):
+    OUTLOOK = "outlook"
+
+
+class CalendarConnectionStatus(StrEnum):
+    CONNECTED = "connected"
+    REVOKED = "revoked"
+    ERROR = "error"
+
+
+class CalendarSyncSourceType(StrEnum):
+    MATTER_HEARING = "matter_hearing"
+    MATTER_DEADLINE = "matter_deadline"
+    MATTER_TASK = "matter_task"
+
+
+class CalendarEventSyncStatus(StrEnum):
+    PENDING = "pending"
+    SYNCED = "synced"
+    FAILED = "failed"
+    DELETED = "deleted"
+
+
+class NotificationRuleScopeType(StrEnum):
+    COMPANY = "company"
+    MATTER = "matter"
+    USER = "user"
+
+
+class NotificationRuleEventType(StrEnum):
+    HEARING_UPCOMING = "hearing_upcoming"
+    NEW_ORDER_UPLOADED = "new_order_uploaded"
+    STAY_STATUS_CHANGED = "stay_status_changed"
+
+
+class InAppNotificationStatus(StrEnum):
+    UNREAD = "unread"
+    READ = "read"
+
+
 class HearingReminder(Base):
     """Durable record of one reminder we intend to send for a hearing.
 
@@ -914,6 +1538,202 @@ class HearingReminder(Base):
     )
 
     hearing: Mapped[MatterHearing] = relationship(back_populates="reminders")
+
+
+class UserCalendarConnection(Base):
+    __tablename__ = "user_calendar_connections"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            "membership_id",
+            "provider",
+            name="uq_calendar_connections_company_membership_provider",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    membership_id: Mapped[str] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    provider: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=CalendarProvider.OUTLOOK,
+    )
+    provider_account_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    display_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=CalendarConnectionStatus.CONNECTED,
+        index=True,
+    )
+    encrypted_token_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
+    scopes_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    connected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship()
+    membership: Mapped[CompanyMembership] = relationship()
+    event_syncs: Mapped[list[CalendarEventSync]] = relationship(
+        back_populates="connection",
+        cascade="all, delete-orphan",
+    )
+
+
+class CalendarEventSync(Base):
+    __tablename__ = "calendar_event_syncs"
+    __table_args__ = (
+        UniqueConstraint(
+            "calendar_connection_id",
+            "source_type",
+            "source_id",
+            name="uq_calendar_event_sync_connection_source",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    calendar_connection_id: Mapped[str] = mapped_column(
+        ForeignKey("user_calendar_connections.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    source_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    source_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    provider_event_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    sync_status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=CalendarEventSyncStatus.PENDING,
+        index=True,
+    )
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship()
+    connection: Mapped[UserCalendarConnection] = relationship(back_populates="event_syncs")
+
+
+class NotificationRule(Base):
+    __tablename__ = "notification_rules"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    scope_type: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
+    scope_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    event_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    channels_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    offset_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship()
+    created_by_membership: Mapped[CompanyMembership | None] = relationship()
+
+
+class InAppNotification(Base):
+    __tablename__ = "in_app_notifications"
+    __table_args__ = (
+        UniqueConstraint(
+            "recipient_membership_id",
+            "event_type",
+            "source_type",
+            "source_id",
+            name="uq_in_app_notification_recipient_source",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    recipient_membership_id: Mapped[str] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    event_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    source_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    source_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    matter_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    body: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=InAppNotificationStatus.UNREAD,
+        index=True,
+    )
+    metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    company: Mapped[Company] = relationship()
+    recipient_membership: Mapped[CompanyMembership] = relationship()
+    matter: Mapped[Matter | None] = relationship()
 
 
 class MatterActivity(Base):
@@ -1012,6 +1832,31 @@ class MatterCourtOrder(Base):
     order_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     source: Mapped[str] = mapped_column(String(120), nullable=False)
     source_reference: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    bench_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    judge_names_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    order_attachment_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matter_attachments.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    order_kind: Mapped[str | None] = mapped_column(
+        String(40),
+        nullable=True,
+        default=MatterCourtOrderKind.DAILY_ORDER,
+    )
+    is_interim_order: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=false(),
+    )
+    stay_status: Mapped[str | None] = mapped_column(
+        String(24),
+        nullable=True,
+        index=True,
+        default=MatterStayStatus.NONE,
+    )
+    stay_effective_until: Mapped[date | None] = mapped_column(Date, nullable=True)
     synced_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
@@ -1024,6 +1869,9 @@ class MatterCourtOrder(Base):
     )
 
     matter: Mapped[Matter] = relationship(back_populates="court_orders")
+    order_attachment: Mapped[MatterAttachment | None] = relationship(
+        foreign_keys=[order_attachment_id]
+    )
     sync_run: Mapped[MatterCourtSyncRun | None] = relationship(back_populates="court_orders")
 
 
@@ -1164,6 +2012,15 @@ class MatterAttachment(Base):
     extraction_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     extracted_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    document_type: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    lifecycle_stage: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    document_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    sequence_index: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    linked_court_order_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matter_court_orders.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
@@ -1178,6 +2035,9 @@ class MatterAttachment(Base):
         back_populates="attachment",
         cascade="all, delete-orphan",
         order_by="MatterAttachmentChunk.chunk_index.asc()",
+    )
+    linked_court_order: Mapped[MatterCourtOrder | None] = relationship(
+        foreign_keys=[linked_court_order_id]
     )
 
 
@@ -1758,6 +2618,8 @@ class Contract(Base):
     contract_code: Mapped[str] = mapped_column(String(80), nullable=False)
     counterparty_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     contract_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    contract_type_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    contract_type_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(24), nullable=False, default=ContractStatus.DRAFT)
     jurisdiction: Mapped[str | None] = mapped_column(String(255), nullable=True)
     effective_on: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -1799,6 +2661,16 @@ class Contract(Base):
         back_populates="contract",
         cascade="all, delete-orphan",
         order_by="desc(ContractPlaybookRule.created_at)",
+    )
+    legal_references: Mapped[list[ContractLegalReference]] = relationship(
+        back_populates="contract",
+        cascade="all, delete-orphan",
+        order_by="desc(ContractLegalReference.created_at)",
+    )
+    term_suggestions: Mapped[list[ContractTermSuggestion]] = relationship(
+        back_populates="contract",
+        cascade="all, delete-orphan",
+        order_by="desc(ContractTermSuggestion.created_at)",
     )
     attachments: Mapped[list[ContractAttachment]] = relationship(
         back_populates="contract",
@@ -1956,6 +2828,149 @@ class ContractActivity(Base):
     )
 
 
+class ContractLegalReference(Base):
+    __tablename__ = "contract_legal_references"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    contract_id: Mapped[str] = mapped_column(
+        ForeignKey("contracts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    act_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    section_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    clause_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    authority_id: Mapped[str | None] = mapped_column(
+        ForeignKey("authority_documents.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    statute_id: Mapped[str | None] = mapped_column(
+        ForeignKey("statutes.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    source: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=ContractLegalReferenceSource.MANUAL,
+    )
+    confidence: Mapped[float | None] = mapped_column(Numeric(5, 4), nullable=True)
+    evidence_attachment_id: Mapped[str | None] = mapped_column(
+        ForeignKey("contract_attachments.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    evidence_quote: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=ContractReviewStatus.ACCEPTED,
+    )
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    reviewed_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    contract: Mapped[Contract] = relationship(back_populates="legal_references")
+    evidence_attachment: Mapped[ContractAttachment | None] = relationship(
+        foreign_keys=[evidence_attachment_id],
+    )
+    created_by_membership: Mapped[CompanyMembership | None] = relationship(
+        foreign_keys=[created_by_membership_id],
+    )
+    reviewed_by_membership: Mapped[CompanyMembership | None] = relationship(
+        foreign_keys=[reviewed_by_membership_id],
+    )
+
+
+class ContractTermSuggestion(Base):
+    __tablename__ = "contract_term_suggestions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    contract_id: Mapped[str] = mapped_column(
+        ForeignKey("contracts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    source_attachment_id: Mapped[str | None] = mapped_column(
+        ForeignKey("contract_attachments.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    suggested_effective_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    suggested_expires_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    suggested_renewal_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    suggested_duration_months: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    evidence_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=ContractReviewStatus.SUGGESTED,
+    )
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    reviewed_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    contract: Mapped[Contract] = relationship(back_populates="term_suggestions")
+    source_attachment: Mapped[ContractAttachment | None] = relationship(
+        foreign_keys=[source_attachment_id],
+    )
+    created_by_membership: Mapped[CompanyMembership | None] = relationship(
+        foreign_keys=[created_by_membership_id],
+    )
+    reviewed_by_membership: Mapped[CompanyMembership | None] = relationship(
+        foreign_keys=[reviewed_by_membership_id],
+    )
+
+
 class ContractAttachment(Base):
     __tablename__ = "contract_attachments"
 
@@ -1983,6 +2998,14 @@ class ContractAttachment(Base):
     extracted_char_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     extraction_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     extracted_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attachment_role: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    parent_attachment_id: Mapped[str | None] = mapped_column(
+        ForeignKey("contract_attachments.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    document_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -1994,6 +3017,10 @@ class ContractAttachment(Base):
     uploaded_by_membership: Mapped[CompanyMembership | None] = relationship(
         back_populates="uploaded_contract_attachments",
         foreign_keys=[uploaded_by_membership_id],
+    )
+    parent_attachment: Mapped[ContractAttachment | None] = relationship(
+        remote_side=[id],
+        foreign_keys=[parent_attachment_id],
     )
     chunks: Mapped[list[ContractAttachmentChunk]] = relationship(
         back_populates="attachment",
@@ -2619,6 +3646,76 @@ class RecommendationDecision(Base):
     recommendation: Mapped[Recommendation] = relationship(back_populates="decisions")
 
 
+class MatterStrategyEntry(Base):
+    """Lawyer-owned strategy work product for a matter.
+
+    Distinct from ``Recommendation`` rows, which remain system-generated
+    decision support. This table holds human-authored plan/decision notes.
+    """
+
+    __tablename__ = "matter_strategy_entries"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    entry_type: Mapped[str] = mapped_column(String(24), nullable=False, default="plan")
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="active")
+    owner_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    updated_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    source_recommendation_id: Mapped[str | None] = mapped_column(
+        ForeignKey("recommendations.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship()
+    matter: Mapped[Matter] = relationship()
+    owner_membership: Mapped[CompanyMembership | None] = relationship(
+        foreign_keys=[owner_membership_id]
+    )
+    created_by_membership: Mapped[CompanyMembership | None] = relationship(
+        foreign_keys=[created_by_membership_id]
+    )
+    updated_by_membership: Mapped[CompanyMembership | None] = relationship(
+        foreign_keys=[updated_by_membership_id]
+    )
+    source_recommendation: Mapped[Recommendation | None] = relationship()
+
+
 class HearingPackStatus(StrEnum):
     DRAFT = "draft"
     REVIEWED = "reviewed"
@@ -3012,6 +4109,58 @@ class Court(Base):
         onupdate=utcnow,
         nullable=False,
     )
+
+
+class ForumCatalogEntry(Base):
+    """Public court/forum selector catalog.
+
+    This table intentionally has no company_id: it is a shared legal forum
+    taxonomy, not tenant data. Matter rows copy the selected metadata so legacy
+    free-text court_name values continue to render if a catalog entry changes.
+    """
+
+    __tablename__ = "forum_catalog_entries"
+
+    id: Mapped[str] = mapped_column(String(120), primary_key=True)
+    parent_id: Mapped[str | None] = mapped_column(
+        ForeignKey("forum_catalog_entries.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    court_id: Mapped[str | None] = mapped_column(
+        ForeignKey("courts.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    forum_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    forum_level: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    state: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    district: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    city: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    consumer_level: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    source_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    source_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    lineage: Mapped[str] = mapped_column(String(500), nullable=False)
+    display_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    parent: Mapped[ForumCatalogEntry | None] = relationship(
+        remote_side=[id],
+        foreign_keys=[parent_id],
+    )
+    court: Mapped[Court | None] = relationship(foreign_keys=[court_id])
 
 
 class Bench(Base):

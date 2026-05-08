@@ -64,6 +64,10 @@ export type Capability =
   // hearing packs
   | "hearing_packs:generate"
   | "hearing_packs:review"
+  // calendar + notifications (LW-S10)
+  | "calendar:view"
+  | "calendar:sync"
+  | "notifications:manage"
   // court sync
   | "court_sync:run"
   // recommendations + AI
@@ -119,6 +123,8 @@ const FEE_EARNER: Capability[] = [
   "contracts:edit",
   "outside_counsel:recommend",
   "hearing_packs:generate",
+  "calendar:view",
+  "calendar:sync",
   "ai:generate",
   "authorities:search",
   "authorities:annotate",
@@ -194,6 +200,7 @@ const GOVERNANCE: Capability[] = [
   // Owner/admin only — same gate as company:manage_users.
   "portal:invite",
   "portal:manage_grants",
+  "notifications:manage",
 ];
 
 // Owner-only caps.
@@ -204,6 +211,7 @@ const VIEWER_CAPS: ReadonlySet<Capability> = new Set<Capability>([
   "intake:submit",
   "clients:view",
   "communications:view",
+  "calendar:view",
 ]);
 
 const PARALEGAL_CAPS: ReadonlySet<Capability> = new Set<Capability>([
@@ -262,8 +270,19 @@ export function can(role: Role | null | undefined, capability: Capability): bool
 
 export function useCapability(capability: Capability): boolean {
   const session = useSession();
+  const resolved = session.context?.capabilities;
+  if (Array.isArray(resolved)) {
+    return resolved.includes(capability);
+  }
   const role = (session.context?.membership.role ?? null) as Role | null;
   return can(role, capability);
+}
+
+export function useResolvedCapabilities(): readonly string[] | null {
+  const session = useSession();
+  return Array.isArray(session.context?.capabilities)
+    ? session.context.capabilities
+    : null;
 }
 
 export function useRole(): Role | null {

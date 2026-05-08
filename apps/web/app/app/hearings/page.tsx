@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Calendar, Gavel } from "lucide-react";
+import { Calendar, CalendarCheck, Gavel } from "lucide-react";
 import Link from "next/link";
 
 import {
@@ -18,6 +18,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { listMatters } from "@/lib/api/endpoints";
 import type { Matter } from "@/lib/api/schemas";
+import { useCapability } from "@/lib/capabilities";
 import { formatLegalDate } from "@/lib/dates";
 
 type BucketKey = "past-due" | "this-week" | "next-7-30" | "later";
@@ -43,6 +44,7 @@ function bucketFor(hearingDate: string): BucketKey {
 }
 
 export default function AllHearingsPage() {
+  const canSyncOutlook = useCapability("calendar:sync");
   const mattersQuery = useQuery({
     queryKey: ["matters", "hearings-aggregate"],
     queryFn: () => listMatters({ limit: 200 }),
@@ -114,7 +116,7 @@ export default function AllHearingsPage() {
                   <ul className="divide-y divide-[var(--color-line-2)]">
                     {list.map((matter) => (
                       <li key={matter.id} className="py-3">
-                        <HearingRow matter={matter} />
+                        <HearingRow matter={matter} canSyncOutlook={canSyncOutlook} />
                       </li>
                     ))}
                   </ul>
@@ -128,7 +130,13 @@ export default function AllHearingsPage() {
   );
 }
 
-function HearingRow({ matter }: { matter: Matter }) {
+function HearingRow({
+  matter,
+  canSyncOutlook,
+}: {
+  matter: Matter;
+  canSyncOutlook: boolean;
+}) {
   const date = formatLegalDate(matter.next_hearing_on, {
     day: "2-digit",
     month: "short",
@@ -152,6 +160,14 @@ function HearingRow({ matter }: { matter: Matter }) {
         <div className="inline-flex items-center gap-1 text-xs font-medium text-[var(--color-ink-2)]">
           <Calendar className="h-3 w-3" aria-hidden /> {date}
         </div>
+        {canSyncOutlook ? (
+          <span
+            className="inline-flex items-center gap-1 text-xs font-medium text-[var(--color-mute)]"
+            data-testid="hearings-sync-affordance"
+          >
+            <CalendarCheck className="h-3 w-3" aria-hidden /> Sync in matter
+          </span>
+        ) : null}
         <StatusBadge status={matter.status} />
       </div>
     </Link>

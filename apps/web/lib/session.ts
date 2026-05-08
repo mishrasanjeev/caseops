@@ -20,6 +20,7 @@ type StoredContext = {
   company: AuthSession["company"];
   user: AuthSession["user"];
   membership: AuthSession["membership"];
+  capabilities?: AuthSession["capabilities"];
 };
 
 function hasStorage(): boolean {
@@ -53,6 +54,7 @@ export function storeSession(session: AuthSession): void {
     company: session.company,
     user: session.user,
     membership: session.membership,
+    capabilities: session.capabilities,
   };
   try {
     // EG-001: do NOT store the access token. The cookie set by the

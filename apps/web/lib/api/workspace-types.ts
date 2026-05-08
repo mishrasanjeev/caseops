@@ -5,12 +5,30 @@ export type WorkspaceMatter = {
   status: string;
   practice_area?: string | null;
   forum_level?: string | null;
+  court_id?: string | null;
   court_name?: string | null;
+  forum_catalog_entry_id?: string | null;
+  forum_state?: string | null;
+  forum_district?: string | null;
+  forum_city?: string | null;
+  forum_consumer_level?: string | null;
   judge_name?: string | null;
   client_name?: string | null;
   opposing_party?: string | null;
   description?: string | null;
   next_hearing_on?: string | null;
+  claim_amount_minor?: number | null;
+  claim_currency?: string;
+  claim_amount_notes?: string | null;
+  tags?: Array<{
+    id: string;
+    company_id: string;
+    name: string;
+    slug: string;
+    color_key?: string | null;
+  }>;
+  has_stay?: boolean;
+  has_interim_order?: boolean;
   team_id?: string | null;
   // Phase C-3c (MOD-TS-016, 2026-04-25). Default false — present on
   // every fresh server but optional here so legacy cached responses
@@ -27,7 +45,11 @@ export type WorkspaceHearing = {
   scheduled_for?: string | null;
   listing_date?: string | null;
   hearing_type?: string | null;
+  purpose?: string | null;
+  forum_name?: string | null;
+  judge_name?: string | null;
   status?: string | null;
+  outcome_note?: string | null;
   outcome_notes?: string | null;
   created_at: string;
 };
@@ -37,8 +59,14 @@ export type WorkspaceAttachment = {
   filename?: string | null;
   original_filename?: string | null;
   mime_type?: string | null;
+  content_type?: string | null;
   size_bytes?: number | null;
   processing_status?: string | null;
+  document_type?: string | null;
+  lifecycle_stage?: string | null;
+  document_date?: string | null;
+  sequence_index?: number | null;
+  linked_court_order_id?: string | null;
   created_at: string;
 };
 
@@ -105,6 +133,14 @@ export type WorkspaceCourtOrder = {
   summary?: string | null;
   order_date?: string | null;
   source?: string | null;
+  source_reference?: string | null;
+  bench_name?: string | null;
+  judge_names?: string[] | null;
+  order_attachment_id?: string | null;
+  order_kind?: string | null;
+  is_interim_order?: boolean;
+  stay_status?: string | null;
+  stay_effective_until?: string | null;
 };
 
 export type WorkspaceResolvedBenchMember = {

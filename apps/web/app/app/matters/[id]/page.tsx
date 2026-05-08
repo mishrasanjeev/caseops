@@ -7,7 +7,9 @@ import { useParams } from "next/navigation";
 import { CounselRecommendationsCard } from "@/components/app/CounselRecommendationsCard";
 import { BenchStrategyPanel } from "@/components/matter/BenchStrategyPanel";
 import { ConflictCheckCard } from "@/components/matters/ConflictCheckCard";
+import { MatterForumCard } from "@/components/matters/MatterForumCard";
 import { NextActionCard } from "@/components/matters/NextActionCard";
+import { OrderBadges } from "@/components/matters/OrderBadges";
 import { ScheduleHearingDialog } from "@/components/matters/ScheduleHearingDialog";
 import {
   Card,
@@ -50,6 +52,7 @@ export default function MatterOverviewPage() {
 
   const activeTasks = data.tasks.filter((t) => t.status !== "done").slice(0, 5);
   const upcomingHearings = data.hearings
+    .filter((h) => h.status !== "completed")
     .filter((h) => h.hearing_on || h.scheduled_for || h.listing_date)
     .slice(0, 4);
   const latestOrder = data.court_orders[0];
@@ -90,6 +93,8 @@ export default function MatterOverviewPage() {
 
       <ConflictCheckCard matterId={data.matter.id} />
 
+      <MatterForumCard matter={data.matter} />
+
       <CounselRecommendationsCard matterId={data.matter.id} />
 
       <BenchStrategyPanel matterId={data.matter.id} />
@@ -121,6 +126,7 @@ export default function MatterOverviewPage() {
                   {latestOrder.summary}
                 </p>
               ) : null}
+              <OrderBadges order={latestOrder} />
               {latestOrder.source ? (
                 <span className="mt-1 inline-flex w-fit items-center rounded-full border border-[var(--color-line)] bg-[var(--color-bg)] px-2 py-0.5 text-[10px] uppercase tracking-wider text-[var(--color-mute)]">
                   {latestOrder.source}

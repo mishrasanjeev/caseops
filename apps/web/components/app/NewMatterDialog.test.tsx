@@ -4,14 +4,16 @@ import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { createMatterMock, toastSuccess, toastError } = vi.hoisted(() => ({
+const { createMatterMock, fetchForumCatalogMock, toastSuccess, toastError } = vi.hoisted(() => ({
   createMatterMock: vi.fn(),
+  fetchForumCatalogMock: vi.fn(),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
 }));
 
 vi.mock("@/lib/api/endpoints", () => ({
   createMatter: createMatterMock,
+  fetchForumCatalog: fetchForumCatalogMock,
 }));
 
 vi.mock("sonner", () => ({
@@ -31,9 +33,52 @@ async function openDialog(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByTestId("new-matter-trigger"));
 }
 
+async function fillRequiredMatterFields(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(await screen.findByLabelText("Title"), "Spine matter");
+  await user.type(screen.getByLabelText("Matter code"), "blr-001");
+  await user.type(screen.getByLabelText("Practice area"), "Commercial");
+}
+
 describe("NewMatterDialog", () => {
   beforeEach(() => {
     createMatterMock.mockReset();
+    fetchForumCatalogMock.mockReset();
+    fetchForumCatalogMock.mockResolvedValue({
+      entries: [
+        {
+          id: "sc:india",
+          parent_id: null,
+          court_id: "supreme-court-india",
+          name: "Supreme Court of India",
+          forum_type: "supreme_court",
+          forum_level: "supreme_court",
+          state: null,
+          district: null,
+          city: "New Delhi",
+          consumer_level: null,
+          source_name: "CaseOps LW-S4 baseline forum catalog",
+          source_url: null,
+          lineage: "Supreme Court > India",
+          display_order: 10,
+        },
+        {
+          id: "hc:delhi",
+          parent_id: null,
+          court_id: "delhi-hc",
+          name: "Delhi High Court",
+          forum_type: "high_court",
+          forum_level: "high_court",
+          state: "Delhi",
+          district: null,
+          city: "New Delhi",
+          consumer_level: null,
+          source_name: "CaseOps LW-S4 baseline forum catalog",
+          source_url: null,
+          lineage: "High Court > Delhi > Delhi High Court",
+          display_order: 24,
+        },
+      ],
+    });
     toastSuccess.mockReset();
     toastError.mockReset();
   });
@@ -43,6 +88,7 @@ describe("NewMatterDialog", () => {
     render(withClient(<NewMatterDialog />));
 
     await openDialog(user);
+    await waitFor(() => expect(fetchForumCatalogMock).toHaveBeenCalledTimes(1));
     // Submitting the dialog with no fields filled trips the zod schema.
     await user.click(await screen.findByRole("button", { name: /Create matter/i }));
 
@@ -58,6 +104,70 @@ describe("NewMatterDialog", () => {
     expect(createMatterMock).not.toHaveBeenCalled();
   });
 
+  it("keeps creation disabled while the forum catalog is loading", async () => {
+    const user = userEvent.setup();
+    let resolveCatalog: (value: { entries: [] }) => void = () => {};
+    fetchForumCatalogMock.mockReturnValue(
+      new Promise<{ entries: [] }>((resolve) => {
+        resolveCatalog = resolve;
+      }),
+    );
+    render(withClient(<NewMatterDialog />));
+
+    await openDialog(user);
+
+    expect(screen.getByRole("button", { name: /Create matter/i })).toBeDisabled();
+    resolveCatalog({ entries: [] });
+  });
+
+  it("requires an explicit legacy fallback when the forum catalog request fails", async () => {
+    const user = userEvent.setup();
+    fetchForumCatalogMock.mockRejectedValue(new Error("catalog down"));
+    createMatterMock.mockResolvedValue({
+      id: "m-1",
+      matter_code: "BLR-001",
+      title: "Spine matter",
+      created_at: "2026-04-17T10:00:00Z",
+      status: "active",
+    });
+    render(withClient(<NewMatterDialog />));
+
+    await openDialog(user);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /Forum catalog could not be loaded/i,
+    );
+    await fillRequiredMatterFields(user);
+    expect(screen.getByRole("button", { name: /Create matter/i })).toBeDisabled();
+
+    await user.selectOptions(screen.getByTestId("new-matter-forum-category"), "legacy");
+    expect(screen.getByRole("button", { name: /Create matter/i })).toBeDisabled();
+
+    await user.type(screen.getByTestId("new-matter-forum-legacy-court"), "SIAC");
+    await user.click(screen.getByRole("button", { name: /Create matter/i }));
+
+    await waitFor(() => expect(createMatterMock).toHaveBeenCalledTimes(1));
+    expect(createMatterMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        court_id: null,
+        court_name: "SIAC",
+        forum_catalog_entry_id: null,
+      }),
+    );
+  });
+
+  it("blocks hierarchy submission when the forum catalog is empty", async () => {
+    const user = userEvent.setup();
+    fetchForumCatalogMock.mockResolvedValue({ entries: [] });
+    render(withClient(<NewMatterDialog />));
+
+    await openDialog(user);
+    expect(await screen.findByText(/Forum catalog is empty/i)).toBeInTheDocument();
+    await fillRequiredMatterFields(user);
+
+    expect(screen.getByRole("button", { name: /Create matter/i })).toBeDisabled();
+    expect(createMatterMock).not.toHaveBeenCalled();
+  });
+
   it("uppercases the matter code and trims whitespace before calling the API", async () => {
     const user = userEvent.setup();
     createMatterMock.mockResolvedValue({
@@ -70,6 +180,9 @@ describe("NewMatterDialog", () => {
     render(withClient(<NewMatterDialog />));
 
     await openDialog(user);
+    await waitFor(() =>
+      expect(screen.getByTestId("new-matter-forum-state")).toHaveValue("Delhi"),
+    );
     await user.type(await screen.findByLabelText("Title"), "  Spine matter  ");
     await user.type(screen.getByLabelText("Matter code"), "  blr-001  ");
     await user.type(screen.getByLabelText("Practice area"), "Commercial");
@@ -82,6 +195,13 @@ describe("NewMatterDialog", () => {
         matter_code: "BLR-001",
         practice_area: "Commercial",
         forum_level: "high_court",
+        court_id: "delhi-hc",
+        court_name: "Delhi High Court",
+        forum_catalog_entry_id: "hc:delhi",
+        forum_state: "Delhi",
+        forum_district: null,
+        forum_city: "New Delhi",
+        forum_consumer_level: null,
         status: "active",
       }),
     );

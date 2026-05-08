@@ -21,6 +21,7 @@ from caseops_api.db.models import (
     AuthorityDocument,
     AuthorityDocumentChunk,
     Court,
+    ForumCatalogEntry,
     Judge,
     JudgeAlias,
     JudgeAppointment,
@@ -190,6 +191,29 @@ class JudgesListResponse(BaseModel):
     judges: list[JudgeRecord]
 
 
+class ForumCatalogEntryRecord(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    parent_id: str | None
+    court_id: str | None
+    name: str
+    forum_type: str
+    forum_level: str
+    state: str | None
+    district: str | None
+    city: str | None
+    consumer_level: str | None
+    source_name: str
+    source_url: str | None
+    lineage: str
+    display_order: int
+
+
+class ForumCatalogResponse(BaseModel):
+    entries: list[ForumCatalogEntryRecord]
+
+
 @router.get(
     "/",
     response_model=CourtsListResponse,
@@ -213,6 +237,37 @@ def list_courts(
     courts = list(session.scalars(stmt))
     return CourtsListResponse(
         courts=[CourtRecord.model_validate(court) for court in courts],
+    )
+
+
+@router.get(
+    "/forum-catalog",
+    response_model=ForumCatalogResponse,
+    summary="List the public LegalWorkspace forum selector catalog",
+)
+def list_forum_catalog(
+    context: CurrentContext,
+    session: DbSession,
+    forum_type: str | None = None,
+    state: str | None = None,
+) -> ForumCatalogResponse:
+    # Authentication is required, but the returned catalog is public product
+    # metadata only. No company_id, matter count, or tenant-derived field is
+    # selected here.
+    _ = context
+    stmt = select(ForumCatalogEntry).where(ForumCatalogEntry.is_active.is_(True))
+    if forum_type:
+        stmt = stmt.where(ForumCatalogEntry.forum_type == forum_type)
+    if state:
+        stmt = stmt.where(ForumCatalogEntry.state == state)
+    stmt = stmt.order_by(
+        ForumCatalogEntry.display_order.asc(),
+        ForumCatalogEntry.state.asc().nulls_first(),
+        ForumCatalogEntry.district.asc().nulls_first(),
+        ForumCatalogEntry.name.asc(),
+    )
+    return ForumCatalogResponse(
+        entries=[ForumCatalogEntryRecord.model_validate(entry) for entry in session.scalars(stmt)]
     )
 
 

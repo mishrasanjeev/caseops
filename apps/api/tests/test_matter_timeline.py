@@ -165,6 +165,93 @@ def test_timeline_is_empty_for_bare_matter(client: TestClient) -> None:
     assert timeline.matter_id == matter_id
 
 
+def test_timeline_source_queries_are_bounded_before_merge(client: TestClient) -> None:
+    from tests.test_auth_company import auth_headers, bootstrap_company
+
+    bootstrap = bootstrap_company(client)
+    headers = auth_headers(str(bootstrap["access_token"]))
+    matter_id = _create_matter(client, matter_code="TL-BOUNDED", headers=headers)
+
+    factory = get_session_factory()
+    with factory() as session:
+        session.add_all(
+            [
+                MatterHearing(
+                    matter_id=matter_id,
+                    hearing_on=date(2026, 7, day),
+                    forum_name="Delhi High Court",
+                    purpose=f"Bounded hearing {day:02d}",
+                    status=MatterHearingStatus.SCHEDULED,
+                )
+                for day in range(1, 13)
+            ]
+        )
+        session.commit()
+
+    with factory() as session:
+        matter = session.scalar(select(Matter).where(Matter.id == matter_id))
+        assert matter is not None
+        timeline = build_matter_timeline(
+            session=session,
+            matter=matter,
+            source_limit=3,
+        )
+
+    assert [event.title for event in timeline.events] == [
+        "Bounded hearing 01",
+        "Bounded hearing 02",
+        "Bounded hearing 03",
+    ]
+
+
+def test_timeline_same_day_same_kind_same_title_uses_stable_source_id(
+    client: TestClient,
+) -> None:
+    from tests.test_auth_company import auth_headers, bootstrap_company
+
+    bootstrap = bootstrap_company(client)
+    headers = auth_headers(str(bootstrap["access_token"]))
+    matter_id = _create_matter(client, matter_code="TL-STABLE", headers=headers)
+    same_day = date(2026, 7, 15)
+    same_time = datetime(2026, 7, 15, 10, 0, tzinfo=UTC)
+
+    factory = get_session_factory()
+    with factory() as session:
+        session.add_all(
+            [
+                MatterCourtOrder(
+                    id="tl-stable-order-b",
+                    matter_id=matter_id,
+                    order_date=same_day,
+                    title="Same title",
+                    summary="Second stable order.",
+                    source="manual-test",
+                    synced_at=same_time,
+                ),
+                MatterCourtOrder(
+                    id="tl-stable-order-a",
+                    matter_id=matter_id,
+                    order_date=same_day,
+                    title="Same title",
+                    summary="First stable order.",
+                    source="manual-test",
+                    synced_at=same_time,
+                ),
+            ]
+        )
+        session.commit()
+
+    with factory() as session:
+        matter = session.scalar(select(Matter).where(Matter.id == matter_id))
+        assert matter is not None
+        timeline = build_matter_timeline(session=session, matter=matter)
+
+    assert [event.source_ref_id for event in timeline.events] == [
+        "tl-stable-order-a",
+        "tl-stable-order-b",
+    ]
+
+
 def test_build_timeline_by_id_rejects_cross_tenant(client: TestClient) -> None:
     """Tenant A's matter must 404 for Tenant B."""
     from tests.test_auth_company import auth_headers, bootstrap_company

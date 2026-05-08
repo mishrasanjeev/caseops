@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   uploadMock,
+  updateMetadataMock,
   retryMock,
   reindexMock,
   workspaceData,
@@ -14,6 +15,7 @@ const {
   toastError,
 } = vi.hoisted(() => ({
   uploadMock: vi.fn(),
+  updateMetadataMock: vi.fn(),
   retryMock: vi.fn(),
   reindexMock: vi.fn(),
   workspaceData: {
@@ -37,6 +39,7 @@ const {
 
 vi.mock("@/lib/api/endpoints", () => ({
   uploadMatterAttachment: uploadMock,
+  updateMatterAttachmentMetadata: updateMetadataMock,
   retryMatterAttachment: retryMock,
   reindexMatterAttachment: reindexMock,
 }));
@@ -73,11 +76,13 @@ function attachments(list: Array<Record<string, unknown>>) {
 describe("MatterDocumentsPage", () => {
   beforeEach(() => {
     uploadMock.mockReset();
+    updateMetadataMock.mockReset();
     retryMock.mockReset();
     reindexMock.mockReset();
     useCapabilityMock.mockReset();
     toastSuccess.mockReset();
     toastError.mockReset();
+    workspaceData.current = { ...(workspaceData.current as object), court_orders: [] };
     attachments([]);
   });
 
@@ -93,13 +98,101 @@ describe("MatterDocumentsPage", () => {
     uploadMock.mockResolvedValue({ id: "a1" });
 
     render(withClient(<MatterDocumentsPage />));
+    await userEvent.selectOptions(
+      screen.getByTestId("matter-attachment-document-type"),
+      "order_judgment",
+    );
+    expect(screen.getByTestId("matter-attachment-lifecycle-stage")).toHaveValue("orders");
+    await userEvent.type(screen.getByLabelText("Document date"), "2026-05-03");
+    await userEvent.type(screen.getByLabelText("Sequence"), "5");
     const input = screen.getByTestId("matter-attachment-file-input") as HTMLInputElement;
     const file = new File(["hello"], "order.pdf", { type: "application/pdf" });
     await userEvent.upload(input, file);
 
     await waitFor(() => expect(uploadMock).toHaveBeenCalledTimes(1));
-    expect(uploadMock).toHaveBeenCalledWith({ matterId: "m1", file });
+    expect(uploadMock).toHaveBeenCalledWith({
+      matterId: "m1",
+      file,
+      documentType: "order_judgment",
+      lifecycleStage: "orders",
+      documentDate: "2026-05-03",
+      sequenceIndex: 5,
+      linkedCourtOrderId: null,
+    });
     expect(toastSuccess).toHaveBeenCalled();
+  });
+
+  it("groups documents by lifecycle and shows unclassified legacy documents", () => {
+    useCapabilityMock.mockImplementation(() => false);
+    attachments([
+      {
+        id: "a1",
+        original_filename: "evidence.pdf",
+        document_type: "evidence",
+        lifecycle_stage: "evidence",
+        document_date: "2026-05-02",
+        sequence_index: 20,
+        processing_status: "indexed",
+        created_at: "2026-05-04T10:00:00Z",
+        size_bytes: 2048,
+      },
+      {
+        id: "a2",
+        original_filename: "legacy.pdf",
+        document_type: null,
+        lifecycle_stage: null,
+        processing_status: "indexed",
+        created_at: "2026-05-05T10:00:00Z",
+        size_bytes: 1024,
+      },
+    ]);
+
+    render(withClient(<MatterDocumentsPage />));
+
+    expect(screen.getByTestId("matter-document-group-evidence")).toBeInTheDocument();
+    expect(screen.getByTestId("matter-document-group-unclassified")).toBeInTheDocument();
+    expect(screen.getByText("Seq 20")).toBeInTheDocument();
+    expect(screen.getAllByText("Unclassified").length).toBeGreaterThan(0);
+  });
+
+  it("lets document managers edit lifecycle metadata", async () => {
+    useCapabilityMock.mockImplementation((cap: string) => cap === "documents:manage");
+    updateMetadataMock.mockResolvedValue({ id: "a1" });
+    workspaceData.current = {
+      ...(workspaceData.current as object),
+      court_orders: [{ id: "o1", title: "Interim order", order_date: "2026-05-03" }],
+      attachments: [
+        {
+          id: "a1",
+          original_filename: "legacy.pdf",
+          document_type: null,
+          lifecycle_stage: null,
+          processing_status: "indexed",
+          created_at: "2026-05-05T10:00:00Z",
+          size_bytes: 1024,
+        },
+      ],
+    };
+
+    render(withClient(<MatterDocumentsPage />));
+    await userEvent.click(screen.getByTestId("matter-attachment-edit-a1"));
+    await userEvent.selectOptions(screen.getAllByLabelText("Document type")[0], "pleading_reply");
+    await userEvent.type(screen.getAllByLabelText("Document date")[0], "2026-05-01");
+    await userEvent.type(screen.getAllByLabelText("Sequence")[0], "12");
+    await userEvent.selectOptions(screen.getAllByLabelText("Linked order")[0], "o1");
+    await userEvent.click(screen.getByTestId("matter-attachment-save-a1"));
+
+    await waitFor(() => expect(updateMetadataMock).toHaveBeenCalledTimes(1));
+    expect(updateMetadataMock).toHaveBeenCalledWith({
+      matterId: "m1",
+      attachmentId: "a1",
+      document_type: "pleading_reply",
+      lifecycle_stage: "pleadings",
+      document_date: "2026-05-01",
+      sequence_index: 12,
+      linked_court_order_id: "o1",
+    });
+    expect(toastSuccess).toHaveBeenCalledWith("Document metadata updated.");
   });
 
   it("shows retry for failed attachments when the user can manage", async () => {

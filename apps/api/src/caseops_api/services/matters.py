@@ -1,17 +1,19 @@
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime
+from datetime import UTC, date, datetime, time
 from typing import BinaryIO
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from caseops_api.db.models import (
     CompanyMembership,
+    Court,
     DocumentProcessingAction,
     DocumentProcessingTargetType,
+    ForumCatalogEntry,
     Matter,
     MatterActivity,
     MatterAttachment,
@@ -24,6 +26,8 @@ from caseops_api.db.models import (
     MatterInvoiceLineItem,
     MatterInvoicePaymentAttempt,
     MatterNote,
+    MatterTag,
+    MatterTagAssignment,
     MatterTask,
     MatterTaskStatus,
     MatterTimeEntry,
@@ -39,17 +43,21 @@ from caseops_api.schemas.billing import (
     TimeEntryRecord,
 )
 from caseops_api.schemas.document_processing import DocumentProcessingJobRecord
+from caseops_api.schemas.matter_tags import MatterTagRecord
 from caseops_api.schemas.matters import (
     MatterActivityRecord,
+    MatterAttachmentMetadataUpdateRequest,
     MatterAttachmentRecord,
     MatterCauseListEntryRecord,
     MatterCourtOrderRecord,
+    MatterCourtOrderUpdateRequest,
     MatterCourtSyncImportRequest,
     MatterCourtSyncJobRecord,
     MatterCourtSyncRunRecord,
     MatterCreateRequest,
     MatterHearingCreateRequest,
     MatterHearingRecord,
+    MatterListFilters,
     MatterListResponse,
     MatterNoteCreateRequest,
     MatterNoteRecord,
@@ -77,12 +85,272 @@ from caseops_api.services.matter_access import (
     assert_access,
     visible_matters_filter,
 )
+from caseops_api.services.matter_tags import slugify_tag
 
 logger = logging.getLogger(__name__)
+ACTIVE_STAY_STATUSES = {"granted", "continued", "modified"}
+FORUM_SELECTION_FIELDS = {
+    "forum_level",
+    "court_id",
+    "court_name",
+    "forum_catalog_entry_id",
+    "forum_state",
+    "forum_district",
+    "forum_city",
+    "forum_consumer_level",
+}
+DOCUMENT_TYPE_DEFAULT_LIFECYCLE: dict[str, str] = {
+    "complaint_petition": "initiation",
+    "notice": "initiation",
+    "vakalatnama": "administrative",
+    "pleading_reply": "pleadings",
+    "affidavit": "pleadings",
+    "evidence": "evidence",
+    "written_submission": "arguments",
+    "interim_application": "interim_applications",
+    "order_judgment": "orders",
+    "correspondence": "administrative",
+    "research": "administrative",
+    "billing": "administrative",
+    "other": "other",
+}
+
+
+def _order_has_active_stay(order: MatterCourtOrder) -> bool:
+    return (order.stay_status or "none") in ACTIVE_STAY_STATUSES
+
+
+def _order_is_interim(order: MatterCourtOrder) -> bool:
+    return bool(order.is_interim_order) or order.order_kind == "interim_order"
 
 
 def _matter_record(matter: Matter) -> MatterRecord:
-    return MatterRecord.model_validate(matter)
+    record = MatterRecord.model_validate(matter)
+    assignments = list(getattr(matter, "tag_assignments", []) or [])
+    record.tags = [
+        MatterTagRecord.model_validate(assignment.tag)
+        for assignment in sorted(
+            assignments,
+            key=lambda item: item.tag.name.lower() if item.tag else "",
+        )
+        if assignment.tag is not None
+    ]
+    orders = list(getattr(matter, "court_orders", []) or [])
+    record.has_stay = any(_order_has_active_stay(order) for order in orders)
+    record.has_interim_order = any(_order_is_interim(order) for order in orders)
+    return record
+
+
+def _clean_optional_str(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = value.strip()
+    return cleaned or None
+
+
+def _forum_snapshot(matter: Matter) -> dict[str, str | None]:
+    return {
+        "forum_level": matter.forum_level,
+        "court_id": matter.court_id,
+        "court_name": matter.court_name,
+        "forum_catalog_entry_id": matter.forum_catalog_entry_id,
+        "forum_state": matter.forum_state,
+        "forum_district": matter.forum_district,
+        "forum_city": matter.forum_city,
+        "forum_consumer_level": matter.forum_consumer_level,
+    }
+
+
+def _load_active_court(session: Session, court_id: str | None) -> Court | None:
+    if not court_id:
+        return None
+    court = session.scalar(
+        select(Court).where(Court.id == court_id, Court.is_active.is_(True))
+    )
+    if court is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Court was not found in the public court catalog.",
+        )
+    return court
+
+
+def _load_forum_catalog_entry(
+    session: Session, entry_id: str | None
+) -> ForumCatalogEntry | None:
+    if not entry_id:
+        return None
+    entry = session.scalar(
+        select(ForumCatalogEntry).where(
+            ForumCatalogEntry.id == entry_id,
+            ForumCatalogEntry.is_active.is_(True),
+        )
+    )
+    if entry is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Forum selection was not found in the public catalog.",
+        )
+    return entry
+
+
+def _validate_forum_metadata(entry: ForumCatalogEntry) -> None:
+    if entry.forum_type == "supreme_court":
+        return
+    if entry.forum_type == "high_court" and not entry.state:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="High Court selection requires a state.",
+        )
+    if entry.forum_type == "district_court" and (
+        not entry.state or not (entry.district or entry.city)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="District Court selection requires state and district/city.",
+        )
+    if entry.forum_type == "consumer_forum":
+        if entry.consumer_level in {"state", "district"} and not entry.state:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="State consumer forum selection requires a state.",
+            )
+        if entry.consumer_level == "district" and not (entry.district or entry.city):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="District consumer forum selection requires district/city.",
+            )
+
+
+def _assert_matching_optional(
+    *,
+    provided: str | None,
+    expected: str | None,
+    field_name: str,
+) -> None:
+    if provided and expected and provided.strip() != expected:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"{field_name} does not match the selected forum catalog entry.",
+        )
+
+
+def _resolve_forum_selection(
+    session: Session,
+    *,
+    forum_level: str | None,
+    court_id: str | None,
+    court_name: str | None,
+    forum_catalog_entry_id: str | None,
+    forum_state: str | None,
+    forum_district: str | None,
+    forum_city: str | None,
+    forum_consumer_level: str | None,
+) -> dict[str, str | None]:
+    clean_forum_level = _clean_optional_str(forum_level)
+    clean_court_id = _clean_optional_str(court_id)
+    clean_court_name = _clean_optional_str(court_name)
+    clean_catalog_entry_id = _clean_optional_str(forum_catalog_entry_id)
+    clean_state = _clean_optional_str(forum_state)
+    clean_district = _clean_optional_str(forum_district)
+    clean_city = _clean_optional_str(forum_city)
+    clean_consumer_level = _clean_optional_str(forum_consumer_level)
+
+    entry = _load_forum_catalog_entry(session, clean_catalog_entry_id)
+    if entry is not None:
+        _validate_forum_metadata(entry)
+        _assert_matching_optional(
+            provided=clean_forum_level,
+            expected=entry.forum_level,
+            field_name="forum_level",
+        )
+        if clean_court_id:
+            if entry.court_id is None or clean_court_id != entry.court_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="court_id does not match the selected forum catalog entry.",
+                )
+            provided_court = _load_active_court(session, clean_court_id)
+            if provided_court is None or provided_court.forum_level != entry.forum_level:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="court_id does not match the selected forum level.",
+                )
+        _assert_matching_optional(
+            provided=clean_state,
+            expected=entry.state,
+            field_name="forum_state",
+        )
+        _assert_matching_optional(
+            provided=clean_district,
+            expected=entry.district,
+            field_name="forum_district",
+        )
+        _assert_matching_optional(
+            provided=clean_city,
+            expected=entry.city,
+            field_name="forum_city",
+        )
+        _assert_matching_optional(
+            provided=clean_consumer_level,
+            expected=entry.consumer_level,
+            field_name="forum_consumer_level",
+        )
+        return {
+            "forum_level": entry.forum_level,
+            "court_id": entry.court_id,
+            "court_name": entry.name,
+            "forum_catalog_entry_id": entry.id,
+            "forum_state": entry.state,
+            "forum_district": entry.district,
+            "forum_city": entry.city,
+            "forum_consumer_level": entry.consumer_level,
+        }
+
+    court = _load_active_court(session, clean_court_id)
+    if court is not None:
+        _assert_matching_optional(
+            provided=clean_forum_level,
+            expected=court.forum_level,
+            field_name="forum_level",
+        )
+        return {
+            "forum_level": court.forum_level,
+            "court_id": court.id,
+            "court_name": clean_court_name or court.name,
+            "forum_catalog_entry_id": None,
+            "forum_state": clean_state or court.jurisdiction,
+            "forum_district": clean_district,
+            "forum_city": clean_city or court.seat_city,
+            "forum_consumer_level": clean_consumer_level,
+        }
+
+    if clean_forum_level is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="forum_level is required when no catalog forum is selected.",
+        )
+    return {
+        "forum_level": clean_forum_level,
+        "court_id": None,
+        "court_name": clean_court_name,
+        "forum_catalog_entry_id": None,
+        "forum_state": clean_state,
+        "forum_district": clean_district,
+        "forum_city": clean_city,
+        "forum_consumer_level": clean_consumer_level,
+    }
+
+
+def _apply_forum_selection(matter: Matter, selection: dict[str, str | None]) -> None:
+    matter.forum_level = selection["forum_level"] or matter.forum_level
+    matter.court_id = selection["court_id"]
+    matter.court_name = selection["court_name"]
+    matter.forum_catalog_entry_id = selection["forum_catalog_entry_id"]
+    matter.forum_state = selection["forum_state"]
+    matter.forum_district = selection["forum_district"]
+    matter.forum_city = selection["forum_city"]
+    matter.forum_consumer_level = selection["forum_consumer_level"]
 
 
 def _membership_summary(membership: CompanyMembership) -> MatterWorkspaceMembership:
@@ -216,6 +484,9 @@ def _cause_list_entry_record(entry: MatterCauseListEntry) -> MatterCauseListEntr
 
 
 def _court_order_record(order: MatterCourtOrder) -> MatterCourtOrderRecord:
+    judge_names = order.judge_names_json
+    if not isinstance(judge_names, list):
+        judge_names = None
     return MatterCourtOrderRecord(
         id=order.id,
         matter_id=order.matter_id,
@@ -226,6 +497,13 @@ def _court_order_record(order: MatterCourtOrder) -> MatterCourtOrderRecord:
         order_text=order.order_text,
         source=order.source,
         source_reference=order.source_reference,
+        bench_name=order.bench_name,
+        judge_names=judge_names,
+        order_attachment_id=order.order_attachment_id,
+        order_kind=order.order_kind,
+        is_interim_order=bool(order.is_interim_order),
+        stay_status=order.stay_status,
+        stay_effective_until=order.stay_effective_until,
         synced_at=order.synced_at,
         created_at=order.created_at,
     )
@@ -299,6 +577,11 @@ def _attachment_record(
         extraction_error=attachment.extraction_error,
         processed_at=attachment.processed_at,
         latest_job=latest_job,
+        document_type=attachment.document_type,
+        lifecycle_stage=attachment.lifecycle_stage,
+        document_date=attachment.document_date,
+        sequence_index=attachment.sequence_index,
+        linked_court_order_id=attachment.linked_court_order_id,
         created_at=attachment.created_at,
     )
 
@@ -442,6 +725,21 @@ def _append_activity(
     )
 
 
+def _default_lifecycle_stage(document_type: str | None) -> str | None:
+    if document_type is None:
+        return None
+    return DOCUMENT_TYPE_DEFAULT_LIFECYCLE.get(document_type)
+
+
+def _validated_sequence_index(sequence_index: int | None) -> int | None:
+    if sequence_index is not None and sequence_index < 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="sequence_index must be greater than or equal to 0.",
+        )
+    return sequence_index
+
+
 def _attachment_record_map(
     session: Session,
     attachments: list[MatterAttachment],
@@ -504,6 +802,7 @@ def _get_matter_model(session: Session, *, context: SessionContext, matter_id: s
             selectinload(Matter.activity_events)
             .joinedload(MatterActivity.actor_membership)
             .joinedload(CompanyMembership.user),
+            selectinload(Matter.tag_assignments).joinedload(MatterTagAssignment.tag),
             selectinload(Matter.cause_list_entries),
             selectinload(Matter.court_orders),
             selectinload(Matter.court_sync_runs)
@@ -579,6 +878,17 @@ def create_matter(
             status_code=status.HTTP_409_CONFLICT,
             detail="A matter with this code already exists for the current company.",
         )
+    forum_selection = _resolve_forum_selection(
+        session,
+        forum_level=payload.forum_level,
+        court_id=payload.court_id,
+        court_name=payload.court_name,
+        forum_catalog_entry_id=payload.forum_catalog_entry_id,
+        forum_state=payload.forum_state,
+        forum_district=payload.forum_district,
+        forum_city=payload.forum_city,
+        forum_consumer_level=payload.forum_consumer_level,
+    )
 
     matter = Matter(
         company_id=context.company.id,
@@ -588,11 +898,21 @@ def create_matter(
         opposing_party=payload.opposing_party.strip() if payload.opposing_party else None,
         status=payload.status,
         practice_area=payload.practice_area.strip(),
-        forum_level=payload.forum_level,
-        court_name=payload.court_name.strip() if payload.court_name else None,
+        forum_level=forum_selection["forum_level"] or payload.forum_level,
+        court_id=forum_selection["court_id"],
+        court_name=forum_selection["court_name"],
+        forum_catalog_entry_id=forum_selection["forum_catalog_entry_id"],
+        forum_state=forum_selection["forum_state"],
+        forum_district=forum_selection["forum_district"],
+        forum_city=forum_selection["forum_city"],
+        forum_consumer_level=forum_selection["forum_consumer_level"],
         judge_name=payload.judge_name.strip() if payload.judge_name else None,
         description=payload.description.strip() if payload.description else None,
         next_hearing_on=payload.next_hearing_on,
+        claim_amount_minor=payload.claim_amount_minor,
+        claim_currency=payload.claim_currency.strip().upper(),
+        claim_amount_notes=payload.claim_amount_notes.strip()
+        if payload.claim_amount_notes else None,
     )
     session.add(matter)
     session.flush()
@@ -615,11 +935,99 @@ def create_matter(
             "matter_code": matter.matter_code,
             "status": matter.status,
             "forum_level": matter.forum_level,
+            "court_id": matter.court_id,
+            "court_name": matter.court_name,
+            "forum_catalog_entry_id": matter.forum_catalog_entry_id,
+            "forum_state": matter.forum_state,
+            "forum_district": matter.forum_district,
+            "forum_city": matter.forum_city,
+            "forum_consumer_level": matter.forum_consumer_level,
+            "claim_amount_minor": matter.claim_amount_minor,
+            "claim_currency": matter.claim_currency,
         },
     )
     session.commit()
     session.refresh(matter)
     return _matter_record(matter)
+
+
+def _created_boundary(value: date, *, end: bool = False) -> datetime:
+    return datetime.combine(value, time.max if end else time.min, tzinfo=UTC)
+
+
+def _apply_list_filters(stmt, filters: MatterListFilters):
+    if (
+        filters.min_claim_amount_minor is not None
+        and filters.max_claim_amount_minor is not None
+        and filters.min_claim_amount_minor > filters.max_claim_amount_minor
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="min_claim_amount_minor cannot exceed max_claim_amount_minor.",
+        )
+
+    if filters.q:
+        needle = f"%{filters.q.strip()}%"
+        stmt = stmt.where(
+            or_(
+                Matter.title.ilike(needle),
+                Matter.matter_code.ilike(needle),
+                Matter.client_name.ilike(needle),
+                Matter.opposing_party.ilike(needle),
+                Matter.court_name.ilike(needle),
+                Matter.practice_area.ilike(needle),
+            )
+        )
+    if filters.client_name:
+        stmt = stmt.where(Matter.client_name.ilike(f"%{filters.client_name.strip()}%"))
+    if filters.opposing_party:
+        stmt = stmt.where(
+            Matter.opposing_party.ilike(f"%{filters.opposing_party.strip()}%")
+        )
+    if filters.forum_level:
+        stmt = stmt.where(Matter.forum_level == filters.forum_level)
+    if filters.court_id:
+        stmt = stmt.where(Matter.court_id == filters.court_id.strip())
+    if filters.status:
+        stmt = stmt.where(Matter.status == filters.status)
+    if filters.created_from:
+        stmt = stmt.where(Matter.created_at >= _created_boundary(filters.created_from))
+    if filters.created_to:
+        stmt = stmt.where(Matter.created_at <= _created_boundary(filters.created_to, end=True))
+    if filters.next_hearing_from:
+        stmt = stmt.where(Matter.next_hearing_on >= filters.next_hearing_from)
+    if filters.next_hearing_to:
+        stmt = stmt.where(Matter.next_hearing_on <= filters.next_hearing_to)
+    if filters.tag:
+        tag_value = filters.tag.strip()
+        tag_slug = slugify_tag(tag_value)
+        tag_exists = (
+            select(MatterTagAssignment.id)
+            .join(MatterTag, MatterTag.id == MatterTagAssignment.tag_id)
+            .where(MatterTagAssignment.matter_id == Matter.id)
+            .where(MatterTagAssignment.company_id == Matter.company_id)
+            .where(MatterTag.company_id == Matter.company_id)
+            .where(
+                or_(
+                    MatterTag.id == tag_value,
+                    MatterTag.slug == tag_slug,
+                    MatterTag.name.ilike(tag_value),
+                )
+            )
+        )
+        stmt = stmt.where(tag_exists.exists())
+    if filters.has_stay is not None:
+        stay_exists = (
+            select(MatterCourtOrder.id)
+            .where(MatterCourtOrder.matter_id == Matter.id)
+            .where(MatterCourtOrder.stay_status.in_(ACTIVE_STAY_STATUSES))
+        )
+        stmt = stmt.where(stay_exists.exists() if filters.has_stay else ~stay_exists.exists())
+    if filters.min_claim_amount_minor is not None:
+        stmt = stmt.where(Matter.claim_amount_minor >= filters.min_claim_amount_minor)
+    if filters.max_claim_amount_minor is not None:
+        stmt = stmt.where(Matter.claim_amount_minor <= filters.max_claim_amount_minor)
+    return stmt
 
 
 def list_matters(
@@ -628,9 +1036,8 @@ def list_matters(
     context: SessionContext,
     limit: int | None = None,
     cursor: str | None = None,
+    filters: MatterListFilters | None = None,
 ) -> MatterListResponse:
-    from sqlalchemy import and_, or_
-
     from caseops_api.services.pagination import (
         clamp_limit,
         decode_cursor,
@@ -642,12 +1049,17 @@ def list_matters(
 
     stmt = (
         select(Matter)
+        .options(
+            selectinload(Matter.tag_assignments).joinedload(MatterTagAssignment.tag),
+            selectinload(Matter.court_orders),
+        )
         .where(
             Matter.company_id == context.company.id,
             visible_matters_filter(session, context=context),
         )
         .order_by(Matter.updated_at.desc(), Matter.id.desc())
     )
+    stmt = _apply_list_filters(stmt, filters or MatterListFilters())
     if decoded is not None:
         stmt = stmt.where(
             or_(
@@ -767,6 +1179,12 @@ def update_matter(
     matter = _get_matter_model(session, context=context, matter_id=matter_id)
 
     updates = payload.model_dump(exclude_unset=True)
+    claim_before = {
+        "claim_amount_minor": matter.claim_amount_minor,
+        "claim_currency": matter.claim_currency,
+        "claim_amount_notes": matter.claim_amount_notes,
+    }
+    forum_before = _forum_snapshot(matter)
     assignee_membership_id = updates.pop("assignee_membership_id", None)
     assignee_changed = "assignee_membership_id" in payload.model_dump(exclude_unset=True)
     if assignee_changed:
@@ -803,7 +1221,29 @@ def update_matter(
                 )
             matter.team_id = team_id
 
+    if FORUM_SELECTION_FIELDS & updates.keys():
+        forum_selection = _resolve_forum_selection(
+            session,
+            forum_level=updates.pop("forum_level", matter.forum_level),
+            court_id=updates.pop("court_id", matter.court_id),
+            court_name=updates.pop("court_name", matter.court_name),
+            forum_catalog_entry_id=updates.pop(
+                "forum_catalog_entry_id", matter.forum_catalog_entry_id
+            ),
+            forum_state=updates.pop("forum_state", matter.forum_state),
+            forum_district=updates.pop("forum_district", matter.forum_district),
+            forum_city=updates.pop("forum_city", matter.forum_city),
+            forum_consumer_level=updates.pop(
+                "forum_consumer_level", matter.forum_consumer_level
+            ),
+        )
+        _apply_forum_selection(matter, forum_selection)
+
     for field_name, value in updates.items():
+        if field_name == "claim_currency" and isinstance(value, str):
+            value = value.strip().upper()
+        if field_name == "claim_amount_notes" and isinstance(value, str):
+            value = value.strip() or None
         setattr(matter, field_name, value)
 
     session.add(matter)
@@ -815,6 +1255,32 @@ def update_matter(
         title="Matter updated",
         detail=f"Status is now {matter.status}.",
     )
+    claim_after = {
+        "claim_amount_minor": matter.claim_amount_minor,
+        "claim_currency": matter.claim_currency,
+        "claim_amount_notes": matter.claim_amount_notes,
+    }
+    if claim_after != claim_before:
+        record_from_context(
+            session,
+            context,
+            action="matter.claim_amount.updated",
+            target_type="matter",
+            target_id=matter.id,
+            matter_id=matter.id,
+            metadata={"before": claim_before, "after": claim_after},
+        )
+    forum_after = _forum_snapshot(matter)
+    if forum_after != forum_before:
+        record_from_context(
+            session,
+            context,
+            action="matter.forum.updated",
+            target_type="matter",
+            target_id=matter.id,
+            matter_id=matter.id,
+            metadata={"before": forum_before, "after": forum_after},
+        )
     session.commit()
     session.refresh(matter)
     return _matter_record(matter)
@@ -1130,6 +1596,163 @@ def update_matter_hearing(
     return _hearing_record(hearing)
 
 
+def _validated_order_attachment_id(
+    session: Session,
+    *,
+    matter_id: str,
+    attachment_id: str | None,
+) -> str | None:
+    if attachment_id is None:
+        return None
+    found = session.scalar(
+        select(MatterAttachment.id).where(
+            MatterAttachment.id == attachment_id,
+            MatterAttachment.matter_id == matter_id,
+        )
+    )
+    if found is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Linked order attachment was not found on this matter.",
+        )
+    return found
+
+
+def _validated_attachment_court_order_id(
+    session: Session,
+    *,
+    matter_id: str,
+    court_order_id: str | None,
+) -> str | None:
+    if court_order_id is None:
+        return None
+    found = session.scalar(
+        select(MatterCourtOrder.id).where(
+            MatterCourtOrder.id == court_order_id,
+            MatterCourtOrder.matter_id == matter_id,
+        )
+    )
+    if found is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Linked court order was not found on this matter.",
+        )
+    return found
+
+
+def _attachment_metadata_snapshot(attachment: MatterAttachment) -> dict[str, object]:
+    return {
+        "document_type": attachment.document_type,
+        "lifecycle_stage": attachment.lifecycle_stage,
+        "document_date": attachment.document_date,
+        "sequence_index": attachment.sequence_index,
+        "linked_court_order_id": attachment.linked_court_order_id,
+    }
+
+
+def _order_metadata_snapshot(order: MatterCourtOrder) -> dict[str, object]:
+    judge_names = order.judge_names_json
+    return {
+        "bench_name": order.bench_name,
+        "judge_names": judge_names if isinstance(judge_names, list) else None,
+        "order_attachment_id": order.order_attachment_id,
+        "order_kind": order.order_kind,
+        "is_interim_order": bool(order.is_interim_order),
+        "stay_status": order.stay_status,
+        "stay_effective_until": order.stay_effective_until,
+    }
+
+
+def update_matter_court_order(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+    order_id: str,
+    payload: MatterCourtOrderUpdateRequest,
+) -> MatterCourtOrderRecord:
+    matter = _get_matter_model(session, context=context, matter_id=matter_id)
+    order = session.scalar(
+        select(MatterCourtOrder).where(
+            MatterCourtOrder.id == order_id,
+            MatterCourtOrder.matter_id == matter.id,
+        )
+    )
+    if order is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Court order not found.",
+        )
+
+    before = _order_metadata_snapshot(order)
+    updates = payload.model_dump(exclude_unset=True)
+    if "bench_name" in updates:
+        value = updates["bench_name"]
+        order.bench_name = value.strip() if isinstance(value, str) else None
+    if "judge_names" in updates:
+        order.judge_names_json = updates["judge_names"]
+    if "order_attachment_id" in updates:
+        order.order_attachment_id = _validated_order_attachment_id(
+            session,
+            matter_id=matter.id,
+            attachment_id=updates["order_attachment_id"],
+        )
+    if updates.get("order_kind") is not None:
+        order.order_kind = updates["order_kind"]
+    if updates.get("is_interim_order") is not None:
+        order.is_interim_order = bool(updates["is_interim_order"])
+    if updates.get("stay_status") is not None:
+        order.stay_status = updates["stay_status"]
+    if "stay_effective_until" in updates:
+        order.stay_effective_until = updates["stay_effective_until"]
+
+    after = _order_metadata_snapshot(order)
+    if after != before:
+        session.add(order)
+        _append_activity(
+            session,
+            matter_id=matter.id,
+            actor_membership_id=context.membership.id,
+            event_type="court_order_updated",
+            title="Court order metadata updated",
+            detail=order.title,
+        )
+        record_from_context(
+            session,
+            context,
+            action="matter_court_order.metadata.updated",
+            target_type="matter_court_order",
+            target_id=order.id,
+            matter_id=matter.id,
+            metadata={"before": before, "after": after},
+        )
+        stay_before = {
+            "order_kind": before["order_kind"],
+            "is_interim_order": before["is_interim_order"],
+            "stay_status": before["stay_status"],
+            "stay_effective_until": before["stay_effective_until"],
+        }
+        stay_after = {
+            "order_kind": after["order_kind"],
+            "is_interim_order": after["is_interim_order"],
+            "stay_status": after["stay_status"],
+            "stay_effective_until": after["stay_effective_until"],
+        }
+        if stay_after != stay_before:
+            record_from_context(
+                session,
+                context,
+                action="matter_court_order.stay.updated",
+                target_type="matter_court_order",
+                target_id=order.id,
+                matter_id=matter.id,
+                metadata={"before": stay_before, "after": stay_after},
+            )
+    session.commit()
+    session.refresh(order)
+    return _court_order_record(order)
+
+
 def create_matter_hearing(
     session: Session,
     *,
@@ -1228,6 +1851,11 @@ def _persist_court_sync_import(
         new_listing_ids.append(new_entry.id)
 
     for item in orders:
+        order_attachment_id = _validated_order_attachment_id(
+            session,
+            matter_id=matter.id,
+            attachment_id=item.order_attachment_id,
+        )
         session.add(
             MatterCourtOrder(
                 matter_id=matter.id,
@@ -1238,6 +1866,13 @@ def _persist_court_sync_import(
                 order_text=item.order_text.strip() if item.order_text else None,
                 source=source,
                 source_reference=item.source_reference.strip() if item.source_reference else None,
+                bench_name=item.bench_name.strip() if item.bench_name else None,
+                judge_names_json=item.judge_names,
+                order_attachment_id=order_attachment_id,
+                order_kind=item.order_kind,
+                is_interim_order=item.is_interim_order,
+                stay_status=item.stay_status,
+                stay_effective_until=item.stay_effective_until,
             )
         )
 
@@ -1325,8 +1960,20 @@ def create_matter_attachment(
     filename: str,
     content_type: str | None,
     stream: BinaryIO,
+    document_type: str | None = None,
+    lifecycle_stage: str | None = None,
+    document_date: date | None = None,
+    sequence_index: int | None = None,
+    linked_court_order_id: str | None = None,
 ) -> tuple[MatterAttachmentRecord, str]:
     matter = _get_matter_model(session, context=context, matter_id=matter_id)
+    linked_court_order_id = _validated_attachment_court_order_id(
+        session,
+        matter_id=matter.id,
+        court_order_id=linked_court_order_id,
+    )
+    sequence_index = _validated_sequence_index(sequence_index)
+    lifecycle_stage = lifecycle_stage or _default_lifecycle_stage(document_type)
     # §6.3: refuse obviously-wrong uploads before they touch disk.
     # Checks extension whitelist, content-type coherence, and magic
     # bytes; leaves the stream cursor at 0 on success.
@@ -1341,6 +1988,11 @@ def create_matter_attachment(
         content_type=content_type,
         size_bytes=0,
         sha256_hex="0" * 64,
+        document_type=document_type,
+        lifecycle_stage=lifecycle_stage,
+        document_date=document_date,
+        sequence_index=sequence_index,
+        linked_court_order_id=linked_court_order_id,
     )
     session.add(attachment)
     session.flush()
@@ -1395,6 +2047,18 @@ def create_matter_attachment(
                 "and queued for processing."
             ),
         )
+        if linked_court_order_id:
+            from caseops_api.services.notification_rules import (
+                create_new_order_uploaded_notifications,
+            )
+
+            create_new_order_uploaded_notifications(
+                session,
+                context=context,
+                matter=matter,
+                attachment_id=attachment.id,
+                linked_court_order_id=linked_court_order_id,
+            )
         session.commit()
     except Exception:
         session.rollback()
@@ -1420,6 +2084,84 @@ def create_matter_attachment(
         ),
         job.id,
     )
+
+
+def update_matter_attachment_metadata(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+    attachment_id: str,
+    payload: MatterAttachmentMetadataUpdateRequest,
+) -> MatterAttachmentRecord:
+    matter = _get_matter_model(session, context=context, matter_id=matter_id)
+    attachment = session.scalar(
+        select(MatterAttachment)
+        .options(
+            joinedload(MatterAttachment.uploaded_by_membership).joinedload(
+                CompanyMembership.user
+            )
+        )
+        .where(
+            MatterAttachment.id == attachment_id,
+            MatterAttachment.matter_id == matter.id,
+        )
+    )
+    if attachment is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found.")
+
+    before = _attachment_metadata_snapshot(attachment)
+    updates = payload.model_dump(exclude_unset=True)
+    if "document_type" in updates:
+        attachment.document_type = updates["document_type"]
+        if "lifecycle_stage" not in updates:
+            attachment.lifecycle_stage = _default_lifecycle_stage(attachment.document_type)
+    if "lifecycle_stage" in updates:
+        attachment.lifecycle_stage = updates["lifecycle_stage"]
+    if "document_date" in updates:
+        attachment.document_date = updates["document_date"]
+    if "sequence_index" in updates:
+        attachment.sequence_index = _validated_sequence_index(updates["sequence_index"])
+    if "linked_court_order_id" in updates:
+        attachment.linked_court_order_id = _validated_attachment_court_order_id(
+            session,
+            matter_id=matter.id,
+            court_order_id=updates["linked_court_order_id"],
+        )
+
+    after = _attachment_metadata_snapshot(attachment)
+    if before != after:
+        session.add(attachment)
+        _append_activity(
+            session,
+            matter_id=matter.id,
+            actor_membership_id=context.membership.id,
+            event_type="attachment_metadata_updated",
+            title="Document metadata updated",
+            detail=attachment.original_filename,
+        )
+        record_from_context(
+            session,
+            context,
+            action="matter_attachment.metadata.updated",
+            target_type="matter_attachment",
+            target_id=attachment.id,
+            matter_id=matter.id,
+            metadata={
+                "before": before,
+                "after": after,
+                "matter_code": matter.matter_code,
+                "filename": attachment.original_filename,
+            },
+        )
+    session.commit()
+    session.refresh(attachment)
+    latest_jobs = load_latest_processing_jobs(
+        session,
+        target_type=DocumentProcessingTargetType.MATTER_ATTACHMENT,
+        attachment_ids=[attachment.id],
+    )
+    return _attachment_record(attachment, latest_job=latest_jobs.get(attachment.id))
 
 
 def request_matter_attachment_processing(
