@@ -1,8 +1,9 @@
 """Durable ingest watchdog.
 
-Probes MAX(ingested_at) on caseops-db. If the most recent ingest is older
-than STALE_THRESHOLD_SEC (default 2h), issues a reset on the ingest VM so
-its boot-time @reboot cron can relaunch the screen sweeps.
+Probes the newest corpus activity on caseops-db. If the most recent ingest,
+embedding, or Layer-2 metadata activity is older than STALE_THRESHOLD_SEC
+(default 2h), issues a reset on the ingest VM so its boot-time @reboot cron can
+relaunch the screen sweeps.
 
 Runs as a Cloud Run Job, triggered by Cloud Scheduler every 15 min. This
 replaces the session-scoped CronCreate watchdog that vanished whenever the
@@ -36,14 +37,41 @@ def _db_url() -> str:
     return raw.replace("postgresql+psycopg://", "postgresql://", 1)
 
 
-def _stale_seconds() -> int | None:
+def _latest_activity() -> tuple[str | None, int | None]:
     with psycopg.connect(_db_url(), connect_timeout=15) as conn, conn.cursor() as cur:
         cur.execute(
-            "SELECT EXTRACT(EPOCH FROM (now() - MAX(ingested_at)))::int "
-            "FROM authority_documents"
+            """
+            WITH activity(source, activity_at) AS (
+                SELECT 'authority_documents.ingested_at', MAX(ingested_at)
+                FROM authority_documents
+                UNION ALL
+                SELECT 'authority_document_chunks.embedded_at', MAX(embedded_at)
+                FROM authority_document_chunks
+                UNION ALL
+                SELECT 'model_runs.metadata_extract', MAX(created_at)
+                FROM model_runs
+                WHERE purpose = 'metadata_extract'
+                UNION ALL
+                SELECT 'voyage_usage.ingest', MAX(created_at)
+                FROM voyage_usage
+                WHERE purpose = 'ingest'
+            )
+            SELECT source, EXTRACT(EPOCH FROM (now() - activity_at))::int
+            FROM activity
+            WHERE activity_at IS NOT NULL
+            ORDER BY activity_at DESC
+            LIMIT 1
+            """
         )
         row = cur.fetchone()
-    return row[0] if row else None
+    if not row:
+        return None, None
+    return row[0], row[1]
+
+
+def _stale_seconds() -> int | None:
+    _, stale = _latest_activity()
+    return stale
 
 
 _LABEL_LAST_RESET = "watchdog-last-reset-unix"
@@ -86,8 +114,12 @@ def _reset_and_record() -> str:
 
 
 def main() -> int:
-    stale = _stale_seconds()
-    print(f"stale_sec={stale} threshold={STALE_THRESHOLD_SEC}", flush=True)
+    activity_source, stale = _latest_activity()
+    print(
+        f"activity_source={activity_source} stale_sec={stale} "
+        f"threshold={STALE_THRESHOLD_SEC}",
+        flush=True,
+    )
 
     if stale is None:
         print("no_data — corpus empty, nothing to do", flush=True)

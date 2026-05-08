@@ -47,6 +47,7 @@ from sqlalchemy.orm import Session
 from caseops_api.db.models import AuthorityDocument
 from caseops_api.db.session import get_session_factory
 from caseops_api.services.corpus_ingest import (
+    HC_COURT_CATALOG,
     _derive_title,
     _guess_decision_date,
 )
@@ -106,6 +107,17 @@ _DEFAULT_FORUMS: frozenset[str] = frozenset({"supreme_court", "high_court"})
 # per the 2026-05-04 EN-only Layer-2 directive — older judgments are
 # both lower-quality OCR and rarely-cited authority.
 _DEFAULT_EN_YEAR_RANGE: tuple[int, int] = (1990, 2025)
+_COURT_KEY_STOPWORDS: frozenset[str] = frozenset({
+    "and",
+    "at",
+    "court",
+    "for",
+    "high",
+    "judicature",
+    "of",
+    "state",
+    "the",
+})
 
 # Indic scripts in the Unicode plane. We use a single bracketed
 # character class instead of nine separate `\u` escapes because
@@ -291,6 +303,46 @@ def _year_for_doc(doc: AuthorityDocument) -> int | None:
     return year
 
 
+def _court_key(value: str | None) -> str:
+    """Normalize court names for operator-scoped Layer-2 buckets."""
+    if not value:
+        return ""
+    tokens = re.findall(r"[a-z0-9]+", value.lower())
+    meaningful = [t for t in tokens if t not in _COURT_KEY_STOPWORDS]
+    return " ".join(meaningful)
+
+
+def _parse_court_filter(value: str | None) -> frozenset[str] | None:
+    if not value or value.strip().lower() == "all":
+        return None
+    out: set[str] = set()
+    for raw in value.split(","):
+        item = raw.strip()
+        if not item:
+            continue
+        key = item.lower()
+        out.add(_court_key(item))
+        if key in HC_COURT_CATALOG:
+            out.add(_court_key(HC_COURT_CATALOG[key]["display"]))
+        elif key in {"sc", "supreme", "supreme-court", "supreme_court"}:
+            out.add(_court_key("Supreme Court of India"))
+    return frozenset(v for v in out if v)
+
+
+def _doc_matches_court_filter(
+    doc: AuthorityDocument, court_filter: frozenset[str] | None,
+) -> bool:
+    if not court_filter:
+        return True
+    doc_key = _court_key(doc.court_name)
+    if not doc_key:
+        return False
+    return any(
+        doc_key == allowed or doc_key in allowed or allowed in doc_key
+        for allowed in court_filter
+    )
+
+
 def _tier_for_doc(doc: AuthorityDocument) -> str:
     """Default-route every document to Haiku.
 
@@ -334,6 +386,7 @@ def _structured_pass(
     concurrency: int = 1,
     english_only: bool = True,
     forums: frozenset[str] | None = None,
+    court_names: frozenset[str] | None = None,
     triage_only: bool = False,
 ) -> dict:
     """Triage router over every doc that still needs structured data.
@@ -374,8 +427,6 @@ def _structured_pass(
             AuthorityDocument.ingested_at.desc(),
         )
     )
-    if limit is not None:
-        stmt = stmt.limit(limit)
     all_docs = session.scalars(stmt).all()
 
     # Partition into buckets. Sonnet first — premium budget is the
@@ -390,6 +441,7 @@ def _structured_pass(
     forums_filter = forums if forums is not None else _DEFAULT_FORUMS
     skipped_non_en = 0
     skipped_forum = 0
+    skipped_court = 0
     skipped_year = 0
     # Per-source counters: how many docs got a year from each of the
     # three sources, vs how many were rejected as unparseable. Reported
@@ -408,6 +460,9 @@ def _structured_pass(
         if forums_filter and doc.forum_level not in forums_filter:
             skipped_forum += 1
             continue
+        if not _doc_matches_court_filter(doc, court_names):
+            skipped_court += 1
+            continue
         if year_range is not None:
             year, year_src = _year_and_source_for_doc(doc)
             year_source_counts[year_src] += 1
@@ -421,10 +476,14 @@ def _structured_pass(
             sonnet_bucket.append(doc)
         else:
             haiku_bucket.append(doc)
-    if english_only or forums_filter or year_range is not None:
+
+    if limit is not None:
+        sonnet_bucket = sonnet_bucket[:limit]
+        haiku_bucket = haiku_bucket[: max(limit - len(sonnet_bucket), 0)]
+    if english_only or forums_filter or court_names or year_range is not None:
         logger.info(
-            "filter rejections: forum=%d  year=%d  non_english=%d",
-            skipped_forum, skipped_year, skipped_non_en,
+            "filter rejections: forum=%d  court=%d  year=%d  non_english=%d",
+            skipped_forum, skipped_court, skipped_year, skipped_non_en,
         )
         if year_range is not None:
             logger.info(
@@ -469,6 +528,7 @@ def _structured_pass(
             "quality_low": 0,
             "year_sources": dict(year_source_counts),
             "skipped_forum": skipped_forum,
+            "skipped_court": skipped_court,
             "skipped_year": skipped_year,
             "skipped_non_english": skipped_non_en,
             "triage_only": True,
@@ -517,6 +577,11 @@ def _structured_pass(
         "haiku": {"done": 0, "cost_usd": 0.0, "candidates": len(haiku_bucket)},
         "failures": 0,
         "quality_low": 0,
+        "year_sources": dict(year_source_counts),
+        "skipped_forum": skipped_forum,
+        "skipped_court": skipped_court,
+        "skipped_year": skipped_year,
+        "skipped_non_english": skipped_non_en,
     }
 
     totals_lock = threading.Lock()
@@ -775,6 +840,7 @@ def run(
     concurrency: int = 1,
     english_only: bool = True,
     forums: frozenset[str] | None = None,
+    court_names: frozenset[str] | None = None,
     triage_only: bool = False,
 ) -> int:
     logging.basicConfig(
@@ -799,6 +865,7 @@ def run(
                 concurrency=concurrency,
                 english_only=english_only,
                 forums=forums,
+                court_names=court_names,
                 triage_only=triage_only,
             )
             if totals.get("triage_only"):
@@ -808,6 +875,7 @@ def run(
                     f"sonnet_candidates={totals['sonnet']['candidates']} "
                     f"haiku_candidates={totals['haiku']['candidates']} "
                     f"skipped_forum={totals.get('skipped_forum', 0)} "
+                    f"skipped_court={totals.get('skipped_court', 0)} "
                     f"skipped_year={totals.get('skipped_year', 0)} "
                     f"skipped_non_english={totals.get('skipped_non_english', 0)} "
                     f"year_sources(sc={ys.get('sc_filename', 0)}, "
@@ -911,6 +979,15 @@ def main(argv: Iterable[str] | None = None) -> int:
             "``--forums all`` to drop the filter entirely."
         ),
     )
+    parser.add_argument(
+        "--courts",
+        default=None,
+        help=(
+            "Optional comma-separated court allowlist for strict buckets. "
+            "Accepts HC aliases from ingest, e.g. delhi,bombay,madras, or "
+            "exact court names. Pass ``--courts all`` to disable."
+        ),
+    )
     args = parser.parse_args(list(argv) if argv is not None else None)
     forums: frozenset[str] | None
     if args.forums.strip().lower() == "all":
@@ -919,6 +996,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         forums = frozenset(
             v.strip() for v in args.forums.split(",") if v.strip()
         )
+    court_names = _parse_court_filter(args.courts)
     year_range = _parse_year_range(args.year_range)
     if year_range is None and args.english_only:
         # User-stated scope (2026-05-04): SC 2025-1990 + all HC 2025-1990,
@@ -933,6 +1011,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         concurrency=max(1, args.concurrency),
         english_only=args.english_only,
         forums=forums,
+        court_names=court_names,
         triage_only=args.triage_only,
     )
 

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import threading
 import uuid
+from datetime import date
 
 import pytest
 from fastapi.testclient import TestClient
@@ -283,6 +284,117 @@ def test_forum_filter_excludes_district_court(
         assert d not in seen
 
 
+def test_court_filter_accepts_hc_alias_and_limit_applies_after_court_filter(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``--courts delhi --limit 1`` must process one Delhi candidate, not
+    stop on an earlier same-year non-Delhi row.
+
+    This keeps proof buckets strict by court. The previous selector had no
+    court filter, so a Delhi HC proof could mutate other HC rows in the same
+    forum/year cohort.
+    """
+    _ = client
+    factory = get_session_factory()
+    madras_id = f"madras-{uuid.uuid4().hex[:6]}"
+    delhi_id = f"delhi-{uuid.uuid4().hex[:6]}"
+    with factory() as s:
+        s.add(AuthorityDocument(
+            id=madras_id, source="ecourts-hc", adapter_name="corpus-ingest",
+            court_name="Madras High Court", forum_level="high_court",
+            document_type="judgment", title="Madras Candidate v. State",
+            canonical_key=f"k-{madras_id}",
+            source_reference="MADHC000000000001_1_2023-12-31.pdf",
+            summary="", document_text="The Madras judgment.",
+            extracted_char_count=2000, structured_version=None,
+            decision_date=date(2023, 12, 31),
+        ))
+        s.add(AuthorityDocument(
+            id=delhi_id, source="ecourts-hc", adapter_name="corpus-ingest",
+            court_name="High Court of Delhi", forum_level="high_court",
+            document_type="judgment", title="Delhi Candidate v. State",
+            canonical_key=f"k-{delhi_id}",
+            source_reference="DLHC000000000001_1_2023-01-01.pdf",
+            summary="", document_text="The Delhi judgment.",
+            extracted_char_count=2000, structured_version=None,
+            decision_date=date(2023, 1, 1),
+        ))
+        s.commit()
+
+    seen: list[str] = []
+
+    def _capture(session, *, document, tier):
+        seen.append(document.id)
+        return _fake_summary(session, document=document, tier=tier)
+
+    monkeypatch.setattr(mod, "extract_and_persist_structured", _capture)
+    with factory() as session:
+        totals = mod._structured_pass(
+            session, limit=1, dry_run=False, budget_usd=10.0,
+            force_tier="haiku", year_range=(2023, 2023), concurrency=1,
+            english_only=True, forums=mod._DEFAULT_FORUMS,
+            court_names=mod._parse_court_filter("delhi"),
+        )
+
+    assert seen == [delhi_id]
+    assert totals["haiku"]["candidates"] == 1
+    assert totals["skipped_court"] == 1
+
+
+def test_limit_applies_after_year_and_coverage_filters(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A safe proof limit must cap real candidates, not the raw DB scan.
+
+    Regression: ``--limit 1 --year-range 2023-2023`` used to stop on a newer
+    already-covered row, skip it, and process zero rows even though a matching
+    2023 pending document existed later in chronological order.
+    """
+    _ = client
+    factory = get_session_factory()
+    covered_id = f"covered-{uuid.uuid4().hex[:6]}"
+    pending_id = f"pending-{uuid.uuid4().hex[:6]}"
+    with factory() as s:
+        s.add(AuthorityDocument(
+            id=covered_id, source="ecourts-hc", adapter_name="corpus-ingest",
+            court_name="Delhi High Court", forum_level="high_court",
+            document_type="judgment", title="Covered v. State",
+            canonical_key=f"k-{covered_id}",
+            source_reference="DLHC000000000000_1_2025-01-01.pdf",
+            summary="", document_text="The covered judgment.",
+            extracted_char_count=2000, structured_version=mod.HAIKU_VERSION,
+            decision_date=date(2025, 1, 1),
+        ))
+        s.add(AuthorityDocument(
+            id=pending_id, source="ecourts-hc", adapter_name="corpus-ingest",
+            court_name="Delhi High Court", forum_level="high_court",
+            document_type="judgment", title="Pending v. State",
+            canonical_key=f"k-{pending_id}",
+            source_reference="DLHC000000000001_1_2023-01-01.pdf",
+            summary="", document_text="The pending judgment.",
+            extracted_char_count=2000, structured_version=None,
+            decision_date=date(2023, 1, 1),
+        ))
+        s.commit()
+
+    seen: list[str] = []
+
+    def _capture(session, *, document, tier):
+        seen.append(document.id)
+        return _fake_summary(session, document=document, tier=tier)
+
+    monkeypatch.setattr(mod, "extract_and_persist_structured", _capture)
+    with factory() as session:
+        totals = mod._structured_pass(
+            session, limit=1, dry_run=False, budget_usd=10.0,
+            force_tier="haiku", year_range=(2023, 2023), concurrency=1,
+            english_only=True, forums=mod._DEFAULT_FORUMS,
+        )
+
+    assert seen == [pending_id]
+    assert totals["haiku"]["candidates"] == 1
+
+
 def test_year_range_default_is_1990_2025_with_english_only() -> None:
     """The CLI defaults to ``year_range=(1990, 2025)`` when
     ``--english-only`` is on and no explicit range was passed.
@@ -321,6 +433,26 @@ def test_main_english_only_default_applies_year_range(
     mod.main(["--stage", "structured"])
     assert captured["english_only"] is True
     assert captured["year_range"] == (1990, 2025)
+
+
+def test_main_parses_court_alias_filter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict = {}
+
+    def _spy_run(**kwargs) -> int:
+        captured.update(kwargs)
+        return 0
+
+    monkeypatch.setattr(mod, "run", _spy_run)
+    mod.main([
+        "--stage", "structured",
+        "--year-range", "2023-2023",
+        "--courts", "delhi,madras",
+    ])
+    assert captured["court_names"] is not None
+    assert "delhi" in captured["court_names"]
+    assert "madras" in captured["court_names"]
 
 
 def test_main_explicit_year_range_overrides_default(
