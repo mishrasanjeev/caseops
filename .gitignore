@@ -3,6 +3,10 @@
 .env.*
 !.env.example
 !.env.local.example
+# MCP server configs are per-developer/per-machine and may carry
+# client credentials. Keep local; never commit. Use `.mcp.json.example`
+# if a template is needed.
+.mcp.json
 .idea/
 .vscode/
 # Ignore Claude Code's local state but keep vendored skills in .claude/skills/.
