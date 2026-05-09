@@ -16,7 +16,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 CalendarEventKind = Literal["hearing", "task", "deadline"]
 CalendarProviderLiteral = Literal["outlook"]
@@ -117,6 +117,72 @@ class CalendarSyncStatusResponse(BaseModel):
     durable_automation: Literal["blocked_pending_temporal"] = "blocked_pending_temporal"
     connections: list[CalendarConnectionRecord]
     syncs: list[CalendarEventSyncRecord]
+
+
+# BUG-039 (Hari 2026-05-09) — bounded manual bulk sync of the
+# caller's visible hearings to their connected Outlook calendar. No
+# durable background automation is implied; the caller pulls a
+# date range, the backend loops over visible hearings, returns a
+# structured summary. Tasks/deadlines are accepted in the request
+# but the v1 adapter does not yet upsert them — they surface as
+# `skipped` with `skip_reason="source_type_unsupported"`.
+class OutlookBulkSyncRequest(BaseModel):
+    range_from: date = Field(alias="from")
+    range_to: date = Field(alias="to")
+    matter_id: str | None = Field(
+        default=None, min_length=36, max_length=36
+    )
+    source_types: list[CalendarSyncSourceTypeLiteral] | None = Field(
+        default=None,
+        description=(
+            "Optional list of source types to include. v1 only "
+            "actually syncs `matter_hearing`; other entries are "
+            "echoed back as `skipped` with `skip_reason=\"source_"
+            "type_unsupported\"`. Default behaviour is "
+            "[\"matter_hearing\"]."
+        ),
+    )
+    limit: int = Field(default=50, ge=1, le=200)
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class OutlookBulkSyncItem(BaseModel):
+    """One row of the bulk-sync summary. ``sync_status="synced"``
+    rows are split between ``created`` and ``updated`` counters in
+    the parent response based on whether a CalendarEventSync row
+    existed before the batch ran.
+    """
+
+    source_type: CalendarSyncSourceTypeLiteral
+    source_id: str
+    sync_status: CalendarEventSyncStatusLiteral | Literal["skipped"]
+    matter_id: str | None
+    matter_title: str | None
+    provider_event_id: str | None = None
+    last_error: str | None = None
+    skip_reason: str | None = None
+
+
+class OutlookBulkSyncResponse(BaseModel):
+    """Structured summary for the manual bulk sync. ``examined`` is
+    the count of source rows the backend actually loaded (after
+    tenant + visibility + matter filters); ``skipped`` includes
+    both unsupported source types and cases where the row was
+    out-of-range or otherwise not eligible. ``durable_automation``
+    explicitly notes that this endpoint is the only sync path —
+    Temporal-backed background sync remains blocked.
+    """
+
+    examined: int
+    created: int
+    updated: int
+    failed: int
+    skipped: int
+    items: list[OutlookBulkSyncItem]
+    durable_automation: Literal["blocked_pending_temporal"] = (
+        "blocked_pending_temporal"
+    )
 
 
 class NotificationRuleBase(BaseModel):

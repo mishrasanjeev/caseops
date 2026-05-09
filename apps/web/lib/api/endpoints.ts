@@ -9,6 +9,7 @@ import {
   type CalendarEventListResponse,
   type CalendarEventSyncResponse,
   type CalendarSyncStatusResponse,
+  type OutlookBulkSyncResponse,
   type CommunicationChannel,
   type CommunicationDirection,
   type CommunicationListResponse,
@@ -47,6 +48,7 @@ import {
   calendarEventListResponse,
   calendarEventSyncResponse,
   calendarSyncStatusResponse,
+  outlookBulkSyncResponse,
   communicationListResponse,
   communicationRecord,
   contractsList,
@@ -3573,6 +3575,31 @@ export async function syncHearingToOutlook(
 export async function fetchCalendarSyncStatus(): Promise<CalendarSyncStatusResponse> {
   const data = await apiRequest<unknown>("/api/calendar/sync-status");
   return calendarSyncStatusResponse.parse(data);
+}
+
+// BUG-039 (Hari 2026-05-09) — bounded manual bulk Outlook sync.
+// Posts the currently-rendered date window from `/app/calendar`.
+// Tasks/deadlines fall through as `skipped` items today; future
+// versions extend the provider adapter to upsert them.
+export async function syncOutlookVisibleRange(input: {
+  from: string;
+  to: string;
+  matterId?: string | null;
+  sourceTypes?: Array<"matter_hearing" | "matter_deadline" | "matter_task">;
+  limit?: number;
+}): Promise<OutlookBulkSyncResponse> {
+  const body: Record<string, unknown> = {
+    from: input.from,
+    to: input.to,
+  };
+  if (input.matterId) body.matter_id = input.matterId;
+  if (input.sourceTypes) body.source_types = input.sourceTypes;
+  if (typeof input.limit === "number") body.limit = input.limit;
+  const data = await apiRequest<unknown>("/api/calendar/sync/outlook", {
+    method: "POST",
+    body,
+  });
+  return outlookBulkSyncResponse.parse(data);
 }
 
 export type NotificationRuleInput = {

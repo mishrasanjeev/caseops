@@ -757,6 +757,34 @@ export const calendarSyncStatusResponse = z.object({
   syncs: z.array(calendarEventSyncRecord),
 });
 
+// BUG-039 (Hari 2026-05-09) — bounded manual bulk Outlook sync.
+export const outlookBulkSyncItem = z.object({
+  source_type: z.enum(["matter_hearing", "matter_deadline", "matter_task"]),
+  source_id: z.string(),
+  sync_status: z.enum([
+    "pending",
+    "synced",
+    "failed",
+    "deleted",
+    "skipped",
+  ]),
+  matter_id: z.string().nullable(),
+  matter_title: z.string().nullable(),
+  provider_event_id: z.string().nullable().optional(),
+  last_error: z.string().nullable().optional(),
+  skip_reason: z.string().nullable().optional(),
+});
+
+export const outlookBulkSyncResponse = z.object({
+  examined: z.number().int(),
+  created: z.number().int(),
+  updated: z.number().int(),
+  failed: z.number().int(),
+  skipped: z.number().int(),
+  items: z.array(outlookBulkSyncItem),
+  durable_automation: z.literal("blocked_pending_temporal"),
+});
+
 export const notificationRuleRecord = z.object({
   id: z.string(),
   company_id: z.string(),
@@ -790,6 +818,8 @@ export type CalendarConnectionStartResponse = z.infer<typeof calendarConnectionS
 export type CalendarEventSyncRecord = z.infer<typeof calendarEventSyncRecord>;
 export type CalendarEventSyncResponse = z.infer<typeof calendarEventSyncResponse>;
 export type CalendarSyncStatusResponse = z.infer<typeof calendarSyncStatusResponse>;
+export type OutlookBulkSyncItem = z.infer<typeof outlookBulkSyncItem>;
+export type OutlookBulkSyncResponse = z.infer<typeof outlookBulkSyncResponse>;
 export type NotificationRuleRecord = z.infer<typeof notificationRuleRecord>;
 export type NotificationRuleListResponse = z.infer<typeof notificationRuleListResponse>;
 

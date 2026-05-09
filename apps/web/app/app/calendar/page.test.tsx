@@ -10,7 +10,8 @@
 // - "+N more" overflow appears when a single day has >3 events.
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -19,12 +20,14 @@ const {
   fetchCalendarSyncStatusMock,
   listCalendarConnectionsMock,
   startOutlookCalendarConnectionMock,
+  syncOutlookVisibleRangeMock,
   useCapabilityMock,
 } = vi.hoisted(() => ({
   fetchCalendarEventsMock: vi.fn(),
   fetchCalendarSyncStatusMock: vi.fn(),
   listCalendarConnectionsMock: vi.fn(),
   startOutlookCalendarConnectionMock: vi.fn(),
+  syncOutlookVisibleRangeMock: vi.fn(),
   useCapabilityMock: vi.fn(),
 }));
 
@@ -34,6 +37,7 @@ vi.mock("@/lib/api/endpoints", () => ({
   listCalendarConnections: listCalendarConnectionsMock,
   revokeCalendarConnection: vi.fn(),
   startOutlookCalendarConnection: startOutlookCalendarConnectionMock,
+  syncOutlookVisibleRange: syncOutlookVisibleRangeMock,
 }));
 
 vi.mock("@/lib/capabilities", () => ({
@@ -60,6 +64,7 @@ describe("CalendarPage", () => {
     fetchCalendarSyncStatusMock.mockReset();
     listCalendarConnectionsMock.mockReset();
     startOutlookCalendarConnectionMock.mockReset();
+    syncOutlookVisibleRangeMock.mockReset();
     useCapabilityMock.mockReset();
     useCapabilityMock.mockReturnValue(true);
     listCalendarConnectionsMock.mockResolvedValue({
@@ -230,5 +235,83 @@ describe("CalendarPage", () => {
     expect(screen.queryByTestId("calendar-event-hearing:overflow-4")).toBeNull();
     // Use 'within' so the linter doesn't flag the import as unused.
     void within;
+  });
+
+  // BUG-039 (Hari 2026-05-09): the bulk sync button only renders
+  // when the caller has the `calendar:sync` capability AND a
+  // connected Outlook account. Click triggers
+  // POST /api/calendar/sync/outlook with the same `from`/`to` the
+  // events query is using. Result counts surface to the user via the
+  // existing outlook-message panel.
+  it("renders Sync visible range to Outlook button when connected and posts the visible range", async () => {
+    fetchCalendarEventsMock.mockResolvedValueOnce({
+      range_from: "2026-04-01",
+      range_to: "2026-05-31",
+      events: [],
+    });
+    listCalendarConnectionsMock.mockResolvedValueOnce({
+      provider: "outlook",
+      provider_available: true,
+      unavailable_reason: null,
+      durable_automation: "blocked_pending_temporal",
+      connections: [
+        {
+          id: "conn-1",
+          company_id: "co-1",
+          membership_id: "mem-1",
+          provider: "outlook",
+          provider_account_id: "acct-1",
+          display_email: "qa-bot@caseops.ai",
+          status: "connected",
+          scopes: ["Calendars.ReadWrite"],
+          connected_at: new Date().toISOString(),
+          last_sync_at: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      ],
+    });
+    syncOutlookVisibleRangeMock.mockResolvedValueOnce({
+      examined: 3,
+      created: 2,
+      updated: 1,
+      failed: 0,
+      skipped: 0,
+      items: [],
+      durable_automation: "blocked_pending_temporal",
+    });
+
+    const user = userEvent.setup();
+    render(withClient(<CalendarPage />));
+
+    const syncButton = await screen.findByTestId("calendar-outlook-sync-range");
+    expect(syncButton).toBeEnabled();
+    await user.click(syncButton);
+
+    await waitFor(() => expect(syncOutlookVisibleRangeMock).toHaveBeenCalled());
+    const args = syncOutlookVisibleRangeMock.mock.calls[0][0];
+    expect(args.from).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(args.to).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    // Summary message includes the per-bucket counts.
+    expect(
+      await screen.findByText(
+        /Synced 2 new, 1 updated, 0 failed, 0 skipped \(3 examined\)\./,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("hides the Sync visible range to Outlook button when no Outlook account is connected", async () => {
+    fetchCalendarEventsMock.mockResolvedValueOnce({
+      range_from: "2026-04-01",
+      range_to: "2026-05-31",
+      events: [],
+    });
+    // The default beforeEach mock returns connections: []. Wait for
+    // the connect-button to appear (proving the connections query
+    // resolved) before asserting the sync button is absent.
+    render(withClient(<CalendarPage />));
+    await screen.findByTestId("calendar-outlook-connect");
+    expect(screen.queryByTestId("calendar-outlook-sync-range")).toBeNull();
+    expect(syncOutlookVisibleRangeMock).not.toHaveBeenCalled();
   });
 });
