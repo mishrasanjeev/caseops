@@ -422,6 +422,9 @@ def run_reminder_worker(
         "skipped_missing_email": 0,
         "skipped_missing_phone": 0,
         "skipped_provider_disabled": 0,
+        # BUG-038 (2026-05-09) — count of rows skipped because the
+        # recipient address is suppressed in this tenant.
+        "suppressed": 0,
     }
 
     for r in due:
@@ -485,6 +488,31 @@ def run_reminder_worker(
         # even if SMS/WhatsApp aren't wired — channels degrade
         # independently.
         if r.channel == HearingReminderChannel.EMAIL:
+            # BUG-038 (2026-05-09) — tenant-scoped suppression check.
+            # If a prior SendGrid event recorded this address as
+            # bounced/dropped/spam-reported/unsubscribed for this
+            # tenant, skip the send. Mark the row CANCELLED with an
+            # actionable reason; do not move money/credits to a known
+            # failed address. Auth-flow mailers (account_setup /
+            # password_reset / portal) bypass this check by design.
+            from caseops_api.services.email_suppression import (
+                is_suppressed,
+            )
+
+            suppression = is_suppressed(
+                session,
+                company_id=r.company_id,
+                recipient_email=r.recipient_email or "",
+            )
+            if suppression is not None:
+                r.status = HearingReminderStatus.CANCELLED
+                r.last_error = (
+                    f"suppressed: {suppression.reason} on "
+                    f"{suppression.last_event_at.isoformat()}"
+                )
+                r.updated_at = now
+                report["suppressed"] = report.get("suppressed", 0) + 1
+                continue
             success, msg_id, err = _send_via_sendgrid(
                 to_email=r.recipient_email or "",
                 subject=subject,
@@ -556,16 +584,31 @@ def apply_sendgrid_event(
 ) -> bool:
     """Update a ``HearingReminder`` row from a single SendGrid event.
 
-    Events we care about — full list at
-    https://docs.sendgrid.com/for-developers/tracking-events/event —
-    are ``delivered`` / ``bounce`` / ``dropped`` / ``deferred`` /
-    ``open`` / ``click`` / ``spamreport``. We match the row by
-    ``sg_message_id`` (header SendGrid echoes back into event JSON).
+    Events we handle (SendGrid docs: https://docs.sendgrid.com/
+    for-developers/tracking-events/event):
 
-    Returns True when a row was updated, False when no match or the
-    event type wasn't one we track. Idempotent — re-applying the same
-    event is a no-op (we only forward-move status).
+    - ``delivered`` — promote row to DELIVERED.
+    - ``bounce`` / ``dropped`` / ``blocked`` / ``spamreport`` —
+      promote row to FAILED AND record an ``EmailSuppression`` row so
+      future sends from this tenant to this address are blocked.
+    - ``unsubscribe`` / ``group_unsubscribe`` — record an
+      ``EmailSuppression`` row (status not regressed; the user's
+      previous send already happened, but no more should follow).
+    - ``open`` / ``click`` / ``deferred`` — logged via match but no
+      state change.
+
+    Match key: ``sg_message_id`` (prefix before the first dot) against
+    ``HearingReminder.provider_message_id``.
+
+    Returns True when a row was updated. Idempotent — re-applying the
+    same event is a no-op (status only moves forward, suppression upsert
+    is idempotent on ``(company_id, recipient_email)``).
     """
+    from caseops_api.services.email_suppression import (
+        reason_for_event,
+        record_suppression,
+    )
+
     sg_message_id = event.get("sg_message_id") or event.get("smtp-id")
     if not sg_message_id:
         return False
@@ -587,6 +630,9 @@ def apply_sendgrid_event(
     when = (
         datetime.fromtimestamp(int(ts), tz=UTC) if ts else datetime.now(UTC)
     )
+    suppression_reason = reason_for_event(event_type)
+    detail = event.get("reason") or event.get("response")
+    event_email = (event.get("email") or "").strip().lower()
     updated = False
     for row in candidates:
         prior = row.status
@@ -596,14 +642,35 @@ def apply_sendgrid_event(
         elif event_type in ("bounce", "dropped", "blocked", "spamreport"):
             row.status = HearingReminderStatus.FAILED
             row.last_error = (
-                f"sendgrid:{event_type}: {event.get('reason') or event.get('response') or ''}"
+                f"sendgrid:{event_type}: {detail or ''}"
             )[:500]
+        elif event_type in ("unsubscribe", "group_unsubscribe"):
+            # Don't regress status (the row was already SENT or
+            # DELIVERED) — but record the suppression so the worker
+            # never schedules another reminder for this recipient.
+            pass
         else:
             # open / click / deferred — log but don't regress status.
             continue
         row.updated_at = when
         if row.status != prior:
             updated = True
+        # Tenant-scoped suppression: use the matched row's
+        # company_id (the canonical scope) and prefer the event's
+        # `email` over the row's recipient_email so SendGrid's
+        # canonical address is what we suppress.
+        if suppression_reason is not None:
+            target_email = event_email or (row.recipient_email or "")
+            if target_email:
+                record_suppression(
+                    session,
+                    company_id=row.company_id,
+                    recipient_email=target_email,
+                    reason=suppression_reason,
+                    detail=str(detail) if detail else None,
+                    source_message_id=str(sg_message_id),
+                )
+                updated = True
     return updated
 
 

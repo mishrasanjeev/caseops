@@ -1540,6 +1540,84 @@ class HearingReminder(Base):
     hearing: Mapped[MatterHearing] = relationship(back_populates="reminders")
 
 
+class EmailSuppressionReason(StrEnum):
+    """Why a tenant-scoped email address must not receive further mail.
+
+    These mirror the SendGrid event names (sans hyphens) so the
+    webhook handler can map directly. ``manual`` covers admin-driven
+    insertions if/when an admin tool surfaces this list.
+    """
+
+    BOUNCE = "bounce"
+    DROPPED = "dropped"
+    SPAM_REPORT = "spam_report"
+    UNSUBSCRIBE = "unsubscribe"
+    GROUP_UNSUBSCRIBE = "group_unsubscribe"
+    MANUAL = "manual"
+
+
+class EmailSuppression(Base):
+    """Tenant-scoped suppression list, populated by SendGrid webhook
+    events (bounce / dropped / spam_report / unsubscribe /
+    group_unsubscribe) and consulted before every outbound matter email
+    or hearing-reminder send. The auth-flow mailers (account setup,
+    password reset, portal access) explicitly DO NOT consult this list:
+    a user who unsubscribed from matter mail must still be able to
+    reset their password.
+
+    Tenant scoping rationale: a recipient who hard-bounced or
+    unsubscribed inside one law firm's mail flow has not necessarily
+    opted out of another firm's. Each ``company_id`` keeps its own
+    list. SendGrid maintains a global suppression too, but trusting
+    only the global list crosses tenant boundaries — the app-level
+    list is what gates `services.communications.send_matter_email`
+    and the hearing-reminder worker.
+
+    Idempotency: ``(company_id, recipient_email)`` is unique, so
+    re-applying a webhook event for the same address is a no-op (the
+    handler upserts ``last_event_at`` + reason).
+    """
+
+    __tablename__ = "email_suppressions"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            "recipient_email",
+            name="uq_email_suppressions_tenant_address",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    # Stored lowercase to match SendGrid event payloads; the upsert
+    # path normalises before insert/lookup.
+    recipient_email: Mapped[str] = mapped_column(
+        String(320), nullable=False, index=True
+    )
+    reason: Mapped[str] = mapped_column(String(24), nullable=False)
+    # Free-text excerpt of the SendGrid `reason` / `response` fields
+    # so an admin tool can show "why" without reaching into raw event
+    # JSON. Capped at 500 chars to keep the table light.
+    detail: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # `sg_message_id` of the event that introduced the suppression.
+    # Useful for audit + dedupe; nullable for `manual` insertions.
+    source_message_id: Mapped[str | None] = mapped_column(
+        String(120), nullable=True
+    )
+    last_event_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
 class UserCalendarConnection(Base):
     __tablename__ = "user_calendar_connections"
     __table_args__ = (

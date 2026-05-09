@@ -171,6 +171,33 @@ def send_matter_email(
             ),
         )
 
+    # BUG-038 (2026-05-09) — pre-flight tenant-scoped suppression
+    # check. If the recipient hard-bounced, was dropped, reported
+    # spam, or unsubscribed for this tenant via a prior SendGrid
+    # event, refuse the send and surface an actionable 422 rather
+    # than burn a SendGrid request that will fail/spam-flag again.
+    # Auth-flow mailers (account setup, password reset, portal) do
+    # NOT call this function and so are not affected — they remain
+    # critical for tenant access.
+    from caseops_api.services.email_suppression import is_suppressed
+
+    suppression = is_suppressed(
+        session,
+        company_id=context.company.id,
+        recipient_email=str(payload.recipient_email),
+    )
+    if suppression is not None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"This address is on the workspace suppression list "
+                f"(reason: {suppression.reason}, recorded "
+                f"{suppression.last_event_at.isoformat()}). Reach the "
+                "recipient through another channel, or have a workspace "
+                "admin review and remove the suppression entry."
+            ),
+        )
+
     success, message_id, error = _send_via_sendgrid(
         to_email=str(payload.recipient_email),
         recipient_name=payload.recipient_name,
@@ -303,18 +330,30 @@ def apply_sendgrid_communication_event(
     channel — silently ignored).
 
     Idempotent: replaying the same event is safe; status only moves
-    forward in the rank table above.
+    forward in the rank table above. Bounce / dropped / spam_report
+    / unsubscribe / group_unsubscribe events also write a tenant-
+    scoped ``EmailSuppression`` row so future ``send_matter_email``
+    calls to the same address are blocked. Auth-flow mailers
+    (account setup, password reset, portal) bypass that suppression
+    by design.
     """
+    from caseops_api.services.email_suppression import (
+        reason_for_event,
+        record_suppression,
+    )
+
     sg_message_id = (event.get("sg_message_id") or "").strip()
     event_name = (event.get("event") or "").strip().lower()
     if not sg_message_id or not event_name:
         return False
 
     target_status = _SENDGRID_EVENT_TO_STATUS.get(event_name)
-    if target_status is None:
-        # Many SendGrid events (processed, click, deferred) we
-        # ignore — they don't change the high-level status the UI
-        # cares about.
+    suppression_reason = reason_for_event(event_name)
+    if target_status is None and suppression_reason is None:
+        # Events we neither track on the row (delivered/open/bounce/
+        # dropped/spamreport) nor map to suppression
+        # (unsubscribe/group_unsubscribe) — drop. Includes
+        # processed / click / deferred.
         return False
 
     # SendGrid mangles message IDs in the X-Message-Id header
@@ -330,19 +369,40 @@ def apply_sendgrid_communication_event(
     if row is None:
         return False
 
-    if _STATUS_RANK.get(target_status, -1) > _STATUS_RANK.get(row.status, -1):
-        row.status = target_status
-
     timestamp_iso = event.get("timestamp")
     when = (
         datetime.fromtimestamp(int(timestamp_iso), tz=UTC)
         if isinstance(timestamp_iso, (int, float))
         else datetime.now(UTC)
     )
+
+    if target_status is not None and _STATUS_RANK.get(
+        target_status, -1
+    ) > _STATUS_RANK.get(row.status, -1):
+        row.status = target_status
+
     if event_name == "delivered" and row.delivered_at is None:
         row.delivered_at = when
     if event_name == "open" and row.opened_at is None:
         row.opened_at = when
+
+    # BUG-038 (2026-05-09) — record tenant-scoped suppression for the
+    # exact address SendGrid reported. Prefer event["email"] (the
+    # canonical recipient SendGrid sees) over row.recipient_email.
+    if suppression_reason is not None:
+        event_email = (event.get("email") or "").strip().lower()
+        target_email = event_email or (row.recipient_email or "")
+        if target_email:
+            detail = event.get("reason") or event.get("response")
+            record_suppression(
+                session,
+                company_id=row.company_id,
+                recipient_email=target_email,
+                reason=suppression_reason,
+                detail=str(detail) if detail else None,
+                source_message_id=sg_message_id,
+            )
+
     session.flush()
     return True
 
