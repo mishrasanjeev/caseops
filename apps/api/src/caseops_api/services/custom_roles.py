@@ -20,6 +20,7 @@ from caseops_api.schemas.custom_roles import (
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.capabilities import (
     bump_membership_sessions,
+    custom_role_capabilities_allowed,
     known_capabilities,
     owner_only_capabilities,
     validate_custom_role_permissions,
@@ -143,17 +144,33 @@ def _assigned_counts(session: Session, *, company_id: str) -> dict[str, int]:
 
 def list_capability_catalog() -> CapabilityCatalogResponse:
     owner_only = owner_only_capabilities()
+    delegable = custom_role_capabilities_allowed()
     rows: list[CapabilityRecord] = []
     for capability in sorted(known_capabilities()):
         prefix = capability.split(":", 1)[0]
         group = _GROUP_LABELS.get(prefix, prefix.replace("_", " ").title())
         label = capability.split(":", 1)[-1].replace("_", " ").replace(":", " ")
+        is_owner_only = capability in owner_only
+        is_delegable = capability in delegable
+        if is_delegable:
+            protected_reason: str | None = None
+        elif is_owner_only:
+            protected_reason = (
+                "Reserved for the fixed Owner role; cannot be granted via a custom role."
+            )
+        else:
+            protected_reason = (
+                "Non-delegable administrative capability; the backend will reject any "
+                "custom role that includes it."
+            )
         rows.append(
             CapabilityRecord(
                 capability=capability,
                 group=group,
                 label=label,
-                owner_only=capability in owner_only,
+                owner_only=is_owner_only,
+                custom_role_delegable=is_delegable,
+                protected_reason=protected_reason,
             )
         )
     return CapabilityCatalogResponse(capabilities=rows)

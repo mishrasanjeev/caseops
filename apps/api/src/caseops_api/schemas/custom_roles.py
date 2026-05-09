@@ -12,6 +12,16 @@ class CapabilityRecord(BaseModel):
     group: str
     label: str
     owner_only: bool = False
+    # True when this capability can be granted via a custom role.
+    # False covers both owner-only and the non-delegable administrative
+    # capabilities (workspace:admin, email_templates:manage, etc.) that the
+    # backend will reject in `validate_custom_role_permissions`. The UI
+    # uses this to disable selection before submit. Defaults to True so
+    # older clients reading the field don't accidentally lock the matrix.
+    custom_role_delegable: bool = True
+    # Human-readable explanation for why a capability is undelegable.
+    # `None` when the capability can be assigned via a custom role.
+    protected_reason: str | None = None
 
 
 class CapabilityCatalogResponse(BaseModel):
