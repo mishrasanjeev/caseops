@@ -38,6 +38,7 @@ export default defineConfig({
     /billing-payment\.spec\.ts/,
     /hari-ii-bugs\.spec\.ts/,
     /hari-2026-05-09-bugs\.spec\.ts/,
+    /hari-2026-05-09-bug-033\.spec\.ts/,
     /matter-outside-counsel\.spec\.ts/,
     /mobile-responsive\.spec\.ts/,
   ],
