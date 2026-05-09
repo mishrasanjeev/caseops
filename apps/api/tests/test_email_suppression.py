@@ -357,6 +357,95 @@ def test_reason_for_event_handles_known_and_ignores_unknown() -> None:
     assert reason_for_event("") is None
 
 
+def test_auth_flow_mailers_bypass_suppression(client: TestClient) -> None:
+    """BUG-038 regression guard: account-setup, password-reset, and
+    portal-access mail must NOT consult ``is_suppressed``. A user who
+    unsubscribed from matter mail in this tenant must still be able
+    to complete password reset, set up their account, and authenticate
+    into the portal.
+
+    This test pre-populates an ``email_suppressions`` row for an
+    address, then exercises the two endpoints that fan out into
+    ``employee_mailer.send_employee_account_link``:
+
+    1. ``POST /api/companies/current/employees`` — creates an
+       employee at the suppressed address; the request must succeed
+       (200) and a setup token must be issued. If a future change
+       wires ``is_suppressed`` into ``employee_mailer``, the create
+       call would 4xx (or 200 with a suppression-laced error in the
+       audit) and this test breaks.
+    2. ``POST /api/auth/password-reset/start`` — anti-enumeration
+       returns ``delivered=true`` regardless of account existence;
+       the test asserts that contract holds AND that the underlying
+       token is issued (debug_token populated in test env) for the
+       previously-created employee at the suppressed address.
+
+    The point isn't to prove the mail was sent — in a test env
+    ``send_employee_account_link`` returns False with ``"non-prod"``
+    by design. The point is to prove that the suppression check is
+    NOT silently locking auth-flow mail.
+    """
+    boot = _bootstrap(client, slug="sup-authbypass")
+    owner_token = str(boot["access_token"])
+    suppressed_address = "pre-suppressed@example.com"
+
+    # Pre-populate the suppression row for this tenant before any
+    # auth-flow mail is attempted.
+    factory = get_session_factory()
+    with factory() as session:
+        record_suppression(
+            session,
+            company_id=boot["company"]["id"],
+            recipient_email=suppressed_address,
+            reason=EmailSuppressionReason.UNSUBSCRIBE,
+            detail="user opted out of matter mail",
+        )
+        session.commit()
+
+    # 1. Employee create at the suppressed address. Must succeed.
+    from tests.test_auth_company import auth_headers
+
+    create_resp = client.post(
+        "/api/companies/current/employees",
+        headers=auth_headers(owner_token),
+        json={
+            "full_name": "Pre Suppressed Employee",
+            "email": suppressed_address,
+            "role": "member",
+            "mobile": "+91-9000000001",
+            "designation": "Associate",
+            "department": "Litigation",
+            "employee_code": "PRE-SUP-1",
+            "joined_on": "2026-05-09",
+        },
+    )
+    assert create_resp.status_code == 200, create_resp.text
+    body = create_resp.json()
+    # Token MUST have been issued — proves the auth-flow code did
+    # not short-circuit on suppression.
+    assert body.get("setup", {}).get("debug_token"), (
+        "account_setup token was not issued; auth-flow mailer may have "
+        "been blocked by suppression"
+    )
+
+    # 2. Password-reset-start at the same suppressed address. Must
+    # also succeed and issue a token.
+    reset_resp = client.post(
+        "/api/auth/password-reset/start",
+        json={
+            "company_slug": "sup-authbypass",
+            "email": suppressed_address,
+        },
+    )
+    assert reset_resp.status_code == 200, reset_resp.text
+    reset_body = reset_resp.json()
+    assert reset_body["delivered"] is True
+    assert reset_body.get("debug_token"), (
+        "password_reset token was not issued for a pre-suppressed "
+        "address; auth-flow mailer may have been blocked by suppression"
+    )
+
+
 def test_run_reminder_worker_cancels_suppressed_rows(
     client: TestClient,
 ) -> None:
