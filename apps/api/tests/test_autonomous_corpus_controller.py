@@ -117,7 +117,7 @@ def test_classification_pauses_on_red_lines() -> None:
 
     assert unembedded.state == BucketState.PAUSED_FOR_HUMAN
     assert drift.state == BucketState.PAUSED_FOR_HUMAN
-    assert low_rating.state == BucketState.PAUSED_FOR_HUMAN
+    assert low_rating.state == BucketState.RECOVERY_REQUIRED
 
 
 def test_classification_recovers_dirty_metadata_until_cap() -> None:
@@ -130,6 +130,181 @@ def test_classification_recovers_dirty_metadata_until_cap() -> None:
 
     assert result.state == BucketState.RECOVERY_REQUIRED
     assert "dirty metadata rate" in result.reason
+
+
+class _ControllerHarness(CorpusController):
+    def __init__(self, *args, hygiene: HygieneMetrics, metrics: EvalMetrics, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.hygiene = hygiene
+        self.metrics = metrics
+        self.calls: list[str] = []
+
+    def bucket_coverage(self, bucket: BucketPlan) -> dict[str, int]:
+        self.calls.append(f"coverage:{bucket.label}")
+        return {"docs": 1, "structured_docs": 0, "pending_docs": 1}
+
+    def maybe_ingest_missing(self, bucket: BucketPlan, coverage: dict[str, int]) -> None:
+        self.calls.append(f"ingest:{bucket.label}")
+
+    def export_bucket(self, bucket: BucketPlan) -> dict:
+        self.calls.append(f"export:{bucket.label}")
+        return {
+            "exported_requests": 1,
+            "estimated_cost_usd": 0.01,
+            "output_dir": str(self._bucket_dir(bucket) / "batch"),
+        }
+
+    def submit_bucket(self, bucket: BucketPlan, manifest_path: Path) -> dict:
+        self.calls.append(f"submit:{bucket.label}")
+        return {}
+
+    def monitor_bucket_until_done(self, bucket: BucketPlan, manifest_path: Path) -> dict:
+        self.calls.append(f"monitor:{bucket.label}")
+        return {}
+
+    def import_bucket(self, bucket: BucketPlan, manifest_path: Path) -> dict:
+        self.calls.append(f"import:{bucket.label}")
+        self.event({
+            "event": "imported",
+            "source_file": str(self._bucket_dir(bucket) / "results" / "out.jsonl"),
+            "document_id": f"{bucket.label}-doc",
+        })
+        return {"imported": 1, "skipped": 0, "quarantined": 0, "errors": []}
+
+    def refresh_title_chunks(
+        self,
+        bucket: BucketPlan,
+        *,
+        document_ids: tuple[str, ...] = (),
+    ) -> str:
+        self.calls.append(f"refresh:{bucket.label}:{len(document_ids)}")
+        return "refreshed"
+
+    def read_hygiene(self, bucket: BucketPlan) -> HygieneMetrics:
+        self.calls.append(f"hygiene:{bucket.label}")
+        return self.hygiene
+
+    def voyage_spend_since_start(self) -> float:
+        return 0.0
+
+    def evaluate_bucket(self, bucket: BucketPlan) -> EvalMetrics:
+        self.calls.append(f"eval:{bucket.label}")
+        return self.metrics
+
+    def evaluate_global(self) -> EvalMetrics:
+        self.calls.append("global_eval")
+        return self.metrics
+
+
+def test_bucket_quality_failure_logs_recovery_required_and_continues(tmp_path: Path) -> None:
+    controller = _ControllerHarness(
+        base_dir=tmp_path,
+        tenant_slug="aster-demo",
+        policy=StopLinePolicy(),
+        dry_run=False,
+        hygiene=HygieneMetrics(docs=100, dirty_metadata_chunks=3),
+        metrics=_metrics(1.0, 0.95, 1.0),
+    )
+
+    assert controller.run([
+        BucketPlan("dirty", "supreme_court", "Supreme Court of India", 2021),
+        BucketPlan("next", "supreme_court", "Supreme Court of India", 2020),
+    ]) == 0
+
+    ledger = (tmp_path / "controller-ledger.jsonl").read_text(encoding="utf-8")
+    assert '"event":"recovery_queued"' in ledger
+    assert '"bucket":"dirty"' in ledger
+    assert "export:next" in controller.calls
+    assert '"controller_paused"' not in ledger
+
+
+def test_global_infra_failure_still_stops(tmp_path: Path) -> None:
+    controller = _ControllerHarness(
+        base_dir=tmp_path,
+        tenant_slug="aster-demo",
+        policy=StopLinePolicy(),
+        dry_run=False,
+        hygiene=HygieneMetrics(docs=100, unembedded_chunks_global=1),
+        metrics=_metrics(1.0, 0.95, 1.0),
+    )
+
+    with pytest.raises(RuntimeError, match="bucket hard stop"):
+        controller.run([BucketPlan("bad", "supreme_court", "Supreme Court of India", 2021)])
+
+    ledger = (tmp_path / "controller-ledger.jsonl").read_text(encoding="utf-8")
+    assert '"controller_paused"' in ledger
+
+
+def test_accepted_bucket_is_skipped_on_resume(tmp_path: Path) -> None:
+    bucket = BucketPlan("done", "supreme_court", "Supreme Court of India", 2021)
+    controller = _ControllerHarness(
+        base_dir=tmp_path,
+        tenant_slug="aster-demo",
+        policy=StopLinePolicy(),
+        dry_run=False,
+        hygiene=HygieneMetrics(docs=100),
+        metrics=_metrics(1.0, 0.95, 1.0),
+    )
+    controller.event({
+        "event": "bucket_classified",
+        "bucket": bucket.label,
+        "classification": BucketState.ACCEPTED,
+        "reason": "target quality met",
+    })
+
+    assert controller.run([bucket]) == 0
+
+    assert not any(call.startswith("export:") for call in controller.calls)
+    ledger = (tmp_path / "controller-ledger.jsonl").read_text(encoding="utf-8")
+    assert '"event":"bucket_skipped_terminal"' in ledger
+
+
+def test_interrupted_bucket_resumes_from_title_refresh_checkpoint(tmp_path: Path) -> None:
+    bucket = BucketPlan("interrupted", "supreme_court", "Supreme Court of India", 2020)
+    controller = _ControllerHarness(
+        base_dir=tmp_path,
+        tenant_slug="aster-demo",
+        policy=StopLinePolicy(),
+        dry_run=False,
+        hygiene=HygieneMetrics(docs=100),
+        metrics=_metrics(1.0, 0.95, 1.0),
+    )
+    controller.event({
+        "event": "imported",
+        "source_file": str(tmp_path / bucket.label / "results" / "out.jsonl"),
+        "document_id": "doc-1",
+    })
+    controller.event({
+        "event": "import_result",
+        "bucket": bucket.label,
+        "imported": 1,
+        "skipped": 0,
+        "quarantined": 0,
+        "errors": [],
+    })
+
+    assert controller.run([bucket]) == 0
+
+    assert "refresh:interrupted:1" in controller.calls
+    assert "eval:interrupted" in controller.calls
+    assert not any(call.startswith("export:") for call in controller.calls)
+
+
+def test_refresh_title_chunks_scopes_to_imported_ids(tmp_path: Path) -> None:
+    controller = CorpusController(
+        base_dir=tmp_path,
+        tenant_slug="aster-demo",
+        policy=StopLinePolicy(),
+        dry_run=True,
+    )
+    bucket = BucketPlan("ids", "supreme_court", "Supreme Court of India", 2020)
+
+    controller.refresh_title_chunks(bucket, document_ids=("doc-a", "doc-b"))
+
+    ids_file = tmp_path / "ids" / "imported_document_ids.txt"
+    assert ids_file.read_text(encoding="utf-8") == "doc-a\ndoc-b\n"
+    ledger = (tmp_path / "controller-ledger.jsonl").read_text(encoding="utf-8")
+    assert "--ids-file" in ledger
 
 
 def test_controller_lock_is_exclusive(tmp_path: Path) -> None:

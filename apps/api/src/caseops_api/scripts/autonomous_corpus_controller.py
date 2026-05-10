@@ -99,6 +99,23 @@ class BucketClassification:
     reason: str
 
 
+@dataclass(frozen=True)
+class BucketLedgerStatus:
+    terminal_state: BucketState | None = None
+    terminal_reason: str | None = None
+    import_completed: bool = False
+    title_refreshed: bool = False
+    imported_document_ids: tuple[str, ...] = ()
+
+    @property
+    def is_terminal(self) -> bool:
+        return self.terminal_state in {
+            BucketState.ACCEPTED,
+            BucketState.ACCEPTED_WITH_CAVEAT,
+            BucketState.RECOVERY_REQUIRED,
+        }
+
+
 _RECALL_RE = re.compile(r"\*\*recall@10\*\*:\s*(\d+)/(\d+)\s*\(([\d.]+)\s*%")
 _MRR_RE = re.compile(r"\*\*MRR\*\*:\s*([\d.]+)")
 _RANK_RE = re.compile(r"\*\*mean rank \(when found\)\*\*:\s*([\d.]+)")
@@ -199,9 +216,9 @@ def classify_bucket(
         return BucketClassification(BucketState.ACCEPTED, rating, "target quality met")
     if rating < policy.red_rating:
         return BucketClassification(
-            BucketState.PAUSED_FOR_HUMAN,
+            BucketState.RECOVERY_REQUIRED,
             rating,
-            "rating below red-line minimum",
+            "bucket rating below red-line minimum; queued for recovery",
         )
     if (
         policy.recover_below_target
@@ -384,6 +401,62 @@ class CorpusController:
         if language == "non_english":
             return "non_en"
         return "any"
+
+    def bucket_ledger_status(self, bucket: BucketPlan) -> BucketLedgerStatus:
+        """Read prior controller progress for resume-safe bucket handling."""
+        if not self.ledger_path.exists():
+            return BucketLedgerStatus()
+
+        terminal_state: BucketState | None = None
+        terminal_reason: str | None = None
+        import_completed = False
+        title_refreshed = False
+        imported_ids: list[str] = []
+        seen_ids: set[str] = set()
+        bucket_path_fragment = f"/{bucket.label}/"
+
+        with self.ledger_path.open("r", encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+
+                if event.get("bucket") == bucket.label:
+                    if event.get("event") == "bucket_classified":
+                        try:
+                            state = BucketState(str(event.get("classification")))
+                        except ValueError:
+                            state = None
+                        if state is not None:
+                            terminal_state = state
+                            terminal_reason = str(event.get("reason") or "")
+                    elif event.get("event") == "import_result":
+                        import_completed = bool(event.get("errors") in (None, []))
+                    elif event.get("event") == "title_refresh_result":
+                        title_refreshed = True
+
+                if event.get("event") == "imported":
+                    source_file = str(event.get("source_file") or "").replace("\\", "/")
+                    document_id = event.get("document_id")
+                    if (
+                        bucket_path_fragment in source_file
+                        and isinstance(document_id, str)
+                        and document_id not in seen_ids
+                    ):
+                        seen_ids.add(document_id)
+                        imported_ids.append(document_id)
+
+        return BucketLedgerStatus(
+            terminal_state=terminal_state,
+            terminal_reason=terminal_reason,
+            import_completed=import_completed,
+            title_refreshed=title_refreshed,
+            imported_document_ids=tuple(imported_ids),
+        )
 
     def _coverage_sql(self) -> str:
         return """
@@ -688,7 +761,12 @@ SELECT
             )
         return result
 
-    def refresh_title_chunks(self, bucket: BucketPlan) -> str:
+    def refresh_title_chunks(
+        self,
+        bucket: BucketPlan,
+        *,
+        document_ids: tuple[str, ...] = (),
+    ) -> str:
         args = self._python_module(
             "caseops_api.scripts.backfill_title_chunks",
             "--refresh",
@@ -702,6 +780,11 @@ SELECT
         )
         if bucket.court_name:
             args.extend(["--court-name", bucket.court_name])
+        if document_ids:
+            ids_path = self._bucket_dir(bucket) / "imported_document_ids.txt"
+            ids_path.parent.mkdir(parents=True, exist_ok=True)
+            ids_path.write_text("\n".join(document_ids) + "\n", encoding="utf-8")
+            args.extend(["--ids-file", str(ids_path)])
         return self.run_command(args, output_path=self._bucket_dir(bucket) / "title_refresh.log")
 
     def recover_bucket(self, bucket: BucketPlan, *, attempt: int) -> None:
@@ -807,6 +890,14 @@ SELECT
             "hygiene": asdict(hygiene),
             "recovery_attempts": recovery_attempts,
         })
+        if classification.state == BucketState.RECOVERY_REQUIRED:
+            self.event({
+                "event": "recovery_queued",
+                "bucket": bucket.label,
+                "reason": classification.reason,
+                "rating": classification.rating,
+                "hygiene": asdict(hygiene),
+            })
         return classification
 
     def run_recovery_until_classified(
@@ -839,9 +930,73 @@ SELECT
             )
         return classification
 
+    def finish_imported_bucket(
+        self,
+        bucket: BucketPlan,
+        *,
+        status: BucketLedgerStatus,
+    ) -> BucketClassification:
+        document_ids = status.imported_document_ids
+        if not status.title_refreshed:
+            self.event({
+                "event": "state",
+                "bucket": bucket.label,
+                "state": BucketState.TITLE_CHUNK_REFRESH,
+                "resume": status.import_completed,
+                "document_ids": len(document_ids),
+            })
+            title_output = self.refresh_title_chunks(bucket, document_ids=document_ids)
+            self.event({
+                "event": "title_refresh_result",
+                "bucket": bucket.label,
+                "output_tail": title_output[-1000:],
+                "document_ids": len(document_ids),
+            })
+
+        self.event({
+            "event": "state",
+            "bucket": bucket.label,
+            "state": BucketState.HNSW_PROBE,
+            "resume": status.import_completed,
+        })
+        hygiene = self.read_hygiene(bucket)
+        voyage_spend = self.voyage_spend_since_start()
+        if voyage_spend > self.policy.voyage_cap_usd:
+            raise RuntimeError(
+                f"Voyage cap exceeded: ${voyage_spend:.2f} > ${self.policy.voyage_cap_usd:.2f}"
+            )
+        metrics = self.evaluate_bucket(bucket)
+        classification = self.mark_bucket(
+            bucket,
+            metrics=metrics,
+            hygiene=hygiene,
+            recovery_attempts=self.policy.max_recovery_attempts,
+        )
+        if classification.state in {BucketState.PAUSED_FOR_HUMAN, BucketState.FAILED}:
+            raise RuntimeError(f"bucket hard stop: {bucket.label}: {classification.reason}")
+        return classification
+
     def process_bucket(self, bucket: BucketPlan) -> BucketClassification | None:
         bucket_dir = self._bucket_dir(bucket)
         bucket_dir.mkdir(parents=True, exist_ok=True)
+        status = self.bucket_ledger_status(bucket)
+        if status.is_terminal:
+            self.event({
+                "event": "bucket_skipped_terminal",
+                "bucket": bucket.label,
+                "state": status.terminal_state,
+                "reason": status.terminal_reason,
+            })
+            return None
+        if status.import_completed:
+            self.event({
+                "event": "bucket_resumed_after_import",
+                "bucket": bucket.label,
+                "title_refreshed": status.title_refreshed,
+                "document_ids": len(status.imported_document_ids),
+            })
+            return self.finish_imported_bucket(bucket, status=status)
+
         self.event({"event": "state", "bucket": bucket.label, "state": BucketState.PLANNED})
         coverage = self.bucket_coverage(bucket)
         self.event({"event": "coverage", "bucket": bucket.label, **coverage})
@@ -869,40 +1024,8 @@ SELECT
         self.monitor_bucket_until_done(bucket, manifest_path)
         import_result = self.import_bucket(bucket, manifest_path)
         self.event({"event": "import_result", "bucket": bucket.label, **import_result})
-
-        self.event({
-            "event": "state",
-            "bucket": bucket.label,
-            "state": BucketState.TITLE_CHUNK_REFRESH,
-        })
-        title_output = self.refresh_title_chunks(bucket)
-        self.event({
-            "event": "title_refresh_result",
-            "bucket": bucket.label,
-            "output_tail": title_output[-1000:],
-        })
-
-        self.event({
-            "event": "state",
-            "bucket": bucket.label,
-            "state": BucketState.HNSW_PROBE,
-        })
-        hygiene = self.read_hygiene(bucket)
-        voyage_spend = self.voyage_spend_since_start()
-        if voyage_spend > self.policy.voyage_cap_usd:
-            raise RuntimeError(
-                f"Voyage cap exceeded: ${voyage_spend:.2f} > ${self.policy.voyage_cap_usd:.2f}"
-            )
-        metrics = self.evaluate_bucket(bucket)
-        classification = self.mark_bucket(
-            bucket,
-            metrics=metrics,
-            hygiene=hygiene,
-            recovery_attempts=self.policy.max_recovery_attempts,
-        )
-        if classification.state in {BucketState.PAUSED_FOR_HUMAN, BucketState.FAILED}:
-            raise RuntimeError(f"bucket hard stop: {bucket.label}: {classification.reason}")
-        return classification
+        status = self.bucket_ledger_status(bucket)
+        return self.finish_imported_bucket(bucket, status=status)
 
     def run(self, buckets: list[BucketPlan]) -> int:
         acquire_lock(self.lock_path)
