@@ -687,7 +687,7 @@ re-discovering them as new findings.
   2. In SendGrid dashboard:
      Settings → Mail Settings → Event Webhook → enable Signed
      Event Webhook, set HTTPS POST URL to
-     `https://api.caseops.ai/api/sendgrid/events`, enable
+     `https://api.caseops.ai/api/webhooks/sendgrid/events`, enable
      `bounce`, `dropped`, `spam_report`, `unsubscribe`,
      `group_unsubscribe` events.
   3. Verify the webhook end-to-end via the runbook's curl probe.
