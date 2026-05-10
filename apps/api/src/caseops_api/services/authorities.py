@@ -5,7 +5,7 @@ import re
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 # NOTE for reviewers: the task spec asked for this wiring to land in
@@ -486,6 +486,30 @@ def search_authority_catalog(
     court_name: str | None = None,
     document_type: str | None = None,
 ) -> list[AuthoritySearchResult]:
+    # Exact legal identifiers (neutral citations / docket references)
+    # should beat vector distance. Queries such as ``2022 DHC 2140`` and
+    # ``2022/DHC/002140`` are too short for embeddings and otherwise
+    # collide with every Delhi HC row from the same year.
+    exact_identifier_ids = _exact_identifier_match_document_ids(
+        session,
+        query=query,
+        forum_level=forum_level,
+        court_name=court_name,
+        document_type=document_type,
+        limit=max(limit * 4, 20),
+    )
+    # Case-name collisions are usually caused by common parties ("Union
+    # of India", "State", "Ors."). Keep the exact-name prefilter, but
+    # add a stronger title scorer that treats distinctive party names and
+    # common-party terms separately.
+    strong_title_ids = _strong_title_match_document_ids(
+        session,
+        query=query,
+        forum_level=forum_level,
+        court_name=court_name,
+        document_type=document_type,
+        limit=max(limit * 4, 20),
+    )
     # Parties / title exact-match boost: case-name queries ("Wahid State
     # Govt of NCT of Delhi") carry a distinctive proper noun that
     # almost certainly appears verbatim in the target doc's parties_json
@@ -551,10 +575,23 @@ def search_authority_catalog(
     # Merge: exact-name matches first (highest confidence), then vector
     # results. Dedup while preserving order.
     merged_ids: list[str] | None = None
-    if name_match_ids or pg_document_ids is not None:
+    priority_boost_by_id: dict[str, int] = {}
+    for index, doc_id in enumerate(exact_identifier_ids):
+        priority_boost_by_id[doc_id] = max(priority_boost_by_id.get(doc_id, 0), 1200 - index)
+    for index, doc_id in enumerate(strong_title_ids):
+        priority_boost_by_id[doc_id] = max(
+            priority_boost_by_id.get(doc_id, 0), 1000 - (index * 250)
+        )
+
+    if exact_identifier_ids or strong_title_ids or name_match_ids or pg_document_ids is not None:
         seen: set[str] = set()
         merged_ids = []
-        for doc_id in (*name_match_ids, *(pg_document_ids or [])):
+        for doc_id in (
+            *exact_identifier_ids,
+            *strong_title_ids,
+            *name_match_ids,
+            *(pg_document_ids or []),
+        ):
             if doc_id in seen:
                 continue
             seen.add(doc_id)
@@ -646,7 +683,7 @@ def search_authority_catalog(
         if document is None:
             continue
 
-        adjusted_score = result.score
+        adjusted_score = result.score + priority_boost_by_id.get(document.id, 0)
         if court_name and document.court_name == court_name:
             adjusted_score += 16
         # P4 (2026-04-25): forum-aware precedent boost — replaces the
@@ -836,6 +873,272 @@ def _title_is_predominantly_ascii(title: str | None) -> bool:
     if ascii_letters < 3:
         return False
     return ascii_letters / len(letters) >= 0.7
+
+
+_NEUTRAL_CITATION_PATTERN = re.compile(
+    r"\b(?P<year>(?:19|20)\d{2})"
+    r"(?:\s*[/:\-.]\s*|\s+)"
+    r"(?P<court>[A-Z]{2,8})"
+    r"(?:\s*[/:\-.]\s*|\s+)"
+    r"(?P<number>\d{2,8})"
+    r"(?:\s*[-/]\s*(?P<suffix>[A-Z]{1,6}))?\b",
+    re.IGNORECASE,
+)
+
+
+def _normalise_legal_identifier_key(value: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", value.lower())
+
+
+def _neutral_citation_keys(value: str) -> set[str]:
+    keys: set[str] = set()
+    for match in _NEUTRAL_CITATION_PATTERN.finditer(value or ""):
+        year = match.group("year")
+        court = re.sub(r"[^A-Z0-9]", "", match.group("court").upper())
+        number = match.group("number").lstrip("0") or "0"
+        suffix = re.sub(r"[^A-Z0-9]", "", (match.group("suffix") or "").upper())
+        if not court or not number:
+            continue
+        keys.add(f"{year}:{court}:{number}:{suffix}")
+    return keys
+
+
+def _legal_identifier_keys(value: str | None) -> set[str]:
+    if not value:
+        return set()
+    keys = set(_neutral_citation_keys(value))
+    for reference in _extract_case_references(value):
+        normalized = _normalise_legal_identifier_key(reference)
+        if normalized:
+            keys.add(normalized)
+    normalized_full = _normalise_legal_identifier_key(value)
+    if (
+        normalized_full
+        and any(ch.isdigit() for ch in normalized_full)
+        and any(ch.isalpha() for ch in normalized_full)
+    ):
+        keys.add(normalized_full)
+    return keys
+
+
+def _apply_authority_filters(
+    stmt,
+    *,
+    forum_level: str | None,
+    court_name: str | None,
+    document_type: str | None,
+):
+    if forum_level:
+        stmt = stmt.where(AuthorityDocument.forum_level == forum_level)
+    if court_name:
+        stmt = stmt.where(AuthorityDocument.court_name == court_name)
+    if document_type:
+        stmt = stmt.where(AuthorityDocument.document_type == document_type)
+    return stmt
+
+
+def _exact_identifier_match_document_ids(
+    session: Session,
+    *,
+    query: str,
+    forum_level: str | None,
+    court_name: str | None,
+    document_type: str | None,
+    limit: int,
+) -> list[str]:
+    query_keys = _legal_identifier_keys(query)
+    if not query_keys:
+        return []
+
+    probe_term_groups: list[list[str]] = []
+    for match in _NEUTRAL_CITATION_PATTERN.finditer(query):
+        number = match.group("number")
+        probe_term_groups.append(
+            [
+                match.group("year"),
+                match.group("court").upper(),
+                number.lstrip("0") or "0",
+            ]
+        )
+    for reference in _extract_case_references(query):
+        if len(reference) >= 4:
+            probe_term_groups.append([reference[:24]])
+
+    stmt = select(
+        AuthorityDocument.id,
+        AuthorityDocument.case_reference,
+        AuthorityDocument.neutral_citation,
+        AuthorityDocument.title,
+        AuthorityDocument.summary,
+    )
+    stmt = _apply_authority_filters(
+        stmt,
+        forum_level=forum_level,
+        court_name=court_name,
+        document_type=document_type,
+    )
+    if probe_term_groups:
+        grouped_conditions = []
+        for group in probe_term_groups:
+            like_terms = [term for term in group if len(term) >= 2]
+            if not like_terms:
+                continue
+            grouped_conditions.append(
+                and_(
+                    *[
+                        or_(
+                            AuthorityDocument.case_reference.ilike(f"%{term}%"),
+                            AuthorityDocument.neutral_citation.ilike(f"%{term}%"),
+                            AuthorityDocument.title.ilike(f"%{term}%"),
+                            AuthorityDocument.summary.ilike(f"%{term}%"),
+                        )
+                        for term in like_terms
+                    ]
+                )
+            )
+        if grouped_conditions:
+            stmt = stmt.where(
+                or_(*grouped_conditions)
+            )
+    stmt = stmt.order_by(AuthorityDocument.decision_date.desc()).limit(max(limit * 20, 100))
+
+    rows = session.execute(stmt).all()
+    scored: list[tuple[int, str]] = []
+    for row in rows:
+        document_keys = _legal_identifier_keys(row.case_reference)
+        document_keys.update(_legal_identifier_keys(row.neutral_citation))
+        document_keys.update(_legal_identifier_keys(row.title))
+        if query_keys & document_keys:
+            scored.append((100, row.id))
+            continue
+        # Some old rows have the neutral citation only in the summary.
+        summary_keys = _legal_identifier_keys(row.summary)
+        if query_keys & summary_keys:
+            scored.append((80, row.id))
+
+    scored.sort(key=lambda item: item[0], reverse=True)
+    return [doc_id for _, doc_id in scored[:limit]]
+
+
+_TITLE_TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z0-9.'-]*")
+_COMMON_PARTY_TOKENS = {
+    "and",
+    "another",
+    "authority",
+    "board",
+    "commissioner",
+    "committee",
+    "council",
+    "court",
+    "department",
+    "district",
+    "gov",
+    "government",
+    "govt",
+    "high",
+    "india",
+    "limited",
+    "ltd",
+    "officer",
+    "ors",
+    "others",
+    "petitioner",
+    "pvt",
+    "respondent",
+    "state",
+    "supreme",
+    "the",
+    "union",
+    "versus",
+}
+_BAD_TITLE_PREFIXES = (
+    "date of decision",
+    "judgment pronounced",
+    "judgment reserved",
+    "neutral citation",
+)
+
+
+def _title_query_tokens(value: str) -> list[str]:
+    tokens: list[str] = []
+    for raw in _TITLE_TOKEN_RE.findall(value or ""):
+        token = raw.strip(".'-").lower()
+        if len(token) < 3:
+            continue
+        if token not in tokens:
+            tokens.append(token)
+    return tokens
+
+
+def _strong_title_score(query: str, document: AuthorityDocument) -> int:
+    query_tokens = _title_query_tokens(query)
+    if len(query_tokens) < 2:
+        return 0
+    strong_tokens = [token for token in query_tokens if token not in _COMMON_PARTY_TOKENS]
+    weak_tokens = [token for token in query_tokens if token in _COMMON_PARTY_TOKENS]
+    if len(strong_tokens) < 2:
+        return 0
+
+    title = (document.title or "").lower()
+    parties = (document.parties_json or "").lower()
+    haystack = f"{title}\n{parties}"
+    haystack_tokens = set(_title_query_tokens(haystack))
+
+    strong_hits = sum(1 for token in strong_tokens if token in haystack_tokens)
+    if strong_hits < len(strong_tokens):
+        return 0
+    weak_hits = sum(1 for token in weak_tokens if token in haystack_tokens)
+
+    score = (strong_hits * 130) + (weak_hits * 45)
+    strong_phrase = " ".join(strong_tokens[:2])
+    if strong_phrase and strong_phrase in haystack:
+        score += 120
+    if re.search(r"\b(v\.?|vs\.?|versus)\b", title, flags=re.IGNORECASE):
+        score += 80
+    if any(title.startswith(prefix) for prefix in _BAD_TITLE_PREFIXES):
+        score -= 160
+    return score
+
+
+def _strong_title_match_document_ids(
+    session: Session,
+    *,
+    query: str,
+    forum_level: str | None,
+    court_name: str | None,
+    document_type: str | None,
+    limit: int,
+) -> list[str]:
+    strong_tokens = [
+        token for token in _title_query_tokens(query) if token not in _COMMON_PARTY_TOKENS
+    ]
+    if len(strong_tokens) < 2:
+        return []
+
+    stmt = select(AuthorityDocument)
+    stmt = _apply_authority_filters(
+        stmt,
+        forum_level=forum_level,
+        court_name=court_name,
+        document_type=document_type,
+    )
+    for token in strong_tokens[:2]:
+        pattern = f"%{token}%"
+        stmt = stmt.where(
+            or_(
+                AuthorityDocument.title.ilike(pattern),
+                AuthorityDocument.parties_json.ilike(pattern),
+            )
+        )
+    stmt = stmt.order_by(AuthorityDocument.decision_date.desc()).limit(max(limit * 20, 100))
+
+    scored: list[tuple[int, str]] = []
+    for document in session.scalars(stmt):
+        score = _strong_title_score(query, document)
+        if score >= 360:
+            scored.append((score, document.id))
+    scored.sort(key=lambda item: item[0], reverse=True)
+    return [doc_id for _, doc_id in scored[:limit]]
 
 
 # Case-name queries carry at least one distinctive proper noun (the

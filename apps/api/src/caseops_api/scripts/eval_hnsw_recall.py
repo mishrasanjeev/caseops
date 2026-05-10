@@ -39,9 +39,9 @@ import re
 import sys
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
@@ -78,6 +78,10 @@ _TITLE_NOISE_RE = re.compile(
     re.IGNORECASE,
 )
 _PUNCT_RE = re.compile(r"[^A-Za-z0-9\s]+")
+_NON_ENGLISH_TITLE_RE = re.compile(
+    r"[\u0900-\u097F\u0980-\u09FF\u0A00-\u0A7F"
+    r"\u0B80-\u0BFF\u0C00-\u0C7F\u0C80-\u0CFF]"
+)
 
 
 @dataclass(frozen=True)
@@ -167,6 +171,11 @@ def _sample_probes(
     seed: int,
     updated_since: datetime | None = None,
     updated_until: datetime | None = None,
+    forum_level: str | None = None,
+    court_name: str | None = None,
+    year: int | None = None,
+    source_year: int | None = None,
+    language: str = "any",
 ) -> tuple[list[_Probe], dict[str, int]]:
     """Return ``(probes, skip_reasons)``.
 
@@ -197,6 +206,23 @@ def _sample_probes(
         stmt = stmt.where(AuthorityDocument.updated_at >= updated_since)
     if updated_until is not None:
         stmt = stmt.where(AuthorityDocument.updated_at < updated_until)
+    if forum_level:
+        stmt = stmt.where(AuthorityDocument.forum_level == forum_level)
+    if court_name:
+        stmt = stmt.where(AuthorityDocument.court_name == court_name)
+    if year is not None:
+        stmt = stmt.where(AuthorityDocument.decision_date >= date(year, 1, 1))
+        stmt = stmt.where(AuthorityDocument.decision_date < date(year + 1, 1, 1))
+    if source_year is not None:
+        year_text = str(source_year)
+        stmt = stmt.where(
+            or_(
+                AuthorityDocument.source_reference.ilike(f"%/{year_text}/%"),
+                AuthorityDocument.source_reference.ilike(f"%\\{year_text}\\%"),
+                AuthorityDocument.source_reference.ilike(f"%{year_text}_%"),
+                AuthorityDocument.source_reference.ilike(f"%_{year_text}%"),
+            )
+        )
     candidates = list(session.execute(stmt).all())
     if not candidates:
         return [], {}
@@ -210,6 +236,13 @@ def _sample_probes(
     probes: list[_Probe] = []
     skip_reasons: dict[str, int] = {}
     for doc_id, title in pool:
+        non_english_title = bool(_NON_ENGLISH_TITLE_RE.search(title or ""))
+        if language == "en" and non_english_title:
+            skip_reasons["language_non_en"] = skip_reasons.get("language_non_en", 0) + 1
+            continue
+        if language == "non_en" and not non_english_title:
+            skip_reasons["language_en"] = skip_reasons.get("language_en", 0) + 1
+            continue
         ok, reason = _title_is_case_name(title or "")
         if not ok:
             skip_reasons[reason] = skip_reasons.get(reason, 0) + 1
@@ -345,6 +378,11 @@ def run(
     fail_on_miss: bool = False,
     updated_since: datetime | None = None,
     updated_until: datetime | None = None,
+    forum_level: str | None = None,
+    court_name: str | None = None,
+    year: int | None = None,
+    source_year: int | None = None,
+    language: str = "any",
 ) -> int:
     logging.basicConfig(
         level=logging.INFO,
@@ -361,6 +399,11 @@ def run(
             session, suite_name="hnsw-recall",
             provider="caseops-authority-search-v2", model=f"k={k}",
         )
+        # The probe performs external embedding calls and can run long enough
+        # for Cloud SQL/proxy connections to be recycled. Persist the parent
+        # run before the first case row so a reconnected session never records
+        # cases against an uncommitted run id.
+        session.commit()
 
         skip_reasons: dict[str, int] = {}
         if dry_run:
@@ -369,6 +412,8 @@ def run(
             probes, skip_reasons = _sample_probes(
                 session, sample_size=sample_size, seed=seed,
                 updated_since=updated_since, updated_until=updated_until,
+                forum_level=forum_level, court_name=court_name,
+                year=year, source_year=source_year, language=language,
             )
             if expand_query and probes:
                 expanded: list[_Probe] = []
@@ -474,6 +519,28 @@ def main(argv: Iterable[str] | None = None) -> int:
             "this. Pair with --updated-since to slice an A/B window."
         ),
     )
+    parser.add_argument(
+        "--forum-level", default=None,
+        help="Sample only one forum level, e.g. supreme_court or high_court.",
+    )
+    parser.add_argument(
+        "--court-name", default=None,
+        help="Sample only one exact court_name bucket, e.g. Delhi High Court.",
+    )
+    parser.add_argument(
+        "--year", type=int, default=None,
+        help="Sample only documents whose decision_date falls in this calendar year.",
+    )
+    parser.add_argument(
+        "--source-year",
+        type=int,
+        default=None,
+        help="Sample only documents whose source_reference/corpus path carries this year.",
+    )
+    parser.add_argument(
+        "--language", choices=("any", "en", "non_en"), default="any",
+        help="Sample any titles, English/Latin titles, or non-English-script titles.",
+    )
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     def _parse_iso(v: str | None) -> datetime | None:
@@ -487,6 +554,11 @@ def main(argv: Iterable[str] | None = None) -> int:
         fail_on_miss=args.fail_on_miss,
         updated_since=_parse_iso(args.updated_since),
         updated_until=_parse_iso(args.updated_until),
+        forum_level=args.forum_level,
+        court_name=args.court_name,
+        year=args.year,
+        source_year=args.source_year,
+        language=args.language,
     )
 
 

@@ -135,6 +135,104 @@ def _build_reference_bias_adapter() -> AuthoritySourceAdapter:
     )
 
 
+def _build_retrieval_collision_adapter() -> AuthoritySourceAdapter:
+    def puller(*, max_documents: int) -> AuthorityIngestResult:
+        documents = [
+            AuthoritySourceDocument(
+                court_name="High Court of Delhi",
+                forum_level=MatterForumLevel.HIGH_COURT,
+                document_type=AuthorityDocumentType.JUDGMENT,
+                title="NEUTRAL CITATION NO: 2022/DHC/002140",
+                decision_date="2022-05-20",
+                case_reference=None,
+                bench_name="Justice Test",
+                neutral_citation="2022/DHC/002140",
+                source="retrieval_collision_source",
+                source_reference="https://official.example.test/2022-dhc-002140.pdf",
+                summary="Delhi High Court judgment indexed by neutral citation 2022/DHC/002140.",
+                document_text=(
+                    "NEUTRAL CITATION NO: 2022/DHC/002140. The Delhi High Court "
+                    "decided the petition on maintainability and interim relief."
+                ),
+            ),
+            AuthoritySourceDocument(
+                court_name="High Court of Delhi",
+                forum_level=MatterForumLevel.HIGH_COURT,
+                document_type=AuthorityDocumentType.JUDGMENT,
+                title="NEUTRAL CITATION NO: 2022/DHC/001429",
+                decision_date="2022-05-21",
+                case_reference=None,
+                bench_name="Justice Test",
+                neutral_citation="2022/DHC/001429",
+                source="retrieval_collision_source",
+                source_reference="https://official.example.test/2022-dhc-001429.pdf",
+                summary="Delhi High Court judgment indexed by neutral citation 2022/DHC/001429.",
+                document_text="NEUTRAL CITATION NO: 2022/DHC/001429. Similar procedural context.",
+            ),
+            AuthoritySourceDocument(
+                court_name="High Court of Delhi",
+                forum_level=MatterForumLevel.HIGH_COURT,
+                document_type=AuthorityDocumentType.JUDGMENT,
+                title="Mahendra Singh v. Union of India & Ors.",
+                decision_date="2025-09-26",
+                case_reference="W.P.(C) 9000/2025",
+                bench_name="Justice Test",
+                neutral_citation="2025/DHC/009000",
+                source="retrieval_collision_source",
+                source_reference="https://official.example.test/mahendra-uoi.pdf",
+                summary="Delhi High Court matter involving Mahendra Singh and Union of India.",
+                document_text=(
+                    "Mahendra Singh v. Union of India & Ors. was decided by the "
+                    "Delhi High Court on service and public law relief."
+                ),
+            ),
+            AuthoritySourceDocument(
+                court_name="High Court of Delhi",
+                forum_level=MatterForumLevel.HIGH_COURT,
+                document_type=AuthorityDocumentType.JUDGMENT,
+                title="Mahendra Singh and Ors. v. State of M.P.",
+                decision_date="2025-09-27",
+                case_reference="CRL.A. 11/2025",
+                bench_name="Justice Test",
+                neutral_citation="2025/DHC/009001",
+                source="retrieval_collision_source",
+                source_reference="https://official.example.test/mahendra-state.pdf",
+                summary="Another Mahendra Singh matter with a different respondent.",
+                document_text="Mahendra Singh and others challenged state action.",
+            ),
+            AuthoritySourceDocument(
+                court_name="High Court of Delhi",
+                forum_level=MatterForumLevel.HIGH_COURT,
+                document_type=AuthorityDocumentType.JUDGMENT,
+                title="Judgment Pronounced on : 26.09.2025",
+                decision_date="2025-09-28",
+                case_reference="W.P.(C) 9001/2025",
+                bench_name="Justice Test",
+                neutral_citation="2025/DHC/009002",
+                source="retrieval_collision_source",
+                source_reference="https://official.example.test/gopal-uoi.pdf",
+                summary="Gopal Singh & Ors. versus Union of India service dispute.",
+                document_text="Gopal Singh and others versus Union of India.",
+            ),
+        ]
+        return AuthorityIngestResult(
+            adapter_name="caseops-retrieval-collision-v1",
+            summary="Loaded authority documents for retrieval collision testing.",
+            documents=documents[:max_documents],
+        )
+
+    return AuthoritySourceAdapter(
+        source="retrieval_collision_source",
+        adapter_name="caseops-retrieval-collision-v1",
+        label="Retrieval collision source",
+        description="Test-only source for neutral citation and party collision ranking.",
+        court_name="High Court of Delhi",
+        forum_level=MatterForumLevel.HIGH_COURT,
+        document_type=AuthorityDocumentType.JUDGMENT,
+        puller=puller,
+    )
+
+
 def test_owner_can_ingest_and_search_authority_corpus(
     client: TestClient,
     monkeypatch,
@@ -315,6 +413,69 @@ def test_authority_search_prefers_exact_case_reference_match(
     assert search_response.status_code == 200
     payload = search_response.json()
     assert payload["results"][0]["case_reference"] == "ARB.P. 120/2026"
+
+
+def test_authority_search_prefers_exact_neutral_citation_variants(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    bootstrap_payload = bootstrap_company(client)
+    token = str(bootstrap_payload["access_token"])
+    monkeypatch.setitem(
+        ADAPTERS,
+        "retrieval_collision_source",
+        _build_retrieval_collision_adapter(),
+    )
+
+    ingest_response = client.post(
+        "/api/authorities/ingestions/pull",
+        headers=auth_headers(token),
+        json={"source": "retrieval_collision_source", "max_documents": 5},
+    )
+    assert ingest_response.status_code == 200
+
+    for query in ["2022/DHC/002140", "2022 DHC 2140", "2022:dhc:002140"]:
+        search_response = client.post(
+            "/api/authorities/search",
+            headers=auth_headers(token),
+            json={"query": query, "limit": 10, "court_name": "High Court of Delhi"},
+        )
+        assert search_response.status_code == 200
+        payload = search_response.json()
+        assert payload["results"][0]["title"] == "NEUTRAL CITATION NO: 2022/DHC/002140"
+
+
+def test_authority_search_reduces_common_party_collisions(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    bootstrap_payload = bootstrap_company(client)
+    token = str(bootstrap_payload["access_token"])
+    monkeypatch.setitem(
+        ADAPTERS,
+        "retrieval_collision_source",
+        _build_retrieval_collision_adapter(),
+    )
+
+    ingest_response = client.post(
+        "/api/authorities/ingestions/pull",
+        headers=auth_headers(token),
+        json={"source": "retrieval_collision_source", "max_documents": 5},
+    )
+    assert ingest_response.status_code == 200
+
+    search_response = client.post(
+        "/api/authorities/search",
+        headers=auth_headers(token),
+        json={
+            "query": "Mahendra Singh Union Ors",
+            "limit": 10,
+            "court_name": "High Court of Delhi",
+        },
+    )
+    assert search_response.status_code == 200
+    payload = search_response.json()
+    assert payload["results"][0]["title"] == "Mahendra Singh v. Union of India & Ors."
 
 
 def test_telangana_authority_adapter_parses_public_judgment_rows(monkeypatch) -> None:
@@ -629,4 +790,3 @@ def test_pg110_search_offset_pagination(client: TestClient, monkeypatch) -> None
     ).json()
     assert page2["offset"] == 5
     assert [r["authority_document_id"] for r in page2["results"]] == [f"d{i}" for i in range(5, 10)]
-

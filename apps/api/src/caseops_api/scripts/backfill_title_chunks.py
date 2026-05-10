@@ -23,11 +23,14 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import re
 import sys
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, extract, func, or_, select
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import AuthorityDocument, AuthorityDocumentChunk
@@ -37,9 +40,16 @@ from caseops_api.services.corpus_ingest import (
     _encode_vector,
     _postgres_backend,
 )
+from caseops_api.services.corpus_title_validation import title_is_case_name
 from caseops_api.services.embeddings import EmbeddingProvider, build_provider
 
 logger = logging.getLogger("backfill_title_chunks")
+
+_UNSAFE_DETAIL_RE = re.compile(
+    r"\(cid:\d+\)|"
+    "[\u0900-\u097F\u0A00-\u0A7F\u0B00-\u0B7F\u0B80-\u0BFF"
+    "\u0C00-\u0C7F\u0C80-\u0CFF\u0D00-\u0D7F]"
+)
 
 
 @dataclass
@@ -52,23 +62,10 @@ class _Summary:
     errors: int = 0
 
 
-_CASE_NAME_SIGNAL = ("v.", " vs ", "versus", "v/s")
-
-
 def _title_is_case_name(title: str | None) -> bool:
-    """True when the title carries a real case name, not a placeholder.
-
-    Filenames like "2024_2_231_238_EN.pdf" and citation-only strings like
-    "[2024] 4 S.C.R. 340 : 2024 INSC 270" are NOT case names. Their
-    embeddings are useless for party-name queries and their presence in
-    the header just adds noise.
-    """
-    if not title:
-        return False
-    t = title.strip().lower()
-    if not t:
-        return False
-    return any(s in t for s in _CASE_NAME_SIGNAL)
+    """True when the shared corpus predicate accepts this title signal."""
+    ok, _reason = title_is_case_name(title)
+    return ok
 
 
 def _parties_from_json(parties_json: str | None) -> list[str]:
@@ -90,6 +87,56 @@ def _parties_from_json(parties_json: str | None) -> list[str]:
     return [s for s in (p.strip() for p in out) if s]
 
 
+def _valid_signal(value: str | None) -> str | None:
+    value = (value or "").strip()
+    if not value:
+        return None
+    ok, _reason = title_is_case_name(value)
+    return value if ok else None
+
+
+def _safe_detail(value: str | None) -> str | None:
+    value = (value or "").strip()
+    if not value:
+        return None
+    if _UNSAFE_DETAIL_RE.search(value):
+        return None
+    _ok, reason = title_is_case_name(value)
+    if reason == "cid_marker":
+        return None
+    return value
+
+
+def _party_case_name(parties: Sequence[str]) -> str | None:
+    """Return a valid party-case title synthesized from parties_json."""
+    clean = [p.strip() for p in parties if p and p.strip()]
+    for party in clean:
+        if valid := _valid_signal(party):
+            return valid
+    if len(clean) < 2:
+        return None
+    candidate = f"{clean[0]} v. {clean[1]}"
+    return _valid_signal(candidate)
+
+
+def _source_reference_matches_year(source_reference: str | None, year: int) -> bool:
+    ref = (source_reference or "").lower()
+    year_text = str(year)
+    return (
+        f"/{year_text}/" in ref
+        or f"\\{year_text}\\" in ref
+        or f"{year_text}_" in ref
+        or f"_{year_text}" in ref
+    )
+
+
+def _doc_has_dirty_metadata_chunk(doc: AuthorityDocument) -> bool:
+    return any(
+        chunk.chunk_role == "metadata" and _UNSAFE_DETAIL_RE.search(chunk.content)
+        for chunk in doc.chunks
+    )
+
+
 def _build_header_from_row(doc: AuthorityDocument) -> str:
     """Build a metadata header from every useful DB column.
 
@@ -101,26 +148,44 @@ def _build_header_from_row(doc: AuthorityDocument) -> str:
     quality, no dummy or incorrect rows".
     """
     parties = _parties_from_json(doc.parties_json)
-    title_is_name = _title_is_case_name(doc.title)
+    valid_title = _valid_signal(doc.title)
+    valid_parties_title = _party_case_name(parties)
+    valid_case_reference = _valid_signal(doc.case_reference)
+    valid_neutral_citation = _valid_signal(doc.neutral_citation)
+    primary = (
+        valid_title
+        or valid_parties_title
+        or valid_case_reference
+        or valid_neutral_citation
+    )
 
     # Quality gate — reject headers that carry no party-level signal.
-    if not title_is_name and not parties:
+    if not primary:
         return ""
 
     parts: list[str | None] = [
-        doc.title,
-        doc.case_reference,
-        doc.neutral_citation,
+        primary,
+        valid_case_reference if valid_case_reference != primary else None,
+        valid_neutral_citation if valid_neutral_citation != primary else None,
         doc.court_name,
-        doc.bench_name,
+        _safe_detail(doc.bench_name),
         doc.decision_date.isoformat() if doc.decision_date else None,
     ]
-    parts.extend(parties)
+    parts.extend(p for p in (_safe_detail(p) for p in parties) if p)
     return "\n".join(p.strip() for p in parts if p and p.strip())
 
 
 def _docs_needing_header(
-    session: Session, *, limit: int | None = None, refresh: bool = False
+    session: Session,
+    *,
+    limit: int | None = None,
+    refresh: bool = False,
+    forum_levels: Sequence[str] | None = None,
+    court_name: str | None = None,
+    year: int | None = None,
+    document_ids: Sequence[str] | None = None,
+    invalid_titles_only: bool = False,
+    dirty_metadata_only: bool = False,
 ) -> list[AuthorityDocument]:
     """Docs needing a metadata chunk, ordered by ingested_at desc.
 
@@ -129,6 +194,23 @@ def _docs_needing_header(
     the stale metadata chunks per doc right before re-embedding).
     """
     stmt = select(AuthorityDocument).order_by(AuthorityDocument.ingested_at.desc())
+    if document_ids:
+        stmt = stmt.where(AuthorityDocument.id.in_(list(document_ids)))
+    if forum_levels:
+        stmt = stmt.where(AuthorityDocument.forum_level.in_(list(forum_levels)))
+    if court_name:
+        stmt = stmt.where(AuthorityDocument.court_name == court_name)
+    if year is not None:
+        year_text = str(year)
+        stmt = stmt.where(
+            or_(
+                extract("year", AuthorityDocument.decision_date) == year,
+                AuthorityDocument.source_reference.ilike(f"%/{year_text}/%"),
+                AuthorityDocument.source_reference.ilike(f"%\\{year_text}\\%"),
+                AuthorityDocument.source_reference.ilike(f"%{year_text}_%"),
+                AuthorityDocument.source_reference.ilike(f"%_{year_text}%"),
+            )
+        )
     if not refresh:
         has_header_subq = (
             select(AuthorityDocumentChunk.authority_document_id)
@@ -137,9 +219,31 @@ def _docs_needing_header(
             .subquery()
         )
         stmt = stmt.where(AuthorityDocument.id.not_in(select(has_header_subq)))
-    if limit is not None:
+    needs_python_filter = invalid_titles_only or dirty_metadata_only
+    if limit is not None and not needs_python_filter:
         stmt = stmt.limit(limit)
-    return list(session.execute(stmt).scalars())
+    docs = list(session.execute(stmt).scalars())
+    if needs_python_filter:
+        docs = [
+            doc for doc in docs
+            if (
+                invalid_titles_only
+                and not _title_is_case_name(doc.title)
+            )
+            or (
+                dirty_metadata_only
+                and _doc_has_dirty_metadata_chunk(doc)
+            )
+        ]
+        if year is not None:
+            docs = [
+                doc for doc in docs
+                if (doc.decision_date and doc.decision_date.year == year)
+                or _source_reference_matches_year(doc.source_reference, year)
+            ]
+        if limit is not None:
+            docs = docs[:limit]
+    return docs
 
 
 def _drop_existing_metadata_chunks(session: Session, *, document_id: str) -> int:
@@ -173,9 +277,25 @@ def _run(
     limit: int | None,
     batch_size: int,
     refresh: bool = False,
+    forum_levels: Sequence[str] | None = None,
+    court_name: str | None = None,
+    year: int | None = None,
+    document_ids: Sequence[str] | None = None,
+    invalid_titles_only: bool = False,
+    dirty_metadata_only: bool = False,
 ) -> _Summary:
     summary = _Summary()
-    docs = _docs_needing_header(session, limit=limit, refresh=refresh)
+    docs = _docs_needing_header(
+        session,
+        limit=limit,
+        refresh=refresh,
+        forum_levels=forum_levels,
+        court_name=court_name,
+        year=year,
+        document_ids=document_ids,
+        invalid_titles_only=invalid_titles_only,
+        dirty_metadata_only=dirty_metadata_only,
+    )
     summary.scanned = len(docs)
     logger.info(
         "docs %s title-header chunk: %d",
@@ -272,6 +392,40 @@ def main(argv: list[str] | None = None) -> int:
             "filename-derived placeholders."
         ),
     )
+    parser.add_argument(
+        "--forum-level",
+        action="append",
+        default=None,
+        help="Restrict to a forum_level. Repeat for multiple values.",
+    )
+    parser.add_argument(
+        "--court-name",
+        default=None,
+        help="Restrict to one exact court_name, e.g. 'Delhi High Court'.",
+    )
+    parser.add_argument("--year", type=int, default=None)
+    parser.add_argument(
+        "--ids-file",
+        type=Path,
+        default=None,
+        help="Restrict to document IDs listed one per line.",
+    )
+    parser.add_argument(
+        "--invalid-titles-only",
+        action="store_true",
+        help=(
+            "Only process rows whose canonical title fails the shared "
+            "case-name predicate. Intended for targeted hygiene repair."
+        ),
+    )
+    parser.add_argument(
+        "--dirty-metadata-only",
+        action="store_true",
+        help=(
+            "Only process rows whose existing metadata chunk contains "
+            "unsafe non-Latin or CID-marker text."
+        ),
+    )
     parser.add_argument("--verbose", "-v", action="store_true")
     args = parser.parse_args(argv)
 
@@ -281,6 +435,13 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     embedder = build_provider()
+    document_ids = None
+    if args.ids_file is not None:
+        document_ids = tuple(
+            line.strip()
+            for line in args.ids_file.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        )
     session_factory = get_session_factory()
     with session_factory() as session:
         summary = _run(
@@ -289,6 +450,12 @@ def main(argv: list[str] | None = None) -> int:
             limit=args.limit,
             batch_size=args.batch_size,
             refresh=args.refresh,
+            forum_levels=tuple(args.forum_level) if args.forum_level else None,
+            court_name=args.court_name,
+            year=args.year,
+            document_ids=document_ids,
+            invalid_titles_only=args.invalid_titles_only,
+            dirty_metadata_only=args.dirty_metadata_only,
         )
 
     print(

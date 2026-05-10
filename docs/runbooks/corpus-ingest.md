@@ -99,6 +99,64 @@ A production-ready state is: every row has `embedding_vector NOT NULL`
 and all rows share a single `embedding_model`. Mixed models means a
 re-embed was interrupted — rerun `--reembed`.
 
+## 3.1 Authority metadata Batch operations
+
+Use `caseops-ingest-vm` or a Cloud Run Job for heavy authority metadata
+Batch import, title refresh, and quality probes. Do not import completed
+Batch JSONL files through local Windows plus Cloud SQL proxy except for
+tiny proof runs; per-row/chunk DB work is too slow over that path.
+
+Safe VM flow:
+
+```bash
+# On the VM, keep the watchdog scheduler paused during supervised work.
+gcloud scheduler jobs pause caseops-ingest-watchdog-15m --location=asia-south1
+
+cd ~/caseops/apps/api
+source ~/.layer2_env
+
+# 1. Import completed OpenAI Batch output idempotently. Split large output
+# files into disjoint shards and run a small number of workers if needed.
+python -m caseops_api.scripts.import_authority_metadata_batch \
+  ~/.caseops/authority-metadata-batch/<bucket>/results/<batch>.output.jsonl \
+  --ledger ~/.caseops/authority-metadata-batch/<bucket>/ledger.jsonl \
+  --quarantine ~/.caseops/authority-metadata-batch/<bucket>/quarantine.jsonl \
+  --commit-batch-size 100
+
+# 2. Refresh only the imported cohort. Prefer --ids-file over loose
+# court/year filters when a manifest is available.
+python -m caseops_api.scripts.backfill_title_chunks \
+  --refresh \
+  --ids-file ~/.caseops/authority-metadata-batch/<bucket>/manifest_ids.txt \
+  --batch-size 32
+
+# 3. Evaluate the same cohort. Use --source-year for corpus/S3 year when
+# decision_date is null or unreliable.
+python -m caseops_api.scripts.eval_hnsw_recall \
+  --tenant aster-demo \
+  --sample-size 30 \
+  --k 10 \
+  --seed 42 \
+  --forum-level high_court \
+  --court-name "Delhi High Court" \
+  --source-year 2024 \
+  --language en
+```
+
+Rules:
+
+- Export/submit/monitor only one approved Batch at a time unless the user
+  explicitly approves a queue.
+- Validate manifest scope before submit: forum, court, source/corpus year,
+  language, `structured_version IS NULL`, and estimated Batch cost.
+- Keep original non-English text canonical. Bridge/romanized content is
+  derived retrieval metadata only.
+- Import is idempotent: already structured rows should skip, failed rows go
+  to quarantine, and successful rows can be resumed from the same output.
+- Stop before the next batch if quarantine is non-empty, unembedded chunks
+  appear, dirty metadata exceeds 1%, provider/model drift appears, or the
+  bucket rating falls below 4.5/5.
+
 ## 4. Quality gate (pre-pilot)
 
 Before calling any corpus slice production-ready, run a fixed 50-query legal

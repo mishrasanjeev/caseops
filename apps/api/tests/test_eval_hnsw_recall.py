@@ -9,6 +9,7 @@ from datetime import date
 import pytest
 from sqlalchemy import select
 
+import caseops_api.scripts.eval_hnsw_recall as hnsw
 from caseops_api.db.models import (
     AuthorityDocument,
     EvaluationCase,
@@ -46,6 +47,9 @@ def _seed_doc(
     title: str,
     structured_version: int | None = 1,
     decision_date: date | None = None,
+    court_name: str = "Supreme Court of India",
+    forum_level: str = "supreme_court",
+    source_reference: str | None = None,
 ) -> str:
     """Drop a synthetic AuthorityDocument into the test DB and return
     its id. Layer-2 docs (``structured_version IS NOT NULL``) are
@@ -57,12 +61,13 @@ def _seed_doc(
         doc = AuthorityDocument(
             source="test-fixture",
             adapter_name="test",
-            court_name="Supreme Court of India",
-            forum_level="supreme_court",
+            court_name=court_name,
+            forum_level=forum_level,
             document_type="judgment",
             title=title,
             canonical_key=f"test::{title}",
             summary=f"Test fixture summary for {title}",
+            source_reference=source_reference,
             decision_date=decision_date,
             structured_version=structured_version,
             ingested_at=utcnow(),
@@ -134,6 +139,83 @@ def test_sample_probes_respects_seed_for_reproducibility(client) -> None:
     assert [p.document_id for p in a] == [p.document_id for p in b]
 
 
+@_skip_seed_on_windows
+def test_sample_probes_filters_by_court_year_and_language(client) -> None:
+    bootstrap_company(client)
+    target_id = _seed_doc(
+        title="Acme Delhi v Zenith Infra",
+        court_name="Delhi High Court",
+        forum_level="high_court",
+        decision_date=date(2024, 5, 1),
+    )
+    _seed_doc(
+        title="Acme Bombay v Zenith Infra",
+        court_name="Bombay High Court",
+        forum_level="high_court",
+        decision_date=date(2024, 5, 1),
+    )
+    _seed_doc(
+        title="Acme Delhi v Older Infra",
+        court_name="Delhi High Court",
+        forum_level="high_court",
+        decision_date=date(2023, 5, 1),
+    )
+    _seed_doc(
+        title="भारतीय न्याय संहिता",
+        court_name="Delhi High Court",
+        forum_level="high_court",
+        decision_date=date(2024, 5, 1),
+    )
+
+    Session = get_session_factory()
+    with Session() as session:
+        probes, skip_reasons = _sample_probes(
+            session,
+            sample_size=10,
+            seed=123,
+            forum_level="high_court",
+            court_name="Delhi High Court",
+            year=2024,
+            language="en",
+        )
+
+    assert [probe.document_id for probe in probes] == [target_id]
+    assert skip_reasons.get("language_non_en") == 1
+
+
+@_skip_seed_on_windows
+def test_sample_probes_filters_by_source_year_when_decision_date_missing(client) -> None:
+    bootstrap_company(client)
+    target_id = _seed_doc(
+        title="Acme Delhi v Zenith Infra",
+        court_name="Delhi High Court",
+        forum_level="high_court",
+        decision_date=None,
+        source_reference="hc/delhi/2024/DLHC0001_2024-01-01.pdf",
+    )
+    _seed_doc(
+        title="Acme Delhi v Older Infra",
+        court_name="Delhi High Court",
+        forum_level="high_court",
+        decision_date=None,
+        source_reference="hc/delhi/2023/DLHC0001_2023-01-01.pdf",
+    )
+
+    Session = get_session_factory()
+    with Session() as session:
+        probes, _skip_reasons = _sample_probes(
+            session,
+            sample_size=10,
+            seed=123,
+            forum_level="high_court",
+            court_name="Delhi High Court",
+            source_year=2024,
+            language="en",
+        )
+
+    assert [probe.document_id for probe in probes] == [target_id]
+
+
 def test_dry_run_records_empty_run(client) -> None:
     slug = _slug(client)
     buf = io.StringIO()
@@ -158,6 +240,47 @@ def test_run_returns_1_when_corpus_has_no_layer_2_docs(client, capsys) -> None:
     assert rc == 1
     captured = capsys.readouterr()
     assert "no Layer-2 docs" in captured.err
+
+
+def test_run_commits_parent_before_external_probe(client, monkeypatch) -> None:
+    """The hnsw probe can cross external network calls before first case write.
+
+    The parent EvaluationRun must be durable before that point so a dropped
+    Cloud SQL connection cannot leave EvaluationCase rows referencing a rolled
+    back/uncommitted run id.
+    """
+    slug = _slug(client)
+    seen: dict[str, bool] = {}
+
+    def fake_sample(*args, **kwargs):
+        return [
+            _Probe(
+                document_id="probe-doc",
+                title="Durable Run v. Probe Case",
+                query="Durable Run Probe Case",
+            )
+        ], {}
+
+    def fake_evaluate(*args, **kwargs):
+        Session = get_session_factory()
+        with Session() as other:
+            seen["parent_visible"] = (
+                other.scalars(
+                    select(EvaluationRun)
+                    .where(EvaluationRun.suite_name == "hnsw-recall")
+                    .order_by(EvaluationRun.created_at.desc())
+                ).first()
+                is not None
+            )
+        return "pass", {"rank": 1, "found": True, "result_count": 1}, []
+
+    monkeypatch.setattr(hnsw, "_sample_probes", fake_sample)
+    monkeypatch.setattr(hnsw, "_evaluate_probe", fake_evaluate)
+
+    rc = main(["--tenant", slug, "--sample-size", "1"])
+
+    assert rc == 0
+    assert seen["parent_visible"] is True
 
 
 def test_unknown_tenant_exits_clean(client) -> None:
