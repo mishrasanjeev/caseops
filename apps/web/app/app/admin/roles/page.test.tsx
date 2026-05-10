@@ -233,4 +233,74 @@ describe("RolesAdminPage", () => {
       screen.queryByRole("option", { name: "Use fixed role capabilities" }),
     ).not.toBeInTheDocument();
   });
+
+  // BUG-034 (Hari 2026-05-09): protected/non-delegable capabilities must
+  // be disabled in the matrix and stripped from the submit payload, so
+  // creating a custom role that includes `email_templates:manage` /
+  // `portal:invite` / `portal:manage_grants` no longer surprises the user
+  // with a 403 after submit.
+  it("disables protected non-delegable capabilities and strips them from submit", async () => {
+    listCapabilityCatalogMock.mockResolvedValue({
+      capabilities: [
+        ...capabilityRows,
+        {
+          capability: "email_templates:manage",
+          group: "Workspace",
+          label: "manage email templates",
+          owner_only: false,
+          custom_role_delegable: false,
+          protected_reason:
+            "Non-delegable administrative capability; the backend will reject any custom role that includes it.",
+        },
+        {
+          capability: "portal:invite",
+          group: "Portal",
+          label: "invite",
+          owner_only: false,
+          custom_role_delegable: false,
+          protected_reason:
+            "Non-delegable administrative capability; the backend will reject any custom role that includes it.",
+        },
+      ],
+    });
+
+    const user = userEvent.setup();
+    render(withClient(<RolesAdminPage />));
+
+    await screen.findByTestId("custom-role-matter-creator");
+
+    // The protected capabilities are present in the matrix but disabled.
+    const protectedTemplate = screen.getByTestId(
+      "capability-email_templates:manage",
+    ) as HTMLInputElement;
+    expect(protectedTemplate).toBeDisabled();
+    expect(
+      screen.getByTestId("capability-email_templates:manage-reason"),
+    ).toHaveTextContent(/non-delegable administrative capability/i);
+
+    const protectedPortal = screen.getByTestId(
+      "capability-portal:invite",
+    ) as HTMLInputElement;
+    expect(protectedPortal).toBeDisabled();
+
+    // owner-only stays disabled with its existing label.
+    expect(screen.getByTestId("capability-audit:export")).toBeDisabled();
+
+    // Pick one delegable cap, then submit. Even if a buggy click had
+    // somehow added a protected capability to the local state, the
+    // submit payload must not include it.
+    await user.click(screen.getByTestId("custom-role-new"));
+    await user.type(screen.getByTestId("custom-role-name"), "Reader");
+    await user.click(screen.getByTestId("capability-clients:view"));
+    await user.click(screen.getByTestId("custom-role-save"));
+
+    await waitFor(() => expect(createCustomRoleMock).toHaveBeenCalled());
+    const [args] = createCustomRoleMock.mock.calls[0] as [
+      { permissions: string[] },
+    ];
+    expect(args.permissions).toEqual(["clients:view"]);
+    expect(args.permissions).not.toContain("email_templates:manage");
+    expect(args.permissions).not.toContain("portal:invite");
+    expect(args.permissions).not.toContain("audit:export");
+  });
 });

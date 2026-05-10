@@ -50,6 +50,21 @@ function capabilityKey(capability: CapabilityRecord): string {
   return `${capability.group}:${capability.capability}`;
 }
 
+// Treats a missing `custom_role_delegable` as delegable (true) for
+// backward compat with older API responses. A capability is protected
+// when the API says it is non-delegable OR when it is owner-only.
+function isCapabilityProtected(capability: CapabilityRecord): boolean {
+  if (capability.owner_only) return true;
+  if (capability.custom_role_delegable === false) return true;
+  return false;
+}
+
+function capabilityLabelSuffix(capability: CapabilityRecord): string {
+  if (capability.owner_only) return " (owner only)";
+  if (capability.custom_role_delegable === false) return " (protected)";
+  return "";
+}
+
 function roleSummary(role: CustomRoleRecord): string {
   if (!role.permissions.length) return "No permissions";
   const preview = role.permissions.slice(0, 3).join(", ");
@@ -99,6 +114,25 @@ export default function RolesAdminPage() {
     ] as const);
   }, [capabilitiesQuery.data?.capabilities]);
 
+  // Defence-in-depth: even if the disabled state is bypassed (browser
+  // devtools, stale cache, future component refactor), strip protected
+  // capabilities from the submit payload so the backend never has to
+  // emit a 403 on a path the user could have completed via the UI.
+  // The backend's `validate_custom_role_permissions` is still the
+  // authoritative gate; this is belt-and-braces.
+  const delegableCapabilitySet = useMemo(() => {
+    const set = new Set<string>();
+    for (const cap of capabilitiesQuery.data?.capabilities ?? []) {
+      if (!isCapabilityProtected(cap)) set.add(cap.capability);
+    }
+    return set;
+  }, [capabilitiesQuery.data?.capabilities]);
+
+  const sanitizedPermissions = useMemo(
+    () => Array.from(permissions).filter((permission) => delegableCapabilitySet.has(permission)),
+    [permissions, delegableCapabilitySet],
+  );
+
   const roles = rolesQuery.data?.roles ?? [];
   const assignableRoles = roles.filter((role) => role.is_active);
   const employees = employeesQuery.data?.employees ?? [];
@@ -126,7 +160,7 @@ export default function RolesAdminPage() {
         name: name.trim(),
         description: description.trim() || null,
         baseRole: baseRole || null,
-        permissions: Array.from(permissions),
+        permissions: sanitizedPermissions,
       }),
     onSuccess: async () => {
       toast.success("Custom role created.");
@@ -144,7 +178,7 @@ export default function RolesAdminPage() {
         name: name.trim(),
         description: description.trim() || null,
         baseRole: baseRole || null,
-        permissions: Array.from(permissions),
+        permissions: sanitizedPermissions,
       });
     },
     onSuccess: async () => {
@@ -187,7 +221,8 @@ export default function RolesAdminPage() {
     updateMutation.isPending ||
     deleteMutation.isPending ||
     assignMutation.isPending;
-  const canSubmitRole = name.trim().length >= 2 && permissions.size > 0 && !pending;
+  const canSubmitRole =
+    name.trim().length >= 2 && sanitizedPermissions.length > 0 && !pending;
   const canClearCustomRole = actorRole === "owner";
   const canSubmitAssignment =
     Boolean(membershipId) && (canClearCustomRole || Boolean(assignmentRoleId)) && !pending;
@@ -351,21 +386,31 @@ export default function RolesAdminPage() {
                         <div className="mt-2 grid gap-2">
                           {rows.map((capability) => {
                             const checked = permissions.has(capability.capability);
+                            const protectedCapability = isCapabilityProtected(capability);
+                            const labelSuffix = capabilityLabelSuffix(capability);
+                            const reason = capability.protected_reason;
                             return (
                               <label
                                 key={capability.capability}
                                 className={`flex items-start gap-2 text-sm ${
-                                  capability.owner_only
+                                  protectedCapability
                                     ? "text-[var(--color-mute)]"
                                     : "text-[var(--color-ink)]"
                                 }`}
+                                title={reason ?? undefined}
                               >
                                 <input
                                   type="checkbox"
                                   className="mt-1"
-                                  checked={checked}
-                                  disabled={capability.owner_only}
+                                  checked={checked && !protectedCapability}
+                                  disabled={protectedCapability}
+                                  aria-describedby={
+                                    protectedCapability
+                                      ? `capability-${capability.capability}-reason`
+                                      : undefined
+                                  }
                                   onChange={(event) => {
+                                    if (protectedCapability) return;
                                     const next = new Set(permissions);
                                     if (event.target.checked) next.add(capability.capability);
                                     else next.delete(capability.capability);
@@ -376,11 +421,20 @@ export default function RolesAdminPage() {
                                 <span>
                                   <span className="block font-medium">
                                     {capability.label}
-                                    {capability.owner_only ? " (owner only)" : ""}
+                                    {labelSuffix}
                                   </span>
                                   <span className="block font-mono text-xs text-[var(--color-mute)]">
                                     {capability.capability}
                                   </span>
+                                  {protectedCapability && reason ? (
+                                    <span
+                                      id={`capability-${capability.capability}-reason`}
+                                      className="block text-xs text-[var(--color-mute)]"
+                                      data-testid={`capability-${capability.capability}-reason`}
+                                    >
+                                      {reason}
+                                    </span>
+                                  ) : null}
                                 </span>
                               </label>
                             );

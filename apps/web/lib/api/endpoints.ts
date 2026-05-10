@@ -2139,6 +2139,17 @@ export type CapabilityRecord = {
   group: string;
   label: string;
   owner_only: boolean;
+  // True when the capability can be granted via a custom role.
+  // False covers both owner-only and the non-delegable administrative
+  // capabilities. The admin/roles UI uses this to disable selection
+  // before submit so the backend never has to reject the payload.
+  // Optional in the wire shape — older API responses omit it. Treat
+  // missing as `true` (delegable) to preserve existing behaviour.
+  custom_role_delegable?: boolean;
+  // Human-readable explanation for why a capability is undelegable.
+  // `null` (or absent) when the capability can be assigned via a
+  // custom role.
+  protected_reason?: string | null;
 };
 
 export type CapabilityCatalogResult = {

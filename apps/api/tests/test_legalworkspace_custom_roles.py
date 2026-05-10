@@ -274,6 +274,118 @@ def test_custom_role_creation_rejects_owner_only_and_unknown_capabilities(
     assert admin["role"] == "admin"
 
 
+def test_capability_catalog_exposes_non_delegable_flag_and_reason(
+    client: TestClient,
+) -> None:
+    """BUG-034 (Hari 2026-05-09): the capability catalog must surface a
+    machine-readable flag for capabilities that the backend will reject in
+    `validate_custom_role_permissions`. Without it the admin/roles UI cannot
+    pre-emptively disable selection and users hit a 403 after submit on
+    capabilities like ``email_templates:manage`` / ``portal:invite`` /
+    ``portal:manage_grants``.
+    """
+
+    boot = _bootstrap(
+        client, slug="lw-s7-catalog", email="owner@catalog.example"
+    )
+    owner_token = str(boot["access_token"])
+
+    response = client.get(
+        "/api/companies/current/capabilities",
+        headers=auth_headers(owner_token),
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    capabilities = body["capabilities"]
+    assert capabilities, "catalog must expose at least one capability"
+
+    by_name = {row["capability"]: row for row in capabilities}
+    for required in (
+        "capability",
+        "group",
+        "label",
+        "owner_only",
+        "custom_role_delegable",
+        "protected_reason",
+    ):
+        assert required in capabilities[0], required
+
+    # Owner-only capabilities are not delegable; they carry a reason.
+    audit_export = by_name["audit:export"]
+    assert audit_export["owner_only"] is True
+    assert audit_export["custom_role_delegable"] is False
+    assert audit_export["protected_reason"]
+    assert "owner" in audit_export["protected_reason"].lower()
+
+    # The three exact non-delegable capabilities from Hari's report must be
+    # surfaced as protected (not owner-only) and not delegable.
+    for protected_capability in (
+        "email_templates:manage",
+        "portal:invite",
+        "portal:manage_grants",
+    ):
+        row = by_name.get(protected_capability)
+        assert row is not None, f"missing capability in catalog: {protected_capability}"
+        assert row["owner_only"] is False, (
+            f"{protected_capability} should be protected, not owner-only"
+        )
+        assert row["custom_role_delegable"] is False, (
+            f"{protected_capability} must be flagged non-delegable"
+        )
+        assert row["protected_reason"], (
+            f"{protected_capability} must explain why it is protected"
+        )
+
+    # A representative delegable capability stays delegable.
+    matters_create = by_name["matters:create"]
+    assert matters_create["custom_role_delegable"] is True
+    assert matters_create["protected_reason"] is None
+
+
+def test_capability_catalog_protected_capabilities_match_validation(
+    client: TestClient,
+) -> None:
+    """BUG-034 round-trip: every capability flagged ``custom_role_delegable=False``
+    in the catalog must in fact be rejected by ``POST /api/companies/current/roles``.
+    Catalog drift between the flag and the validator is the failure mode this
+    bug exposed; the test pins them together.
+    """
+
+    boot = _bootstrap(
+        client, slug="lw-s7-roundtrip", email="owner@roundtrip.example"
+    )
+    owner_token = str(boot["access_token"])
+
+    catalog = client.get(
+        "/api/companies/current/capabilities",
+        headers=auth_headers(owner_token),
+    ).json()["capabilities"]
+
+    protected = [
+        row["capability"]
+        for row in catalog
+        if row["custom_role_delegable"] is False and row["owner_only"] is False
+    ]
+    assert protected, (
+        "expected the catalog to flag at least one non-delegable, non-owner-only "
+        "capability (e.g. email_templates:manage)"
+    )
+
+    for capability in protected:
+        response = client.post(
+            "/api/companies/current/roles",
+            headers=auth_headers(owner_token),
+            json={
+                "name": f"Drift check {capability}",
+                "permissions": [capability],
+            },
+        )
+        assert response.status_code == 403, (
+            f"catalog flagged {capability} non-delegable but validator did not "
+            f"reject: status={response.status_code} body={response.text}"
+        )
+
+
 def test_malformed_inactive_or_revoked_custom_role_fails_closed(
     client: TestClient,
 ) -> None:
