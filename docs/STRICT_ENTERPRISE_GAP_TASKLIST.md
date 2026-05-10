@@ -646,3 +646,79 @@ ledger is `P1-002` / `P1-003` / `AQ-003` / `AQ-004` above.
   deploy or runtime state where relevant.
 - Claude must call out doc drift explicitly instead of silently trusting or
   rewriting old backlog text.
+
+---
+
+## Provider/runtime drift — Hari 2026-05-09 sweep findings
+
+The 2026-05-09 multi-PR sweep surfaced two enterprise hardening gaps
+that span code, infrastructure manifest, runtime env, and provider-side
+config. Both are tracked here so future enterprise audits stop
+re-discovering them as new findings.
+
+### EH-PROV-01 — SendGrid Event Webhook end-to-end wiring (PR #22)
+
+- **Status:** Partially implemented (code complete, infrastructure
+  manifest landed, **provider-side config + Secret Manager value
+  pending operator action**).
+- **Code (in `fix/sendgrid-webhook-delivery-visibility`):**
+  - `apps/api/src/caseops_api/api/routes/sendgrid_webhook.py` —
+    ECDSA P-256 signed-event verification with explicit fail-closed
+    on missing/invalid signature.
+  - `apps/api/src/caseops_api/db/models/email_suppression.py` +
+    Alembic migration — tenant-scoped suppression table,
+    `(company_id, recipient_email)` unique constraint.
+  - `apps/api/src/caseops_api/services/email_suppression.py` —
+    `is_suppressed`, `record_suppression`, idempotent on duplicate
+    events. `services/email_send.py` calls `is_suppressed` before
+    every business mailer; `services/employee_mailer.py` and
+    `services/portal_mailer.py` are intentional bypasses (auth
+    flow can never be silently suppressed).
+  - Test coverage: 12 backend tests including
+    `test_auth_flow_mailers_bypass_suppression` (regression lock).
+- **Infrastructure manifest:**
+  - `infra/cloud-run/api.yaml` (or equivalent service.yaml) —
+    references `caseops-sendgrid-webhook-public-key` Secret
+    Manager value via `valueFrom.secretKeyRef`.
+  - Runbook: `docs/runbooks/sendgrid-event-webhook.md`.
+- **Pending operator steps (gating Properly Implemented):**
+  1. Create the `caseops-sendgrid-webhook-public-key` Secret
+     Manager secret with the SendGrid-provided P-256 public key.
+  2. In SendGrid dashboard:
+     Settings → Mail Settings → Event Webhook → enable Signed
+     Event Webhook, set HTTPS POST URL to
+     `https://api.caseops.ai/api/sendgrid/events`, enable
+     `bounce`, `dropped`, `spam_report`, `unsubscribe`,
+     `group_unsubscribe` events.
+  3. Verify the webhook end-to-end via the runbook's curl probe.
+- **Why this is enterprise hardening, not a bug fix:** SendGrid
+  send had been working from imperatively-set Cloud Run env vars
+  for months while the webhook side had no declarative wiring at
+  all. This is the classic "deploy manifest drift" failure mode
+  the enterprise-hardening skill flags as `Stale-doc` /
+  `Partially implemented`.
+
+### EH-PROV-02 — Outlook bounded bulk sync vs durable automation (PR #23)
+
+- **Status:** Implemented (bounded manual sync); durable automation
+  is explicitly deferred to Temporal.
+- **Code (in `fix/outlook-sync-all`):**
+  - `apps/api/src/caseops_api/api/routes/calendar.py::sync_all_outlook` —
+    bounded endpoint that returns
+    `durable_automation: "blocked_pending_temporal"` literal so
+    callers cannot mistake it for continuous sync.
+  - `apps/web/components/matters/MatterCalendarSyncCard.tsx` — UI
+    button with disabled state + connection-required messaging.
+- **Why tracked here:** any future "always-on Outlook sync" claim
+  is a roadmap item gated on Temporal landing, NOT on this PR.
+  The literal `blocked_pending_temporal` is the enterprise-readable
+  source of truth.
+
+### Closure pre-conditions for both items
+
+Both items remain open in this ledger until the merged commit is
+deployed to `caseops.ai` via `scripts/deploy-prod.sh`, the
+`Prod verification (Playwright)` workflow has run against the
+deployed SHA, and (for EH-PROV-01) the operator-side SendGrid
+dashboard + Secret Manager steps in
+`docs/runbooks/sendgrid-event-webhook.md` are complete.

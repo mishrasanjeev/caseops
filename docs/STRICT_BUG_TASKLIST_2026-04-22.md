@@ -538,3 +538,98 @@ No agent may claim "all bugs fixed" until all of the following are true:
 - `scripts/verify-web.sh -g "BUG-"` (Playwright app suite) should report all green.
 - `npx playwright test --config playwright.app.config.ts --project app-mobile` should report 3/3 green.
 - The release gate above is fully checked.
+
+---
+
+## Hari 2026-05-09 batch
+
+Five PRs opened in response to the 2026-05-09 Hari workbook
+(`C:\Users\mishr\Downloads\CaseOps Bug List_Hari9May2026 .xlsx`).
+All are **Partially fixed** by the strict bug-fixing skill until the
+prod-Playwright spec for each passes against `caseops.ai` on the
+deployed commit SHA. Each PR body carries the full verification
+matrix; this section is the durable index.
+
+| # | Bug / Area | PR | Merge SHA | Branch | Verdict | Prod-Playwright spec |
+|---|---|---|---|---|---|---|
+| H-01 | BUG-034 — custom-role catalog `custom_role_delegable` flag + UI gating | [#20](https://github.com/mishrasanjeev/caseops/pull/20) | `78108e4` | `fix/bug-034-protected-capability-catalog` | Partially fixed | `tests/e2e/hari-2026-05-09-prod.spec.ts` |
+| H-02 | BUG-033 — `/account/setup` + `/account/reset-password` Next.js routes | [#21](https://github.com/mishrasanjeev/caseops/pull/21) | `877c615` | `fix/bug-033-account-setup-links` | Partially fixed | `tests/e2e/hari-2026-05-09-bug-033-prod.spec.ts` |
+| H-03 | BUG-038 — SendGrid webhook valid-sig test, unsubscribe handling, tenant suppression, Cloud Run wiring, runbook | [#22](https://github.com/mishrasanjeev/caseops/pull/22) | `2b571cc` | `fix/sendgrid-webhook-delivery-visibility` | Partially fixed | n/a (server-only; no Playwright surface). Verdict ceiling depends on **provider-side** SendGrid dashboard config + Secret Manager write per `docs/runbooks/sendgrid-event-webhook.md` |
+| H-04 | BUG-039 — Outlook bounded bulk sync endpoint + Calendar UI button | [#23](https://github.com/mishrasanjeev/caseops/pull/23) | `7761a1b` | `fix/outlook-sync-all` | Partially fixed | `tests/e2e/hari-2026-05-09-outlook-sync-prod.spec.ts` |
+| H-05 | BUG-032 — manual court-order create from matter Hearings page | [#24](https://github.com/mishrasanjeev/caseops/pull/24) | `ed01fdd` | `fix/bug-032-hearing-order-upload` | Partially fixed | `tests/e2e/hari-2026-05-09-bug-032-prod.spec.ts` |
+
+Pre-cursor merge that cleared CVE-2026-44843 (`langchain-core` 1.3.0 → 1.3.3, transitive via `voyageai`):
+**[#18](https://github.com/mishrasanjeev/caseops/pull/18) → `b827efb`** (dependabot). Without this merge first, every Hari PR's `pip-audit` gate stayed red.
+
+All five fix PRs merged to main on 2026-05-10. Final main SHA after the batch: `ed01fdd`. Production deploy and prod-Playwright runs are NOT YET DONE — they remain the sole gating items for graduating each row to **Properly fixed**.
+
+### Closure pre-conditions (2026-05-10)
+
+For each row above to graduate to **Properly fixed**:
+
+1. The PR is merged to `main`.
+2. The merged commit is deployed to `caseops.ai` via the canonical
+   `scripts/deploy-prod.sh` (per the EG-002 hard rule — never
+   ad-hoc `gcloud run deploy`).
+3. The named prod-Playwright spec passes against the deployed
+   commit SHA via the scheduled or `workflow_dispatch`
+   `Prod verification (Playwright)` workflow.
+4. For H-03 (SendGrid) only: provider-side SendGrid dashboard
+   toggles AND the `caseops-sendgrid-webhook-public-key` Secret
+   Manager value are set per the runbook. Without those two
+   operator-side steps, signed events fail-closed at 503 and
+   suppression rows never populate.
+
+### testMatch overlap on `playwright.app.config.ts` and `playwright.prod-ram.config.ts`
+
+PRs #20, #21, #23, #24 all add entries to the testMatch lines.
+Whichever merges first, the others must be rebased keeping ALL
+spec entries:
+
+- `hari-2026-05-09-bugs.spec.ts` (PR #20 local)
+- `hari-2026-05-09-prod.spec.ts` (PR #20 prod)
+- `hari-2026-05-09-bug-033.spec.ts` (PR #21 local)
+- `hari-2026-05-09-bug-033-prod.spec.ts` (PR #21 prod)
+- `hari-2026-05-09-outlook-sync.spec.ts` (PR #23 local)
+- `hari-2026-05-09-outlook-sync-prod.spec.ts` (PR #23 prod)
+- `hari-2026-05-09-bug-032.spec.ts` (PR #24 local)
+- `hari-2026-05-09-bug-032-prod.spec.ts` (PR #24 prod)
+
+Spec files are uniquely named so no spec-content conflicts.
+Dropping any entry silently disables that bug's prod regression.
+
+### Adjacent-path audit findings
+
+The audit ran alongside the bug fixes:
+
+- **Generated email links must map to real frontend routes.**
+  `services/employee_mailer.py` had been generating
+  `/account/setup` and `/account/reset-password` URLs since the
+  LegalWorkspace LW-S5 employee admin shipped, but neither route
+  existed on the frontend. Closed by PR #21. Going forward, every
+  email-link generator should be paired with a `tests/e2e/*` route-
+  exists test.
+- **Backend protected-capability rules must be reflected in UI.**
+  `services/capabilities.py::_NON_DELEGABLE_CUSTOM_ROLE_CAPABILITIES`
+  rejected `email_templates:manage` / `portal:invite` /
+  `portal:manage_grants` for custom roles, but the
+  `CapabilityRecord` schema only carried an `owner_only` boolean,
+  so the frontend could only gate owner-only caps. Closed by PR #20
+  via `custom_role_delegable` + `protected_reason` fields.
+- **Linked-record selectors need a discoverable create path.**
+  Documents-page Linked-order selector existed, but
+  `MatterCourtOrder` rows could only come from court-sync. Closed
+  by PR #24 with the manual create endpoint + dialog.
+- **Provider integrations need code + infra + runtime + provider
+  config to all agree.** SendGrid send had been working from
+  imperatively-set Cloud Run env vars; the webhook side had no
+  declarative wiring at all (manifest + Secret Manager + dashboard
+  config all missing). PR #22 adds the manifest + runbook; the
+  dashboard + Secret Manager steps remain operator work documented
+  in `docs/runbooks/sendgrid-event-webhook.md`.
+- **Bounded sync vs durable automation.** Outlook sync-all (PR #23)
+  and SendGrid event ingestion (PR #22) both intentionally avoid
+  durable background loops — the `durable_automation:
+  blocked_pending_temporal` literal in the response is the explicit
+  declaration so callers cannot mistake bounded manual sync for
+  continuous automation.
