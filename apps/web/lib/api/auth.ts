@@ -57,3 +57,41 @@ export async function fetchAuthContext(
 ): Promise<AuthContext> {
   return apiRequest<AuthContext>("/api/auth/me", { token });
 }
+
+// BUG-033 (Hari 2026-05-09): consume an `account-setup` token issued
+// by the employee onboarding mailer. Wire identical to ``signIn`` —
+// the backend issues the same session cookies on success, so the
+// caller can hand the response straight to ``storeSession`` and
+// redirect to ``/app``.
+//
+// Token is intentionally not logged anywhere on the client; only the
+// password is sent in the body. Backend errors (weak password,
+// invalid/expired/used token) come through as ``ApiError.detail``
+// and are rendered verbatim by the page.
+export async function completeAccountSetup(input: {
+  token: string;
+  password: string;
+}): Promise<AuthSession> {
+  return apiRequest<AuthSession>("/api/auth/account-setup/complete", {
+    method: "POST",
+    body: {
+      token: input.token,
+      password: input.password,
+    },
+    token: null,
+  });
+}
+
+export async function completePasswordReset(input: {
+  token: string;
+  password: string;
+}): Promise<AuthSession> {
+  return apiRequest<AuthSession>("/api/auth/password-reset/complete", {
+    method: "POST",
+    body: {
+      token: input.token,
+      password: input.password,
+    },
+    token: null,
+  });
+}
