@@ -552,16 +552,19 @@ matrix; this section is the durable index.
 
 | # | Bug / Area | PR | Merge SHA | Branch | Verdict | Prod-Playwright spec |
 |---|---|---|---|---|---|---|
-| H-01 | BUG-034 — custom-role catalog `custom_role_delegable` flag + UI gating | [#20](https://github.com/mishrasanjeev/caseops/pull/20) | `78108e4` | `fix/bug-034-protected-capability-catalog` | Partially fixed | `tests/e2e/hari-2026-05-09-prod.spec.ts` |
-| H-02 | BUG-033 — `/account/setup` + `/account/reset-password` Next.js routes | [#21](https://github.com/mishrasanjeev/caseops/pull/21) | `877c615` | `fix/bug-033-account-setup-links` | Partially fixed | `tests/e2e/hari-2026-05-09-bug-033-prod.spec.ts` |
-| H-03 | BUG-038 — SendGrid webhook valid-sig test, unsubscribe handling, tenant suppression, Cloud Run wiring, runbook | [#22](https://github.com/mishrasanjeev/caseops/pull/22) | `2b571cc` | `fix/sendgrid-webhook-delivery-visibility` | Partially fixed | n/a (server-only; no Playwright surface). Verdict ceiling depends on **provider-side** SendGrid dashboard config + Secret Manager write per `docs/runbooks/sendgrid-event-webhook.md` |
-| H-04 | BUG-039 — Outlook bounded bulk sync endpoint + Calendar UI button | [#23](https://github.com/mishrasanjeev/caseops/pull/23) | `7761a1b` | `fix/outlook-sync-all` | Partially fixed | `tests/e2e/hari-2026-05-09-outlook-sync-prod.spec.ts` |
-| H-05 | BUG-032 — manual court-order create from matter Hearings page | [#24](https://github.com/mishrasanjeev/caseops/pull/24) | `ed01fdd` | `fix/bug-032-hearing-order-upload` | Partially fixed | `tests/e2e/hari-2026-05-09-bug-032-prod.spec.ts` |
+| H-01 | BUG-034 — custom-role catalog `custom_role_delegable` flag + UI gating | [#20](https://github.com/mishrasanjeev/caseops/pull/20) | `78108e4` | `fix/bug-034-protected-capability-catalog` | **Properly fixed** | `tests/e2e/hari-2026-05-09-prod.spec.ts` (2/2 pass on prod `ec55dc2`, run 25628453223) |
+| H-02 | BUG-033 — `/account/setup` + `/account/reset-password` Next.js routes | [#21](https://github.com/mishrasanjeev/caseops/pull/21) | `877c615` | `fix/bug-033-account-setup-links` | **Properly fixed** | `tests/e2e/hari-2026-05-09-bug-033-prod.spec.ts` (3/3 pass on prod `ec55dc2`, run 25628453223) |
+| H-03 | BUG-038 — SendGrid webhook valid-sig test, unsubscribe handling, tenant suppression, Cloud Run wiring, runbook | [#22](https://github.com/mishrasanjeev/caseops/pull/22) | `2b571cc` | `fix/sendgrid-webhook-delivery-visibility` | **Partially fixed** — runtime ready, dashboard pending operator | n/a (server-only). Runtime proof: `CASEOPS_SENDGRID_WEBHOOK_PUBLIC_KEY` wired via `secretKeyRef name=caseops-sendgrid-webhook-public-key key=latest` on `caseops-api-00132-c6n` (image `:ec55dc2`); fail-closed verified — invalid + missing signatures both return 401 `"SendGrid webhook signature verification failed."` at canonical URL `https://api.caseops.ai/api/webhooks/sendgrid/events`. Pending: SendGrid dashboard signed-webhook enablement + live signed-event verification per `docs/runbooks/sendgrid-event-webhook.md`. Operator-only. |
+| H-04 | BUG-039 — Outlook bounded bulk sync endpoint + Calendar UI button | [#23](https://github.com/mishrasanjeev/caseops/pull/23) | `7761a1b` | `fix/outlook-sync-all` | **Properly fixed** | `tests/e2e/hari-2026-05-09-outlook-sync-prod.spec.ts` (2/2 pass on prod `ec55dc2`, run 25628453223) |
+| H-05 | BUG-032 — manual court-order create from matter Hearings page | [#24](https://github.com/mishrasanjeev/caseops/pull/24) | `ed01fdd` | `fix/bug-032-hearing-order-upload` | **Properly fixed** | `tests/e2e/hari-2026-05-09-bug-032-prod.spec.ts` (2/2 pass on prod `ec55dc2`, run 25628453223) |
 
 Pre-cursor merge that cleared CVE-2026-44843 (`langchain-core` 1.3.0 → 1.3.3, transitive via `voyageai`):
 **[#18](https://github.com/mishrasanjeev/caseops/pull/18) → `b827efb`** (dependabot). Without this merge first, every Hari PR's `pip-audit` gate stayed red.
 
-All five fix PRs merged to main on 2026-05-10. Final main SHA after the batch: `ed01fdd`. Production deploy and prod-Playwright runs are NOT YET DONE — they remain the sole gating items for graduating each row to **Properly fixed**.
+URL-fix follow-up that corrected stale `https://api.caseops.ai/api/sendgrid/events` references in workbook + audit docs to the canonical `https://api.caseops.ai/api/webhooks/sendgrid/events`:
+**[#26](https://github.com/mishrasanjeev/caseops/pull/26) → `ec55dc2`**. Application code unchanged; runbook was already correct.
+
+All five fix PRs + #18 + #26 merged to main on 2026-05-10. Final main SHA: `ec55dc2`. Deployed to production via `scripts/deploy-prod.sh ec55dc2` (caseops-api revision `caseops-api-00132-c6n`, caseops-web revision `caseops-web-00121-278`, ClamAV sidecar present, health 200).
 
 ### Closure pre-conditions (2026-05-10)
 
