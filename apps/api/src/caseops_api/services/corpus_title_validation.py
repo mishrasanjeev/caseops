@@ -57,6 +57,18 @@ _NON_LATIN_RE = re.compile(
     "[\u0900-\u097F\u0A00-\u0A7F\u0B00-\u0B7F\u0B80-\u0BFF"
     "\u0C00-\u0C7F\u0C80-\u0CFF\u0D00-\u0D7F]"
 )
+_PROCEDURAL_HEADER_RE = re.compile(
+    r"^(?:"
+    r"via\s+video[-\s]?conferencing|"
+    r"date\s+of\s+(?:judg(?:e)?ment|order|decision)|"
+    r"judg(?:e)?ment\s+delivered\s+on|"
+    r"pronounced\s+on|"
+    r"reserved\s+on|"
+    r"coram\s*:?|"
+    r"signature\s+not\s+verified"
+    r")\b",
+    re.IGNORECASE,
+)
 
 
 def title_is_case_name(title: str | None) -> tuple[bool, str]:
@@ -83,6 +95,9 @@ def title_is_case_name(title: str | None) -> tuple[bool, str]:
         return False, "cid_marker"
     if _NON_LATIN_RE.search(s):
         return False, "non_latin"
+    header_probe = re.sub(r"^[\s()[\]{}.,:;-]+", "", s)
+    if _PROCEDURAL_HEADER_RE.search(header_probe):
+        return False, "bench_header_or_thin"
     if _PARTY_SEPARATOR_RE.search(s):
         return True, "party_separator"
     if _CITATION_RE.search(s):
