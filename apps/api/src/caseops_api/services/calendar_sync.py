@@ -32,10 +32,16 @@ from caseops_api.schemas.calendar import (
     CalendarEventSyncRecord,
     CalendarEventSyncResponse,
     CalendarSyncStatusResponse,
+    OutlookBulkSyncItem,
+    OutlookBulkSyncRequest,
+    OutlookBulkSyncResponse,
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.identity import SessionContext
-from caseops_api.services.matter_access import assert_access
+from caseops_api.services.matter_access import (
+    assert_access,
+    visible_matters_filter,
+)
 
 OUTLOOK_SCOPES = ["offline_access", "User.Read", "Calendars.ReadWrite"]
 _STATE_KIND = "outlook_calendar_oauth"
@@ -578,6 +584,190 @@ def sync_hearing_to_outlook(
     )
     session.commit()
     return CalendarEventSyncResponse(sync=_sync_record(sync))
+
+
+def sync_outlook_bulk(
+    session: Session,
+    *,
+    context: SessionContext,
+    payload: OutlookBulkSyncRequest,
+) -> OutlookBulkSyncResponse:
+    """BUG-039 (Hari 2026-05-09) — bounded manual bulk sync.
+
+    Loops the caller's visible hearings within ``[from, to]`` (and
+    optionally narrowed to a single ``matter_id``) and pushes each
+    one to Outlook via ``sync_hearing_to_outlook``. Returns a
+    structured summary instead of any HTTP-stream-of-status
+    nonsense; the caller (frontend toast / runbook curl) renders
+    the counts directly.
+
+    Idempotency: each per-hearing call goes through the same
+    ``CalendarEventSync (calendar_connection_id, source_type,
+    source_id)`` unique constraint that the per-hearing endpoint
+    relies on. Re-running a bulk sync over the same range is safe;
+    rows with `sync_status="synced"` are touched again only if the
+    Graph upsert actually returns a (possibly identical)
+    ``provider_event_id``.
+
+    Tenant + ethical-wall + team-scoping enforcement: the SELECT
+    uses ``visible_matters_filter`` so opaque-walled matters never
+    enter the loop. Each per-hearing call additionally re-asserts
+    access defensively. No cross-tenant leakage is possible.
+
+    Source types other than ``matter_hearing`` are accepted in the
+    request but not actually synced — they are echoed as `skipped`
+    items with `skip_reason="source_type_unsupported"`. Implementing
+    task / deadline upsert against Microsoft Graph is a future
+    extension that needs a separate provider method.
+
+    Durable background sync remains blocked pending Temporal — see
+    the response's ``durable_automation`` field.
+    """
+
+    # 409 if no Outlook connection — checked first so a user without a
+    # connection always sees the same actionable env-state error,
+    # regardless of any other request-shape issues. The frontend
+    # disables the button in this state, but a hand-rolled curl call
+    # gets a clean response.
+    connection = _connected_outlook_connection(session, context=context)
+
+    if (payload.range_to - payload.range_from).days > 92:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Range exceeds 92 days. Narrow the from/to window before "
+                "retrying — bulk sync is intentionally bounded."
+            ),
+        )
+    if payload.range_to < payload.range_from:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="`to` must be on or after `from`.",
+        )
+
+    requested_sources = list(payload.source_types or ["matter_hearing"])
+    seen_sources: set[str] = set()
+    items: list[OutlookBulkSyncItem] = []
+    counters = {"created": 0, "updated": 0, "failed": 0, "skipped": 0}
+    examined = 0
+
+    if "matter_hearing" in requested_sources:
+        seen_sources.add("matter_hearing")
+        # SELECT with the same visibility filter the calendar feed
+        # uses — opaquely walled matters and out-of-team matters
+        # are excluded at the SQL level. Optional matter_id narrows
+        # further.
+        stmt = (
+            select(MatterHearing, Matter)
+            .join(Matter, Matter.id == MatterHearing.matter_id)
+            .where(
+                Matter.company_id == context.company.id,
+                visible_matters_filter(session, context=context),
+                MatterHearing.hearing_on >= payload.range_from,
+                MatterHearing.hearing_on <= payload.range_to,
+            )
+            .order_by(MatterHearing.hearing_on, MatterHearing.id)
+            .limit(payload.limit)
+        )
+        if payload.matter_id is not None:
+            stmt = stmt.where(Matter.id == payload.matter_id)
+
+        rows = list(session.execute(stmt).all())
+
+        # Materialise the hearing-id list so we can pre-detect
+        # which rows already had a sync row before this batch (used
+        # to split the `synced` outcome into `created` vs
+        # `updated`). Materialising before the loop also makes the
+        # commits inside `sync_hearing_to_outlook` safe — we never
+        # iterate a result-set across a commit boundary.
+        hearing_ids = [hearing.id for hearing, _ in rows]
+        existing_sync_source_ids: set[str] = set()
+        if hearing_ids:
+            existing_sync_source_ids = set(
+                session.scalars(
+                    select(CalendarEventSync.source_id).where(
+                        CalendarEventSync.company_id == context.company.id,
+                        CalendarEventSync.calendar_connection_id
+                        == connection.id,
+                        CalendarEventSync.source_type
+                        == CalendarSyncSourceType.MATTER_HEARING,
+                        CalendarEventSync.source_id.in_(hearing_ids),
+                    )
+                )
+            )
+
+        for hearing, matter in rows:
+            examined += 1
+            was_existing = hearing.id in existing_sync_source_ids
+            try:
+                resp = sync_hearing_to_outlook(
+                    session, context=context, hearing_id=hearing.id
+                )
+            except HTTPException as exc:
+                # Only fires for races (the row vanished mid-batch)
+                # or access changes between the SELECT above and the
+                # per-hearing re-check inside the function. Counted
+                # as failed; surface a redacted detail.
+                counters["failed"] += 1
+                items.append(
+                    OutlookBulkSyncItem(
+                        source_type="matter_hearing",
+                        source_id=hearing.id,
+                        sync_status=CalendarEventSyncStatus.FAILED,
+                        matter_id=matter.id,
+                        matter_title=matter.title,
+                        last_error=str(exc.detail),
+                    )
+                )
+                continue
+
+            sync = resp.sync
+            if sync.sync_status == CalendarEventSyncStatus.SYNCED:
+                if was_existing:
+                    counters["updated"] += 1
+                else:
+                    counters["created"] += 1
+            else:
+                counters["failed"] += 1
+            items.append(
+                OutlookBulkSyncItem(
+                    source_type="matter_hearing",
+                    source_id=hearing.id,
+                    sync_status=sync.sync_status,
+                    matter_id=matter.id,
+                    matter_title=matter.title,
+                    provider_event_id=sync.provider_event_id,
+                    last_error=sync.last_error,
+                )
+            )
+
+    # Unsupported source types — emit one skipped item per type so
+    # the caller knows which were ignored without us silently
+    # eating their request.
+    for source in requested_sources:
+        if source in seen_sources:
+            continue
+        seen_sources.add(source)
+        counters["skipped"] += 1
+        items.append(
+            OutlookBulkSyncItem(
+                source_type=source,
+                source_id="",
+                sync_status="skipped",
+                matter_id=None,
+                matter_title=None,
+                skip_reason="source_type_unsupported",
+            )
+        )
+
+    return OutlookBulkSyncResponse(
+        examined=examined,
+        created=counters["created"],
+        updated=counters["updated"],
+        failed=counters["failed"],
+        skipped=counters["skipped"],
+        items=items,
+    )
 
 
 def sync_status(

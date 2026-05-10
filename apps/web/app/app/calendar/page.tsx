@@ -29,6 +29,7 @@ import {
   listCalendarConnections,
   revokeCalendarConnection,
   startOutlookCalendarConnection,
+  syncOutlookVisibleRange,
 } from "@/lib/api/endpoints";
 import type { CalendarEventKind, CalendarEventRecord } from "@/lib/api/schemas";
 import { API_BASE_URL } from "@/lib/api/config";
@@ -170,6 +171,27 @@ export default function CalendarPage() {
     onSuccess: () => {
       setOutlookMessage("Outlook connection revoked.");
       void queryClient.invalidateQueries({ queryKey: ["calendar", "connections"] });
+      void queryClient.invalidateQueries({ queryKey: ["calendar", "sync-status"] });
+    },
+    onError: (error) => setOutlookMessage(String(error)),
+  });
+
+  // BUG-039 (Hari 2026-05-09) — bounded manual bulk sync of the
+  // currently-rendered date window to Outlook. Posts the same `from`
+  // / `to` dates the events query uses; relies on the backend's
+  // 92-day guard + tenant + visibility filters. The button is only
+  // rendered for users with `calendar:sync` AND a connected Outlook
+  // account (see button branch below); it is not the durable
+  // automation track — that remains blocked pending Temporal.
+  const syncRangeMutation = useMutation({
+    mutationFn: () =>
+      syncOutlookVisibleRange({
+        from: isoDate(rangeFrom),
+        to: isoDate(rangeTo),
+      }),
+    onSuccess: (result) => {
+      const summary = `Synced ${result.created} new, ${result.updated} updated, ${result.failed} failed, ${result.skipped} skipped (${result.examined} examined).`;
+      setOutlookMessage(summary);
       void queryClient.invalidateQueries({ queryKey: ["calendar", "sync-status"] });
     },
     onError: (error) => setOutlookMessage(String(error)),
@@ -351,20 +373,34 @@ export default function CalendarPage() {
           {canSyncCalendar ? (
             <div className="flex items-center gap-2">
               {connectionsQuery.data?.connections.some((c) => c.status === "connected") ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const connection = connectionsQuery.data?.connections.find(
-                      (c) => c.status === "connected",
-                    );
-                    if (connection) revokeOutlookMutation.mutate(connection.id);
-                  }}
-                  disabled={revokeOutlookMutation.isPending}
-                  className="inline-flex h-8 items-center rounded-md border border-[var(--color-line-2)] px-3 text-xs font-medium text-[var(--color-ink)] hover:bg-[var(--color-line-1)] disabled:opacity-60"
-                  data-testid="calendar-outlook-revoke"
-                >
-                  Revoke
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => syncRangeMutation.mutate()}
+                    disabled={syncRangeMutation.isPending}
+                    className="inline-flex h-8 items-center rounded-md bg-[var(--color-ink)] px-3 text-xs font-medium text-white hover:bg-[var(--color-ink-2)] disabled:opacity-60"
+                    data-testid="calendar-outlook-sync-range"
+                    aria-label={`Sync visible range ${label} to Outlook`}
+                  >
+                    {syncRangeMutation.isPending
+                      ? "Syncing…"
+                      : "Sync visible range to Outlook"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const connection = connectionsQuery.data?.connections.find(
+                        (c) => c.status === "connected",
+                      );
+                      if (connection) revokeOutlookMutation.mutate(connection.id);
+                    }}
+                    disabled={revokeOutlookMutation.isPending}
+                    className="inline-flex h-8 items-center rounded-md border border-[var(--color-line-2)] px-3 text-xs font-medium text-[var(--color-ink)] hover:bg-[var(--color-line-1)] disabled:opacity-60"
+                    data-testid="calendar-outlook-revoke"
+                  >
+                    Revoke
+                  </button>
+                </>
               ) : (
                 <button
                   type="button"

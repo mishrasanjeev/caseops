@@ -798,6 +798,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/calendar/sync/outlook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Manually sync the caller's visible hearings within a date range to Outlook. Bounded; no durable background automation.
+         * @description BUG-039 (Hari 2026-05-09): companion to the per-hearing
+         *     `POST /sync/hearings/{hearing_id}` endpoint. The frontend
+         *     `Sync visible range to Outlook` button on `/app/calendar`
+         *     posts the currently-rendered date window here. Per-row sync
+         *     reuses the same idempotent `CalendarEventSync (connection,
+         *     source_type, source_id)` unique constraint, so re-running
+         *     never produces duplicates.
+         *
+         *     Tenant + ethical-wall enforcement happens via
+         *     `visible_matters_filter` at the SQL layer, with a defensive
+         *     `assert_access` re-check inside the per-hearing function.
+         *     Hearings the caller cannot see never enter the loop and never
+         *     appear in the response. The `durable_automation` field on the
+         *     response explicitly notes that Temporal-backed background sync
+         *     is not yet available — this endpoint is the only sync path.
+         */
+        post: operations["sync_outlook_visible_range_api_calendar_sync_outlook_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/clients/": {
         parameters: {
             query?: never;
@@ -9381,6 +9415,89 @@ export interface components {
             /** Removed */
             removed: number;
         };
+        /**
+         * OutlookBulkSyncItem
+         * @description One row of the bulk-sync summary. ``sync_status="synced"``
+         *     rows are split between ``created`` and ``updated`` counters in
+         *     the parent response based on whether a CalendarEventSync row
+         *     existed before the batch ran.
+         */
+        OutlookBulkSyncItem: {
+            /** Last Error */
+            last_error?: string | null;
+            /** Matter Id */
+            matter_id: string | null;
+            /** Matter Title */
+            matter_title: string | null;
+            /** Provider Event Id */
+            provider_event_id?: string | null;
+            /** Skip Reason */
+            skip_reason?: string | null;
+            /** Source Id */
+            source_id: string;
+            /**
+             * Source Type
+             * @enum {string}
+             */
+            source_type: "matter_hearing" | "matter_deadline" | "matter_task";
+            /** Sync Status */
+            sync_status: ("pending" | "synced" | "failed" | "deleted") | "skipped";
+        };
+        /** OutlookBulkSyncRequest */
+        OutlookBulkSyncRequest: {
+            /**
+             * From
+             * Format: date
+             */
+            from: string;
+            /**
+             * Limit
+             * @default 50
+             */
+            limit: number;
+            /** Matter Id */
+            matter_id?: string | null;
+            /**
+             * Source Types
+             * @description Optional list of source types to include. v1 only actually syncs `matter_hearing`; other entries are echoed back as `skipped` with `skip_reason="source_type_unsupported"`. Default behaviour is ["matter_hearing"].
+             */
+            source_types?: ("matter_hearing" | "matter_deadline" | "matter_task")[] | null;
+            /**
+             * To
+             * Format: date
+             */
+            to: string;
+        };
+        /**
+         * OutlookBulkSyncResponse
+         * @description Structured summary for the manual bulk sync. ``examined`` is
+         *     the count of source rows the backend actually loaded (after
+         *     tenant + visibility + matter filters); ``skipped`` includes
+         *     both unsupported source types and cases where the row was
+         *     out-of-range or otherwise not eligible. ``durable_automation``
+         *     explicitly notes that this endpoint is the only sync path —
+         *     Temporal-backed background sync remains blocked.
+         */
+        OutlookBulkSyncResponse: {
+            /** Created */
+            created: number;
+            /**
+             * Durable Automation
+             * @default blocked_pending_temporal
+             * @constant
+             */
+            durable_automation: "blocked_pending_temporal";
+            /** Examined */
+            examined: number;
+            /** Failed */
+            failed: number;
+            /** Items */
+            items: components["schemas"]["OutlookBulkSyncItem"][];
+            /** Skipped */
+            skipped: number;
+            /** Updated */
+            updated: number;
+        };
         /** OutsideCounselAssignmentCreateRequest */
         OutsideCounselAssignmentCreateRequest: {
             /** Budget Amount Minor */
@@ -12520,6 +12637,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CalendarEventSyncResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sync_outlook_visible_range_api_calendar_sync_outlook_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OutlookBulkSyncRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OutlookBulkSyncResponse"];
                 };
             };
             /** @description Validation Error */

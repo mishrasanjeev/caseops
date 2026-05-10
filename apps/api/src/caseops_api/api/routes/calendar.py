@@ -22,6 +22,8 @@ from caseops_api.schemas.calendar import (
     CalendarEventListResponse,
     CalendarEventSyncResponse,
     CalendarSyncStatusResponse,
+    OutlookBulkSyncRequest,
+    OutlookBulkSyncResponse,
 )
 from caseops_api.services.calendar import (
     aggregate_calendar_events,
@@ -33,6 +35,7 @@ from caseops_api.services.calendar_sync import (
     revoke_connection,
     start_outlook_connection,
     sync_hearing_to_outlook,
+    sync_outlook_bulk,
     sync_status,
 )
 from caseops_api.services.identity import SessionContext
@@ -239,6 +242,38 @@ async def sync_hearing(
     hearing_id: str,
 ) -> CalendarEventSyncResponse:
     return sync_hearing_to_outlook(session, context=context, hearing_id=hearing_id)
+
+
+@router.post(
+    "/sync/outlook",
+    response_model=OutlookBulkSyncResponse,
+    summary=(
+        "Manually sync the caller's visible hearings within a date range "
+        "to Outlook. Bounded; no durable background automation."
+    ),
+)
+async def sync_outlook_visible_range(
+    context: CalendarSyncer,
+    session: DbSession,
+    payload: OutlookBulkSyncRequest,
+) -> OutlookBulkSyncResponse:
+    """BUG-039 (Hari 2026-05-09): companion to the per-hearing
+    `POST /sync/hearings/{hearing_id}` endpoint. The frontend
+    `Sync visible range to Outlook` button on `/app/calendar`
+    posts the currently-rendered date window here. Per-row sync
+    reuses the same idempotent `CalendarEventSync (connection,
+    source_type, source_id)` unique constraint, so re-running
+    never produces duplicates.
+
+    Tenant + ethical-wall enforcement happens via
+    `visible_matters_filter` at the SQL layer, with a defensive
+    `assert_access` re-check inside the per-hearing function.
+    Hearings the caller cannot see never enter the loop and never
+    appear in the response. The `durable_automation` field on the
+    response explicitly notes that Temporal-backed background sync
+    is not yet available — this endpoint is the only sync path.
+    """
+    return sync_outlook_bulk(session, context=context, payload=payload)
 
 
 @router.get(
