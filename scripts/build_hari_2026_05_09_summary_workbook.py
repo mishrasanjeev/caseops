@@ -190,7 +190,7 @@ def build_bug_details_sheet(wb: Workbook) -> None:
             "Merge SHA 2b571cc (in main as of 2026-05-10).",
             "https://github.com/mishrasanjeev/caseops/pull/22",
             "Partially fixed pending deploy + operator-side runbook completion (PR merged)",
-            "BLOCKER: Secret Manager value caseops-sendgrid-webhook-public-key must be created with SendGrid-provided P-256 public key. BLOCKER: SendGrid dashboard must enable Signed Event Webhook → POST URL https://api.caseops.ai/api/sendgrid/events with bounce/dropped/spam_report/unsubscribe/group_unsubscribe events. Both per docs/runbooks/sendgrid-event-webhook.md.",
+            "BLOCKER: Secret Manager value caseops-sendgrid-webhook-public-key must be created with SendGrid-provided P-256 public key. BLOCKER: SendGrid dashboard must enable Signed Event Webhook → POST URL https://api.caseops.ai/api/webhooks/sendgrid/events with bounce/dropped/spam_report/unsubscribe/group_unsubscribe events. Both per docs/runbooks/sendgrid-event-webhook.md.",
             "L5 — provider integration code-complete while runtime/provider config remained incomplete.",
         ],
         [
@@ -438,7 +438,7 @@ def build_pending_prod_proof_sheet(wb: Workbook) -> None:
         ["BUG-038 (SendGrid)", "#22", "Merge to main", "Reviewer", "Done", "MERGED 2026-05-10 as 2b571cc."],
         ["BUG-038 (SendGrid)", "#22", "Deploy via scripts/deploy-prod.sh", "Operator", "Awaiting deploy approval", "Deploy script exit 0; Alembic migration applied; manifest references caseops-sendgrid-webhook-public-key."],
         ["BUG-038 (SendGrid)", "#22", "Create Secret Manager value caseops-sendgrid-webhook-public-key", "Operator", "Awaiting SendGrid-provided P-256 public key", "Secret value present and Cloud Run revision rolls forward."],
-        ["BUG-038 (SendGrid)", "#22", "Configure SendGrid dashboard Signed Event Webhook", "Operator", "Awaiting Secret Manager value", "Settings → Mail Settings → Event Webhook → POST URL https://api.caseops.ai/api/sendgrid/events; bounce/dropped/spam_report/unsubscribe/group_unsubscribe enabled."],
+        ["BUG-038 (SendGrid)", "#22", "Configure SendGrid dashboard Signed Event Webhook", "Operator", "Awaiting Secret Manager value", "Settings → Mail Settings → Event Webhook → POST URL https://api.caseops.ai/api/webhooks/sendgrid/events; bounce/dropped/spam_report/unsubscribe/group_unsubscribe enabled."],
         ["BUG-038 (SendGrid)", "#22", "Run end-to-end webhook curl probe per runbook", "Operator", "Awaiting dashboard config", "200 on signed valid event; 503 on missing/invalid signature; suppression row appears in tenant-scoped table."],
         ["BUG-039 (Outlook)", "#23", "Merge to main", "Reviewer", "Done", "MERGED 2026-05-10 as 7761a1b."],
         ["BUG-039 (Outlook)", "#23", "Deploy via scripts/deploy-prod.sh", "Operator", "Awaiting deploy approval", "Deploy script exit 0."],

@@ -132,7 +132,7 @@ table, idempotent ingestion), but the Cloud Run manifest didn't
 reference the `caseops-sendgrid-webhook-public-key` Secret
 Manager value before this PR, and the SendGrid dashboard still
 needs operator action to enable signed event delivery to
-`https://api.caseops.ai/api/sendgrid/events`.
+`https://api.caseops.ai/api/webhooks/sendgrid/events`.
 
 **Going forward.**
 - A provider integration is **not** "code-complete + ready to
