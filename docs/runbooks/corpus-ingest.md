@@ -106,6 +106,77 @@ Batch import, title refresh, and quality probes. Do not import completed
 Batch JSONL files through local Windows plus Cloud SQL proxy except for
 tiny proof runs; per-row/chunk DB work is too slow over that path.
 
+### Autonomous backlog-drain controller
+
+For the backlog-completion push, use the autonomous controller policy instead
+of asking for per-wave manual approval. The controller owns one run at a time
+through a filesystem lock, writes a durable JSONL ledger, applies spend caps,
+tracks bucket states, and pauses on red conditions.
+
+```bash
+cd ~/caseops/apps/api
+source ~/.layer2_env
+
+python -m caseops_api.scripts.autonomous_corpus_controller \
+  --base-dir ~/.caseops/authority-metadata-autonomous \
+  --tenant aster-demo \
+  --openai-cap-usd 75 \
+  --voyage-cap-usd 10 \
+  --dry-run
+```
+
+Controller bucket states:
+
+- `planned`
+- `ingesting`
+- `layer2_structuring`
+- `title_chunk_refresh`
+- `embedding_verification`
+- `hnsw_probe`
+- `recovery_required`
+- `accepted`
+- `accepted_with_caveat`
+- `paused_for_human`
+- `failed`
+
+Autonomous policy:
+
+- Keep `caseops-ingest-watchdog-15m` paused until the controller has been
+  proven safe under the lock/ledger/cap model.
+- Use OpenAI Batch with `gpt-5-mini` for Layer-2 metadata.
+- Use Voyage `voyage-4-large`, 1024 dimensions, for title/bridge chunks.
+- Preserve original non-English source text; bridge/romanized content is
+  derived retrieval metadata only.
+- Do not run all-corpus re-embed, full-document translation, or destructive
+  recovery.
+- Retry targeted recovery at most twice per bucket. Recovery is limited to
+  dirty/placeholder title repair and affected metadata-title chunk refresh.
+- Classify a clean bucket below the 4.8 target as
+  `accepted_with_caveat` only after targeted recovery attempts are exhausted.
+
+Stop lines:
+
+- `unembedded_chunks > 0`
+- embedding provider/model drift
+- dirty metadata/title rate above 1%
+- quarantine/import failures above 10%
+- bucket rating below 4.0/5
+- material recall/MRR/rank regression
+- spend cap would be exceeded
+- controller lock cannot be acquired
+- provider/auth/secrets failure
+- DB corruption, data loss, or cross-bucket contamination risk
+- any unexpected broad ingest/backfill/re-embed process
+
+Every bucket report must include:
+
+```text
+rating: X.Y/5 (recall@10=..., MRR=..., rank=...)
+```
+
+Use `caseops-eval-hnsw-recall --tenant aster-demo --sample-size 30 --k 10
+--seed 42` with rerank enabled as the only source of the 0-5 quality rating.
+
 Safe VM flow:
 
 ```bash
@@ -145,17 +216,16 @@ python -m caseops_api.scripts.eval_hnsw_recall \
 
 Rules:
 
-- Export/submit/monitor only one approved Batch at a time unless the user
-  explicitly approves a queue.
+- In manual mode, export/submit/monitor only explicitly approved scopes. In
+  autonomous mode, let the controller choose the next manifest within its
+  lock, ledger, and per-wave caps.
 - Validate manifest scope before submit: forum, court, source/corpus year,
   language, `structured_version IS NULL`, and estimated Batch cost.
 - Keep original non-English text canonical. Bridge/romanized content is
   derived retrieval metadata only.
 - Import is idempotent: already structured rows should skip, failed rows go
   to quarantine, and successful rows can be resumed from the same output.
-- Stop before the next batch if quarantine is non-empty, unembedded chunks
-  appear, dirty metadata exceeds 1%, provider/model drift appears, or the
-  bucket rating falls below 4.5/5.
+- Stop before the next batch if a controller stop line triggers.
 
 ## 4. Quality gate (pre-pilot)
 
