@@ -2415,6 +2415,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matters/{matter_id}/court-orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a court order on a matter manually (BUG-032). Optional pre-uploaded attachment is referenced by ID.
+         * @description Manual create path for ``MatterCourtOrder``. Mirrors the
+         *     PATCH endpoint's tenant + matter-access guard via the
+         *     ``MatterEditor`` capability and the
+         *     ``_get_matter_model`` helper inside the service. Optional file
+         *     upload is handled by calling the existing
+         *     ``POST /api/matters/{matter_id}/attachments`` first and passing
+         *     the resulting attachment ID as ``order_attachment_id`` in this
+         *     request body — keeps file validation, ClamAV scan, and
+         *     storage-backend handling in one place.
+         */
+        post: operations["post_current_company_matter_court_order_api_matters__matter_id__court_orders_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matters/{matter_id}/court-orders/{order_id}": {
         parameters: {
             query?: never;
@@ -8187,6 +8215,41 @@ export interface components {
             matter_id: string;
             /** Role */
             role: string | null;
+        };
+        /** MatterCourtOrderCreateRequest */
+        MatterCourtOrderCreateRequest: {
+            /** Bench Name */
+            bench_name?: string | null;
+            /** Is Interim Order */
+            is_interim_order?: boolean | null;
+            /** Judge Names */
+            judge_names?: string[] | null;
+            /** Order Attachment Id */
+            order_attachment_id?: string | null;
+            /**
+             * Order Date
+             * Format: date
+             */
+            order_date: string;
+            /** Order Kind */
+            order_kind?: ("daily_order" | "interim_order" | "stay_order" | "final_judgment" | "other") | null;
+            /** Order Text */
+            order_text?: string | null;
+            /**
+             * Source
+             * @default manual_upload
+             */
+            source: string;
+            /** Source Reference */
+            source_reference?: string | null;
+            /** Stay Effective Until */
+            stay_effective_until?: string | null;
+            /** Stay Status */
+            stay_status?: ("none" | "granted" | "continued" | "modified" | "vacated" | "unknown") | null;
+            /** Summary */
+            summary: string;
+            /** Title */
+            title: string;
         };
         /** MatterCourtOrderRecord */
         MatterCourtOrderRecord: {
@@ -16242,6 +16305,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConflictCheckRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_current_company_matter_court_order_api_matters__matter_id__court_orders_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MatterCourtOrderCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterCourtOrderRecord"];
                 };
             };
             /** @description Validation Error */
