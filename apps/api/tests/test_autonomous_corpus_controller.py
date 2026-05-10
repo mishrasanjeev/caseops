@@ -5,10 +5,12 @@ import pytest
 from caseops_api.scripts.autonomous_corpus_controller import (
     BucketPlan,
     BucketState,
+    CorpusController,
     EvalMetrics,
     HygieneMetrics,
     StopLinePolicy,
     acquire_lock,
+    autonomous_sweep_plan,
     classify_bucket,
     default_wave3_plan,
     parse_eval_report,
@@ -57,8 +59,20 @@ def test_classification_accepts_target_quality() -> None:
     assert result.rating == 5.0
 
 
-def test_classification_requires_targeted_recovery_before_caveat() -> None:
-    policy = StopLinePolicy(max_recovery_attempts=2)
+def test_classification_accepts_clean_redline_quality_with_caveat_by_default() -> None:
+    result = classify_bucket(
+        metrics=_metrics(1.0, 0.931, 1.37),
+        hygiene=HygieneMetrics(docs=4342, dirty_metadata_chunks=0),
+        policy=StopLinePolicy(max_recovery_attempts=2),
+        recovery_attempts=0,
+    )
+
+    assert result.state == BucketState.ACCEPTED_WITH_CAVEAT
+    assert result.rating == 4.0
+
+
+def test_classification_can_require_targeted_recovery_before_caveat() -> None:
+    policy = StopLinePolicy(max_recovery_attempts=2, recover_below_target=True)
 
     first = classify_bucket(
         metrics=_metrics(1.0, 0.931, 1.37),
@@ -131,6 +145,22 @@ def test_controller_lock_is_exclusive(tmp_path: Path) -> None:
     assert not lock_path.exists()
 
 
+def test_controller_dry_run_only_plans_without_db_or_paid_commands(tmp_path: Path) -> None:
+    controller = CorpusController(
+        base_dir=tmp_path,
+        tenant_slug="aster-demo",
+        policy=StopLinePolicy(),
+        dry_run=True,
+    )
+
+    assert controller.run([default_wave3_plan()[0]]) == 0
+
+    ledger = (tmp_path / "controller-ledger.jsonl").read_text(encoding="utf-8")
+    assert '"controller_started"' in ledger
+    assert '"planned"' in ledger
+    assert not (tmp_path / "controller.lock").exists()
+
+
 def test_default_wave3_plan_is_scoped_and_non_destructive() -> None:
     plan = default_wave3_plan()
 
@@ -148,3 +178,25 @@ def test_default_wave3_plan_is_scoped_and_non_destructive() -> None:
         "sc-non-en-2022",
     ]
     assert all(bucket.language == "non_english" for bucket in plan[1:])
+
+
+def test_autonomous_sweep_plan_prioritizes_sc_then_supported_high_courts() -> None:
+    plan = autonomous_sweep_plan()
+
+    assert plan[0] == BucketPlan(
+        label="supreme-court-2025",
+        forum_level="supreme_court",
+        court_name="Supreme Court of India",
+        source_year=2025,
+        language="any",
+    )
+    assert plan[35].label == "supreme-court-1990"
+    assert plan[36] == BucketPlan(
+        label="delhi-high-court-2025",
+        forum_level="high_court",
+        court_name="Delhi High Court",
+        source_year=2025,
+        language="any",
+        court_key="delhi",
+    )
+    assert any(bucket.court_name == "Patna High Court" for bucket in plan)
