@@ -15,7 +15,7 @@ spec:
         # through Secret Manager, never as a raw env value in the
         # manifest. Auth secret + DB URL + future SendGrid /
         # Anthropic / Pine Labs keys all use secretKeyRef.
-        run.googleapis.com/secrets: "caseops-auth-secret=projects/__PROJECT_NUMBER__/secrets/caseops-auth-secret,caseops-database-url=projects/__PROJECT_NUMBER__/secrets/caseops-database-url,caseops-openai-api-key=projects/__PROJECT_NUMBER__/secrets/caseops-openai-api-key"
+        run.googleapis.com/secrets: "caseops-auth-secret=projects/__PROJECT_NUMBER__/secrets/caseops-auth-secret,caseops-database-url=projects/__PROJECT_NUMBER__/secrets/caseops-database-url,caseops-openai-api-key=projects/__PROJECT_NUMBER__/secrets/caseops-openai-api-key,caseops-sendgrid-webhook-public-key=projects/__PROJECT_NUMBER__/secrets/caseops-sendgrid-webhook-public-key"
     spec:
       containerConcurrency: 80
       timeoutSeconds: 900
@@ -95,6 +95,23 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: "caseops-openai-api-key"
+                  key: "latest"
+            # BUG-038 (Hari 2026-05-09): SendGrid Signed Event Webhook
+            # ECDSA P-256 public key (base64-encoded DER). When set,
+            # POST /api/webhooks/sendgrid/events fails closed on
+            # invalid / missing signatures and on payloads SendGrid did
+            # not sign. When the secret is missing in this env (cloud /
+            # staging / production), the route returns 503 — never
+            # silently accepts unsigned events. Rotate by:
+            #   gcloud secrets versions add caseops-sendgrid-webhook-public-key \
+            #     --project=__PROJECT_ID__ --data-file=- <<<"$NEW_KEY_B64"
+            # then redeploy the API service. Provider-side enabling
+            # (event types + URL + signing toggle) is documented in
+            # docs/runbooks/sendgrid-event-webhook.md.
+            - name: CASEOPS_SENDGRID_WEBHOOK_PUBLIC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: "caseops-sendgrid-webhook-public-key"
                   key: "latest"
           resources:
             limits:

@@ -227,3 +227,58 @@ def test_unit_verifier_returns_true_in_local_when_no_key(
         )
         is True
     )
+
+
+def test_valid_signed_event_through_http_route(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    restore_settings_cache: None,
+) -> None:
+    """BUG-038 (Hari 2026-05-09): the HTTP webhook route must accept a
+    correctly-signed event in production-like envs. This is the
+    positive counterpart to ``test_invalid_signature_returns_401`` —
+    without it, the only proof we had was negative.
+
+    Generates a fresh ECDSA P-256 keypair, signs the canonical
+    SendGrid payload (``timestamp + body``), encodes the public key
+    as base64 DER (matching SendGrid's "Signed Event Webhooks" public
+    key format), and POSTs through the live route. Asserts 200 with
+    a well-formed ``WebhookAckResponse``.
+    """
+    import base64
+
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+
+    private_key = ec.generate_private_key(ec.SECP256R1())
+    public_key = private_key.public_key()
+    public_der = public_key.public_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    public_b64 = base64.b64encode(public_der).decode("ascii")
+
+    body = json.dumps([{"event": "delivered"}]).encode("utf-8")
+    timestamp = "1715251200"  # arbitrary fixed value
+    payload = timestamp.encode("utf-8") + body
+    signature_der = private_key.sign(payload, ec.ECDSA(hashes.SHA256()))
+    signature_b64 = base64.b64encode(signature_der).decode("ascii")
+
+    _set_settings(
+        monkeypatch,
+        env="production",
+        sendgrid_webhook_public_key=public_b64,
+    )
+
+    resp = client.post(
+        "/api/webhooks/sendgrid/events",
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+            "X-Twilio-Email-Event-Webhook-Signature": signature_b64,
+            "X-Twilio-Email-Event-Webhook-Timestamp": timestamp,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body_resp = resp.json()
+    assert body_resp == {"accepted": 1, "matched": 0}
