@@ -4855,6 +4855,11 @@ export interface components {
         CapabilityRecord: {
             /** Capability */
             capability: string;
+            /**
+             * Custom Role Delegable
+             * @default true
+             */
+            custom_role_delegable: boolean;
             /** Group */
             group: string;
             /** Label */
@@ -4864,6 +4869,8 @@ export interface components {
              * @default false
              */
             owner_only: boolean;
+            /** Protected Reason */
+            protected_reason?: string | null;
         };
         /** ClauseExtractionResponse */
         ClauseExtractionResponse: {
