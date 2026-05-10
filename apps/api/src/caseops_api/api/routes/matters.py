@@ -69,6 +69,7 @@ from caseops_api.schemas.matter_tags import (
 from caseops_api.schemas.matters import (
     MatterAttachmentMetadataUpdateRequest,
     MatterAttachmentRecord,
+    MatterCourtOrderCreateRequest,
     MatterCourtOrderRecord,
     MatterCourtOrderUpdateRequest,
     MatterCourtSyncImportRequest,
@@ -177,6 +178,7 @@ from caseops_api.services.matter_timeline import (
 from caseops_api.services.matters import (
     create_matter,
     create_matter_attachment,
+    create_matter_court_order,
     create_matter_court_sync_import,
     create_matter_hearing,
     create_matter_invoice,
@@ -1549,6 +1551,35 @@ async def import_current_company_matter_court_sync(
         context=context,
         matter_id=matter_id,
         payload=payload,
+    )
+
+
+@router.post(
+    "/{matter_id}/court-orders",
+    response_model=MatterCourtOrderRecord,
+    summary=(
+        "Create a court order on a matter manually (BUG-032). "
+        "Optional pre-uploaded attachment is referenced by ID."
+    ),
+)
+async def post_current_company_matter_court_order(
+    matter_id: str,
+    payload: MatterCourtOrderCreateRequest,
+    context: MatterEditor,
+    session: DbSession,
+) -> MatterCourtOrderRecord:
+    """Manual create path for ``MatterCourtOrder``. Mirrors the
+    PATCH endpoint's tenant + matter-access guard via the
+    ``MatterEditor`` capability and the
+    ``_get_matter_model`` helper inside the service. Optional file
+    upload is handled by calling the existing
+    ``POST /api/matters/{matter_id}/attachments`` first and passing
+    the resulting attachment ID as ``order_attachment_id`` in this
+    request body — keeps file validation, ClamAV scan, and
+    storage-backend handling in one place.
+    """
+    return create_matter_court_order(
+        session, context=context, matter_id=matter_id, payload=payload,
     )
 
 

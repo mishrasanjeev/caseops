@@ -863,6 +863,56 @@ export async function createMatterHearing(
 }
 
 
+// BUG-032 (Hari 2026-05-09) — manual court-order create. The hearings
+// page Orders-on-file card needs an explicit Add-order affordance;
+// court-sync was the only path that produced rows before. Optional
+// `orderAttachmentId` references an attachment uploaded ahead of this
+// call via the existing POST /api/matters/{id}/attachments route, so
+// file validation, ClamAV scan, and storage backends stay in one
+// place. Workspace `court_orders` array is what the documents page
+// Linked-order selector feeds from; callers should invalidate the
+// `["matters", matterId, "workspace"]` query key on success.
+export type MatterCourtOrderCreateInput = {
+  matterId: string;
+  order_date: string;
+  title: string;
+  summary: string;
+  source?: string;
+  source_reference?: string | null;
+  order_text?: string | null;
+  bench_name?: string | null;
+  judge_names?: string[] | null;
+  order_attachment_id?: string | null;
+  order_kind?:
+    | "daily_order"
+    | "interim_order"
+    | "stay_order"
+    | "final_judgment"
+    | "other"
+    | null;
+  is_interim_order?: boolean;
+  stay_status?:
+    | "none"
+    | "granted"
+    | "continued"
+    | "modified"
+    | "vacated"
+    | "unknown"
+    | null;
+  stay_effective_until?: string | null;
+};
+
+export async function createMatterCourtOrder(
+  input: MatterCourtOrderCreateInput,
+): Promise<unknown> {
+  const { matterId, ...body } = input;
+  return apiRequest<unknown>(`/api/matters/${matterId}/court-orders`, {
+    method: "POST",
+    body,
+  });
+}
+
+
 // --- Conflict checks (PG-001) ---
 // Backend endpoints: POST /api/matters/{id}/conflict-checks (capability:
 // conflicts:run), GET /api/matters/{id}/conflict-checks, PATCH

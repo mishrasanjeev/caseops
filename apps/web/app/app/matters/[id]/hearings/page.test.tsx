@@ -32,6 +32,12 @@ const {
 
 vi.mock("@/lib/api/endpoints", () => ({
   createMatterHearing: vi.fn(),
+  // BUG-032 (Hari 2026-05-09): AddCourtOrderDialog (mounted on the
+  // Orders-on-file card) imports these. Mock so the page renders
+  // without hitting real fetch; the API-call shape is asserted in
+  // the dedicated BUG-032 test below.
+  createMatterCourtOrder: vi.fn().mockResolvedValue({ id: "order-new" }),
+  uploadMatterAttachment: vi.fn().mockResolvedValue({ id: "att-new" }),
   fetchCalendarSyncStatus: fetchCalendarSyncStatusMock,
   listMatterReminders: listMatterRemindersMock,
   pullMatterCourtSync: vi.fn(),
@@ -288,5 +294,39 @@ describe("MatterHearingsPage", () => {
     ).toBeInTheDocument();
     // No clickable judge link when resolved_bench is null.
     expect(screen.queryByTestId("cause-list-bench-resolved")).toBeNull();
+  });
+
+  // BUG-032 (Hari 2026-05-09): Orders-on-file card now exposes an
+  // explicit Add-order affordance (the previous symptom: no path to
+  // create an order from this page; the documents-page Linked-order
+  // selector was therefore empty for any matter without a court
+  // sync). The dialog shows up in the card header AND in the empty
+  // state.
+  it("BUG-032: renders Add-order affordance on Orders-on-file (header + empty state)", () => {
+    workspaceData.current = {
+      ...(workspaceData.current as { matter: unknown }),
+      matter: {
+        id: "m1",
+        matter_code: "X",
+        title: "T",
+        status: "active",
+      },
+      hearings: [],
+      attachments: [],
+      invoices: [],
+      time_entries: [],
+      activity: [],
+      tasks: [],
+      notes: [],
+      court_orders: [],
+      cause_list_entries: [],
+    } as unknown;
+
+    render(withClient(<MatterHearingsPage />));
+    // Header + empty-state both mount the dialog trigger; the
+    // dialog uses a single testid so we expect at least 2 trigger
+    // buttons on screen.
+    const triggers = screen.getAllByTestId("add-court-order-open");
+    expect(triggers.length).toBeGreaterThanOrEqual(2);
   });
 });

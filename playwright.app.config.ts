@@ -40,6 +40,7 @@ export default defineConfig({
     /hari-2026-05-09-bugs\.spec\.ts/,
     /hari-2026-05-09-bug-033\.spec\.ts/,
     /hari-2026-05-09-outlook-sync\.spec\.ts/,
+    /hari-2026-05-09-bug-032\.spec\.ts/,
     /matter-outside-counsel\.spec\.ts/,
     /mobile-responsive\.spec\.ts/,
   ],
