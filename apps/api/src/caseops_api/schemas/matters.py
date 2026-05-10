@@ -494,6 +494,55 @@ class MatterCourtOrderUpdateRequest(BaseModel):
         return _clean_judge_names(value)
 
 
+# BUG-032 (Hari 2026-05-09) — manual court-order create. The hearings
+# page Orders-on-file card needs an explicit Add-order affordance;
+# court-sync is the only path that creates ``MatterCourtOrder`` rows
+# today, so an order produced by a hand-uploaded PDF or a scanned
+# remarks summary cannot exist without first running a sync.
+#
+# Required fields mirror the backing model's NOT NULL columns
+# (``order_date``, ``title``, ``summary``, ``source``); the optional
+# fields mirror ``MatterCourtOrderUpdateRequest`` so the create + edit
+# surfaces stay aligned. ``source`` defaults to ``"manual_upload"``;
+# the frontend may set ``"manual_remarks"`` for orders entered without
+# a PDF.
+class MatterCourtOrderCreateRequest(BaseModel):
+    order_date: date
+    title: str = Field(min_length=2, max_length=255)
+    summary: str = Field(min_length=2, max_length=4000)
+    source: str = Field(default="manual_upload", min_length=2, max_length=120)
+    source_reference: str | None = Field(default=None, max_length=500)
+    order_text: str | None = Field(default=None, max_length=20000)
+    bench_name: str | None = Field(default=None, min_length=2, max_length=255)
+    judge_names: list[str] | None = Field(default=None, max_length=12)
+    # An attachment uploaded ahead of this call (the dialog uploads
+    # the file via the existing ``POST /attachments`` route first,
+    # then passes the returned ID here). Validated against the same
+    # matter to prevent cross-tenant linkability.
+    order_attachment_id: str | None = Field(default=None, max_length=36)
+    order_kind: MatterCourtOrderKindLiteral | None = None
+    is_interim_order: bool | None = None
+    stay_status: MatterStayStatusLiteral | None = None
+    stay_effective_until: date | None = None
+
+    @field_validator("judge_names", mode="before")
+    @classmethod
+    def clean_judge_names(cls, value: object) -> list[str] | None:
+        if value is None:
+            return None
+        if not isinstance(value, list):
+            raise ValueError("judge_names must be a list of names")
+        return _clean_judge_names(value)
+
+    @field_validator("title", "summary", mode="before")
+    @classmethod
+    def _strip_strings(cls, value: object) -> object:
+        if isinstance(value, str):
+            stripped = value.strip()
+            return stripped or value
+        return value
+
+
 class MatterTimelineLinkRecord(BaseModel):
     matter: str
     document: str | None = None

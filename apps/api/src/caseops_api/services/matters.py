@@ -26,6 +26,7 @@ from caseops_api.db.models import (
     MatterInvoiceLineItem,
     MatterInvoicePaymentAttempt,
     MatterNote,
+    MatterStayStatus,
     MatterTag,
     MatterTagAssignment,
     MatterTask,
@@ -49,6 +50,7 @@ from caseops_api.schemas.matters import (
     MatterAttachmentMetadataUpdateRequest,
     MatterAttachmentRecord,
     MatterCauseListEntryRecord,
+    MatterCourtOrderCreateRequest,
     MatterCourtOrderRecord,
     MatterCourtOrderUpdateRequest,
     MatterCourtSyncImportRequest,
@@ -1661,6 +1663,122 @@ def _order_metadata_snapshot(order: MatterCourtOrder) -> dict[str, object]:
         "stay_status": order.stay_status,
         "stay_effective_until": order.stay_effective_until,
     }
+
+
+def create_matter_court_order(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+    payload: MatterCourtOrderCreateRequest,
+) -> MatterCourtOrderRecord:
+    """BUG-032 (Hari 2026-05-09) — manual court-order create.
+
+    The hearings page Orders-on-file card needs an explicit
+    Add-order affordance. Court-sync was the only path that produced
+    ``MatterCourtOrder`` rows before this; an order from a
+    hand-uploaded PDF or scanned remarks summary could not exist
+    without first running a sync (and a corresponding sync hit).
+
+    Reuses the same access + audit + activity primitives as the
+    PATCH path (`update_matter_court_order`). The optional file
+    attachment is uploaded by the caller via the existing
+    ``POST /api/matters/{id}/attachments`` route first; the resulting
+    `attachment_id` is passed in here as `order_attachment_id` and
+    is validated against the same matter (no cross-tenant linking).
+
+    Notification side-effect: when an attachment is linked, this
+    fires ``create_new_order_uploaded_notifications`` to keep parity
+    with the upload-with-linked-court-order path. Without that call,
+    a manually-created order with an attachment would silently skip
+    the in-app notification rules other workspace members rely on.
+    """
+
+    matter = _get_matter_model(session, context=context, matter_id=matter_id)
+
+    attachment_id = _validated_order_attachment_id(
+        session,
+        matter_id=matter.id,
+        attachment_id=payload.order_attachment_id,
+    )
+
+    is_interim = bool(payload.is_interim_order)
+    stay_status = payload.stay_status or MatterStayStatus.NONE
+
+    order = MatterCourtOrder(
+        matter_id=matter.id,
+        sync_run_id=None,
+        order_date=payload.order_date,
+        title=payload.title.strip(),
+        summary=payload.summary.strip(),
+        order_text=payload.order_text,
+        source=payload.source.strip() or "manual_upload",
+        source_reference=payload.source_reference,
+        bench_name=(
+            payload.bench_name.strip() if payload.bench_name else None
+        ),
+        judge_names_json=payload.judge_names,
+        order_attachment_id=attachment_id,
+        order_kind=payload.order_kind,
+        is_interim_order=is_interim,
+        stay_status=stay_status,
+        stay_effective_until=payload.stay_effective_until,
+    )
+    session.add(order)
+    session.flush()
+
+    # Mirror the matter-rollup updates that update_matter_court_order
+    # applies on PATCH so the matter-summary badges show immediately.
+    if is_interim:
+        matter.has_interim_order = True
+    if stay_status and stay_status != MatterStayStatus.NONE:
+        matter.has_stay = True
+
+    _append_activity(
+        session,
+        matter_id=matter.id,
+        actor_membership_id=context.membership.id,
+        event_type="court_order_added",
+        title="Court order added",
+        detail=order.title,
+    )
+    record_from_context(
+        session,
+        context,
+        action="matter_court_order.created",
+        target_type="matter_court_order",
+        target_id=order.id,
+        matter_id=matter.id,
+        metadata={
+            "source": order.source,
+            "order_kind": order.order_kind,
+            "is_interim_order": order.is_interim_order,
+            "stay_status": order.stay_status,
+            "has_attachment": order.order_attachment_id is not None,
+        },
+    )
+
+    if attachment_id is not None:
+        # Reuse the existing notification helper so manual-create
+        # parity matches the attachment-upload-with-linked-order
+        # path. Without this call, downstream NotificationRule rows
+        # would not fire on the new order. Imported lazily — same
+        # pattern as `create_matter_attachment` uses.
+        from caseops_api.services.notification_rules import (
+            create_new_order_uploaded_notifications,
+        )
+
+        create_new_order_uploaded_notifications(
+            session,
+            context=context,
+            matter=matter,
+            attachment_id=attachment_id,
+            linked_court_order_id=order.id,
+        )
+
+    session.commit()
+    session.refresh(order)
+    return _court_order_record(order)
 
 
 def update_matter_court_order(

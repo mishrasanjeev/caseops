@@ -16,6 +16,7 @@ import { toast } from "sonner";
 
 import { HearingPackDialog } from "@/components/app/HearingPackDialog";
 import { OrderBadges } from "@/components/matters/OrderBadges";
+import { AddCourtOrderDialog } from "@/components/matters/AddCourtOrderDialog";
 import { ScheduleHearingDialog } from "@/components/matters/ScheduleHearingDialog";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -436,6 +437,11 @@ export default function MatterHearingsPage() {
             </CardDescription>
           </div>
           <div className="flex gap-2">
+            {/* BUG-032 (Hari 2026-05-09): Add-order affordance.
+                Available in the card header AND in the empty state
+                below so a fresh matter has a clear path to its first
+                order without a court-sync. */}
+            <AddCourtOrderDialog matterId={matterId} />
             <Button
               type="button"
               size="sm"
@@ -459,7 +465,8 @@ export default function MatterHearingsPage() {
             <EmptyState
               icon={ScrollText}
               title="No orders attached"
-              description="Upload or sync orders to build a tight chronology for hearing prep."
+              description="Add an order manually, or run court sync to import them. Orders here also show up in the documents page Linked-order selector."
+              action={<AddCourtOrderDialog matterId={matterId} triggerLabel="Add the first order" />}
             />
           ) : (
             <ul className="flex flex-col gap-3">
