@@ -1092,6 +1092,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/companies/current/employees/{membership_id}/matter-access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List matter-level access state for one employee (admin) */
+        get: operations["current_company_employee_matter_access_api_companies_current_employees__membership_id__matter_access_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/companies/current/employees/{membership_id}/offboarding/commit": {
         parameters: {
             query?: never;
@@ -4678,6 +4695,8 @@ export interface components {
             document_type?: ("complaint_petition" | "notice" | "vakalatnama" | "pleading_reply" | "affidavit" | "evidence" | "written_submission" | "interim_application" | "order_judgment" | "correspondence" | "research" | "billing" | "other") | null;
             /** File */
             file: string;
+            /** Hearing Id */
+            hearing_id?: string | null;
             /** Lifecycle Stage */
             lifecycle_stage?: ("initiation" | "pleadings" | "interim_applications" | "evidence" | "arguments" | "orders" | "post_order" | "administrative" | "other") | null;
             /** Linked Court Order Id */
@@ -6923,6 +6942,32 @@ export interface components {
             /** Employees */
             employees: components["schemas"]["EmployeeRecord"][];
         };
+        /** EmployeeMatterAccessResponse */
+        EmployeeMatterAccessResponse: {
+            /** Matters */
+            matters: components["schemas"]["EmployeeMatterAccessRow"][];
+            /** Membership Id */
+            membership_id: string;
+        };
+        /** EmployeeMatterAccessRow */
+        EmployeeMatterAccessRow: {
+            /** Grant Id */
+            grant_id?: string | null;
+            /** Has Grant */
+            has_grant: boolean;
+            /** Is Assignee */
+            is_assignee: boolean;
+            /** Is Walled */
+            is_walled: boolean;
+            /** Matter Code */
+            matter_code: string;
+            /** Matter Id */
+            matter_id: string;
+            /** Matter Title */
+            matter_title: string;
+            /** Restricted Access */
+            restricted_access: boolean;
+        };
         /** EmployeeOffboardingCommitResponse */
         EmployeeOffboardingCommitResponse: {
             /** Deactivated */
@@ -7950,6 +7995,8 @@ export interface components {
             document_date?: string | null;
             /** Document Type */
             document_type?: ("complaint_petition" | "notice" | "vakalatnama" | "pleading_reply" | "affidavit" | "evidence" | "written_submission" | "interim_application" | "order_judgment" | "correspondence" | "research" | "billing" | "other") | null;
+            /** Hearing Id */
+            hearing_id?: string | null;
             /** Lifecycle Stage */
             lifecycle_stage?: ("initiation" | "pleadings" | "interim_applications" | "evidence" | "arguments" | "orders" | "post_order" | "administrative" | "other") | null;
             /** Linked Court Order Id */
@@ -7974,6 +8021,8 @@ export interface components {
             extracted_char_count: number;
             /** Extraction Error */
             extraction_error: string | null;
+            /** Hearing Id */
+            hearing_id?: string | null;
             /** Id */
             id: string;
             latest_job: components["schemas"]["DocumentProcessingJobRecord"] | null;
@@ -13347,6 +13396,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EmployeeAuditResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    current_company_employee_matter_access_api_companies_current_employees__membership_id__matter_access_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                membership_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmployeeMatterAccessResponse"];
                 };
             };
             /** @description Validation Error */

@@ -2125,7 +2125,7 @@ class MatterAttachment(Base):
     linked_court_order: Mapped[MatterCourtOrder | None] = relationship(
         foreign_keys=[linked_court_order_id]
     )
-    hearing: Mapped["MatterHearing | None"] = relationship(
+    hearing: Mapped[MatterHearing | None] = relationship(
         foreign_keys=[hearing_id]
     )
 
