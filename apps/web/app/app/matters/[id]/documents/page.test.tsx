@@ -118,6 +118,9 @@ describe("MatterDocumentsPage", () => {
       documentDate: "2026-05-03",
       sequenceIndex: 5,
       linkedCourtOrderId: null,
+      // BUG-045 (Hari 2026-05-11): hearing_id is part of the upload
+      // payload now; defaults to null when no hearing is selected.
+      hearingId: null,
     });
     expect(toastSuccess).toHaveBeenCalled();
   });
@@ -191,6 +194,9 @@ describe("MatterDocumentsPage", () => {
       document_date: "2026-05-01",
       sequence_index: 12,
       linked_court_order_id: "o1",
+      // BUG-045 (Hari 2026-05-11): metadata patch now also passes
+      // hearing_id; null when nothing is selected in the editor.
+      hearing_id: null,
     });
     expect(toastSuccess).toHaveBeenCalledWith("Document metadata updated.");
   });
