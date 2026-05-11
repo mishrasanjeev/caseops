@@ -584,6 +584,7 @@ def _attachment_record(
         document_date=attachment.document_date,
         sequence_index=attachment.sequence_index,
         linked_court_order_id=attachment.linked_court_order_id,
+        hearing_id=attachment.hearing_id,
         created_at=attachment.created_at,
     )
 
@@ -1642,6 +1643,33 @@ def _validated_attachment_court_order_id(
     return found
 
 
+def _validated_attachment_hearing_id(
+    session: Session,
+    *,
+    matter_id: str,
+    hearing_id: str | None,
+) -> str | None:
+    """BUG-045: validate the chosen hearing belongs to this matter.
+
+    Mirrors ``_validated_attachment_court_order_id`` so an out-of-tenant
+    hearing id can't be smuggled into the FK and quietly persisted.
+    """
+    if hearing_id is None:
+        return None
+    found = session.scalar(
+        select(MatterHearing.id).where(
+            MatterHearing.id == hearing_id,
+            MatterHearing.matter_id == matter_id,
+        )
+    )
+    if found is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Linked hearing was not found on this matter.",
+        )
+    return found
+
+
 def _attachment_metadata_snapshot(attachment: MatterAttachment) -> dict[str, object]:
     return {
         "document_type": attachment.document_type,
@@ -1649,6 +1677,7 @@ def _attachment_metadata_snapshot(attachment: MatterAttachment) -> dict[str, obj
         "document_date": attachment.document_date,
         "sequence_index": attachment.sequence_index,
         "linked_court_order_id": attachment.linked_court_order_id,
+        "hearing_id": attachment.hearing_id,
     }
 
 
@@ -2083,12 +2112,18 @@ def create_matter_attachment(
     document_date: date | None = None,
     sequence_index: int | None = None,
     linked_court_order_id: str | None = None,
+    hearing_id: str | None = None,
 ) -> tuple[MatterAttachmentRecord, str]:
     matter = _get_matter_model(session, context=context, matter_id=matter_id)
     linked_court_order_id = _validated_attachment_court_order_id(
         session,
         matter_id=matter.id,
         court_order_id=linked_court_order_id,
+    )
+    hearing_id = _validated_attachment_hearing_id(
+        session,
+        matter_id=matter.id,
+        hearing_id=hearing_id,
     )
     sequence_index = _validated_sequence_index(sequence_index)
     lifecycle_stage = lifecycle_stage or _default_lifecycle_stage(document_type)
@@ -2111,6 +2146,7 @@ def create_matter_attachment(
         document_date=document_date,
         sequence_index=sequence_index,
         linked_court_order_id=linked_court_order_id,
+        hearing_id=hearing_id,
     )
     session.add(attachment)
     session.flush()
@@ -2245,6 +2281,12 @@ def update_matter_attachment_metadata(
             session,
             matter_id=matter.id,
             court_order_id=updates["linked_court_order_id"],
+        )
+    if "hearing_id" in updates:
+        attachment.hearing_id = _validated_attachment_hearing_id(
+            session,
+            matter_id=matter.id,
+            hearing_id=updates["hearing_id"],
         )
 
     after = _attachment_metadata_snapshot(attachment)

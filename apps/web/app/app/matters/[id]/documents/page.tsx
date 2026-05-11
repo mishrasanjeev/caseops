@@ -9,6 +9,7 @@ import {
   Pencil,
   RefreshCw,
   Save,
+  Search,
   Upload,
   X,
 } from "lucide-react";
@@ -40,6 +41,7 @@ import { useMatterWorkspace } from "@/lib/use-matter-workspace";
 import type {
   WorkspaceAttachment,
   WorkspaceCourtOrder,
+  WorkspaceHearing,
 } from "@/lib/api/workspace-types";
 
 const DOCUMENT_TYPE_OPTIONS: Array<{ value: MatterDocumentType; label: string }> = [
@@ -103,6 +105,9 @@ const RETRY_STATUSES = new Set(["failed", "needs_ocr", "pending"]);
 const REINDEX_STATUSES = new Set(["indexed"]);
 const UNCLASSIFIED = "unclassified" as const;
 const NO_LINKED_ORDER = "none";
+const NO_LINKED_HEARING = "none";
+const HEARING_FILTER_ALL = "all" as const;
+const HEARING_FILTER_NONE = "none" as const;
 
 type MetadataDraft = {
   documentType: MatterDocumentType | typeof UNCLASSIFIED;
@@ -110,6 +115,7 @@ type MetadataDraft = {
   documentDate: string;
   sequenceIndex: string;
   linkedCourtOrderId: string;
+  hearingId: string;
 };
 
 type UploadMetadata = {
@@ -118,6 +124,7 @@ type UploadMetadata = {
   documentDate: string;
   sequenceIndex: string;
   linkedCourtOrderId: string;
+  hearingId: string;
 };
 
 function humanSize(bytes: number | null | undefined): string {
@@ -170,6 +177,7 @@ function metadataDraftFromDoc(doc: WorkspaceAttachment): MetadataDraft {
         ? ""
         : String(doc.sequence_index),
     linkedCourtOrderId: doc.linked_court_order_id ?? NO_LINKED_ORDER,
+    hearingId: doc.hearing_id ?? NO_LINKED_HEARING,
   };
 }
 
@@ -177,6 +185,17 @@ function orderLabel(order: WorkspaceCourtOrder): string {
   const title = order.title ?? "Court order";
   const date = order.order_date ? dateLabel(order.order_date) : null;
   return date ? `${date} - ${title}` : title;
+}
+
+function hearingDate(hearing: WorkspaceHearing): string | null | undefined {
+  return hearing.hearing_on ?? hearing.scheduled_for ?? hearing.listing_date;
+}
+
+function hearingLabel(hearing: WorkspaceHearing): string {
+  const date = hearingDate(hearing);
+  const dateText = date ? dateLabel(date) : "Unscheduled";
+  const subject = hearing.purpose ?? hearing.hearing_type ?? "Hearing";
+  return `${dateText} - ${subject}`;
 }
 
 function groupAttachments(attachments: WorkspaceAttachment[]) {
@@ -217,12 +236,26 @@ export default function MatterDocumentsPage() {
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [metadataDraft, setMetadataDraft] = useState<MetadataDraft | null>(null);
+  // BUG-043 (Hari 2026-05-11): client-side search across the loaded
+  // attachment set. Matches on filename, document type label, and
+  // lifecycle stage label so a lawyer hunting "vakalatnama" or
+  // "evidence" finds them without scrolling. Backend full-text search
+  // over attachment_chunks is a follow-up; the workspace endpoint
+  // already returns the full attachment list for the matter so client
+  // filter is the right scope today.
+  const [searchQ, setSearchQ] = useState("");
+  // BUG-045 (Hari 2026-05-11): filter by hearing — "all" shows
+  // everything, "none" shows un-linked, "<id>" shows the chosen
+  // hearing's evidence. Stays in sync with the upload-metadata
+  // hearing selector so a user can scope-then-add.
+  const [hearingFilter, setHearingFilter] = useState<string>(HEARING_FILTER_ALL);
   const [uploadMetadata, setUploadMetadata] = useState<UploadMetadata>({
     documentType: "other",
     lifecycleStage: "other",
     documentDate: "",
     sequenceIndex: "",
     linkedCourtOrderId: NO_LINKED_ORDER,
+    hearingId: NO_LINKED_HEARING,
   });
 
   const invalidate = () =>
@@ -241,6 +274,10 @@ export default function MatterDocumentsPage() {
           uploadMetadata.linkedCourtOrderId === NO_LINKED_ORDER
             ? null
             : uploadMetadata.linkedCourtOrderId,
+        hearingId:
+          uploadMetadata.hearingId === NO_LINKED_HEARING
+            ? null
+            : uploadMetadata.hearingId,
       }),
     onSuccess: async () => {
       await invalidate();
@@ -265,6 +302,8 @@ export default function MatterDocumentsPage() {
         sequence_index: sequenceValue(draft.sequenceIndex),
         linked_court_order_id:
           draft.linkedCourtOrderId === NO_LINKED_ORDER ? null : draft.linkedCourtOrderId,
+        hearing_id:
+          draft.hearingId === NO_LINKED_HEARING ? null : draft.hearingId,
       }),
     onMutate: ({ attachmentId }) => setPendingId(attachmentId),
     onSuccess: async () => {
@@ -307,14 +346,47 @@ export default function MatterDocumentsPage() {
     onSettled: () => setPendingId(null),
   });
 
+  const filteredAttachments = useMemo(() => {
+    const all = data?.attachments ?? [];
+    const q = searchQ.trim().toLowerCase();
+    return all.filter((doc) => {
+      // BUG-045: hearing filter
+      if (hearingFilter === HEARING_FILTER_NONE) {
+        if (doc.hearing_id) return false;
+      } else if (hearingFilter !== HEARING_FILTER_ALL) {
+        if (doc.hearing_id !== hearingFilter) return false;
+      }
+      if (!q) return true;
+      const haystack = [
+        doc.original_filename ?? "",
+        doc.filename ?? "",
+        labelFor(DOCUMENT_TYPE_OPTIONS, doc.document_type),
+        labelFor(LIFECYCLE_STAGE_OPTIONS, doc.lifecycle_stage),
+      ]
+        .join(" | ")
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [data?.attachments, searchQ, hearingFilter]);
   const groupedAttachments = useMemo(
-    () => groupAttachments(data?.attachments ?? []),
-    [data?.attachments],
+    () => groupAttachments(filteredAttachments),
+    [filteredAttachments],
   );
 
   if (!data) return null;
   const attachments = data.attachments;
   const courtOrders = data.court_orders ?? [];
+  const hearings: WorkspaceHearing[] = data.hearings ?? [];
+  const sortedHearings = [...hearings].sort((a, b) => {
+    const aDate = hearingDate(a) ?? "";
+    const bDate = hearingDate(b) ?? "";
+    return bDate.localeCompare(aDate);
+  });
+  const hearingsById = new Map<string, WorkspaceHearing>(
+    hearings.map((h) => [h.id, h]),
+  );
+  const isFiltered =
+    searchQ.trim().length > 0 || hearingFilter !== HEARING_FILTER_ALL;
 
   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const selected = event.target.files?.[0];
@@ -412,8 +484,8 @@ export default function MatterDocumentsPage() {
           />
         </div>
       </div>
-      <div className="mt-3 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div className="w-full lg:max-w-md">
+      <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
+        <div className="w-full">
           <Label htmlFor="upload-linked-order">Linked order</Label>
           <select
             id="upload-linked-order"
@@ -430,6 +502,32 @@ export default function MatterDocumentsPage() {
             {courtOrders.map((order) => (
               <option key={order.id} value={order.id}>
                 {orderLabel(order)}
+              </option>
+            ))}
+          </select>
+        </div>
+        {/* BUG-045 (Hari 2026-05-11): hearing selector for the
+            upload form. Lets the lawyer tag this evidence with the
+            specific hearing it belongs to so it shows up in the
+            hearing-filtered view + downstream hearing pack. */}
+        <div className="w-full">
+          <Label htmlFor="upload-linked-hearing">Linked hearing</Label>
+          <select
+            id="upload-linked-hearing"
+            className={`${selectClassName()} mt-1.5`}
+            value={uploadMetadata.hearingId}
+            onChange={(event) =>
+              setUploadMetadata((current) => ({
+                ...current,
+                hearingId: event.target.value,
+              }))
+            }
+            data-testid="matter-attachment-linked-hearing"
+          >
+            <option value={NO_LINKED_HEARING}>No linked hearing</option>
+            {sortedHearings.map((hearing) => (
+              <option key={hearing.id} value={hearing.id}>
+                {hearingLabel(hearing)}
               </option>
             ))}
           </select>
@@ -485,6 +583,77 @@ export default function MatterDocumentsPage() {
   return (
     <div className="flex flex-col gap-6">
       {uploader}
+      {/* BUG-043 (Hari 2026-05-11): document search bar. Filters the
+          rendered groups in-place so the lifecycle structure is
+          preserved when a query is active. The "Showing N of M" hint
+          + Clear button keep the empty filtered-result state from
+          looking like data loss. */}
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--color-line)] bg-white px-3 py-2">
+        <Search
+          className="h-4 w-4 shrink-0 text-[var(--color-mute)]"
+          aria-hidden
+        />
+        <Input
+          id="matter-document-search"
+          type="search"
+          placeholder="Search by filename, document type, or lifecycle"
+          className="h-9 flex-1 border-0 shadow-none focus-visible:ring-0"
+          value={searchQ}
+          onChange={(event) => setSearchQ(event.target.value)}
+          data-testid="matter-document-search"
+          aria-label="Search uploaded documents"
+        />
+        {/* BUG-045: hearing filter — scope the documents tab to a
+            single hearing so the lawyer can pull "all evidence for
+            22 May listing" without scrolling. */}
+        {sortedHearings.length > 0 ? (
+          <select
+            id="matter-document-hearing-filter"
+            className="h-9 rounded-md border border-[var(--color-line)] bg-white px-2 text-sm text-[var(--color-ink)]"
+            value={hearingFilter}
+            onChange={(event) => setHearingFilter(event.target.value)}
+            data-testid="matter-document-hearing-filter"
+            aria-label="Filter by hearing"
+          >
+            <option value={HEARING_FILTER_ALL}>All hearings</option>
+            <option value={HEARING_FILTER_NONE}>Not linked to a hearing</option>
+            {sortedHearings.map((hearing) => (
+              <option key={hearing.id} value={hearing.id}>
+                {hearingLabel(hearing)}
+              </option>
+            ))}
+          </select>
+        ) : null}
+        {isFiltered ? (
+          <>
+            <span
+              className="text-xs text-[var(--color-mute)]"
+              data-testid="matter-document-search-count"
+            >
+              Showing {filteredAttachments.length} of {attachments.length}
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSearchQ("");
+                setHearingFilter(HEARING_FILTER_ALL);
+              }}
+              data-testid="matter-document-search-clear"
+            >
+              <X className="h-3.5 w-3.5" aria-hidden /> Clear
+            </Button>
+          </>
+        ) : null}
+      </div>
+      {isFiltered && filteredAttachments.length === 0 ? (
+        <EmptyState
+          icon={Search}
+          title="No documents match this search"
+          description={`Nothing in this matter matched "${searchQ.trim()}". Try a different filename or document type.`}
+        />
+      ) : (
       <Card>
         <CardContent className="p-0">
           {groupedAttachments.map((group) => (
@@ -552,6 +721,22 @@ export default function MatterDocumentsPage() {
                               </Badge>
                               {doc.linked_court_order_id ? (
                                 <Badge tone="neutral">Linked order</Badge>
+                              ) : null}
+                              {/* BUG-045: hearing chip — surface the
+                                  linked hearing date inline so the
+                                  context is visible from the list. */}
+                              {doc.hearing_id && hearingsById.has(doc.hearing_id) ? (
+                                <span
+                                  data-testid={`matter-attachment-hearing-${doc.id}`}
+                                  className="contents"
+                                >
+                                  <Badge tone="neutral">
+                                    Hearing:{" "}
+                                    {dateLabel(
+                                      hearingDate(hearingsById.get(doc.hearing_id)!),
+                                    )}
+                                  </Badge>
+                                </span>
                               ) : null}
                             </div>
                           </td>
@@ -727,6 +912,28 @@ export default function MatterDocumentsPage() {
                                     ))}
                                   </select>
                                 </div>
+                                {/* BUG-045: hearing selector inside
+                                    the metadata edit row, mirroring
+                                    the upload form. */}
+                                <div>
+                                  <Label htmlFor={`linked-hearing-${doc.id}`}>Linked hearing</Label>
+                                  <select
+                                    id={`linked-hearing-${doc.id}`}
+                                    className={`${selectClassName()} mt-1.5`}
+                                    value={metadataDraft.hearingId}
+                                    onChange={(event) =>
+                                      updateDraft({ hearingId: event.target.value })
+                                    }
+                                    data-testid={`matter-attachment-edit-hearing-${doc.id}`}
+                                  >
+                                    <option value={NO_LINKED_HEARING}>No linked hearing</option>
+                                    {sortedHearings.map((hearing) => (
+                                      <option key={hearing.id} value={hearing.id}>
+                                        {hearingLabel(hearing)}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
                                 <div className="flex justify-end gap-2">
                                   <Button
                                     type="button"
@@ -773,6 +980,7 @@ export default function MatterDocumentsPage() {
           ))}
         </CardContent>
       </Card>
+      )}
     </div>
   );
 }

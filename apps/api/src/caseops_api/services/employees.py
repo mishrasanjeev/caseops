@@ -46,6 +46,8 @@ from caseops_api.schemas.employees import (
     EmployeeCreateRequest,
     EmployeeCreateResponse,
     EmployeeListResponse,
+    EmployeeMatterAccessResponse,
+    EmployeeMatterAccessRow,
     EmployeeOffboardingCommitResponse,
     EmployeeOffboardingObject,
     EmployeeOffboardingPreviewResponse,
@@ -946,6 +948,87 @@ def get_employee(
         membership_id=membership_id,
     )
     return _employee_record(session, membership)
+
+
+def list_employee_matter_access(
+    session: Session,
+    *,
+    context: SessionContext,
+    membership_id: str,
+) -> EmployeeMatterAccessResponse:
+    """BUG-048 (Hari 2026-05-11): admin view of one employee's matter
+    access fan-out.
+
+    Lists every matter in the company and labels it with whether the
+    target employee:
+      - has restricted_access turned on (then access requires a grant);
+      - already holds an explicit grant;
+      - is the assignee (auto-visible);
+      - is on an ethical wall (forced-out, overrides any grant).
+
+    The Admin > Employees Edit dialog uses this to show a per-matter
+    toggle. Mutations still go through the per-matter access endpoints
+    (POST /api/matters/{id}/access/grants, DELETE …/{grant_id}) so
+    audit + RBAC + validation paths are reused.
+    """
+    from caseops_api.db.models import EthicalWall, Matter, MatterAccessGrant
+
+    # Confirm the target membership belongs to the caller's company.
+    target = _load_employee_membership(
+        session,
+        company_id=context.company.id,
+        membership_id=membership_id,
+    )
+
+    matters = list(
+        session.scalars(
+            select(Matter)
+            .where(Matter.company_id == context.company.id)
+            .order_by(Matter.matter_code.asc(), Matter.id.asc())
+        )
+    )
+    if not matters:
+        return EmployeeMatterAccessResponse(
+            membership_id=target.id,
+            matters=[],
+        )
+
+    matter_ids = [m.id for m in matters]
+    grant_rows = session.execute(
+        select(MatterAccessGrant.matter_id, MatterAccessGrant.id)
+        .where(
+            MatterAccessGrant.membership_id == target.id,
+            MatterAccessGrant.matter_id.in_(matter_ids),
+        )
+    ).all()
+    grants_by_matter: dict[str, str] = {row[0]: row[1] for row in grant_rows}
+
+    wall_rows = session.execute(
+        select(EthicalWall.matter_id)
+        .where(
+            EthicalWall.excluded_membership_id == target.id,
+            EthicalWall.matter_id.in_(matter_ids),
+        )
+    ).all()
+    walled_matters = {row[0] for row in wall_rows}
+
+    rows = [
+        EmployeeMatterAccessRow(
+            matter_id=matter.id,
+            matter_code=matter.matter_code,
+            matter_title=matter.title,
+            restricted_access=bool(matter.restricted_access),
+            has_grant=matter.id in grants_by_matter,
+            grant_id=grants_by_matter.get(matter.id),
+            is_assignee=matter.assignee_membership_id == target.id,
+            is_walled=matter.id in walled_matters,
+        )
+        for matter in matters
+    ]
+    return EmployeeMatterAccessResponse(
+        membership_id=target.id,
+        matters=rows,
+    )
 
 
 def create_employee(

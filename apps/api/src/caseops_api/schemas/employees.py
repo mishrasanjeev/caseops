@@ -247,3 +247,25 @@ class PasswordResetStartRequest(BaseModel):
 class PasswordResetStartResponse(BaseModel):
     delivered: bool = True
     debug_token: str | None = None
+
+
+# BUG-048 (Hari 2026-05-11): admin UI for matter-level access control.
+# Backend grants exist (MatterAccessGrant) but the Admin > Employees
+# page never surfaced them. These records power the Edit Employee
+# dialog's "Matter access" section.
+class EmployeeMatterAccessRow(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    matter_id: str
+    matter_code: str
+    matter_title: str
+    restricted_access: bool
+    has_grant: bool
+    grant_id: str | None = None
+    is_assignee: bool
+    is_walled: bool
+
+
+class EmployeeMatterAccessResponse(BaseModel):
+    membership_id: str
+    matters: list[EmployeeMatterAccessRow]

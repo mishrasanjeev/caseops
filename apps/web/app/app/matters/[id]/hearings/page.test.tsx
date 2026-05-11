@@ -115,7 +115,23 @@ describe("MatterHearingsPage", () => {
     fetchCalendarSyncStatusMock.mockResolvedValue({
       provider_available: true,
       durable_automation: "blocked_pending_temporal",
-      connections: [],
+      // BUG-044 (Hari 2026-05-11): the page now suppresses the Sync
+      // button when connections is empty (it's pre-empting a 409).
+      // For the connected path we need at least one connection.
+      connections: [
+        {
+          id: "conn-1",
+          company_id: "c1",
+          membership_id: "mem-1",
+          provider: "outlook",
+          provider_account_id: "acct-1",
+          display_email: "owner@firm.in",
+          status: "connected",
+          last_synced_at: "2026-05-07T10:00:00Z",
+          created_at: "2026-05-07T09:00:00Z",
+          updated_at: "2026-05-07T10:00:00Z",
+        },
+      ],
       syncs: [
         {
           id: "sync-1",
@@ -137,6 +153,37 @@ describe("MatterHearingsPage", () => {
 
     expect(await screen.findByTestId("hearing-outlook-sync-h-sync")).toBeInTheDocument();
     expect(await screen.findByText(/synced/i)).toBeInTheDocument();
+  });
+
+  it("BUG-044 (Hari 2026-05-11): renders Connect Outlook link, NOT Sync, when there is no Outlook connection", async () => {
+    useCapabilityMock.mockImplementation((cap: string) => cap === "calendar:sync");
+    workspaceData.current = {
+      ...(workspaceData.current as { matter: unknown }),
+      hearings: [
+        {
+          id: "h-noconn",
+          hearing_on: "2026-06-10",
+          purpose: "Arguments",
+          status: "scheduled",
+        },
+      ],
+      court_orders: [],
+      cause_list_entries: [],
+    } as unknown;
+    // No connections + no syncs — the broken state Hari hit.
+    fetchCalendarSyncStatusMock.mockResolvedValue({
+      provider_available: true,
+      durable_automation: "blocked_pending_temporal",
+      connections: [],
+      syncs: [],
+    });
+
+    render(withClient(<MatterHearingsPage />));
+
+    const connect = await screen.findByTestId("hearing-outlook-connect-h-noconn");
+    expect(connect).toBeInTheDocument();
+    expect(connect.getAttribute("href")).toBe("/app/calendar");
+    expect(screen.queryByTestId("hearing-outlook-sync-h-noconn")).toBeNull();
   });
 
   it("renders the Scheduled hearings card and the Schedule hearing trigger", () => {

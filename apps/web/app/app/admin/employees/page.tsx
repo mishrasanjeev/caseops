@@ -58,16 +58,21 @@ import {
   downloadEmployeeImportTemplate,
   listEmployeeAudit,
   listEmployees,
+  listEmployeeMatterAccess,
   previewEmployeeOffboarding,
   previewEmployeeImport,
   resendEmployeeSetup,
   resetEmployeePassword,
   updateEmployee,
+  grantMatterAccess,
+  revokeMatterAccess,
+  setMatterRestrictedAccess,
   type AssignableEmployeeRole,
   type EmployeeAuditEvent,
   type EmployeeEmploymentStatus,
   type EmployeeImportJob,
   type EmployeeImportRowPreview,
+  type EmployeeMatterAccessRow,
   type EmployeeOffboardingPreview,
   type EmployeeRecord,
   type EmployeeRole,
@@ -1394,6 +1399,17 @@ function EditEmployeeDialog({
             Setup sent {formatDate(employee.setup_sent_at)}. Password reset sent{" "}
             {formatDate(employee.password_reset_sent_at)}.
           </div>
+          {/* BUG-048 (Hari 2026-05-11): admin matter-access section.
+              Surfaces every matter in the company with this employee's
+              effective access state and a one-click grant/revoke.
+              Only meaningful for non-owner roles — owners always
+              have full access by definition. */}
+          {employee.role !== "owner" ? (
+            <EmployeeMatterAccessPanel
+              membershipId={employee.membership_id}
+              displayName={employee.full_name}
+            />
+          ) : null}
           <EmployeeHistoryPanel
             events={auditQuery.data?.events ?? []}
             isPending={auditQuery.isPending}
@@ -1416,6 +1432,238 @@ function EditEmployeeDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// BUG-048 (Hari 2026-05-11): admin matter-access panel inside the
+// EditEmployeeDialog. Per row:
+//   - "Restricted" tag when the matter has restricted_access on
+//   - "Walled off" tag when an ethical wall excludes this employee
+//     (overrides any grant — display only, no toggle here)
+//   - "Assignee" tag when the employee is the matter's primary owner
+//   - Grant/Revoke button when the matter is restricted
+//   - "Open access" hint + "Restrict matter" button when the matter
+//     is unrestricted (admin can flip restricted_access from here so
+//     they don't have to navigate to the cockpit just to lock down a
+//     single matter for one employee)
+function EmployeeMatterAccessPanel({
+  membershipId,
+  displayName,
+}: {
+  membershipId: string;
+  displayName: string;
+}) {
+  const queryClient = useQueryClient();
+  const accessQuery = useQuery({
+    queryKey: ["admin", "employees", membershipId, "matter-access"],
+    queryFn: () => listEmployeeMatterAccess(membershipId),
+  });
+  const [pendingMatterId, setPendingMatterId] = useState<string | null>(null);
+
+  const invalidate = () =>
+    queryClient.invalidateQueries({
+      queryKey: ["admin", "employees", membershipId, "matter-access"],
+    });
+
+  const grantMutation = useMutation({
+    mutationFn: (matterId: string) =>
+      grantMatterAccess({
+        matterId,
+        membershipId,
+        reason: `Granted from Admin > Employees > ${displayName}`,
+      }),
+    onMutate: (matterId) => setPendingMatterId(matterId),
+    onSuccess: async () => {
+      await invalidate();
+      toast.success("Matter access granted.");
+    },
+    onError: (err) => toast.error(apiErrorMessage(err, "Could not grant access.")),
+    onSettled: () => setPendingMatterId(null),
+  });
+
+  const revokeMutation = useMutation({
+    mutationFn: ({ matterId, grantId }: { matterId: string; grantId: string }) =>
+      revokeMatterAccess({ matterId, grantId }),
+    onMutate: ({ matterId }) => setPendingMatterId(matterId),
+    onSuccess: async () => {
+      await invalidate();
+      toast.success("Matter access revoked.");
+    },
+    onError: (err) => toast.error(apiErrorMessage(err, "Could not revoke access.")),
+    onSettled: () => setPendingMatterId(null),
+  });
+
+  const restrictMutation = useMutation({
+    mutationFn: (matterId: string) =>
+      setMatterRestrictedAccess({ matterId, restricted: true }),
+    onMutate: (matterId) => setPendingMatterId(matterId),
+    onSuccess: async () => {
+      await invalidate();
+      toast.success("Matter is now restricted to explicit grants.");
+    },
+    onError: (err) =>
+      toast.error(apiErrorMessage(err, "Could not turn on restricted access.")),
+    onSettled: () => setPendingMatterId(null),
+  });
+
+  const matters = accessQuery.data?.matters ?? [];
+  const restrictedCount = matters.filter((m) => m.restricted_access).length;
+  const grantCount = matters.filter((m) => m.has_grant).length;
+  const wallCount = matters.filter((m) => m.is_walled).length;
+
+  return (
+    <div className="md:col-span-2 rounded-md border border-[var(--color-line)]">
+      <div className="flex items-center justify-between border-b border-[var(--color-line)] bg-[var(--color-bg-2)] px-3 py-2">
+        <div className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--color-ink)]">
+          Matter access
+        </div>
+        <span className="text-xs text-[var(--color-mute)]">
+          {grantCount} explicit grant{grantCount === 1 ? "" : "s"} | {restrictedCount}{" "}
+          restricted matter{restrictedCount === 1 ? "" : "s"}
+          {wallCount > 0 ? ` | ${wallCount} walled` : ""}
+        </span>
+      </div>
+      {accessQuery.isPending ? (
+        <div className="p-3">
+          <Skeleton className="h-20 w-full" />
+        </div>
+      ) : accessQuery.isError ? (
+        <div className="px-3 py-4 text-sm text-[var(--color-danger-500)]">
+          Could not load matter access.
+        </div>
+      ) : matters.length === 0 ? (
+        <div className="px-3 py-4 text-sm text-[var(--color-mute)]">
+          No matters in this company yet.
+        </div>
+      ) : (
+        <div
+          className="max-h-72 overflow-auto divide-y divide-[var(--color-line)]"
+          data-testid="employee-matter-access-list"
+        >
+          {matters.map((row) => (
+            <EmployeeMatterAccessRow
+              key={row.matter_id}
+              row={row}
+              isPending={pendingMatterId === row.matter_id}
+              onGrant={() => grantMutation.mutate(row.matter_id)}
+              onRevoke={() =>
+                row.grant_id &&
+                revokeMutation.mutate({
+                  matterId: row.matter_id,
+                  grantId: row.grant_id,
+                })
+              }
+              onRestrict={() => restrictMutation.mutate(row.matter_id)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EmployeeMatterAccessRow({
+  row,
+  isPending,
+  onGrant,
+  onRevoke,
+  onRestrict,
+}: {
+  row: EmployeeMatterAccessRow;
+  isPending: boolean;
+  onGrant: () => void;
+  onRevoke: () => void;
+  onRestrict: () => void;
+}) {
+  return (
+    <div
+      className="grid gap-2 px-3 py-2 sm:grid-cols-[1fr_auto] sm:items-center"
+      data-testid={`employee-matter-access-row-${row.matter_id}`}
+    >
+      <div className="min-w-0">
+        <div className="text-sm font-medium text-[var(--color-ink)] truncate">
+          {row.matter_code}
+          <span className="ml-2 text-[var(--color-mute)]">{row.matter_title}</span>
+        </div>
+        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-[var(--color-mute)]">
+          {row.is_walled ? (
+            <span className="rounded-full bg-[var(--color-warn-50,#fff6e0)] px-2 py-0.5 text-[var(--color-warn-700,#9a4a00)]">
+              Walled off (ethical wall)
+            </span>
+          ) : null}
+          {row.is_assignee ? (
+            <span className="rounded-full bg-[var(--color-bg-2)] px-2 py-0.5">
+              Assignee
+            </span>
+          ) : null}
+          {row.restricted_access ? (
+            <span className="rounded-full bg-[var(--color-bg-2)] px-2 py-0.5">
+              Restricted
+            </span>
+          ) : (
+            <span>Open access — every member can see this matter.</span>
+          )}
+          {row.has_grant && !row.is_walled ? (
+            <span
+              className="rounded-full bg-[var(--color-brand-50,#eef2ff)] px-2 py-0.5 text-[var(--color-brand-700)]"
+              data-testid={`employee-matter-access-granted-${row.matter_id}`}
+            >
+              Grant active
+            </span>
+          ) : null}
+        </div>
+      </div>
+      <div className="flex justify-end gap-2">
+        {row.is_walled ? (
+          <span className="text-xs text-[var(--color-mute)]">
+            Remove the wall in the matter cockpit to enable.
+          </span>
+        ) : row.restricted_access ? (
+          row.has_grant ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={isPending}
+              onClick={onRevoke}
+              data-testid={`employee-matter-access-revoke-${row.matter_id}`}
+            >
+              {isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+              ) : null}
+              Revoke
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              size="sm"
+              disabled={isPending}
+              onClick={onGrant}
+              data-testid={`employee-matter-access-grant-${row.matter_id}`}
+            >
+              {isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+              ) : null}
+              Grant access
+            </Button>
+          )
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={isPending}
+            onClick={onRestrict}
+            data-testid={`employee-matter-access-restrict-${row.matter_id}`}
+          >
+            {isPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+            ) : null}
+            Restrict matter
+          </Button>
+        )}
+      </div>
+    </div>
   );
 }
 

@@ -1440,6 +1440,7 @@ export type MatterAttachmentRecord = {
   document_date: string | null;
   sequence_index: number | null;
   linked_court_order_id: string | null;
+  hearing_id: string | null;
   created_at: string;
 };
 
@@ -1451,6 +1452,7 @@ export async function uploadMatterAttachment(input: {
   documentDate?: string | null;
   sequenceIndex?: number | null;
   linkedCourtOrderId?: string | null;
+  hearingId?: string | null;
 }): Promise<MatterAttachmentRecord> {
   const body = new FormData();
   body.append("file", input.file);
@@ -1462,6 +1464,9 @@ export async function uploadMatterAttachment(input: {
   }
   if (input.linkedCourtOrderId) {
     body.append("linked_court_order_id", input.linkedCourtOrderId);
+  }
+  if (input.hearingId) {
+    body.append("hearing_id", input.hearingId);
   }
   const data = await apiRequest<unknown>(
     `/api/matters/${input.matterId}/attachments`,
@@ -1478,6 +1483,7 @@ export async function updateMatterAttachmentMetadata(input: {
   document_date?: string | null;
   sequence_index?: number | null;
   linked_court_order_id?: string | null;
+  hearing_id?: string | null;
 }): Promise<MatterAttachmentRecord> {
   const { matterId, attachmentId, ...body } = input;
   const data = await apiRequest<unknown>(
@@ -2324,6 +2330,72 @@ export async function listEmployeeAudit(
 ): Promise<EmployeeAuditResult> {
   return apiRequest<EmployeeAuditResult>(
     `/api/companies/current/employees/${membershipId}/audit`,
+  );
+}
+
+// BUG-048 (Hari 2026-05-11): admin matter-access fan-out per
+// employee. Read happens via this endpoint; the per-matter
+// grant/revoke calls below reuse the existing matter-scoped
+// endpoints so audit + RBAC + validation are unchanged.
+export type EmployeeMatterAccessRow = {
+  matter_id: string;
+  matter_code: string;
+  matter_title: string;
+  restricted_access: boolean;
+  has_grant: boolean;
+  grant_id: string | null;
+  is_assignee: boolean;
+  is_walled: boolean;
+};
+
+export type EmployeeMatterAccessResult = {
+  membership_id: string;
+  matters: EmployeeMatterAccessRow[];
+};
+
+export async function listEmployeeMatterAccess(
+  membershipId: string,
+): Promise<EmployeeMatterAccessResult> {
+  return apiRequest<EmployeeMatterAccessResult>(
+    `/api/companies/current/employees/${membershipId}/matter-access`,
+  );
+}
+
+export async function setMatterRestrictedAccess(input: {
+  matterId: string;
+  restricted: boolean;
+}): Promise<{ matter_id: string; restricted_access: boolean }> {
+  return apiRequest<{ matter_id: string; restricted_access: boolean }>(
+    `/api/matters/${input.matterId}/access/restricted`,
+    { method: "POST", body: { restricted: input.restricted } },
+  );
+}
+
+export async function grantMatterAccess(input: {
+  matterId: string;
+  membershipId: string;
+  reason?: string | null;
+}): Promise<{ id: string; matter_id: string; membership_id: string }> {
+  return apiRequest<{ id: string; matter_id: string; membership_id: string }>(
+    `/api/matters/${input.matterId}/access/grants`,
+    {
+      method: "POST",
+      body: {
+        membership_id: input.membershipId,
+        access_level: "member",
+        reason: input.reason ?? null,
+      },
+    },
+  );
+}
+
+export async function revokeMatterAccess(input: {
+  matterId: string;
+  grantId: string;
+}): Promise<void> {
+  await apiRequest<unknown>(
+    `/api/matters/${input.matterId}/access/grants/${input.grantId}`,
+    { method: "DELETE" },
   );
 }
 

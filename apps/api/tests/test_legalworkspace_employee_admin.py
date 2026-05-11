@@ -576,3 +576,123 @@ def test_employee_role_guards_manager_tenant_and_token_expiry(
         },
     )
     assert expired.status_code == 400
+
+
+def test_employee_matter_access_lists_every_matter_with_grant_state(client: TestClient) -> None:
+    """BUG-048 (Hari 2026-05-11): admin matter-access fan-out endpoint.
+
+    Verifies GET /api/companies/current/employees/{id}/matter-access
+    returns one row per matter in the caller's company, with the
+    correct restricted_access / has_grant / is_assignee / is_walled
+    flags. Also verifies cross-tenant isolation (a different
+    company's matters never leak in) and the membership-not-found
+    404.
+    """
+    owner = _bootstrap(client, slug="bug048-a", email="owner@bug048a.example")
+    owner_token = owner["access_token"]
+
+    member = _create_employee(
+        client,
+        owner_token,
+        email="member@bug048a.example",
+        full_name="Matter Access Member",
+    )
+    membership_id = member["employee"]["membership_id"]
+
+    # Two matters in this company: one open, one restricted-with-grant.
+    open_matter = client.post(
+        "/api/matters/",
+        headers=auth_headers(owner_token),
+        json={
+            "title": "Open matter",
+            "matter_code": "B48-OPEN",
+            "practice_area": "criminal",
+            "forum_level": "high_court",
+            "status": "active",
+        },
+    )
+    assert open_matter.status_code == 200, open_matter.text
+    open_matter_id = open_matter.json()["id"]
+
+    restricted_matter = client.post(
+        "/api/matters/",
+        headers=auth_headers(owner_token),
+        json={
+            "title": "Restricted matter",
+            "matter_code": "B48-RES",
+            "practice_area": "criminal",
+            "forum_level": "high_court",
+            "status": "active",
+        },
+    )
+    assert restricted_matter.status_code == 200, restricted_matter.text
+    restricted_matter_id = restricted_matter.json()["id"]
+
+    restrict_resp = client.post(
+        f"/api/matters/{restricted_matter_id}/access/restricted",
+        headers=auth_headers(owner_token),
+        json={"restricted": True},
+    )
+    assert restrict_resp.status_code == 200, restrict_resp.text
+
+    grant_resp = client.post(
+        f"/api/matters/{restricted_matter_id}/access/grants",
+        headers=auth_headers(owner_token),
+        json={"membership_id": membership_id, "access_level": "member"},
+    )
+    assert grant_resp.status_code == 200, grant_resp.text
+
+    # Fan-out: every matter shows up with the right flags.
+    fanout = client.get(
+        f"/api/companies/current/employees/{membership_id}/matter-access",
+        headers=auth_headers(owner_token),
+    )
+    assert fanout.status_code == 200, fanout.text
+    body = fanout.json()
+    assert body["membership_id"] == membership_id
+    matters_by_id = {m["matter_id"]: m for m in body["matters"]}
+    assert open_matter_id in matters_by_id
+    assert restricted_matter_id in matters_by_id
+
+    open_row = matters_by_id[open_matter_id]
+    assert open_row["restricted_access"] is False
+    assert open_row["has_grant"] is False
+    assert open_row["is_walled"] is False
+
+    restricted_row = matters_by_id[restricted_matter_id]
+    assert restricted_row["restricted_access"] is True
+    assert restricted_row["has_grant"] is True
+    assert restricted_row["grant_id"] is not None
+    assert restricted_row["is_walled"] is False
+
+    # Cross-tenant isolation: a second company's matters never leak in.
+    other = _bootstrap(client, slug="bug048-b", email="owner@bug048b.example")
+    other_token = other["access_token"]
+    other_matter = client.post(
+        "/api/matters/",
+        headers=auth_headers(other_token),
+        json={
+            "title": "Other tenant matter",
+            "matter_code": "B48-OTHER",
+            "practice_area": "criminal",
+            "forum_level": "high_court",
+            "status": "active",
+        },
+    )
+    assert other_matter.status_code == 200, other_matter.text
+    other_matter_id = other_matter.json()["id"]
+
+    fanout_again = client.get(
+        f"/api/companies/current/employees/{membership_id}/matter-access",
+        headers=auth_headers(owner_token),
+    )
+    assert fanout_again.status_code == 200, fanout_again.text
+    leaked_ids = {m["matter_id"] for m in fanout_again.json()["matters"]}
+    assert other_matter_id not in leaked_ids
+
+    # 404 on unknown membership id (same tenant scope).
+    missing = client.get(
+        "/api/companies/current/employees/00000000-0000-0000-0000-000000000000/matter-access",
+        headers=auth_headers(owner_token),
+    )
+    assert missing.status_code == 404, missing.text

@@ -1657,6 +1657,7 @@ async def post_current_company_matter_attachment(
     document_date: Annotated[date | None, Form()] = None,
     sequence_index: Annotated[int | None, Form(ge=0)] = None,
     linked_court_order_id: Annotated[str | None, Form(max_length=36)] = None,
+    hearing_id: Annotated[str | None, Form(max_length=36)] = None,
 ) -> MatterAttachmentRecord:
     attachment, job_id = create_matter_attachment(
         session,
@@ -1670,6 +1671,7 @@ async def post_current_company_matter_attachment(
         document_date=document_date,
         sequence_index=sequence_index,
         linked_court_order_id=linked_court_order_id,
+        hearing_id=hearing_id,
     )
     background_tasks.add_task(run_document_processing_job, job_id)
     return attachment
