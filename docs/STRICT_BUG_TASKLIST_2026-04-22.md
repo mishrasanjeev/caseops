@@ -636,3 +636,35 @@ The audit ran alongside the bug fixes:
   blocked_pending_temporal` literal in the response is the explicit
   declaration so callers cannot mistake bounded manual sync for
   continuous automation.
+
+## Hari 2026-05-11 batch — BUG-042 to BUG-048
+
+Reported on `CaseOpsBugList_Hari11May2026.xlsx` (Downloads). Worktree branch
+`worktree-hari-bugs-2026-05-11`, HEAD commit `91d31d1`. Local Playwright
+proof in `tests/e2e/hari-2026-05-11-bugs.spec.ts` (9/9 PASSED). Prod
+re-run required after `scripts/deploy-prod.sh`. Summary xlsx:
+`C:\Users\mishr\Downloads\CaseOpsBugFixSummary_Hari11May2026.xlsx`.
+
+| ID | Severity | Verdict | Spec | Notes |
+|----|----------|---------|------|-------|
+| BUG-042 | P2 | Properly fixed (local) | `hari-2026-05-11-bugs.spec.ts::185` | View order document button on hearings order list |
+| BUG-043 | P2 | Properly fixed (local, client-side scope) | `hari-2026-05-11-bugs.spec.ts::213` | Search + hearing-filter on documents tab |
+| BUG-044 | P1 | Properly fixed (local) | `hari-2026-05-11-bugs.spec.ts::245+261` | Outlook 409 → Connect Outlook pre-empt + actionable toast |
+| BUG-045 | P2 | Properly fixed (local) — migration required at deploy | `hari-2026-05-11-bugs.spec.ts::286` | `matter_attachments.hearing_id` FK + UI |
+| BUG-046 | P2 | Stale report | `hari-2026-05-11-bugs.spec.ts::351` | BenchStrategyPanel already mounts at `apps/web/app/app/matters/[id]/page.tsx:100` |
+| BUG-047 | P1 | Stale report | `hari-2026-05-11-bugs.spec.ts::371` | Role select ships in both create + edit dialogs |
+| BUG-048 | P1 | Properly fixed (local) | `hari-2026-05-11-bugs.spec.ts::387+455` | Matter access admin panel on EditEmployeeDialog |
+
+Adjacent gaps surfaced by the audit (NOT fixed in this batch — separate
+tickets to be filed):
+
+- **Upload-but-no-view (BUG-042 class).** `contracts/[id]/page.tsx:602-650`
+  only renders View redline for DOCX; PDF/TXT contract attachments have no
+  View affordance. Same pattern as BUG-042.
+- **Raw `apiErrorMessage` on actionable failure (BUG-044 class).** Five
+  highest-value sites where the toast should pre-empt or render an actionable
+  CTA: documents upload 422, contracts upload 422, draft create 429/422,
+  court-sync 400 (no live adapter), calendar visible-range sync 401/403.
+- **Backend exists, no admin UI (BUG-048 class).** `services/custom_roles.py`,
+  `services/notification_rules.py`, `services/conflict_checks.py` all ship
+  REST routes but have no admin page; admins must run SQL to use them.

@@ -2099,6 +2099,14 @@ class MatterAttachment(Base):
         nullable=True,
         index=True,
     )
+    # BUG-045 (Hari 2026-05-11): link evidence to a specific hearing.
+    # Nullable + SET NULL so legacy attachments are unaffected and
+    # deleting a hearing doesn't cascade-delete its evidence.
+    hearing_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matter_hearings.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
@@ -2116,6 +2124,9 @@ class MatterAttachment(Base):
     )
     linked_court_order: Mapped[MatterCourtOrder | None] = relationship(
         foreign_keys=[linked_court_order_id]
+    )
+    hearing: Mapped["MatterHearing | None"] = relationship(
+        foreign_keys=[hearing_id]
     )
 
 

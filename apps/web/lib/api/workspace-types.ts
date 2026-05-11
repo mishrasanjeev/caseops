@@ -67,6 +67,7 @@ export type WorkspaceAttachment = {
   document_date?: string | null;
   sequence_index?: number | null;
   linked_court_order_id?: string | null;
+  hearing_id?: string | null;
   created_at: string;
 };
 

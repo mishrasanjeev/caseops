@@ -638,6 +638,7 @@ class MatterAttachmentRecord(BaseModel):
     document_date: date | None = None
     sequence_index: int | None = None
     linked_court_order_id: str | None = None
+    hearing_id: str | None = None
     created_at: datetime
 
 
@@ -647,6 +648,7 @@ class MatterAttachmentMetadataUpdateRequest(BaseModel):
     document_date: date | None = None
     sequence_index: int | None = Field(default=None, ge=0)
     linked_court_order_id: str | None = Field(default=None, max_length=36)
+    hearing_id: str | None = Field(default=None, max_length=36)
 
 
 class MatterWorkspaceResponse(BaseModel):

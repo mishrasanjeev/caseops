@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Calendar,
   CalendarCheck,
+  Eye,
   Gavel,
   Loader2,
   RefreshCw,
@@ -22,7 +23,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { apiErrorMessage } from "@/lib/api/config";
+import { apiErrorMessage, isApiErrorShape } from "@/lib/api/config";
 import {
   fetchCalendarSyncStatus,
   listMatterReminders,
@@ -103,6 +104,12 @@ export default function MatterHearingsPage() {
       outlookSyncsByHearing.set(sync.source_id, sync);
     }
   }
+  // BUG-044 (Hari 2026-05-11): pre-emptively detect "no Outlook
+  // connection at all" so we render a Connect-Outlook link instead of
+  // a Sync button that we know will 409. Disable the action, not just
+  // the error (per feedback_root_cause_patterns_2026_04_22 rule #5).
+  const hasOutlookConnection =
+    (outlookStatusQuery.data?.connections.length ?? 0) > 0;
   const remindersByHearing = new Map<string, MatterReminderRecord[]>();
   for (const r of remindersQuery.data?.reminders ?? []) {
     const list = remindersByHearing.get(r.hearing_id) ?? [];
@@ -138,6 +145,24 @@ export default function MatterHearingsPage() {
       }
     },
     onError: (err) => {
+      // BUG-044 (Hari 2026-05-11): the backend returns 409 with
+      // detail "Outlook calendar is not connected." when the user has
+      // no Outlook connection. The raw toast tells them what's wrong
+      // but not what to do (memory: feedback_error_copy_principle).
+      // Catch the 409 and render an actionable toast that takes the
+      // user straight to /app/calendar to connect.
+      if (isApiErrorShape(err) && err.status === 409) {
+        toast.error("Outlook calendar isn't connected yet.", {
+          description: "Connect Outlook from the Calendar page, then retry the sync.",
+          action: {
+            label: "Connect Outlook",
+            onClick: () => {
+              window.location.assign("/app/calendar");
+            },
+          },
+        });
+        return;
+      }
       toast.error(apiErrorMessage(err, "Could not sync hearing to Outlook."));
     },
   });
@@ -293,6 +318,7 @@ export default function MatterHearingsPage() {
                       <HearingOutlookSync
                         hearing={h}
                         sync={outlookSyncsByHearing.get(h.id)}
+                        hasConnection={hasOutlookConnection}
                         isPending={
                           outlookSyncMutation.isPending &&
                           outlookSyncMutation.variables === h.id
@@ -345,6 +371,7 @@ export default function MatterHearingsPage() {
                       <HearingOutlookSync
                         hearing={h}
                         sync={outlookSyncsByHearing.get(h.id)}
+                        hasConnection={hasOutlookConnection}
                         isPending={
                           outlookSyncMutation.isPending &&
                           outlookSyncMutation.variables === h.id
@@ -474,6 +501,7 @@ export default function MatterHearingsPage() {
                 <li
                   key={order.id}
                   className="rounded-xl border border-[var(--color-line)] bg-white p-4"
+                  data-testid={`matter-court-order-${order.id}`}
                 >
                   <div className="flex items-baseline justify-between gap-3">
                     <h3 className="text-sm font-semibold text-[var(--color-ink)]">
@@ -497,6 +525,28 @@ export default function MatterHearingsPage() {
                     <p className="mt-1.5 text-sm leading-relaxed text-[var(--color-mute)]">
                       {order.summary}
                     </p>
+                  ) : null}
+                  {/* BUG-042 (Hari 2026-05-11): when an order has an
+                      attached document (uploaded via AddCourtOrderDialog
+                      or the Documents tab's linked-order selector),
+                      surface a View affordance on the hearings page
+                      itself. The order card is the natural place users
+                      look after upload — sending them to the Documents
+                      tab to find their own file is the upload-but-no-
+                      view anti-pattern (memory:
+                      feedback_root_cause_patterns_2026_04_22 #5,
+                      feedback_brutal_bug_fixing_2026_04_26 #2). */}
+                  {order.order_attachment_id ? (
+                    <div className="mt-3">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        href={`/app/matters/${matterId}/documents/${order.order_attachment_id}/view`}
+                        data-testid={`matter-court-order-view-${order.id}`}
+                      >
+                        <Eye className="h-4 w-4" aria-hidden /> View order document
+                      </Button>
+                    </div>
                   ) : null}
                 </li>
               ))}
@@ -525,11 +575,13 @@ export default function MatterHearingsPage() {
 function HearingOutlookSync({
   hearing,
   sync,
+  hasConnection,
   isPending,
   onSync,
 }: {
   hearing: WorkspaceHearing;
   sync: CalendarEventSyncRecord | undefined;
+  hasConnection: boolean;
   isPending: boolean;
   onSync: () => void;
 }) {
@@ -541,6 +593,31 @@ function HearingOutlookSync({
         minute: "2-digit",
       })
     : null;
+  // BUG-044 (Hari 2026-05-11): if the user has no Outlook connection,
+  // the Sync button always 409s. Render a Connect-Outlook link
+  // instead — the action the user actually needs. Disable the broken
+  // action; do not rely on toast copy alone.
+  if (!hasConnection) {
+    return (
+      <div
+        className="mt-3 flex flex-wrap items-center gap-2 text-xs"
+        data-testid={`hearing-outlook-status-${hearing.id}`}
+      >
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          href="/app/calendar"
+          data-testid={`hearing-outlook-connect-${hearing.id}`}
+        >
+          <CalendarCheck className="h-3.5 w-3.5" aria-hidden /> Connect Outlook
+        </Button>
+        <span className="text-[var(--color-mute)]">
+          Connect Outlook to sync this hearing.
+        </span>
+      </div>
+    );
+  }
   return (
     <div
       className="mt-3 flex flex-wrap items-center gap-2 text-xs"

@@ -34,6 +34,7 @@ from caseops_api.schemas.employees import (
     EmployeeImportCommitResponse,
     EmployeeImportJobResponse,
     EmployeeListResponse,
+    EmployeeMatterAccessResponse,
     EmployeeOffboardingCommitResponse,
     EmployeeOffboardingPreviewResponse,
     EmployeeOffboardingRequest,
@@ -64,6 +65,7 @@ from caseops_api.services.employees import (
     get_employee,
     issue_employee_password_reset,
     list_employee_audit,
+    list_employee_matter_access,
     list_employees,
     preview_employee_offboarding,
     resend_employee_setup,
@@ -309,6 +311,27 @@ async def resend_current_company_employee_setup(
     session: DbSession,
 ) -> EmployeeTokenDelivery:
     return resend_employee_setup(
+        session,
+        context=context,
+        membership_id=membership_id,
+    )
+
+
+# BUG-048 (Hari 2026-05-11): admin UI to manage matter-level access
+# per employee. Read-only here — mutations still go through the
+# matter-scoped /api/matters/{id}/access/grants endpoints so the
+# existing audit + RBAC + validation paths are reused.
+@router.get(
+    "/current/employees/{membership_id}/matter-access",
+    response_model=EmployeeMatterAccessResponse,
+    summary="List matter-level access state for one employee (admin)",
+)
+async def current_company_employee_matter_access(
+    membership_id: str,
+    context: UserManager,
+    session: DbSession,
+) -> EmployeeMatterAccessResponse:
+    return list_employee_matter_access(
         session,
         context=context,
         membership_id=membership_id,
