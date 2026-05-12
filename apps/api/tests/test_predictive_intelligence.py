@@ -19,6 +19,7 @@ from caseops_api.db.models import (
     Matter,
     MatterCauseListEntry,
     MatterCourtOrder,
+    ModelRun,
     PredictiveOutcomeAggregateSnapshot,
     PredictiveSignalEvidence,
     PredictiveSignalItem,
@@ -351,6 +352,12 @@ def test_weak_evidence_returns_insufficient_evidence(client: TestClient) -> None
         assert signal["missing_data"]
     assert body["matter_risk_summary"]["status"] == "insufficient_evidence"
     assert body["hearing_prep_scorecard"]["status"] == "insufficient_evidence"
+    assert body["calibrated_signals"]
+    assert all(
+        signal["status"] == "insufficient_evidence"
+        for signal in body["calibrated_signals"]
+    )
+    assert all(signal["observed_rate"] is None for signal in body["calibrated_signals"])
 
 
 def test_summary_only_sources_do_not_support_predictive_markers_or_excerpts() -> None:
@@ -447,6 +454,22 @@ def test_strong_fixture_returns_source_backed_confidence_and_audit(
     assert bench_context["observed_distribution"]
     assert all(item["sample_size"] >= 5 for item in bench_context["observed_distribution"])
     assert "not legal advice" in bench_context["disclaimer"]
+    calibrated = {
+        signal["signal_type"]: signal for signal in body["calibrated_signals"]
+    }
+    calibrated_outcome = calibrated["bench_outcome_tendency"]
+    assert calibrated_outcome["status"] == "supported"
+    assert calibrated_outcome["aggregate_snapshot_id"]
+    assert calibrated_outcome["scope"]["judge_id"] == seeded["judge_id"]
+    assert calibrated_outcome["sample_size"] == 5
+    assert calibrated_outcome["observed_rate"] is not None
+    assert calibrated_outcome["confidence"]["confidence_band_low"] is not None
+    assert calibrated_outcome["confidence"]["confidence_band_high"] is not None
+    assert calibrated_outcome["calibration_level"] == "low"
+    assert calibrated_outcome["evidence"]
+    assert all(evidence["source_id"] for evidence in calibrated_outcome["evidence"])
+    assert "not legal advice" in calibrated_outcome["disclaimer"]
+    assert "observed historical pattern" in calibrated_outcome["limitation_note"].lower()
 
     factory = get_session_factory()
     with factory() as session:
@@ -487,6 +510,68 @@ def test_strong_fixture_returns_source_backed_confidence_and_audit(
             )
         )
         assert audit is not None
+        metadata = json.loads(audit.metadata_json or "{}")
+        assert "bench_outcome_tendency" in metadata["supported_calibrated_signal_types"]
+        assert (
+            session.scalar(
+                select(ModelRun).where(
+                    ModelRun.company_id == company_id,
+                    ModelRun.matter_id == matter_id,
+                    ModelRun.purpose.like("%predictive%"),
+                )
+            )
+            is None
+        )
+
+
+def test_calibrated_signal_requires_source_evidence_before_supported(
+    client: TestClient,
+) -> None:
+    token = str(bootstrap_company(client)["access_token"])
+    _enable_predictive_policy(client, token)
+    matter_id = _create_matter(client, token, "PI-CAL-EVIDENCE")
+    court_name = f"Calibrated Evidence Court {uuid4().hex[:8]}"
+
+    factory = get_session_factory()
+    with factory() as session:
+        matter = session.get(Matter, matter_id)
+        assert matter is not None
+        matter.court_name = court_name
+        snapshot = PredictiveOutcomeAggregateSnapshot(
+            id=str(uuid4()),
+            scope_type="court_forum",
+            scope_key=f"court_forum|{court_name}|high_court|interim_relief_likelihood",
+            court_name=court_name,
+            forum_level="high_court",
+            signal_type="interim_relief_likelihood",
+            sample_size=8,
+            positive_count=6,
+            negative_count=2,
+            neutral_count=0,
+            consistency=0.75,
+            confidence_label="low",
+            confidence_band_low=0.41,
+            confidence_band_high=0.93,
+            evidence_source_ids_json="[]",
+            feature_summary_json=json.dumps({"source_court_names": [court_name]}),
+            status="supported",
+        )
+        session.add(snapshot)
+        session.commit()
+
+    response = _predictive_response(client, token, matter_id)
+
+    assert response.status_code == 200, response.text
+    calibrated = {
+        signal["signal_type"]: signal
+        for signal in response.json()["calibrated_signals"]
+    }
+    signal = calibrated["interim_relief_likelihood"]
+    assert signal["status"] == "insufficient_evidence"
+    assert signal["sample_size"] == 8
+    assert signal["observed_rate"] is None
+    assert signal["evidence"] == []
+    assert "Resolvable source evidence IDs" in json.dumps(signal["missing_data"])
 
 
 def test_no_unsupported_favorability_phrase_or_source_free_supported_signal(

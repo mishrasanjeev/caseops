@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,8 +7,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const {
   completeMockHearingMock,
   fetchCalendarSyncStatusMock,
+  fetchHearingCoachMock,
   fetchMockHearingsMock,
   fetchProceedingIntelligenceMock,
+  generateHearingCoachMock,
   listMatterRemindersMock,
   startMockHearingMock,
   submitMockHearingResponseMock,
@@ -18,8 +20,10 @@ const {
 } = vi.hoisted(() => ({
   completeMockHearingMock: vi.fn(),
   fetchCalendarSyncStatusMock: vi.fn(),
+  fetchHearingCoachMock: vi.fn(),
   fetchMockHearingsMock: vi.fn(),
   fetchProceedingIntelligenceMock: vi.fn(),
+  generateHearingCoachMock: vi.fn(),
   listMatterRemindersMock: vi.fn(),
   startMockHearingMock: vi.fn(),
   submitMockHearingResponseMock: vi.fn(),
@@ -51,8 +55,10 @@ vi.mock("@/lib/api/endpoints", () => ({
   createMatterCourtOrder: vi.fn().mockResolvedValue({ id: "order-new" }),
   uploadMatterAttachment: vi.fn().mockResolvedValue({ id: "att-new" }),
   fetchCalendarSyncStatus: fetchCalendarSyncStatusMock,
+  fetchHearingCoach: fetchHearingCoachMock,
   fetchMockHearings: fetchMockHearingsMock,
   fetchProceedingIntelligence: fetchProceedingIntelligenceMock,
+  generateHearingCoach: generateHearingCoachMock,
   listMatterReminders: listMatterRemindersMock,
   pullMatterCourtSync: vi.fn(),
   startMockHearing: startMockHearingMock,
@@ -140,12 +146,71 @@ function mockHearingSession(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function hearingCoachReport(overrides: Record<string, unknown> = {}) {
+  return {
+    matter_id: "m1",
+    mock_hearing_session_id: "mh1",
+    generated_at: "2026-05-12T10:00:00Z",
+    status: "supported",
+    disclaimer:
+      "Hearing coach is a transcript-first training aid for hearing preparation, not legal advice.",
+    consent_acknowledged: true,
+    metrics: {
+      total_responses: 1,
+      answered_question_count: 1,
+      source_reference_used_count: 1,
+      unsupported_assertion_count: 1,
+      contradiction_count: 0,
+      missing_exhibit_reference_count: 0,
+      evasiveness_marker_count: 0,
+      overlong_response_count: 0,
+      average_clarity_score: 70,
+      average_completeness_score: 65,
+      review_required_count: 1,
+    },
+    feedback_items: [
+      {
+        response_id: "mr1",
+        question_id: "mq1",
+        mock_hearing_session_id: "mh1",
+        source_affidavit_question_id: "aq1",
+        source_affidavit_statement_id: "as1",
+        source_attachment_id: "att1",
+        source_chunk_id: "chunk1",
+        source_chunk_index: 0,
+        page_reference: "page 2",
+        question_text: "Which invoice supports the payment statement?",
+        transcript_excerpt: "Invoice A supports it, with a new Pune warehouse detail.",
+        source_quote: "I state that respondent paid Rs. 10,000 under Invoice A.",
+        answered_question: true,
+        source_reference_used: true,
+        unsupported_assertion_count: 1,
+        contradiction_count: 0,
+        clarity_score: 70,
+        completeness_score: 65,
+        evasiveness_marker: false,
+        overlong_response_marker: false,
+        missing_exhibit_reference: false,
+        review_required: true,
+        feedback: ["The answer addresses the question in typed form."],
+        improvement_checklist: ["Remove new facts unless a linked record supports them."],
+      },
+    ],
+    limitation_notes: [
+      "Uses typed mock-hearing responses and source-backed affidavit question banks only.",
+    ],
+    ...overrides,
+  };
+}
+
 describe("MatterHearingsPage", () => {
   beforeEach(() => {
     completeMockHearingMock.mockReset();
     fetchCalendarSyncStatusMock.mockReset();
+    fetchHearingCoachMock.mockReset();
     fetchMockHearingsMock.mockReset();
     fetchProceedingIntelligenceMock.mockReset();
+    generateHearingCoachMock.mockReset();
     listMatterRemindersMock.mockReset();
     startMockHearingMock.mockReset();
     submitMockHearingResponseMock.mockReset();
@@ -158,6 +223,19 @@ describe("MatterHearingsPage", () => {
         "Mock hearings are source-backed hearing-preparation decision support, not legal advice.",
       sessions: [],
       latest_session: null,
+    });
+    fetchHearingCoachMock.mockResolvedValue({
+      matter_id: "m1",
+      generated_at: "2026-05-12T00:00:00Z",
+      status: "no_mock_hearing_responses",
+      disclaimer:
+        "Hearing coach is a transcript-first training aid for hearing preparation, not legal advice.",
+      consent_required: true,
+      latest_session_id: null,
+      response_count: 0,
+      limitation_notes: [
+        "Uses typed mock-hearing responses and source-backed affidavit question banks only.",
+      ],
     });
     fetchProceedingIntelligenceMock.mockResolvedValue({
       matter_id: "m1",
@@ -681,6 +759,114 @@ describe("MatterHearingsPage", () => {
     expect(section).toHaveTextContent("not legal advice");
     expect(section.textContent).not.toMatch(
       /guaranteed|will win|emotional|psychological|mental state|biometric|voice stress|voice/i,
+    );
+  });
+
+  it("renders hearing coach consent gate and source-linked report", async () => {
+    useCapabilityMock.mockImplementation((cap: string) => cap === "hearing_packs:generate");
+    const answeredSession = mockHearingSession({
+      current_question_id: null,
+      questions: [
+        {
+          ...mockHearingSession().questions[0],
+          status: "answered",
+          responses: [
+            {
+              id: "mr1",
+              session_id: "mh1",
+              question_id: "mq1",
+              matter_id: "m1",
+              response_text: "Invoice A supports it, with a new Pune warehouse detail.",
+              response_word_count: 9,
+              elapsed_seconds: null,
+              answered_question: true,
+              consistency_with_affidavit: true,
+              unsupported_assertion_added: true,
+              missing_document_reference: false,
+              contradiction_with_source: false,
+              response_completeness: "medium",
+              confidence_label: "medium",
+              feedback_text: "Response adds facts not visible in the source quote.",
+              source_quote: "I state that respondent paid Rs. 10,000 under Invoice A.",
+              review_required: true,
+              review_status: "review_required",
+              created_at: "2026-05-11T10:02:00Z",
+              updated_at: "2026-05-11T10:02:00Z",
+            },
+          ],
+        },
+      ],
+    });
+    fetchMockHearingsMock.mockResolvedValue({
+      matter_id: "m1",
+      generated_at: "2026-05-11T10:00:00Z",
+      disclaimer:
+        "Mock hearings are source-backed hearing-preparation decision support, not legal advice.",
+      sessions: [answeredSession],
+      latest_session: answeredSession,
+    });
+    fetchHearingCoachMock.mockResolvedValue({
+      matter_id: "m1",
+      generated_at: "2026-05-12T00:00:00Z",
+      status: "consent_required",
+      disclaimer:
+        "Hearing coach is a transcript-first training aid for hearing preparation, not legal advice.",
+      consent_required: true,
+      latest_session_id: "mh1",
+      response_count: 1,
+      limitation_notes: [
+        "Uses typed mock-hearing responses and source-backed affidavit question banks only.",
+      ],
+    });
+    generateHearingCoachMock.mockResolvedValue(hearingCoachReport());
+
+    render(withClient(<MatterHearingsPage />));
+
+    const section = await screen.findByTestId("hearing-coach-section");
+    expect(section).toHaveTextContent("Transcript-first training aid");
+    const button = await screen.findByTestId("hearing-coach-generate");
+    expect(button).toBeDisabled();
+    await userEvent.click(await screen.findByTestId("hearing-coach-consent"));
+    expect(button).not.toBeDisabled();
+    await userEvent.click(button);
+
+    expect(generateHearingCoachMock).toHaveBeenCalledWith({
+      matterId: "m1",
+      sessionId: "mh1",
+      acknowledged: true,
+    });
+    const report = await screen.findByTestId("hearing-coach-report");
+    expect(report).toHaveTextContent("Clarity");
+    expect(report).toHaveTextContent("Source refs");
+    expect(report).toHaveTextContent("Invoice A supports it");
+    expect(report).toHaveTextContent("Remove new facts");
+    expect(within(report).getByRole("link", { name: "View source" })).toHaveAttribute(
+      "href",
+      "/app/matters/m1/documents/att1/view",
+    );
+  });
+
+  it("renders hearing coach empty and error states", async () => {
+    const view = render(withClient(<MatterHearingsPage />));
+
+    expect(await screen.findByText("No typed responses yet")).toBeInTheDocument();
+    view.unmount();
+
+    fetchHearingCoachMock.mockRejectedValue(new Error("status failed"));
+    render(withClient(<MatterHearingsPage />));
+
+    expect(
+      await screen.findByText("Hearing coach status could not be loaded."),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps hearing coach copy within transcript-first legal-safety boundaries", async () => {
+    render(withClient(<MatterHearingsPage />));
+
+    const section = await screen.findByTestId("hearing-coach-section");
+    expect(section).toHaveTextContent("not legal advice");
+    expect(section.textContent).not.toMatch(
+      /guaranteed|will win|will lose|win probability|loss probability|judge reputation|judge likes|judge dislikes|favorable judge|emotional|psychological|mental|biometric|stress|sentiment|personality|lie detection|voice|audio/i,
     );
   });
 });

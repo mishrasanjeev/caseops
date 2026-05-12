@@ -1,6 +1,7 @@
 """LI-S6 matter-level review queue for source-backed litigation intelligence."""
 from __future__ import annotations
 
+import re
 from collections import Counter
 from collections.abc import Iterable
 from datetime import UTC, datetime
@@ -12,7 +13,9 @@ from sqlalchemy.orm import Session
 from caseops_api.db.models import (
     AffidavitQuestion,
     AffidavitStatement,
+    AuditEvent,
     AuditResult,
+    LitigationIntelligenceReviewAction,
     Matter,
     MatterAttachment,
     MatterCourtOrder,
@@ -25,9 +28,12 @@ from caseops_api.db.models import (
 )
 from caseops_api.schemas.litigation_intelligence import (
     LitigationIntelligenceReviewItem,
+    LitigationIntelligenceReviewMutationRequest,
+    LitigationIntelligenceReviewMutationResponse,
     LitigationIntelligenceReviewResponse,
     LitigationIntelligenceReviewSource,
     LitigationIntelligenceReviewSummary,
+    LitigationReviewItemTypeLiteral,
     LitigationReviewPriorityLiteral,
 )
 from caseops_api.services.audit import record_from_context
@@ -41,6 +47,54 @@ DISCLAIMER = (
 )
 
 REVIEW_REQUIRED_STATUSES = {"review_required", "auto_promoted", "insufficient_evidence"}
+TERMINAL_REVIEW_ACTIONS = {"mark_reviewed", "accept", "reject"}
+TERMINAL_STATUS_BY_ACTION = {
+    "mark_reviewed": "reviewed",
+    "accept": "accepted",
+    "reject": "rejected",
+}
+UNSAFE_REVIEW_NOTE_PATTERNS = tuple(
+    re.compile(pattern, re.IGNORECASE)
+    for pattern in (
+        r"\bguaranteed(?:\s+(?:outcome|win|result))?\b",
+        r"\bwill\s+win\b",
+        r"\bwill\s+lose\b",
+        r"\bjudge\s+(?:likes|dislikes)\b",
+        r"\bjudge\s+reputation\b",
+        r"\bfavou?rable\s+judge\b",
+        r"\bjudge\s+is\s+favou?rable\b",
+        r"\bwin\s+probability\b",
+        r"\bloss\s+probability\b",
+        r"\bwin\s*/\s*loss\b",
+        r"\bprobability\s+of\s+(?:winning|success)\b",
+        r"\bsuccess\s+probability\b",
+        r"\bemotional\s+(?:instability|state)\b",
+        r"\bpsychological(?:\s+(?:diagnosis|profile|state|score))?\b",
+        r"\bbiometric(?:\s+(?:score|scoring|claim))?\b",
+        r"\bmental[-\s]?health\b",
+        r"\bvoice\s+stress\b",
+        r"\bstress\s+score\b",
+        r"\bcredibility\s+score\b",
+    )
+)
+ITEM_ID_PREFIX_BY_TYPE: dict[str, str] = {
+    "proceeding_signal": "proceeding",
+    "affidavit_statement": "affidavit-statement",
+    "affidavit_question": "affidavit-question",
+    "mock_hearing_session": "mock-hearing-session",
+    "mock_hearing_response": "mock-hearing-response",
+    "predictive_signal": "predictive-signal",
+    "bench_context": "bench-context",
+}
+SOURCE_TYPE_BY_ITEM_TYPE: dict[str, str] = {
+    "proceeding_signal": "matter_proceeding_signal",
+    "affidavit_statement": "affidavit_statement",
+    "affidavit_question": "affidavit_question",
+    "mock_hearing_session": "mock_hearing_session",
+    "mock_hearing_response": "mock_hearing_response",
+    "predictive_signal": "predictive_signal_item",
+    "bench_context": "predictive_signal_run",
+}
 
 
 def build_litigation_intelligence_review(
@@ -57,6 +111,7 @@ def build_litigation_intelligence_review(
     items.extend(_mock_hearing_items(session, matter))
     items.extend(_predictive_items(session, matter))
     items.sort(key=_sort_key)
+    items = _apply_review_actions(session, matter, items)
 
     record_from_context(
         session,
@@ -85,6 +140,134 @@ def build_litigation_intelligence_review(
     )
 
 
+def mutate_litigation_intelligence_review_item(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+    payload: LitigationIntelligenceReviewMutationRequest,
+) -> LitigationIntelligenceReviewMutationResponse:
+    matter = _load_matter(session, context=context, matter_id=matter_id)
+    source_id = _parse_review_item_id(payload.item_id, payload.item_type)
+    target = _load_review_target(
+        session,
+        matter=matter,
+        item_type=payload.item_type,
+        source_id=source_id,
+    )
+    latest_action = _latest_action_for_item(
+        session,
+        matter=matter,
+        item_type=payload.item_type,
+        item_id=payload.item_id,
+    )
+    note = _normalize_note(payload.note)
+    if latest_action is not None and latest_action.action in TERMINAL_REVIEW_ACTIONS:
+        if payload.action != latest_action.action:
+            source_type = SOURCE_TYPE_BY_ITEM_TYPE[payload.item_type]
+            before_status = latest_action.status_after
+            _record_review_action_audit(
+                session,
+                context=context,
+                matter=matter,
+                item_id=payload.item_id,
+                item_type=payload.item_type,
+                source_type=source_type,
+                source_id=source_id,
+                action=payload.action,
+                before_status=before_status,
+                after_status=before_status,
+                note=note,
+                applied=False,
+                no_op_reason="conflict_terminal_state",
+                conflict_reason="conflict_terminal_state",
+                result=AuditResult.FAILED,
+            )
+            session.commit()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "conflict_terminal_state: review item already has terminal "
+                    f"action {latest_action.action}; requested {payload.action}."
+                ),
+            )
+        before_status = latest_action.status_after
+    else:
+        before_status = (
+            latest_action.status_after
+            if latest_action is not None
+            else _target_status(payload.item_type, target)
+        )
+    after_status = before_status
+    applied = True
+    no_op_reason: str | None = None
+
+    if payload.action in TERMINAL_REVIEW_ACTIONS:
+        after_status = TERMINAL_STATUS_BY_ACTION[payload.action]
+        applied = before_status != after_status
+        if applied:
+            _apply_terminal_review_status(payload.item_type, target)
+        else:
+            no_op_reason = "repeat_terminal_action"
+    elif (
+        latest_action is not None
+        and latest_action.action == payload.action
+        and (latest_action.note or None) == note
+    ):
+        applied = False
+        no_op_reason = "repeat_note"
+
+    action_row = LitigationIntelligenceReviewAction(
+        company_id=matter.company_id,
+        matter_id=matter.id,
+        item_type=payload.item_type,
+        item_id=payload.item_id,
+        source_type=SOURCE_TYPE_BY_ITEM_TYPE[payload.item_type],
+        source_id=source_id,
+        action=payload.action,
+        note=note,
+        status_before=before_status,
+        status_after=after_status,
+        actor_membership_id=context.membership.id,
+        created_at=datetime.now(UTC),
+    )
+    session.add(action_row)
+    session.flush()
+
+    audit_event = _record_review_action_audit(
+        session,
+        context=context,
+        matter=matter,
+        item_id=payload.item_id,
+        item_type=payload.item_type,
+        source_type=action_row.source_type,
+        source_id=source_id,
+        action=payload.action,
+        before_status=before_status,
+        after_status=after_status,
+        note=note,
+        applied=applied,
+        no_op_reason=no_op_reason,
+    )
+    session.commit()
+
+    return LitigationIntelligenceReviewMutationResponse(
+        matter_id=matter.id,
+        item_id=payload.item_id,
+        item_type=payload.item_type,
+        source_type=action_row.source_type,
+        source_id=source_id,
+        action=payload.action,
+        status_before=before_status,
+        status_after=after_status,
+        note=note,
+        no_op_reason=no_op_reason,
+        audit_event_id=audit_event.id,
+        applied=applied,
+        updated_at=action_row.created_at,
+    )
+
+
 def _load_matter(
     session: Session,
     *,
@@ -101,6 +284,50 @@ def _load_matter(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Matter not found.")
     assert_access(session, context=context, matter=matter)
     return matter
+
+
+def _record_review_action_audit(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter: Matter,
+    item_id: str,
+    item_type: str,
+    source_type: str,
+    source_id: str,
+    action: str,
+    before_status: str,
+    after_status: str,
+    note: str | None,
+    applied: bool,
+    no_op_reason: str | None = None,
+    conflict_reason: str | None = None,
+    result: str = AuditResult.SUCCESS,
+) -> AuditEvent:
+    metadata = {
+        "item_id": item_id,
+        "item_type": item_type,
+        "source_type": source_type,
+        "source_id": source_id,
+        "action": action,
+        "before": {"status": before_status},
+        "after": {"status": after_status, "note": note},
+        "applied": applied,
+        "idempotent": no_op_reason in {"repeat_terminal_action", "repeat_note"},
+        "no_op_reason": no_op_reason,
+    }
+    if conflict_reason is not None:
+        metadata["conflict_reason"] = conflict_reason
+    return record_from_context(
+        session,
+        context,
+        action="litigation_intelligence_review.item_mutated",
+        target_type=source_type,
+        target_id=source_id,
+        matter_id=matter.id,
+        result=result,
+        metadata=metadata,
+    )
 
 
 def _proceeding_items(
@@ -479,6 +706,224 @@ def _predictive_evidence_by_item(
     return evidence
 
 
+def _apply_review_actions(
+    session: Session,
+    matter: Matter,
+    items: list[LitigationIntelligenceReviewItem],
+) -> list[LitigationIntelligenceReviewItem]:
+    latest = _latest_review_actions_by_item(session, matter)
+    out: list[LitigationIntelligenceReviewItem] = []
+    for item in items:
+        action = latest.get((item.item_type, item.id))
+        if action is None:
+            out.append(item)
+            continue
+        if action.action in TERMINAL_REVIEW_ACTIONS:
+            continue
+        item.review_note = action.note
+        item.last_review_action = action.action  # type: ignore[assignment]
+        item.reviewed_at = action.created_at
+        item.reviewed_by_membership_id = action.actor_membership_id
+        out.append(item)
+    return out
+
+
+def _latest_review_actions_by_item(
+    session: Session,
+    matter: Matter,
+) -> dict[tuple[str, str], LitigationIntelligenceReviewAction]:
+    latest: dict[tuple[str, str], LitigationIntelligenceReviewAction] = {}
+    rows = session.scalars(
+        select(LitigationIntelligenceReviewAction)
+        .where(
+            LitigationIntelligenceReviewAction.company_id == matter.company_id,
+            LitigationIntelligenceReviewAction.matter_id == matter.id,
+        )
+        .order_by(LitigationIntelligenceReviewAction.created_at.desc())
+    )
+    for row in rows:
+        key = (row.item_type, row.item_id)
+        latest.setdefault(key, row)
+    return latest
+
+
+def _latest_action_for_item(
+    session: Session,
+    matter: Matter,
+    *,
+    item_type: LitigationReviewItemTypeLiteral,
+    item_id: str,
+) -> LitigationIntelligenceReviewAction | None:
+    return session.scalar(
+        select(LitigationIntelligenceReviewAction)
+        .where(
+            LitigationIntelligenceReviewAction.company_id == matter.company_id,
+            LitigationIntelligenceReviewAction.matter_id == matter.id,
+            LitigationIntelligenceReviewAction.item_type == item_type,
+            LitigationIntelligenceReviewAction.item_id == item_id,
+        )
+        .order_by(LitigationIntelligenceReviewAction.created_at.desc())
+        .limit(1)
+    )
+
+
+def _parse_review_item_id(
+    item_id: str,
+    item_type: LitigationReviewItemTypeLiteral,
+) -> str:
+    prefix = ITEM_ID_PREFIX_BY_TYPE[item_type]
+    expected = f"{prefix}:"
+    if not item_id.startswith(expected):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Review item id does not match item_type.",
+        )
+    source_id = item_id[len(expected) :].strip()
+    if not source_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Review item id is missing a source id.",
+        )
+    return source_id
+
+
+def _load_review_target(
+    session: Session,
+    *,
+    matter: Matter,
+    item_type: LitigationReviewItemTypeLiteral,
+    source_id: str,
+) -> object:
+    target: object | None
+    if item_type == "proceeding_signal":
+        target = session.scalar(
+            select(MatterProceedingSignal).where(
+                MatterProceedingSignal.id == source_id,
+                MatterProceedingSignal.company_id == matter.company_id,
+                MatterProceedingSignal.matter_id == matter.id,
+            )
+        )
+    elif item_type == "affidavit_statement":
+        target = session.scalar(
+            select(AffidavitStatement).where(
+                AffidavitStatement.id == source_id,
+                AffidavitStatement.company_id == matter.company_id,
+                AffidavitStatement.matter_id == matter.id,
+            )
+        )
+    elif item_type == "affidavit_question":
+        target = session.scalar(
+            select(AffidavitQuestion).where(
+                AffidavitQuestion.id == source_id,
+                AffidavitQuestion.company_id == matter.company_id,
+                AffidavitQuestion.matter_id == matter.id,
+            )
+        )
+    elif item_type == "mock_hearing_session":
+        target = session.scalar(
+            select(MockHearingSession).where(
+                MockHearingSession.id == source_id,
+                MockHearingSession.company_id == matter.company_id,
+                MockHearingSession.matter_id == matter.id,
+            )
+        )
+    elif item_type == "mock_hearing_response":
+        target = session.scalar(
+            select(MockHearingResponse).where(
+                MockHearingResponse.id == source_id,
+                MockHearingResponse.company_id == matter.company_id,
+                MockHearingResponse.matter_id == matter.id,
+            )
+        )
+    elif item_type == "predictive_signal":
+        target = session.scalar(
+            select(PredictiveSignalItem).where(
+                PredictiveSignalItem.id == source_id,
+                PredictiveSignalItem.company_id == matter.company_id,
+                PredictiveSignalItem.matter_id == matter.id,
+            )
+        )
+    elif item_type == "bench_context":
+        target = session.scalar(
+            select(PredictiveSignalRun).where(
+                PredictiveSignalRun.id == source_id,
+                PredictiveSignalRun.company_id == matter.company_id,
+                PredictiveSignalRun.matter_id == matter.id,
+            )
+        )
+    else:
+        target = None
+    if target is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Review item not found.",
+        )
+    return target
+
+
+def _target_status(
+    item_type: LitigationReviewItemTypeLiteral,
+    target: object,
+) -> str:
+    if item_type == "bench_context" and isinstance(target, PredictiveSignalRun):
+        return _bench_context_status(target)
+    status_value = getattr(target, "review_status", None)
+    if status_value is not None:
+        return str(status_value)
+    status_value = getattr(target, "status", None)
+    if status_value is not None:
+        return str(status_value)
+    return "supported"
+
+
+def _apply_terminal_review_status(
+    item_type: LitigationReviewItemTypeLiteral,
+    target: object,
+) -> None:
+    if isinstance(
+        target,
+        (
+            MatterProceedingSignal,
+            AffidavitStatement,
+            AffidavitQuestion,
+            MockHearingSession,
+            MockHearingResponse,
+        ),
+    ):
+        target.review_status = "reviewed"
+    if isinstance(target, (AffidavitQuestion, MockHearingResponse)):
+        target.review_required = False
+
+
+def _normalize_note(note: str | None) -> str | None:
+    if note is None:
+        return None
+    stripped = note.strip()
+    if not stripped:
+        return None
+    _assert_safe_review_note(stripped)
+    return stripped
+
+
+def _assert_safe_review_note(note: str) -> None:
+    lowered = note.casefold()
+    if "legal advice" in lowered and "not legal advice" not in lowered:
+        raise _unsafe_review_note_exception()
+    for pattern in UNSAFE_REVIEW_NOTE_PATTERNS:
+        if pattern.search(note):
+            raise _unsafe_review_note_exception()
+
+
+def _unsafe_review_note_exception() -> HTTPException:
+    return HTTPException(
+        status_code=422,
+        detail=(
+            "Review note contains unsupported prediction, judge-reputation, "
+            "legal-advice, or biometric/psychological language."
+        ),
+    )
+
+
 def _predictive_item_source(
     item: PredictiveSignalItem,
     run: PredictiveSignalRun,
@@ -604,4 +1049,7 @@ def _title_from_key(value: str) -> str:
     return value.replace("_", " ").strip().title()
 
 
-__all__ = ["build_litigation_intelligence_review"]
+__all__ = [
+    "build_litigation_intelligence_review",
+    "mutate_litigation_intelligence_review_item",
+]

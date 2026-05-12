@@ -93,6 +93,19 @@ class AuthoritySourceAdapter:
         return self.puller(max_documents=max_documents)
 
 
+SOURCE_READINESS_INGEST_READY = "ingest_ready"
+SOURCE_READINESS_PROOF_REQUIRED = "proof_required"
+SOURCE_READINESS_BLOCKED_CAPTCHA_OR_SESSION = "blocked_captcha_or_session"
+SOURCE_READINESS_BLOCKED_LICENSE_OR_UNKNOWN = "blocked_license_or_unknown"
+SOURCE_READINESS_MANUAL_OR_PARTNER_ONLY = "manual_or_partner_only"
+
+SOURCE_PROOF_VERIFIED = "verified"
+SOURCE_PROOF_REQUIRED = "proof_required"
+SOURCE_PROOF_BLOCKED = "blocked"
+SOURCE_PROOF_MANUAL_OR_PARTNER_ONLY = "manual_or_partner_only"
+SOURCE_PROOF_LICENSE_UNKNOWN = "license_unknown"
+
+
 @dataclass(frozen=True, slots=True)
 class LegalSourceRegistryEntry:
     source_key: str
@@ -110,6 +123,29 @@ class LegalSourceRegistryEntry:
     last_checked_at: str | None
     last_checked_status: str
     notes: str
+    readiness_status: str = SOURCE_READINESS_PROOF_REQUIRED
+    proof_status: str = SOURCE_PROOF_REQUIRED
+    blocked_reason: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class LegalSourceReadiness:
+    source_key: str
+    source_name: str
+    source_category: str
+    jurisdiction: str
+    court_or_forum: str
+    source_type: str
+    access_mode: str
+    captcha_session_gated: bool
+    adapter_available: bool
+    allowed_for_public_corpus: bool
+    allowed_for_predictive_aggregates: bool
+    readiness_status: str
+    proof_status: str
+    blocked_reason: str | None
+    lineage_requirements: tuple[str, ...]
+    notes: str
 
 
 SOURCE_CATEGORY_SUPREME_COURT = "supreme_court"
@@ -126,6 +162,7 @@ SOURCE_TYPE_LICENSED = "licensed"
 SOURCE_TYPE_MANUAL = "manual"
 SOURCE_TYPE_INTERNAL = "internal"
 SOURCE_TYPE_TEST = "test"
+SOURCE_TYPE_UNLICENSED = "unlicensed"
 
 
 def _compact(value: str) -> str:
@@ -921,6 +958,8 @@ LEGAL_SOURCE_REGISTRY_ENTRIES: tuple[LegalSourceRegistryEntry, ...] = (
             "Official public latest-orders feed. Automated pulls remain bounded by "
             "adapter limits."
         ),
+        readiness_status=SOURCE_READINESS_INGEST_READY,
+        proof_status=SOURCE_PROOF_VERIFIED,
     ),
     LegalSourceRegistryEntry(
         source_key="delhi_high_court_recent_judgments",
@@ -938,6 +977,8 @@ LEGAL_SOURCE_REGISTRY_ENTRIES: tuple[LegalSourceRegistryEntry, ...] = (
         last_checked_at=None,
         last_checked_status="adapter_supported",
         notes="Official public court page with recent judgment PDF links.",
+        readiness_status=SOURCE_READINESS_INGEST_READY,
+        proof_status=SOURCE_PROOF_VERIFIED,
     ),
     LegalSourceRegistryEntry(
         source_key="bombay_high_court_recent_orders_judgments",
@@ -955,6 +996,8 @@ LEGAL_SOURCE_REGISTRY_ENTRIES: tuple[LegalSourceRegistryEntry, ...] = (
         last_checked_at=None,
         last_checked_status="adapter_supported",
         notes="Official public court feed for recent order and judgment PDFs.",
+        readiness_status=SOURCE_READINESS_INGEST_READY,
+        proof_status=SOURCE_PROOF_VERIFIED,
     ),
     LegalSourceRegistryEntry(
         source_key="karnataka_high_court_latest_judgments",
@@ -972,6 +1015,8 @@ LEGAL_SOURCE_REGISTRY_ENTRIES: tuple[LegalSourceRegistryEntry, ...] = (
         last_checked_at=None,
         last_checked_status="adapter_supported",
         notes="Official public latest judgments page.",
+        readiness_status=SOURCE_READINESS_INGEST_READY,
+        proof_status=SOURCE_PROOF_VERIFIED,
     ),
     LegalSourceRegistryEntry(
         source_key="telangana_high_court_judgments",
@@ -989,6 +1034,8 @@ LEGAL_SOURCE_REGISTRY_ENTRIES: tuple[LegalSourceRegistryEntry, ...] = (
         last_checked_at=None,
         last_checked_status="adapter_supported",
         notes="Official public e-HC judgment rail.",
+        readiness_status=SOURCE_READINESS_INGEST_READY,
+        proof_status=SOURCE_PROOF_VERIFIED,
     ),
     LegalSourceRegistryEntry(
         source_key="madras_high_court_operational_orders",
@@ -1009,6 +1056,8 @@ LEGAL_SOURCE_REGISTRY_ENTRIES: tuple[LegalSourceRegistryEntry, ...] = (
             "Only openly published operational PDFs are supported; the judgment "
             "search surface remains captcha-gated and is not automated."
         ),
+        readiness_status=SOURCE_READINESS_INGEST_READY,
+        proof_status=SOURCE_PROOF_VERIFIED,
     ),
     LegalSourceRegistryEntry(
         source_key="ecourts_district_court_judgments",
@@ -1029,6 +1078,9 @@ LEGAL_SOURCE_REGISTRY_ENTRIES: tuple[LegalSourceRegistryEntry, ...] = (
             "Do not scrape captcha/session-gated eCourts pages. Enable only after an "
             "official API, licensed feed, or manual lineage-safe workflow is verified."
         ),
+        readiness_status=SOURCE_READINESS_BLOCKED_CAPTCHA_OR_SESSION,
+        proof_status=SOURCE_PROOF_BLOCKED,
+        blocked_reason="captcha_or_session_gated",
     ),
     LegalSourceRegistryEntry(
         source_key="ecourts_session_court_orders",
@@ -1049,6 +1101,9 @@ LEGAL_SOURCE_REGISTRY_ENTRIES: tuple[LegalSourceRegistryEntry, ...] = (
             "Session court automation is blocked until lawful non-captcha access and "
             "source quality proof exist."
         ),
+        readiness_status=SOURCE_READINESS_BLOCKED_CAPTCHA_OR_SESSION,
+        proof_status=SOURCE_PROOF_BLOCKED,
+        blocked_reason="captcha_or_session_gated",
     ),
     LegalSourceRegistryEntry(
         source_key="nclt_orders_registry",
@@ -1241,6 +1296,39 @@ LEGAL_SOURCE_REGISTRY_ENTRIES: tuple[LegalSourceRegistryEntry, ...] = (
             "Arbitration materials require explicit license or tenant-scoped manual "
             "lineage review before use. They are not public corpus or public aggregate sources."
         ),
+        readiness_status=SOURCE_READINESS_MANUAL_OR_PARTNER_ONLY,
+        proof_status=SOURCE_PROOF_MANUAL_OR_PARTNER_ONLY,
+        blocked_reason="manual_or_partner_only",
+    ),
+    LegalSourceRegistryEntry(
+        source_key="third_party_case_database_unlicensed",
+        source_name="Unverified third-party case database",
+        jurisdiction="India",
+        court_or_forum="Third-party case law database",
+        source_category=SOURCE_CATEGORY_HIGH_COURT,
+        source_type=SOURCE_TYPE_UNLICENSED,
+        adapter_available=False,
+        access_mode="blocked_license_or_unknown",
+        captcha_session_gated=False,
+        allowed_for_public_corpus=False,
+        allowed_for_predictive_aggregates=False,
+        lineage_requirements=(
+            "source_key",
+            "license_contract_reference",
+            "permitted_use_review",
+            "document_reference",
+            "review_status",
+        ),
+        last_checked_at=None,
+        last_checked_status="blocked_license_or_unknown",
+        notes=(
+            "Placeholder for non-official or unlicensed legal databases. They cannot "
+            "enter public corpus or predictive aggregates without an explicit license "
+            "and source-quality proof."
+        ),
+        readiness_status=SOURCE_READINESS_BLOCKED_LICENSE_OR_UNKNOWN,
+        proof_status=SOURCE_PROOF_LICENSE_UNKNOWN,
+        blocked_reason="license_or_terms_not_verified",
     ),
     LegalSourceRegistryEntry(
         source_key="manual_authority_upload",
@@ -1266,6 +1354,9 @@ LEGAL_SOURCE_REGISTRY_ENTRIES: tuple[LegalSourceRegistryEntry, ...] = (
             "Manual tenant uploads stay tenant-scoped unless a separate licensed/public "
             "source review promotes them."
         ),
+        readiness_status=SOURCE_READINESS_MANUAL_OR_PARTNER_ONLY,
+        proof_status=SOURCE_PROOF_MANUAL_OR_PARTNER_ONLY,
+        blocked_reason="manual_tenant_scoped_source",
     ),
 )
 
@@ -1274,8 +1365,80 @@ LEGAL_SOURCE_REGISTRY_BY_KEY = {
 }
 
 
+def _source_blocked_reason(entry: LegalSourceRegistryEntry | None) -> str:
+    if entry is None:
+        return "unknown_source"
+    if entry.blocked_reason:
+        return entry.blocked_reason
+    if entry.captcha_session_gated:
+        return "captcha_or_session_gated"
+    if entry.source_type == SOURCE_TYPE_UNLICENSED:
+        return "license_or_terms_not_verified"
+    if entry.source_type not in {SOURCE_TYPE_OFFICIAL, SOURCE_TYPE_LICENSED}:
+        return "source_not_official_or_licensed"
+    if not entry.adapter_available:
+        return "adapter_or_parser_proof_required"
+    if not entry.allowed_for_public_corpus:
+        return "public_corpus_not_allowed"
+    return "none"
+
+
+def _readiness_for_entry(entry: LegalSourceRegistryEntry) -> LegalSourceReadiness:
+    blocked_reason = None
+    if entry.readiness_status != SOURCE_READINESS_INGEST_READY:
+        blocked_reason = _source_blocked_reason(entry)
+    return LegalSourceReadiness(
+        source_key=entry.source_key,
+        source_name=entry.source_name,
+        source_category=entry.source_category,
+        jurisdiction=entry.jurisdiction,
+        court_or_forum=entry.court_or_forum,
+        source_type=entry.source_type,
+        access_mode=entry.access_mode,
+        captcha_session_gated=entry.captcha_session_gated,
+        adapter_available=entry.adapter_available,
+        allowed_for_public_corpus=entry.allowed_for_public_corpus,
+        allowed_for_predictive_aggregates=entry.allowed_for_predictive_aggregates,
+        readiness_status=entry.readiness_status,
+        proof_status=entry.proof_status,
+        blocked_reason=blocked_reason,
+        lineage_requirements=entry.lineage_requirements,
+        notes=entry.notes,
+    )
+
+
+def get_legal_source_readiness(source_key: str) -> LegalSourceReadiness | None:
+    entry = get_legal_source_registry_entry(source_key)
+    if entry is None:
+        return None
+    return _readiness_for_entry(entry)
+
+
+def list_legal_source_readiness() -> list[LegalSourceReadiness]:
+    return [_readiness_for_entry(entry) for entry in list_legal_source_registry_entries()]
+
+
+def assert_source_adapter_ingest_ready(source_key: str) -> LegalSourceRegistryEntry:
+    entry = get_legal_source_registry_entry(source_key)
+    if entry is None:
+        raise ValueError(f"Source is not ingest-ready: {source_key} (unknown_source)")
+    if not _is_allowed_automated_public_source(entry, predictive=False):
+        raise ValueError(
+            "Source is not ingest-ready: "
+            f"{source_key} ({entry.readiness_status}; {_source_blocked_reason(entry)})"
+        )
+    if source_key.strip() not in ADAPTERS:
+        raise ValueError(
+            "Source is not ingest-ready: "
+            f"{source_key} ({entry.readiness_status}; adapter_contract_missing)"
+        )
+    return entry
+
+
 def get_authority_source_adapter(source: str) -> AuthoritySourceAdapter:
-    adapter = ADAPTERS.get(source.strip())
+    source_key = source.strip()
+    assert_source_adapter_ingest_ready(source_key)
+    adapter = ADAPTERS.get(source_key)
     if adapter is None:
         raise ValueError(f"Unsupported authority source: {source}")
     return adapter
@@ -1303,6 +1466,10 @@ def _is_allowed_automated_public_source(
     predictive: bool,
 ) -> bool:
     if entry is None:
+        return False
+    if entry.readiness_status != SOURCE_READINESS_INGEST_READY:
+        return False
+    if entry.proof_status != SOURCE_PROOF_VERIFIED:
         return False
     if entry.source_type not in {SOURCE_TYPE_OFFICIAL, SOURCE_TYPE_LICENSED}:
         return False

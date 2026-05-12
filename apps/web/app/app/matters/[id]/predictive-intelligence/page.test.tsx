@@ -174,6 +174,60 @@ const SUPPORTED_RESPONSE = {
     disclaimer:
       "Predictive intelligence is decision support based on indexed sources only, not legal advice.",
   },
+  calibrated_signals: [
+    {
+      signal_type: "interim_relief_likelihood",
+      label: "Interim relief likelihood",
+      status: "supported" as const,
+      scope: {
+        scope_type: "judge",
+        scope_key: "judge:j-1|signal:interim_relief_likelihood",
+        court_name: "High Court of Delhi",
+        forum_level: "high_court",
+        judge_id: "j-1",
+        matter_type: "Commercial",
+        party_side: null,
+        year_start: 2024,
+        year_end: 2026,
+      },
+      sample_size: 7,
+      observed_rate: 0.57,
+      positive_count: 4,
+      negative_count: 2,
+      neutral_count: 1,
+      confidence: {
+        label: "low" as const,
+        sample_size: 7,
+        confidence_band_low: 0.17,
+        confidence_band_high: 0.64,
+        method: "calibrated_classified_source_frequency_wilson_95",
+        limitations: ["Observed rates are historical indexed-source distributions only."],
+      },
+      calibration_level: "low" as const,
+      evidence_quality: "thin",
+      evidence: [
+        {
+          id: "cal-e-1",
+          source_type: "authority_document",
+          source_id: "auth-1",
+          title: "Alpha v Beta",
+          source_reference: "2026 TEST 1",
+          excerpt: "The court granted interim relief on source-backed grounds.",
+          source_date: "2026-01-03",
+          weight: 1,
+        },
+      ],
+      missing_data: [],
+      limitation_note:
+        "Calibrated signal is an observed historical pattern for source-backed decision support, not legal advice.",
+      aggregate_snapshot_id: "snap-1",
+      generated_at: "2026-05-11T06:00:00Z",
+      human_review_required: true,
+      decision_support_label: "decision support, not legal advice",
+      disclaimer:
+        "Predictive intelligence is decision support based on indexed sources only, not legal advice.",
+    },
+  ],
   matter_risk_summary: {
     matter_id: "m-1",
     status: "supported" as const,
@@ -314,6 +368,28 @@ const INSUFFICIENT_RESPONSE = {
     limitation_note:
       "Bench context cannot be generated until source-linked bench history is available.",
   },
+  calibrated_signals: SUPPORTED_RESPONSE.calibrated_signals.map((signal) => ({
+    ...signal,
+    status: "insufficient_evidence" as const,
+    sample_size: 0,
+    observed_rate: null,
+    positive_count: 0,
+    negative_count: 0,
+    neutral_count: 0,
+    confidence: {
+      label: "insufficient" as const,
+      sample_size: 0,
+      confidence_band_low: null,
+      confidence_band_high: null,
+      method: "insufficient_source_sample",
+      limitations: ["Minimum sample size is 5."],
+    },
+    calibration_level: "insufficient" as const,
+    evidence_quality: "insufficient",
+    evidence: [],
+    missing_data: ["Stored LI-S7B aggregate snapshot for this signal and matter scope."],
+    aggregate_snapshot_id: null,
+  })),
   matter_risk_summary: {
     ...SUPPORTED_RESPONSE.matter_risk_summary,
     status: "insufficient_evidence" as const,
@@ -327,8 +403,13 @@ const INSUFFICIENT_RESPONSE = {
 const FORBIDDEN_COPY = [
   "guaranteed",
   "will win",
+  "will lose",
+  "win probability",
+  "loss probability",
+  "win/loss",
   "judge likes",
   "judge dislikes",
+  "favorable judge",
   "judge reputation",
   "emotional instability",
   "psychological",
@@ -349,7 +430,7 @@ describe("PredictiveIntelligencePage", () => {
     render(withClient(<PredictiveIntelligencePage />));
 
     expect(await screen.findByText("Source-backed litigation signals")).toBeInTheDocument();
-    expect(screen.getByText("Interim relief likelihood")).toBeInTheDocument();
+    expect(screen.getAllByText("Interim relief likelihood").length).toBeGreaterThan(0);
     expect(screen.getAllByText("17-64%")[0]).toBeInTheDocument();
     expect(screen.getAllByText("7")[0]).toBeInTheDocument();
     expect(screen.getByTestId("predictive-disclaimer")).toHaveTextContent(
@@ -375,6 +456,22 @@ describe("PredictiveIntelligencePage", () => {
     expect(panel).toHaveTextContent(/not legal advice/i);
   });
 
+  it("renders calibrated source-backed signals safely", async () => {
+    fetchPredictiveIntelligenceMock.mockResolvedValue(SUPPORTED_RESPONSE);
+
+    render(withClient(<PredictiveIntelligencePage />));
+
+    const panel = await screen.findByTestId("predictive-calibrated-signals");
+    expect(panel).toHaveTextContent("Observed historical patterns");
+    expect(panel).toHaveTextContent("Interim relief likelihood");
+    expect(panel).toHaveTextContent("57%");
+    expect(panel).toHaveTextContent("17-64%");
+    expect(panel).toHaveTextContent("4/2/1");
+    expect(panel).toHaveTextContent("Judge aggregate");
+    expect(panel).toHaveTextContent("Snapshot snap-1");
+    expect(panel).toHaveTextContent(/not legal advice/i);
+  });
+
   it("renders insufficient evidence state without inventing a signal", async () => {
     fetchPredictiveIntelligenceMock.mockResolvedValue(INSUFFICIENT_RESPONSE);
 
@@ -385,6 +482,9 @@ describe("PredictiveIntelligencePage", () => {
     );
     expect(screen.getAllByText("Insufficient evidence").length).toBeGreaterThan(0);
     expect(screen.getAllByTestId("predictive-missing-data").length).toBeGreaterThan(0);
+    expect(
+      screen.getByTestId("predictive-calibrated-signal-interim_relief_likelihood"),
+    ).toHaveTextContent("No rate");
   });
 
   it("renders tenant policy disabled state for 403 responses", async () => {

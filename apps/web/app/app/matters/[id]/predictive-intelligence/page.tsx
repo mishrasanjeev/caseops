@@ -32,6 +32,7 @@ import { apiErrorMessage, isApiErrorShape } from "@/lib/api/config";
 import { fetchPredictiveIntelligence } from "@/lib/api/endpoints";
 import type {
   BenchContextSummary,
+  CalibratedPredictiveSignal,
   HearingPrepScorecard,
   MatterRiskSummary,
   PredictionFeatureContribution,
@@ -180,6 +181,7 @@ function PredictiveIntelligenceView({
       </Card>
 
       <BenchContextPanel context={data.bench_context} matterId={matterId} />
+      <CalibratedSignalsPanel signals={data.calibrated_signals} matterId={matterId} />
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(22rem,0.9fr)]">
         <div className="flex flex-col gap-4">
@@ -193,6 +195,157 @@ function PredictiveIntelligenceView({
         </div>
       </section>
     </div>
+  );
+}
+
+function CalibratedSignalsPanel({
+  signals,
+  matterId,
+}: {
+  signals: CalibratedPredictiveSignal[];
+  matterId: string;
+}) {
+  const supported = signals.filter((signal) => signal.status === "supported");
+  return (
+    <Card data-testid="predictive-calibrated-signals">
+      <CardHeader className="gap-3">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge tone="neutral">Calibrated signals</Badge>
+              <StatusPill status={supported.length > 0 ? "supported" : "insufficient_evidence"} />
+            </div>
+            <CardTitle className="mt-2 text-base">
+              Observed historical patterns
+            </CardTitle>
+            <CardDescription className="mt-1 max-w-3xl">
+              Stored outcome classifications are shown as source-backed
+              distributions with confidence bands, snapshot scope, and cited
+              evidence.
+            </CardDescription>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
+            <CompactMetric label="Supported" value={String(supported.length)} />
+            <CompactMetric label="Total signals" value={String(signals.length)} />
+            <CompactMetric label="Review gate" value="Human review" />
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {signals.length === 0 ? (
+          <EmptyState
+            icon={BarChart3}
+            title="No calibrated signal set"
+            description="Run source-backed outcome classification and aggregate refresh before calibrated signals can be displayed."
+          />
+        ) : (
+          <div className="overflow-hidden rounded-md border border-[var(--color-line)]">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-[var(--color-bg)] text-[var(--color-mute)]">
+                <tr>
+                  <th className="px-3 py-2 font-semibold">Signal</th>
+                  <th className="px-3 py-2 font-semibold">Status</th>
+                  <th className="px-3 py-2 font-semibold">Sample</th>
+                  <th className="px-3 py-2 font-semibold">Observed rate</th>
+                  <th className="px-3 py-2 font-semibold">Band</th>
+                  <th className="px-3 py-2 font-semibold">Scope</th>
+                  <th className="px-3 py-2 font-semibold">Sources</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--color-line)] bg-white">
+                {signals.map((signal) => (
+                  <CalibratedSignalRow
+                    key={`${signal.signal_type}-${signal.aggregate_snapshot_id ?? "missing"}`}
+                    signal={signal}
+                    matterId={matterId}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function CalibratedSignalRow({
+  signal,
+  matterId,
+}: {
+  signal: CalibratedPredictiveSignal;
+  matterId: string;
+}) {
+  return (
+    <tr data-testid={`predictive-calibrated-signal-${signal.signal_type}`}>
+      <td className="px-3 py-2 align-top">
+        <div className="font-semibold text-[var(--color-ink)]">{signal.label}</div>
+        <div className="mt-1 text-[var(--color-mute)]">
+          {signal.aggregate_snapshot_id
+            ? `Snapshot ${signal.aggregate_snapshot_id}`
+            : "No aggregate snapshot"}
+        </div>
+        {signal.missing_data.length > 0 ? (
+          <ul className="mt-2 space-y-1 text-amber-900">
+            {signal.missing_data.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        ) : null}
+        <p className="mt-2 max-w-xl leading-relaxed text-[var(--color-mute)]">
+          {signal.limitation_note}
+        </p>
+      </td>
+      <td className="px-3 py-2 align-top">
+        <StatusPill status={signal.status} />
+      </td>
+      <td className="px-3 py-2 align-top tabular-nums text-[var(--color-ink-2)]">
+        {signal.sample_size}
+      </td>
+      <td className="px-3 py-2 align-top tabular-nums text-[var(--color-ink-2)]">
+        {formatRate(signal.observed_rate)}
+        <div className="mt-1 text-[var(--color-mute)]">
+          {signal.positive_count}/{signal.negative_count}/{signal.neutral_count}
+        </div>
+      </td>
+      <td className="px-3 py-2 align-top text-[var(--color-ink-2)]">
+        {confidenceBand(signal)}
+        <div className="mt-1 text-[var(--color-mute)]">
+          {titleCase(signal.calibration_level)} · {titleCase(signal.evidence_quality)}
+        </div>
+      </td>
+      <td className="px-3 py-2 align-top text-[var(--color-ink-2)]">
+        {calibratedScopeLabel(signal)}
+        <div className="mt-1 text-[var(--color-mute)]">
+          {yearWindow(signal.scope.year_start, signal.scope.year_end)}
+        </div>
+      </td>
+      <td className="px-3 py-2 align-top">
+        {signal.evidence.length > 0 ? (
+          <div className="flex flex-col gap-1">
+            {signal.evidence.slice(0, 3).map((item) => {
+              const href = sourceHref(item, matterId);
+              const label = item.source_reference || item.title || item.source_id;
+              return href ? (
+                <Link
+                  key={item.id}
+                  href={href}
+                  className="text-xs font-medium text-[var(--color-accent)] hover:underline"
+                >
+                  {label}
+                </Link>
+              ) : (
+                <span key={item.id} className="text-xs text-[var(--color-mute)]">
+                  {label}
+                </span>
+              );
+            })}
+          </div>
+        ) : (
+          <span className="text-xs text-[var(--color-mute)]">No source links</span>
+        )}
+      </td>
+    </tr>
   );
 }
 
@@ -696,12 +849,30 @@ function SectionLabel({
 }
 
 function confidenceBand(
-  item: PredictiveSignal | MatterRiskSummary | HearingPrepScorecard | BenchContextSummary,
+  item:
+    | PredictiveSignal
+    | MatterRiskSummary
+    | HearingPrepScorecard
+    | BenchContextSummary
+    | CalibratedPredictiveSignal,
 ): string {
   const low = item.confidence.confidence_band_low;
   const high = item.confidence.confidence_band_high;
   if (low === null || high === null) return "No band";
   return `${Math.round(low * 100)}-${Math.round(high * 100)}%`;
+}
+
+function formatRate(value?: number | null): string {
+  if (value == null) return "No rate";
+  return `${Math.round(value * 100)}%`;
+}
+
+function calibratedScopeLabel(signal: CalibratedPredictiveSignal): string {
+  const scope = signal.scope;
+  if (scope.judge_id) return "Judge aggregate";
+  if (scope.court_name || scope.forum_level) return scope.court_name ?? titleCase(scope.forum_level ?? "");
+  if (scope.matter_type) return `Matter type: ${scope.matter_type}`;
+  return titleCase(scope.scope_type ?? "aggregate");
 }
 
 function yearWindow(start?: number | null, end?: number | null): string {

@@ -89,8 +89,9 @@ const draftingFlow = [
 const hearingFlow = [
   "Chronology assembled from the matter timeline",
   "Last effective order surfaced without manual digging",
-  "Bench brief and oral points compiled into a repeatable pack",
-  "Cause-list and listing awareness feeding the next action",
+  "Proceeding-sheet directions converted into review-required tasks and deadlines",
+  "Affidavit question bank, mock hearing, and transcript-first coach feeding oral prep",
+  "Source-backed bench context and calibrated historical patterns shown with limitations",
 ] as const;
 
 const platformMoves = [
@@ -103,6 +104,11 @@ const platformMoves = [
     icon: Search,
     title: "Research and knowledge reuse",
     body: "Search the public corpus and tenant-private annotations without leaving the operating workflow.",
+  },
+  {
+    icon: Gavel,
+    title: "Litigation Intelligence",
+    body: "Review proceeding signals, affidavit gaps, mock-hearing feedback, source-backed bench context, calibrated patterns, and graph links from one matter queue.",
   },
   {
     icon: Briefcase,
@@ -135,7 +141,7 @@ const trustLayers = [
   "Tenant isolation at query and storage layer",
   "Matter-level ethical walls that override broad role access",
   "Audit on sensitive actions, exports and AI runs",
-  "Scoped, review-required AI workflows for legal output",
+  "Scoped, source-backed review workflows for legal output",
   "Signed access patterns for private documents and attachments",
   "Configurable workspace contact, ownership and oversight",
 ] as const;
@@ -342,7 +348,7 @@ export default function LawFirmPitchPage() {
               <PitchCard
                 icon={Sparkles}
                 title="Bench-aware appeal drafting — shipped"
-                body="When the matter has an upcoming listing, the appeal-memorandum draft pulls authorities authored by THAT specific bench (court-scoped via the resolver) and prefers ones aligned with the matter's practice area. No win/lose copy; advocate-bias citation selection."
+                body="When the matter has an upcoming listing, the appeal-memorandum draft pulls authorities authored by that bench (court-scoped via the resolver) and prefers ones aligned with the matter's practice area. It is citation selection with visible source context, not an outcome forecast."
               />
               <PitchCard
                 icon={BookOpen}
@@ -384,8 +390,8 @@ export default function LawFirmPitchPage() {
               <div className="mt-6 space-y-4">
                 <ReviewRow
                   icon={Gavel}
-                  title="Bench brief"
-                  body="Short court-ready context, current posture and the decision the team is asking for."
+                  title="Litigation intelligence brief"
+                  body="Current posture, proceeding directions, affidavit prep, source-backed bench context and review-required items."
                   inverse
                 />
                 <ReviewRow

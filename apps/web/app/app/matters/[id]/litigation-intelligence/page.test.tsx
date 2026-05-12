@@ -1,14 +1,20 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { fetchLitigationIntelligenceReviewMock } = vi.hoisted(() => ({
+const {
+  fetchLitigationIntelligenceReviewMock,
+  mutateLitigationIntelligenceReviewItemMock,
+} = vi.hoisted(() => ({
   fetchLitigationIntelligenceReviewMock: vi.fn(),
+  mutateLitigationIntelligenceReviewItemMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api/endpoints", () => ({
   fetchLitigationIntelligenceReview: fetchLitigationIntelligenceReviewMock,
+  mutateLitigationIntelligenceReviewItem: mutateLitigationIntelligenceReviewItemMock,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -16,7 +22,10 @@ vi.mock("next/navigation", () => ({
 }));
 
 import LitigationIntelligenceReviewPage from "@/app/app/matters/[id]/litigation-intelligence/page";
-import { litigationIntelligenceReviewResponse } from "@/lib/api/schemas";
+import {
+  litigationIntelligenceReviewMutationResponse,
+  litigationIntelligenceReviewResponse,
+} from "@/lib/api/schemas";
 
 function withClient(children: ReactNode) {
   const client = new QueryClient({
@@ -123,6 +132,7 @@ const REVIEW_RESPONSE = {
 describe("LitigationIntelligenceReviewPage", () => {
   beforeEach(() => {
     fetchLitigationIntelligenceReviewMock.mockReset();
+    mutateLitigationIntelligenceReviewItemMock.mockReset();
   });
 
   it("renders grouped review items with source links and safe disclaimer", async () => {
@@ -139,6 +149,9 @@ describe("LitigationIntelligenceReviewPage", () => {
     expect(screen.getByTestId("litigation-review-group-predictive_signal")).toBeInTheDocument();
     expect(screen.getByText("Which invoice supports the payment statement?")).toBeInTheDocument();
     expect(screen.getByText("Low sample size requires review.")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("litigation-review-actions-affidavit-question:q-1"),
+    ).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "View source" })).toHaveLength(3);
     expect(
       screen.getByTestId("litigation-review-source-link-proceeding:sig-1"),
@@ -164,6 +177,96 @@ describe("LitigationIntelligenceReviewPage", () => {
     ]) {
       expect(rendered).not.toContain(forbidden);
     }
+  });
+
+  it("sends closed review mutation actions with reviewer notes", async () => {
+    fetchLitigationIntelligenceReviewMock.mockResolvedValue(REVIEW_RESPONSE);
+    mutateLitigationIntelligenceReviewItemMock.mockResolvedValue({
+      matter_id: "m-1",
+      item_id: "affidavit-question:q-1",
+      item_type: "affidavit_question",
+      source_type: "affidavit_question",
+      source_id: "q-1",
+      action: "accept",
+      status_before: "review_required",
+      status_after: "reviewed",
+      note: "Approved for hearing prep.",
+      audit_event_id: "audit-1",
+      applied: true,
+      updated_at: "2026-05-12T09:00:00Z",
+    });
+
+    render(withClient(<LitigationIntelligenceReviewPage />));
+
+    await screen.findByTestId("litigation-review-page");
+    await userEvent.type(
+      screen.getByTestId("litigation-review-note-input-affidavit-question:q-1"),
+      "Approved for hearing prep.",
+    );
+    await userEvent.click(
+      screen.getByTestId("litigation-review-action-accept-affidavit-question:q-1"),
+    );
+
+    await waitFor(() => {
+      expect(mutateLitigationIntelligenceReviewItemMock).toHaveBeenCalledWith({
+        matterId: "m-1",
+        itemId: "affidavit-question:q-1",
+        itemType: "affidavit_question",
+        action: "accept",
+        note: "Approved for hearing prep.",
+      });
+    });
+  });
+
+  it("blocks unsafe review-note language before mutation", async () => {
+    fetchLitigationIntelligenceReviewMock.mockResolvedValue(REVIEW_RESPONSE);
+
+    render(withClient(<LitigationIntelligenceReviewPage />));
+
+    await screen.findByTestId("litigation-review-page");
+    const noteInput = screen.getByTestId(
+      "litigation-review-note-input-affidavit-question:q-1",
+    );
+    const saveNote = screen.getByTestId(
+      "litigation-review-action-note-affidavit-question:q-1",
+    );
+    for (const note of [
+      "Guaranteed win because judge likes us.",
+      "The witness will lose on this point.",
+      "Add a loss probability for the matter.",
+      "Add win/loss notes for this witness.",
+      "This relies on judge reputation.",
+    ]) {
+      await userEvent.clear(noteInput);
+      await userEvent.type(noteInput, note);
+      await userEvent.click(saveNote);
+    }
+
+    expect(mutateLitigationIntelligenceReviewItemMock).not.toHaveBeenCalled();
+  });
+
+  it("does not render unsafe stored reviewer notes", async () => {
+    fetchLitigationIntelligenceReviewMock.mockResolvedValue({
+      ...REVIEW_RESPONSE,
+      items: [
+        {
+          ...REVIEW_RESPONSE.items[0],
+          review_note:
+            "This relies on judge reputation and win/loss prediction with loss probability.",
+        },
+      ],
+    });
+
+    render(withClient(<LitigationIntelligenceReviewPage />));
+
+    await screen.findByTestId("litigation-review-page");
+    expect(screen.getByTestId("litigation-review-note-hidden-proceeding:sig-1")).toHaveTextContent(
+      "hidden by safety policy",
+    );
+    const rendered = document.body.textContent?.toLowerCase() ?? "";
+    expect(rendered).not.toContain("judge reputation");
+    expect(rendered).not.toContain("win/loss");
+    expect(rendered).not.toContain("loss probability");
   });
 
   it("renders empty, loading, and error states", async () => {
@@ -207,6 +310,22 @@ describe("LitigationIntelligenceReviewPage", () => {
             },
           },
         ],
+      }),
+    ).toThrow();
+    expect(() =>
+      litigationIntelligenceReviewMutationResponse.parse({
+        matter_id: "m-1",
+        item_id: "affidavit-question:q-1",
+        item_type: "affidavit_question",
+        source_type: "manual_upload",
+        source_id: "manual-1",
+        action: "accept",
+        status_before: "review_required",
+        status_after: "accepted",
+        note: null,
+        audit_event_id: "audit-1",
+        applied: true,
+        updated_at: "2026-05-12T09:00:00Z",
       }),
     ).toThrow();
   });

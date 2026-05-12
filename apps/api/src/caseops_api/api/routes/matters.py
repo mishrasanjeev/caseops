@@ -48,11 +48,19 @@ from caseops_api.schemas.drafts import (
     DraftRecord,
     DraftReviewRequest,
 )
+from caseops_api.schemas.hearing_coach import (
+    HearingCoachReportResponse,
+    HearingCoachRunRequest,
+    HearingCoachStatusResponse,
+)
 from caseops_api.schemas.hearing_packs import (
     HearingPackGenerateRequest,
     HearingPackRecord,
 )
+from caseops_api.schemas.legal_knowledge_graph import LegalKnowledgeGraphResponse
 from caseops_api.schemas.litigation_intelligence import (
+    LitigationIntelligenceReviewMutationRequest,
+    LitigationIntelligenceReviewMutationResponse,
     LitigationIntelligenceReviewResponse,
 )
 from caseops_api.schemas.matter_access import (
@@ -643,6 +651,71 @@ async def get_current_company_matter_litigation_intelligence_review(
 
 
 @router.post(
+    "/{matter_id}/litigation-intelligence/review/actions",
+    response_model=LitigationIntelligenceReviewMutationResponse,
+    summary="LI-S9 mutate a source-backed litigation intelligence review item",
+)
+async def post_current_company_matter_litigation_intelligence_review_action(
+    matter_id: str,
+    payload: LitigationIntelligenceReviewMutationRequest,
+    context: HearingPackReviewer,
+    session: DbSession,
+) -> LitigationIntelligenceReviewMutationResponse:
+    from caseops_api.services.litigation_intelligence_review import (
+        mutate_litigation_intelligence_review_item,
+    )
+
+    return mutate_litigation_intelligence_review_item(
+        session,
+        context=context,
+        matter_id=matter_id,
+        payload=payload,
+    )
+
+
+@router.get(
+    "/{matter_id}/legal-knowledge-graph",
+    response_model=LegalKnowledgeGraphResponse,
+    summary="LI-S11 source-backed legal knowledge graph for a matter",
+)
+async def get_current_company_matter_legal_knowledge_graph(
+    matter_id: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> LegalKnowledgeGraphResponse:
+    from caseops_api.services.legal_knowledge_graph import (
+        get_legal_knowledge_graph,
+    )
+
+    return get_legal_knowledge_graph(
+        session,
+        context=context,
+        matter_id=matter_id,
+    )
+
+
+@router.post(
+    "/{matter_id}/legal-knowledge-graph/materialize",
+    response_model=LegalKnowledgeGraphResponse,
+    summary="Materialize LI-S11 source-backed legal knowledge graph for a matter",
+)
+async def post_current_company_matter_legal_knowledge_graph_materialize(
+    matter_id: str,
+    context: MatterWriter,
+    session: DbSession,
+) -> LegalKnowledgeGraphResponse:
+    from caseops_api.services.legal_knowledge_graph import (
+        materialize_legal_knowledge_graph,
+    )
+
+    return materialize_legal_knowledge_graph(
+        session,
+        context=context,
+        matter_id=matter_id,
+    )
+
+
+@router.post(
     "/{matter_id}/court-orders/{order_id}/proceeding-intelligence/extract",
     response_model=ProceedingIntelligenceResponse,
     summary="Extract LI-S1 proceeding signals from a source-backed court order",
@@ -767,6 +840,48 @@ async def get_current_company_matter_mock_hearing(
         context=context,
         matter_id=matter_id,
         session_id=session_id,
+    )
+
+
+@router.get(
+    "/{matter_id}/hearing-coach",
+    response_model=HearingCoachStatusResponse,
+    summary="LI-S13 transcript-first hearing coach readiness",
+)
+async def get_current_company_matter_hearing_coach(
+    matter_id: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> HearingCoachStatusResponse:
+    from caseops_api.services.hearing_coach import get_hearing_coach_status
+
+    return get_hearing_coach_status(
+        session,
+        context=context,
+        matter_id=matter_id,
+    )
+
+
+@router.post(
+    "/{matter_id}/mock-hearings/{session_id}/coach",
+    response_model=HearingCoachReportResponse,
+    summary="LI-S13 generate consent-gated transcript-first hearing coach report",
+)
+async def post_current_company_matter_mock_hearing_coach(
+    matter_id: str,
+    session_id: str,
+    payload: HearingCoachRunRequest,
+    context: HearingPackGenerator,
+    session: DbSession,
+) -> HearingCoachReportResponse:
+    from caseops_api.services.hearing_coach import generate_hearing_coach_report
+
+    return generate_hearing_coach_report(
+        session,
+        context=context,
+        matter_id=matter_id,
+        session_id=session_id,
+        payload=payload,
     )
 
 

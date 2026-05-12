@@ -27,6 +27,7 @@ const sections: { id: string; title: string }[] = [
   { id: "documents", title: "Documents and indexing" },
   { id: "drafting", title: "Drafting with citations" },
   { id: "hearings", title: "Hearing preparation" },
+  { id: "litigation-intelligence", title: "Litigation Intelligence" },
   { id: "bench-strategy", title: "Bench-aware appeal drafting" },
   { id: "statutes", title: "Statutes (BNSS / BNS / CrPC / IPC / Constitution / NI Act)" },
   { id: "research", title: "Research and authorities" },
@@ -131,7 +132,7 @@ export default function GuidePage() {
             </h1>
             <p className="mt-5 max-w-2xl text-[17px] leading-relaxed text-[var(--color-mute)]">
               A linear, end-to-end read for partners, associates, general counsel and legal
-              ops. Fifteen sections. Read front to back the first time; return for the
+              ops. Eighteen sections. Read front to back the first time; return for the
               section that matches the task in front of you after that.
             </p>
             <div className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm text-[var(--color-ink-2)]">
@@ -141,11 +142,11 @@ export default function GuidePage() {
               </span>
               <span>
                 <span className="font-mono text-[var(--color-mute-2)]">Reading time</span>{" "}
-                ~35 min
+                ~40 min
               </span>
               <span>
                 <span className="font-mono text-[var(--color-mute-2)]">Updated</span>{" "}
-                19 Apr 2026
+                12 May 2026
               </span>
             </div>
           </Container>
@@ -429,8 +430,8 @@ export default function GuidePage() {
                       want to make, keyed to the matter record.
                     </li>
                     <li>
-                      A <strong>bench brief</strong> covering the judge's recent trend on
-                      this class of matter (shown only where the corpus supports it).
+                      <strong>Source-backed bench context</strong> with sample size,
+                      linked sources, and limitation notes where the corpus supports it.
                     </li>
                     <li>
                       The <strong>source list</strong> — every piece of content in the pack
@@ -443,15 +444,65 @@ export default function GuidePage() {
                     for the courts that have a wired adapter). The bench resolver
                     normalises free-text rosters like &quot;Justice X &amp; Justice Y&quot;
                     into clickable judge profiles using the high-quality confidence
-                    floor — no silent guesses. Per-court automated scrapers (Bombay,
-                    Karnataka, Madras, Telangana, Patna and others) ship as each
-                    court&apos;s PRD lands. Today&apos;s judge catalog covers the
+                    floor - no silent guesses. Per-court source adapters (Bombay,
+                    Karnataka, Madras, Telangana, Patna and others) ship only after
+                    lawful access and source-quality proof. Today&apos;s judge catalog covers the
                     Supreme Court (31 sitting judges) and the Delhi High Court (32
                     sitting judges) with source-attributed bios.
                   </Callout>
                 </Section>
 
-                <Section id="bench-strategy" title="6A · Bench-aware appeal drafting">
+                <Section id="litigation-intelligence" title="6A - Litigation Intelligence">
+                  <p>
+                    Litigation Intelligence is the matter-level workspace for source-backed
+                    preparation and review. It pulls together proceeding sheets, affidavits,
+                    mock-hearing sessions, predictive context, legal-source readiness, a
+                    matter knowledge graph, and transcript-first coaching without changing
+                    the rule that a lawyer reviews substantive output.
+                  </p>
+                  <ul className="mt-3 space-y-2 text-[15px]">
+                    <li>
+                      <strong>Proceeding Sheet Intelligence.</strong> Court orders and order
+                      sheets are parsed from raw order text only. Next hearing dates,
+                      compliance directions, affidavit deadlines, and generated tasks keep
+                      the source order, snippet, confidence, and review-required status.
+                    </li>
+                    <li>
+                      <strong>Affidavit Intelligence.</strong> Mark a document as an
+                      affidavit, chief affidavit, or counter-affidavit to extract key
+                      statements, dates, figures, entities, annexures, gaps, contradictions,
+                      and source-grounded cross-examination questions.
+                    </li>
+                    <li>
+                      <strong>Mock Hearing and Coach.</strong> The simulator is typed-text
+                      only and uses LI affidavit question banks. The coach requires a session
+                      acknowledgement and scores observable preparation markers such as
+                      whether the question was answered, whether a source reference was used,
+                      and whether unsupported assertions were added.
+                    </li>
+                    <li>
+                      <strong>Predictive and bench context.</strong> Predictive Intelligence
+                      shows observed historical patterns only when indexed source evidence
+                      exists. Supported signals display sample size, confidence band, source
+                      links, snapshot references, and limitation notes.
+                    </li>
+                    <li>
+                      <strong>Review queue and knowledge graph.</strong> The Litigation
+                      Intelligence review page groups pending review items and lets permitted
+                      users accept, reject, mark reviewed, or edit notes. The knowledge graph
+                      materializes matter-scoped nodes and edges from source-backed LI records
+                      with bounded snippets.
+                    </li>
+                  </ul>
+                  <Callout tone="warn" title="Decision support, not legal advice">
+                    These tools are preparation and review aids. They do not replace legal
+                    judgment, do not create court filings automatically, and do not use audio,
+                    voice analysis, emotion detection, biometric signals, psychological
+                    scoring, mental-health inference, or broad external scraping.
+                  </Callout>
+                </Section>
+
+                <Section id="bench-strategy" title="6B - Bench-aware appeal drafting">
                   <p>
                     When you generate an{" "}
                     <strong>appeal_memorandum</strong> draft for a matter that has
@@ -480,16 +531,15 @@ export default function GuidePage() {
                       flags per-ground citation coverage and weak-evidence paths.
                     </li>
                   </ul>
-                  <Callout tone="warn" title="No win/lose / probability / favourability copy">
-                    Bench-aware drafting is a hard rule: no &quot;this bench tends
-                    to&quot;, no &quot;winnable&quot;, no &quot;chance of
-                    success&quot;. Selection of supporting citations is allowed and
-                    required — that&apos;s what advocates do — but the system
-                    never claims an outcome.
+                  <Callout tone="warn" title="No outcome-forecast copy">
+                    Bench-aware drafting stays on source selection, citation coverage,
+                    and limitation notes. Selection of supporting citations is allowed and
+                    required - that&apos;s what advocates do - but the system never claims
+                    an outcome.
                   </Callout>
                 </Section>
 
-                <Section id="statutes" title="6B · Statutes (BNSS, BNS, CrPC, IPC, NI Act, Constitution)">
+                <Section id="statutes" title="6C - Statutes (BNSS, BNS, CrPC, IPC, NI Act, Constitution)">
                   <p>
                     Visit <code>/app/statutes</code> to browse the structured
                     catalog of central Indian Acts. v1 ships with 7 acts and 91
@@ -596,9 +646,8 @@ export default function GuidePage() {
                   <p>
                     CaseOps produces explainable recommendations — forum choice, supporting
                     authorities, next best action — with rationale, assumptions, missing
-                    facts and a confidence label. Recommendations are <strong>never</strong>{" "}
-                    black-box favourability scores. You must see why a recommendation was
-                    made before accepting it.
+                    facts and a confidence label. Recommendations must show the source
+                    trail and limitation note before anyone accepts them.
                   </p>
                   <ol className="mt-3 list-decimal space-y-2 pl-6 text-[15px]">
                     <li>

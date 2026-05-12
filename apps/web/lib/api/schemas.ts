@@ -456,6 +456,83 @@ export type MockHearingQuestion = z.infer<typeof mockHearingQuestion>;
 export type MockHearingSession = z.infer<typeof mockHearingSession>;
 export type MockHearingListResponse = z.infer<typeof mockHearingListResponse>;
 
+export const hearingCoachStatusResponse = z
+  .object({
+    matter_id: z.string(),
+    generated_at: z.string(),
+    status: z.enum(["consent_required", "no_mock_hearing_responses"]),
+    disclaimer: z.string(),
+    consent_required: z.boolean(),
+    latest_session_id: z.string().nullable(),
+    response_count: z.number().int().nonnegative(),
+    limitation_notes: z.array(z.string()).default([]),
+  })
+  .strict();
+
+export const hearingCoachMetricSummary = z
+  .object({
+    total_responses: z.number().int().nonnegative(),
+    answered_question_count: z.number().int().nonnegative(),
+    source_reference_used_count: z.number().int().nonnegative(),
+    unsupported_assertion_count: z.number().int().nonnegative(),
+    contradiction_count: z.number().int().nonnegative(),
+    missing_exhibit_reference_count: z.number().int().nonnegative(),
+    evasiveness_marker_count: z.number().int().nonnegative(),
+    overlong_response_count: z.number().int().nonnegative(),
+    average_clarity_score: z.number().int().min(0).max(100),
+    average_completeness_score: z.number().int().min(0).max(100),
+    review_required_count: z.number().int().nonnegative(),
+  })
+  .strict();
+
+export const hearingCoachFeedbackItem = z
+  .object({
+    response_id: z.string(),
+    question_id: z.string(),
+    mock_hearing_session_id: z.string(),
+    source_affidavit_question_id: z.string().nullable(),
+    source_affidavit_statement_id: z.string().nullable(),
+    source_attachment_id: z.string().nullable(),
+    source_chunk_id: z.string().nullable(),
+    source_chunk_index: z.number().int().nullable(),
+    page_reference: z.string().nullable(),
+    question_text: z.string(),
+    transcript_excerpt: z.string(),
+    source_quote: z.string(),
+    answered_question: z.boolean(),
+    source_reference_used: z.boolean(),
+    unsupported_assertion_count: z.number().int().nonnegative(),
+    contradiction_count: z.number().int().nonnegative(),
+    clarity_score: z.number().int().min(0).max(100),
+    completeness_score: z.number().int().min(0).max(100),
+    evasiveness_marker: z.boolean(),
+    overlong_response_marker: z.boolean(),
+    missing_exhibit_reference: z.boolean(),
+    review_required: z.boolean(),
+    feedback: z.array(z.string()).default([]),
+    improvement_checklist: z.array(z.string()).default([]),
+  })
+  .strict();
+
+export const hearingCoachReportResponse = z
+  .object({
+    matter_id: z.string(),
+    mock_hearing_session_id: z.string(),
+    generated_at: z.string(),
+    status: z.literal("supported"),
+    disclaimer: z.string(),
+    consent_acknowledged: z.boolean(),
+    metrics: hearingCoachMetricSummary,
+    feedback_items: z.array(hearingCoachFeedbackItem).default([]),
+    limitation_notes: z.array(z.string()).default([]),
+  })
+  .strict();
+
+export type HearingCoachStatusResponse = z.infer<typeof hearingCoachStatusResponse>;
+export type HearingCoachMetricSummary = z.infer<typeof hearingCoachMetricSummary>;
+export type HearingCoachFeedbackItem = z.infer<typeof hearingCoachFeedbackItem>;
+export type HearingCoachReportResponse = z.infer<typeof hearingCoachReportResponse>;
+
 export const confidence = z.enum(["low", "medium", "high"]);
 // Sprint 9 BG-023 — four recommendation types. Keep the union in
 // lockstep with the backend's RecommendationTypeLiteral.
@@ -785,6 +862,45 @@ export const observedSignalDistribution = z
   })
   .strict();
 
+export const calibratedSignalScope = z
+  .object({
+    scope_type: z.string().nullable().optional(),
+    scope_key: z.string().nullable().optional(),
+    court_name: z.string().nullable().optional(),
+    forum_level: z.string().nullable().optional(),
+    judge_id: z.string().nullable().optional(),
+    matter_type: z.string().nullable().optional(),
+    party_side: z.string().nullable().optional(),
+    year_start: z.number().int().nullable().optional(),
+    year_end: z.number().int().nullable().optional(),
+  })
+  .strict();
+
+export const calibratedPredictiveSignal = z
+  .object({
+    signal_type: z.string(),
+    label: z.string(),
+    status: benchContextStatus,
+    scope: calibratedSignalScope,
+    sample_size: z.number().int().nonnegative(),
+    observed_rate: z.number().min(0).max(1).nullable().optional(),
+    positive_count: z.number().int().nonnegative(),
+    negative_count: z.number().int().nonnegative(),
+    neutral_count: z.number().int().nonnegative(),
+    confidence: predictionConfidence,
+    calibration_level: predictionConfidenceLabel,
+    evidence_quality: z.string(),
+    evidence: z.array(predictiveEvidence).default([]),
+    missing_data: z.array(z.string()).default([]),
+    limitation_note: z.string(),
+    aggregate_snapshot_id: z.string().nullable().optional(),
+    generated_at: z.string().nullable().optional(),
+    human_review_required: z.boolean(),
+    decision_support_label: z.string(),
+    disclaimer: z.string(),
+  })
+  .strict();
+
 export const benchContextSummary = z
   .object({
     matter_id: z.string(),
@@ -846,6 +962,7 @@ export const predictiveIntelligenceResponse = z
     run_id: z.string(),
     bench_summary: benchPredictiveSummary,
     bench_context: benchContextSummary,
+    calibrated_signals: z.array(calibratedPredictiveSignal).default([]),
     matter_risk_summary: matterRiskSummary,
     hearing_prep_scorecard: hearingPrepScorecard,
     disclaimer: z.string(),
@@ -874,8 +991,15 @@ export const litigationIntelligenceReviewStatus = z.enum([
 ]);
 
 export const litigationIntelligenceReviewPriority = z.enum(["high", "medium", "low"]);
+export const litigationIntelligenceReviewAction = z.enum([
+  "mark_reviewed",
+  "accept",
+  "reject",
+  "edit_note",
+]);
 
 export const litigationIntelligenceReviewSourceType = z.enum([
+  "matter_proceeding_signal",
   "matter_court_order",
   "matter_cause_list_entry",
   "matter_document",
@@ -883,6 +1007,8 @@ export const litigationIntelligenceReviewSourceType = z.enum([
   "affidavit_statement",
   "affidavit_question",
   "mock_hearing_session",
+  "mock_hearing_response",
+  "predictive_signal_item",
   "predictive_signal_run",
   "authority_document",
   "aggregate_snapshot",
@@ -914,6 +1040,10 @@ export const litigationIntelligenceReviewItem = z
     review_reason: z.string(),
     source: litigationIntelligenceReviewSource,
     due_on: z.string().nullable().optional(),
+    review_note: z.string().nullable().optional(),
+    last_review_action: litigationIntelligenceReviewAction.nullable().optional(),
+    reviewed_at: z.string().nullable().optional(),
+    reviewed_by_membership_id: z.string().nullable().optional(),
     created_at: z.string(),
     updated_at: z.string().nullable().optional(),
   })
@@ -939,6 +1069,131 @@ export const litigationIntelligenceReviewResponse = z
   })
   .strict();
 
+export const litigationIntelligenceReviewMutationResponse = z
+  .object({
+    matter_id: z.string(),
+    item_id: z.string(),
+    item_type: litigationIntelligenceReviewItemType,
+    source_type: litigationIntelligenceReviewSourceType,
+    source_id: z.string(),
+    action: litigationIntelligenceReviewAction,
+    status_before: z.string(),
+    status_after: z.string(),
+    note: z.string().nullable(),
+    no_op_reason: z.string().nullable().optional(),
+    audit_event_id: z.string(),
+    applied: z.boolean(),
+    updated_at: z.string(),
+  })
+  .strict();
+
+export const legalKnowledgeGraphRunStatus = z.enum([
+  "completed",
+  "no_source_records",
+  "not_materialized",
+]);
+
+export const legalKnowledgeGraphNodeType = z.enum([
+  "matter",
+  "proceeding_signal",
+  "affidavit_statement",
+  "affidavit_question",
+  "mock_hearing_question",
+  "mock_hearing_response",
+  "predictive_signal",
+  "bench_context",
+  "legal_source",
+  "statute_or_issue",
+  "review_action",
+]);
+
+export const legalKnowledgeGraphEdgeType = z.enum([
+  "supports",
+  "contradicts",
+  "references",
+  "derived_from",
+  "prompts",
+  "relates_to",
+  "has_limitation",
+]);
+
+export const legalKnowledgeGraphSourceType = z.enum([
+  "matter",
+  "matter_court_order",
+  "matter_proceeding_signal",
+  "matter_document",
+  "matter_attachment_chunk",
+  "affidavit_statement",
+  "affidavit_question",
+  "mock_hearing_session",
+  "mock_hearing_question",
+  "mock_hearing_response",
+  "predictive_signal_item",
+  "predictive_signal_run",
+  "authority_document",
+  "aggregate_snapshot",
+  "litigation_intelligence_review_action",
+  "unavailable",
+]);
+
+export const legalKnowledgeGraphNode = z
+  .object({
+    id: z.string(),
+    node_key: z.string(),
+    node_type: legalKnowledgeGraphNodeType,
+    label: z.string(),
+    description: z.string().nullable().optional(),
+    source_type: legalKnowledgeGraphSourceType,
+    source_id: z.string(),
+    source_quote: z.string().nullable().optional(),
+    confidence_label: z.string().nullable().optional(),
+    review_status: z.string().nullable().optional(),
+    limitation_note: z.string(),
+    created_at: z.string(),
+  })
+  .strict();
+
+export const legalKnowledgeGraphEdge = z
+  .object({
+    id: z.string(),
+    edge_type: legalKnowledgeGraphEdgeType,
+    label: z.string(),
+    from_node_id: z.string(),
+    to_node_id: z.string(),
+    source_type: legalKnowledgeGraphSourceType,
+    source_id: z.string(),
+    source_quote: z.string().nullable().optional(),
+    confidence_label: z.string().nullable().optional(),
+    limitation_note: z.string(),
+    created_at: z.string(),
+  })
+  .strict();
+
+export const legalKnowledgeGraphSummary = z
+  .object({
+    status: legalKnowledgeGraphRunStatus,
+    source_record_count: z.number().int().nonnegative(),
+    node_count: z.number().int().nonnegative(),
+    edge_count: z.number().int().nonnegative(),
+    by_node_type: z.record(z.string(), z.number().int().nonnegative()).default({}),
+    by_edge_type: z.record(z.string(), z.number().int().nonnegative()).default({}),
+    missing_data: z.array(z.string()).default([]),
+  })
+  .strict();
+
+export const legalKnowledgeGraphResponse = z
+  .object({
+    matter_id: z.string(),
+    generated_at: z.string(),
+    run_id: z.string().nullable().optional(),
+    disclaimer: z.string(),
+    limitation_note: z.string(),
+    summary: legalKnowledgeGraphSummary,
+    nodes: z.array(legalKnowledgeGraphNode).default([]),
+    edges: z.array(legalKnowledgeGraphEdge).default([]),
+  })
+  .strict();
+
 export type Recommendation = z.infer<typeof recommendation>;
 export type RecommendationOption = z.infer<typeof recommendationOption>;
 export type RecommendationDecision = z.infer<typeof recommendationDecision>;
@@ -960,6 +1215,7 @@ export type PredictiveEvidenceSourceType = z.infer<
 export type PredictionFeatureContribution =
   z.infer<typeof predictionFeatureContribution>;
 export type PredictiveSignal = z.infer<typeof predictiveSignal>;
+export type CalibratedPredictiveSignal = z.infer<typeof calibratedPredictiveSignal>;
 export type BenchPredictiveSummary = z.infer<typeof benchPredictiveSummary>;
 export type BenchContextSummary = z.infer<typeof benchContextSummary>;
 export type MatterRiskSummary = z.infer<typeof matterRiskSummary>;
@@ -972,6 +1228,13 @@ export type LitigationIntelligenceReviewItem =
   z.infer<typeof litigationIntelligenceReviewItem>;
 export type LitigationIntelligenceReviewResponse =
   z.infer<typeof litigationIntelligenceReviewResponse>;
+export type LitigationIntelligenceReviewAction =
+  z.infer<typeof litigationIntelligenceReviewAction>;
+export type LitigationIntelligenceReviewMutationResponse =
+  z.infer<typeof litigationIntelligenceReviewMutationResponse>;
+export type LegalKnowledgeGraphNode = z.infer<typeof legalKnowledgeGraphNode>;
+export type LegalKnowledgeGraphEdge = z.infer<typeof legalKnowledgeGraphEdge>;
+export type LegalKnowledgeGraphResponse = z.infer<typeof legalKnowledgeGraphResponse>;
 
 // MOD-LSE-1 (2026-05-03) — strategy planner type exports.
 export type LitigationStrategyPayload = z.infer<typeof litigationStrategyPayload>;

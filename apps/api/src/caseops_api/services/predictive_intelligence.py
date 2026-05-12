@@ -33,6 +33,8 @@ from caseops_api.schemas.predictive_intelligence import (
     BenchContextScope,
     BenchContextSummary,
     BenchPredictiveSummary,
+    CalibratedPredictiveSignal,
+    CalibratedSignalScope,
     HearingPrepScorecard,
     MatterRiskSummary,
     ObservedSignalDistribution,
@@ -168,6 +170,11 @@ def build_predictive_intelligence(
         matter=matter,
         snapshots=aggregate_snapshots,
     )
+    calibrated_signals = _build_calibrated_signals(
+        session,
+        matter=matter,
+        snapshots=aggregate_snapshots,
+    )
     bench_context = _build_bench_context_summary(
         session,
         matter=matter,
@@ -209,6 +216,11 @@ def build_predictive_intelligence(
             ],
             "sample_size": run.sample_size,
             "evidence_quality": evidence_quality,
+            "supported_calibrated_signal_types": [
+                signal.signal_type
+                for signal in calibrated_signals
+                if signal.status == "supported"
+            ],
         },
     )
     session.commit()
@@ -227,6 +239,7 @@ def build_predictive_intelligence(
             disclaimer=DISCLAIMER,
         ),
         bench_context=bench_context,
+        calibrated_signals=calibrated_signals,
         matter_risk_summary=matter_risk,
         hearing_prep_scorecard=hearing_scorecard,
         disclaimer=DISCLAIMER,
@@ -574,7 +587,7 @@ def _signal_from_aggregate_snapshot(
             method="classified_source_outcome_frequency_wilson_95",
             limitations=[
                 "Confidence bands describe historical indexed source classifications only.",
-                "No LLM-only probability or intuition-only prediction is used.",
+                "No LLM-only or intuition-only estimate is used.",
                 "Source mix, forum assignment, pleadings, and law may differ in the live matter.",
             ],
         ),
@@ -593,6 +606,172 @@ def _signal_from_aggregate_snapshot(
             )
         ],
         limitation_note=LIMITATION_NOTE,
+        disclaimer=DISCLAIMER,
+    )
+
+
+def _build_calibrated_signals(
+    session: Session,
+    *,
+    matter: Matter,
+    snapshots: Sequence[PredictiveOutcomeAggregateSnapshot],
+) -> list[CalibratedPredictiveSignal]:
+    by_signal: dict[str, PredictiveOutcomeAggregateSnapshot] = {
+        snapshot.signal_type: snapshot for snapshot in snapshots
+    }
+    if "bench_party_side_tendency" in by_signal:
+        by_signal["bench_outcome_tendency"] = by_signal["bench_party_side_tendency"]
+
+    calibrated: list[CalibratedPredictiveSignal] = []
+    for signal_type in _AGGREGATE_SIGNAL_ORDER:
+        snapshot = by_signal.get(signal_type)
+        if snapshot is None:
+            calibrated.append(
+                _insufficient_calibrated_signal(
+                    signal_type=signal_type,
+                    label=_AGGREGATE_SIGNAL_LABELS[signal_type],
+                    sample_size=0,
+                    scope=CalibratedSignalScope(
+                        court_name=matter.court_name,
+                        forum_level=matter.forum_level,
+                        matter_type=matter.practice_area,
+                    ),
+                    missing_data=[
+                        "Stored LI-S7B aggregate snapshot for this signal and matter scope.",
+                        "Source judgment/order IDs for aggregate evidence.",
+                    ],
+                )
+            )
+            continue
+        calibrated.append(
+            _calibrated_signal_from_snapshot(
+                session,
+                matter=matter,
+                signal_type=signal_type,
+                snapshot=snapshot,
+            )
+        )
+    return calibrated
+
+
+def _calibrated_signal_from_snapshot(
+    session: Session,
+    *,
+    matter: Matter,
+    signal_type: str,
+    snapshot: PredictiveOutcomeAggregateSnapshot,
+) -> CalibratedPredictiveSignal:
+    scope = _calibrated_scope(snapshot)
+    evidence = _evidence_from_aggregate_snapshot(session, matter, snapshot)
+    missing_data: list[str] = []
+    if snapshot.sample_size < MIN_SAMPLE_SIZE:
+        missing_data.append(
+            f"At least {MIN_SAMPLE_SIZE} source classifications for calibrated output."
+        )
+    if not evidence:
+        missing_data.append("Resolvable source evidence IDs for this aggregate snapshot.")
+    if snapshot.status != "supported":
+        missing_data.append("Supported aggregate snapshot status.")
+
+    if snapshot.status == "supported" and snapshot.sample_size >= MIN_SAMPLE_SIZE and evidence:
+        status_label = "supported"
+        observed_rate = round(snapshot.positive_count / snapshot.sample_size, 4)
+        confidence = PredictionConfidence(
+            label=snapshot.confidence_label,  # type: ignore[arg-type]
+            sample_size=snapshot.sample_size,
+            confidence_band_low=snapshot.confidence_band_low,
+            confidence_band_high=snapshot.confidence_band_high,
+            method="calibrated_classified_source_frequency_wilson_95",
+            limitations=[
+                "Observed rates are historical indexed-source distributions only.",
+                (
+                    "No LLM-only estimate, uncited bench-profile claim, "
+                    "or legal-advice conclusion is used."
+                ),
+                "Calibration depends on source coverage, matter type, forum, and year window.",
+            ],
+        )
+        limitation = (
+            "Calibrated signal is computed from stored LI-S7B outcome classifications "
+            "and aggregate snapshot counts. It is an observed historical pattern for "
+            "source-backed decision support, not legal advice."
+        )
+    elif evidence:
+        status_label = "limited_context"
+        observed_rate = None
+        confidence = _insufficient_confidence(snapshot.sample_size)
+        limitation = (
+            "Calibrated context has source links but does not meet the supported "
+            "sample or aggregate-status threshold."
+        )
+    else:
+        status_label = "insufficient_evidence"
+        observed_rate = None
+        confidence = _insufficient_confidence(snapshot.sample_size)
+        limitation = (
+            "Calibrated signal cannot be shown until the aggregate snapshot has "
+            "sufficient sample size and source evidence IDs."
+        )
+
+    return CalibratedPredictiveSignal(
+        signal_type=signal_type,
+        label=_AGGREGATE_SIGNAL_LABELS.get(signal_type, _format_signal_label(signal_type)),
+        status=status_label,  # type: ignore[arg-type]
+        scope=scope,
+        sample_size=snapshot.sample_size,
+        observed_rate=observed_rate,
+        positive_count=snapshot.positive_count,
+        negative_count=snapshot.negative_count,
+        neutral_count=snapshot.neutral_count,
+        confidence=confidence,
+        calibration_level=confidence.label,
+        evidence_quality=_evidence_quality(snapshot.sample_size),
+        evidence=evidence,
+        missing_data=missing_data,
+        limitation_note=limitation,
+        aggregate_snapshot_id=snapshot.id,
+        generated_at=snapshot.refreshed_at,
+        disclaimer=DISCLAIMER,
+    )
+
+
+def _calibrated_scope(snapshot: PredictiveOutcomeAggregateSnapshot) -> CalibratedSignalScope:
+    return CalibratedSignalScope(
+        scope_type=snapshot.scope_type,
+        scope_key=snapshot.scope_key,
+        court_name=snapshot.court_name,
+        forum_level=snapshot.forum_level,
+        judge_id=snapshot.judge_id,
+        matter_type=snapshot.matter_type,
+        party_side=snapshot.party_side,
+        year_start=snapshot.year_start,
+        year_end=snapshot.year_end,
+    )
+
+
+def _insufficient_calibrated_signal(
+    *,
+    signal_type: str,
+    label: str,
+    sample_size: int,
+    scope: CalibratedSignalScope,
+    missing_data: list[str],
+) -> CalibratedPredictiveSignal:
+    return CalibratedPredictiveSignal(
+        signal_type=signal_type,
+        label=label,
+        status="insufficient_evidence",
+        scope=scope,
+        sample_size=sample_size,
+        observed_rate=None,
+        confidence=_insufficient_confidence(sample_size),
+        calibration_level="insufficient",
+        evidence_quality=_evidence_quality(sample_size),
+        missing_data=missing_data,
+        limitation_note=(
+            "Calibrated signal requires stored source-backed aggregate snapshots "
+            "with sample size, confidence band, and evidence IDs."
+        ),
         disclaimer=DISCLAIMER,
     )
 
@@ -1256,7 +1435,7 @@ def _confidence(
         limitations=limitations
         or [
             "Source-frequency confidence bands describe historical indexed samples only.",
-            "No LLM-only or intuition-only probability is used.",
+            "No LLM-only or intuition-only estimate is used.",
         ],
     )
 

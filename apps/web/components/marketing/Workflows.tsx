@@ -6,9 +6,9 @@ const flows = [
     persona: "Litigation partner",
     headline: "From cause list to cited order in an afternoon.",
     bullets: [
-      "Auto-ingest the morning cause list and flag matters at risk.",
-      "One-click hearing pack with chronology, last order, and oral points.",
-      "Post-hearing notes flow into tasks, drafts, and client updates.",
+      "Proceeding sheets extract next dates, compliance directions, and review-required tasks.",
+      "Affidavit intelligence turns chief statements into gaps, contradictions, and cross questions.",
+      "Mock hearings and the transcript-first coach keep feedback source-linked and reviewable.",
     ],
   },
   {
@@ -17,14 +17,14 @@ const flows = [
     bullets: [
       "Structured intake for every business request with SLAs.",
       "Contract repository with clause extraction and obligation tracking.",
-      "Outside-counsel spend, aging, and realization in one dashboard.",
+      "Matter intelligence review, outside-counsel spend, aging, and realization in one dashboard.",
     ],
   },
   {
     persona: "Solo advocate",
     headline: "Operate like a 20-lawyer practice.",
     bullets: [
-      "One app for matters, drafts, hearings, billing, and payment collection.",
+      "One app for matters, drafts, hearings, litigation intelligence, billing, and payment collection.",
       "Pine Labs payment links issued with every invoice.",
       "Case diary that survives the day you forgot your diary.",
     ],

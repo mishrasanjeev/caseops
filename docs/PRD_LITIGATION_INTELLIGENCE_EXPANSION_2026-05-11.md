@@ -1,6 +1,6 @@
 # PRD: Litigation Intelligence Expansion
 
-Status: Approved addendum; LI-S1 through LI-S7 implemented and verified at their scoped V1/foundation boundaries; LI-S8 final PRD alignment/release-readiness slice implemented; LI-S7D+ and legal knowledge graph materialization pending
+Status: Approved addendum; LI-S1 through LI-S13 implemented/ready at their scoped V1/foundation boundaries
 Date: 2026-05-11
 Source input: `C:\Users\mishr\Downloads\CaseOps.pdf`
 Canonical PRD anchor: `docs/PRD_CLAUDE_CODE_2026-04-23.md`
@@ -12,11 +12,13 @@ Related addenda:
 
 This addendum began as a planning document. Current repo truth as of
 2026-05-12: LI-S1, LI-S2, LI-S3, LI-S4 foundation, LI-S5, LI-S6 integration
-review, and LI-S7A/B/C product slices are implemented and verified at their
-defined scopes. LI-S8 is a final alignment and release-readiness documentation
-slice. LI-S7D and later predictive-model calibration expansions, accept/reject
-review mutations for LI-S6, broad district/session/tribunal ingestion, voice or
-audio scoring, and legal knowledge graph materialization remain pending.
+review, LI-S7A/B/C product slices, LI-S8 PRD/status alignment, LI-S9 review
+mutations, LI-S10 calibrated predictive expansion, LI-S11 legal knowledge graph
+materialization foundation, LI-S12 safe source-expansion readiness/proof
+tooling, and LI-S13 transcript-first hearing coach foundation are implemented
+at their defined scopes. Remaining caveats are not abandoned: broad
+district/session/tribunal ingestion beyond the LI-S12 proof layer remains
+deferred until lawful adapters and quality proof exist.
 
 ## 1. Purpose
 
@@ -26,8 +28,8 @@ lawyers. The useful product direction is real: proceeding-sheet absorption,
 affidavit-based hearing preparation, district and tribunal source coverage,
 bench/forum context, and a legal knowledge graph.
 
-Several PDF asks are predictive and must be implemented carefully rather than
-left out of scope. CaseOps must not ship opaque or unsupported "black-box"
+Several PDF asks are predictive and must be implemented carefully as explicit
+closure slices. CaseOps must not ship opaque or unsupported "black-box"
 predictions. It may ship controlled predictive intelligence only when the
 surface is explainable, source-backed, tenant-policy gated, audited, and
 reviewable by a lawyer.
@@ -521,9 +523,9 @@ can include an existing surface that must be corrected before extension.
 | Statute model and statute references | Implemented | `Statute`, `StatuteSection`, `AuthorityStatuteReference`, `/app/statutes`, `statute_resolver.py` | Extend coverage as tribunal/district sources require. |
 | District court source support | Partial | `forum_level=lower_court`, forum catalog validation, Central Delhi public source posture adapter, lower-court research filter, LI-S4 registry entries for district/session courts marked blocked/planned | No production district judgment corpus, no verified broad eCourts/NJDG data path, and no automated captcha/session-gated scraping. |
 | Tribunal source support | Partial | `forum_level=tribunal`, NCLT/NCLAT/DRT format profiles, template recommender tribunal paths, research filter, LI-S4 registry entries for NCLT/NCLAT/DRT/DRAT/ITAT/NGT/CAT/consumer forums marked planned | No tribunal corpus ingestion or tribunal profile intelligence until lawful source adapters and corpus-quality proof exist. |
-| Legal knowledge graph | Partial | Matter graph, authority citations, judge decision index, statute focus, judge aliases/appointments | No graph API/UI, no normalized graph nodes/edges across cases, advocates, sections, tribunals. |
+| Legal knowledge graph | Partial | LI-S11 `legal_knowledge_graph_*` matter graph tables, `/api/matters/{matter_id}/legal-knowledge-graph`, `/app/matters/[id]/knowledge-graph`, authority citations, judge decision index, statute focus | Matter-scoped graph foundation exists. Corpus-scale graph analytics, broad visual exploration, and cross-case/tribunal graph expansion remain deferred. |
 | Compliance tracking | Partial | Matter tasks/deadlines, calendar feed, reminders, notification rules, `MatterCourtOrder` stay flags, LI-S1 high-confidence proceeding-signal task/deadline creation | Proceeding-sheet derived tasks/deadlines exist with review flags and audit. External client notifications and broader calendar delivery remain deferred. |
-| Human review gates | Partial | Draft approval gates, recommendation decisions, hearing-pack review, audit, LI-S6 read-only litigation-intelligence review page | Review-required states are visible across LI-S1/S2/S3/S5/S7, but accept/reject/edit review mutations are deferred. |
+| Human review gates | Partial | Draft approval gates, recommendation decisions, hearing-pack review, audit, LI-S6 read-only litigation-intelligence review page, LI-S9 review mutations | Review-required states are visible across LI-S1/S2/S3/S5/S7; LI-S9 adds accept/reject/mark-reviewed/note actions for the LI queue. Broader workflow assignment/escalation remains pending. |
 | Tenant isolation and audit | Implemented foundation | `assert_access`, matter grants, ethical walls, `AuditEvent`, route capabilities | Every new LI table/route must prove tenant/matter isolation and audit. |
 | Corpus/vector quality | Partial | Voyage/pgvector/reranker path, corpus-ingest skill, authority retrieval | New district/tribunal/public-law slices must meet the 4.8/5 readiness gate before production claims. |
 
@@ -537,7 +539,7 @@ Status values: Already usable, Partial, Missing, Unsafe/stale-doc.
 | `bench_strategy.py` | Partial | Returns bench judge IDs, indexed decision count, authority/statute aggregates, evidence quality, disclaimer | Reuse its materialized-layer foundation; LI-S7A adds typed predictive contracts and source-backed confidence bands. |
 | `bench_analysis_layers.py` | Already usable | Builds L-A judge decision index, L-B authority affinity, L-C statute focus | Primary deterministic data source for LI-S7A bench signals. |
 | `bench_strategy_context.py` | Partial | Has `mode=predictive` and descriptive outcome counts when policy is enabled | Useful proof of opt-in behavior, but the shape lacks confidence bands, evidence objects, and unified audit/run persistence. |
-| `recommendations.py` | Partial | Citation-verified recommendations and outcome-bias reranking over `AuthorityDocument.outcome_label` | Reusable as an input pattern for later LI-S7D+ review workflows, but not the predictive contract. |
+| `recommendations.py` | Partial | Citation-verified recommendations and outcome-bias reranking over `AuthorityDocument.outcome_label` | Reusable as an input pattern for later LI-S10 review workflows, but not the predictive contract. |
 | `appeal_strength.py` | Partial | Deterministic argument-completeness analyzer with policy-mode echo | Useful risk/evidence-gap input; currently blocks probability language and is not a predictive scorecard. |
 | `litigation_strategy.py` | Partial | Citation-grounded route planner with strong forbidden-probability gates | Must be revised in a later slice before it consumes LI-S7 outputs. |
 | `hearing_packs.py` | Already usable | Matter-scoped hearing-pack generation with ModelRun and audit | Good source for later hearing-prep context; no mock-hearing scoring today. |
@@ -1400,9 +1402,9 @@ Status:
 
 - Implemented and verified as LI-S6 V1. It is a read-only aggregation and
   review workflow layer over existing LI-S1/S2/S3/S5/S7 records.
-- No accept/reject/edit mutation endpoint, graph materialization, new
-  prediction engine, corpus ingest, scraping, embedding, or backfill is
-  implemented in LI-S6 V1.
+- No accept/reject/edit mutation endpoint was implemented in LI-S6 V1; LI-S9
+  adds that closure slice. Graph materialization, new prediction engines,
+  corpus ingest, scraping, embedding, and backfill remain outside LI-S6.
 
 Purpose:
 
@@ -1487,7 +1489,8 @@ Acceptance criteria:
 - UI and API copy state decision support, not legal advice, and avoid
   guaranteed-outcome, judge-reputation, voice, emotion, biometric,
   psychological, or mental-health scoring language.
-- Legal knowledge graph materialization remains deferred.
+- Legal knowledge graph exploration beyond the LI-S11 matter graph foundation
+  remains deferred.
 
 ### LI-S7: Predictive Litigation Intelligence Foundation
 
@@ -1527,9 +1530,9 @@ API/backend changes:
   - LI-S7C is implemented and verified for the matter cockpit Predictive
     Intelligence UI, strict frontend API parsing, disclaimer rendering,
     source-link rendering, disabled state, and insufficient-evidence state.
-  - LI-S7D+ remains pending for calibrated model/backfill expansion,
-    predictive review workflow, broader source-family coverage, and any
-    production rollout hardening not covered by LI-S7A/B/C.
+  - LI-S10 is implemented for calibrated signals exposed from existing LI-S7B
+    aggregate snapshots. Broader source-family coverage and production rollout
+    hardening remain future work, but not as a missing LI-S10 V1 requirement.
 - Every output must keep source IDs, sample size, confidence band, features,
   limitations, human-review state, policy gate, audit contract, and the
   "decision support, not legal advice" disclaimer.
@@ -1651,12 +1654,15 @@ Source-data and AI policy:
   - outputs are source-backed decision support, not legal advice.
   - predictive surfaces require sample size, confidence band, source evidence,
     feature explanation, limitation note, tenant policy gate, and audit.
-  - no voice, audio recording, speech analysis, emotion, biometric,
-    psychological, mental-health, or voice-stress scoring is implemented.
+  - no broad voice/audio analysis, audio recording, speech analysis, emotion,
+    biometric, psychological, mental-health, or voice-stress scoring is
+    implemented.
   - no broad district/session/tribunal scraping or corpus ingest/backfill/
-    embedding job is part of LI-S1 through LI-S8 feature work.
-  - legal knowledge graph materialization remains deferred.
-  - LI-S6 accept/reject/edit review mutations remain deferred.
+    embedding job is part of LI-S1 through LI-S13 feature work.
+  - LI-S9 review mutations exist for the matter review queue; broader
+    assignment/escalation workflows remain pending.
+  - broad ingestion beyond LI-S12 readiness/proof tooling remains deferred
+    where marked below.
 
 Tests:
 
@@ -1682,6 +1688,296 @@ Acceptance criteria:
 - Gap ledger is updated only if this pass finds a broader enterprise/security/
   ops gap.
 
+### LI-S9: Review Mutations for Litigation Intelligence Queue
+
+Status:
+
+- Implemented as the first Litigation Intelligence Closure Track slice.
+- Scope is limited to review mutations for existing source-backed LI-S6 queue
+  items; it does not add new predictions, graph materialization, corpus ingest,
+  scraping, embeddings, or voice/audio features.
+
+Purpose:
+
+- Let a litigation partner perform human-review actions on matter-scoped LI
+  queue items without leaving the matter cockpit.
+- Preserve source lineage, tenant isolation, and auditability for every queue
+  mutation.
+
+User stories:
+
+- US-LI-013.
+- US-028.
+- US-040.
+
+API/backend changes:
+
+- Add `POST /api/matters/{matter_id}/litigation-intelligence/review/actions`.
+- Allowed actions are closed:
+  - `mark_reviewed`.
+  - `accept`.
+  - `reject`.
+  - `edit_note`.
+- Request contract requires a closed `item_type`, queue `item_id`, action, and
+  optional note.
+- Mutation service validates item ID prefix against item type, loads the source
+  record in the same company/matter, and fails closed for unknown or mismatched
+  items.
+- Repeated terminal actions are idempotent: the resulting state remains
+  `reviewed` and the request is audited with before/after state.
+
+DB models/migrations:
+
+- Add `litigation_intelligence_review_actions` via
+  `20260512_0001_litigation_intelligence_review_actions.py`.
+- Columns include `company_id`, `matter_id`, closed `item_type`, queue
+  `item_id`, source type/id, action, note, before/after status,
+  actor membership, and timestamp.
+- Source records remain authoritative. Where a source table already has
+  `review_status`, LI-S9 marks terminal actions as `reviewed`; predictive and
+  bench-context items use the action ledger overlay.
+
+Frontend pages/components:
+
+- Extend `/app/matters/{matter_id}/litigation-intelligence` rows with:
+  - reviewer note editor.
+  - `Save note`.
+  - `Mark reviewed`.
+  - `Accept`.
+  - `Reject`.
+- Actions invalidate and reload the matter-scoped review queue.
+- UI copy remains dense, professional, source-linked, and explicitly
+  decision-support oriented.
+
+AI prompts/providers:
+
+- None. LI-S9 does not invoke an LLM or model.
+
+Source-data rules:
+
+- Mutations apply only to existing source-backed LI-S1/S2/S3/S5/S7 queue
+  items.
+- Unknown item or source types fail validation.
+- Review actions do not create new predictions, recommendations, or legal
+  advice.
+
+Tests:
+
+- Backend tests cover mark-reviewed, accept, reject, edit-note, idempotent
+  repeated action, audit before/after metadata, closed item validation,
+  cross-tenant denial, restricted matter denial, team-scoped denial, and ethical
+  wall denial.
+- Frontend tests cover action rendering and strict mutation payloads.
+
+Security/tenant isolation checks:
+
+- Route enforces review capability plus existing matter access checks,
+  restricted matters, team scoping, ethical walls, and cross-tenant denial.
+- Every mutation is company/matter scoped and audited with source identity and
+  before/after state.
+
+Acceptance criteria:
+
+- A reviewer can mark a proceeding/affidavit/mock-hearing/predictive/bench
+  queue item reviewed, accepted, rejected, or annotate it with a note.
+- Repeating the same terminal action is safe and does not duplicate source
+  state changes.
+- The queue never mutates unknown item/source types.
+
+### LI-S10: Calibrated Predictive Expansion
+
+Status: Implemented.
+
+Purpose:
+
+- Expand controlled predictive analytics beyond LI-S7A/B/C foundations into
+  calibrated, source-backed outcome/favorability/risk surfaces.
+
+Required policy:
+
+- Every output must include sample size, confidence band, source evidence,
+  feature explanation, limitation note, tenant policy gate, audit trail, and
+  "decision support, not legal advice."
+- No LLM-only probability, win/loss claim, uncited judge reputation, or opaque
+  favorability score is allowed.
+- Weak evidence must degrade to `insufficient_evidence`.
+
+Candidate surfaces:
+
+- Bench/forum outcome tendency.
+- Interim relief, notice issuance, stay/interim order, adjournment, disposal
+  delay, adverse-order, settlement-inclination, and matter-risk analytics.
+
+Implemented scope:
+
+- `GET /api/matters/{matter_id}/predictive-intelligence` now returns
+  `calibrated_signals` as an additive field backed by existing LI-S7B
+  `predictive_outcome_aggregate_snapshots`.
+- Each calibrated signal exposes signal type, scope, sample size, observed
+  source-label distribution/rate, Wilson confidence band, calibration level,
+  evidence quality, source evidence links, limitation note, aggregate snapshot
+  reference, generated timestamp, and the decision-support disclaimer.
+- Weak sample size, unsupported snapshot status, or missing evidence IDs
+  degrades to `insufficient_evidence` or `limited_context`; no probability is
+  shown from LLM intuition.
+- `/app/matters/[id]/predictive-intelligence` renders a compact calibrated
+  signal table with source links, confidence band, sample size, observed
+  historical pattern copy, limitation notes, and safe insufficient-evidence
+  states.
+
+Deferred beyond LI-S10:
+
+- No new prediction engine, LLM summarization path, corpus ingest/backfill,
+  embedding job, graph materialization, or external source scraping is part of
+  LI-S10.
+
+### LI-S11: Legal Knowledge Graph Materialization
+
+Status: Implemented foundation.
+
+Purpose:
+
+- Materialize source-linked legal relationships across entities, issues,
+  statutes, orders, affidavits, judges, forums, outcomes, and matter events.
+
+Required policy:
+
+- Every edge must carry provenance, source ID, extraction method, confidence,
+  tenant/matter scope where applicable, and refresh metadata.
+- Graph refresh must be idempotent and auditable.
+- UI exploration beyond the matter cockpit foundation is a later sub-slice after
+  graph lineage and access checks are verified.
+
+Implemented scope:
+
+- `legal_knowledge_graph_runs`, `legal_knowledge_graph_nodes`, and
+  `legal_knowledge_graph_edges` materialize a single-matter, tenant-scoped
+  graph from existing source-backed LI records.
+- `GET /api/matters/{matter_id}/legal-knowledge-graph` returns the current
+  graph with closed node, edge, and source contracts.
+- `POST /api/matters/{matter_id}/legal-knowledge-graph/materialize` rebuilds
+  the graph idempotently for that matter and audits the mutation.
+- The foundation consumes existing LI-S1 proceeding signals, LI-S2 affidavit
+  statements/questions, LI-S3 mock-hearing questions/responses, LI-S5/LI-S7
+  predictive/bench evidence rows, and LI-S9 review-action metadata only.
+- `/app/matters/[id]/knowledge-graph` renders a compact node/relationship table
+  with source snippets, source links, filters, empty/loading/error states, and
+  the decision-support disclaimer.
+
+Deferred beyond LI-S11:
+
+- No external corpus graphing, corpus ingest/backfill, embedding job,
+  graph-wide analytics engine, or broad visual graph explorer is implemented.
+- No new prediction engine, LLM-only probability, voice/audio, emotion,
+  biometric, psychological, or mental-health scoring is implemented.
+
+### LI-S12: District/Session/Tribunal Source Expansion Plan and Safe Adapter Proofs
+
+Status: Implemented foundation/proof layer.
+
+Purpose:
+
+- Move beyond LI-S4 registry visibility into explicit lawful-source readiness,
+  adapter-contract proof gates, and per-source caveats for district courts,
+  session courts, tribunals, consumer forums, bare acts, and arbitration
+  forums.
+
+Required policy:
+
+- Lawful official/licensed adapters only.
+- No captcha/session-gated scraping.
+- Source registry readiness must mark each source as ingest-ready, planned,
+  blocked, manual-only, official, licensed, or test/internal.
+- Each source family needs lineage proof, parser quality checks, HNSW retrieval
+  quality evidence where embedded, and per-source rollback/backfill controls.
+
+Implemented scope:
+
+- `services/authority_sources.py` now exposes explicit source readiness states:
+  `ingest_ready`, `proof_required`, `blocked_captcha_or_session`,
+  `blocked_license_or_unknown`, and `manual_or_partner_only`.
+- Source readiness output includes source key/name, category, jurisdiction,
+  court/forum, access mode, official/licensed/manual/test/unlicensed source
+  type, captcha/session-gated posture, adapter availability, public corpus
+  allowance, predictive aggregate allowance, proof status, blocked reason,
+  lineage requirements, and caveats.
+- `assert_source_adapter_ingest_ready` is the proof gate for adapter use. It
+  fails closed for unknown, manual, unlicensed, captcha/session-gated, or
+  proof-required sources.
+- Existing Supreme Court and High Court official adapter-backed sources remain
+  ingest-ready. eCourts district/session sources remain blocked because the
+  available surfaces are captcha/session gated.
+- Tribunal, consumer forum, statutory bare-act, and arbitration entries appear
+  in readiness output but are not public-corpus or predictive-aggregate ready
+  until lawful adapter access, parser proof, and source-quality gates exist.
+- Bare-act/statute sources are represented separately from judgment/order
+  sources and are never eligible for predictive outcome aggregates by default.
+
+Deferred beyond LI-S12:
+
+- No broad district/session/tribunal ingestion, public corpus backfill,
+  embedding job, source scraping, paid-source pull, or predictive expansion is
+  implemented.
+- No source is promoted from readiness/proof-required to ingest-ready without
+  lawful access, adapter contract proof, lineage proof, and the corpus quality
+  gate.
+
+### LI-S13: Hearing Performance Coach
+
+Status: Implemented transcript-first foundation.
+
+Purpose:
+
+- Extend text-first mock hearing preparation into a consented performance coach
+  using existing typed mock-hearing responses and source-backed LI-S2 question
+  banks.
+
+Required policy:
+
+- Voice/audio features require tenant opt-in and explicit participant consent.
+- Transcript-first metrics are required before any audio-derived metrics.
+- Allowed metrics must be observable performance markers, such as answer
+  completeness, consistency with affidavit, unsupported assertions, document
+  references, and response timing.
+- Retention policy, deletion controls, and audit must be explicit.
+- No medical, mental-health, psychological, biometric, credibility, stress, or
+  emotion diagnosis is allowed.
+
+Implemented scope:
+
+- `GET /api/matters/{matter_id}/hearing-coach` returns matter-scoped readiness,
+  response count, consent-required state, limitation notes, and the training-aid
+  disclaimer.
+- `POST /api/matters/{matter_id}/mock-hearings/{session_id}/coach` generates a
+  deterministic report only when the user acknowledges the transcript-first
+  preparation gate.
+- LI-S13 reuses existing `mock_hearing_sessions`, `mock_hearing_questions`, and
+  `mock_hearing_responses`; no new table or migration is required for V1.
+- Metrics are observable text markers only: answered question, source-reference
+  use, unsupported assertions, contradictions, clarity/completeness scores,
+  direct-answer marker, response length marker, and missing exhibit/reference
+  marker.
+- Every feedback item links back to the mock-hearing response, question, source
+  affidavit question/statement, attachment/chunk where present, and bounded
+  source quote.
+- The service is deterministic and does not invoke an LLM or create `ModelRun`
+  rows.
+- Routes enforce tenant/matter access, restricted matter rules, team scoping,
+  ethical walls, and cross-tenant denial through the existing matter access
+  layer.
+- `/app/matters/[id]/hearings` includes a compact Hearing coach section with
+  consent acknowledgement, observable metrics, source links, safe disclaimer,
+  and empty/loading/error states.
+
+Deferred beyond LI-S13:
+
+- No broad voice/audio analysis, recording workflow, speech analysis, emotion,
+  biometric, psychological, mental-health, stress, lie-detection, or personality
+  inference is implemented.
+- Any future recording or transcript import workflow requires explicit tenant
+  opt-in, participant consent, retention/deletion controls, audit, and a
+  separate strict review.
+
 ## 9. Recommended Implementation Order
 
 1. LI-S0: PRD and source policy.
@@ -1700,8 +1996,14 @@ Acceptance criteria:
 10. LI-S7C: Matter cockpit predictive UI (implemented and verified).
 11. LI-S8: Final PRD alignment, release readiness, and gap ledger
     (implemented as docs/status verification).
-12. LI-S7D+: Calibrated model/backfill expansion and predictive review
-    workflow (pending).
+12. LI-S9: Review mutations for Litigation Intelligence queue
+    (implemented).
+13. LI-S10: Calibrated predictive expansion (implemented).
+14. LI-S11: Legal knowledge graph materialization foundation (implemented).
+15. LI-S12: District/session/tribunal source expansion proof layer
+    (implemented foundation; broad ingestion deferred).
+16. LI-S13: Hearing performance coach transcript-first foundation
+    (implemented).
 
 Historical sequencing notes:
 
@@ -1711,12 +2013,12 @@ Historical sequencing notes:
   registry semantics.
 - LI-S1 through LI-S7 are complete enough to leave the LI feature queue at
   their scoped V1/foundation boundaries after LI-S8 verification.
-- LI-S7D+ should wait until LI-S4/LI-S5 source and context semantics are stable
+- LI-S10 should wait until LI-S4/LI-S5 source and context semantics are stable
   for any source family beyond current official/licensed corpus layers.
 
-## 10. Explicit Out of Scope and Deferred Items
+## 10. Prohibited Patterns and Closure Track
 
-Out of scope:
+Prohibited patterns:
 
 - Opaque or unsupported black-box judge favorability.
 - Generic win/loss prediction without source IDs, sample size, confidence
@@ -1729,32 +2031,25 @@ Out of scope:
   confidence band, and limitations.
 - Settlement inclination scores without official/licensed source evidence.
 - Unsupported legal risk scores.
-- Emotional or psychological diagnosis.
-- Biometric, psychological, or voice-stress inference.
+- Medical, mental-health, emotional, psychological, biometric, credibility, or
+  voice-stress diagnosis.
 - Autonomous court filing or external legal action.
 - Cross-tenant analytics over private matter data.
 - Cross-tenant model training on customer data without explicit opt-in.
 - Bypassing captcha/session restrictions on court or tribunal sites.
 - Using unlicensed paid sources or third-party databases.
 
-Deferred:
+Closure slices, not abandonment:
 
-- Voice-enabled simulator.
-- Full stress simulation.
+- LI-S11 broad graph explorer and corpus-scale graph analytics beyond the
+  matter-scoped foundation.
+- Broad district/session/tribunal ingestion beyond LI-S12 safe adapter
+  readiness/proof tooling.
 - NJDG-based analytics until access, permitted use, and granularity are
   verified.
 - Paid commentary integration.
-- Broad all-India district court corpus.
-- Full all-tribunal corpus.
-- Graph database migration; start with relational/materialized graph tables.
 - Client-portal sharing of prep reports.
 - Auto-notification to clients from proceeding sheets.
-- LI-S6 accept/reject/edit review mutations.
-- Legal knowledge graph API/UI/materialization beyond the existing citation,
-  matter, statute, and judge-reference substrates.
-- LI-S7D+ calibrated prediction model/backfill expansion and predictive review
-  workflow beyond the LI-S7A/B/C foundation.
-- Voice/audio-based hearing metrics and any biometric inference.
 
 ## 11. LI Track Status Checklist
 
@@ -1788,10 +2083,24 @@ Deferred:
 - [x] LI-S7C implemented and verified: matter cockpit Predictive Intelligence
       page/nav, strict API parsing, professional decision-support UI,
       disclaimer, source links, disabled state, and insufficient-evidence state.
-- [ ] LI-S7D+ pending: calibrated model/backfill expansion, predictive review
-      workflow, broader source-family coverage, and rollout hardening.
 - [x] LI-S8 implemented: final PRD status alignment, caveat check, release
       readiness verification command plan, and gap-ledger review.
+- [x] LI-S9 implemented: review queue mutation endpoint/UI actions for
+      mark-reviewed, accept, reject, edit-note, idempotency, audit before/after
+      state, and unsafe-access denial.
+- [x] LI-S10 implemented: calibrated predictive expansion with source-backed
+      aggregate snapshot signals, observed source-label distributions,
+      confidence bands, sample size, limitation notes, and source evidence.
+- [x] LI-S11 implemented: matter-scoped legal knowledge graph foundation with
+      tenant-scoped runs, nodes, edges, source provenance, idempotent refresh,
+      audit, closed contracts, and compact cockpit UI.
+- [x] LI-S12 implemented: district/session/tribunal safe adapter readiness and
+      proof layer with explicit source states, fail-closed adapter contract,
+      blocked eCourts captcha/session posture, and no broad ingestion.
+- [x] LI-S13 implemented: consent-gated transcript-first hearing coach
+      foundation over typed mock-hearing responses, observable preparation
+      metrics, source-linked feedback, audit, safe cockpit UI, and no
+      medical/mental-health diagnosis.
 
 ## 12. Remaining Approval Checklist
 

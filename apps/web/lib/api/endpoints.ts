@@ -25,7 +25,13 @@ import {
   type EmailTemplateRecord,
   type EmailTemplateVariable,
   type ForumCatalogResponse,
+  type HearingCoachReportResponse,
+  type HearingCoachStatusResponse,
   type HearingPack,
+  type LegalKnowledgeGraphResponse,
+  type LitigationIntelligenceReviewAction,
+  type LitigationIntelligenceReviewItem,
+  type LitigationIntelligenceReviewMutationResponse,
   type Matter,
   type MatterAuditList,
   type LitigationIntelligenceReviewResponse,
@@ -65,9 +71,13 @@ import {
   emailTemplateListResponse,
   emailTemplateRecord,
   forumCatalogResponse,
+  hearingCoachReportResponse,
+  hearingCoachStatusResponse,
   hearingPack,
+  legalKnowledgeGraphResponse,
   matter,
   matterAuditList,
+  litigationIntelligenceReviewMutationResponse,
   litigationIntelligenceReviewResponse,
   matterStrategyEntry,
   matterStrategyEntryList,
@@ -251,6 +261,50 @@ export async function fetchLitigationIntelligenceReview(input: {
   return litigationIntelligenceReviewResponse.parse(data);
 }
 
+export async function mutateLitigationIntelligenceReviewItem(input: {
+  matterId: string;
+  itemId: string;
+  itemType: LitigationIntelligenceReviewItem["item_type"];
+  action: LitigationIntelligenceReviewAction;
+  note?: string | null;
+}): Promise<LitigationIntelligenceReviewMutationResponse> {
+  const matterId = encodeURIComponent(input.matterId);
+  const data = await apiRequest<unknown>(
+    `/api/matters/${matterId}/litigation-intelligence/review/actions`,
+    {
+      method: "POST",
+      body: {
+        item_id: input.itemId,
+        item_type: input.itemType,
+        action: input.action,
+        note: input.note ?? null,
+      },
+    },
+  );
+  return litigationIntelligenceReviewMutationResponse.parse(data);
+}
+
+export async function fetchLegalKnowledgeGraph(input: {
+  matterId: string;
+}): Promise<LegalKnowledgeGraphResponse> {
+  const matterId = encodeURIComponent(input.matterId);
+  const data = await apiRequest<unknown>(
+    `/api/matters/${matterId}/legal-knowledge-graph`,
+  );
+  return legalKnowledgeGraphResponse.parse(data);
+}
+
+export async function materializeLegalKnowledgeGraph(input: {
+  matterId: string;
+}): Promise<LegalKnowledgeGraphResponse> {
+  const matterId = encodeURIComponent(input.matterId);
+  const data = await apiRequest<unknown>(
+    `/api/matters/${matterId}/legal-knowledge-graph/materialize`,
+    { method: "POST", body: {} },
+  );
+  return legalKnowledgeGraphResponse.parse(data);
+}
+
 export async function fetchAffidavitIntelligence(input: {
   matterId: string;
 }): Promise<AffidavitIntelligenceResponse> {
@@ -334,6 +388,33 @@ export async function completeMockHearing(input: {
     { method: "POST", body: {} },
   );
   return mockHearingSession.parse(data);
+}
+
+export async function fetchHearingCoach(input: {
+  matterId: string;
+}): Promise<HearingCoachStatusResponse> {
+  const matterId = encodeURIComponent(input.matterId);
+  const data = await apiRequest<unknown>(`/api/matters/${matterId}/hearing-coach`);
+  return hearingCoachStatusResponse.parse(data);
+}
+
+export async function generateHearingCoach(input: {
+  matterId: string;
+  sessionId: string;
+  acknowledged: boolean;
+}): Promise<HearingCoachReportResponse> {
+  const matterId = encodeURIComponent(input.matterId);
+  const sessionId = encodeURIComponent(input.sessionId);
+  const data = await apiRequest<unknown>(
+    `/api/matters/${matterId}/mock-hearings/${sessionId}/coach`,
+    {
+      method: "POST",
+      body: {
+        acknowledged: input.acknowledged,
+      },
+    },
+  );
+  return hearingCoachReportResponse.parse(data);
 }
 
 // Phase C-3c (MOD-TS-016, 2026-04-25): toggle the per-matter

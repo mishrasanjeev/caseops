@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  BarChart3,
   Calendar,
   CalendarCheck,
   CheckCircle2,
@@ -33,8 +34,10 @@ import { apiErrorMessage, isApiErrorShape } from "@/lib/api/config";
 import {
   completeMockHearing,
   fetchCalendarSyncStatus,
+  fetchHearingCoach,
   fetchMockHearings,
   fetchProceedingIntelligence,
+  generateHearingCoach,
   listMatterReminders,
   type MatterCourtSyncJob,
   type MatterReminderRecord,
@@ -45,6 +48,9 @@ import {
 } from "@/lib/api/endpoints";
 import type {
   CalendarEventSyncRecord,
+  HearingCoachFeedbackItem,
+  HearingCoachReportResponse,
+  HearingCoachStatusResponse,
   MockHearingListResponse,
   MockHearingQuestion,
   MockHearingSession,
@@ -103,6 +109,7 @@ export default function MatterHearingsPage() {
   const [lastJob, setLastJob] = useState<MatterCourtSyncJob | null>(null);
   const [orderSort, setOrderSort] = useState<"latest" | "oldest">("latest");
   const [mockResponseDraft, setMockResponseDraft] = useState("");
+  const [coachAcknowledged, setCoachAcknowledged] = useState(false);
   const { data } = useMatterWorkspace(matterId);
   // Strict Ledger #5 (BUG-013 in-app visibility, 2026-04-22):
   // per-matter reminder rows. Re-fetched on a 30s polling cadence
@@ -122,6 +129,11 @@ export default function MatterHearingsPage() {
   const mockHearingQuery = useQuery({
     queryKey: ["matters", matterId, "mock-hearings"],
     queryFn: () => fetchMockHearings({ matterId }),
+    enabled: Boolean(matterId),
+  });
+  const hearingCoachQuery = useQuery({
+    queryKey: ["matters", matterId, "hearing-coach"],
+    queryFn: () => fetchHearingCoach({ matterId }),
     enabled: Boolean(matterId),
   });
   const outlookStatusQuery = useQuery({
@@ -242,6 +254,9 @@ export default function MatterHearingsPage() {
     onSuccess: (session) => {
       upsertMockSession(session);
       setMockResponseDraft("");
+      void queryClient.invalidateQueries({
+        queryKey: ["matters", matterId, "hearing-coach"],
+      });
     },
     onError: (err) => {
       toast.error(apiErrorMessage(err, "Could not record response."));
@@ -255,6 +270,20 @@ export default function MatterHearingsPage() {
     },
     onError: (err) => {
       toast.error(apiErrorMessage(err, "Could not complete mock hearing."));
+    },
+  });
+  const generateCoachMutation = useMutation({
+    mutationFn: (sessionId: string) =>
+      generateHearingCoach({
+        matterId,
+        sessionId,
+        acknowledged: coachAcknowledged,
+      }),
+    onSuccess: () => {
+      toast.success("Hearing coach report generated.");
+    },
+    onError: (err) => {
+      toast.error(apiErrorMessage(err, "Could not generate hearing coach report."));
     },
   });
 
@@ -575,6 +604,20 @@ export default function MatterHearingsPage() {
           });
         }}
         onComplete={(sessionId) => completeMockMutation.mutate(sessionId)}
+      />
+
+      <HearingCoachSection
+        matterId={matterId}
+        mockHearings={mockHearingQuery.data}
+        status={hearingCoachQuery.data}
+        report={generateCoachMutation.data}
+        isLoading={hearingCoachQuery.isPending}
+        isError={hearingCoachQuery.isError}
+        canRun={canRunMockHearing}
+        acknowledged={coachAcknowledged}
+        isGenerating={generateCoachMutation.isPending}
+        onAcknowledgedChange={setCoachAcknowledged}
+        onGenerate={(sessionId) => generateCoachMutation.mutate(sessionId)}
       />
 
       <Card className="lg:col-span-2">
@@ -904,6 +947,13 @@ function mockSourceHref(matterId: string, question: MockHearingQuestion): string
   return `/app/matters/${matterId}/documents`;
 }
 
+function coachSourceHref(matterId: string, item: HearingCoachFeedbackItem): string {
+  if (item.source_attachment_id) {
+    return `/app/matters/${matterId}/documents/${item.source_attachment_id}/view`;
+  }
+  return `/app/matters/${matterId}/documents`;
+}
+
 function activeMockSession(
   response: MockHearingListResponse | undefined,
 ): MockHearingSession | null {
@@ -923,6 +973,231 @@ function currentMockQuestion(session: MockHearingSession | null): MockHearingQue
 function latestMockResponse(session: MockHearingSession | null) {
   const responses = (session?.questions ?? []).flatMap((question) => question.responses);
   return responses.sort((a, b) => b.created_at.localeCompare(a.created_at))[0] ?? null;
+}
+
+function HearingCoachSection({
+  matterId,
+  mockHearings,
+  status,
+  report,
+  isLoading,
+  isError,
+  canRun,
+  acknowledged,
+  isGenerating,
+  onAcknowledgedChange,
+  onGenerate,
+}: {
+  matterId: string;
+  mockHearings: MockHearingListResponse | undefined;
+  status: HearingCoachStatusResponse | undefined;
+  report: HearingCoachReportResponse | undefined;
+  isLoading: boolean;
+  isError: boolean;
+  canRun: boolean;
+  acknowledged: boolean;
+  isGenerating: boolean;
+  onAcknowledgedChange: (value: boolean) => void;
+  onGenerate: (sessionId: string) => void;
+}) {
+  const sessionId = status?.latest_session_id ?? activeMockSession(mockHearings)?.id ?? null;
+  const responseCount = status?.response_count ?? 0;
+  const canGenerate = Boolean(sessionId && acknowledged && canRun && responseCount > 0);
+  return (
+    <Card className="lg:col-span-2" data-testid="hearing-coach-section">
+      <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+        <div>
+          <CardTitle>Hearing coach</CardTitle>
+          <CardDescription>
+            Transcript-first training aid from typed mock-hearing responses; not legal advice.
+          </CardDescription>
+        </div>
+        {responseCount > 0 ? (
+          <Button
+            type="button"
+            size="sm"
+            disabled={!canGenerate || isGenerating}
+            onClick={() => sessionId && onGenerate(sessionId)}
+            data-testid="hearing-coach-generate"
+          >
+            {isGenerating ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            ) : (
+              <BarChart3 className="h-4 w-4" aria-hidden />
+            )}
+            Generate coach report
+          </Button>
+        ) : null}
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="grid gap-2 md:grid-cols-3" data-testid="hearing-coach-loading">
+            <div className="h-20 rounded-lg bg-[var(--color-bg-2)]" />
+            <div className="h-20 rounded-lg bg-[var(--color-bg-2)]" />
+            <div className="h-20 rounded-lg bg-[var(--color-bg-2)]" />
+          </div>
+        ) : isError ? (
+          <p className="text-sm text-[var(--color-danger-500,#c53030)]">
+            Hearing coach status could not be loaded.
+          </p>
+        ) : responseCount === 0 ? (
+          <EmptyState
+            icon={BarChart3}
+            title="No typed responses yet"
+            description="Start a mock hearing and submit at least one typed response before running the hearing coach."
+          />
+        ) : (
+          <div className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
+            <div className="rounded-lg border border-[var(--color-line)] bg-[var(--color-bg)] p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusBadge status={status?.status ?? "consent_required"} />
+                <span className="text-xs text-[var(--color-mute)]">
+                  {responseCount} typed response{responseCount === 1 ? "" : "s"}
+                </span>
+              </div>
+              <p className="mt-3 text-xs leading-relaxed text-[var(--color-mute)]">
+                {status?.disclaimer ??
+                  "Hearing coach is a transcript-first training aid; not legal advice."}
+              </p>
+              <label className="mt-4 flex items-start gap-2 text-sm text-[var(--color-ink-2)]">
+                <input
+                  type="checkbox"
+                  className="mt-1 h-4 w-4 rounded border-[var(--color-line)]"
+                  checked={acknowledged}
+                  onChange={(event) => onAcknowledgedChange(event.target.checked)}
+                  data-testid="hearing-coach-consent"
+                />
+                <span>
+                  I acknowledge this report uses typed practice responses and source-linked
+                  mock hearing material as a preparation aid for counsel review.
+                </span>
+              </label>
+              {!canRun ? (
+                <p className="mt-3 text-xs text-[var(--color-mute)]">
+                  A team member with hearing preparation access can generate the report.
+                </p>
+              ) : null}
+              {status?.limitation_notes?.length ? (
+                <ul className="mt-4 list-disc space-y-1 pl-5 text-xs text-[var(--color-mute)]">
+                  {status.limitation_notes.map((note) => (
+                    <li key={note}>{note}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+
+            {report ? (
+              <div className="space-y-4" data-testid="hearing-coach-report">
+                <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+                  <MockMetric
+                    label="Clarity"
+                    value={report.metrics.average_clarity_score}
+                  />
+                  <MockMetric
+                    label="Completeness"
+                    value={report.metrics.average_completeness_score}
+                  />
+                  <MockMetric
+                    label="Source refs"
+                    value={report.metrics.source_reference_used_count}
+                  />
+                  <MockMetric
+                    label="Review flags"
+                    value={report.metrics.review_required_count}
+                  />
+                </div>
+                <div className="grid gap-3">
+                  {report.feedback_items.map((item) => (
+                    <HearingCoachFeedbackRow
+                      key={item.response_id}
+                      matterId={matterId}
+                      item={item}
+                    />
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-[var(--color-line)] bg-white p-4 text-sm text-[var(--color-mute)]">
+                A coach report appears here after acknowledgement and generation.
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function HearingCoachFeedbackRow({
+  matterId,
+  item,
+}: {
+  matterId: string;
+  item: HearingCoachFeedbackItem;
+}) {
+  return (
+    <div
+      className="rounded-lg border border-[var(--color-line)] bg-white p-4"
+      data-testid="hearing-coach-feedback-item"
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusBadge status={item.review_required ? "review_required" : "supported"} />
+        <span className="text-xs text-[var(--color-mute)]">
+          Clarity {item.clarity_score} / Completeness {item.completeness_score}
+        </span>
+      </div>
+      <p className="mt-2 text-sm font-medium text-[var(--color-ink)]">
+        {item.question_text}
+      </p>
+      <div className="mt-3 grid gap-3 md:grid-cols-2">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-[0.06em] text-[var(--color-mute)]">
+            Typed response
+          </div>
+          <p className="mt-1 text-sm text-[var(--color-ink-2)]">
+            {item.transcript_excerpt}
+          </p>
+        </div>
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-[0.06em] text-[var(--color-mute)]">
+            Source quote
+          </div>
+          <p className="mt-1 text-sm text-[var(--color-ink-2)]">{item.source_quote}</p>
+          <Button href={coachSourceHref(matterId, item)} variant="ghost" size="sm" className="mt-2">
+            View source
+          </Button>
+        </div>
+      </div>
+      <dl className="mt-3 grid gap-2 text-xs text-[var(--color-mute)] md:grid-cols-2">
+        <MockFact
+          label="Answered question"
+          value={item.answered_question ? "Yes" : "Needs direct answer"}
+        />
+        <MockFact
+          label="Source reference"
+          value={item.source_reference_used ? "Present" : "Missing"}
+        />
+        <MockFact
+          label="Unsupported assertions"
+          value={String(item.unsupported_assertion_count)}
+        />
+        <MockFact label="Contradictions" value={String(item.contradiction_count)} />
+        <MockFact
+          label="Exhibit reference"
+          value={item.missing_exhibit_reference ? "Missing" : "Present"}
+        />
+        <MockFact
+          label="Response length"
+          value={item.overlong_response_marker ? "Condense" : "Within range"}
+        />
+      </dl>
+      <ul className="mt-3 list-disc space-y-1 pl-5 text-xs text-[var(--color-mute)]">
+        {item.improvement_checklist.map((note) => (
+          <li key={note}>{note}</li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 function MockHearingSection({

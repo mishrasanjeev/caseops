@@ -32,12 +32,12 @@ const features = [
   {
     icon: Gavel,
     title: "Hearing Prep",
-    body: "Auto-compile chronologies, last orders, pending compliance, bench brief, and oral points before every listing.",
+    body: "Auto-compile chronologies, proceeding-sheet directions, affidavit prep, mock-hearing prompts, hearing-coach feedback, and oral points before a listing.",
   },
   {
     icon: Sparkles,
-    title: "Explainable Recommendations",
-    body: "Forum and supporting-authority recommendations today, with rationale, assumptions, missing facts, and confidence on every option.",
+    title: "Litigation Intelligence",
+    body: "Review proceeding signals, affidavit gaps, mock-hearing feedback, bench context, calibrated historical patterns, and knowledge-graph links with sources attached.",
   },
   {
     icon: Scale,

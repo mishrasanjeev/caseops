@@ -8,6 +8,7 @@ from sqlalchemy import (
     JSON,
     BigInteger,
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     Float,
@@ -271,6 +272,54 @@ class MockHearingQuestionStatus(StrEnum):
 class MockHearingReviewStatus(StrEnum):
     REVIEW_REQUIRED = "review_required"
     REVIEWED = "reviewed"
+
+
+class LegalKnowledgeGraphRunStatus(StrEnum):
+    COMPLETED = "completed"
+    NO_SOURCE_RECORDS = "no_source_records"
+
+
+class LegalKnowledgeGraphNodeType(StrEnum):
+    MATTER = "matter"
+    PROCEEDING_SIGNAL = "proceeding_signal"
+    AFFIDAVIT_STATEMENT = "affidavit_statement"
+    AFFIDAVIT_QUESTION = "affidavit_question"
+    MOCK_HEARING_QUESTION = "mock_hearing_question"
+    MOCK_HEARING_RESPONSE = "mock_hearing_response"
+    PREDICTIVE_SIGNAL = "predictive_signal"
+    BENCH_CONTEXT = "bench_context"
+    LEGAL_SOURCE = "legal_source"
+    STATUTE_OR_ISSUE = "statute_or_issue"
+    REVIEW_ACTION = "review_action"
+
+
+class LegalKnowledgeGraphEdgeType(StrEnum):
+    SUPPORTS = "supports"
+    CONTRADICTS = "contradicts"
+    REFERENCES = "references"
+    DERIVED_FROM = "derived_from"
+    PROMPTS = "prompts"
+    RELATES_TO = "relates_to"
+    HAS_LIMITATION = "has_limitation"
+
+
+class LegalKnowledgeGraphSourceType(StrEnum):
+    MATTER = "matter"
+    MATTER_COURT_ORDER = "matter_court_order"
+    MATTER_PROCEEDING_SIGNAL = "matter_proceeding_signal"
+    MATTER_DOCUMENT = "matter_document"
+    MATTER_ATTACHMENT_CHUNK = "matter_attachment_chunk"
+    AFFIDAVIT_STATEMENT = "affidavit_statement"
+    AFFIDAVIT_QUESTION = "affidavit_question"
+    MOCK_HEARING_SESSION = "mock_hearing_session"
+    MOCK_HEARING_QUESTION = "mock_hearing_question"
+    MOCK_HEARING_RESPONSE = "mock_hearing_response"
+    PREDICTIVE_SIGNAL_ITEM = "predictive_signal_item"
+    PREDICTIVE_SIGNAL_RUN = "predictive_signal_run"
+    AUTHORITY_DOCUMENT = "authority_document"
+    AGGREGATE_SNAPSHOT = "aggregate_snapshot"
+    LITIGATION_INTELLIGENCE_REVIEW_ACTION = "litigation_intelligence_review_action"
+    UNAVAILABLE = "unavailable"
 
 
 class MatterCourtSyncJobStatus(StrEnum):
@@ -2795,6 +2844,277 @@ class MockHearingResponse(Base):
 
     session: Mapped[MockHearingSession] = relationship(back_populates="responses")
     question: Mapped[MockHearingQuestion] = relationship(back_populates="responses")
+
+
+class LitigationIntelligenceReviewAction(Base):
+    """Human review action for an LI review-queue item.
+
+    LI-S9 keeps source records authoritative and stores the lawyer's queue
+    action as a tenant/matter-scoped ledger so predictive/bench items that do
+    not have their own review_status column can still be marked reviewed.
+    """
+
+    __tablename__ = "litigation_intelligence_review_actions"
+    __table_args__ = (
+        CheckConstraint(
+            "item_type in ("
+            "'proceeding_signal', 'affidavit_statement', 'affidavit_question', "
+            "'mock_hearing_session', 'mock_hearing_response', 'predictive_signal', "
+            "'bench_context'"
+            ")",
+            name="ck_li_review_actions_item_type",
+        ),
+        CheckConstraint(
+            "source_type in ("
+            "'matter_proceeding_signal', 'affidavit_statement', 'affidavit_question', "
+            "'mock_hearing_session', 'mock_hearing_response', 'predictive_signal_item', "
+            "'predictive_signal_run'"
+            ")",
+            name="ck_li_review_actions_source_type",
+        ),
+        CheckConstraint(
+            "action in ('mark_reviewed', 'accept', 'reject', 'edit_note')",
+            name="ck_li_review_actions_action",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    item_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    item_id: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    source_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    source_id: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    action: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status_before: Mapped[str] = mapped_column(String(64), nullable=False)
+    status_after: Mapped[str] = mapped_column(String(64), nullable=False)
+    actor_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+        index=True,
+    )
+
+
+class LegalKnowledgeGraphRun(Base):
+    """Matter-scoped source-backed legal knowledge graph materialization run."""
+
+    __tablename__ = "legal_knowledge_graph_runs"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            "matter_id",
+            name="uq_legal_knowledge_graph_run_matter",
+        ),
+        CheckConstraint(
+            "status in ('completed', 'no_source_records')",
+            name="ck_legal_knowledge_graph_runs_status",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=LegalKnowledgeGraphRunStatus.NO_SOURCE_RECORDS,
+        index=True,
+    )
+    source_record_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    node_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    edge_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    missing_data_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    limitation_note: Mapped[str] = mapped_column(Text, nullable=False)
+    disclaimer: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    nodes: Mapped[list[LegalKnowledgeGraphNode]] = relationship(
+        back_populates="run",
+        cascade="all, delete-orphan",
+        order_by="LegalKnowledgeGraphNode.created_at.asc()",
+    )
+    edges: Mapped[list[LegalKnowledgeGraphEdge]] = relationship(
+        back_populates="run",
+        cascade="all, delete-orphan",
+        order_by="LegalKnowledgeGraphEdge.created_at.asc()",
+    )
+
+
+class LegalKnowledgeGraphNode(Base):
+    __tablename__ = "legal_knowledge_graph_nodes"
+    __table_args__ = (
+        UniqueConstraint(
+            "run_id",
+            "node_key",
+            name="uq_legal_knowledge_graph_node_run_key",
+        ),
+        CheckConstraint(
+            "node_type in ("
+            "'matter', 'proceeding_signal', 'affidavit_statement', "
+            "'affidavit_question', 'mock_hearing_question', 'mock_hearing_response', "
+            "'predictive_signal', 'bench_context', 'legal_source', "
+            "'statute_or_issue', 'review_action'"
+            ")",
+            name="ck_legal_knowledge_graph_nodes_node_type",
+        ),
+        CheckConstraint(
+            "source_type in ("
+            "'matter', 'matter_court_order', 'matter_proceeding_signal', "
+            "'matter_document', 'matter_attachment_chunk', 'affidavit_statement', "
+            "'affidavit_question', 'mock_hearing_session', 'mock_hearing_question', "
+            "'mock_hearing_response', 'predictive_signal_item', 'predictive_signal_run', "
+            "'authority_document', 'aggregate_snapshot', "
+            "'litigation_intelligence_review_action', 'unavailable'"
+            ")",
+            name="ck_legal_knowledge_graph_nodes_source_type",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    run_id: Mapped[str] = mapped_column(
+        ForeignKey("legal_knowledge_graph_runs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    node_key: Mapped[str] = mapped_column(String(180), nullable=False, index=True)
+    node_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    label: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    source_id: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    source_quote: Mapped[str | None] = mapped_column(Text, nullable=True)
+    confidence_label: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    review_status: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    limitation_note: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+
+    run: Mapped[LegalKnowledgeGraphRun] = relationship(back_populates="nodes")
+
+
+class LegalKnowledgeGraphEdge(Base):
+    __tablename__ = "legal_knowledge_graph_edges"
+    __table_args__ = (
+        UniqueConstraint(
+            "run_id",
+            "from_node_id",
+            "to_node_id",
+            "edge_type",
+            "source_type",
+            "source_id",
+            name="uq_legal_knowledge_graph_edge_identity",
+        ),
+        CheckConstraint(
+            "edge_type in ("
+            "'supports', 'contradicts', 'references', 'derived_from', "
+            "'prompts', 'relates_to', 'has_limitation'"
+            ")",
+            name="ck_legal_knowledge_graph_edges_edge_type",
+        ),
+        CheckConstraint(
+            "source_type in ("
+            "'matter', 'matter_court_order', 'matter_proceeding_signal', "
+            "'matter_document', 'matter_attachment_chunk', 'affidavit_statement', "
+            "'affidavit_question', 'mock_hearing_session', 'mock_hearing_question', "
+            "'mock_hearing_response', 'predictive_signal_item', 'predictive_signal_run', "
+            "'authority_document', 'aggregate_snapshot', "
+            "'litigation_intelligence_review_action', 'unavailable'"
+            ")",
+            name="ck_legal_knowledge_graph_edges_source_type",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    run_id: Mapped[str] = mapped_column(
+        ForeignKey("legal_knowledge_graph_runs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    from_node_id: Mapped[str] = mapped_column(
+        ForeignKey("legal_knowledge_graph_nodes.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    to_node_id: Mapped[str] = mapped_column(
+        ForeignKey("legal_knowledge_graph_nodes.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    edge_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    label: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    source_id: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    source_quote: Mapped[str | None] = mapped_column(Text, nullable=True)
+    confidence_label: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    limitation_note: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+
+    run: Mapped[LegalKnowledgeGraphRun] = relationship(back_populates="edges")
 
 
 class MatterTimeEntry(Base):

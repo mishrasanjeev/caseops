@@ -25,7 +25,9 @@ LitigationReviewStatusLiteral = Literal[
     "completed",
 ]
 LitigationReviewPriorityLiteral = Literal["high", "medium", "low"]
+LitigationReviewActionLiteral = Literal["mark_reviewed", "accept", "reject", "edit_note"]
 LitigationReviewSourceTypeLiteral = Literal[
+    "matter_proceeding_signal",
     "matter_court_order",
     "matter_cause_list_entry",
     "matter_document",
@@ -33,6 +35,8 @@ LitigationReviewSourceTypeLiteral = Literal[
     "affidavit_statement",
     "affidavit_question",
     "mock_hearing_session",
+    "mock_hearing_response",
+    "predictive_signal_item",
     "predictive_signal_run",
     "authority_document",
     "aggregate_snapshot",
@@ -66,6 +70,10 @@ class LitigationIntelligenceReviewItem(BaseModel):
     review_reason: str
     source: LitigationIntelligenceReviewSource
     due_on: date | None = None
+    review_note: str | None = None
+    last_review_action: LitigationReviewActionLiteral | None = None
+    reviewed_at: datetime | None = None
+    reviewed_by_membership_id: str | None = None
     created_at: datetime
     updated_at: datetime | None = None
 
@@ -88,3 +96,30 @@ class LitigationIntelligenceReviewResponse(BaseModel):
     disclaimer: str
     summary: LitigationIntelligenceReviewSummary
     items: list[LitigationIntelligenceReviewItem] = Field(default_factory=list)
+
+
+class LitigationIntelligenceReviewMutationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    item_id: str = Field(min_length=3, max_length=160)
+    item_type: LitigationReviewItemTypeLiteral
+    action: LitigationReviewActionLiteral
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class LitigationIntelligenceReviewMutationResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    matter_id: str
+    item_id: str
+    item_type: LitigationReviewItemTypeLiteral
+    source_type: LitigationReviewSourceTypeLiteral
+    source_id: str
+    action: LitigationReviewActionLiteral
+    status_before: str
+    status_after: str
+    note: str | None = None
+    no_op_reason: str | None = None
+    audit_event_id: str
+    applied: bool
+    updated_at: datetime

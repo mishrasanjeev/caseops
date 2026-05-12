@@ -98,6 +98,41 @@ class ObservedSignalDistribution(BaseModel):
     year_end: int | None = None
 
 
+class CalibratedSignalScope(BaseModel):
+    scope_type: str | None = None
+    scope_key: str | None = None
+    court_name: str | None = None
+    forum_level: str | None = None
+    judge_id: str | None = None
+    matter_type: str | None = None
+    party_side: str | None = None
+    year_start: int | None = None
+    year_end: int | None = None
+
+
+class CalibratedPredictiveSignal(BaseModel):
+    signal_type: str
+    label: str
+    status: BenchContextStatusLiteral
+    scope: CalibratedSignalScope
+    sample_size: int = Field(ge=0)
+    observed_rate: float | None = Field(default=None, ge=0, le=1)
+    positive_count: int = Field(default=0, ge=0)
+    negative_count: int = Field(default=0, ge=0)
+    neutral_count: int = Field(default=0, ge=0)
+    confidence: PredictionConfidence
+    calibration_level: PredictionConfidenceLabel
+    evidence_quality: str
+    evidence: list[PredictiveEvidence] = Field(default_factory=list)
+    missing_data: list[str] = Field(default_factory=list)
+    limitation_note: str
+    aggregate_snapshot_id: str | None = None
+    generated_at: datetime | None = None
+    human_review_required: bool = True
+    decision_support_label: str = "decision support, not legal advice"
+    disclaimer: str
+
+
 class BenchContextSummary(BaseModel):
     matter_id: str
     status: BenchContextStatusLiteral
@@ -152,6 +187,7 @@ class PredictiveIntelligenceResponse(BaseModel):
     run_id: str
     bench_summary: BenchPredictiveSummary
     bench_context: BenchContextSummary
+    calibrated_signals: list[CalibratedPredictiveSignal] = Field(default_factory=list)
     matter_risk_summary: MatterRiskSummary
     hearing_prep_scorecard: HearingPrepScorecard
     disclaimer: str

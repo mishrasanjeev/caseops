@@ -48,7 +48,7 @@ const faqJsonLd = {
       name: "What courts and jurisdictions are covered?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Lower courts, High Courts, and the Supreme Court are in scope. Today's judge catalog: 31 sitting Supreme Court judges plus 32 sitting Delhi High Court judges with career history sourced from official sites. Bombay, Karnataka, Madras, Telangana and Patna High Courts are catalog-seeded; per-court judge data and cause-list scrapers ship as each court's PRD lands.",
+        text: "Lower courts, High Courts, tribunals, forums, bare acts, arbitration sources, and the Supreme Court are in scope. Current public-source automation is limited to verified official sources; district, session, tribunal, consumer-forum, bare-act, and arbitration sources appear in the readiness registry until lawful adapters and source-quality proof exist.",
       },
     },
     {
@@ -56,7 +56,15 @@ const faqJsonLd = {
       name: "Does the appeal draft consider which bench will hear it?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Yes. When a matter has an upcoming listing whose bench is resolved against our judge catalog, the appeal-memorandum draft pulls authorities authored by THAT specific bench and prefers ones aligned with the matter's practice area. Selection of supporting citations is editorial advocacy; the system never claims a win/loss probability or judge tendency.",
+        text: "Yes. When a matter has an upcoming listing whose bench is resolved against the judge catalog, the appeal-memorandum draft can pull authorities authored by that bench and prefer ones aligned with the matter's practice area. Predictive and bench-context surfaces show source evidence, sample size, confidence bands, and limitation notes rather than uncited court-strategy claims.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "What is Litigation Intelligence?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Litigation Intelligence is a matter-level review surface for proceeding-sheet signals, affidavit facts and gaps, mock-hearing feedback, bench context, calibrated historical patterns, source readiness, a legal knowledge graph, and a transcript-first hearing coach. It is decision support and a training aid, not legal advice.",
       },
     },
     {

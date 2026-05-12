@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -20,15 +20,23 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { fetchLitigationIntelligenceReview } from "@/lib/api/endpoints";
+import { apiErrorMessage } from "@/lib/api/config";
+import {
+  fetchLitigationIntelligenceReview,
+  mutateLitigationIntelligenceReviewItem,
+} from "@/lib/api/endpoints";
 import type {
+  LitigationIntelligenceReviewAction,
   LitigationIntelligenceReviewItem,
   LitigationIntelligenceReviewResponse,
   LitigationIntelligenceReviewSource,
 } from "@/lib/api/schemas";
+import { useState } from "react";
+import { toast } from "sonner";
 
 const TYPE_LABELS: Record<LitigationIntelligenceReviewItem["item_type"], string> = {
   proceeding_signal: "Proceeding signals",
@@ -59,14 +67,59 @@ const PRIORITY_TONE: Record<
   medium: "warning",
   low: "neutral",
 };
+const REVIEW_NOTE_POLICY_MESSAGE =
+  "Review note contains unsupported prediction, judge-reputation, legal-advice, or biometric/psychological language.";
+const UNSAFE_REVIEW_NOTE_PATTERNS = [
+  /\bguaranteed(?:\s+(?:outcome|win|result))?\b/i,
+  /\bwill\s+win\b/i,
+  /\bwill\s+lose\b/i,
+  /\bjudge\s+(?:likes|dislikes)\b/i,
+  /\bjudge\s+reputation\b/i,
+  /\bfavou?rable\s+judge\b/i,
+  /\bjudge\s+is\s+favou?rable\b/i,
+  /\bwin\s+probability\b/i,
+  /\bloss\s+probability\b/i,
+  /\bwin\s*\/\s*loss\b/i,
+  /\bprobability\s+of\s+(?:winning|success)\b/i,
+  /\bsuccess\s+probability\b/i,
+  /\bemotional\s+(?:instability|state)\b/i,
+  /\bpsychological(?:\s+(?:diagnosis|profile|state|score))?\b/i,
+  /\bbiometric(?:\s+(?:score|scoring|claim))?\b/i,
+  /\bmental[-\s]?health\b/i,
+  /\bvoice\s+stress\b/i,
+  /\bstress\s+score\b/i,
+  /\bcredibility\s+score\b/i,
+];
 
 export default function LitigationIntelligenceReviewPage() {
   const params = useParams<{ id: string }>();
   const matterId = params.id;
+  const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ["matters", matterId, "litigation-intelligence-review"],
     queryFn: () => fetchLitigationIntelligenceReview({ matterId }),
     enabled: Boolean(matterId),
+  });
+  const actionMutation = useMutation({
+    mutationFn: (input: {
+      itemId: string;
+      itemType: LitigationIntelligenceReviewItem["item_type"];
+      action: LitigationIntelligenceReviewAction;
+      note?: string | null;
+    }) =>
+      mutateLitigationIntelligenceReviewItem({
+        matterId,
+        ...input,
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["matters", matterId, "litigation-intelligence-review"],
+      });
+      toast.success("Review action saved.");
+    },
+    onError: (err) => {
+      toast.error(apiErrorMessage(err, "Could not save review action."));
+    },
   });
   const refetchReview = query.refetch;
 
@@ -92,15 +145,42 @@ export default function LitigationIntelligenceReviewPage() {
     );
   }
 
-  return <ReviewView data={query.data} matterId={matterId} />;
+  return (
+    <ReviewView
+      data={query.data}
+      matterId={matterId}
+      pendingItemId={actionMutation.variables?.itemId ?? null}
+      onAction={(item, action, note) => {
+        const normalizedNote = note?.trim() || null;
+        if (normalizedNote && !isSafeReviewNote(normalizedNote)) {
+          toast.error(REVIEW_NOTE_POLICY_MESSAGE);
+          return;
+        }
+        actionMutation.mutate({
+          itemId: item.id,
+          itemType: item.item_type,
+          action,
+          note: normalizedNote,
+        });
+      }}
+    />
+  );
 }
 
 function ReviewView({
   data,
   matterId,
+  pendingItemId,
+  onAction,
 }: {
   data: LitigationIntelligenceReviewResponse;
   matterId: string;
+  pendingItemId: string | null;
+  onAction: (
+    item: LitigationIntelligenceReviewItem,
+    action: LitigationIntelligenceReviewAction,
+    note?: string | null,
+  ) => void;
 }) {
   const grouped = groupItems(data.items);
 
@@ -166,7 +246,14 @@ function ReviewView({
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_18rem]">
           <section className="space-y-4">
             {grouped.map(([type, items]) => (
-              <ReviewGroup key={type} type={type} items={items} matterId={matterId} />
+              <ReviewGroup
+                key={type}
+                type={type}
+                items={items}
+                matterId={matterId}
+                pendingItemId={pendingItemId}
+                onAction={onAction}
+              />
             ))}
           </section>
           <ReviewSidebar data={data} />
@@ -180,10 +267,18 @@ function ReviewGroup({
   type,
   items,
   matterId,
+  pendingItemId,
+  onAction,
 }: {
   type: LitigationIntelligenceReviewItem["item_type"];
   items: LitigationIntelligenceReviewItem[];
   matterId: string;
+  pendingItemId: string | null;
+  onAction: (
+    item: LitigationIntelligenceReviewItem,
+    action: LitigationIntelligenceReviewAction,
+    note?: string | null,
+  ) => void;
 }) {
   return (
     <Card data-testid={`litigation-review-group-${type}`}>
@@ -200,7 +295,13 @@ function ReviewGroup({
         <div className="overflow-hidden rounded-md border border-[var(--color-line)]">
           <ul className="divide-y divide-[var(--color-line)]">
             {items.map((item) => (
-              <ReviewItemRow key={item.id} item={item} matterId={matterId} />
+              <ReviewItemRow
+                key={item.id}
+                item={item}
+                matterId={matterId}
+                pending={pendingItemId === item.id}
+                onAction={onAction}
+              />
             ))}
           </ul>
         </div>
@@ -212,11 +313,23 @@ function ReviewGroup({
 function ReviewItemRow({
   item,
   matterId,
+  pending,
+  onAction,
 }: {
   item: LitigationIntelligenceReviewItem;
   matterId: string;
+  pending: boolean;
+  onAction: (
+    item: LitigationIntelligenceReviewItem,
+    action: LitigationIntelligenceReviewAction,
+    note?: string | null,
+  ) => void;
 }) {
   const href = sourceHref(item.source, matterId);
+  const visibleReviewNote =
+    item.review_note && isSafeReviewNote(item.review_note) ? item.review_note : null;
+  const noteHiddenByPolicy = Boolean(item.review_note && !visibleReviewNote);
+  const [noteDraft, setNoteDraft] = useState(visibleReviewNote ?? "");
   return (
     <li className="bg-white p-3" data-testid={`litigation-review-item-${item.id}`}>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -259,6 +372,21 @@ function ReviewItemRow({
           ) : null}
         </div>
       </div>
+      {visibleReviewNote ? (
+        <div
+          className="mt-3 rounded-md border border-[var(--color-line)] bg-[var(--color-bg-2)] px-3 py-2 text-xs text-[var(--color-ink-2)]"
+          data-testid={`litigation-review-note-${item.id}`}
+        >
+          <span className="font-semibold">Reviewer note:</span> {visibleReviewNote}
+        </div>
+      ) : noteHiddenByPolicy ? (
+        <div
+          className="mt-3 rounded-md border border-[var(--color-line)] bg-[var(--color-bg-2)] px-3 py-2 text-xs text-[var(--color-ink-2)]"
+          data-testid={`litigation-review-note-hidden-${item.id}`}
+        >
+          Reviewer note hidden by safety policy.
+        </div>
+      ) : null}
       <div className="mt-3 grid gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,0.6fr)]">
         <SourceBlock source={item.source} />
         <div className="rounded-md border border-[var(--color-line)] bg-[var(--color-bg)] px-3 py-2">
@@ -268,6 +396,60 @@ function ReviewItemRow({
           <p className="mt-1 text-xs leading-relaxed text-[var(--color-mute)]">
             {item.limitation_note}
           </p>
+        </div>
+      </div>
+      <div
+        className="mt-3 grid gap-2 rounded-md border border-[var(--color-line)] bg-[var(--color-bg-2)] p-2 lg:grid-cols-[minmax(0,1fr)_auto]"
+        data-testid={`litigation-review-actions-${item.id}`}
+      >
+        <textarea
+          className="min-h-16 rounded-md border border-[var(--color-line)] bg-white px-2 py-1.5 text-xs text-[var(--color-ink)] outline-none focus:border-[var(--color-accent)]"
+          value={noteDraft}
+          onChange={(event) => setNoteDraft(event.target.value)}
+          aria-label={`Review note for ${item.title}`}
+          data-testid={`litigation-review-note-input-${item.id}`}
+        />
+        <div className="flex flex-wrap items-start justify-end gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={pending}
+            onClick={() => onAction(item, "edit_note", noteDraft)}
+            data-testid={`litigation-review-action-note-${item.id}`}
+          >
+            Save note
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={pending}
+            onClick={() => onAction(item, "mark_reviewed", noteDraft)}
+            data-testid={`litigation-review-action-reviewed-${item.id}`}
+          >
+            Mark reviewed
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            disabled={pending}
+            onClick={() => onAction(item, "accept", noteDraft)}
+            data-testid={`litigation-review-action-accept-${item.id}`}
+          >
+            Accept
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="border-red-200 text-red-700 hover:border-red-300 hover:text-red-800"
+            disabled={pending}
+            onClick={() => onAction(item, "reject", noteDraft)}
+            data-testid={`litigation-review-action-reject-${item.id}`}
+          >
+            Reject
+          </Button>
         </div>
       </div>
     </li>
@@ -409,6 +591,7 @@ function sourceHref(
   switch (source.source_type) {
     case "matter_court_order":
     case "matter_cause_list_entry":
+    case "matter_proceeding_signal":
       return `${base}/timeline`;
     case "matter_document":
     case "matter_attachment_chunk":
@@ -416,8 +599,10 @@ function sourceHref(
     case "affidavit_question":
       return `${base}/documents`;
     case "mock_hearing_session":
+    case "mock_hearing_response":
       return `${base}/hearings`;
     case "predictive_signal_run":
+    case "predictive_signal_item":
     case "authority_document":
     case "aggregate_snapshot":
       return `${base}/predictive-intelligence`;
@@ -428,6 +613,14 @@ function sourceHref(
 
 function sourceLabel(sourceType: LitigationIntelligenceReviewSource["source_type"]): string {
   return labelFromKey(sourceType);
+}
+
+function isSafeReviewNote(note: string): boolean {
+  const lowered = note.toLowerCase();
+  if (lowered.includes("legal advice") && !lowered.includes("not legal advice")) {
+    return false;
+  }
+  return !UNSAFE_REVIEW_NOTE_PATTERNS.some((pattern) => pattern.test(note));
 }
 
 function labelFromKey(value: string): string {
