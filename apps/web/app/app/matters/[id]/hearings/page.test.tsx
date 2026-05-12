@@ -619,7 +619,7 @@ describe("MatterHearingsPage", () => {
     expect(await screen.findByText("Proceeding intelligence")).toBeInTheDocument();
     expect(await screen.findByText("Reply / affidavit deadline")).toBeInTheDocument();
     expect(screen.getByText(/Respondent shall file reply affidavit/i)).toBeInTheDocument();
-    expect(screen.getByText(/Due 20 May 2026/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Due 20 May 2026/i)).toBeInTheDocument();
     expect(screen.getByText(/Human review/i)).toBeInTheDocument();
     expect(screen.getAllByText(/not legal advice/i).length).toBeGreaterThan(0);
     expect(screen.getByText("Linked task/deadline")).toBeInTheDocument();
