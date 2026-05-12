@@ -1,0 +1,37 @@
+# Cloud Build uses apps/web/ as the build context. The repo-root
+# .dockerignore does NOT apply here, so this file is required to
+# keep Windows-installed node_modules + the local Next build cache
+# out of the COPY . . layer in the builder stage.
+#
+# Anchor: 2026-05-12 deploy of 6b05637 failed with "sh: next:
+# Permission denied" because a npm install run on a Windows host
+# (during the next 16.2.5+ bump for GHSA-8h8q-6873-q5fj) shipped
+# a node_modules tree where node_modules/.bin/* had no +x bit.
+# That tree got uploaded to Cloud Build, then COPY . . in the
+# builder stage overwrote the alpine-installed deps, and `next
+# build` couldn't exec next.
+
+# Local installs / build artefacts.
+node_modules/
+.next/
+
+# Editor + git noise.
+.git/
+.gitignore
+.DS_Store
+
+# Local logs / coverage / test artefacts.
+coverage/
+.coverage
+.nyc_output/
+*.log
+test-results/
+playwright-report/
+
+# Local env overrides — never bake into the image.
+.env
+.env.local
+.env*.local
+
+# TypeScript build cache (regenerated inside the image).
+tsconfig.tsbuildinfo
