@@ -19,6 +19,13 @@ describe("MatterCockpitNav", () => {
       "aria-current",
       "page",
     );
+    expect(
+      screen.getByRole("link", { name: "Predictive Intelligence" }),
+    ).toHaveAttribute("href", "/app/matters/m-1/predictive-intelligence");
+    expect(screen.getByRole("link", { name: "Intelligence Review" })).toHaveAttribute(
+      "href",
+      "/app/matters/m-1/litigation-intelligence",
+    );
     expect(screen.getByRole("link", { name: "Matter Audit" })).toHaveAttribute(
       "href",
       "/app/matters/m-1/audit",

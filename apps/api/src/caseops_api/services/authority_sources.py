@@ -93,6 +93,41 @@ class AuthoritySourceAdapter:
         return self.puller(max_documents=max_documents)
 
 
+@dataclass(frozen=True, slots=True)
+class LegalSourceRegistryEntry:
+    source_key: str
+    source_name: str
+    jurisdiction: str
+    court_or_forum: str
+    source_category: str
+    source_type: str
+    adapter_available: bool
+    access_mode: str
+    captcha_session_gated: bool
+    allowed_for_public_corpus: bool
+    allowed_for_predictive_aggregates: bool
+    lineage_requirements: tuple[str, ...]
+    last_checked_at: str | None
+    last_checked_status: str
+    notes: str
+
+
+SOURCE_CATEGORY_SUPREME_COURT = "supreme_court"
+SOURCE_CATEGORY_HIGH_COURT = "high_court"
+SOURCE_CATEGORY_DISTRICT_COURT = "district_court"
+SOURCE_CATEGORY_SESSION_COURT = "session_court"
+SOURCE_CATEGORY_TRIBUNAL = "tribunal"
+SOURCE_CATEGORY_CONSUMER_FORUM = "consumer_forum"
+SOURCE_CATEGORY_STATUTORY_BARE_ACT = "statutory_bare_act"
+SOURCE_CATEGORY_ARBITRATION_FORUM = "arbitration_forum"
+
+SOURCE_TYPE_OFFICIAL = "official"
+SOURCE_TYPE_LICENSED = "licensed"
+SOURCE_TYPE_MANUAL = "manual"
+SOURCE_TYPE_INTERNAL = "internal"
+SOURCE_TYPE_TEST = "test"
+
+
 def _compact(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip()
 
@@ -856,6 +891,389 @@ ADAPTERS = {
 }
 
 
+DEFAULT_LINEAGE_REQUIREMENTS = (
+    "source_key",
+    "source_reference",
+    "court_or_forum",
+    "decision_or_order_date",
+    "document_text_or_pdf_reference",
+    "adapter_name",
+)
+
+
+LEGAL_SOURCE_REGISTRY_ENTRIES: tuple[LegalSourceRegistryEntry, ...] = (
+    LegalSourceRegistryEntry(
+        source_key="supreme_court_latest_orders",
+        source_name="Supreme Court latest orders",
+        jurisdiction="India",
+        court_or_forum="Supreme Court of India",
+        source_category=SOURCE_CATEGORY_SUPREME_COURT,
+        source_type=SOURCE_TYPE_OFFICIAL,
+        adapter_available=True,
+        access_mode="official_public_feed",
+        captcha_session_gated=False,
+        allowed_for_public_corpus=True,
+        allowed_for_predictive_aggregates=True,
+        lineage_requirements=DEFAULT_LINEAGE_REQUIREMENTS,
+        last_checked_at=None,
+        last_checked_status="adapter_supported",
+        notes=(
+            "Official public latest-orders feed. Automated pulls remain bounded by "
+            "adapter limits."
+        ),
+    ),
+    LegalSourceRegistryEntry(
+        source_key="delhi_high_court_recent_judgments",
+        source_name="Delhi High Court recent judgments",
+        jurisdiction="Delhi",
+        court_or_forum="High Court of Delhi",
+        source_category=SOURCE_CATEGORY_HIGH_COURT,
+        source_type=SOURCE_TYPE_OFFICIAL,
+        adapter_available=True,
+        access_mode="official_public_page",
+        captcha_session_gated=False,
+        allowed_for_public_corpus=True,
+        allowed_for_predictive_aggregates=True,
+        lineage_requirements=DEFAULT_LINEAGE_REQUIREMENTS,
+        last_checked_at=None,
+        last_checked_status="adapter_supported",
+        notes="Official public court page with recent judgment PDF links.",
+    ),
+    LegalSourceRegistryEntry(
+        source_key="bombay_high_court_recent_orders_judgments",
+        source_name="Bombay High Court recent orders and judgments",
+        jurisdiction="Maharashtra",
+        court_or_forum="High Court of Bombay",
+        source_category=SOURCE_CATEGORY_HIGH_COURT,
+        source_type=SOURCE_TYPE_OFFICIAL,
+        adapter_available=True,
+        access_mode="official_public_feed",
+        captcha_session_gated=False,
+        allowed_for_public_corpus=True,
+        allowed_for_predictive_aggregates=True,
+        lineage_requirements=DEFAULT_LINEAGE_REQUIREMENTS,
+        last_checked_at=None,
+        last_checked_status="adapter_supported",
+        notes="Official public court feed for recent order and judgment PDFs.",
+    ),
+    LegalSourceRegistryEntry(
+        source_key="karnataka_high_court_latest_judgments",
+        source_name="Karnataka High Court latest judgments and orders",
+        jurisdiction="Karnataka",
+        court_or_forum="High Court of Karnataka",
+        source_category=SOURCE_CATEGORY_HIGH_COURT,
+        source_type=SOURCE_TYPE_OFFICIAL,
+        adapter_available=True,
+        access_mode="official_public_page",
+        captcha_session_gated=False,
+        allowed_for_public_corpus=True,
+        allowed_for_predictive_aggregates=True,
+        lineage_requirements=DEFAULT_LINEAGE_REQUIREMENTS,
+        last_checked_at=None,
+        last_checked_status="adapter_supported",
+        notes="Official public latest judgments page.",
+    ),
+    LegalSourceRegistryEntry(
+        source_key="telangana_high_court_judgments",
+        source_name="Telangana High Court judgments",
+        jurisdiction="Telangana",
+        court_or_forum="High Court for the State of Telangana",
+        source_category=SOURCE_CATEGORY_HIGH_COURT,
+        source_type=SOURCE_TYPE_OFFICIAL,
+        adapter_available=True,
+        access_mode="official_public_page",
+        captcha_session_gated=False,
+        allowed_for_public_corpus=True,
+        allowed_for_predictive_aggregates=True,
+        lineage_requirements=DEFAULT_LINEAGE_REQUIREMENTS,
+        last_checked_at=None,
+        last_checked_status="adapter_supported",
+        notes="Official public e-HC judgment rail.",
+    ),
+    LegalSourceRegistryEntry(
+        source_key="madras_high_court_operational_orders",
+        source_name="Madras High Court operational orders",
+        jurisdiction="Tamil Nadu",
+        court_or_forum="High Court of Judicature at Madras",
+        source_category=SOURCE_CATEGORY_HIGH_COURT,
+        source_type=SOURCE_TYPE_OFFICIAL,
+        adapter_available=True,
+        access_mode="official_public_operational_pdfs",
+        captcha_session_gated=False,
+        allowed_for_public_corpus=True,
+        allowed_for_predictive_aggregates=True,
+        lineage_requirements=DEFAULT_LINEAGE_REQUIREMENTS,
+        last_checked_at=None,
+        last_checked_status="adapter_supported_limited",
+        notes=(
+            "Only openly published operational PDFs are supported; the judgment "
+            "search surface remains captcha-gated and is not automated."
+        ),
+    ),
+    LegalSourceRegistryEntry(
+        source_key="ecourts_district_court_judgments",
+        source_name="eCourts district court judgments/orders",
+        jurisdiction="India district courts",
+        court_or_forum="District Courts",
+        source_category=SOURCE_CATEGORY_DISTRICT_COURT,
+        source_type=SOURCE_TYPE_OFFICIAL,
+        adapter_available=False,
+        access_mode="blocked_captcha_session_gated",
+        captcha_session_gated=True,
+        allowed_for_public_corpus=False,
+        allowed_for_predictive_aggregates=False,
+        lineage_requirements=DEFAULT_LINEAGE_REQUIREMENTS,
+        last_checked_at=None,
+        last_checked_status="blocked_pending_lawful_access",
+        notes=(
+            "Do not scrape captcha/session-gated eCourts pages. Enable only after an "
+            "official API, licensed feed, or manual lineage-safe workflow is verified."
+        ),
+    ),
+    LegalSourceRegistryEntry(
+        source_key="ecourts_session_court_orders",
+        source_name="eCourts session court orders",
+        jurisdiction="India session courts",
+        court_or_forum="Session Courts",
+        source_category=SOURCE_CATEGORY_SESSION_COURT,
+        source_type=SOURCE_TYPE_OFFICIAL,
+        adapter_available=False,
+        access_mode="blocked_captcha_session_gated",
+        captcha_session_gated=True,
+        allowed_for_public_corpus=False,
+        allowed_for_predictive_aggregates=False,
+        lineage_requirements=DEFAULT_LINEAGE_REQUIREMENTS,
+        last_checked_at=None,
+        last_checked_status="blocked_pending_lawful_access",
+        notes=(
+            "Session court automation is blocked until lawful non-captcha access and "
+            "source quality proof exist."
+        ),
+    ),
+    LegalSourceRegistryEntry(
+        source_key="nclt_orders_registry",
+        source_name="NCLT orders registry",
+        jurisdiction="India",
+        court_or_forum="National Company Law Tribunal",
+        source_category=SOURCE_CATEGORY_TRIBUNAL,
+        source_type=SOURCE_TYPE_OFFICIAL,
+        adapter_available=False,
+        access_mode="planned_official_review",
+        captcha_session_gated=False,
+        allowed_for_public_corpus=False,
+        allowed_for_predictive_aggregates=False,
+        lineage_requirements=DEFAULT_LINEAGE_REQUIREMENTS,
+        last_checked_at=None,
+        last_checked_status="planned_source_review",
+        notes=(
+            "Planned tribunal source; no automated ingest until adapter and terms "
+            "review are complete."
+        ),
+    ),
+    LegalSourceRegistryEntry(
+        source_key="nclat_orders_registry",
+        source_name="NCLAT orders registry",
+        jurisdiction="India",
+        court_or_forum="National Company Law Appellate Tribunal",
+        source_category=SOURCE_CATEGORY_TRIBUNAL,
+        source_type=SOURCE_TYPE_OFFICIAL,
+        adapter_available=False,
+        access_mode="planned_official_review",
+        captcha_session_gated=False,
+        allowed_for_public_corpus=False,
+        allowed_for_predictive_aggregates=False,
+        lineage_requirements=DEFAULT_LINEAGE_REQUIREMENTS,
+        last_checked_at=None,
+        last_checked_status="planned_source_review",
+        notes=(
+            "Planned tribunal source; no automated ingest until adapter and terms "
+            "review are complete."
+        ),
+    ),
+    LegalSourceRegistryEntry(
+        source_key="drt_drat_orders_registry",
+        source_name="DRT/DRAT orders registry",
+        jurisdiction="India",
+        court_or_forum="Debt Recovery Tribunals and Appellate Tribunals",
+        source_category=SOURCE_CATEGORY_TRIBUNAL,
+        source_type=SOURCE_TYPE_OFFICIAL,
+        adapter_available=False,
+        access_mode="planned_official_review",
+        captcha_session_gated=False,
+        allowed_for_public_corpus=False,
+        allowed_for_predictive_aggregates=False,
+        lineage_requirements=DEFAULT_LINEAGE_REQUIREMENTS,
+        last_checked_at=None,
+        last_checked_status="planned_source_review",
+        notes=(
+            "Planned tribunal source; no automated ingest until adapter and terms "
+            "review are complete."
+        ),
+    ),
+    LegalSourceRegistryEntry(
+        source_key="itat_orders_registry",
+        source_name="ITAT orders registry",
+        jurisdiction="India",
+        court_or_forum="Income Tax Appellate Tribunal",
+        source_category=SOURCE_CATEGORY_TRIBUNAL,
+        source_type=SOURCE_TYPE_OFFICIAL,
+        adapter_available=False,
+        access_mode="planned_official_review",
+        captcha_session_gated=False,
+        allowed_for_public_corpus=False,
+        allowed_for_predictive_aggregates=False,
+        lineage_requirements=DEFAULT_LINEAGE_REQUIREMENTS,
+        last_checked_at=None,
+        last_checked_status="planned_source_review",
+        notes=(
+            "Planned tribunal source; no automated ingest until adapter and terms "
+            "review are complete."
+        ),
+    ),
+    LegalSourceRegistryEntry(
+        source_key="ngt_orders_registry",
+        source_name="NGT orders registry",
+        jurisdiction="India",
+        court_or_forum="National Green Tribunal",
+        source_category=SOURCE_CATEGORY_TRIBUNAL,
+        source_type=SOURCE_TYPE_OFFICIAL,
+        adapter_available=False,
+        access_mode="planned_official_review",
+        captcha_session_gated=False,
+        allowed_for_public_corpus=False,
+        allowed_for_predictive_aggregates=False,
+        lineage_requirements=DEFAULT_LINEAGE_REQUIREMENTS,
+        last_checked_at=None,
+        last_checked_status="planned_source_review",
+        notes=(
+            "Planned tribunal source; no automated ingest until adapter and terms "
+            "review are complete."
+        ),
+    ),
+    LegalSourceRegistryEntry(
+        source_key="cat_orders_registry",
+        source_name="CAT orders registry",
+        jurisdiction="India",
+        court_or_forum="Central Administrative Tribunal",
+        source_category=SOURCE_CATEGORY_TRIBUNAL,
+        source_type=SOURCE_TYPE_OFFICIAL,
+        adapter_available=False,
+        access_mode="planned_official_review",
+        captcha_session_gated=False,
+        allowed_for_public_corpus=False,
+        allowed_for_predictive_aggregates=False,
+        lineage_requirements=DEFAULT_LINEAGE_REQUIREMENTS,
+        last_checked_at=None,
+        last_checked_status="planned_source_review",
+        notes=(
+            "Planned tribunal source; no automated ingest until adapter and terms "
+            "review are complete."
+        ),
+    ),
+    LegalSourceRegistryEntry(
+        source_key="consumer_forum_confonet",
+        source_name="Consumer forum orders registry",
+        jurisdiction="India",
+        court_or_forum="NCDRC and State/District Consumer Forums",
+        source_category=SOURCE_CATEGORY_CONSUMER_FORUM,
+        source_type=SOURCE_TYPE_OFFICIAL,
+        adapter_available=False,
+        access_mode="planned_official_review",
+        captcha_session_gated=False,
+        allowed_for_public_corpus=False,
+        allowed_for_predictive_aggregates=False,
+        lineage_requirements=DEFAULT_LINEAGE_REQUIREMENTS,
+        last_checked_at=None,
+        last_checked_status="planned_source_review",
+        notes=(
+            "Planned consumer forum source; no automated ingest until lawful source "
+            "access and quality checks are verified."
+        ),
+    ),
+    LegalSourceRegistryEntry(
+        source_key="india_code_bare_acts",
+        source_name="India Code bare acts",
+        jurisdiction="India",
+        court_or_forum="India Code",
+        source_category=SOURCE_CATEGORY_STATUTORY_BARE_ACT,
+        source_type=SOURCE_TYPE_OFFICIAL,
+        adapter_available=False,
+        access_mode="planned_static_public_source",
+        captcha_session_gated=False,
+        allowed_for_public_corpus=False,
+        allowed_for_predictive_aggregates=False,
+        lineage_requirements=(
+            "source_key",
+            "act_identifier",
+            "section_identifier",
+            "source_reference",
+            "version_or_effective_date",
+        ),
+        last_checked_at=None,
+        last_checked_status="planned_source_review",
+        notes=(
+            "Official statutory source candidate. Not wired into this authority "
+            "adapter registry yet and never eligible for predictive outcome aggregates."
+        ),
+    ),
+    LegalSourceRegistryEntry(
+        source_key="arbitration_forum_manual_sources",
+        source_name="Arbitration forum manual/licensed sources",
+        jurisdiction="India",
+        court_or_forum="DIAC, MCIA, and other arbitration institutions",
+        source_category=SOURCE_CATEGORY_ARBITRATION_FORUM,
+        source_type=SOURCE_TYPE_MANUAL,
+        adapter_available=False,
+        access_mode="manual_or_licensed_only",
+        captcha_session_gated=False,
+        allowed_for_public_corpus=False,
+        allowed_for_predictive_aggregates=False,
+        lineage_requirements=(
+            "source_key",
+            "license_or_upload_reference",
+            "document_reference",
+            "source_owner",
+            "review_status",
+        ),
+        last_checked_at=None,
+        last_checked_status="manual_or_licensed_required",
+        notes=(
+            "Arbitration materials require explicit license or tenant-scoped manual "
+            "lineage review before use. They are not public corpus or public aggregate sources."
+        ),
+    ),
+    LegalSourceRegistryEntry(
+        source_key="manual_authority_upload",
+        source_name="Manual authority upload",
+        jurisdiction="Tenant scoped",
+        court_or_forum="Manual uploads",
+        source_category=SOURCE_CATEGORY_HIGH_COURT,
+        source_type=SOURCE_TYPE_MANUAL,
+        adapter_available=False,
+        access_mode="manual_upload_only",
+        captcha_session_gated=False,
+        allowed_for_public_corpus=False,
+        allowed_for_predictive_aggregates=False,
+        lineage_requirements=(
+            "tenant_id",
+            "matter_id_or_upload_batch",
+            "source_reference",
+            "review_status",
+        ),
+        last_checked_at=None,
+        last_checked_status="manual_only",
+        notes=(
+            "Manual tenant uploads stay tenant-scoped unless a separate licensed/public "
+            "source review promotes them."
+        ),
+    ),
+)
+
+LEGAL_SOURCE_REGISTRY_BY_KEY = {
+    entry.source_key: entry for entry in LEGAL_SOURCE_REGISTRY_ENTRIES
+}
+
+
 def get_authority_source_adapter(source: str) -> AuthoritySourceAdapter:
     adapter = ADAPTERS.get(source.strip())
     if adapter is None:
@@ -864,4 +1282,75 @@ def get_authority_source_adapter(source: str) -> AuthoritySourceAdapter:
 
 
 def list_supported_authority_sources() -> list[AuthoritySourceAdapter]:
-    return [ADAPTERS[source] for source in sorted(ADAPTERS.keys())]
+    supported_sources = list_public_corpus_authority_source_keys()
+    return [ADAPTERS[source] for source in supported_sources if source in ADAPTERS]
+
+
+def get_legal_source_registry_entry(source_key: str) -> LegalSourceRegistryEntry | None:
+    return LEGAL_SOURCE_REGISTRY_BY_KEY.get(source_key.strip())
+
+
+def list_legal_source_registry_entries() -> list[LegalSourceRegistryEntry]:
+    return sorted(
+        LEGAL_SOURCE_REGISTRY_ENTRIES,
+        key=lambda entry: (entry.source_category, entry.source_key),
+    )
+
+
+def _is_allowed_automated_public_source(
+    entry: LegalSourceRegistryEntry | None,
+    *,
+    predictive: bool,
+) -> bool:
+    if entry is None:
+        return False
+    if entry.source_type not in {SOURCE_TYPE_OFFICIAL, SOURCE_TYPE_LICENSED}:
+        return False
+    if entry.captcha_session_gated:
+        return False
+    if not entry.adapter_available:
+        return False
+    if predictive:
+        return entry.allowed_for_predictive_aggregates
+    return entry.allowed_for_public_corpus
+
+
+def is_source_allowed_for_public_corpus(source_key: str) -> bool:
+    entry = get_legal_source_registry_entry(source_key)
+    return _is_allowed_automated_public_source(entry, predictive=False)
+
+
+def is_source_allowed_for_predictive_aggregates(source_key: str) -> bool:
+    entry = get_legal_source_registry_entry(source_key)
+    return _is_allowed_automated_public_source(entry, predictive=True)
+
+
+def is_source_blocked_for_automated_ingest(source_key: str) -> bool:
+    entry = get_legal_source_registry_entry(source_key)
+    if entry is None:
+        return True
+    return (
+        entry.captcha_session_gated
+        or not entry.adapter_available
+        or not entry.allowed_for_public_corpus
+    )
+
+
+def list_public_corpus_authority_source_keys() -> tuple[str, ...]:
+    return tuple(
+        sorted(
+            entry.source_key
+            for entry in LEGAL_SOURCE_REGISTRY_ENTRIES
+            if is_source_allowed_for_public_corpus(entry.source_key)
+        )
+    )
+
+
+def list_predictive_aggregate_authority_source_keys() -> tuple[str, ...]:
+    return tuple(
+        sorted(
+            entry.source_key
+            for entry in LEGAL_SOURCE_REGISTRY_ENTRIES
+            if is_source_allowed_for_predictive_aggregates(entry.source_key)
+        )
+    )

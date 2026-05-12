@@ -32,6 +32,7 @@ from caseops_api.core.rate_limit import (
     limiter,
     tenant_aware_key,
 )
+from caseops_api.schemas.affidavit_intelligence import AffidavitIntelligenceResponse
 from caseops_api.schemas.audit import MatterAuditListResponse
 from caseops_api.schemas.billing import (
     InvoiceCreateRequest,
@@ -50,6 +51,9 @@ from caseops_api.schemas.drafts import (
 from caseops_api.schemas.hearing_packs import (
     HearingPackGenerateRequest,
     HearingPackRecord,
+)
+from caseops_api.schemas.litigation_intelligence import (
+    LitigationIntelligenceReviewResponse,
 )
 from caseops_api.schemas.matter_access import (
     EthicalWallCreateRequest,
@@ -94,6 +98,14 @@ from caseops_api.schemas.matters import (
     MatterUpdateRequest,
     MatterWorkspaceResponse,
 )
+from caseops_api.schemas.mock_hearing import (
+    MockHearingListResponse,
+    MockHearingResponseCreateRequest,
+    MockHearingSessionRecord,
+    MockHearingStartRequest,
+)
+from caseops_api.schemas.predictive_intelligence import PredictiveIntelligenceResponse
+from caseops_api.schemas.proceeding_intelligence import ProceedingIntelligenceResponse
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.bench_matcher import (
     BenchSuggestion as BenchSuggestionDC,
@@ -586,6 +598,220 @@ async def get_current_company_matter_timeline(
         source_limit=timeline_source_limit(limit=limit, cursor=cursor),
     )
     return timeline_response(timeline, limit=limit, cursor=cursor)
+
+
+@router.get(
+    "/{matter_id}/proceeding-intelligence",
+    response_model=ProceedingIntelligenceResponse,
+    summary="LI-S1 proceeding/order-sheet intelligence for a matter",
+)
+async def get_current_company_matter_proceeding_intelligence(
+    matter_id: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> ProceedingIntelligenceResponse:
+    from caseops_api.services.proceeding_intelligence import (
+        list_proceeding_intelligence,
+    )
+
+    return list_proceeding_intelligence(
+        session,
+        context=context,
+        matter_id=matter_id,
+    )
+
+
+@router.get(
+    "/{matter_id}/litigation-intelligence/review",
+    response_model=LitigationIntelligenceReviewResponse,
+    summary="LI-S6 source-backed litigation intelligence review queue",
+)
+async def get_current_company_matter_litigation_intelligence_review(
+    matter_id: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> LitigationIntelligenceReviewResponse:
+    from caseops_api.services.litigation_intelligence_review import (
+        build_litigation_intelligence_review,
+    )
+
+    return build_litigation_intelligence_review(
+        session,
+        context=context,
+        matter_id=matter_id,
+    )
+
+
+@router.post(
+    "/{matter_id}/court-orders/{order_id}/proceeding-intelligence/extract",
+    response_model=ProceedingIntelligenceResponse,
+    summary="Extract LI-S1 proceeding signals from a source-backed court order",
+)
+async def post_current_company_matter_order_proceeding_intelligence_extract(
+    matter_id: str,
+    order_id: str,
+    context: MatterWriter,
+    session: DbSession,
+) -> ProceedingIntelligenceResponse:
+    from caseops_api.services.proceeding_intelligence import (
+        extract_order_proceeding_intelligence,
+    )
+
+    return extract_order_proceeding_intelligence(
+        session,
+        context=context,
+        matter_id=matter_id,
+        order_id=order_id,
+    )
+
+
+@router.get(
+    "/{matter_id}/affidavit-intelligence",
+    response_model=AffidavitIntelligenceResponse,
+    summary="LI-S2 affidavit hearing-prep intelligence for a matter",
+)
+async def get_current_company_matter_affidavit_intelligence(
+    matter_id: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> AffidavitIntelligenceResponse:
+    from caseops_api.services.affidavit_intelligence import (
+        list_affidavit_intelligence,
+    )
+
+    return list_affidavit_intelligence(
+        session,
+        context=context,
+        matter_id=matter_id,
+    )
+
+
+@router.post(
+    "/{matter_id}/attachments/{attachment_id}/affidavit-intelligence/analyze",
+    response_model=AffidavitIntelligenceResponse,
+    summary="Analyze a source-backed affidavit attachment for hearing prep",
+)
+async def post_current_company_matter_attachment_affidavit_intelligence_analyze(
+    matter_id: str,
+    attachment_id: str,
+    context: HearingPackGenerator,
+    session: DbSession,
+) -> AffidavitIntelligenceResponse:
+    from caseops_api.services.affidavit_intelligence import (
+        analyze_affidavit_attachment,
+    )
+
+    return analyze_affidavit_attachment(
+        session,
+        context=context,
+        matter_id=matter_id,
+        attachment_id=attachment_id,
+    )
+
+
+@router.post(
+    "/{matter_id}/mock-hearings",
+    response_model=MockHearingSessionRecord,
+    summary="Start a text-first mock hearing session from affidavit questions",
+)
+async def post_current_company_matter_mock_hearing(
+    matter_id: str,
+    payload: MockHearingStartRequest,
+    context: HearingPackGenerator,
+    session: DbSession,
+) -> MockHearingSessionRecord:
+    from caseops_api.services.mock_hearing import start_mock_hearing
+
+    return start_mock_hearing(
+        session,
+        context=context,
+        matter_id=matter_id,
+        payload=payload,
+    )
+
+
+@router.get(
+    "/{matter_id}/mock-hearings",
+    response_model=MockHearingListResponse,
+    summary="List mock hearing sessions for a matter",
+)
+async def get_current_company_matter_mock_hearings(
+    matter_id: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> MockHearingListResponse:
+    from caseops_api.services.mock_hearing import list_mock_hearings
+
+    return list_mock_hearings(
+        session,
+        context=context,
+        matter_id=matter_id,
+    )
+
+
+@router.get(
+    "/{matter_id}/mock-hearings/{session_id}",
+    response_model=MockHearingSessionRecord,
+    summary="Get one mock hearing session",
+)
+async def get_current_company_matter_mock_hearing(
+    matter_id: str,
+    session_id: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> MockHearingSessionRecord:
+    from caseops_api.services.mock_hearing import get_mock_hearing
+
+    return get_mock_hearing(
+        session,
+        context=context,
+        matter_id=matter_id,
+        session_id=session_id,
+    )
+
+
+@router.post(
+    "/{matter_id}/mock-hearings/{session_id}/responses",
+    response_model=MockHearingSessionRecord,
+    summary="Record a typed mock hearing response and deterministic feedback",
+)
+async def post_current_company_matter_mock_hearing_response(
+    matter_id: str,
+    session_id: str,
+    payload: MockHearingResponseCreateRequest,
+    context: HearingPackGenerator,
+    session: DbSession,
+) -> MockHearingSessionRecord:
+    from caseops_api.services.mock_hearing import record_mock_hearing_response
+
+    return record_mock_hearing_response(
+        session,
+        context=context,
+        matter_id=matter_id,
+        session_id=session_id,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/{matter_id}/mock-hearings/{session_id}/complete",
+    response_model=MockHearingSessionRecord,
+    summary="Complete a mock hearing session",
+)
+async def post_current_company_matter_mock_hearing_complete(
+    matter_id: str,
+    session_id: str,
+    context: HearingPackGenerator,
+    session: DbSession,
+) -> MockHearingSessionRecord:
+    from caseops_api.services.mock_hearing import complete_mock_hearing
+
+    return complete_mock_hearing(
+        session,
+        context=context,
+        matter_id=matter_id,
+        session_id=session_id,
+    )
 
 
 @router.get(
@@ -1306,6 +1532,30 @@ async def get_current_company_matter_bench_strategy(
             for s in payload.top_statute_sections
         ],
         disclaimer=payload.disclaimer,
+    )
+
+
+@router.get(
+    "/{matter_id}/predictive-intelligence",
+    response_model=PredictiveIntelligenceResponse,
+    summary=(
+        "Controlled predictive litigation intelligence for a visible matter. "
+        "Requires tenant opt-in and source-backed confidence bands."
+    ),
+)
+async def get_current_company_matter_predictive_intelligence(
+    matter_id: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> PredictiveIntelligenceResponse:
+    from caseops_api.services.predictive_intelligence import (
+        build_predictive_intelligence,
+    )
+
+    return build_predictive_intelligence(
+        session,
+        context=context,
+        matter_id=matter_id,
     )
 
 

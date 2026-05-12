@@ -4,11 +4,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Calendar,
   CalendarCheck,
+  CheckCircle2,
+  ClipboardList,
   Eye,
   Gavel,
+  HelpCircle,
   Loader2,
+  PlayCircle,
   RefreshCw,
   ScrollText,
+  Send,
 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -23,16 +28,30 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { Textarea } from "@/components/ui/Textarea";
 import { apiErrorMessage, isApiErrorShape } from "@/lib/api/config";
 import {
+  completeMockHearing,
   fetchCalendarSyncStatus,
+  fetchMockHearings,
+  fetchProceedingIntelligence,
   listMatterReminders,
   type MatterCourtSyncJob,
   type MatterReminderRecord,
   pullMatterCourtSync,
+  startMockHearing,
+  submitMockHearingResponse,
   syncHearingToOutlook,
 } from "@/lib/api/endpoints";
-import type { CalendarEventSyncRecord } from "@/lib/api/schemas";
+import type {
+  CalendarEventSyncRecord,
+  MockHearingListResponse,
+  MockHearingQuestion,
+  MockHearingSession,
+  ProceedingIntelligenceResponse,
+  ProceedingOrderIntelligence,
+  ProceedingSignal,
+} from "@/lib/api/schemas";
 import type { WorkspaceCourtOrder, WorkspaceHearing } from "@/lib/api/workspace-types";
 import { useCapability } from "@/lib/capabilities";
 import { formatLegalDate } from "@/lib/dates";
@@ -80,8 +99,10 @@ export default function MatterHearingsPage() {
   const queryClient = useQueryClient();
   const canRunSync = useCapability("court_sync:run");
   const canSyncOutlook = useCapability("calendar:sync");
+  const canRunMockHearing = useCapability("hearing_packs:generate");
   const [lastJob, setLastJob] = useState<MatterCourtSyncJob | null>(null);
   const [orderSort, setOrderSort] = useState<"latest" | "oldest">("latest");
+  const [mockResponseDraft, setMockResponseDraft] = useState("");
   const { data } = useMatterWorkspace(matterId);
   // Strict Ledger #5 (BUG-013 in-app visibility, 2026-04-22):
   // per-matter reminder rows. Re-fetched on a 30s polling cadence
@@ -91,6 +112,16 @@ export default function MatterHearingsPage() {
     queryKey: ["matters", matterId, "reminders"],
     queryFn: () => listMatterReminders(matterId),
     refetchInterval: 30_000,
+    enabled: Boolean(matterId),
+  });
+  const proceedingQuery = useQuery({
+    queryKey: ["matters", matterId, "proceeding-intelligence"],
+    queryFn: () => fetchProceedingIntelligence({ matterId }),
+    enabled: Boolean(matterId),
+  });
+  const mockHearingQuery = useQuery({
+    queryKey: ["matters", matterId, "mock-hearings"],
+    queryFn: () => fetchMockHearings({ matterId }),
     enabled: Boolean(matterId),
   });
   const outlookStatusQuery = useQuery({
@@ -164,6 +195,66 @@ export default function MatterHearingsPage() {
         return;
       }
       toast.error(apiErrorMessage(err, "Could not sync hearing to Outlook."));
+    },
+  });
+  const upsertMockSession = (session: MockHearingSession) => {
+    queryClient.setQueryData<MockHearingListResponse>(
+      ["matters", matterId, "mock-hearings"],
+      (current) => {
+        const existing = current?.sessions ?? [];
+        return {
+          matter_id: matterId,
+          generated_at: new Date().toISOString(),
+          disclaimer: session.disclaimer,
+          sessions: [session, ...existing.filter((item) => item.id !== session.id)],
+          latest_session: session,
+        };
+      },
+    );
+  };
+  const startMockMutation = useMutation({
+    mutationFn: () => startMockHearing({ matterId }),
+    onSuccess: (session) => {
+      upsertMockSession(session);
+      setMockResponseDraft("");
+      toast.success("Mock hearing session started.");
+    },
+    onError: (err) => {
+      toast.error(apiErrorMessage(err, "Could not start mock hearing."));
+    },
+  });
+  const submitMockResponseMutation = useMutation({
+    mutationFn: ({
+      sessionId,
+      questionId,
+      responseText,
+    }: {
+      sessionId: string;
+      questionId: string | null;
+      responseText: string;
+    }) =>
+      submitMockHearingResponse({
+        matterId,
+        sessionId,
+        questionId,
+        responseText,
+      }),
+    onSuccess: (session) => {
+      upsertMockSession(session);
+      setMockResponseDraft("");
+    },
+    onError: (err) => {
+      toast.error(apiErrorMessage(err, "Could not record response."));
+    },
+  });
+  const completeMockMutation = useMutation({
+    mutationFn: (sessionId: string) => completeMockHearing({ matterId, sessionId }),
+    onSuccess: (session) => {
+      upsertMockSession(session);
+      toast.success("Mock hearing session completed.");
+    },
+    onError: (err) => {
+      toast.error(apiErrorMessage(err, "Could not complete mock hearing."));
     },
   });
 
@@ -455,6 +546,37 @@ export default function MatterHearingsPage() {
         </CardContent>
       </Card>
 
+      <ProceedingIntelligenceSection
+        matterId={matterId}
+        response={proceedingQuery.data}
+        isLoading={proceedingQuery.isPending}
+        isError={proceedingQuery.isError}
+      />
+
+      <MockHearingSection
+        matterId={matterId}
+        response={mockHearingQuery.data}
+        isLoading={mockHearingQuery.isPending}
+        isError={mockHearingQuery.isError}
+        canRun={canRunMockHearing}
+        responseDraft={mockResponseDraft}
+        isStarting={startMockMutation.isPending}
+        isSubmitting={submitMockResponseMutation.isPending}
+        isCompleting={completeMockMutation.isPending}
+        onStart={() => startMockMutation.mutate()}
+        onResponseDraftChange={setMockResponseDraft}
+        onSubmit={(sessionId, questionId) => {
+          const text = mockResponseDraft.trim();
+          if (!text) return;
+          submitMockResponseMutation.mutate({
+            sessionId,
+            questionId,
+            responseText: text,
+          });
+        }}
+        onComplete={(sessionId) => completeMockMutation.mutate(sessionId)}
+      />
+
       <Card className="lg:col-span-2">
         <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
           <div>
@@ -572,6 +694,498 @@ export default function MatterHearingsPage() {
 // the offset relative to the hearing date so the user can verify
 // at a glance that T-24h and T-1h are queued for tomorrow's 4pm
 // listing without opening the admin dashboard.
+const PROCEEDING_SIGNAL_LABELS: Record<string, string> = {
+  next_hearing: "Next hearing",
+  filing_defect: "Filing defect",
+  compliance_direction: "Compliance direction",
+  reply_affidavit_deadline: "Reply / affidavit deadline",
+  counsel_appearance: "Counsel appearance",
+  interim_observation: "Interim observation",
+  order_kind: "Order kind",
+  action_required: "Action required",
+};
+
+function sourceHref(matterId: string, order: ProceedingOrderIntelligence): string {
+  if (order.order_attachment_id) {
+    return `/app/matters/${matterId}/documents/${order.order_attachment_id}/view`;
+  }
+  return `/app/matters/${matterId}/timeline`;
+}
+
+function signalDueText(signal: ProceedingSignal): string | null {
+  if (signal.due_on) return `Due ${formatDateTime(signal.due_on)}`;
+  if (signal.hearing_on) return `Hearing ${formatDateTime(signal.hearing_on)}`;
+  return null;
+}
+
+function ProceedingIntelligenceSection({
+  matterId,
+  response,
+  isLoading,
+  isError,
+}: {
+  matterId: string;
+  response: ProceedingIntelligenceResponse | undefined;
+  isLoading: boolean;
+  isError: boolean;
+}) {
+  const orders = response?.orders ?? [];
+  const supportedOrders = orders.filter((order) => order.signals.length > 0);
+  const pending = response?.pending_compliance_items ?? [];
+
+  return (
+    <Card className="lg:col-span-2">
+      <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+        <div>
+          <CardTitle>Proceeding intelligence</CardTitle>
+          <CardDescription>
+            Source-backed directions, hearing dates, defects, and compliance items
+            extracted from recent order sheets.
+          </CardDescription>
+        </div>
+        {pending.length > 0 ? <StatusBadge status={`${pending.length} pending`} /> : null}
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="grid gap-2 md:grid-cols-3" data-testid="proceeding-loading">
+            <div className="h-16 rounded-lg bg-[var(--color-bg-2)]" />
+            <div className="h-16 rounded-lg bg-[var(--color-bg-2)]" />
+            <div className="h-16 rounded-lg bg-[var(--color-bg-2)]" />
+          </div>
+        ) : isError ? (
+          <p className="text-sm text-[var(--color-danger-500,#c53030)]">
+            Proceeding intelligence could not be loaded.
+          </p>
+        ) : orders.length === 0 ? (
+          <EmptyState
+            icon={ClipboardList}
+            title="No proceeding sheets yet"
+            description="Order-sheet intelligence appears after a court sync or manual order import with raw source text."
+          />
+        ) : supportedOrders.length === 0 ? (
+          <div className="rounded-lg border border-[var(--color-line)] bg-[var(--color-bg)] p-3">
+            <div className="text-sm font-medium text-[var(--color-ink)]">
+              Insufficient source text
+            </div>
+            <p className="mt-1 text-sm text-[var(--color-mute)]">
+              Raw order text is required before CaseOps can extract proceeding
+              directions. Summaries are not used for task or deadline creation.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="grid gap-2 md:grid-cols-3">
+              <ProceedingMetric label="Orders with signals" value={supportedOrders.length} />
+              <ProceedingMetric label="Pending compliance" value={pending.length} />
+              <ProceedingMetric label="Review state" value="Human review" />
+            </div>
+            <p className="text-xs leading-relaxed text-[var(--color-mute)]">
+              {response?.disclaimer}
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[760px] border-separate border-spacing-0 text-left text-sm">
+                <thead className="text-xs uppercase tracking-[0.06em] text-[var(--color-mute)]">
+                  <tr>
+                    <th className="border-b border-[var(--color-line)] py-2 pr-3 font-medium">
+                      Order
+                    </th>
+                    <th className="border-b border-[var(--color-line)] px-3 py-2 font-medium">
+                      Direction
+                    </th>
+                    <th className="border-b border-[var(--color-line)] px-3 py-2 font-medium">
+                      Due / hearing
+                    </th>
+                    <th className="border-b border-[var(--color-line)] px-3 py-2 font-medium">
+                      Review
+                    </th>
+                    <th className="border-b border-[var(--color-line)] py-2 pl-3 font-medium">
+                      Source
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {supportedOrders.flatMap((order) =>
+                    order.signals.slice(0, 4).map((signal) => (
+                      <ProceedingSignalRow
+                        key={signal.id}
+                        matterId={matterId}
+                        order={order}
+                        signal={signal}
+                      />
+                    )),
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ProceedingMetric({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number;
+}) {
+  return (
+    <div className="rounded-lg border border-[var(--color-line)] bg-[var(--color-bg)] px-3 py-2">
+      <div className="text-xs uppercase tracking-[0.06em] text-[var(--color-mute)]">
+        {label}
+      </div>
+      <div className="mt-1 text-sm font-semibold text-[var(--color-ink)]">
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function ProceedingSignalRow({
+  matterId,
+  order,
+  signal,
+}: {
+  matterId: string;
+  order: ProceedingOrderIntelligence;
+  signal: ProceedingSignal;
+}) {
+  const dueText = signalDueText(signal);
+  return (
+    <tr data-testid={`proceeding-signal-${signal.id}`}>
+      <td className="border-b border-[var(--color-line)] py-3 pr-3 align-top">
+        <div className="font-medium text-[var(--color-ink)]">{order.title}</div>
+        <div className="mt-0.5 text-xs text-[var(--color-mute)]">
+          {formatDateTime(order.order_date)}
+        </div>
+      </td>
+      <td className="border-b border-[var(--color-line)] px-3 py-3 align-top">
+        <div className="font-medium text-[var(--color-ink)]">
+          {PROCEEDING_SIGNAL_LABELS[signal.signal_type] ?? signal.signal_type}
+        </div>
+        <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-[var(--color-mute)]">
+          {signal.source_snippet}
+        </p>
+      </td>
+      <td className="border-b border-[var(--color-line)] px-3 py-3 align-top text-sm text-[var(--color-ink-2)]">
+        {dueText ?? "Not dated"}
+      </td>
+      <td className="border-b border-[var(--color-line)] px-3 py-3 align-top">
+        <div className="flex flex-col gap-1">
+          <StatusBadge status={signal.review_status.replaceAll("_", " ")} />
+          <span className="text-xs text-[var(--color-mute)]">
+            Confidence {signal.confidence_label}
+          </span>
+        </div>
+      </td>
+      <td className="border-b border-[var(--color-line)] py-3 pl-3 align-top">
+        <Link
+          href={sourceHref(matterId, order)}
+          className="text-sm font-medium text-[var(--color-brand-700)] hover:underline"
+        >
+          View source
+        </Link>
+        {signal.generated_task_id || signal.generated_deadline_id ? (
+          <div className="mt-1 text-xs text-[var(--color-mute)]">
+            Linked task/deadline
+          </div>
+        ) : null}
+      </td>
+    </tr>
+  );
+}
+
+function mockSourceHref(matterId: string, question: MockHearingQuestion): string {
+  if (question.source_attachment_id) {
+    return `/app/matters/${matterId}/documents/${question.source_attachment_id}/view`;
+  }
+  return `/app/matters/${matterId}/documents`;
+}
+
+function activeMockSession(
+  response: MockHearingListResponse | undefined,
+): MockHearingSession | null {
+  const sessions = response?.sessions ?? [];
+  return sessions.find((session) => session.status === "active") ?? response?.latest_session ?? null;
+}
+
+function currentMockQuestion(session: MockHearingSession | null): MockHearingQuestion | null {
+  if (!session || session.status !== "active") return null;
+  return (
+    session.questions.find((question) => question.id === session.current_question_id) ??
+    session.questions.find((question) => question.status === "pending") ??
+    null
+  );
+}
+
+function latestMockResponse(session: MockHearingSession | null) {
+  const responses = (session?.questions ?? []).flatMap((question) => question.responses);
+  return responses.sort((a, b) => b.created_at.localeCompare(a.created_at))[0] ?? null;
+}
+
+function MockHearingSection({
+  matterId,
+  response,
+  isLoading,
+  isError,
+  canRun,
+  responseDraft,
+  isStarting,
+  isSubmitting,
+  isCompleting,
+  onStart,
+  onResponseDraftChange,
+  onSubmit,
+  onComplete,
+}: {
+  matterId: string;
+  response: MockHearingListResponse | undefined;
+  isLoading: boolean;
+  isError: boolean;
+  canRun: boolean;
+  responseDraft: string;
+  isStarting: boolean;
+  isSubmitting: boolean;
+  isCompleting: boolean;
+  onStart: () => void;
+  onResponseDraftChange: (value: string) => void;
+  onSubmit: (sessionId: string, questionId: string | null) => void;
+  onComplete: (sessionId: string) => void;
+}) {
+  const session = activeMockSession(response);
+  const question = currentMockQuestion(session);
+  const latestResponse = latestMockResponse(session);
+  const scorecard = session?.scorecard;
+  return (
+    <Card className="lg:col-span-2" data-testid="mock-hearing-section">
+      <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+        <div>
+          <CardTitle>Mock hearing</CardTitle>
+          <CardDescription>
+            Text practice from affidavit question banks with source-linked feedback; not
+            legal advice.
+          </CardDescription>
+        </div>
+        {canRun ? (
+          <Button
+            type="button"
+            size="sm"
+            disabled={isStarting}
+            onClick={onStart}
+            data-testid="mock-hearing-start"
+          >
+            {isStarting ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            ) : (
+              <PlayCircle className="h-4 w-4" aria-hidden />
+            )}
+            Start session
+          </Button>
+        ) : null}
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="grid gap-2 md:grid-cols-3" data-testid="mock-hearing-loading">
+            <div className="h-20 rounded-lg bg-[var(--color-bg-2)]" />
+            <div className="h-20 rounded-lg bg-[var(--color-bg-2)]" />
+            <div className="h-20 rounded-lg bg-[var(--color-bg-2)]" />
+          </div>
+        ) : isError ? (
+          <p className="text-sm text-[var(--color-danger-500,#c53030)]">
+            Mock hearing sessions could not be loaded.
+          </p>
+        ) : !session ? (
+          <EmptyState
+            icon={HelpCircle}
+            title="No mock hearing sessions"
+            description="Generate affidavit intelligence first, then start a text practice session from the source-backed question bank."
+          />
+        ) : (
+          <div className="grid gap-4 xl:grid-cols-[1fr_0.8fr]">
+            <div className="rounded-lg border border-[var(--color-line)] bg-[var(--color-bg)] p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusBadge status={session.status} />
+                <StatusBadge status={session.review_status} />
+                <span className="text-xs text-[var(--color-mute)]">
+                  {session.questions.length} source-backed questions
+                </span>
+              </div>
+              <p className="mt-3 text-xs leading-relaxed text-[var(--color-mute)]">
+                {session.disclaimer}
+              </p>
+              {question ? (
+                <div className="mt-4" data-testid="mock-hearing-current-question">
+                  <div className="text-xs uppercase tracking-[0.06em] text-[var(--color-mute)]">
+                    Question {question.turn_index + 1}
+                  </div>
+                  <p className="mt-1 text-base font-semibold text-[var(--color-ink)]">
+                    {question.question_text}
+                  </p>
+                  <p className="mt-2 text-sm text-[var(--color-mute)]">{question.reason}</p>
+                  <div className="mt-3 rounded-md border border-[var(--color-line)] bg-white p-3">
+                    <div className="text-xs font-semibold uppercase tracking-[0.06em] text-[var(--color-mute)]">
+                      Source quote
+                    </div>
+                    <p className="mt-1 text-sm text-[var(--color-ink-2)]">
+                      {question.source_quote}
+                    </p>
+                    <Button
+                      href={mockSourceHref(matterId, question)}
+                      variant="ghost"
+                      size="sm"
+                      className="mt-2"
+                    >
+                      View source
+                    </Button>
+                  </div>
+                  <label className="mt-4 block text-sm font-medium text-[var(--color-ink)]">
+                    Typed response
+                  </label>
+                  <Textarea
+                    className="mt-1 min-h-28"
+                    value={responseDraft}
+                    onChange={(event) => onResponseDraftChange(event.target.value)}
+                    placeholder="Record the answer exactly as prepared."
+                    data-testid="mock-hearing-response-input"
+                  />
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={isSubmitting || responseDraft.trim().length === 0}
+                      onClick={() => onSubmit(session.id, question.id)}
+                      data-testid="mock-hearing-submit-response"
+                    >
+                      {isSubmitting ? (
+                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                      ) : (
+                        <Send className="h-4 w-4" aria-hidden />
+                      )}
+                      Submit response
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={isCompleting}
+                      onClick={() => onComplete(session.id)}
+                      data-testid="mock-hearing-complete"
+                    >
+                      <CheckCircle2 className="h-4 w-4" aria-hidden />
+                      Complete
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-4 rounded-md border border-[var(--color-line)] bg-white p-3">
+                  <div className="text-sm font-medium text-[var(--color-ink)]">
+                    All questions answered
+                  </div>
+                  <p className="mt-1 text-sm text-[var(--color-mute)]">
+                    Complete the session to freeze the preparation report.
+                  </p>
+                  {session.status === "active" ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="mt-3"
+                      disabled={isCompleting}
+                      onClick={() => onComplete(session.id)}
+                      data-testid="mock-hearing-complete"
+                    >
+                      <CheckCircle2 className="h-4 w-4" aria-hidden />
+                      Complete
+                    </Button>
+                  ) : null}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-4">
+              {scorecard ? (
+                <div
+                  className="grid grid-cols-2 gap-2"
+                  data-testid="mock-hearing-scorecard"
+                >
+                  <MockMetric label="Answered" value={scorecard.answered_questions} />
+                  <MockMetric label="Review flags" value={scorecard.review_required_count} />
+                  <MockMetric label="New assertions" value={scorecard.unsupported_assertion_count} />
+                  <MockMetric
+                    label="Document gaps"
+                    value={scorecard.missing_document_reference_count}
+                  />
+                </div>
+              ) : null}
+              {latestResponse ? (
+                <div
+                  className="rounded-lg border border-[var(--color-line)] bg-white p-4"
+                  data-testid="mock-hearing-feedback"
+                >
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <StatusBadge status={latestResponse.confidence_label} />
+                    {latestResponse.review_required ? (
+                      <StatusBadge status="review_required" />
+                    ) : null}
+                  </div>
+                  <p className="text-sm font-medium text-[var(--color-ink)]">
+                    {latestResponse.feedback_text}
+                  </p>
+                  <dl className="mt-3 grid gap-2 text-xs text-[var(--color-mute)]">
+                    <MockFact
+                      label="Answered question"
+                      value={latestResponse.answered_question ? "Yes" : "Needs work"}
+                    />
+                    <MockFact
+                      label="Consistent with affidavit"
+                      value={latestResponse.consistency_with_affidavit ? "Yes" : "Review"}
+                    />
+                    <MockFact
+                      label="Unsupported assertion"
+                      value={latestResponse.unsupported_assertion_added ? "Flagged" : "None"}
+                    />
+                    <MockFact
+                      label="Document reference"
+                      value={
+                        latestResponse.missing_document_reference ? "Missing" : "Present"
+                      }
+                    />
+                  </dl>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-[var(--color-line)] bg-white p-4 text-sm text-[var(--color-mute)]">
+                  Feedback appears after the first typed response.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function MockMetric({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-lg border border-[var(--color-line)] bg-white px-3 py-2">
+      <div className="text-xs uppercase tracking-[0.06em] text-[var(--color-mute)]">
+        {label}
+      </div>
+      <div className="mt-1 text-sm font-semibold text-[var(--color-ink)]">{value}</div>
+    </div>
+  );
+}
+
+function MockFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <dt>{label}</dt>
+      <dd className="font-medium text-[var(--color-ink-2)]">{value}</dd>
+    </div>
+  );
+}
+
 function HearingOutlookSync({
   hearing,
   sync,

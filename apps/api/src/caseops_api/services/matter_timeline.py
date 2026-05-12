@@ -22,6 +22,9 @@ from caseops_api.db.models import (
     MatterCourtOrder,
     MatterDeadline,
     MatterHearing,
+    MatterProceedingReviewStatus,
+    MatterProceedingSignal,
+    MatterProceedingSignalType,
     MatterTask,
 )
 from caseops_api.schemas.matters import (
@@ -384,6 +387,15 @@ def _events_from_court_orders(
     rows = list(
         session.scalars(stmt)
     )
+    signals_by_order: dict[str, list[MatterProceedingSignal]] = {}
+    order_ids = [row.id for row in rows]
+    if order_ids:
+        for signal in session.scalars(
+            select(MatterProceedingSignal)
+            .where(MatterProceedingSignal.court_order_id.in_(order_ids))
+            .order_by(MatterProceedingSignal.created_at.asc())
+        ):
+            signals_by_order.setdefault(signal.court_order_id, []).append(signal)
     out: list[TimelineEvent] = []
     for row in rows:
         order_kind = row.order_kind or "daily_order"
@@ -394,6 +406,30 @@ def _events_from_court_orders(
             badges.append("interim")
         if stay_status != "none":
             badges.append(f"stay:{stay_status}")
+        proceeding_signals = signals_by_order.get(row.id, [])
+        pending_count = sum(
+            1
+            for signal in proceeding_signals
+            if signal.due_on is not None
+            and signal.review_status
+            in {
+                MatterProceedingReviewStatus.REVIEW_REQUIRED,
+                MatterProceedingReviewStatus.AUTO_PROMOTED,
+            }
+        )
+        next_hearing_on = next(
+            (
+                signal.hearing_on
+                for signal in proceeding_signals
+                if signal.signal_type == MatterProceedingSignalType.NEXT_HEARING
+                and signal.hearing_on is not None
+            ),
+            None,
+        )
+        if pending_count:
+            badges.append(f"compliance:{pending_count}")
+        if next_hearing_on is not None:
+            badges.append("next hearing")
         judge_names = row.judge_names_json if isinstance(row.judge_names_json, list) else []
         out.append(
             TimelineEvent(
@@ -415,6 +451,11 @@ def _events_from_court_orders(
                     "source": row.source,
                     "bench_name": row.bench_name,
                     "judge_names": ", ".join(str(name) for name in judge_names) or None,
+                    "proceeding_signal_count": len(proceeding_signals),
+                    "pending_compliance_count": pending_count,
+                    "next_hearing_on": next_hearing_on.isoformat()
+                    if next_hearing_on
+                    else None,
                 },
             )
         )

@@ -9,6 +9,8 @@ const {
   updateMetadataMock,
   retryMock,
   reindexMock,
+  fetchAffidavitMock,
+  analyzeAffidavitMock,
   workspaceData,
   useCapabilityMock,
   toastSuccess,
@@ -18,6 +20,8 @@ const {
   updateMetadataMock: vi.fn(),
   retryMock: vi.fn(),
   reindexMock: vi.fn(),
+  fetchAffidavitMock: vi.fn(),
+  analyzeAffidavitMock: vi.fn(),
   workspaceData: {
     current: {
       matter: { id: "m1", matter_code: "X", title: "T", status: "active" },
@@ -42,6 +46,8 @@ vi.mock("@/lib/api/endpoints", () => ({
   updateMatterAttachmentMetadata: updateMetadataMock,
   retryMatterAttachment: retryMock,
   reindexMatterAttachment: reindexMock,
+  fetchAffidavitIntelligence: fetchAffidavitMock,
+  analyzeAffidavitIntelligence: analyzeAffidavitMock,
 }));
 
 vi.mock("@/lib/use-matter-workspace", () => ({
@@ -79,6 +85,16 @@ describe("MatterDocumentsPage", () => {
     updateMetadataMock.mockReset();
     retryMock.mockReset();
     reindexMock.mockReset();
+    fetchAffidavitMock.mockReset();
+    analyzeAffidavitMock.mockReset();
+    fetchAffidavitMock.mockResolvedValue({
+      matter_id: "m1",
+      generated_at: "2026-05-11T10:00:00Z",
+      disclaimer:
+        "Affidavit intelligence is source-backed hearing-preparation decision support. It is not legal advice.",
+      runs: [],
+      latest_run: null,
+    });
     useCapabilityMock.mockReset();
     toastSuccess.mockReset();
     toastError.mockReset();
@@ -288,5 +304,246 @@ describe("MatterDocumentsPage", () => {
     render(withClient(<MatterDocumentsPage />));
     expect(screen.queryByTestId("matter-attachment-retry-a1")).toBeNull();
     expect(screen.queryByTestId("matter-attachment-reindex-a1")).toBeNull();
+  });
+
+  it("renders affidavit statements, question bank, review state, and source links", async () => {
+    useCapabilityMock.mockImplementation((cap: string) => cap === "hearing_packs:generate");
+    attachments([
+      {
+        id: "aff1",
+        original_filename: "chief-affidavit.pdf",
+        document_type: "chief_affidavit",
+        lifecycle_stage: "pleadings",
+        processing_status: "indexed",
+        created_at: "2026-05-05T10:00:00Z",
+        size_bytes: 1024,
+      },
+    ]);
+    fetchAffidavitMock.mockResolvedValue({
+      matter_id: "m1",
+      generated_at: "2026-05-11T10:00:00Z",
+      disclaimer:
+        "Affidavit intelligence is source-backed hearing-preparation decision support. It is not legal advice.",
+      runs: [
+        {
+          id: "run1",
+          matter_id: "m1",
+          attachment_id: "aff1",
+          status: "completed",
+          extraction_method: "deterministic",
+          parser_version: "caseops-affidavit-deterministic-v1",
+          source_hash: "hash",
+          source_char_count: 180,
+          missing_data: [],
+          model_run_id: null,
+          created_by_membership_id: "mem1",
+          created_at: "2026-05-11T10:00:00Z",
+          updated_at: "2026-05-11T10:00:00Z",
+          statements: [
+            {
+              id: "stmt1",
+              run_id: "run1",
+              matter_id: "m1",
+              attachment_id: "aff1",
+              source_chunk_id: "chunk1",
+              source_chunk_index: 0,
+              page_reference: "page 2",
+              statement_type: "evidence_gap",
+              statement_text: "Supporting document should be reviewed.",
+              source_quote: "I state that respondent paid Rs. 10,000 in cash.",
+              confidence_label: "low",
+              review_status: "review_required",
+              created_at: "2026-05-11T10:00:00Z",
+              updated_at: "2026-05-11T10:00:00Z",
+            },
+          ],
+          questions: [
+            {
+              id: "q1",
+              run_id: "run1",
+              matter_id: "m1",
+              attachment_id: "aff1",
+              statement_id: "stmt1",
+              source_chunk_id: "chunk1",
+              source_chunk_index: 0,
+              page_reference: "page 2",
+              category: "document_support",
+              question_text:
+                "What primary document supports this assertion, and why is it not identified here?",
+              reason:
+                "The statement appears to require supporting evidence but does not name a clear exhibit.",
+              source_quote: "I state that respondent paid Rs. 10,000 in cash.",
+              confidence_label: "low",
+              review_required: true,
+              review_status: "review_required",
+              created_at: "2026-05-11T10:00:00Z",
+              updated_at: "2026-05-11T10:00:00Z",
+            },
+          ],
+        },
+      ],
+      latest_run: {
+        id: "run1",
+        matter_id: "m1",
+        attachment_id: "aff1",
+        status: "completed",
+        extraction_method: "deterministic",
+        parser_version: "caseops-affidavit-deterministic-v1",
+        source_hash: "hash",
+        source_char_count: 180,
+        missing_data: [],
+        model_run_id: null,
+        created_by_membership_id: "mem1",
+        created_at: "2026-05-11T10:00:00Z",
+        updated_at: "2026-05-11T10:00:00Z",
+        statements: [
+          {
+            id: "stmt1",
+            run_id: "run1",
+            matter_id: "m1",
+            attachment_id: "aff1",
+            source_chunk_id: "chunk1",
+            source_chunk_index: 0,
+            page_reference: "page 2",
+            statement_type: "evidence_gap",
+            statement_text: "Supporting document should be reviewed.",
+            source_quote: "I state that respondent paid Rs. 10,000 in cash.",
+            confidence_label: "low",
+            review_status: "review_required",
+            created_at: "2026-05-11T10:00:00Z",
+            updated_at: "2026-05-11T10:00:00Z",
+          },
+        ],
+        questions: [
+          {
+            id: "q1",
+            run_id: "run1",
+            matter_id: "m1",
+            attachment_id: "aff1",
+            statement_id: "stmt1",
+            source_chunk_id: "chunk1",
+            source_chunk_index: 0,
+            page_reference: "page 2",
+            category: "document_support",
+            question_text:
+              "What primary document supports this assertion, and why is it not identified here?",
+            reason:
+              "The statement appears to require supporting evidence but does not name a clear exhibit.",
+            source_quote: "I state that respondent paid Rs. 10,000 in cash.",
+            confidence_label: "low",
+            review_required: true,
+            review_status: "review_required",
+            created_at: "2026-05-11T10:00:00Z",
+            updated_at: "2026-05-11T10:00:00Z",
+          },
+        ],
+      },
+    });
+
+    render(withClient(<MatterDocumentsPage />));
+
+    expect(await screen.findByTestId("affidavit-intelligence-section")).toBeInTheDocument();
+    expect(await screen.findByText("Extracted statements")).toBeInTheDocument();
+    expect(screen.getByText("Cross-examination question bank")).toBeInTheDocument();
+    expect(screen.getAllByText("Review required").length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("I state that respondent paid Rs. 10,000 in cash.").length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByTestId("affidavit-source-link-aff1")).toHaveAttribute(
+      "href",
+      "/app/matters/m1/documents/aff1/view",
+    );
+  });
+
+  it("shows empty and insufficient affidavit intelligence states", async () => {
+    useCapabilityMock.mockImplementation(() => false);
+    attachments([
+      {
+        id: "aff1",
+        original_filename: "affidavit.pdf",
+        document_type: "affidavit",
+        lifecycle_stage: "pleadings",
+        processing_status: "indexed",
+        created_at: "2026-05-05T10:00:00Z",
+        size_bytes: 1024,
+      },
+    ]);
+    fetchAffidavitMock.mockResolvedValue({
+      matter_id: "m1",
+      generated_at: "2026-05-11T10:00:00Z",
+      disclaimer:
+        "Affidavit intelligence is source-backed hearing-preparation decision support. It is not legal advice.",
+      runs: [],
+      latest_run: {
+        id: "run2",
+        matter_id: "m1",
+        attachment_id: "aff1",
+        status: "insufficient_source_text",
+        extraction_method: "deterministic",
+        parser_version: "caseops-affidavit-deterministic-v1",
+        source_hash: "hash",
+        source_char_count: 0,
+        missing_data: ["raw_attachment_text_chunks"],
+        model_run_id: null,
+        created_by_membership_id: "mem1",
+        created_at: "2026-05-11T10:00:00Z",
+        updated_at: "2026-05-11T10:00:00Z",
+        statements: [],
+        questions: [],
+      },
+    });
+
+    render(withClient(<MatterDocumentsPage />));
+
+    expect(await screen.findByTestId("affidavit-insufficient-state")).toHaveTextContent(
+      "raw_attachment_text_chunks",
+    );
+    expect(screen.getByText("No extracted statements are available.")).toBeInTheDocument();
+  });
+
+  it("runs affidavit analysis from the document workflow without duplicate actions", async () => {
+    useCapabilityMock.mockImplementation((cap: string) => cap === "hearing_packs:generate");
+    analyzeAffidavitMock.mockResolvedValue({
+      matter_id: "m1",
+      generated_at: "2026-05-11T10:00:00Z",
+      disclaimer:
+        "Affidavit intelligence is source-backed hearing-preparation decision support. It is not legal advice.",
+      runs: [],
+      latest_run: null,
+    });
+    attachments([
+      {
+        id: "aff1",
+        original_filename: "affidavit.pdf",
+        document_type: "affidavit",
+        lifecycle_stage: "pleadings",
+        processing_status: "indexed",
+        created_at: "2026-05-05T10:00:00Z",
+        size_bytes: 1024,
+      },
+    ]);
+
+    const { rerender } = render(withClient(<MatterDocumentsPage />));
+    expect(await screen.findByTestId("affidavit-analyze-aff1")).toBeInTheDocument();
+    rerender(withClient(<MatterDocumentsPage />));
+    expect(screen.getAllByTestId("affidavit-analyze-aff1")).toHaveLength(1);
+    await userEvent.click(screen.getByTestId("affidavit-analyze-aff1"));
+
+    await waitFor(() => expect(analyzeAffidavitMock).toHaveBeenCalledTimes(1));
+    expect(analyzeAffidavitMock).toHaveBeenCalledWith({
+      matterId: "m1",
+      attachmentId: "aff1",
+    });
+  });
+
+  it("keeps affidavit prep copy within legal-safety boundaries", async () => {
+    useCapabilityMock.mockImplementation(() => false);
+    render(withClient(<MatterDocumentsPage />));
+
+    const section = await screen.findByTestId("affidavit-intelligence-section");
+    expect(section).toHaveTextContent("not legal advice");
+    expect(section.textContent).not.toMatch(
+      /guaranteed|will win|emotional|psychological|mental state|biometric|voice stress/i,
+    );
   });
 });

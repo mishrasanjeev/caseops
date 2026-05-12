@@ -42,6 +42,8 @@ MatterDocumentTypeLiteral = Literal[
     "vakalatnama",
     "pleading_reply",
     "affidavit",
+    "chief_affidavit",
+    "counter_affidavit",
     "evidence",
     "written_submission",
     "interim_application",

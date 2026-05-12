@@ -1,17 +1,28 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
+  completeMockHearingMock,
   fetchCalendarSyncStatusMock,
+  fetchMockHearingsMock,
+  fetchProceedingIntelligenceMock,
   listMatterRemindersMock,
+  startMockHearingMock,
+  submitMockHearingResponseMock,
   syncHearingToOutlookMock,
   workspaceData,
   useCapabilityMock,
 } = vi.hoisted(() => ({
+  completeMockHearingMock: vi.fn(),
   fetchCalendarSyncStatusMock: vi.fn(),
+  fetchMockHearingsMock: vi.fn(),
+  fetchProceedingIntelligenceMock: vi.fn(),
   listMatterRemindersMock: vi.fn(),
+  startMockHearingMock: vi.fn(),
+  submitMockHearingResponseMock: vi.fn(),
   syncHearingToOutlookMock: vi.fn(),
   workspaceData: {
     current: {
@@ -31,6 +42,7 @@ const {
 }));
 
 vi.mock("@/lib/api/endpoints", () => ({
+  completeMockHearing: completeMockHearingMock,
   createMatterHearing: vi.fn(),
   // BUG-032 (Hari 2026-05-09): AddCourtOrderDialog (mounted on the
   // Orders-on-file card) imports these. Mock so the page renders
@@ -39,8 +51,12 @@ vi.mock("@/lib/api/endpoints", () => ({
   createMatterCourtOrder: vi.fn().mockResolvedValue({ id: "order-new" }),
   uploadMatterAttachment: vi.fn().mockResolvedValue({ id: "att-new" }),
   fetchCalendarSyncStatus: fetchCalendarSyncStatusMock,
+  fetchMockHearings: fetchMockHearingsMock,
+  fetchProceedingIntelligence: fetchProceedingIntelligenceMock,
   listMatterReminders: listMatterRemindersMock,
   pullMatterCourtSync: vi.fn(),
+  startMockHearing: startMockHearingMock,
+  submitMockHearingResponse: submitMockHearingResponseMock,
   syncHearingToOutlook: syncHearingToOutlookMock,
 }));
 
@@ -69,12 +85,88 @@ function withClient(children: ReactNode) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
+function mockHearingSession(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "mh1",
+    matter_id: "m1",
+    source_affidavit_run_id: "run1",
+    mode: "client_preparation",
+    participant_label: null,
+    status: "active",
+    review_status: "review_required",
+    current_question_id: "mq1",
+    disclaimer:
+      "Mock hearings are source-backed hearing-preparation decision support, not legal advice.",
+    scorecard: {
+      total_questions: 1,
+      answered_questions: 0,
+      responses_recorded: 0,
+      answered_question_count: 0,
+      unsupported_assertion_count: 0,
+      missing_document_reference_count: 0,
+      contradiction_count: 0,
+      review_required_count: 0,
+      average_response_seconds: null,
+    },
+    created_by_membership_id: "mem1",
+    started_at: "2026-05-11T10:00:00Z",
+    completed_at: null,
+    updated_at: "2026-05-11T10:00:00Z",
+    questions: [
+      {
+        id: "mq1",
+        session_id: "mh1",
+        matter_id: "m1",
+        source_affidavit_run_id: "run1",
+        source_affidavit_question_id: "aq1",
+        source_affidavit_statement_id: "as1",
+        source_attachment_id: "att1",
+        turn_index: 0,
+        category: "document_support",
+        question_text: "Which invoice supports the payment statement?",
+        reason: "The affidavit payment statement requires document support.",
+        source_quote: "I state that respondent paid Rs. 10,000 under Invoice A.",
+        source_chunk_id: "chunk1",
+        source_chunk_index: 0,
+        page_reference: "page 2",
+        difficulty_label: "low",
+        status: "pending",
+        responses: [],
+        created_at: "2026-05-11T10:00:00Z",
+        updated_at: "2026-05-11T10:00:00Z",
+      },
+    ],
+    ...overrides,
+  };
+}
+
 describe("MatterHearingsPage", () => {
   beforeEach(() => {
+    completeMockHearingMock.mockReset();
     fetchCalendarSyncStatusMock.mockReset();
+    fetchMockHearingsMock.mockReset();
+    fetchProceedingIntelligenceMock.mockReset();
     listMatterRemindersMock.mockReset();
+    startMockHearingMock.mockReset();
+    submitMockHearingResponseMock.mockReset();
     syncHearingToOutlookMock.mockReset();
     listMatterRemindersMock.mockResolvedValue({ matter_id: "m1", reminders: [] });
+    fetchMockHearingsMock.mockResolvedValue({
+      matter_id: "m1",
+      generated_at: "2026-05-11T00:00:00Z",
+      disclaimer:
+        "Mock hearings are source-backed hearing-preparation decision support, not legal advice.",
+      sessions: [],
+      latest_session: null,
+    });
+    fetchProceedingIntelligenceMock.mockResolvedValue({
+      matter_id: "m1",
+      generated_at: "2026-05-11T00:00:00Z",
+      disclaimer:
+        "Proceeding intelligence is source-backed decision support for legal teams. It is not legal advice; counsel must review extracted directions before external use or client-facing communication.",
+      orders: [],
+      pending_compliance_items: [],
+    });
     fetchCalendarSyncStatusMock.mockResolvedValue({
       provider_available: true,
       durable_automation: "blocked_pending_temporal",
@@ -375,5 +467,220 @@ describe("MatterHearingsPage", () => {
     // buttons on screen.
     const triggers = screen.getAllByTestId("add-court-order-open");
     expect(triggers.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("renders proceeding intelligence directions with due date and source link", async () => {
+    fetchProceedingIntelligenceMock.mockResolvedValue({
+      matter_id: "m1",
+      generated_at: "2026-05-11T00:00:00Z",
+      disclaimer:
+        "Proceeding intelligence is source-backed decision support for legal teams. It is not legal advice; counsel must review extracted directions before external use or client-facing communication.",
+      orders: [
+        {
+          court_order_id: "o1",
+          sync_run_id: "sync-1",
+          title: "Daily order sheet",
+          order_date: "2026-05-06",
+          source: "manual-test",
+          source_reference: "fixture:order",
+          order_attachment_id: "att-1",
+          extraction_status: "supported",
+          missing_data: [],
+          signals: [
+            {
+              id: "sig-1",
+              matter_id: "m1",
+              court_order_id: "o1",
+              sync_run_id: "sync-1",
+              signal_type: "reply_affidavit_deadline",
+              signal_text: "Reply or affidavit deadline due 2026-05-20",
+              action_required: "Respondent shall file reply affidavit by 20.05.2026.",
+              due_on: "2026-05-20",
+              hearing_on: null,
+              order_kind: null,
+              confidence_label: "high",
+              source_snippet: "Respondent shall file reply affidavit by 20.05.2026.",
+              review_status: "review_required",
+              generated_task_id: "task-1",
+              generated_deadline_id: "deadline-1",
+              extraction_method: "deterministic",
+              parser_version: "caseops-proceeding-deterministic-v1",
+              created_at: "2026-05-11T00:00:00Z",
+              updated_at: "2026-05-11T00:00:00Z",
+            },
+          ],
+        },
+      ],
+      pending_compliance_items: [
+        {
+          id: "sig-1",
+          matter_id: "m1",
+          court_order_id: "o1",
+          sync_run_id: "sync-1",
+          signal_type: "reply_affidavit_deadline",
+          signal_text: "Reply or affidavit deadline due 2026-05-20",
+          action_required: "Respondent shall file reply affidavit by 20.05.2026.",
+          due_on: "2026-05-20",
+          hearing_on: null,
+          order_kind: null,
+          confidence_label: "high",
+          source_snippet: "Respondent shall file reply affidavit by 20.05.2026.",
+          review_status: "review_required",
+          generated_task_id: "task-1",
+          generated_deadline_id: "deadline-1",
+          extraction_method: "deterministic",
+          parser_version: "caseops-proceeding-deterministic-v1",
+          created_at: "2026-05-11T00:00:00Z",
+          updated_at: "2026-05-11T00:00:00Z",
+        },
+      ],
+    });
+
+    render(withClient(<MatterHearingsPage />));
+
+    expect(await screen.findByText("Proceeding intelligence")).toBeInTheDocument();
+    expect(await screen.findByText("Reply / affidavit deadline")).toBeInTheDocument();
+    expect(screen.getByText(/Respondent shall file reply affidavit/i)).toBeInTheDocument();
+    expect(screen.getByText(/Due 20 May 2026/i)).toBeInTheDocument();
+    expect(screen.getByText(/Human review/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/not legal advice/i).length).toBeGreaterThan(0);
+    expect(screen.getByText("Linked task/deadline")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View source" })).toHaveAttribute(
+      "href",
+      "/app/matters/m1/documents/att-1/view",
+    );
+  });
+
+  it("renders proceeding insufficient-source state without duplicate actions", async () => {
+    fetchProceedingIntelligenceMock.mockResolvedValue({
+      matter_id: "m1",
+      generated_at: "2026-05-11T00:00:00Z",
+      disclaimer:
+        "Proceeding intelligence is source-backed decision support for legal teams. It is not legal advice.",
+      orders: [
+        {
+          court_order_id: "o1",
+          sync_run_id: null,
+          title: "Summary-only order",
+          order_date: "2026-05-06",
+          source: "manual-test",
+          source_reference: null,
+          order_attachment_id: null,
+          extraction_status: "insufficient_source_text",
+          missing_data: ["raw_order_text"],
+          signals: [],
+        },
+      ],
+      pending_compliance_items: [],
+    });
+    const view = render(withClient(<MatterHearingsPage />));
+
+    expect(await screen.findByText("Insufficient source text")).toBeInTheDocument();
+    expect(screen.getByText(/Summaries are not used/i)).toBeInTheDocument();
+
+    view.rerender(withClient(<MatterHearingsPage />));
+
+    expect(screen.queryAllByRole("link", { name: "View source" })).toHaveLength(0);
+  });
+
+  it("starts a mock hearing session and renders source-backed questions", async () => {
+    useCapabilityMock.mockImplementation((cap: string) => cap === "hearing_packs:generate");
+    const session = mockHearingSession();
+    startMockHearingMock.mockResolvedValue(session);
+
+    render(withClient(<MatterHearingsPage />));
+
+    expect(await screen.findByTestId("mock-hearing-section")).toBeInTheDocument();
+    expect(await screen.findByText("No mock hearing sessions")).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("mock-hearing-start"));
+
+    expect(await screen.findByText("Which invoice supports the payment statement?")).toBeInTheDocument();
+    expect(screen.getByText("I state that respondent paid Rs. 10,000 under Invoice A.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View source" })).toHaveAttribute(
+      "href",
+      "/app/matters/m1/documents/att1/view",
+    );
+  });
+
+  it("submitting a mock hearing response renders observable feedback and scorecard", async () => {
+    useCapabilityMock.mockImplementation((cap: string) => cap === "hearing_packs:generate");
+    const answeredSession = mockHearingSession({
+      current_question_id: null,
+      scorecard: {
+        total_questions: 1,
+        answered_questions: 1,
+        responses_recorded: 1,
+        answered_question_count: 1,
+        unsupported_assertion_count: 1,
+        missing_document_reference_count: 0,
+        contradiction_count: 0,
+        review_required_count: 1,
+        average_response_seconds: null,
+      },
+      questions: [
+        {
+          ...mockHearingSession().questions[0],
+          status: "answered",
+          responses: [
+            {
+              id: "mr1",
+              session_id: "mh1",
+              question_id: "mq1",
+              matter_id: "m1",
+              response_text: "Invoice A supports it, with a new Pune warehouse detail.",
+              response_word_count: 9,
+              elapsed_seconds: null,
+              answered_question: true,
+              consistency_with_affidavit: true,
+              unsupported_assertion_added: true,
+              missing_document_reference: false,
+              contradiction_with_source: false,
+              response_completeness: "medium",
+              confidence_label: "medium",
+              feedback_text: "Response adds facts not visible in the source quote.",
+              source_quote: "I state that respondent paid Rs. 10,000 under Invoice A.",
+              review_required: true,
+              review_status: "review_required",
+              created_at: "2026-05-11T10:02:00Z",
+              updated_at: "2026-05-11T10:02:00Z",
+            },
+          ],
+        },
+      ],
+    });
+    fetchMockHearingsMock.mockResolvedValue({
+      matter_id: "m1",
+      generated_at: "2026-05-11T10:00:00Z",
+      disclaimer:
+        "Mock hearings are source-backed hearing-preparation decision support, not legal advice.",
+      sessions: [mockHearingSession()],
+      latest_session: mockHearingSession(),
+    });
+    submitMockHearingResponseMock.mockResolvedValue(answeredSession);
+
+    render(withClient(<MatterHearingsPage />));
+
+    expect(await screen.findByText("Which invoice supports the payment statement?")).toBeInTheDocument();
+    await userEvent.type(
+      screen.getByTestId("mock-hearing-response-input"),
+      "Invoice A supports it, with a new Pune warehouse detail.",
+    );
+    await userEvent.click(screen.getByTestId("mock-hearing-submit-response"));
+
+    expect(await screen.findByTestId("mock-hearing-feedback")).toHaveTextContent(
+      "Response adds facts not visible in the source quote.",
+    );
+    expect(screen.getByTestId("mock-hearing-scorecard")).toHaveTextContent("New assertions");
+    expect(screen.getByTestId("mock-hearing-scorecard")).toHaveTextContent("1");
+  });
+
+  it("keeps mock hearing copy within legal-safety boundaries", async () => {
+    render(withClient(<MatterHearingsPage />));
+
+    const section = await screen.findByTestId("mock-hearing-section");
+    expect(section).toHaveTextContent("not legal advice");
+    expect(section.textContent).not.toMatch(
+      /guaranteed|will win|emotional|psychological|mental state|biometric|voice stress|voice/i,
+    );
   });
 });

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import logging
 from datetime import UTC, date, datetime, time
 from typing import BinaryIO
@@ -107,6 +108,8 @@ DOCUMENT_TYPE_DEFAULT_LIFECYCLE: dict[str, str] = {
     "vakalatnama": "administrative",
     "pleading_reply": "pleadings",
     "affidavit": "pleadings",
+    "chief_affidavit": "pleadings",
+    "counter_affidavit": "pleadings",
     "evidence": "evidence",
     "written_submission": "arguments",
     "interim_application": "interim_applications",
@@ -120,6 +123,59 @@ DOCUMENT_TYPE_DEFAULT_LIFECYCLE: dict[str, str] = {
 
 def _order_has_active_stay(order: MatterCourtOrder) -> bool:
     return (order.stay_status or "none") in ACTIVE_STAY_STATUSES
+
+
+def _normalize_order_identity_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = " ".join(value.split()).strip()
+    return normalized or None
+
+
+def _order_text_hash(value: str | None) -> str | None:
+    normalized = _normalize_order_identity_text(value)
+    if normalized is None:
+        return None
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def _find_existing_imported_order(
+    session: Session,
+    *,
+    matter_id: str,
+    source: str,
+    source_reference: str | None,
+    order_date: date,
+    title: str,
+    order_text: str | None,
+) -> MatterCourtOrder | None:
+    """Find the same source order across court-sync reruns.
+
+    The raw-text hash is mandatory so same-date daily orders do not collapse
+    unless their source text is actually equivalent.
+    """
+
+    incoming_hash = _order_text_hash(order_text)
+    if incoming_hash is None:
+        return None
+    incoming_title = (_normalize_order_identity_text(title) or "").casefold()
+    stmt = select(MatterCourtOrder).where(
+        MatterCourtOrder.matter_id == matter_id,
+        MatterCourtOrder.source == source,
+        MatterCourtOrder.order_date == order_date,
+    )
+    if source_reference:
+        stmt = stmt.where(MatterCourtOrder.source_reference == source_reference)
+    else:
+        stmt = stmt.where(MatterCourtOrder.source_reference.is_(None))
+    for candidate in session.scalars(stmt):
+        candidate_title = (_normalize_order_identity_text(candidate.title) or "").casefold()
+        if (
+            candidate_title == incoming_title
+            and _order_text_hash(candidate.order_text) == incoming_hash
+        ):
+            return candidate
+    return None
 
 
 def _order_is_interim(order: MatterCourtOrder) -> bool:
@@ -1997,22 +2053,35 @@ def _persist_court_sync_import(
         session.flush()
         new_listing_ids.append(new_entry.id)
 
+    new_orders: list[MatterCourtOrder] = []
     for item in orders:
         order_attachment_id = _validated_order_attachment_id(
             session,
             matter_id=matter.id,
             attachment_id=item.order_attachment_id,
         )
-        session.add(
-            MatterCourtOrder(
+        title = item.title.strip()
+        source_reference = item.source_reference.strip() if item.source_reference else None
+        order_text = item.order_text.strip() if item.order_text else None
+        order = _find_existing_imported_order(
+            session,
+            matter_id=matter.id,
+            source=source,
+            source_reference=source_reference,
+            order_date=item.order_date,
+            title=title,
+            order_text=order_text,
+        )
+        if order is None:
+            order = MatterCourtOrder(
                 matter_id=matter.id,
                 sync_run_id=sync_run.id,
                 order_date=item.order_date,
-                title=item.title.strip(),
+                title=title,
                 summary=item.summary.strip(),
-                order_text=item.order_text.strip() if item.order_text else None,
+                order_text=order_text,
                 source=source,
-                source_reference=item.source_reference.strip() if item.source_reference else None,
+                source_reference=source_reference,
                 bench_name=item.bench_name.strip() if item.bench_name else None,
                 judge_names_json=item.judge_names,
                 order_attachment_id=order_attachment_id,
@@ -2021,7 +2090,21 @@ def _persist_court_sync_import(
                 stay_status=item.stay_status,
                 stay_effective_until=item.stay_effective_until,
             )
-        )
+        else:
+            order.sync_run_id = sync_run.id
+            order.summary = item.summary.strip()
+            order.order_text = order_text
+            order.bench_name = item.bench_name.strip() if item.bench_name else None
+            order.judge_names_json = item.judge_names
+            order.order_attachment_id = order_attachment_id
+            order.order_kind = item.order_kind
+            order.is_interim_order = item.is_interim_order
+            order.stay_status = item.stay_status
+            order.stay_effective_until = item.stay_effective_until
+            order.synced_at = utcnow()
+        session.add(order)
+        session.flush()
+        new_orders.append(order)
 
     if cause_list_entries:
         next_listing = min(cause_list_entries, key=lambda entry: entry.listing_date)
@@ -2062,6 +2145,26 @@ def _persist_court_sync_import(
                     "bench_resolver: failed for listing_id=%s; "
                     "leaving judges_json NULL for periodic retry",
                     listing_id,
+                )
+
+    if new_orders:
+        from caseops_api.services.proceeding_intelligence import (
+            extract_imported_order_proceeding_intelligence,
+        )
+
+        for order in new_orders:
+            try:
+                extract_imported_order_proceeding_intelligence(
+                    session,
+                    matter=matter,
+                    order=order,
+                    actor_membership_id=actor_membership_id,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "proceeding_intelligence: failed for court_order_id=%s: %s",
+                    order.id,
+                    exc,
                 )
 
     return sync_run
