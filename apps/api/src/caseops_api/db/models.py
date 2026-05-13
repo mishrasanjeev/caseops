@@ -8,8 +8,10 @@ from sqlalchemy import (
     JSON,
     BigInteger,
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     Numeric,
@@ -164,12 +166,38 @@ class MatterStayStatus(StrEnum):
     UNKNOWN = "unknown"
 
 
+class MatterProceedingSignalType(StrEnum):
+    NEXT_HEARING = "next_hearing"
+    FILING_DEFECT = "filing_defect"
+    COMPLIANCE_DIRECTION = "compliance_direction"
+    REPLY_AFFIDAVIT_DEADLINE = "reply_affidavit_deadline"
+    COUNSEL_APPEARANCE = "counsel_appearance"
+    INTERIM_OBSERVATION = "interim_observation"
+    ORDER_KIND = "order_kind"
+    ACTION_REQUIRED = "action_required"
+
+
+class MatterProceedingConfidence(StrEnum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
+class MatterProceedingReviewStatus(StrEnum):
+    REVIEW_REQUIRED = "review_required"
+    REVIEWED = "reviewed"
+    AUTO_PROMOTED = "auto_promoted"
+    INSUFFICIENT_EVIDENCE = "insufficient_evidence"
+
+
 class MatterDocumentType(StrEnum):
     COMPLAINT_PETITION = "complaint_petition"
     NOTICE = "notice"
     VAKALATNAMA = "vakalatnama"
     PLEADING_REPLY = "pleading_reply"
     AFFIDAVIT = "affidavit"
+    CHIEF_AFFIDAVIT = "chief_affidavit"
+    COUNTER_AFFIDAVIT = "counter_affidavit"
     EVIDENCE = "evidence"
     WRITTEN_SUBMISSION = "written_submission"
     INTERIM_APPLICATION = "interim_application"
@@ -190,6 +218,108 @@ class MatterDocumentLifecycleStage(StrEnum):
     POST_ORDER = "post_order"
     ADMINISTRATIVE = "administrative"
     OTHER = "other"
+
+
+class AffidavitIntelligenceRunStatus(StrEnum):
+    COMPLETED = "completed"
+    INSUFFICIENT_SOURCE_TEXT = "insufficient_source_text"
+    NO_FINDINGS = "no_findings"
+
+
+class AffidavitStatementType(StrEnum):
+    KEY_STATEMENT = "key_statement"
+    FACT_ASSERTION = "fact_assertion"
+    TIMELINE_POINT = "timeline_point"
+    MONETARY_FIGURE = "monetary_figure"
+    NAMED_ENTITY = "named_entity"
+    EXHIBIT_REFERENCE = "exhibit_reference"
+    EVIDENCE_GAP = "evidence_gap"
+    CONTRADICTION = "contradiction"
+
+
+class AffidavitQuestionCategory(StrEnum):
+    FACT_BASED = "fact_based"
+    TIMELINE_INCONSISTENCY = "timeline_inconsistency"
+    FINANCIAL_SCRUTINY = "financial_scrutiny"
+    EVIDENCE_CONTRADICTION = "evidence_contradiction"
+    DOCUMENT_SUPPORT = "document_support"
+    INTENT_MOTIVE = "intent_motive"
+
+
+class AffidavitIntelligenceReviewStatus(StrEnum):
+    REVIEW_REQUIRED = "review_required"
+    REVIEWED = "reviewed"
+    INSUFFICIENT_EVIDENCE = "insufficient_evidence"
+
+
+class MockHearingMode(StrEnum):
+    CLIENT_PREPARATION = "client_preparation"
+    COUNSEL_PRACTICE = "counsel_practice"
+    WITNESS_PREPARATION = "witness_preparation"
+
+
+class MockHearingSessionStatus(StrEnum):
+    ACTIVE = "active"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+
+class MockHearingQuestionStatus(StrEnum):
+    PENDING = "pending"
+    ANSWERED = "answered"
+
+
+class MockHearingReviewStatus(StrEnum):
+    REVIEW_REQUIRED = "review_required"
+    REVIEWED = "reviewed"
+
+
+class LegalKnowledgeGraphRunStatus(StrEnum):
+    COMPLETED = "completed"
+    NO_SOURCE_RECORDS = "no_source_records"
+
+
+class LegalKnowledgeGraphNodeType(StrEnum):
+    MATTER = "matter"
+    PROCEEDING_SIGNAL = "proceeding_signal"
+    AFFIDAVIT_STATEMENT = "affidavit_statement"
+    AFFIDAVIT_QUESTION = "affidavit_question"
+    MOCK_HEARING_QUESTION = "mock_hearing_question"
+    MOCK_HEARING_RESPONSE = "mock_hearing_response"
+    PREDICTIVE_SIGNAL = "predictive_signal"
+    BENCH_CONTEXT = "bench_context"
+    LEGAL_SOURCE = "legal_source"
+    STATUTE_OR_ISSUE = "statute_or_issue"
+    REVIEW_ACTION = "review_action"
+
+
+class LegalKnowledgeGraphEdgeType(StrEnum):
+    SUPPORTS = "supports"
+    CONTRADICTS = "contradicts"
+    REFERENCES = "references"
+    DERIVED_FROM = "derived_from"
+    PROMPTS = "prompts"
+    RELATES_TO = "relates_to"
+    HAS_LIMITATION = "has_limitation"
+
+
+class LegalKnowledgeGraphSourceType(StrEnum):
+    MATTER = "matter"
+    MATTER_COURT_ORDER = "matter_court_order"
+    MATTER_PROCEEDING_SIGNAL = "matter_proceeding_signal"
+    MATTER_DOCUMENT = "matter_document"
+    MATTER_ATTACHMENT_CHUNK = "matter_attachment_chunk"
+    AFFIDAVIT_STATEMENT = "affidavit_statement"
+    AFFIDAVIT_QUESTION = "affidavit_question"
+    MOCK_HEARING_SESSION = "mock_hearing_session"
+    MOCK_HEARING_QUESTION = "mock_hearing_question"
+    MOCK_HEARING_RESPONSE = "mock_hearing_response"
+    PREDICTIVE_SIGNAL_ITEM = "predictive_signal_item"
+    PREDICTIVE_SIGNAL_RUN = "predictive_signal_run"
+    AUTHORITY_DOCUMENT = "authority_document"
+    AGGREGATE_SNAPSHOT = "aggregate_snapshot"
+    LITIGATION_INTELLIGENCE_REVIEW_ACTION = "litigation_intelligence_review_action"
+    UNAVAILABLE = "unavailable"
 
 
 class MatterCourtSyncJobStatus(StrEnum):
@@ -1999,6 +2129,95 @@ class MatterCourtSyncRun(Base):
     jobs: Mapped[list[MatterCourtSyncJob]] = relationship(back_populates="sync_run")
 
 
+class MatterProceedingSignal(Base):
+    """Structured proceeding/order-sheet extraction tied to a source order.
+
+    LI-S1 keeps this matter-native: source lineage remains on
+    ``MatterCourtOrder``/``MatterCourtSyncRun`` and generated work lands in
+    the existing task/deadline tables.
+    """
+
+    __tablename__ = "matter_proceeding_signals"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            "matter_id",
+            "court_order_id",
+            "dedupe_key",
+            name="uq_matter_proceeding_signal_order_key",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    court_order_id: Mapped[str] = mapped_column(
+        ForeignKey("matter_court_orders.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    sync_run_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matter_court_sync_runs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    signal_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    signal_text: Mapped[str] = mapped_column(Text, nullable=False)
+    action_required: Mapped[str | None] = mapped_column(Text, nullable=True)
+    due_on: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    hearing_on: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    order_kind: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    confidence_label: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default=MatterProceedingConfidence.LOW,
+    )
+    source_snippet: Mapped[str] = mapped_column(Text, nullable=False)
+    review_status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=MatterProceedingReviewStatus.REVIEW_REQUIRED,
+        index=True,
+    )
+    generated_task_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matter_tasks.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    generated_deadline_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matter_deadlines.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    extraction_method: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="deterministic",
+    )
+    parser_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    dedupe_key: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+
 class MatterCourtSyncJob(Base):
     __tablename__ = "matter_court_sync_jobs"
 
@@ -2125,9 +2344,7 @@ class MatterAttachment(Base):
     linked_court_order: Mapped[MatterCourtOrder | None] = relationship(
         foreign_keys=[linked_court_order_id]
     )
-    hearing: Mapped[MatterHearing | None] = relationship(
-        foreign_keys=[hearing_id]
-    )
+    hearing: Mapped[MatterHearing | None] = relationship(foreign_keys=[hearing_id])
 
 
 class MatterAttachmentChunk(Base):
@@ -2159,6 +2376,745 @@ class MatterAttachmentChunk(Base):
     )
 
     attachment: Mapped[MatterAttachment] = relationship(back_populates="chunks")
+
+
+class AffidavitIntelligenceRun(Base):
+    """Matter-private affidavit hearing-prep extraction run.
+
+    LI-S2 keeps every output anchored to a matter attachment and, where
+    available, its raw extracted chunks. Runs are versioned so re-analysis does
+    not mutate historical reviewer context.
+    """
+
+    __tablename__ = "affidavit_intelligence_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    attachment_id: Mapped[str] = mapped_column(
+        ForeignKey("matter_attachments.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    model_run_id: Mapped[str | None] = mapped_column(
+        ForeignKey("model_runs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=AffidavitIntelligenceRunStatus.NO_FINDINGS,
+        index=True,
+    )
+    extraction_method: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="deterministic",
+    )
+    parser_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    source_char_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    missing_data_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    disclaimer: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    statements: Mapped[list[AffidavitStatement]] = relationship(
+        back_populates="run",
+        cascade="all, delete-orphan",
+        order_by="AffidavitStatement.created_at.asc()",
+    )
+    questions: Mapped[list[AffidavitQuestion]] = relationship(
+        back_populates="run",
+        cascade="all, delete-orphan",
+        order_by="AffidavitQuestion.created_at.asc()",
+    )
+
+
+class AffidavitStatement(Base):
+    __tablename__ = "affidavit_statements"
+    __table_args__ = (
+        UniqueConstraint(
+            "run_id",
+            "dedupe_key",
+            name="uq_affidavit_statement_run_key",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    run_id: Mapped[str] = mapped_column(
+        ForeignKey("affidavit_intelligence_runs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    attachment_id: Mapped[str] = mapped_column(
+        ForeignKey("matter_attachments.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    source_chunk_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matter_attachment_chunks.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    source_chunk_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    page_reference: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    statement_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    statement_text: Mapped[str] = mapped_column(Text, nullable=False)
+    source_quote: Mapped[str] = mapped_column(Text, nullable=False)
+    confidence_label: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default=MatterProceedingConfidence.LOW,
+    )
+    review_status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=AffidavitIntelligenceReviewStatus.REVIEW_REQUIRED,
+        index=True,
+    )
+    dedupe_key: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    run: Mapped[AffidavitIntelligenceRun] = relationship(back_populates="statements")
+
+
+class AffidavitQuestion(Base):
+    __tablename__ = "affidavit_questions"
+    __table_args__ = (
+        UniqueConstraint(
+            "run_id",
+            "dedupe_key",
+            name="uq_affidavit_question_run_key",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    run_id: Mapped[str] = mapped_column(
+        ForeignKey("affidavit_intelligence_runs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    attachment_id: Mapped[str] = mapped_column(
+        ForeignKey("matter_attachments.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    statement_id: Mapped[str | None] = mapped_column(
+        ForeignKey("affidavit_statements.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    source_chunk_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matter_attachment_chunks.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    source_chunk_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    page_reference: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    category: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    question_text: Mapped[str] = mapped_column(Text, nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    source_quote: Mapped[str] = mapped_column(Text, nullable=False)
+    confidence_label: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default=MatterProceedingConfidence.LOW,
+    )
+    review_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    review_status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=AffidavitIntelligenceReviewStatus.REVIEW_REQUIRED,
+        index=True,
+    )
+    dedupe_key: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    run: Mapped[AffidavitIntelligenceRun] = relationship(back_populates="questions")
+
+
+class MockHearingSession(Base):
+    """Text-first mock hearing session built from source-backed affidavit questions."""
+
+    __tablename__ = "mock_hearing_sessions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    source_affidavit_run_id: Mapped[str | None] = mapped_column(
+        ForeignKey("affidavit_intelligence_runs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    mode: Mapped[str] = mapped_column(
+        String(40),
+        nullable=False,
+        default=MockHearingMode.CLIENT_PREPARATION,
+        index=True,
+    )
+    participant_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=MockHearingSessionStatus.ACTIVE,
+        index=True,
+    )
+    review_status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=MockHearingReviewStatus.REVIEW_REQUIRED,
+        index=True,
+    )
+    disclaimer: Mapped[str] = mapped_column(Text, nullable=False)
+    scorecard_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    total_questions: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    answered_questions: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    unsupported_assertion_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+    )
+    missing_document_reference_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+    )
+    contradiction_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    review_required_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    average_response_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    questions: Mapped[list[MockHearingQuestion]] = relationship(
+        back_populates="session",
+        cascade="all, delete-orphan",
+        order_by="MockHearingQuestion.turn_index.asc()",
+    )
+    responses: Mapped[list[MockHearingResponse]] = relationship(
+        back_populates="session",
+        cascade="all, delete-orphan",
+        order_by="MockHearingResponse.created_at.asc()",
+    )
+
+
+class MockHearingQuestion(Base):
+    __tablename__ = "mock_hearing_questions"
+    __table_args__ = (
+        UniqueConstraint(
+            "session_id",
+            "turn_index",
+            name="uq_mock_hearing_question_session_turn",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    session_id: Mapped[str] = mapped_column(
+        ForeignKey("mock_hearing_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    source_affidavit_run_id: Mapped[str | None] = mapped_column(
+        ForeignKey("affidavit_intelligence_runs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    source_affidavit_question_id: Mapped[str | None] = mapped_column(
+        ForeignKey("affidavit_questions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    source_affidavit_statement_id: Mapped[str | None] = mapped_column(
+        ForeignKey("affidavit_statements.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    source_attachment_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matter_attachments.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    source_chunk_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matter_attachment_chunks.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    source_chunk_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    page_reference: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    turn_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    category: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    question_text: Mapped[str] = mapped_column(Text, nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    source_quote: Mapped[str] = mapped_column(Text, nullable=False)
+    difficulty_label: Mapped[str] = mapped_column(String(16), nullable=False, default="medium")
+    status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=MockHearingQuestionStatus.PENDING,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    session: Mapped[MockHearingSession] = relationship(back_populates="questions")
+    responses: Mapped[list[MockHearingResponse]] = relationship(
+        back_populates="question",
+        cascade="all, delete-orphan",
+        order_by="MockHearingResponse.created_at.asc()",
+    )
+
+
+class MockHearingResponse(Base):
+    __tablename__ = "mock_hearing_responses"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    session_id: Mapped[str] = mapped_column(
+        ForeignKey("mock_hearing_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    question_id: Mapped[str] = mapped_column(
+        ForeignKey("mock_hearing_questions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    source_affidavit_question_id: Mapped[str | None] = mapped_column(
+        ForeignKey("affidavit_questions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    response_text: Mapped[str] = mapped_column(Text, nullable=False)
+    response_word_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    elapsed_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    answered_question: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    consistency_with_affidavit: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    unsupported_assertion_added: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )
+    missing_document_reference: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )
+    contradiction_with_source: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )
+    response_completeness: Mapped[str] = mapped_column(String(16), nullable=False, default="low")
+    confidence_label: Mapped[str] = mapped_column(String(16), nullable=False, default="low")
+    feedback_text: Mapped[str] = mapped_column(Text, nullable=False)
+    evaluation_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    source_quote: Mapped[str] = mapped_column(Text, nullable=False)
+    review_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    review_status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=MockHearingReviewStatus.REVIEW_REQUIRED,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    session: Mapped[MockHearingSession] = relationship(back_populates="responses")
+    question: Mapped[MockHearingQuestion] = relationship(back_populates="responses")
+
+
+class LitigationIntelligenceReviewAction(Base):
+    """Human review action for an LI review-queue item.
+
+    LI-S9 keeps source records authoritative and stores the lawyer's queue
+    action as a tenant/matter-scoped ledger so predictive/bench items that do
+    not have their own review_status column can still be marked reviewed.
+    """
+
+    __tablename__ = "litigation_intelligence_review_actions"
+    __table_args__ = (
+        CheckConstraint(
+            "item_type in ("
+            "'proceeding_signal', 'affidavit_statement', 'affidavit_question', "
+            "'mock_hearing_session', 'mock_hearing_response', 'predictive_signal', "
+            "'bench_context'"
+            ")",
+            name="ck_li_review_actions_item_type",
+        ),
+        CheckConstraint(
+            "source_type in ("
+            "'matter_proceeding_signal', 'affidavit_statement', 'affidavit_question', "
+            "'mock_hearing_session', 'mock_hearing_response', 'predictive_signal_item', "
+            "'predictive_signal_run'"
+            ")",
+            name="ck_li_review_actions_source_type",
+        ),
+        CheckConstraint(
+            "action in ('mark_reviewed', 'accept', 'reject', 'edit_note')",
+            name="ck_li_review_actions_action",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    item_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    item_id: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    source_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    source_id: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    action: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status_before: Mapped[str] = mapped_column(String(64), nullable=False)
+    status_after: Mapped[str] = mapped_column(String(64), nullable=False)
+    actor_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+        index=True,
+    )
+
+
+class LegalKnowledgeGraphRun(Base):
+    """Matter-scoped source-backed legal knowledge graph materialization run."""
+
+    __tablename__ = "legal_knowledge_graph_runs"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            "matter_id",
+            name="uq_legal_knowledge_graph_run_matter",
+        ),
+        CheckConstraint(
+            "status in ('completed', 'no_source_records')",
+            name="ck_legal_knowledge_graph_runs_status",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=LegalKnowledgeGraphRunStatus.NO_SOURCE_RECORDS,
+        index=True,
+    )
+    source_record_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    node_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    edge_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    missing_data_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    limitation_note: Mapped[str] = mapped_column(Text, nullable=False)
+    disclaimer: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    nodes: Mapped[list[LegalKnowledgeGraphNode]] = relationship(
+        back_populates="run",
+        cascade="all, delete-orphan",
+        order_by="LegalKnowledgeGraphNode.created_at.asc()",
+    )
+    edges: Mapped[list[LegalKnowledgeGraphEdge]] = relationship(
+        back_populates="run",
+        cascade="all, delete-orphan",
+        order_by="LegalKnowledgeGraphEdge.created_at.asc()",
+    )
+
+
+class LegalKnowledgeGraphNode(Base):
+    __tablename__ = "legal_knowledge_graph_nodes"
+    __table_args__ = (
+        UniqueConstraint(
+            "run_id",
+            "node_key",
+            name="uq_legal_knowledge_graph_node_run_key",
+        ),
+        CheckConstraint(
+            "node_type in ("
+            "'matter', 'proceeding_signal', 'affidavit_statement', "
+            "'affidavit_question', 'mock_hearing_question', 'mock_hearing_response', "
+            "'predictive_signal', 'bench_context', 'legal_source', "
+            "'statute_or_issue', 'review_action'"
+            ")",
+            name="ck_legal_knowledge_graph_nodes_node_type",
+        ),
+        CheckConstraint(
+            "source_type in ("
+            "'matter', 'matter_court_order', 'matter_proceeding_signal', "
+            "'matter_document', 'matter_attachment_chunk', 'affidavit_statement', "
+            "'affidavit_question', 'mock_hearing_session', 'mock_hearing_question', "
+            "'mock_hearing_response', 'predictive_signal_item', 'predictive_signal_run', "
+            "'authority_document', 'aggregate_snapshot', "
+            "'litigation_intelligence_review_action', 'unavailable'"
+            ")",
+            name="ck_legal_knowledge_graph_nodes_source_type",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    run_id: Mapped[str] = mapped_column(
+        ForeignKey("legal_knowledge_graph_runs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    node_key: Mapped[str] = mapped_column(String(180), nullable=False, index=True)
+    node_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    label: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    source_id: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    source_quote: Mapped[str | None] = mapped_column(Text, nullable=True)
+    confidence_label: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    review_status: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    limitation_note: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+
+    run: Mapped[LegalKnowledgeGraphRun] = relationship(back_populates="nodes")
+
+
+class LegalKnowledgeGraphEdge(Base):
+    __tablename__ = "legal_knowledge_graph_edges"
+    __table_args__ = (
+        UniqueConstraint(
+            "run_id",
+            "from_node_id",
+            "to_node_id",
+            "edge_type",
+            "source_type",
+            "source_id",
+            name="uq_legal_knowledge_graph_edge_identity",
+        ),
+        CheckConstraint(
+            "edge_type in ("
+            "'supports', 'contradicts', 'references', 'derived_from', "
+            "'prompts', 'relates_to', 'has_limitation'"
+            ")",
+            name="ck_legal_knowledge_graph_edges_edge_type",
+        ),
+        CheckConstraint(
+            "source_type in ("
+            "'matter', 'matter_court_order', 'matter_proceeding_signal', "
+            "'matter_document', 'matter_attachment_chunk', 'affidavit_statement', "
+            "'affidavit_question', 'mock_hearing_session', 'mock_hearing_question', "
+            "'mock_hearing_response', 'predictive_signal_item', 'predictive_signal_run', "
+            "'authority_document', 'aggregate_snapshot', "
+            "'litigation_intelligence_review_action', 'unavailable'"
+            ")",
+            name="ck_legal_knowledge_graph_edges_source_type",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    run_id: Mapped[str] = mapped_column(
+        ForeignKey("legal_knowledge_graph_runs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    from_node_id: Mapped[str] = mapped_column(
+        ForeignKey("legal_knowledge_graph_nodes.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    to_node_id: Mapped[str] = mapped_column(
+        ForeignKey("legal_knowledge_graph_nodes.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    edge_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    label: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    source_id: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    source_quote: Mapped[str | None] = mapped_column(Text, nullable=True)
+    confidence_label: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    limitation_note: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+
+    run: Mapped[LegalKnowledgeGraphRun] = relationship(back_populates="edges")
 
 
 class MatterTimeEntry(Base):
@@ -3621,6 +4577,258 @@ class JudgeStatuteFocus(Base):
     )
 
 
+class PredictiveSignalRun(Base):
+    """Controlled predictive-intelligence run.
+
+    LI-S7A stores the deterministic data-contract output separately
+    from recommendations because prediction surfaces need stricter
+    source lineage, confidence, policy, and audit guarantees.
+    """
+
+    __tablename__ = "predictive_signal_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    actor_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="completed")
+    mode: Mapped[str] = mapped_column(String(32), nullable=False, default="predictive")
+    sample_size: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    evidence_quality: Mapped[str] = mapped_column(String(32), nullable=False, default="none")
+    disclaimer: Mapped[str] = mapped_column(Text, nullable=False)
+    limitation_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False,
+    )
+
+    items: Mapped[list[PredictiveSignalItem]] = relationship(
+        back_populates="run",
+        cascade="all, delete-orphan",
+        order_by="PredictiveSignalItem.created_at.asc()",
+    )
+    evidence_rows: Mapped[list[PredictiveSignalEvidence]] = relationship(
+        back_populates="run",
+        cascade="all, delete-orphan",
+        order_by="PredictiveSignalEvidence.created_at.asc()",
+    )
+
+
+class PredictiveSignalItem(Base):
+    """One controlled predictive signal within a run."""
+
+    __tablename__ = "predictive_signal_items"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    run_id: Mapped[str] = mapped_column(
+        ForeignKey("predictive_signal_runs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    signal_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    label: Mapped[str] = mapped_column(String(255), nullable=False)
+    estimate_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    sample_size: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    confidence_label: Mapped[str] = mapped_column(String(32), nullable=False)
+    confidence_band_low: Mapped[float | None] = mapped_column(Float, nullable=True)
+    confidence_band_high: Mapped[float | None] = mapped_column(Float, nullable=True)
+    limitation_note: Mapped[str] = mapped_column(Text, nullable=False)
+    features_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    missing_data_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False,
+    )
+
+    run: Mapped[PredictiveSignalRun] = relationship(back_populates="items")
+    evidence_rows: Mapped[list[PredictiveSignalEvidence]] = relationship(
+        back_populates="item",
+        cascade="all, delete-orphan",
+        order_by="PredictiveSignalEvidence.created_at.asc()",
+    )
+
+
+class PredictiveSignalEvidence(Base):
+    """Source lineage for a controlled predictive signal."""
+
+    __tablename__ = "predictive_signal_evidence"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    run_id: Mapped[str] = mapped_column(
+        ForeignKey("predictive_signal_runs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    item_id: Mapped[str] = mapped_column(
+        ForeignKey("predictive_signal_items.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    source_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    source_id: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    title: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    source_reference: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    excerpt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_date: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    weight: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False,
+    )
+
+    run: Mapped[PredictiveSignalRun] = relationship(back_populates="evidence_rows")
+    item: Mapped[PredictiveSignalItem] = relationship(back_populates="evidence_rows")
+
+
+class PredictiveOutcomeClassification(Base):
+    """Source-bound outcome label used by predictive-intelligence aggregates.
+
+    Public authority classifications keep company_id/matter_id null. Private
+    matter-order classifications must carry both scope columns and are excluded
+    from public aggregate jobs by default.
+    """
+
+    __tablename__ = "predictive_outcome_classifications"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_type",
+            "source_id",
+            "classification_label",
+            "signal_type",
+            name="uq_predictive_outcome_classification_source_label_signal",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    source_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    source_id: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    source_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    company_id: Mapped[str | None] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    matter_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    classification_label: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    signal_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    court_name: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    forum_level: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    judge_ids_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    matter_type: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    party_side: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    decision_year: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    rationale_snippet: Mapped[str | None] = mapped_column(Text, nullable=True)
+    method: Mapped[str] = mapped_column(String(40), nullable=False, default="deterministic")
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="classified", index=True,
+    )
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    model_run_id: Mapped[str | None] = mapped_column(
+        ForeignKey("model_runs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False,
+    )
+
+
+class PredictiveOutcomeAggregateSnapshot(Base):
+    """Reusable aggregate backing controlled predictive-intelligence signals."""
+
+    __tablename__ = "predictive_outcome_aggregate_snapshots"
+    __table_args__ = (
+        UniqueConstraint(
+            "scope_key",
+            name="uq_predictive_outcome_aggregate_scope_key",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    scope_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    scope_key: Mapped[str] = mapped_column(String(700), nullable=False, index=True)
+    company_id: Mapped[str | None] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    matter_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    court_name: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    forum_level: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    judge_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    matter_type: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    party_side: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    year_start: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    year_end: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    signal_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    sample_size: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    positive_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    negative_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    neutral_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    consistency: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    confidence_label: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="insufficient",
+    )
+    confidence_band_low: Mapped[float | None] = mapped_column(Float, nullable=True)
+    confidence_band_high: Mapped[float | None] = mapped_column(Float, nullable=True)
+    evidence_source_ids_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    feature_summary_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="insufficient_evidence", index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False,
+    )
+    refreshed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False,
+    )
+
+
 class Recommendation(Base):
     """Explainable decision-support output for a matter (PRD §11, §23.1)."""
 
@@ -4278,9 +5486,12 @@ class Bench(Base):
 
 
 class Judge(Base):
-    """Judge master record. PRD §10.6 is adamant that we do NOT build
-    favorability scoring on top of this — use it for profile pages,
-    citation trends, cause-list dedup, and recommendation context only."""
+    """Judge master record.
+
+    Use this for profile pages, citation trends, cause-list dedup, and
+    controlled predictive intelligence only through source-backed LI-S7
+    contracts. Do not build opaque judge favorability scoring on top of it.
+    """
 
     __tablename__ = "judges"
     __table_args__ = (UniqueConstraint("court_id", "full_name", name="uq_judges_court_name"),)
@@ -4905,11 +6116,11 @@ class TenantAIPolicy(Base):
     training_opt_in: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
-    # PG-107 (2026-05-01) — opt-in predictive bench analytics.
-    # Default false: existing evidence-only output (no favorability /
-    # judge-tendency / win-loss copy). Owner/admin can flip per
-    # workspace; sample-size ≥5 guard + mandatory disclaimer remain
-    # enforced server-side in B mode.
+    # PG-107 (2026-05-01) / LI-S7A (2026-05-11) — opt-in controlled
+    # predictive bench/litigation intelligence. Default false:
+    # evidence-only output. Owner/admin can flip per workspace; source
+    # IDs, sample-size guard, confidence bands, audit, and mandatory
+    # not-legal-advice disclaimer remain enforced server-side.
     predictive_bench_strategy_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )

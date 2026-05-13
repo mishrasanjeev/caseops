@@ -145,7 +145,7 @@ export default function SoloLawyersPage() {
             <PitchCard
               icon={Gavel}
               title="Hearing pack on open"
-              body="Chronology, last order, oral points compiled from your own matter record when you tap the hearing."
+              body="Chronology, last order, proceeding directions, affidavit prep, mock-hearing prompts, and coach feedback compile from your own matter record."
             />
             <PitchCard
               icon={BadgeCheck}
@@ -191,12 +191,12 @@ export default function SoloLawyersPage() {
             <PitchCard
               icon={Gavel}
               title="Cause-list import — manual today, automated incrementally"
-              body="Today: cause-list entries are imported per matter (paste / API / nightly job for the courts that have a wired adapter). The bench resolver normalises 'Justice X & Justice Y' rosters into clickable judge profiles with the high-quality confidence floor. Per-HC automated scrapers ship as each court's PRD lands."
+              body="Today: cause-list entries are imported per matter (paste / API / nightly job for courts with a lawful adapter). The bench resolver normalises 'Justice X & Justice Y' rosters into clickable judge profiles with the high-quality confidence floor. New court adapters ship only after source-readiness proof."
             />
             <PitchCard
               icon={Layers}
               title="Hearing pack compile"
-              body="Chronology, last order, oral points and bench brief assembled from the matter record. Under a minute."
+              body="Chronology, last order, proceeding directions, oral points, and source-backed bench context assembled from the matter record. Under a minute."
             />
             <PitchCard
               icon={Smartphone}
@@ -253,13 +253,13 @@ export default function SoloLawyersPage() {
           tone="light"
           eyebrow="Appeals + bench-aware drafting"
           title="The appeal cites the bench that's actually hearing it."
-          description="When the matter has an upcoming listing, the appeal-memorandum draft pulls authorities authored by THAT specific bench (not just the court at large) and prefers ones that match the practice area. Section 482 BNSS quoted verbatim from the bare-acts catalog. Argument completeness flagged per ground — never win/lose prediction."
+          description="When the matter has an upcoming listing, the appeal-memorandum draft pulls authorities authored by that bench (not just the court at large) and prefers ones that match the practice area. Section 482 BNSS is quoted verbatim from the bare-acts catalog. Argument completeness is flagged per ground with source context, not outcome forecasting."
         >
           <div className="grid gap-4 md:grid-cols-4">
             <MetricCard value="63" label="Judges live" note="31 SC + 32 Delhi HC sitting bench, with career history and indexed authorities." />
             <MetricCard value="91" label="Statute sections" note="BNSS, BNS, BSA, CrPC, IPC, Constitution, NI Act — bare text + clickable indiacode.nic.in source." />
             <MetricCard value="269" label="Judge aliases" note="Tolerant matcher resolves 'A.K. Sikri' to the canonical judge row, no ILIKE fragility." />
-            <MetricCard value="0%" label="Favorability score" note="Bench-aware drafting hard rule: no win/lose/probability/tendency language. Anywhere." />
+            <MetricCard value="0" label="Outcome forecasts" note="Bench-aware drafting stays on citation selection, source context, and limitation notes." />
           </div>
           <div className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
             <PitchCard
@@ -274,8 +274,8 @@ export default function SoloLawyersPage() {
             />
             <PitchCard
               icon={BadgeCheck}
-              title="Argument completeness, not outcome prediction"
-              body="The Appeal Strength panel flags per-ground citation coverage and weak-evidence paths. The advocate decides; the system never claims a win probability."
+              title="Argument completeness, not forecasts"
+              body="The Appeal Strength panel flags per-ground citation coverage and weak-evidence paths. The advocate decides; the system stays on source-backed preparation."
             />
           </div>
         </Slide>

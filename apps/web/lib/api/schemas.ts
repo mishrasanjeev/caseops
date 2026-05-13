@@ -181,6 +181,358 @@ export const matterTimelineResponse = z.object({
 export type MatterTimelineItem = z.infer<typeof matterTimelineItem>;
 export type MatterTimelineResponse = z.infer<typeof matterTimelineResponse>;
 
+export const proceedingSignal = z.object({
+  id: z.string(),
+  matter_id: z.string(),
+  court_order_id: z.string(),
+  sync_run_id: z.string().nullable(),
+  signal_type: z.enum([
+    "next_hearing",
+    "filing_defect",
+    "compliance_direction",
+    "reply_affidavit_deadline",
+    "counsel_appearance",
+    "interim_observation",
+    "order_kind",
+    "action_required",
+  ]),
+  signal_text: z.string(),
+  action_required: z.string().nullable(),
+  due_on: z.string().nullable(),
+  hearing_on: z.string().nullable(),
+  order_kind: z.string().nullable(),
+  confidence_label: z.enum(["low", "medium", "high"]),
+  source_snippet: z.string(),
+  review_status: z.enum([
+    "review_required",
+    "reviewed",
+    "auto_promoted",
+    "insufficient_evidence",
+  ]),
+  generated_task_id: z.string().nullable(),
+  generated_deadline_id: z.string().nullable(),
+  extraction_method: z.enum(["deterministic", "llm"]),
+  parser_version: z.string(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const proceedingOrderIntelligence = z.object({
+  court_order_id: z.string(),
+  sync_run_id: z.string().nullable(),
+  title: z.string(),
+  order_date: z.string(),
+  source: z.string(),
+  source_reference: z.string().nullable(),
+  order_attachment_id: z.string().nullable(),
+  extraction_status: z.enum([
+    "supported",
+    "insufficient_source_text",
+    "insufficient_evidence",
+    "not_extracted",
+  ]),
+  missing_data: z.array(z.string()).default([]),
+  signals: z.array(proceedingSignal).default([]),
+});
+
+export const proceedingIntelligenceResponse = z.object({
+  matter_id: z.string(),
+  generated_at: z.string(),
+  disclaimer: z.string(),
+  orders: z.array(proceedingOrderIntelligence).default([]),
+  pending_compliance_items: z.array(proceedingSignal).default([]),
+});
+
+export type ProceedingSignal = z.infer<typeof proceedingSignal>;
+export type ProceedingOrderIntelligence = z.infer<typeof proceedingOrderIntelligence>;
+export type ProceedingIntelligenceResponse = z.infer<
+  typeof proceedingIntelligenceResponse
+>;
+
+export const affidavitStatement = z
+  .object({
+    id: z.string(),
+    run_id: z.string(),
+    matter_id: z.string(),
+    attachment_id: z.string(),
+    source_chunk_id: z.string().nullable(),
+    source_chunk_index: z.number().int().nullable(),
+    page_reference: z.string().nullable(),
+    statement_type: z.enum([
+      "key_statement",
+      "fact_assertion",
+      "timeline_point",
+      "monetary_figure",
+      "named_entity",
+      "exhibit_reference",
+      "evidence_gap",
+      "contradiction",
+    ]),
+    statement_text: z.string(),
+    source_quote: z.string(),
+    confidence_label: z.enum(["low", "medium", "high"]),
+    review_status: z.enum(["review_required", "reviewed", "insufficient_evidence"]),
+    created_at: z.string(),
+    updated_at: z.string(),
+  })
+  .strict();
+
+export const affidavitQuestion = z
+  .object({
+    id: z.string(),
+    run_id: z.string(),
+    matter_id: z.string(),
+    attachment_id: z.string(),
+    statement_id: z.string().nullable(),
+    source_chunk_id: z.string().nullable(),
+    source_chunk_index: z.number().int().nullable(),
+    page_reference: z.string().nullable(),
+    category: z.enum([
+      "fact_based",
+      "timeline_inconsistency",
+      "financial_scrutiny",
+      "evidence_contradiction",
+      "document_support",
+      "intent_motive",
+    ]),
+    question_text: z.string(),
+    reason: z.string(),
+    source_quote: z.string(),
+    confidence_label: z.enum(["low", "medium", "high"]),
+    review_required: z.boolean(),
+    review_status: z.enum(["review_required", "reviewed", "insufficient_evidence"]),
+    created_at: z.string(),
+    updated_at: z.string(),
+  })
+  .strict();
+
+export const affidavitIntelligenceRun = z
+  .object({
+    id: z.string(),
+    matter_id: z.string(),
+    attachment_id: z.string(),
+    status: z.enum(["completed", "insufficient_source_text", "no_findings"]),
+    extraction_method: z.enum(["deterministic", "llm"]),
+    parser_version: z.string(),
+    source_hash: z.string(),
+    source_char_count: z.number().int().nonnegative(),
+    missing_data: z.array(z.string()).default([]),
+    model_run_id: z.string().nullable(),
+    created_by_membership_id: z.string().nullable(),
+    created_at: z.string(),
+    updated_at: z.string(),
+    statements: z.array(affidavitStatement).default([]),
+    questions: z.array(affidavitQuestion).default([]),
+  })
+  .strict();
+
+export const affidavitIntelligenceResponse = z
+  .object({
+    matter_id: z.string(),
+    generated_at: z.string(),
+    disclaimer: z.string(),
+    runs: z.array(affidavitIntelligenceRun).default([]),
+    latest_run: affidavitIntelligenceRun.nullable(),
+  })
+  .strict();
+
+export type AffidavitStatement = z.infer<typeof affidavitStatement>;
+export type AffidavitQuestion = z.infer<typeof affidavitQuestion>;
+export type AffidavitIntelligenceRun = z.infer<typeof affidavitIntelligenceRun>;
+export type AffidavitIntelligenceResponse = z.infer<
+  typeof affidavitIntelligenceResponse
+>;
+
+export const mockHearingScorecard = z
+  .object({
+    total_questions: z.number().int().nonnegative(),
+    answered_questions: z.number().int().nonnegative(),
+    responses_recorded: z.number().int().nonnegative(),
+    answered_question_count: z.number().int().nonnegative(),
+    unsupported_assertion_count: z.number().int().nonnegative(),
+    missing_document_reference_count: z.number().int().nonnegative(),
+    contradiction_count: z.number().int().nonnegative(),
+    review_required_count: z.number().int().nonnegative(),
+    average_response_seconds: z.number().nullable(),
+  })
+  .strict();
+
+export const mockHearingResponse = z
+  .object({
+    id: z.string(),
+    session_id: z.string(),
+    question_id: z.string(),
+    matter_id: z.string(),
+    source_affidavit_question_id: z.string().nullable().optional(),
+    source_affidavit_statement_id: z.string().nullable().optional(),
+    source_attachment_id: z.string().nullable().optional(),
+    source_chunk_id: z.string().nullable().optional(),
+    source_chunk_index: z.number().int().nullable().optional(),
+    page_reference: z.string().nullable().optional(),
+    response_text: z.string(),
+    response_word_count: z.number().int().nonnegative(),
+    elapsed_seconds: z.number().int().nonnegative().nullable(),
+    answered_question: z.boolean(),
+    consistency_with_affidavit: z.boolean(),
+    unsupported_assertion_added: z.boolean(),
+    missing_document_reference: z.boolean(),
+    contradiction_with_source: z.boolean(),
+    response_completeness: z.enum(["low", "medium", "high"]),
+    confidence_label: z.enum(["low", "medium", "high"]),
+    feedback_text: z.string(),
+    source_quote: z.string(),
+    review_required: z.boolean(),
+    review_status: z.enum(["review_required", "reviewed"]),
+    created_at: z.string(),
+    updated_at: z.string(),
+  })
+  .strict();
+
+export const mockHearingQuestion = z
+  .object({
+    id: z.string(),
+    session_id: z.string(),
+    matter_id: z.string(),
+    source_affidavit_run_id: z.string().nullable(),
+    source_affidavit_question_id: z.string().nullable(),
+    source_affidavit_statement_id: z.string().nullable(),
+    source_attachment_id: z.string().nullable(),
+    turn_index: z.number().int().nonnegative(),
+    category: z.enum([
+      "fact_based",
+      "timeline_inconsistency",
+      "financial_scrutiny",
+      "evidence_contradiction",
+      "document_support",
+      "intent_motive",
+    ]),
+    question_text: z.string(),
+    reason: z.string(),
+    source_quote: z.string(),
+    source_chunk_id: z.string().nullable(),
+    source_chunk_index: z.number().int().nullable(),
+    page_reference: z.string().nullable(),
+    difficulty_label: z.enum(["low", "medium", "high"]),
+    status: z.enum(["pending", "answered"]),
+    responses: z.array(mockHearingResponse).default([]),
+    created_at: z.string(),
+    updated_at: z.string(),
+  })
+  .strict();
+
+export const mockHearingSession = z
+  .object({
+    id: z.string(),
+    matter_id: z.string(),
+    source_affidavit_run_id: z.string().nullable(),
+    mode: z.enum(["client_preparation", "counsel_practice", "witness_preparation"]),
+    participant_label: z.string().nullable(),
+    status: z.enum(["active", "completed", "cancelled"]),
+    review_status: z.enum(["review_required", "reviewed"]),
+    current_question_id: z.string().nullable(),
+    disclaimer: z.string(),
+    scorecard: mockHearingScorecard,
+    created_by_membership_id: z.string().nullable(),
+    started_at: z.string(),
+    completed_at: z.string().nullable(),
+    updated_at: z.string(),
+    questions: z.array(mockHearingQuestion).default([]),
+  })
+  .strict();
+
+export const mockHearingListResponse = z
+  .object({
+    matter_id: z.string(),
+    generated_at: z.string(),
+    disclaimer: z.string(),
+    sessions: z.array(mockHearingSession).default([]),
+    latest_session: mockHearingSession.nullable(),
+  })
+  .strict();
+
+export type MockHearingScorecard = z.infer<typeof mockHearingScorecard>;
+export type MockHearingResponse = z.infer<typeof mockHearingResponse>;
+export type MockHearingQuestion = z.infer<typeof mockHearingQuestion>;
+export type MockHearingSession = z.infer<typeof mockHearingSession>;
+export type MockHearingListResponse = z.infer<typeof mockHearingListResponse>;
+
+export const hearingCoachStatusResponse = z
+  .object({
+    matter_id: z.string(),
+    generated_at: z.string(),
+    status: z.enum(["consent_required", "no_mock_hearing_responses"]),
+    disclaimer: z.string(),
+    consent_required: z.boolean(),
+    latest_session_id: z.string().nullable(),
+    response_count: z.number().int().nonnegative(),
+    limitation_notes: z.array(z.string()).default([]),
+  })
+  .strict();
+
+export const hearingCoachMetricSummary = z
+  .object({
+    total_responses: z.number().int().nonnegative(),
+    answered_question_count: z.number().int().nonnegative(),
+    source_reference_used_count: z.number().int().nonnegative(),
+    unsupported_assertion_count: z.number().int().nonnegative(),
+    contradiction_count: z.number().int().nonnegative(),
+    missing_exhibit_reference_count: z.number().int().nonnegative(),
+    evasiveness_marker_count: z.number().int().nonnegative(),
+    overlong_response_count: z.number().int().nonnegative(),
+    average_clarity_score: z.number().int().min(0).max(100),
+    average_completeness_score: z.number().int().min(0).max(100),
+    review_required_count: z.number().int().nonnegative(),
+  })
+  .strict();
+
+export const hearingCoachFeedbackItem = z
+  .object({
+    response_id: z.string(),
+    question_id: z.string(),
+    mock_hearing_session_id: z.string(),
+    source_affidavit_question_id: z.string().nullable(),
+    source_affidavit_statement_id: z.string().nullable(),
+    source_attachment_id: z.string().nullable(),
+    source_chunk_id: z.string().nullable(),
+    source_chunk_index: z.number().int().nullable(),
+    page_reference: z.string().nullable(),
+    question_text: z.string(),
+    transcript_excerpt: z.string(),
+    source_quote: z.string(),
+    answered_question: z.boolean(),
+    source_reference_used: z.boolean(),
+    unsupported_assertion_count: z.number().int().nonnegative(),
+    contradiction_count: z.number().int().nonnegative(),
+    clarity_score: z.number().int().min(0).max(100),
+    completeness_score: z.number().int().min(0).max(100),
+    evasiveness_marker: z.boolean(),
+    overlong_response_marker: z.boolean(),
+    missing_exhibit_reference: z.boolean(),
+    review_required: z.boolean(),
+    feedback: z.array(z.string()).default([]),
+    improvement_checklist: z.array(z.string()).default([]),
+  })
+  .strict();
+
+export const hearingCoachReportResponse = z
+  .object({
+    matter_id: z.string(),
+    mock_hearing_session_id: z.string(),
+    generated_at: z.string(),
+    status: z.literal("supported"),
+    disclaimer: z.string(),
+    consent_acknowledged: z.boolean(),
+    metrics: hearingCoachMetricSummary,
+    feedback_items: z.array(hearingCoachFeedbackItem).default([]),
+    limitation_notes: z.array(z.string()).default([]),
+  })
+  .strict();
+
+export type HearingCoachStatusResponse = z.infer<typeof hearingCoachStatusResponse>;
+export type HearingCoachMetricSummary = z.infer<typeof hearingCoachMetricSummary>;
+export type HearingCoachFeedbackItem = z.infer<typeof hearingCoachFeedbackItem>;
+export type HearingCoachReportResponse = z.infer<typeof hearingCoachReportResponse>;
+
 export const confidence = z.enum(["low", "medium", "high"]);
 // Sprint 9 BG-023 — four recommendation types. Keep the union in
 // lockstep with the backend's RecommendationTypeLiteral.
@@ -393,6 +745,455 @@ export const matterStrategyEntryList = z.object({
   entries: z.array(matterStrategyEntry),
 });
 
+export const predictionStatus = z.enum(["supported", "insufficient_evidence"]);
+export const predictionConfidenceLabel = z.enum([
+  "high",
+  "medium",
+  "low",
+  "insufficient",
+]);
+export const predictionFeatureDirection = z.enum([
+  "supports",
+  "weakens",
+  "neutral",
+  "unknown",
+]);
+export const predictiveEvidenceSourceType = z.enum([
+  "authority_document",
+  "matter_court_order",
+  "matter_cause_list_entry",
+  "matter_document",
+  "aggregate_snapshot",
+  "unavailable",
+]);
+
+export const predictionConfidence = z
+  .object({
+    label: predictionConfidenceLabel,
+    sample_size: z.number().int().nonnegative(),
+    confidence_band_low: z.number().min(0).max(1).nullable(),
+    confidence_band_high: z.number().min(0).max(1).nullable(),
+    method: z.string(),
+    limitations: z.array(z.string()).default([]),
+  })
+  .strict();
+
+export const predictiveEvidence = z
+  .object({
+    id: z.string(),
+    source_type: predictiveEvidenceSourceType,
+    source_id: z.string(),
+    title: z.string().nullable().optional(),
+    source_reference: z.string().nullable().optional(),
+    excerpt: z.string().nullable().optional(),
+    source_date: z.string().nullable().optional(),
+    weight: z.number(),
+  })
+  .strict();
+
+export const predictionFeatureContribution = z
+  .object({
+    feature_key: z.string(),
+    label: z.string(),
+    direction: predictionFeatureDirection,
+    weight: z.number(),
+    explanation: z.string(),
+    evidence_ids: z.array(z.string()).default([]),
+  })
+  .strict();
+
+export const predictiveSignal = z
+  .object({
+    signal_type: z.string(),
+    label: z.string(),
+    status: predictionStatus,
+    estimate_label: z.string().nullable().optional(),
+    sample_size: z.number().int().nonnegative(),
+    confidence: predictionConfidence,
+    evidence: z.array(predictiveEvidence).default([]),
+    features: z.array(predictionFeatureContribution).default([]),
+    missing_data: z.array(z.string()).default([]),
+    limitation_note: z.string(),
+    human_review_required: z.boolean(),
+    decision_support_label: z.string(),
+    disclaimer: z.string(),
+  })
+  .strict();
+
+export const benchPredictiveSummary = z
+  .object({
+    matter_id: z.string(),
+    bench_judge_ids: z.array(z.string()).default([]),
+    evidence_quality: z.string(),
+    signals: z.array(predictiveSignal).default([]),
+    disclaimer: z.string(),
+  })
+  .strict();
+
+export const benchContextStatus = z.enum([
+  "supported",
+  "limited_context",
+  "insufficient_evidence",
+]);
+
+export const benchContextScope = z
+  .object({
+    court_name: z.string().nullable().optional(),
+    forum_level: z.string().nullable().optional(),
+    bench_name: z.string().nullable().optional(),
+    judge_ids: z.array(z.string()).default([]),
+    judge_names: z.array(z.string()).default([]),
+    matter_type: z.string().nullable().optional(),
+    year_start: z.number().int().nullable().optional(),
+    year_end: z.number().int().nullable().optional(),
+  })
+  .strict();
+
+export const observedSignalDistribution = z
+  .object({
+    signal_type: z.string(),
+    label: z.string(),
+    sample_size: z.number().int().nonnegative(),
+    positive_count: z.number().int().nonnegative(),
+    negative_count: z.number().int().nonnegative(),
+    neutral_count: z.number().int().nonnegative(),
+    year_start: z.number().int().nullable().optional(),
+    year_end: z.number().int().nullable().optional(),
+  })
+  .strict();
+
+export const calibratedSignalScope = z
+  .object({
+    scope_type: z.string().nullable().optional(),
+    scope_key: z.string().nullable().optional(),
+    court_name: z.string().nullable().optional(),
+    forum_level: z.string().nullable().optional(),
+    judge_id: z.string().nullable().optional(),
+    matter_type: z.string().nullable().optional(),
+    party_side: z.string().nullable().optional(),
+    year_start: z.number().int().nullable().optional(),
+    year_end: z.number().int().nullable().optional(),
+  })
+  .strict();
+
+export const calibratedPredictiveSignal = z
+  .object({
+    signal_type: z.string(),
+    label: z.string(),
+    status: benchContextStatus,
+    scope: calibratedSignalScope,
+    sample_size: z.number().int().nonnegative(),
+    observed_rate: z.number().min(0).max(1).nullable().optional(),
+    positive_count: z.number().int().nonnegative(),
+    negative_count: z.number().int().nonnegative(),
+    neutral_count: z.number().int().nonnegative(),
+    confidence: predictionConfidence,
+    calibration_level: predictionConfidenceLabel,
+    evidence_quality: z.string(),
+    evidence: z.array(predictiveEvidence).default([]),
+    missing_data: z.array(z.string()).default([]),
+    limitation_note: z.string(),
+    aggregate_snapshot_id: z.string().nullable().optional(),
+    generated_at: z.string().nullable().optional(),
+    human_review_required: z.boolean(),
+    decision_support_label: z.string(),
+    disclaimer: z.string(),
+  })
+  .strict();
+
+export const benchContextSummary = z
+  .object({
+    matter_id: z.string(),
+    status: benchContextStatus,
+    scope: benchContextScope,
+    sample_size: z.number().int().nonnegative(),
+    evidence_quality: z.string(),
+    confidence: predictionConfidence,
+    observed_distribution: z.array(observedSignalDistribution).default([]),
+    evidence: z.array(predictiveEvidence).default([]),
+    missing_data: z.array(z.string()).default([]),
+    limitation_note: z.string(),
+    human_review_required: z.boolean(),
+    decision_support_label: z.string(),
+    disclaimer: z.string(),
+  })
+  .strict();
+
+export const matterRiskSummary = z
+  .object({
+    matter_id: z.string(),
+    status: predictionStatus,
+    risk_band: z.string().nullable().optional(),
+    confidence: predictionConfidence,
+    signals: z.array(predictiveSignal).default([]),
+    features: z.array(predictionFeatureContribution).default([]),
+    evidence: z.array(predictiveEvidence).default([]),
+    missing_data: z.array(z.string()).default([]),
+    limitation_note: z.string(),
+    human_review_required: z.boolean(),
+    decision_support_label: z.string(),
+    disclaimer: z.string(),
+  })
+  .strict();
+
+export const hearingPrepScorecard = z
+  .object({
+    matter_id: z.string(),
+    status: predictionStatus,
+    overall_band: z.string().nullable().optional(),
+    confidence: predictionConfidence,
+    observable_metrics: z.array(predictionFeatureContribution).default([]),
+    evidence: z.array(predictiveEvidence).default([]),
+    missing_data: z.array(z.string()).default([]),
+    prohibited_inferences: z.array(z.string()).default([]),
+    limitation_note: z.string(),
+    human_review_required: z.boolean(),
+    decision_support_label: z.string(),
+    disclaimer: z.string(),
+  })
+  .strict();
+
+export const predictiveIntelligenceResponse = z
+  .object({
+    matter_id: z.string(),
+    mode: z.literal("predictive"),
+    tenant_policy_enabled: z.boolean(),
+    generated_at: z.string(),
+    run_id: z.string(),
+    bench_summary: benchPredictiveSummary,
+    bench_context: benchContextSummary,
+    calibrated_signals: z.array(calibratedPredictiveSignal).default([]),
+    matter_risk_summary: matterRiskSummary,
+    hearing_prep_scorecard: hearingPrepScorecard,
+    disclaimer: z.string(),
+  })
+  .strict();
+
+export const litigationIntelligenceReviewItemType = z.enum([
+  "proceeding_signal",
+  "affidavit_statement",
+  "affidavit_question",
+  "mock_hearing_session",
+  "mock_hearing_response",
+  "predictive_signal",
+  "bench_context",
+]);
+
+export const litigationIntelligenceReviewStatus = z.enum([
+  "review_required",
+  "reviewed",
+  "auto_promoted",
+  "insufficient_evidence",
+  "supported",
+  "limited_context",
+  "active",
+  "completed",
+]);
+
+export const litigationIntelligenceReviewPriority = z.enum(["high", "medium", "low"]);
+export const litigationIntelligenceReviewAction = z.enum([
+  "mark_reviewed",
+  "accept",
+  "reject",
+  "edit_note",
+]);
+
+export const litigationIntelligenceReviewSourceType = z.enum([
+  "matter_proceeding_signal",
+  "matter_court_order",
+  "matter_cause_list_entry",
+  "matter_document",
+  "matter_attachment_chunk",
+  "affidavit_statement",
+  "affidavit_question",
+  "mock_hearing_session",
+  "mock_hearing_response",
+  "predictive_signal_item",
+  "predictive_signal_run",
+  "authority_document",
+  "aggregate_snapshot",
+]);
+
+export const litigationIntelligenceReviewSource = z
+  .object({
+    source_type: litigationIntelligenceReviewSourceType,
+    source_id: z.string(),
+    label: z.string(),
+    reference: z.string().nullable().optional(),
+    snippet: z.string().nullable().optional(),
+    page_reference: z.string().nullable().optional(),
+  })
+  .strict();
+
+export const litigationIntelligenceReviewItem = z
+  .object({
+    id: z.string(),
+    item_type: litigationIntelligenceReviewItemType,
+    title: z.string(),
+    description: z.string(),
+    status: litigationIntelligenceReviewStatus,
+    priority: litigationIntelligenceReviewPriority,
+    confidence_label: z.string().nullable().optional(),
+    evidence_quality: z.string().nullable().optional(),
+    sample_size: z.number().int().nonnegative().nullable().optional(),
+    limitation_note: z.string(),
+    review_reason: z.string(),
+    source: litigationIntelligenceReviewSource,
+    due_on: z.string().nullable().optional(),
+    review_note: z.string().nullable().optional(),
+    last_review_action: litigationIntelligenceReviewAction.nullable().optional(),
+    reviewed_at: z.string().nullable().optional(),
+    reviewed_by_membership_id: z.string().nullable().optional(),
+    created_at: z.string(),
+    updated_at: z.string().nullable().optional(),
+  })
+  .strict();
+
+export const litigationIntelligenceReviewSummary = z
+  .object({
+    total_items: z.number().int().nonnegative(),
+    review_required_count: z.number().int().nonnegative(),
+    source_linked_count: z.number().int().nonnegative(),
+    by_type: z.record(z.string(), z.number().int().nonnegative()).default({}),
+    by_status: z.record(z.string(), z.number().int().nonnegative()).default({}),
+  })
+  .strict();
+
+export const litigationIntelligenceReviewResponse = z
+  .object({
+    matter_id: z.string(),
+    generated_at: z.string(),
+    disclaimer: z.string(),
+    summary: litigationIntelligenceReviewSummary,
+    items: z.array(litigationIntelligenceReviewItem).default([]),
+  })
+  .strict();
+
+export const litigationIntelligenceReviewMutationResponse = z
+  .object({
+    matter_id: z.string(),
+    item_id: z.string(),
+    item_type: litigationIntelligenceReviewItemType,
+    source_type: litigationIntelligenceReviewSourceType,
+    source_id: z.string(),
+    action: litigationIntelligenceReviewAction,
+    status_before: z.string(),
+    status_after: z.string(),
+    note: z.string().nullable(),
+    no_op_reason: z.string().nullable().optional(),
+    audit_event_id: z.string(),
+    applied: z.boolean(),
+    updated_at: z.string(),
+  })
+  .strict();
+
+export const legalKnowledgeGraphRunStatus = z.enum([
+  "completed",
+  "no_source_records",
+  "not_materialized",
+]);
+
+export const legalKnowledgeGraphNodeType = z.enum([
+  "matter",
+  "proceeding_signal",
+  "affidavit_statement",
+  "affidavit_question",
+  "mock_hearing_question",
+  "mock_hearing_response",
+  "predictive_signal",
+  "bench_context",
+  "legal_source",
+  "statute_or_issue",
+  "review_action",
+]);
+
+export const legalKnowledgeGraphEdgeType = z.enum([
+  "supports",
+  "contradicts",
+  "references",
+  "derived_from",
+  "prompts",
+  "relates_to",
+  "has_limitation",
+]);
+
+export const legalKnowledgeGraphSourceType = z.enum([
+  "matter",
+  "matter_court_order",
+  "matter_proceeding_signal",
+  "matter_document",
+  "matter_attachment_chunk",
+  "affidavit_statement",
+  "affidavit_question",
+  "mock_hearing_session",
+  "mock_hearing_question",
+  "mock_hearing_response",
+  "predictive_signal_item",
+  "predictive_signal_run",
+  "authority_document",
+  "aggregate_snapshot",
+  "litigation_intelligence_review_action",
+  "unavailable",
+]);
+
+export const legalKnowledgeGraphNode = z
+  .object({
+    id: z.string(),
+    node_key: z.string(),
+    node_type: legalKnowledgeGraphNodeType,
+    label: z.string(),
+    description: z.string().nullable().optional(),
+    source_type: legalKnowledgeGraphSourceType,
+    source_id: z.string(),
+    source_quote: z.string().nullable().optional(),
+    confidence_label: z.string().nullable().optional(),
+    review_status: z.string().nullable().optional(),
+    limitation_note: z.string(),
+    created_at: z.string(),
+  })
+  .strict();
+
+export const legalKnowledgeGraphEdge = z
+  .object({
+    id: z.string(),
+    edge_type: legalKnowledgeGraphEdgeType,
+    label: z.string(),
+    from_node_id: z.string(),
+    to_node_id: z.string(),
+    source_type: legalKnowledgeGraphSourceType,
+    source_id: z.string(),
+    source_quote: z.string().nullable().optional(),
+    confidence_label: z.string().nullable().optional(),
+    limitation_note: z.string(),
+    created_at: z.string(),
+  })
+  .strict();
+
+export const legalKnowledgeGraphSummary = z
+  .object({
+    status: legalKnowledgeGraphRunStatus,
+    source_record_count: z.number().int().nonnegative(),
+    node_count: z.number().int().nonnegative(),
+    edge_count: z.number().int().nonnegative(),
+    by_node_type: z.record(z.string(), z.number().int().nonnegative()).default({}),
+    by_edge_type: z.record(z.string(), z.number().int().nonnegative()).default({}),
+    missing_data: z.array(z.string()).default([]),
+  })
+  .strict();
+
+export const legalKnowledgeGraphResponse = z
+  .object({
+    matter_id: z.string(),
+    generated_at: z.string(),
+    run_id: z.string().nullable().optional(),
+    disclaimer: z.string(),
+    limitation_note: z.string(),
+    summary: legalKnowledgeGraphSummary,
+    nodes: z.array(legalKnowledgeGraphNode).default([]),
+    edges: z.array(legalKnowledgeGraphEdge).default([]),
+  })
+  .strict();
+
 export type Recommendation = z.infer<typeof recommendation>;
 export type RecommendationOption = z.infer<typeof recommendationOption>;
 export type RecommendationDecision = z.infer<typeof recommendationDecision>;
@@ -405,6 +1206,35 @@ export type MatterStrategyEntry = z.infer<typeof matterStrategyEntry>;
 export type MatterStrategyEntryList = z.infer<typeof matterStrategyEntryList>;
 export type MatterStrategyEntryType = z.infer<typeof matterStrategyEntryType>;
 export type MatterStrategyEntryStatus = z.infer<typeof matterStrategyEntryStatus>;
+export type PredictionStatus = z.infer<typeof predictionStatus>;
+export type PredictionConfidence = z.infer<typeof predictionConfidence>;
+export type PredictiveEvidence = z.infer<typeof predictiveEvidence>;
+export type PredictiveEvidenceSourceType = z.infer<
+  typeof predictiveEvidenceSourceType
+>;
+export type PredictionFeatureContribution =
+  z.infer<typeof predictionFeatureContribution>;
+export type PredictiveSignal = z.infer<typeof predictiveSignal>;
+export type CalibratedPredictiveSignal = z.infer<typeof calibratedPredictiveSignal>;
+export type BenchPredictiveSummary = z.infer<typeof benchPredictiveSummary>;
+export type BenchContextSummary = z.infer<typeof benchContextSummary>;
+export type MatterRiskSummary = z.infer<typeof matterRiskSummary>;
+export type HearingPrepScorecard = z.infer<typeof hearingPrepScorecard>;
+export type PredictiveIntelligenceResponse =
+  z.infer<typeof predictiveIntelligenceResponse>;
+export type LitigationIntelligenceReviewSource =
+  z.infer<typeof litigationIntelligenceReviewSource>;
+export type LitigationIntelligenceReviewItem =
+  z.infer<typeof litigationIntelligenceReviewItem>;
+export type LitigationIntelligenceReviewResponse =
+  z.infer<typeof litigationIntelligenceReviewResponse>;
+export type LitigationIntelligenceReviewAction =
+  z.infer<typeof litigationIntelligenceReviewAction>;
+export type LitigationIntelligenceReviewMutationResponse =
+  z.infer<typeof litigationIntelligenceReviewMutationResponse>;
+export type LegalKnowledgeGraphNode = z.infer<typeof legalKnowledgeGraphNode>;
+export type LegalKnowledgeGraphEdge = z.infer<typeof legalKnowledgeGraphEdge>;
+export type LegalKnowledgeGraphResponse = z.infer<typeof legalKnowledgeGraphResponse>;
 
 // MOD-LSE-1 (2026-05-03) — strategy planner type exports.
 export type LitigationStrategyPayload = z.infer<typeof litigationStrategyPayload>;

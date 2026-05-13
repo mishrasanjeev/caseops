@@ -2,12 +2,18 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+import caseops_api.services.authority_sources as authority_sources
 from caseops_api.db.models import AuthorityDocumentType, MatterForumLevel
 from caseops_api.services.authority_sources import (
     ADAPTERS,
+    SOURCE_CATEGORY_HIGH_COURT,
+    SOURCE_PROOF_VERIFIED,
+    SOURCE_READINESS_INGEST_READY,
+    SOURCE_TYPE_OFFICIAL,
     AuthorityIngestResult,
     AuthoritySourceAdapter,
     AuthoritySourceDocument,
+    LegalSourceRegistryEntry,
     _pull_karnataka_high_court_latest_judgments,
     _pull_madras_high_court_operational_orders,
     _pull_telangana_high_court_judgments,
@@ -135,12 +141,41 @@ def _build_reference_bias_adapter() -> AuthoritySourceAdapter:
     )
 
 
+def _register_ingest_ready_test_source(monkeypatch, source_key: str) -> None:
+    entry = LegalSourceRegistryEntry(
+        source_key=source_key,
+        source_name=f"{source_key} fixture",
+        jurisdiction="India",
+        court_or_forum="High Court of Delhi",
+        source_category=SOURCE_CATEGORY_HIGH_COURT,
+        source_type=SOURCE_TYPE_OFFICIAL,
+        adapter_available=True,
+        access_mode="test_fixture",
+        captcha_session_gated=False,
+        allowed_for_public_corpus=True,
+        allowed_for_predictive_aggregates=False,
+        lineage_requirements=("source_key", "source_reference"),
+        last_checked_at=None,
+        last_checked_status="test_fixture",
+        notes="Test-only official fixture source registered explicitly for authority ingest tests.",
+        readiness_status=SOURCE_READINESS_INGEST_READY,
+        proof_status=SOURCE_PROOF_VERIFIED,
+    )
+    monkeypatch.setitem(authority_sources.LEGAL_SOURCE_REGISTRY_BY_KEY, source_key, entry)
+    monkeypatch.setattr(
+        authority_sources,
+        "LEGAL_SOURCE_REGISTRY_ENTRIES",
+        (*authority_sources.LEGAL_SOURCE_REGISTRY_ENTRIES, entry),
+    )
+
+
 def test_owner_can_ingest_and_search_authority_corpus(
     client: TestClient,
     monkeypatch,
 ) -> None:
     bootstrap_payload = bootstrap_company(client)
     token = str(bootstrap_payload["access_token"])
+    _register_ingest_ready_test_source(monkeypatch, "test_authority_source")
     monkeypatch.setitem(ADAPTERS, "test_authority_source", _build_test_adapter())
 
     ingest_response = client.post(
@@ -239,6 +274,7 @@ def test_matter_brief_uses_authority_corpus(
 ) -> None:
     bootstrap_payload = bootstrap_company(client)
     token = str(bootstrap_payload["access_token"])
+    _register_ingest_ready_test_source(monkeypatch, "test_authority_source")
     monkeypatch.setitem(ADAPTERS, "test_authority_source", _build_test_adapter())
 
     ingest_response = client.post(
@@ -294,6 +330,7 @@ def test_authority_search_prefers_exact_case_reference_match(
 ) -> None:
     bootstrap_payload = bootstrap_company(client)
     token = str(bootstrap_payload["access_token"])
+    _register_ingest_ready_test_source(monkeypatch, "reference_bias_source")
     monkeypatch.setitem(ADAPTERS, "reference_bias_source", _build_reference_bias_adapter())
 
     ingest_response = client.post(

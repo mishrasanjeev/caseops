@@ -310,11 +310,11 @@ function HearingPackMock() {
           <ul className="mt-3 space-y-2 text-[12.5px] text-[var(--color-ink-2)]">
             <li>
               <span className="font-semibold text-[var(--color-ink)]">Hon'ble Ms Justice R.</span>{" "}
-              Reservation rate 62%; strict on pleadings; favours concise openings.
+              Indexed-source context shown with sample size, source links, and limitations.
             </li>
             <li>
               <span className="font-semibold text-[var(--color-ink)]">Recent §34 trend</span>{" "}
-              Natural-justice grounds succeed where record is documented.
+              Observed historical pattern only where the supporting orders are linked.
             </li>
           </ul>
         </div>

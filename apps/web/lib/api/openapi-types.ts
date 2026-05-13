@@ -2123,6 +2123,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matters/{matter_id}/affidavit-intelligence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** LI-S2 affidavit hearing-prep intelligence for a matter */
+        get: operations["get_current_company_matter_affidavit_intelligence_api_matters__matter_id__affidavit_intelligence_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matters/{matter_id}/appeal-strength": {
         parameters: {
             query?: never;
@@ -2151,6 +2168,23 @@ export interface paths {
         put?: never;
         /** Upload an attachment into a matter workspace */
         post: operations["post_current_company_matter_attachment_api_matters__matter_id__attachments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/{matter_id}/attachments/{attachment_id}/affidavit-intelligence/analyze": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Analyze a source-backed affidavit attachment for hearing prep */
+        post: operations["post_current_company_matter_attachment_affidavit_intelligence_analyze_api_matters__matter_id__attachments__attachment_id__affidavit_intelligence_analyze_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2477,6 +2511,23 @@ export interface paths {
         patch: operations["patch_current_company_matter_court_order_api_matters__matter_id__court_orders__order_id__patch"];
         trace?: never;
     };
+    "/api/matters/{matter_id}/court-orders/{order_id}/proceeding-intelligence/extract": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Extract LI-S1 proceeding signals from a source-backed court order */
+        post: operations["post_current_company_matter_order_proceeding_intelligence_extract_api_matters__matter_id__court_orders__order_id__proceeding_intelligence_extract_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matters/{matter_id}/court-sync/import": {
         parameters: {
             query?: never;
@@ -2750,6 +2801,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matters/{matter_id}/hearing-coach": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** LI-S13 transcript-first hearing coach readiness */
+        get: operations["get_current_company_matter_hearing_coach_api_matters__matter_id__hearing_coach_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matters/{matter_id}/hearing-packs/{pack_id}/review": {
         parameters: {
             query?: never;
@@ -2836,6 +2904,160 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matters/{matter_id}/legal-knowledge-graph": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** LI-S11 source-backed legal knowledge graph for a matter */
+        get: operations["get_current_company_matter_legal_knowledge_graph_api_matters__matter_id__legal_knowledge_graph_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/{matter_id}/legal-knowledge-graph/materialize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Materialize LI-S11 source-backed legal knowledge graph for a matter */
+        post: operations["post_current_company_matter_legal_knowledge_graph_materialize_api_matters__matter_id__legal_knowledge_graph_materialize_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/{matter_id}/litigation-intelligence/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** LI-S6 source-backed litigation intelligence review queue */
+        get: operations["get_current_company_matter_litigation_intelligence_review_api_matters__matter_id__litigation_intelligence_review_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/{matter_id}/litigation-intelligence/review/actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** LI-S9 mutate a source-backed litigation intelligence review item */
+        post: operations["post_current_company_matter_litigation_intelligence_review_action_api_matters__matter_id__litigation_intelligence_review_actions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/{matter_id}/mock-hearings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List mock hearing sessions for a matter */
+        get: operations["get_current_company_matter_mock_hearings_api_matters__matter_id__mock_hearings_get"];
+        put?: never;
+        /** Start a text-first mock hearing session from affidavit questions */
+        post: operations["post_current_company_matter_mock_hearing_api_matters__matter_id__mock_hearings_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/{matter_id}/mock-hearings/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get one mock hearing session */
+        get: operations["get_current_company_matter_mock_hearing_api_matters__matter_id__mock_hearings__session_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/{matter_id}/mock-hearings/{session_id}/coach": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** LI-S13 generate consent-gated transcript-first hearing coach report */
+        post: operations["post_current_company_matter_mock_hearing_coach_api_matters__matter_id__mock_hearings__session_id__coach_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/{matter_id}/mock-hearings/{session_id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Complete a mock hearing session */
+        post: operations["post_current_company_matter_mock_hearing_complete_api_matters__matter_id__mock_hearings__session_id__complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/{matter_id}/mock-hearings/{session_id}/responses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Record a typed mock hearing response and deterministic feedback */
+        post: operations["post_current_company_matter_mock_hearing_response_api_matters__matter_id__mock_hearings__session_id__responses_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matters/{matter_id}/next-action": {
         parameters: {
             query?: never;
@@ -2881,6 +3103,40 @@ export interface paths {
         put?: never;
         /** Generate a hearing pack for the matter's next hearing */
         post: operations["post_current_company_matter_pack_api_matters__matter_id__pack_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/{matter_id}/predictive-intelligence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Controlled predictive litigation intelligence for a visible matter. Requires tenant opt-in and source-backed confidence bands. */
+        get: operations["get_current_company_matter_predictive_intelligence_api_matters__matter_id__predictive_intelligence_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/{matter_id}/proceeding-intelligence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** LI-S1 proceeding/order-sheet intelligence for a matter */
+        get: operations["get_current_company_matter_proceeding_intelligence_api_matters__matter_id__proceeding_intelligence_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3910,6 +4166,165 @@ export interface components {
             /** Token */
             token: string;
         };
+        /** AffidavitIntelligenceResponse */
+        AffidavitIntelligenceResponse: {
+            /** Disclaimer */
+            disclaimer: string;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            latest_run?: components["schemas"]["AffidavitIntelligenceRunRecord"] | null;
+            /** Matter Id */
+            matter_id: string;
+            /** Runs */
+            runs?: components["schemas"]["AffidavitIntelligenceRunRecord"][];
+        };
+        /** AffidavitIntelligenceRunRecord */
+        AffidavitIntelligenceRunRecord: {
+            /** Attachment Id */
+            attachment_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Membership Id */
+            created_by_membership_id?: string | null;
+            /**
+             * Extraction Method
+             * @default deterministic
+             * @enum {string}
+             */
+            extraction_method: "deterministic" | "llm";
+            /** Id */
+            id: string;
+            /** Matter Id */
+            matter_id: string;
+            /** Missing Data */
+            missing_data?: string[];
+            /** Model Run Id */
+            model_run_id?: string | null;
+            /** Parser Version */
+            parser_version: string;
+            /** Questions */
+            questions?: components["schemas"]["AffidavitQuestionRecord"][];
+            /** Source Char Count */
+            source_char_count: number;
+            /** Source Hash */
+            source_hash: string;
+            /** Statements */
+            statements?: components["schemas"]["AffidavitStatementRecord"][];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "completed" | "insufficient_source_text" | "no_findings";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** AffidavitQuestionRecord */
+        AffidavitQuestionRecord: {
+            /** Attachment Id */
+            attachment_id: string;
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "fact_based" | "timeline_inconsistency" | "financial_scrutiny" | "evidence_contradiction" | "document_support" | "intent_motive";
+            /**
+             * Confidence Label
+             * @enum {string}
+             */
+            confidence_label: "low" | "medium" | "high";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Matter Id */
+            matter_id: string;
+            /** Page Reference */
+            page_reference?: string | null;
+            /** Question Text */
+            question_text: string;
+            /** Reason */
+            reason: string;
+            /** Review Required */
+            review_required: boolean;
+            /**
+             * Review Status
+             * @enum {string}
+             */
+            review_status: "review_required" | "reviewed" | "insufficient_evidence";
+            /** Run Id */
+            run_id: string;
+            /** Source Chunk Id */
+            source_chunk_id?: string | null;
+            /** Source Chunk Index */
+            source_chunk_index?: number | null;
+            /** Source Quote */
+            source_quote: string;
+            /** Statement Id */
+            statement_id?: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** AffidavitStatementRecord */
+        AffidavitStatementRecord: {
+            /** Attachment Id */
+            attachment_id: string;
+            /**
+             * Confidence Label
+             * @enum {string}
+             */
+            confidence_label: "low" | "medium" | "high";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Matter Id */
+            matter_id: string;
+            /** Page Reference */
+            page_reference?: string | null;
+            /**
+             * Review Status
+             * @enum {string}
+             */
+            review_status: "review_required" | "reviewed" | "insufficient_evidence";
+            /** Run Id */
+            run_id: string;
+            /** Source Chunk Id */
+            source_chunk_id?: string | null;
+            /** Source Chunk Index */
+            source_chunk_index?: number | null;
+            /** Source Quote */
+            source_quote: string;
+            /** Statement Text */
+            statement_text: string;
+            /**
+             * Statement Type
+             * @enum {string}
+             */
+            statement_type: "key_statement" | "fact_assertion" | "timeline_point" | "monetary_figure" | "named_entity" | "exhibit_reference" | "evidence_gap" | "contradiction";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
         /** AnnotationCreateRequest */
         AnnotationCreateRequest: {
             /** Bbox */
@@ -4527,6 +4942,61 @@ export interface components {
             /** Sample Authority Ids */
             sample_authority_ids: string[];
         };
+        /** BenchContextScope */
+        BenchContextScope: {
+            /** Bench Name */
+            bench_name?: string | null;
+            /** Court Name */
+            court_name?: string | null;
+            /** Forum Level */
+            forum_level?: string | null;
+            /** Judge Ids */
+            judge_ids?: string[];
+            /** Judge Names */
+            judge_names?: string[];
+            /** Matter Type */
+            matter_type?: string | null;
+            /** Year End */
+            year_end?: number | null;
+            /** Year Start */
+            year_start?: number | null;
+        };
+        /** BenchContextSummary */
+        BenchContextSummary: {
+            confidence: components["schemas"]["PredictionConfidence"];
+            /**
+             * Decision Support Label
+             * @default decision support, not legal advice
+             */
+            decision_support_label: string;
+            /** Disclaimer */
+            disclaimer: string;
+            /** Evidence */
+            evidence?: components["schemas"]["PredictiveEvidence"][];
+            /** Evidence Quality */
+            evidence_quality: string;
+            /**
+             * Human Review Required
+             * @default true
+             */
+            human_review_required: boolean;
+            /** Limitation Note */
+            limitation_note: string;
+            /** Matter Id */
+            matter_id: string;
+            /** Missing Data */
+            missing_data?: string[];
+            /** Observed Distribution */
+            observed_distribution?: components["schemas"]["ObservedSignalDistribution"][];
+            /** Sample Size */
+            sample_size: number;
+            scope: components["schemas"]["BenchContextScope"];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "supported" | "limited_context" | "insufficient_evidence";
+        };
         /** BenchMatchJudge */
         BenchMatchJudge: {
             /** Current Position */
@@ -4562,6 +5032,19 @@ export interface components {
             reasoning: string[];
             /** Suggested Judges */
             suggested_judges: components["schemas"]["BenchMatchJudge"][];
+        };
+        /** BenchPredictiveSummary */
+        BenchPredictiveSummary: {
+            /** Bench Judge Ids */
+            bench_judge_ids?: string[];
+            /** Disclaimer */
+            disclaimer: string;
+            /** Evidence Quality */
+            evidence_quality: string;
+            /** Matter Id */
+            matter_id: string;
+            /** Signals */
+            signals?: components["schemas"]["PredictiveSignal"][];
         };
         /**
          * BenchSpecificAuthorityResponse
@@ -4692,7 +5175,7 @@ export interface components {
             /** Document Date */
             document_date?: string | null;
             /** Document Type */
-            document_type?: ("complaint_petition" | "notice" | "vakalatnama" | "pleading_reply" | "affidavit" | "evidence" | "written_submission" | "interim_application" | "order_judgment" | "correspondence" | "research" | "billing" | "other") | null;
+            document_type?: ("complaint_petition" | "notice" | "vakalatnama" | "pleading_reply" | "affidavit" | "chief_affidavit" | "counter_affidavit" | "evidence" | "written_submission" | "interim_application" | "order_judgment" | "correspondence" | "research" | "billing" | "other") | null;
             /** File */
             file: string;
             /** Hearing Id */
@@ -4926,6 +5409,89 @@ export interface components {
             provider_available: boolean;
             /** Syncs */
             syncs: components["schemas"]["CalendarEventSyncRecord"][];
+        };
+        /** CalibratedPredictiveSignal */
+        CalibratedPredictiveSignal: {
+            /** Aggregate Snapshot Id */
+            aggregate_snapshot_id?: string | null;
+            /**
+             * Calibration Level
+             * @enum {string}
+             */
+            calibration_level: "high" | "medium" | "low" | "insufficient";
+            confidence: components["schemas"]["PredictionConfidence"];
+            /**
+             * Decision Support Label
+             * @default decision support, not legal advice
+             */
+            decision_support_label: string;
+            /** Disclaimer */
+            disclaimer: string;
+            /** Evidence */
+            evidence?: components["schemas"]["PredictiveEvidence"][];
+            /** Evidence Quality */
+            evidence_quality: string;
+            /** Generated At */
+            generated_at?: string | null;
+            /**
+             * Human Review Required
+             * @default true
+             */
+            human_review_required: boolean;
+            /** Label */
+            label: string;
+            /** Limitation Note */
+            limitation_note: string;
+            /** Missing Data */
+            missing_data?: string[];
+            /**
+             * Negative Count
+             * @default 0
+             */
+            negative_count: number;
+            /**
+             * Neutral Count
+             * @default 0
+             */
+            neutral_count: number;
+            /** Observed Rate */
+            observed_rate?: number | null;
+            /**
+             * Positive Count
+             * @default 0
+             */
+            positive_count: number;
+            /** Sample Size */
+            sample_size: number;
+            scope: components["schemas"]["CalibratedSignalScope"];
+            /** Signal Type */
+            signal_type: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "supported" | "limited_context" | "insufficient_evidence";
+        };
+        /** CalibratedSignalScope */
+        CalibratedSignalScope: {
+            /** Court Name */
+            court_name?: string | null;
+            /** Forum Level */
+            forum_level?: string | null;
+            /** Judge Id */
+            judge_id?: string | null;
+            /** Matter Type */
+            matter_type?: string | null;
+            /** Party Side */
+            party_side?: string | null;
+            /** Scope Key */
+            scope_key?: string | null;
+            /** Scope Type */
+            scope_type?: string | null;
+            /** Year End */
+            year_end?: number | null;
+            /** Year Start */
+            year_start?: number | null;
         };
         /** CapabilityCatalogResponse */
         CapabilityCatalogResponse: {
@@ -7291,6 +7857,146 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** HearingCoachFeedbackItem */
+        HearingCoachFeedbackItem: {
+            /** Answered Question */
+            answered_question: boolean;
+            /** Clarity Score */
+            clarity_score: number;
+            /** Completeness Score */
+            completeness_score: number;
+            /** Contradiction Count */
+            contradiction_count: number;
+            /** Evasiveness Marker */
+            evasiveness_marker: boolean;
+            /** Feedback */
+            feedback?: string[];
+            /** Improvement Checklist */
+            improvement_checklist?: string[];
+            /** Missing Exhibit Reference */
+            missing_exhibit_reference: boolean;
+            /** Mock Hearing Session Id */
+            mock_hearing_session_id: string;
+            /** Overlong Response Marker */
+            overlong_response_marker: boolean;
+            /** Page Reference */
+            page_reference?: string | null;
+            /** Question Id */
+            question_id: string;
+            /** Question Text */
+            question_text: string;
+            /** Response Id */
+            response_id: string;
+            /** Review Required */
+            review_required: boolean;
+            /** Source Affidavit Question Id */
+            source_affidavit_question_id?: string | null;
+            /** Source Affidavit Statement Id */
+            source_affidavit_statement_id?: string | null;
+            /** Source Attachment Id */
+            source_attachment_id?: string | null;
+            /** Source Chunk Id */
+            source_chunk_id?: string | null;
+            /** Source Chunk Index */
+            source_chunk_index?: number | null;
+            /** Source Quote */
+            source_quote: string;
+            /** Source Reference Used */
+            source_reference_used: boolean;
+            /** Transcript Excerpt */
+            transcript_excerpt: string;
+            /** Unsupported Assertion Count */
+            unsupported_assertion_count: number;
+        };
+        /** HearingCoachMetricSummary */
+        HearingCoachMetricSummary: {
+            /** Answered Question Count */
+            answered_question_count: number;
+            /** Average Clarity Score */
+            average_clarity_score: number;
+            /** Average Completeness Score */
+            average_completeness_score: number;
+            /** Contradiction Count */
+            contradiction_count: number;
+            /** Evasiveness Marker Count */
+            evasiveness_marker_count: number;
+            /** Missing Exhibit Reference Count */
+            missing_exhibit_reference_count: number;
+            /** Overlong Response Count */
+            overlong_response_count: number;
+            /** Review Required Count */
+            review_required_count: number;
+            /** Source Reference Used Count */
+            source_reference_used_count: number;
+            /** Total Responses */
+            total_responses: number;
+            /** Unsupported Assertion Count */
+            unsupported_assertion_count: number;
+        };
+        /** HearingCoachReportResponse */
+        HearingCoachReportResponse: {
+            /** Consent Acknowledged */
+            consent_acknowledged: boolean;
+            /** Disclaimer */
+            disclaimer: string;
+            /** Feedback Items */
+            feedback_items?: components["schemas"]["HearingCoachFeedbackItem"][];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Limitation Notes */
+            limitation_notes?: string[];
+            /** Matter Id */
+            matter_id: string;
+            metrics: components["schemas"]["HearingCoachMetricSummary"];
+            /** Mock Hearing Session Id */
+            mock_hearing_session_id: string;
+            /**
+             * Status
+             * @constant
+             */
+            status: "supported";
+        };
+        /** HearingCoachRunRequest */
+        HearingCoachRunRequest: {
+            /**
+             * Acknowledged
+             * @default false
+             */
+            acknowledged: boolean;
+            /** Acknowledgement Text */
+            acknowledgement_text?: string | null;
+        };
+        /** HearingCoachStatusResponse */
+        HearingCoachStatusResponse: {
+            /** Consent Required */
+            consent_required: boolean;
+            /** Disclaimer */
+            disclaimer: string;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Latest Session Id */
+            latest_session_id?: string | null;
+            /** Limitation Notes */
+            limitation_notes?: string[];
+            /** Matter Id */
+            matter_id: string;
+            /**
+             * Response Count
+             * @default 0
+             */
+            response_count: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "consent_required" | "no_mock_hearing_responses";
+        };
         /**
          * HearingPackGenerateRequest
          * @description Body is empty for now — kept as a placeholder for future options
@@ -7355,6 +8061,41 @@ export interface components {
             status: "draft" | "reviewed";
             /** Summary */
             summary: string;
+        };
+        /** HearingPrepScorecard */
+        HearingPrepScorecard: {
+            confidence: components["schemas"]["PredictionConfidence"];
+            /**
+             * Decision Support Label
+             * @default decision support, not legal advice
+             */
+            decision_support_label: string;
+            /** Disclaimer */
+            disclaimer: string;
+            /** Evidence */
+            evidence?: components["schemas"]["PredictiveEvidence"][];
+            /**
+             * Human Review Required
+             * @default true
+             */
+            human_review_required: boolean;
+            /** Limitation Note */
+            limitation_note: string;
+            /** Matter Id */
+            matter_id: string;
+            /** Missing Data */
+            missing_data?: string[];
+            /** Observable Metrics */
+            observable_metrics?: components["schemas"]["PredictionFeatureContribution"][];
+            /** Overall Band */
+            overall_band?: string | null;
+            /** Prohibited Inferences */
+            prohibited_inferences?: string[];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "supported" | "insufficient_evidence";
         };
         /** HearingReminderListResponse */
         HearingReminderListResponse: {
@@ -7838,6 +8579,118 @@ export interface components {
             /** Documents */
             documents?: components["schemas"]["KycDocumentRecord"][];
         };
+        /** LegalKnowledgeGraphEdgeRecord */
+        LegalKnowledgeGraphEdgeRecord: {
+            /** Confidence Label */
+            confidence_label?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Edge Type
+             * @enum {string}
+             */
+            edge_type: "supports" | "contradicts" | "references" | "derived_from" | "prompts" | "relates_to" | "has_limitation";
+            /** From Node Id */
+            from_node_id: string;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Limitation Note */
+            limitation_note: string;
+            /** Source Id */
+            source_id: string;
+            /** Source Quote */
+            source_quote?: string | null;
+            /**
+             * Source Type
+             * @enum {string}
+             */
+            source_type: "matter" | "matter_court_order" | "matter_proceeding_signal" | "matter_document" | "matter_attachment_chunk" | "affidavit_statement" | "affidavit_question" | "mock_hearing_session" | "mock_hearing_question" | "mock_hearing_response" | "predictive_signal_item" | "predictive_signal_run" | "authority_document" | "aggregate_snapshot" | "litigation_intelligence_review_action" | "unavailable";
+            /** To Node Id */
+            to_node_id: string;
+        };
+        /** LegalKnowledgeGraphNodeRecord */
+        LegalKnowledgeGraphNodeRecord: {
+            /** Confidence Label */
+            confidence_label?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description?: string | null;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Limitation Note */
+            limitation_note: string;
+            /** Node Key */
+            node_key: string;
+            /**
+             * Node Type
+             * @enum {string}
+             */
+            node_type: "matter" | "proceeding_signal" | "affidavit_statement" | "affidavit_question" | "mock_hearing_question" | "mock_hearing_response" | "predictive_signal" | "bench_context" | "legal_source" | "statute_or_issue" | "review_action";
+            /** Review Status */
+            review_status?: string | null;
+            /** Source Id */
+            source_id: string;
+            /** Source Quote */
+            source_quote?: string | null;
+            /**
+             * Source Type
+             * @enum {string}
+             */
+            source_type: "matter" | "matter_court_order" | "matter_proceeding_signal" | "matter_document" | "matter_attachment_chunk" | "affidavit_statement" | "affidavit_question" | "mock_hearing_session" | "mock_hearing_question" | "mock_hearing_response" | "predictive_signal_item" | "predictive_signal_run" | "authority_document" | "aggregate_snapshot" | "litigation_intelligence_review_action" | "unavailable";
+        };
+        /** LegalKnowledgeGraphResponse */
+        LegalKnowledgeGraphResponse: {
+            /** Disclaimer */
+            disclaimer: string;
+            /** Edges */
+            edges?: components["schemas"]["LegalKnowledgeGraphEdgeRecord"][];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Limitation Note */
+            limitation_note: string;
+            /** Matter Id */
+            matter_id: string;
+            /** Nodes */
+            nodes?: components["schemas"]["LegalKnowledgeGraphNodeRecord"][];
+            /** Run Id */
+            run_id?: string | null;
+            summary: components["schemas"]["LegalKnowledgeGraphSummary"];
+        };
+        /** LegalKnowledgeGraphSummary */
+        LegalKnowledgeGraphSummary: {
+            /** By Edge Type */
+            by_edge_type?: {
+                [key: string]: number;
+            };
+            /** By Node Type */
+            by_node_type?: {
+                [key: string]: number;
+            };
+            /** Edge Count */
+            edge_count: number;
+            /** Missing Data */
+            missing_data?: string[];
+            /** Node Count */
+            node_count: number;
+            /** Source Record Count */
+            source_record_count: number;
+            /** Status */
+            status: ("completed" | "no_source_records") | "not_materialized";
+        };
         /**
          * LimitationFlag
          * @description A limitation / drop-dead deadline the matter must meet.
@@ -7875,6 +8728,166 @@ export interface components {
              * @default false
              */
             unverified: boolean;
+        };
+        /** LitigationIntelligenceReviewItem */
+        LitigationIntelligenceReviewItem: {
+            /** Confidence Label */
+            confidence_label?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description: string;
+            /** Due On */
+            due_on?: string | null;
+            /** Evidence Quality */
+            evidence_quality?: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Item Type
+             * @enum {string}
+             */
+            item_type: "proceeding_signal" | "affidavit_statement" | "affidavit_question" | "mock_hearing_session" | "mock_hearing_response" | "predictive_signal" | "bench_context";
+            /** Last Review Action */
+            last_review_action?: ("mark_reviewed" | "accept" | "reject" | "edit_note") | null;
+            /** Limitation Note */
+            limitation_note: string;
+            /**
+             * Priority
+             * @enum {string}
+             */
+            priority: "high" | "medium" | "low";
+            /** Review Note */
+            review_note?: string | null;
+            /** Review Reason */
+            review_reason: string;
+            /** Reviewed At */
+            reviewed_at?: string | null;
+            /** Reviewed By Membership Id */
+            reviewed_by_membership_id?: string | null;
+            /** Sample Size */
+            sample_size?: number | null;
+            source: components["schemas"]["LitigationIntelligenceReviewSource"];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "review_required" | "reviewed" | "auto_promoted" | "insufficient_evidence" | "supported" | "limited_context" | "active" | "completed";
+            /** Title */
+            title: string;
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /** LitigationIntelligenceReviewMutationRequest */
+        LitigationIntelligenceReviewMutationRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "mark_reviewed" | "accept" | "reject" | "edit_note";
+            /** Item Id */
+            item_id: string;
+            /**
+             * Item Type
+             * @enum {string}
+             */
+            item_type: "proceeding_signal" | "affidavit_statement" | "affidavit_question" | "mock_hearing_session" | "mock_hearing_response" | "predictive_signal" | "bench_context";
+            /** Note */
+            note?: string | null;
+        };
+        /** LitigationIntelligenceReviewMutationResponse */
+        LitigationIntelligenceReviewMutationResponse: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "mark_reviewed" | "accept" | "reject" | "edit_note";
+            /** Applied */
+            applied: boolean;
+            /** Audit Event Id */
+            audit_event_id: string;
+            /** Item Id */
+            item_id: string;
+            /**
+             * Item Type
+             * @enum {string}
+             */
+            item_type: "proceeding_signal" | "affidavit_statement" | "affidavit_question" | "mock_hearing_session" | "mock_hearing_response" | "predictive_signal" | "bench_context";
+            /** Matter Id */
+            matter_id: string;
+            /** No Op Reason */
+            no_op_reason?: string | null;
+            /** Note */
+            note?: string | null;
+            /** Source Id */
+            source_id: string;
+            /**
+             * Source Type
+             * @enum {string}
+             */
+            source_type: "matter_proceeding_signal" | "matter_court_order" | "matter_cause_list_entry" | "matter_document" | "matter_attachment_chunk" | "affidavit_statement" | "affidavit_question" | "mock_hearing_session" | "mock_hearing_response" | "predictive_signal_item" | "predictive_signal_run" | "authority_document" | "aggregate_snapshot";
+            /** Status After */
+            status_after: string;
+            /** Status Before */
+            status_before: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** LitigationIntelligenceReviewResponse */
+        LitigationIntelligenceReviewResponse: {
+            /** Disclaimer */
+            disclaimer: string;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Items */
+            items?: components["schemas"]["LitigationIntelligenceReviewItem"][];
+            /** Matter Id */
+            matter_id: string;
+            summary: components["schemas"]["LitigationIntelligenceReviewSummary"];
+        };
+        /** LitigationIntelligenceReviewSource */
+        LitigationIntelligenceReviewSource: {
+            /** Label */
+            label: string;
+            /** Page Reference */
+            page_reference?: string | null;
+            /** Reference */
+            reference?: string | null;
+            /** Snippet */
+            snippet?: string | null;
+            /** Source Id */
+            source_id: string;
+            /**
+             * Source Type
+             * @enum {string}
+             */
+            source_type: "matter_proceeding_signal" | "matter_court_order" | "matter_cause_list_entry" | "matter_document" | "matter_attachment_chunk" | "affidavit_statement" | "affidavit_question" | "mock_hearing_session" | "mock_hearing_response" | "predictive_signal_item" | "predictive_signal_run" | "authority_document" | "aggregate_snapshot";
+        };
+        /** LitigationIntelligenceReviewSummary */
+        LitigationIntelligenceReviewSummary: {
+            /** By Status */
+            by_status?: {
+                [key: string]: number;
+            };
+            /** By Type */
+            by_type?: {
+                [key: string]: number;
+            };
+            /** Review Required Count */
+            review_required_count: number;
+            /** Source Linked Count */
+            source_linked_count: number;
+            /** Total Items */
+            total_items: number;
         };
         /**
          * LitigationStrategyPayload
@@ -7994,7 +9007,7 @@ export interface components {
             /** Document Date */
             document_date?: string | null;
             /** Document Type */
-            document_type?: ("complaint_petition" | "notice" | "vakalatnama" | "pleading_reply" | "affidavit" | "evidence" | "written_submission" | "interim_application" | "order_judgment" | "correspondence" | "research" | "billing" | "other") | null;
+            document_type?: ("complaint_petition" | "notice" | "vakalatnama" | "pleading_reply" | "affidavit" | "chief_affidavit" | "counter_affidavit" | "evidence" | "written_submission" | "interim_application" | "order_judgment" | "correspondence" | "research" | "billing" | "other") | null;
             /** Hearing Id */
             hearing_id?: string | null;
             /** Lifecycle Stage */
@@ -8016,7 +9029,7 @@ export interface components {
             /** Document Date */
             document_date?: string | null;
             /** Document Type */
-            document_type?: ("complaint_petition" | "notice" | "vakalatnama" | "pleading_reply" | "affidavit" | "evidence" | "written_submission" | "interim_application" | "order_judgment" | "correspondence" | "research" | "billing" | "other") | null;
+            document_type?: ("complaint_petition" | "notice" | "vakalatnama" | "pleading_reply" | "affidavit" | "chief_affidavit" | "counter_affidavit" | "evidence" | "written_submission" | "interim_application" | "order_judgment" | "correspondence" | "research" | "billing" | "other") | null;
             /** Extracted Char Count */
             extracted_char_count: number;
             /** Extraction Error */
@@ -8888,6 +9901,41 @@ export interface components {
             /** Restricted */
             restricted: boolean;
         };
+        /** MatterRiskSummary */
+        MatterRiskSummary: {
+            confidence: components["schemas"]["PredictionConfidence"];
+            /**
+             * Decision Support Label
+             * @default decision support, not legal advice
+             */
+            decision_support_label: string;
+            /** Disclaimer */
+            disclaimer: string;
+            /** Evidence */
+            evidence?: components["schemas"]["PredictiveEvidence"][];
+            /** Features */
+            features?: components["schemas"]["PredictionFeatureContribution"][];
+            /**
+             * Human Review Required
+             * @default true
+             */
+            human_review_required: boolean;
+            /** Limitation Note */
+            limitation_note: string;
+            /** Matter Id */
+            matter_id: string;
+            /** Missing Data */
+            missing_data?: string[];
+            /** Risk Band */
+            risk_band?: string | null;
+            /** Signals */
+            signals?: components["schemas"]["PredictiveSignal"][];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "supported" | "insufficient_evidence";
+        };
         /** MatterStatuteReferenceCreateRequest */
         MatterStatuteReferenceCreateRequest: {
             /** Notes */
@@ -9384,6 +10432,244 @@ export interface components {
             /** Role */
             role: string;
         };
+        /** MockHearingListResponse */
+        MockHearingListResponse: {
+            /** Disclaimer */
+            disclaimer: string;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            latest_session?: components["schemas"]["MockHearingSessionRecord"] | null;
+            /** Matter Id */
+            matter_id: string;
+            /** Sessions */
+            sessions?: components["schemas"]["MockHearingSessionRecord"][];
+        };
+        /** MockHearingQuestionRecord */
+        MockHearingQuestionRecord: {
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "fact_based" | "timeline_inconsistency" | "financial_scrutiny" | "evidence_contradiction" | "document_support" | "intent_motive";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Difficulty Label
+             * @enum {string}
+             */
+            difficulty_label: "low" | "medium" | "high";
+            /** Id */
+            id: string;
+            /** Matter Id */
+            matter_id: string;
+            /** Page Reference */
+            page_reference?: string | null;
+            /** Question Text */
+            question_text: string;
+            /** Reason */
+            reason: string;
+            /** Responses */
+            responses?: components["schemas"]["MockHearingResponseRecord"][];
+            /** Session Id */
+            session_id: string;
+            /** Source Affidavit Question Id */
+            source_affidavit_question_id?: string | null;
+            /** Source Affidavit Run Id */
+            source_affidavit_run_id?: string | null;
+            /** Source Affidavit Statement Id */
+            source_affidavit_statement_id?: string | null;
+            /** Source Attachment Id */
+            source_attachment_id?: string | null;
+            /** Source Chunk Id */
+            source_chunk_id?: string | null;
+            /** Source Chunk Index */
+            source_chunk_index?: number | null;
+            /** Source Quote */
+            source_quote: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "answered";
+            /** Turn Index */
+            turn_index: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** MockHearingResponseCreateRequest */
+        MockHearingResponseCreateRequest: {
+            /** Elapsed Seconds */
+            elapsed_seconds?: number | null;
+            /** Question Id */
+            question_id?: string | null;
+            /** Response Text */
+            response_text: string;
+        };
+        /** MockHearingResponseRecord */
+        MockHearingResponseRecord: {
+            /** Answered Question */
+            answered_question: boolean;
+            /**
+             * Confidence Label
+             * @enum {string}
+             */
+            confidence_label: "low" | "medium" | "high";
+            /** Consistency With Affidavit */
+            consistency_with_affidavit: boolean;
+            /** Contradiction With Source */
+            contradiction_with_source: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Elapsed Seconds */
+            elapsed_seconds?: number | null;
+            /** Feedback Text */
+            feedback_text: string;
+            /** Id */
+            id: string;
+            /** Matter Id */
+            matter_id: string;
+            /** Missing Document Reference */
+            missing_document_reference: boolean;
+            /** Page Reference */
+            page_reference?: string | null;
+            /** Question Id */
+            question_id: string;
+            /**
+             * Response Completeness
+             * @enum {string}
+             */
+            response_completeness: "low" | "medium" | "high";
+            /** Response Text */
+            response_text: string;
+            /** Response Word Count */
+            response_word_count: number;
+            /** Review Required */
+            review_required: boolean;
+            /**
+             * Review Status
+             * @enum {string}
+             */
+            review_status: "review_required" | "reviewed";
+            /** Session Id */
+            session_id: string;
+            /** Source Affidavit Question Id */
+            source_affidavit_question_id?: string | null;
+            /** Source Affidavit Statement Id */
+            source_affidavit_statement_id?: string | null;
+            /** Source Attachment Id */
+            source_attachment_id?: string | null;
+            /** Source Chunk Id */
+            source_chunk_id?: string | null;
+            /** Source Chunk Index */
+            source_chunk_index?: number | null;
+            /** Source Quote */
+            source_quote: string;
+            /** Unsupported Assertion Added */
+            unsupported_assertion_added: boolean;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** MockHearingScorecard */
+        MockHearingScorecard: {
+            /** Answered Question Count */
+            answered_question_count: number;
+            /** Answered Questions */
+            answered_questions: number;
+            /** Average Response Seconds */
+            average_response_seconds?: number | null;
+            /** Contradiction Count */
+            contradiction_count: number;
+            /** Missing Document Reference Count */
+            missing_document_reference_count: number;
+            /** Responses Recorded */
+            responses_recorded: number;
+            /** Review Required Count */
+            review_required_count: number;
+            /** Total Questions */
+            total_questions: number;
+            /** Unsupported Assertion Count */
+            unsupported_assertion_count: number;
+        };
+        /** MockHearingSessionRecord */
+        MockHearingSessionRecord: {
+            /** Completed At */
+            completed_at?: string | null;
+            /** Created By Membership Id */
+            created_by_membership_id?: string | null;
+            /** Current Question Id */
+            current_question_id?: string | null;
+            /** Disclaimer */
+            disclaimer: string;
+            /** Id */
+            id: string;
+            /** Matter Id */
+            matter_id: string;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "client_preparation" | "counsel_practice" | "witness_preparation";
+            /** Participant Label */
+            participant_label?: string | null;
+            /** Questions */
+            questions?: components["schemas"]["MockHearingQuestionRecord"][];
+            /**
+             * Review Status
+             * @enum {string}
+             */
+            review_status: "review_required" | "reviewed";
+            scorecard: components["schemas"]["MockHearingScorecard"];
+            /** Source Affidavit Run Id */
+            source_affidavit_run_id?: string | null;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "completed" | "cancelled";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** MockHearingStartRequest */
+        MockHearingStartRequest: {
+            /** Categories */
+            categories?: ("fact_based" | "timeline_inconsistency" | "financial_scrutiny" | "evidence_contradiction" | "document_support" | "intent_motive")[] | null;
+            /**
+             * Max Questions
+             * @default 8
+             */
+            max_questions: number;
+            /**
+             * Mode
+             * @default client_preparation
+             * @enum {string}
+             */
+            mode: "client_preparation" | "counsel_practice" | "witness_preparation";
+            /** Participant Label */
+            participant_label?: string | null;
+        };
         /** NextActionResponse */
         NextActionResponse: {
             /** Detail */
@@ -9526,6 +10812,25 @@ export interface components {
             provider: string;
             /** Removed */
             removed: number;
+        };
+        /** ObservedSignalDistribution */
+        ObservedSignalDistribution: {
+            /** Label */
+            label: string;
+            /** Negative Count */
+            negative_count: number;
+            /** Neutral Count */
+            neutral_count: number;
+            /** Positive Count */
+            positive_count: number;
+            /** Sample Size */
+            sample_size: number;
+            /** Signal Type */
+            signal_type: string;
+            /** Year End */
+            year_end?: number | null;
+            /** Year Start */
+            year_start?: number | null;
         };
         /**
          * OutlookBulkSyncItem
@@ -10413,6 +11718,134 @@ export interface components {
             /** Count */
             count: number;
         };
+        /** PredictionConfidence */
+        PredictionConfidence: {
+            /** Confidence Band High */
+            confidence_band_high?: number | null;
+            /** Confidence Band Low */
+            confidence_band_low?: number | null;
+            /**
+             * Label
+             * @enum {string}
+             */
+            label: "high" | "medium" | "low" | "insufficient";
+            /** Limitations */
+            limitations?: string[];
+            /** Method */
+            method: string;
+            /** Sample Size */
+            sample_size: number;
+        };
+        /** PredictionFeatureContribution */
+        PredictionFeatureContribution: {
+            /**
+             * Direction
+             * @enum {string}
+             */
+            direction: "supports" | "weakens" | "neutral" | "unknown";
+            /** Evidence Ids */
+            evidence_ids?: string[];
+            /** Explanation */
+            explanation: string;
+            /** Feature Key */
+            feature_key: string;
+            /** Label */
+            label: string;
+            /**
+             * Weight
+             * @default 0
+             */
+            weight: number;
+        };
+        /** PredictiveEvidence */
+        PredictiveEvidence: {
+            /** Excerpt */
+            excerpt?: string | null;
+            /** Id */
+            id: string;
+            /** Source Date */
+            source_date?: string | null;
+            /** Source Id */
+            source_id: string;
+            /** Source Reference */
+            source_reference?: string | null;
+            /**
+             * Source Type
+             * @enum {string}
+             */
+            source_type: "authority_document" | "matter_court_order" | "matter_cause_list_entry" | "matter_document" | "aggregate_snapshot" | "unavailable";
+            /** Title */
+            title?: string | null;
+            /**
+             * Weight
+             * @default 1
+             */
+            weight: number;
+        };
+        /** PredictiveIntelligenceResponse */
+        PredictiveIntelligenceResponse: {
+            bench_context: components["schemas"]["BenchContextSummary"];
+            bench_summary: components["schemas"]["BenchPredictiveSummary"];
+            /** Calibrated Signals */
+            calibrated_signals?: components["schemas"]["CalibratedPredictiveSignal"][];
+            /** Disclaimer */
+            disclaimer: string;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            hearing_prep_scorecard: components["schemas"]["HearingPrepScorecard"];
+            /** Matter Id */
+            matter_id: string;
+            matter_risk_summary: components["schemas"]["MatterRiskSummary"];
+            /**
+             * Mode
+             * @constant
+             */
+            mode: "predictive";
+            /** Run Id */
+            run_id: string;
+            /** Tenant Policy Enabled */
+            tenant_policy_enabled: boolean;
+        };
+        /** PredictiveSignal */
+        PredictiveSignal: {
+            confidence: components["schemas"]["PredictionConfidence"];
+            /**
+             * Decision Support Label
+             * @default decision support, not legal advice
+             */
+            decision_support_label: string;
+            /** Disclaimer */
+            disclaimer: string;
+            /** Estimate Label */
+            estimate_label?: string | null;
+            /** Evidence */
+            evidence?: components["schemas"]["PredictiveEvidence"][];
+            /** Features */
+            features?: components["schemas"]["PredictionFeatureContribution"][];
+            /**
+             * Human Review Required
+             * @default true
+             */
+            human_review_required: boolean;
+            /** Label */
+            label: string;
+            /** Limitation Note */
+            limitation_note: string;
+            /** Missing Data */
+            missing_data?: string[];
+            /** Sample Size */
+            sample_size: number;
+            /** Signal Type */
+            signal_type: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "supported" | "insufficient_evidence";
+        };
         /** PredictiveSummaryResponse */
         PredictiveSummaryResponse: {
             /** Adverse Count */
@@ -10427,6 +11860,111 @@ export interface components {
             sample_size: number;
             /** Top Outcome Label */
             top_outcome_label: string | null;
+        };
+        /** ProceedingIntelligenceResponse */
+        ProceedingIntelligenceResponse: {
+            /** Disclaimer */
+            disclaimer: string;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Matter Id */
+            matter_id: string;
+            /** Orders */
+            orders?: components["schemas"]["ProceedingOrderIntelligenceRecord"][];
+            /** Pending Compliance Items */
+            pending_compliance_items?: components["schemas"]["ProceedingSignalRecord"][];
+        };
+        /** ProceedingOrderIntelligenceRecord */
+        ProceedingOrderIntelligenceRecord: {
+            /** Court Order Id */
+            court_order_id: string;
+            /**
+             * Extraction Status
+             * @enum {string}
+             */
+            extraction_status: "supported" | "insufficient_source_text" | "insufficient_evidence" | "not_extracted";
+            /** Missing Data */
+            missing_data?: string[];
+            /** Order Attachment Id */
+            order_attachment_id?: string | null;
+            /**
+             * Order Date
+             * Format: date
+             */
+            order_date: string;
+            /** Signals */
+            signals?: components["schemas"]["ProceedingSignalRecord"][];
+            /** Source */
+            source: string;
+            /** Source Reference */
+            source_reference?: string | null;
+            /** Sync Run Id */
+            sync_run_id?: string | null;
+            /** Title */
+            title: string;
+        };
+        /** ProceedingSignalRecord */
+        ProceedingSignalRecord: {
+            /** Action Required */
+            action_required?: string | null;
+            /**
+             * Confidence Label
+             * @enum {string}
+             */
+            confidence_label: "low" | "medium" | "high";
+            /** Court Order Id */
+            court_order_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Due On */
+            due_on?: string | null;
+            /**
+             * Extraction Method
+             * @default deterministic
+             * @enum {string}
+             */
+            extraction_method: "deterministic" | "llm";
+            /** Generated Deadline Id */
+            generated_deadline_id?: string | null;
+            /** Generated Task Id */
+            generated_task_id?: string | null;
+            /** Hearing On */
+            hearing_on?: string | null;
+            /** Id */
+            id: string;
+            /** Matter Id */
+            matter_id: string;
+            /** Order Kind */
+            order_kind?: string | null;
+            /** Parser Version */
+            parser_version: string;
+            /**
+             * Review Status
+             * @enum {string}
+             */
+            review_status: "review_required" | "reviewed" | "auto_promoted" | "insufficient_evidence";
+            /** Signal Text */
+            signal_text: string;
+            /**
+             * Signal Type
+             * @enum {string}
+             */
+            signal_type: "next_hearing" | "filing_defect" | "compliance_direction" | "reply_affidavit_deadline" | "counsel_appearance" | "interim_observation" | "order_kind" | "action_required";
+            /** Source Snippet */
+            source_snippet: string;
+            /** Sync Run Id */
+            sync_run_id: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
         };
         /** RecommendationDecisionRecord */
         RecommendationDecisionRecord: {
@@ -15692,6 +17230,37 @@ export interface operations {
             };
         };
     };
+    get_current_company_matter_affidavit_intelligence_api_matters__matter_id__affidavit_intelligence_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AffidavitIntelligenceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_current_company_matter_appeal_strength_api_matters__matter_id__appeal_strength_get: {
         parameters: {
             query?: {
@@ -15747,6 +17316,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MatterAttachmentRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_current_company_matter_attachment_affidavit_intelligence_analyze_api_matters__matter_id__attachments__attachment_id__affidavit_intelligence_analyze_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+                attachment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AffidavitIntelligenceResponse"];
                 };
             };
             /** @description Validation Error */
@@ -16469,6 +18070,38 @@ export interface operations {
             };
         };
     };
+    post_current_company_matter_order_proceeding_intelligence_extract_api_matters__matter_id__court_orders__order_id__proceeding_intelligence_extract_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+                order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProceedingIntelligenceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     import_current_company_matter_court_sync_api_matters__matter_id__court_sync_import_post: {
         parameters: {
             query?: never;
@@ -17029,6 +18662,37 @@ export interface operations {
             };
         };
     };
+    get_current_company_matter_hearing_coach_api_matters__matter_id__hearing_coach_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HearingCoachStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     post_current_company_hearing_pack_review_api_matters__matter_id__hearing_packs__pack_id__review_post: {
         parameters: {
             query?: never;
@@ -17235,6 +18899,336 @@ export interface operations {
             };
         };
     };
+    get_current_company_matter_legal_knowledge_graph_api_matters__matter_id__legal_knowledge_graph_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalKnowledgeGraphResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_current_company_matter_legal_knowledge_graph_materialize_api_matters__matter_id__legal_knowledge_graph_materialize_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalKnowledgeGraphResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_current_company_matter_litigation_intelligence_review_api_matters__matter_id__litigation_intelligence_review_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LitigationIntelligenceReviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_current_company_matter_litigation_intelligence_review_action_api_matters__matter_id__litigation_intelligence_review_actions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LitigationIntelligenceReviewMutationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LitigationIntelligenceReviewMutationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_current_company_matter_mock_hearings_api_matters__matter_id__mock_hearings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MockHearingListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_current_company_matter_mock_hearing_api_matters__matter_id__mock_hearings_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MockHearingStartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MockHearingSessionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_current_company_matter_mock_hearing_api_matters__matter_id__mock_hearings__session_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MockHearingSessionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_current_company_matter_mock_hearing_coach_api_matters__matter_id__mock_hearings__session_id__coach_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HearingCoachRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HearingCoachReportResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_current_company_matter_mock_hearing_complete_api_matters__matter_id__mock_hearings__session_id__complete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MockHearingSessionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_current_company_matter_mock_hearing_response_api_matters__matter_id__mock_hearings__session_id__responses_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MockHearingResponseCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MockHearingSessionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_matter_next_action_api_matters__matter_id__next_action_get: {
         parameters: {
             query?: never;
@@ -17323,6 +19317,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HearingPackRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_current_company_matter_predictive_intelligence_api_matters__matter_id__predictive_intelligence_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PredictiveIntelligenceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_current_company_matter_proceeding_intelligence_api_matters__matter_id__proceeding_intelligence_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProceedingIntelligenceResponse"];
                 };
             };
             /** @description Validation Error */

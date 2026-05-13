@@ -6,6 +6,7 @@ import { Container } from "@/components/ui/Container";
 
 const proofPoints = [
   "Citation-grounded AI",
+  "Source-backed litigation intelligence",
   "Multi-tenant by design",
   "Built for Indian courts",
 ];
@@ -31,9 +32,9 @@ export function Hero() {
         </h1>
 
         <p className="mt-6 max-w-2xl text-pretty text-lg leading-relaxed text-[var(--color-mute)] md:text-xl">
-          Run every matter, drafting pass, hearing, contract, and invoice from a single
-          matter-graph workspace. Grounded in statutes, judgments, and your own precedents —
-          never guesses.
+          Run every matter, drafting pass, hearing, contract, invoice, and review queue from
+          a single matter-graph workspace. Grounded in statutes, orders, affidavits,
+          judgments, and your own precedents - never guesses.
         </p>
 
         <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row">

@@ -3,6 +3,7 @@ import { API_BASE_URL } from "./config";
 import {
   type AuthContext,
   type AuthSession,
+  type AffidavitIntelligenceResponse,
   type CalendarConnectionListResponse,
   type CalendarConnectionRecord,
   type CalendarEventKind,
@@ -24,9 +25,19 @@ import {
   type EmailTemplateRecord,
   type EmailTemplateVariable,
   type ForumCatalogResponse,
+  type HearingCoachReportResponse,
+  type HearingCoachStatusResponse,
   type HearingPack,
+  type LegalKnowledgeGraphResponse,
+  type LitigationIntelligenceReviewAction,
+  type LitigationIntelligenceReviewItem,
+  type LitigationIntelligenceReviewMutationResponse,
   type Matter,
   type MatterAuditList,
+  type LitigationIntelligenceReviewResponse,
+  type MockHearingListResponse,
+  type MockHearingSession,
+  type ProceedingIntelligenceResponse,
   type MatterStrategyEntry,
   type MatterStrategyEntryList,
   type MatterStrategyEntryStatus,
@@ -37,11 +48,13 @@ import {
   type NotificationRuleListResponse,
   type NotificationRuleRecord,
   type OutsideCounselWorkspace,
+  type PredictiveIntelligenceResponse,
   type Recommendation,
   type RecommendationList,
   type RecommendationType,
   authContext,
   authSession,
+  affidavitIntelligenceResponse,
   calendarConnectionRecord,
   calendarConnectionListResponse,
   calendarConnectionStartResponse,
@@ -58,17 +71,26 @@ import {
   emailTemplateListResponse,
   emailTemplateRecord,
   forumCatalogResponse,
+  hearingCoachReportResponse,
+  hearingCoachStatusResponse,
   hearingPack,
+  legalKnowledgeGraphResponse,
   matter,
   matterAuditList,
+  litigationIntelligenceReviewMutationResponse,
+  litigationIntelligenceReviewResponse,
   matterStrategyEntry,
   matterStrategyEntryList,
   matterTimelineResponse,
   matterTagsList,
   mattersList,
+  mockHearingListResponse,
+  mockHearingSession,
   notificationRuleListResponse,
   notificationRuleRecord,
   outsideCounselWorkspace,
+  predictiveIntelligenceResponse,
+  proceedingIntelligenceResponse,
   recommendation,
   recommendationList,
 } from "./schemas";
@@ -218,6 +240,181 @@ export async function fetchMatterTimeline(input: {
   }`;
   const data = await apiRequest<unknown>(path);
   return matterTimelineResponse.parse(data);
+}
+
+export async function fetchProceedingIntelligence(input: {
+  matterId: string;
+}): Promise<ProceedingIntelligenceResponse> {
+  const data = await apiRequest<unknown>(
+    `/api/matters/${input.matterId}/proceeding-intelligence`,
+  );
+  return proceedingIntelligenceResponse.parse(data);
+}
+
+export async function fetchLitigationIntelligenceReview(input: {
+  matterId: string;
+}): Promise<LitigationIntelligenceReviewResponse> {
+  const matterId = encodeURIComponent(input.matterId);
+  const data = await apiRequest<unknown>(
+    `/api/matters/${matterId}/litigation-intelligence/review`,
+  );
+  return litigationIntelligenceReviewResponse.parse(data);
+}
+
+export async function mutateLitigationIntelligenceReviewItem(input: {
+  matterId: string;
+  itemId: string;
+  itemType: LitigationIntelligenceReviewItem["item_type"];
+  action: LitigationIntelligenceReviewAction;
+  note?: string | null;
+}): Promise<LitigationIntelligenceReviewMutationResponse> {
+  const matterId = encodeURIComponent(input.matterId);
+  const data = await apiRequest<unknown>(
+    `/api/matters/${matterId}/litigation-intelligence/review/actions`,
+    {
+      method: "POST",
+      body: {
+        item_id: input.itemId,
+        item_type: input.itemType,
+        action: input.action,
+        note: input.note ?? null,
+      },
+    },
+  );
+  return litigationIntelligenceReviewMutationResponse.parse(data);
+}
+
+export async function fetchLegalKnowledgeGraph(input: {
+  matterId: string;
+}): Promise<LegalKnowledgeGraphResponse> {
+  const matterId = encodeURIComponent(input.matterId);
+  const data = await apiRequest<unknown>(
+    `/api/matters/${matterId}/legal-knowledge-graph`,
+  );
+  return legalKnowledgeGraphResponse.parse(data);
+}
+
+export async function materializeLegalKnowledgeGraph(input: {
+  matterId: string;
+}): Promise<LegalKnowledgeGraphResponse> {
+  const matterId = encodeURIComponent(input.matterId);
+  const data = await apiRequest<unknown>(
+    `/api/matters/${matterId}/legal-knowledge-graph/materialize`,
+    { method: "POST", body: {} },
+  );
+  return legalKnowledgeGraphResponse.parse(data);
+}
+
+export async function fetchAffidavitIntelligence(input: {
+  matterId: string;
+}): Promise<AffidavitIntelligenceResponse> {
+  const matterId = encodeURIComponent(input.matterId);
+  const data = await apiRequest<unknown>(
+    `/api/matters/${matterId}/affidavit-intelligence`,
+  );
+  return affidavitIntelligenceResponse.parse(data);
+}
+
+export async function analyzeAffidavitIntelligence(input: {
+  matterId: string;
+  attachmentId: string;
+}): Promise<AffidavitIntelligenceResponse> {
+  const matterId = encodeURIComponent(input.matterId);
+  const attachmentId = encodeURIComponent(input.attachmentId);
+  const data = await apiRequest<unknown>(
+    `/api/matters/${matterId}/attachments/${attachmentId}/affidavit-intelligence/analyze`,
+    { method: "POST", body: {} },
+  );
+  return affidavitIntelligenceResponse.parse(data);
+}
+
+export async function fetchMockHearings(input: {
+  matterId: string;
+}): Promise<MockHearingListResponse> {
+  const matterId = encodeURIComponent(input.matterId);
+  const data = await apiRequest<unknown>(`/api/matters/${matterId}/mock-hearings`);
+  return mockHearingListResponse.parse(data);
+}
+
+export async function startMockHearing(input: {
+  matterId: string;
+  mode?: "client_preparation" | "counsel_practice" | "witness_preparation";
+  participantLabel?: string | null;
+  maxQuestions?: number;
+}): Promise<MockHearingSession> {
+  const matterId = encodeURIComponent(input.matterId);
+  const data = await apiRequest<unknown>(`/api/matters/${matterId}/mock-hearings`, {
+    method: "POST",
+    body: {
+      mode: input.mode ?? "client_preparation",
+      participant_label: input.participantLabel ?? null,
+      max_questions: input.maxQuestions ?? 8,
+    },
+  });
+  return mockHearingSession.parse(data);
+}
+
+export async function submitMockHearingResponse(input: {
+  matterId: string;
+  sessionId: string;
+  questionId?: string | null;
+  responseText: string;
+  elapsedSeconds?: number | null;
+}): Promise<MockHearingSession> {
+  const matterId = encodeURIComponent(input.matterId);
+  const sessionId = encodeURIComponent(input.sessionId);
+  const data = await apiRequest<unknown>(
+    `/api/matters/${matterId}/mock-hearings/${sessionId}/responses`,
+    {
+      method: "POST",
+      body: {
+        question_id: input.questionId ?? null,
+        response_text: input.responseText,
+        elapsed_seconds: input.elapsedSeconds ?? null,
+      },
+    },
+  );
+  return mockHearingSession.parse(data);
+}
+
+export async function completeMockHearing(input: {
+  matterId: string;
+  sessionId: string;
+}): Promise<MockHearingSession> {
+  const matterId = encodeURIComponent(input.matterId);
+  const sessionId = encodeURIComponent(input.sessionId);
+  const data = await apiRequest<unknown>(
+    `/api/matters/${matterId}/mock-hearings/${sessionId}/complete`,
+    { method: "POST", body: {} },
+  );
+  return mockHearingSession.parse(data);
+}
+
+export async function fetchHearingCoach(input: {
+  matterId: string;
+}): Promise<HearingCoachStatusResponse> {
+  const matterId = encodeURIComponent(input.matterId);
+  const data = await apiRequest<unknown>(`/api/matters/${matterId}/hearing-coach`);
+  return hearingCoachStatusResponse.parse(data);
+}
+
+export async function generateHearingCoach(input: {
+  matterId: string;
+  sessionId: string;
+  acknowledged: boolean;
+}): Promise<HearingCoachReportResponse> {
+  const matterId = encodeURIComponent(input.matterId);
+  const sessionId = encodeURIComponent(input.sessionId);
+  const data = await apiRequest<unknown>(
+    `/api/matters/${matterId}/mock-hearings/${sessionId}/coach`,
+    {
+      method: "POST",
+      body: {
+        acknowledged: input.acknowledged,
+      },
+    },
+  );
+  return hearingCoachReportResponse.parse(data);
 }
 
 // Phase C-3c (MOD-TS-016, 2026-04-25): toggle the per-matter
@@ -375,6 +572,15 @@ export async function fetchBenchStrategy(
   return apiRequest<BenchStrategy>(
     `/api/matters/${matterId}/bench-strategy${qs ? `?${qs}` : ""}`,
   );
+}
+
+export async function fetchPredictiveIntelligence(
+  matterId: string,
+): Promise<PredictiveIntelligenceResponse> {
+  const data = await apiRequest<unknown>(
+    `/api/matters/${matterId}/predictive-intelligence`,
+  );
+  return predictiveIntelligenceResponse.parse(data);
 }
 
 
@@ -1407,6 +1613,8 @@ export type MatterDocumentType =
   | "vakalatnama"
   | "pleading_reply"
   | "affidavit"
+  | "chief_affidavit"
+  | "counter_affidavit"
   | "evidence"
   | "written_submission"
   | "interim_application"

@@ -19,11 +19,15 @@ const faqs = [
   },
   {
     q: "What courts and jurisdictions are covered?",
-    a: "Lower courts, High Courts, and the Supreme Court are in scope. Today's judge catalog: 31 sitting Supreme Court judges + 32 sitting Delhi High Court judges, with career history sourced from sci.gov.in and delhihighcourt.nic.in (clickable verify links on every profile). Bombay, Karnataka, Madras, Telangana and Patna High Courts are seeded as catalog rows; per-court judge data + cause-list scrapers ship as each court's PRD lands.",
+    a: "Lower courts, High Courts, tribunals, forums, bare acts, and the Supreme Court are in scope. Current adapter-backed public sources remain limited to verified official sources; district, session, tribunal, consumer-forum, bare-act, and arbitration sources appear in the readiness registry until lawful adapters and source-quality proof exist.",
   },
   {
     q: "Does the appeal draft consider which bench will hear it?",
-    a: "Yes. When a matter has an upcoming listing whose bench is resolved against our judge catalog, the appeal-memorandum draft pulls authorities authored by THAT specific bench and prefers ones aligned with the matter's practice area. Selection of supporting citations is editorial advocacy; the system never claims a win/loss probability or 'judge tendency' — bench-aware drafting is a hard rule.",
+    a: "Yes. When a matter has an upcoming listing whose bench is resolved against the judge catalog, the appeal-memorandum draft can pull authorities authored by that bench and prefer ones aligned with the matter's practice area. Predictive and bench-context surfaces stay source-backed: they show sample size, confidence band, evidence links, and limitation notes rather than uncited court-strategy claims.",
+  },
+  {
+    q: "What is Litigation Intelligence?",
+    a: "It is a matter-level review surface for proceeding-sheet signals, affidavit facts and gaps, mock-hearing feedback, bench context, calibrated historical patterns, source readiness, a legal knowledge graph, and a transcript-first hearing coach. It is decision support and a training aid, not legal advice.",
   },
   {
     q: "How is tenant data isolated?",

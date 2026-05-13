@@ -129,7 +129,7 @@ export default function GeneralCounselsPage() {
           tone="light"
           eyebrow="The AI angle"
           title="Explainable answers the board will accept."
-          description="AI compresses 80 matters and 200 contracts into 'here's what we're exposed to, here's who said what, here's what's due next quarter' — with every number traceable to a source. No black-box risk scores, no favourability percentages, no surprise legal judgment."
+          description="AI compresses 80 matters and 200 contracts into 'here is what is open, here is who said what, here is what is due next quarter' - with every number traceable to a source. Litigation intelligence stays source-backed, reviewable, and explicitly non-advisory."
         >
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
             <PitchCard
@@ -146,6 +146,11 @@ export default function GeneralCounselsPage() {
               icon={BadgeCheck}
               title="Grounded recommendations"
               body="Forum, authority and next-action recommendations with rationale, assumptions, missing facts, and confidence on every option."
+            />
+            <PitchCard
+              icon={GitBranch}
+              title="Litigation Intelligence review"
+              body="Proceeding directions, affidavit gaps, mock-hearing feedback, calibrated historical patterns, and knowledge-graph relationships appear with source links and review state."
             />
             <PitchCard
               icon={ShieldCheck}

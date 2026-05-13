@@ -1,10 +1,13 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  AlertTriangle,
+  ClipboardList,
   Eye,
   File,
   FileText,
+  HelpCircle,
   Loader2,
   Pencil,
   RefreshCw,
@@ -27,6 +30,8 @@ import { Label } from "@/components/ui/Label";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { apiErrorMessage } from "@/lib/api/config";
 import {
+  analyzeAffidavitIntelligence,
+  fetchAffidavitIntelligence,
   reindexMatterAttachment,
   retryMatterAttachment,
   updateMatterAttachmentMetadata,
@@ -36,6 +41,11 @@ import type {
   MatterDocumentType,
   MatterLifecycleStage,
 } from "@/lib/api/endpoints";
+import type {
+  AffidavitIntelligenceResponse,
+  AffidavitQuestion,
+  AffidavitStatement,
+} from "@/lib/api/schemas";
 import { useCapability } from "@/lib/capabilities";
 import { useMatterWorkspace } from "@/lib/use-matter-workspace";
 import type {
@@ -50,6 +60,8 @@ const DOCUMENT_TYPE_OPTIONS: Array<{ value: MatterDocumentType; label: string }>
   { value: "vakalatnama", label: "Vakalatnama" },
   { value: "pleading_reply", label: "Pleading / reply" },
   { value: "affidavit", label: "Affidavit" },
+  { value: "chief_affidavit", label: "Chief affidavit" },
+  { value: "counter_affidavit", label: "Counter affidavit" },
   { value: "evidence", label: "Evidence" },
   { value: "written_submission", label: "Written submission" },
   { value: "interim_application", label: "Interim application" },
@@ -78,6 +90,8 @@ const DEFAULT_STAGE_BY_TYPE: Record<MatterDocumentType, MatterLifecycleStage> = 
   vakalatnama: "administrative",
   pleading_reply: "pleadings",
   affidavit: "pleadings",
+  chief_affidavit: "pleadings",
+  counter_affidavit: "pleadings",
   evidence: "evidence",
   written_submission: "arguments",
   interim_application: "interim_applications",
@@ -103,6 +117,11 @@ const LIFECYCLE_SEQUENCE: Array<MatterLifecycleStage | "unclassified"> = [
 
 const RETRY_STATUSES = new Set(["failed", "needs_ocr", "pending"]);
 const REINDEX_STATUSES = new Set(["indexed"]);
+const AFFIDAVIT_DOCUMENT_TYPES = new Set([
+  "affidavit",
+  "chief_affidavit",
+  "counter_affidavit",
+]);
 const UNCLASSIFIED = "unclassified" as const;
 const NO_LINKED_ORDER = "none";
 const NO_LINKED_HEARING = "none";
@@ -225,6 +244,19 @@ function selectClassName() {
   return "h-10 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm text-[var(--color-ink)] shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-500)]";
 }
 
+function compactLabel(value: string): string {
+  return value
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function affidavitViewHref(matterId: string, attachmentId: string): string {
+  return `/app/matters/${encodeURIComponent(matterId)}/documents/${encodeURIComponent(
+    attachmentId,
+  )}/view`;
+}
+
 export default function MatterDocumentsPage() {
   const params = useParams<{ id: string }>();
   const matterId = params.id;
@@ -232,8 +264,10 @@ export default function MatterDocumentsPage() {
   const { data } = useMatterWorkspace(matterId);
   const canUpload = useCapability("documents:upload");
   const canManage = useCapability("documents:manage");
+  const canAnalyzeAffidavit = useCapability("hearing_packs:generate");
   const fileInput = useRef<HTMLInputElement | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const [analysisPendingId, setAnalysisPendingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [metadataDraft, setMetadataDraft] = useState<MetadataDraft | null>(null);
   // BUG-043 (Hari 2026-05-11): client-side search across the loaded
@@ -260,6 +294,11 @@ export default function MatterDocumentsPage() {
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["matters", matterId, "workspace"] });
+  const affidavitQuery = useQuery({
+    queryKey: ["matters", matterId, "affidavit-intelligence"],
+    queryFn: () => fetchAffidavitIntelligence({ matterId }),
+    enabled: Boolean(matterId),
+  });
 
   const uploadMutation = useMutation({
     mutationFn: (file: File) =>
@@ -346,6 +385,22 @@ export default function MatterDocumentsPage() {
     onSettled: () => setPendingId(null),
   });
 
+  const affidavitMutation = useMutation({
+    mutationFn: (attachmentId: string) =>
+      analyzeAffidavitIntelligence({ matterId, attachmentId }),
+    onMutate: (attachmentId) => setAnalysisPendingId(attachmentId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["matters", matterId, "affidavit-intelligence"],
+      });
+      toast.success("Affidavit analysis generated.");
+    },
+    onError: (err) => {
+      toast.error(apiErrorMessage(err, "Could not analyze the affidavit."));
+    },
+    onSettled: () => setAnalysisPendingId(null),
+  });
+
   const filteredAttachments = useMemo(() => {
     const all = data?.attachments ?? [];
     const q = searchQ.trim().toLowerCase();
@@ -368,6 +423,7 @@ export default function MatterDocumentsPage() {
       return haystack.includes(q);
     });
   }, [data?.attachments, searchQ, hearingFilter]);
+
   const groupedAttachments = useMemo(
     () => groupAttachments(filteredAttachments),
     [filteredAttachments],
@@ -387,6 +443,20 @@ export default function MatterDocumentsPage() {
   );
   const isFiltered =
     searchQ.trim().length > 0 || hearingFilter !== HEARING_FILTER_ALL;
+  const affidavitSection = (
+    <AffidavitIntelligenceSection
+      matterId={matterId}
+      attachments={attachments}
+      data={affidavitQuery.data}
+      isLoading={affidavitQuery.isPending}
+      error={affidavitQuery.error}
+      canAnalyze={canAnalyzeAffidavit}
+      analysisPendingId={analysisPendingId}
+      isAnalyzePending={affidavitMutation.isPending}
+      onAnalyze={(attachmentId) => affidavitMutation.mutate(attachmentId)}
+      onRetry={() => void affidavitQuery.refetch()}
+    />
+  );
 
   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const selected = event.target.files?.[0];
@@ -567,6 +637,7 @@ export default function MatterDocumentsPage() {
     return (
       <div className="flex flex-col gap-6">
         {uploader}
+        {affidavitSection}
         <EmptyState
           icon={FileText}
           title="No documents attached yet"
@@ -583,6 +654,7 @@ export default function MatterDocumentsPage() {
   return (
     <div className="flex flex-col gap-6">
       {uploader}
+      {affidavitSection}
       {/* BUG-043 (Hari 2026-05-11): document search bar. Filters the
           rendered groups in-place so the lifecycle structure is
           preserved when a query is active. The "Showing N of M" hint
@@ -982,5 +1054,344 @@ export default function MatterDocumentsPage() {
       </Card>
       )}
     </div>
+  );
+}
+
+function AffidavitIntelligenceSection({
+  matterId,
+  attachments,
+  data,
+  isLoading,
+  error,
+  canAnalyze,
+  analysisPendingId,
+  isAnalyzePending,
+  onAnalyze,
+  onRetry,
+}: {
+  matterId: string;
+  attachments: WorkspaceAttachment[];
+  data?: AffidavitIntelligenceResponse;
+  isLoading: boolean;
+  error: Error | null;
+  canAnalyze: boolean;
+  analysisPendingId: string | null;
+  isAnalyzePending: boolean;
+  onAnalyze: (attachmentId: string) => void;
+  onRetry: () => void;
+}) {
+  const affidavitAttachments = attachments.filter((attachment) =>
+    AFFIDAVIT_DOCUMENT_TYPES.has(attachment.document_type ?? ""),
+  );
+  const latestRun = data?.latest_run ?? null;
+  const selectedAttachment = latestRun
+    ? attachments.find((attachment) => attachment.id === latestRun.attachment_id)
+    : affidavitAttachments[0] ?? null;
+  const statements = latestRun?.statements ?? [];
+  const questions = latestRun?.questions ?? [];
+  const gaps = statements.filter((statement) =>
+    ["evidence_gap", "contradiction"].includes(statement.statement_type),
+  );
+  const questionsByCategory = questions.reduce<Record<string, AffidavitQuestion[]>>(
+    (groups, question) => {
+      groups[question.category] = [...(groups[question.category] ?? []), question];
+      return groups;
+    },
+    {},
+  );
+
+  return (
+    <Card data-testid="affidavit-intelligence-section">
+      <CardContent className="p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge tone="brand">Affidavit intelligence</Badge>
+              {latestRun ? (
+                <Badge tone={latestRun.status === "completed" ? "neutral" : "warning"}>
+                  {compactLabel(latestRun.status)}
+                </Badge>
+              ) : null}
+              <Badge tone="neutral">Review required</Badge>
+            </div>
+            <h2 className="mt-2 text-base font-semibold text-[var(--color-ink)]">
+              Source-grounded hearing prep
+            </h2>
+            <p className="mt-1 max-w-3xl text-sm text-[var(--color-mute)]">
+              {data?.disclaimer ??
+                "Affidavit intelligence is source-backed hearing-preparation decision support. It is not legal advice."}
+            </p>
+          </div>
+          <div className="text-xs text-[var(--color-mute)]">
+            {latestRun ? (
+              <>
+                Generated {dateLabel(latestRun.created_at)} · {statements.length} statements ·{" "}
+                {questions.length} questions
+              </>
+            ) : (
+              "No analysis run"
+            )}
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
+          <div className="rounded-md border border-[var(--color-line)]">
+            <div className="flex items-center justify-between border-b border-[var(--color-line)] px-3 py-2">
+              <div className="flex items-center gap-2 text-sm font-semibold text-[var(--color-ink)]">
+                <FileText className="h-4 w-4 text-[var(--color-mute)]" aria-hidden />
+                Marked affidavits
+              </div>
+              <Badge tone="neutral">{affidavitAttachments.length}</Badge>
+            </div>
+            {affidavitAttachments.length === 0 ? (
+              <div
+                className="px-3 py-4 text-sm text-[var(--color-mute)]"
+                data-testid="affidavit-intelligence-empty"
+              >
+                Mark a document as chief affidavit, affidavit, or counter affidavit.
+              </div>
+            ) : (
+              <div className="divide-y divide-[var(--color-line-2)]">
+                {affidavitAttachments.map((attachment) => {
+                  const isPending =
+                    isAnalyzePending && analysisPendingId === attachment.id;
+                  return (
+                    <div
+                      key={attachment.id}
+                      className="flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div className="min-w-0">
+                        <Link
+                          href={affidavitViewHref(matterId, attachment.id)}
+                          className="truncate text-sm font-medium text-[var(--color-ink)] hover:underline"
+                          data-testid={`affidavit-source-link-${attachment.id}`}
+                        >
+                          {attachment.original_filename ?? attachment.filename ?? "Affidavit"}
+                        </Link>
+                        <div className="mt-1 flex flex-wrap gap-1.5">
+                          <Badge tone="neutral">
+                            {labelFor(DOCUMENT_TYPE_OPTIONS, attachment.document_type)}
+                          </Badge>
+                          <StatusBadge status={attachment.processing_status ?? "unknown"} />
+                        </div>
+                      </div>
+                      {canAnalyze ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={isPending}
+                          onClick={() => onAnalyze(attachment.id)}
+                          data-testid={`affidavit-analyze-${attachment.id}`}
+                        >
+                          {isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                          ) : (
+                            <ClipboardList className="h-4 w-4" aria-hidden />
+                          )}
+                          Analyze
+                        </Button>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-md border border-[var(--color-line)]">
+            <div className="flex items-center justify-between border-b border-[var(--color-line)] px-3 py-2">
+              <div className="flex items-center gap-2 text-sm font-semibold text-[var(--color-ink)]">
+                <ClipboardList className="h-4 w-4 text-[var(--color-mute)]" aria-hidden />
+                Latest analysis
+              </div>
+              {selectedAttachment ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  href={affidavitViewHref(matterId, selectedAttachment.id)}
+                >
+                  <Eye className="h-4 w-4" aria-hidden />
+                  Source
+                </Button>
+              ) : null}
+            </div>
+
+            {isLoading ? (
+              <div
+                className="flex items-center gap-2 px-3 py-4 text-sm text-[var(--color-mute)]"
+                data-testid="affidavit-intelligence-loading"
+              >
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                Loading affidavit intelligence...
+              </div>
+            ) : error ? (
+              <div
+                className="flex items-start justify-between gap-3 px-3 py-4"
+                data-testid="affidavit-intelligence-error"
+              >
+                <div className="flex gap-2 text-sm text-[var(--color-mute)]">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 text-[var(--color-warning-500)]" aria-hidden />
+                  <span>{apiErrorMessage(error, "Could not load affidavit intelligence.")}</span>
+                </div>
+                <Button type="button" variant="outline" size="sm" onClick={onRetry}>
+                  Retry
+                </Button>
+              </div>
+            ) : latestRun ? (
+              <div className="divide-y divide-[var(--color-line-2)]">
+                {latestRun.status !== "completed" ? (
+                  <div
+                    className="px-3 py-3 text-sm text-[var(--color-mute)]"
+                    data-testid="affidavit-insufficient-state"
+                  >
+                    Missing data:{" "}
+                    {latestRun.missing_data.length > 0
+                      ? latestRun.missing_data.join(", ")
+                      : "detectable affidavit statements"}
+                  </div>
+                ) : null}
+                <AffidavitStatementsList statements={statements} />
+                <AffidavitGapList gaps={gaps} />
+                <AffidavitQuestionGroups groups={questionsByCategory} />
+              </div>
+            ) : (
+              <div className="px-3 py-4 text-sm text-[var(--color-mute)]">
+                No affidavit analysis has been generated for this matter.
+              </div>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AffidavitStatementsList({
+  statements,
+}: {
+  statements: AffidavitStatement[];
+}) {
+  if (statements.length === 0) {
+    return (
+      <div className="px-3 py-3 text-sm text-[var(--color-mute)]">
+        No extracted statements are available.
+      </div>
+    );
+  }
+  return (
+    <section className="px-3 py-3" data-testid="affidavit-statements">
+      <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-[var(--color-ink)]">
+        <ClipboardList className="h-4 w-4 text-[var(--color-mute)]" aria-hidden />
+        Extracted statements
+      </div>
+      <div className="grid gap-2">
+        {statements.slice(0, 6).map((statement) => (
+          <div
+            key={statement.id}
+            className="rounded-md border border-[var(--color-line-2)] px-3 py-2"
+          >
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Badge tone="neutral">{compactLabel(statement.statement_type)}</Badge>
+              <Badge tone={statement.confidence_label === "low" ? "warning" : "neutral"}>
+                {compactLabel(statement.confidence_label)}
+              </Badge>
+              {statement.review_status === "review_required" ? (
+                <Badge tone="warning">Review required</Badge>
+              ) : null}
+            </div>
+            <p className="mt-2 text-sm text-[var(--color-ink)]">
+              {statement.statement_text}
+            </p>
+            <blockquote className="mt-2 border-l-2 border-[var(--color-line)] pl-3 text-xs text-[var(--color-mute)]">
+              {statement.source_quote}
+            </blockquote>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function AffidavitGapList({ gaps }: { gaps: AffidavitStatement[] }) {
+  if (gaps.length === 0) return null;
+  return (
+    <section className="px-3 py-3" data-testid="affidavit-gaps">
+      <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-[var(--color-ink)]">
+        <AlertTriangle className="h-4 w-4 text-[var(--color-warning-500)]" aria-hidden />
+        Evidence gaps and contradictions
+      </div>
+      <div className="grid gap-2">
+        {gaps.slice(0, 4).map((gap) => (
+          <div
+            key={gap.id}
+            className="rounded-md border border-[var(--color-line-2)] px-3 py-2 text-sm"
+          >
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Badge tone="warning">{compactLabel(gap.statement_type)}</Badge>
+              <Badge tone="warning">Review required</Badge>
+            </div>
+            <p className="mt-2 text-[var(--color-ink)]">{gap.statement_text}</p>
+            <p className="mt-1 text-xs text-[var(--color-mute)]">{gap.source_quote}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function AffidavitQuestionGroups({
+  groups,
+}: {
+  groups: Record<string, AffidavitQuestion[]>;
+}) {
+  const entries = Object.entries(groups);
+  if (entries.length === 0) {
+    return (
+      <div className="px-3 py-3 text-sm text-[var(--color-mute)]">
+        No cross-examination questions are available.
+      </div>
+    );
+  }
+  return (
+    <section className="px-3 py-3" data-testid="affidavit-question-bank">
+      <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-[var(--color-ink)]">
+        <HelpCircle className="h-4 w-4 text-[var(--color-mute)]" aria-hidden />
+        Cross-examination question bank
+      </div>
+      <div className="grid gap-3">
+        {entries.map(([category, questions]) => (
+          <div key={category}>
+            <div className="mb-1 text-xs font-semibold uppercase tracking-[0.06em] text-[var(--color-mute)]">
+              {compactLabel(category)}
+            </div>
+            <div className="grid gap-2">
+              {questions.map((question) => (
+                <article
+                  key={question.id}
+                  className="rounded-md border border-[var(--color-line-2)] px-3 py-2"
+                >
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Badge tone={question.confidence_label === "low" ? "warning" : "neutral"}>
+                      {compactLabel(question.confidence_label)}
+                    </Badge>
+                    {question.review_required ? (
+                      <Badge tone="warning">Review required</Badge>
+                    ) : null}
+                  </div>
+                  <p className="mt-2 text-sm font-medium text-[var(--color-ink)]">
+                    {question.question_text}
+                  </p>
+                  <p className="mt-1 text-xs text-[var(--color-mute)]">{question.reason}</p>
+                  <blockquote className="mt-2 border-l-2 border-[var(--color-line)] pl-3 text-xs text-[var(--color-mute)]">
+                    {question.source_quote}
+                  </blockquote>
+                </article>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
