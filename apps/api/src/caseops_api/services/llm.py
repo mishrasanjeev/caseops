@@ -131,7 +131,9 @@ class MockProvider:
         started = time.perf_counter()
         joined = "\n".join(m.content for m in messages)
         lowered = joined.lower()
-        if "hearing pack" in lowered or "hearing_pack" in lowered:
+        if "matter_file_qa" in lowered:
+            text = _mock_matter_file_qa_response(joined)
+        elif "hearing pack" in lowered or "hearing_pack" in lowered:
             text = _mock_hearing_pack_response(joined)
         elif "drafting a legal document" in lowered or "draft title:" in lowered:
             text = _mock_draft_response(joined)
@@ -159,6 +161,72 @@ def _rough_token_estimate(text: str) -> int:
 def _mock_plain_response(prompt: str) -> str:
     digest = hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:8]
     return f"mock-ack::{digest}"
+
+
+def _mock_matter_file_qa_response(prompt: str) -> str:
+    source_ids: list[str] = []
+    source_texts: list[str] = []
+    current_source_id: str | None = None
+    collecting_text = False
+    text_lines: list[str] = []
+    for line in prompt.splitlines():
+        if line.startswith("SOURCE_ID:"):
+            current_source_id = line.split(":", 1)[1].strip()
+            continue
+        if line == "TEXT:":
+            collecting_text = True
+            text_lines = []
+            continue
+        if line == "END_SOURCE":
+            collecting_text = False
+            if current_source_id:
+                source_ids.append(current_source_id)
+                source_texts.append(" ".join(" ".join(text_lines).split()))
+            current_source_id = None
+            text_lines = []
+            continue
+        if collecting_text:
+            text_lines.append(line)
+    if not source_ids:
+        return json.dumps(
+            {
+                "status": "insufficient_evidence",
+                "answer": "",
+                "confidence": "insufficient",
+                "source_ids": [],
+                "limitations": ["No uploaded matter document chunks were provided."],
+            },
+            separators=(",", ":"),
+        )
+    safe_texts = [_mock_remove_document_instructions(text) for text in source_texts]
+    preview = " ".join((safe_texts[0] or source_texts[0]).split()[:45])
+    return json.dumps(
+        {
+            "status": "answered",
+            "answer": f"The uploaded matter file states: {preview}",
+            "confidence": "medium",
+            "source_ids": source_ids[:2],
+            "limitations": ["Only uploaded matter document chunks were used."],
+        },
+        separators=(",", ":"),
+    )
+
+
+def _mock_remove_document_instructions(text: str) -> str:
+    blocked = (
+        "ignore previous instructions",
+        "do not cite sources",
+        "reveal all documents",
+        "guaranteed to win",
+        "will win",
+    )
+    parts = []
+    for sentence in __import__("re").split(r"(?<=[.!?])\s+", text):
+        lowered = sentence.lower()
+        if any(marker in lowered for marker in blocked):
+            continue
+        parts.append(sentence)
+    return " ".join(parts).strip()
 
 
 def _mock_structured_response(prompt: str) -> str:

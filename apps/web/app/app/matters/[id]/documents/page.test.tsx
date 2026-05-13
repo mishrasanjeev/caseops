@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,6 +9,9 @@ const {
   updateMetadataMock,
   retryMock,
   reindexMock,
+  askMatterFileQuestionMock,
+  fetchMatterFileQAHistoryMock,
+  exportMatterFileQANoteMock,
   fetchAffidavitMock,
   analyzeAffidavitMock,
   workspaceData,
@@ -20,6 +23,9 @@ const {
   updateMetadataMock: vi.fn(),
   retryMock: vi.fn(),
   reindexMock: vi.fn(),
+  askMatterFileQuestionMock: vi.fn(),
+  fetchMatterFileQAHistoryMock: vi.fn(),
+  exportMatterFileQANoteMock: vi.fn(),
   fetchAffidavitMock: vi.fn(),
   analyzeAffidavitMock: vi.fn(),
   workspaceData: {
@@ -46,6 +52,9 @@ vi.mock("@/lib/api/endpoints", () => ({
   updateMatterAttachmentMetadata: updateMetadataMock,
   retryMatterAttachment: retryMock,
   reindexMatterAttachment: reindexMock,
+  askMatterFileQuestion: askMatterFileQuestionMock,
+  fetchMatterFileQAHistory: fetchMatterFileQAHistoryMock,
+  exportMatterFileQANote: exportMatterFileQANoteMock,
   fetchAffidavitIntelligence: fetchAffidavitMock,
   analyzeAffidavitIntelligence: analyzeAffidavitMock,
 }));
@@ -67,6 +76,11 @@ vi.mock("sonner", () => ({
 }));
 
 import MatterDocumentsPage from "@/app/app/matters/[id]/documents/page";
+import {
+  matterFileQAExportNoteResponse,
+  matterFileQAHistoryResponse,
+  matterFileQAResponse,
+} from "@/lib/api/schemas";
 
 function withClient(children: ReactNode) {
   const client = new QueryClient({
@@ -85,8 +99,22 @@ describe("MatterDocumentsPage", () => {
     updateMetadataMock.mockReset();
     retryMock.mockReset();
     reindexMock.mockReset();
+    askMatterFileQuestionMock.mockReset();
+    fetchMatterFileQAHistoryMock.mockReset();
+    exportMatterFileQANoteMock.mockReset();
     fetchAffidavitMock.mockReset();
     analyzeAffidavitMock.mockReset();
+    fetchMatterFileQAHistoryMock.mockResolvedValue({
+      matter_id: "m1",
+      entries: [],
+    });
+    exportMatterFileQANoteMock.mockResolvedValue({
+      matter_id: "m1",
+      entry_id: "h1",
+      note_id: "note1",
+      already_exported: false,
+      exported_at: "2026-05-13T10:15:00Z",
+    });
     fetchAffidavitMock.mockResolvedValue({
       matter_id: "m1",
       generated_at: "2026-05-11T10:00:00Z",
@@ -134,8 +162,6 @@ describe("MatterDocumentsPage", () => {
       documentDate: "2026-05-03",
       sequenceIndex: 5,
       linkedCourtOrderId: null,
-      // BUG-045 (Hari 2026-05-11): hearing_id is part of the upload
-      // payload now; defaults to null when no hearing is selected.
       hearingId: null,
     });
     expect(toastSuccess).toHaveBeenCalled();
@@ -210,8 +236,6 @@ describe("MatterDocumentsPage", () => {
       document_date: "2026-05-01",
       sequence_index: 12,
       linked_court_order_id: "o1",
-      // BUG-045 (Hari 2026-05-11): metadata patch now also passes
-      // hearing_id; null when nothing is selected in the editor.
       hearing_id: null,
     });
     expect(toastSuccess).toHaveBeenCalledWith("Document metadata updated.");
@@ -304,6 +328,671 @@ describe("MatterDocumentsPage", () => {
     render(withClient(<MatterDocumentsPage />));
     expect(screen.queryByTestId("matter-attachment-retry-a1")).toBeNull();
     expect(screen.queryByTestId("matter-attachment-reindex-a1")).toBeNull();
+  });
+
+  it("renders Ask case file with safe disclaimer copy", () => {
+    useCapabilityMock.mockImplementation((cap: string) => cap === "ai:generate");
+
+    render(withClient(<MatterDocumentsPage />));
+
+    const section = screen.getByTestId("matter-file-qa-section");
+    expect(section).toHaveTextContent("Ask case file");
+    expect(section).toHaveTextContent(
+      "Answers use uploaded matter documents only and require lawyer review.",
+    );
+    expect(screen.getByTestId("matter-file-qa-empty")).toHaveTextContent(
+      "Ask a question about uploaded matter documents.",
+    );
+  });
+
+  it("submits a Matter File Q&A question and renders answer sources", async () => {
+    useCapabilityMock.mockImplementation((cap: string) => cap === "ai:generate");
+    attachments([
+      {
+        id: "a1",
+        filename: "fir.pdf",
+        original_filename: "fir.pdf",
+        created_at: "2026-05-13T10:00:00Z",
+      },
+    ]);
+    askMatterFileQuestionMock.mockResolvedValue({
+      matter_id: "m1",
+      question: "Which IPC sections are invoked?",
+      status: "answered",
+      answer: "The uploaded FIR refers to IPC Sections 420 and 406.",
+      confidence: "medium",
+      sources: [
+        {
+          source_id: "src_1",
+          attachment_id: "a1",
+          attachment_name: "fir.pdf",
+          chunk_id: "chunk1",
+          chunk_index: 0,
+          document_type: "complaint_petition",
+          page_number: 3,
+          snippet: "The FIR invokes IPC Sections 420 and 406 against Party B.",
+          score: 87,
+          matched_terms: ["IPC", "420"],
+        },
+      ],
+      structured_items: [
+        {
+          item_type: "section",
+          label: "IPC Section 420",
+          value: "The FIR invokes IPC Sections 420 and 406 against Party B.",
+          source_ids: ["src_1"],
+          confidence: "medium",
+          evidence_status: "supported",
+        },
+      ],
+      limitations: [
+        "Only uploaded matter document chunks were used.",
+        "This is decision support for lawyer review, not legal advice.",
+      ],
+      provider: "caseops-matter-file-qa-v1",
+      generated_at: "2026-05-13T10:00:00Z",
+      model_run_id: "run1",
+    });
+
+    render(withClient(<MatterDocumentsPage />));
+    await userEvent.type(
+      screen.getByTestId("matter-file-qa-question"),
+      "Which IPC sections are invoked?",
+    );
+    await userEvent.selectOptions(screen.getByTestId("matter-file-qa-mode"), "sections");
+    await userEvent.click(screen.getByTestId("matter-file-qa-submit"));
+
+    await waitFor(() => expect(askMatterFileQuestionMock).toHaveBeenCalledTimes(1));
+    expect(askMatterFileQuestionMock).toHaveBeenCalledWith({
+      matterId: "m1",
+      question: "Which IPC sections are invoked?",
+      answerMode: "sections",
+      limit: 8,
+    });
+    expect(await screen.findByTestId("matter-file-qa-result-answered")).toHaveTextContent(
+      "IPC Sections 420 and 406",
+    );
+    expect(screen.getByTestId("matter-file-qa-sources")).toHaveTextContent("fir.pdf");
+    expect(screen.getByTestId("matter-file-qa-structured-items")).toHaveTextContent(
+      "IPC Section 420",
+    );
+    expect(screen.getByTestId("matter-file-qa-source-src_1")).toHaveAttribute(
+      "href",
+      "/app/matters/m1/documents/a1/view",
+    );
+    expect(screen.getByText("Page 3")).toBeInTheDocument();
+    expect(screen.getByTestId("matter-file-qa-section").textContent).not.toMatch(
+      /legal advice/i,
+    );
+  });
+
+  it("renders Matter File Q&A history and exports a saved answer", async () => {
+    useCapabilityMock.mockImplementation((cap: string) => cap === "ai:generate");
+    attachments([
+      {
+        id: "a1",
+        filename: "complaint.pdf",
+        original_filename: "complaint.pdf",
+        created_at: "2026-05-13T10:00:00Z",
+      },
+    ]);
+    fetchMatterFileQAHistoryMock.mockResolvedValue({
+      matter_id: "m1",
+      entries: [
+        {
+          id: "h1",
+          matter_id: "m1",
+          question: "What allegation appears?",
+          answer_status: "answered",
+          answer: "The uploaded complaint alleges non-payment under Invoice A-12.",
+          confidence: "medium",
+          answer_mode: "allegations",
+          sources: [
+            {
+              source_id: "src_history",
+              attachment_id: "a1",
+              attachment_name: "complaint.pdf",
+              chunk_id: "chunk1",
+              chunk_index: 0,
+              document_type: "complaint_petition",
+              page_number: null,
+              snippet: "The complaint alleges non-payment under Invoice A-12.",
+              score: 81,
+              matched_terms: ["complaint"],
+            },
+          ],
+          structured_items: [],
+          limitations: ["Only uploaded matter document chunks were used."],
+          model_run_id: "run1",
+          exported_note_id: null,
+          exported_at: null,
+          created_at: "2026-05-13T10:10:00Z",
+        },
+      ],
+    });
+
+    render(withClient(<MatterDocumentsPage />));
+
+    const history = await screen.findByTestId("matter-file-qa-history");
+    expect(history).toHaveTextContent("Recent Q&A");
+    await waitFor(() => expect(history).toHaveTextContent("What allegation appears?"));
+    expect(history).toHaveTextContent("What allegation appears?");
+    expect(history).toHaveTextContent("non-payment under Invoice A-12");
+    expect(screen.getByTestId("matter-file-qa-history-source-src_history")).toHaveAttribute(
+      "href",
+      "/app/matters/m1/documents/a1/view",
+    );
+
+    await userEvent.click(screen.getByTestId("matter-file-qa-history-reopen-h1"));
+    expect(screen.getByTestId("matter-file-qa-question")).toHaveValue(
+      "What allegation appears?",
+    );
+    expect(await screen.findByTestId("matter-file-qa-result-answered")).toHaveTextContent(
+      "non-payment under Invoice A-12",
+    );
+
+    await userEvent.click(screen.getByTestId("matter-file-qa-history-export-h1"));
+    await waitFor(() => expect(exportMatterFileQANoteMock).toHaveBeenCalledTimes(1));
+    expect(exportMatterFileQANoteMock).toHaveBeenCalledWith({
+      matterId: "m1",
+      entryId: "h1",
+    });
+    expect(toastSuccess).toHaveBeenCalledWith("Matter File Q&A note exported.");
+  });
+
+  it("does not link saved Matter File Q&A history sources for unknown attachments", async () => {
+    useCapabilityMock.mockImplementation((cap: string) => cap === "ai:generate");
+    attachments([
+      {
+        id: "a1",
+        filename: "known.pdf",
+        original_filename: "known.pdf",
+        created_at: "2026-05-13T10:00:00Z",
+      },
+    ]);
+    fetchMatterFileQAHistoryMock.mockResolvedValue({
+      matter_id: "m1",
+      entries: [
+        {
+          id: "h2",
+          matter_id: "m1",
+          question: "What does the missing source say?",
+          answer_status: "answered",
+          answer: "The uploaded chunks mention a notice.",
+          confidence: "medium",
+          answer_mode: "direct",
+          sources: [
+            {
+              source_id: "src_missing",
+              attachment_id: "missing",
+              attachment_name: "missing.pdf",
+              chunk_id: "chunk1",
+              chunk_index: 0,
+              document_type: null,
+              page_number: null,
+              snippet: "A notice appears in the uploaded chunks.",
+              score: 70,
+              matched_terms: ["notice"],
+            },
+          ],
+          structured_items: [],
+          limitations: ["Only uploaded matter document chunks were used."],
+          model_run_id: null,
+          exported_note_id: null,
+          exported_at: null,
+          created_at: "2026-05-13T10:10:00Z",
+        },
+      ],
+    });
+
+    render(withClient(<MatterDocumentsPage />));
+
+    const sourceLabel = await screen.findByTestId(
+      "matter-file-qa-history-source-src_missing",
+    );
+    expect(sourceLabel.tagName.toLowerCase()).toBe("span");
+    expect(sourceLabel).not.toHaveAttribute("href");
+    expect(screen.getByText("Source link unavailable")).toBeInTheDocument();
+  });
+
+  it("renders Matter File Q&A gap structured items without advice copy", async () => {
+    useCapabilityMock.mockImplementation((cap: string) => cap === "ai:generate");
+    askMatterFileQuestionMock.mockResolvedValue({
+      matter_id: "m1",
+      question: "What record gaps appear?",
+      status: "partial_answer",
+      answer: "The uploaded chunks identify a record gap for review.",
+      confidence: "low",
+      sources: [],
+      structured_items: [
+        {
+          item_type: "gap",
+          label: "Record gap",
+          value: "Record gap identified in source: No supporting invoice is attached.",
+          source_ids: ["src_1"],
+          confidence: "low",
+          evidence_status: "partial",
+        },
+      ],
+      limitations: ["Only uploaded matter document chunks were used."],
+      provider: "caseops-matter-file-qa-v1",
+      generated_at: "2026-05-13T10:00:00Z",
+      model_run_id: "run1",
+    });
+
+    render(withClient(<MatterDocumentsPage />));
+    await userEvent.type(screen.getByTestId("matter-file-qa-question"), "What record gaps appear?");
+    await userEvent.selectOptions(screen.getByTestId("matter-file-qa-mode"), "gaps");
+    await userEvent.click(screen.getByTestId("matter-file-qa-submit"));
+
+    const items = await screen.findByTestId("matter-file-qa-structured-items");
+    expect(items).toHaveTextContent("Record gap");
+    expect(items).toHaveTextContent("No supporting invoice is attached");
+    expect(items.textContent).not.toMatch(/legal[- ]advice|will win|will lose|win probability/i);
+  });
+
+  it("renders partial Matter File Q&A answers", async () => {
+    useCapabilityMock.mockImplementation((cap: string) => cap === "ai:generate");
+    askMatterFileQuestionMock.mockResolvedValue({
+      matter_id: "m1",
+      question: "Summarise the uploaded record.",
+      status: "partial_answer",
+      answer: "The uploaded chunks partially address the timeline.",
+      confidence: "low",
+      sources: [],
+      limitations: ["Only uploaded matter document chunks were used."],
+      provider: "caseops-matter-file-qa-v1",
+      generated_at: "2026-05-13T10:00:00Z",
+      model_run_id: "run1",
+    });
+
+    render(withClient(<MatterDocumentsPage />));
+    await userEvent.type(
+      screen.getByTestId("matter-file-qa-question"),
+      "Summarise the uploaded record.",
+    );
+    await userEvent.click(screen.getByTestId("matter-file-qa-submit"));
+
+    expect(await screen.findByTestId("matter-file-qa-result-partial_answer")).toHaveTextContent(
+      "Partial answer prepared from the available uploaded chunks.",
+    );
+    expect(screen.getByTestId("matter-file-qa-result-partial_answer")).toHaveTextContent(
+      "partially address the timeline",
+    );
+  });
+
+  it("renders Matter File Q&A loading state", async () => {
+    useCapabilityMock.mockImplementation((cap: string) => cap === "ai:generate");
+    let resolveQuestion: (value: unknown) => void = () => {};
+    askMatterFileQuestionMock.mockReturnValue(
+      new Promise((resolve) => {
+        resolveQuestion = resolve;
+      }),
+    );
+
+    render(withClient(<MatterDocumentsPage />));
+    await userEvent.type(screen.getByTestId("matter-file-qa-question"), "What is alleged?");
+    await userEvent.click(screen.getByTestId("matter-file-qa-submit"));
+
+    expect(await screen.findByTestId("matter-file-qa-loading")).toHaveTextContent(
+      "Reading indexed matter chunks",
+    );
+
+    await act(async () => {
+      resolveQuestion({
+        matter_id: "m1",
+        question: "What is alleged?",
+        status: "answered",
+        answer: "The uploaded chunks refer to a payment dispute.",
+        confidence: "medium",
+        sources: [],
+        limitations: ["Only uploaded matter document chunks were used."],
+        provider: "caseops-matter-file-qa-v1",
+        generated_at: "2026-05-13T10:00:00Z",
+        model_run_id: "run1",
+      });
+    });
+    expect(await screen.findByTestId("matter-file-qa-result-answered")).toHaveTextContent(
+      "payment dispute",
+    );
+  });
+
+  it("does not link Matter File Q&A sources for unknown attachment IDs", async () => {
+    useCapabilityMock.mockImplementation((cap: string) => cap === "ai:generate");
+    attachments([
+      {
+        id: "a1",
+        filename: "known.pdf",
+        original_filename: "known.pdf",
+        created_at: "2026-05-13T10:00:00Z",
+      },
+    ]);
+    askMatterFileQuestionMock.mockResolvedValue({
+      matter_id: "m1",
+      question: "What does the unknown source say?",
+      status: "answered",
+      answer: "The uploaded chunks refer to a notice.",
+      confidence: "medium",
+      sources: [
+        {
+          source_id: "src_unknown",
+          attachment_id: "missing-attachment",
+          attachment_name: "unknown.pdf",
+          chunk_id: "chunk1",
+          chunk_index: 0,
+          document_type: null,
+          page_number: null,
+          snippet: "A notice was issued on 1 May.",
+          score: 75,
+          matched_terms: ["notice"],
+        },
+      ],
+      limitations: ["Only uploaded matter document chunks were used."],
+      provider: "caseops-matter-file-qa-v1",
+      generated_at: "2026-05-13T10:00:00Z",
+      model_run_id: "run1",
+    });
+
+    render(withClient(<MatterDocumentsPage />));
+    await userEvent.type(
+      screen.getByTestId("matter-file-qa-question"),
+      "What does the unknown source say?",
+    );
+    await userEvent.click(screen.getByTestId("matter-file-qa-submit"));
+
+    const sourceLabel = await screen.findByTestId("matter-file-qa-source-src_unknown");
+    expect(sourceLabel.tagName.toLowerCase()).toBe("span");
+    expect(sourceLabel).not.toHaveAttribute("href");
+    expect(screen.getByText("Source link unavailable")).toBeInTheDocument();
+  });
+
+  it("renders insufficient evidence, processing required, and no documents states", async () => {
+    useCapabilityMock.mockImplementation((cap: string) => cap === "ai:generate");
+    const refusals = [
+      {
+        status: "insufficient_evidence",
+        expected: "The uploaded chunks did not provide enough support",
+      },
+      {
+        status: "processing_required",
+        expected: "usable indexed chunks are not ready",
+      },
+      {
+        status: "no_documents",
+        expected: "Upload matter documents before asking",
+      },
+    ] as const;
+
+    for (const refusal of refusals) {
+      askMatterFileQuestionMock.mockResolvedValueOnce({
+        matter_id: "m1",
+        question: "What does the file say?",
+        status: refusal.status,
+        answer: null,
+        confidence: "insufficient",
+        sources: [],
+        limitations: ["Only uploaded matter document chunks were used."],
+        provider: "caseops-matter-file-qa-v1",
+        generated_at: "2026-05-13T10:00:00Z",
+        model_run_id: null,
+      });
+
+      const { unmount } = render(withClient(<MatterDocumentsPage />));
+      await userEvent.type(
+        screen.getByTestId("matter-file-qa-question"),
+        "What does the file say?",
+      );
+      await userEvent.click(screen.getByTestId("matter-file-qa-submit"));
+
+      expect(
+        await screen.findByTestId(`matter-file-qa-result-${refusal.status}`),
+      ).toHaveTextContent(refusal.expected);
+      unmount();
+    }
+  });
+
+  it("renders Matter File Q&A error state", async () => {
+    useCapabilityMock.mockImplementation((cap: string) => cap === "ai:generate");
+    askMatterFileQuestionMock.mockRejectedValue(new Error("Provider unavailable"));
+
+    render(withClient(<MatterDocumentsPage />));
+    await userEvent.type(screen.getByTestId("matter-file-qa-question"), "What is alleged?");
+    await userEvent.click(screen.getByTestId("matter-file-qa-submit"));
+
+    expect(await screen.findByTestId("matter-file-qa-error")).toHaveTextContent(
+      "Provider unavailable",
+    );
+  });
+
+  it("keeps Ask case file copy within safety boundaries", () => {
+    useCapabilityMock.mockImplementation(() => false);
+
+    render(withClient(<MatterDocumentsPage />));
+
+    const section = screen.getByTestId("matter-file-qa-section");
+    expect(section.textContent).not.toMatch(
+      /legal[- ]advice|guaranteed outcome|guaranteed to win|will win|will lose|win probability|loss probability|win\s*(?:[/-]|\s+)\s*loss|judge reputation|judge likes|judge dislikes|favorable judge|emotion|psychological|biometric|mental[- ]health|lie detection/i,
+    );
+  });
+
+  it("withholds unsafe generated Matter File Q&A copy variants", async () => {
+    useCapabilityMock.mockImplementation((cap: string) => cap === "ai:generate");
+    const unsafePhrases = [
+      "legal advice",
+      "legal-advice",
+      "guaranteed outcome",
+      "guaranteed to win",
+      "will win",
+      "will lose",
+      "win probability",
+      "loss probability",
+      "win/loss",
+      "win loss",
+      "judge reputation",
+      "judge likes",
+      "judge dislikes",
+      "judge likes/dislikes",
+      "favorable judge",
+      "emotion",
+      "psychological",
+      "biometric",
+      "mental-health",
+      "mental-health scoring",
+      "lie detection",
+      "reveal all tenant documents",
+    ];
+
+    for (const phrase of unsafePhrases) {
+      fetchMatterFileQAHistoryMock.mockResolvedValueOnce({
+        matter_id: "m1",
+        entries: [
+          {
+            id: `hist-${phrase.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`,
+            matter_id: "m1",
+            question: "What does the saved file answer say?",
+            answer_status: "answered",
+            answer: `Saved answer contains ${phrase}.`,
+            confidence: "medium",
+            answer_mode: "direct",
+            sources: [],
+            structured_items: [],
+            limitations: [`Saved limitation contains ${phrase}.`],
+            model_run_id: "run-history",
+            created_at: "2026-05-13T09:45:00Z",
+            exported_note_id: null,
+          },
+        ],
+      });
+      askMatterFileQuestionMock.mockResolvedValueOnce({
+        matter_id: "m1",
+        question: "What does the file say?",
+        status: "answered",
+        answer: `This answer contains ${phrase}.`,
+        confidence: "medium",
+        sources: [],
+        limitations: [`Limitation contains ${phrase}.`],
+        provider: "caseops-matter-file-qa-v1",
+        generated_at: "2026-05-13T10:00:00Z",
+        model_run_id: "run1",
+      });
+
+      const { unmount } = render(withClient(<MatterDocumentsPage />));
+      await userEvent.type(
+        screen.getByTestId("matter-file-qa-question"),
+        "What does the file say?",
+      );
+      await userEvent.click(screen.getByTestId("matter-file-qa-submit"));
+
+      const section = await screen.findByTestId("matter-file-qa-result-answered");
+      expect(section).toHaveTextContent(
+        "The answer was withheld because it did not meet Matter File Q&A display rules.",
+      );
+      expect(screen.getByTestId("matter-file-qa-section").textContent?.toLowerCase()).not.toContain(
+        phrase.toLowerCase(),
+      );
+      unmount();
+    }
+  });
+
+  it("rejects invalid Matter File Q&A API shapes in the frontend schema", () => {
+    const validResponse = {
+      matter_id: "m1",
+      question: "What is alleged?",
+      status: "answered",
+      answer: "The complaint alleges non-payment.",
+      confidence: "medium",
+      sources: [
+        {
+          source_id: "src_1",
+          attachment_id: "a1",
+          attachment_name: "complaint.pdf",
+          chunk_id: "chunk1",
+          chunk_index: 0,
+          document_type: "complaint_petition",
+          page_number: null,
+          snippet: "The complaint alleges non-payment under Invoice A-12.",
+          score: 80,
+          matched_terms: ["complaint"],
+        },
+      ],
+      structured_items: [
+        {
+          item_type: "section",
+          label: "IPC Section 420",
+          value: "The complaint alleges non-payment.",
+          source_ids: ["src_1"],
+          confidence: "medium",
+          evidence_status: "supported",
+        },
+      ],
+      limitations: ["Only uploaded matter document chunks were used."],
+      provider: "caseops-matter-file-qa-v1",
+      generated_at: "2026-05-13T10:00:00Z",
+      model_run_id: "run1",
+    };
+
+    expect(matterFileQAResponse.parse(validResponse).status).toBe("answered");
+    expect(
+      matterFileQAHistoryResponse.parse({
+        matter_id: "m1",
+        entries: [
+          {
+            id: "h1",
+            matter_id: "m1",
+            question: "What is alleged?",
+            answer_status: "answered",
+            answer: "The complaint alleges non-payment.",
+            confidence: "medium",
+            answer_mode: "direct",
+            sources: validResponse.sources,
+            structured_items: validResponse.structured_items,
+            limitations: validResponse.limitations,
+            model_run_id: "run1",
+            exported_note_id: null,
+            exported_at: null,
+            created_at: "2026-05-13T10:00:00Z",
+          },
+        ],
+      }).entries[0].id,
+    ).toBe("h1");
+    expect(
+      matterFileQAExportNoteResponse.parse({
+        matter_id: "m1",
+        entry_id: "h1",
+        note_id: "note1",
+        already_exported: false,
+        exported_at: "2026-05-13T10:10:00Z",
+      }).note_id,
+    ).toBe("note1");
+    expect(() =>
+      matterFileQAResponse.parse({ ...validResponse, status: "unsupported" }),
+    ).toThrow();
+    expect(() =>
+      matterFileQAHistoryResponse.parse({
+        matter_id: "m1",
+        entries: [
+          {
+            id: "",
+            matter_id: "m1",
+            question: "What is alleged?",
+            answer_status: "answered",
+            answer: "The complaint alleges non-payment.",
+            confidence: "medium",
+            answer_mode: "direct",
+            sources: validResponse.sources,
+            structured_items: [],
+            limitations: [],
+            model_run_id: null,
+            exported_note_id: null,
+            exported_at: null,
+            created_at: "2026-05-13T10:00:00Z",
+          },
+        ],
+      }),
+    ).toThrow();
+    expect(() =>
+      matterFileQAExportNoteResponse.parse({
+        matter_id: "m1",
+        entry_id: "",
+        note_id: "note1",
+        already_exported: false,
+        exported_at: "2026-05-13T10:10:00Z",
+      }),
+    ).toThrow();
+    expect(() =>
+      matterFileQAResponse.parse({
+        ...validResponse,
+        sources: [{ ...validResponse.sources[0], chunk_id: undefined }],
+      }),
+    ).toThrow();
+    expect(() =>
+      matterFileQAResponse.parse({
+        ...validResponse,
+        sources: [{ ...validResponse.sources[0], attachment_id: "" }],
+      }),
+    ).toThrow();
+    expect(() =>
+      matterFileQAResponse.parse({
+        ...validResponse,
+        sources: [{ ...validResponse.sources[0], chunk_id: "" }],
+      }),
+    ).toThrow();
+    expect(() =>
+      matterFileQAResponse.parse({
+        ...validResponse,
+        structured_items: [
+          { ...validResponse.structured_items[0], source_ids: [""] },
+        ],
+      }),
+    ).toThrow();
+    expect(() =>
+      matterFileQAResponse.parse({
+        ...validResponse,
+        structured_items: [
+          { ...validResponse.structured_items[0], item_type: "prediction" },
+        ],
+      }),
+    ).toThrow();
   });
 
   it("renders affidavit statements, question bank, review state, and source links", async () => {

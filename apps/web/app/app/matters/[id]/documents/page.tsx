@@ -9,10 +9,12 @@ import {
   FileText,
   HelpCircle,
   Loader2,
+  MessageSquareText,
   Pencil,
   RefreshCw,
   Save,
   Search,
+  Send,
   Upload,
   X,
 } from "lucide-react";
@@ -28,10 +30,14 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { Textarea } from "@/components/ui/Textarea";
 import { apiErrorMessage } from "@/lib/api/config";
 import {
+  askMatterFileQuestion,
   analyzeAffidavitIntelligence,
+  exportMatterFileQANote,
   fetchAffidavitIntelligence,
+  fetchMatterFileQAHistory,
   reindexMatterAttachment,
   retryMatterAttachment,
   updateMatterAttachmentMetadata,
@@ -45,6 +51,10 @@ import type {
   AffidavitIntelligenceResponse,
   AffidavitQuestion,
   AffidavitStatement,
+  MatterFileQAAnswerMode,
+  MatterFileQAHistoryEntry,
+  MatterFileQAResponse,
+  MatterFileQAStructuredItem,
 } from "@/lib/api/schemas";
 import { useCapability } from "@/lib/capabilities";
 import { useMatterWorkspace } from "@/lib/use-matter-workspace";
@@ -122,6 +132,18 @@ const AFFIDAVIT_DOCUMENT_TYPES = new Set([
   "chief_affidavit",
   "counter_affidavit",
 ]);
+const MATTER_FILE_QA_MODES: Array<{
+  value: MatterFileQAAnswerMode;
+  label: string;
+}> = [
+  { value: "direct", label: "Direct answer" },
+  { value: "summary", label: "Summary" },
+  { value: "sections", label: "Sections" },
+  { value: "allegations", label: "Allegations" },
+  { value: "evidence", label: "Evidence" },
+  { value: "chronology", label: "Chronology" },
+  { value: "gaps", label: "Gaps" },
+];
 const UNCLASSIFIED = "unclassified" as const;
 const NO_LINKED_ORDER = "none";
 const NO_LINKED_HEARING = "none";
@@ -265,6 +287,7 @@ export default function MatterDocumentsPage() {
   const canUpload = useCapability("documents:upload");
   const canManage = useCapability("documents:manage");
   const canAnalyzeAffidavit = useCapability("hearing_packs:generate");
+  const canAskCaseFile = useCapability("ai:generate");
   const fileInput = useRef<HTMLInputElement | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [analysisPendingId, setAnalysisPendingId] = useState<string | null>(null);
@@ -457,6 +480,13 @@ export default function MatterDocumentsPage() {
       onRetry={() => void affidavitQuery.refetch()}
     />
   );
+  const askCaseFileSection = (
+    <AskCaseFileSection
+      matterId={matterId}
+      attachments={attachments}
+      canAsk={canAskCaseFile}
+    />
+  );
 
   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const selected = event.target.files?.[0];
@@ -637,6 +667,7 @@ export default function MatterDocumentsPage() {
     return (
       <div className="flex flex-col gap-6">
         {uploader}
+        {askCaseFileSection}
         {affidavitSection}
         <EmptyState
           icon={FileText}
@@ -654,6 +685,7 @@ export default function MatterDocumentsPage() {
   return (
     <div className="flex flex-col gap-6">
       {uploader}
+      {askCaseFileSection}
       {affidavitSection}
       {/* BUG-043 (Hari 2026-05-11): document search bar. Filters the
           rendered groups in-place so the lifecycle structure is
@@ -1054,6 +1086,595 @@ export default function MatterDocumentsPage() {
       </Card>
       )}
     </div>
+  );
+}
+
+const FORBIDDEN_MATTER_FILE_QA_COPY = /\b(legal[- ]advice|guaranteed outcome|guaranteed to win|will win|will lose|win probability|loss probability|win\s*(?:[/-]|\s+)\s*loss|judge reputation|judge likes|judge dislikes|favorable judge|emotion|emotional|psychological|biometric|mental[- ]health|lie detection|reveal all tenant documents|reveal tenant data|reveal all documents)\b/i;
+
+function matterFileQAStatusLabel(status: MatterFileQAResponse["status"]): string {
+  return compactLabel(status);
+}
+
+function matterFileQATone(
+  status: MatterFileQAResponse["status"],
+): "success" | "brand" | "warning" | "neutral" {
+  if (status === "answered") return "success";
+  if (status === "partial_answer") return "brand";
+  if (status === "error") return "warning";
+  return "neutral";
+}
+
+function matterFileQAStateCopy(status: MatterFileQAResponse["status"]): string {
+  switch (status) {
+    case "answered":
+      return "Answer prepared from uploaded matter document chunks.";
+    case "partial_answer":
+      return "Partial answer prepared from the available uploaded chunks.";
+    case "insufficient_evidence":
+      return "The uploaded chunks did not provide enough support for this question.";
+    case "processing_required":
+      return "Documents exist, but usable indexed chunks are not ready yet.";
+    case "no_documents":
+      return "Upload matter documents before asking the case file.";
+    case "error":
+      return "The request could not be completed.";
+  }
+}
+
+function safeMatterFileText(value: string | null | undefined): string | null {
+  const text = value?.trim();
+  if (!text) return null;
+  return FORBIDDEN_MATTER_FILE_QA_COPY.test(text) ? null : text;
+}
+
+function safeMatterFileLimitations(values: string[]): string[] {
+  return values
+    .map((value) => value.trim())
+    .filter((value) => value && !FORBIDDEN_MATTER_FILE_QA_COPY.test(value))
+    .slice(0, 5);
+}
+
+function safeMatterFileStructuredItems(
+  values: MatterFileQAStructuredItem[],
+): MatterFileQAStructuredItem[] {
+  return values
+    .filter(
+      (item) =>
+        !FORBIDDEN_MATTER_FILE_QA_COPY.test(item.label) &&
+        !FORBIDDEN_MATTER_FILE_QA_COPY.test(item.value),
+    )
+    .slice(0, 12);
+}
+
+function matterFileSourceHref(matterId: string, attachmentId: string): string {
+  return `/app/matters/${encodeURIComponent(matterId)}/documents/${encodeURIComponent(
+    attachmentId,
+  )}/view`;
+}
+
+function matterFileHistoryEntryToResponse(
+  entry: MatterFileQAHistoryEntry,
+): MatterFileQAResponse {
+  return {
+    matter_id: entry.matter_id,
+    question: entry.question,
+    status: entry.answer_status,
+    answer: entry.answer,
+    confidence: entry.confidence,
+    sources: entry.sources,
+    structured_items: entry.structured_items,
+    limitations: entry.limitations,
+    provider: "caseops-matter-file-qa-v1",
+    generated_at: entry.created_at,
+    model_run_id: entry.model_run_id,
+    history_entry_id: entry.id,
+  };
+}
+
+function compactDateTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function AskCaseFileSection({
+  matterId,
+  attachments,
+  canAsk,
+}: {
+  matterId: string;
+  attachments: WorkspaceAttachment[];
+  canAsk: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const [question, setQuestion] = useState("");
+  const [answerMode, setAnswerMode] = useState<MatterFileQAAnswerMode>("direct");
+  const [result, setResult] = useState<MatterFileQAResponse | null>(null);
+  const knownAttachmentIds = useMemo(
+    () => new Set(attachments.map((attachment) => attachment.id)),
+    [attachments],
+  );
+  const trimmedQuestion = question.trim();
+  const canSubmit = canAsk && trimmedQuestion.length >= 4;
+
+  const qaMutation = useMutation({
+    mutationFn: () =>
+      askMatterFileQuestion({
+        matterId,
+        question: trimmedQuestion,
+        answerMode,
+        limit: 8,
+      }),
+    onMutate: () => setResult(null),
+    onSuccess: async (response) => {
+      setResult(response);
+      await queryClient.invalidateQueries({
+        queryKey: ["matters", matterId, "file-qa-history"],
+      });
+    },
+  });
+  const historyQuery = useQuery({
+    queryKey: ["matters", matterId, "file-qa-history"],
+    queryFn: () => fetchMatterFileQAHistory({ matterId }),
+    enabled: Boolean(matterId && canAsk),
+  });
+  const exportMutation = useMutation({
+    mutationFn: (entryId: string) => exportMatterFileQANote({ matterId, entryId }),
+    onSuccess: async (response) => {
+      await queryClient.invalidateQueries({
+        queryKey: ["matters", matterId, "file-qa-history"],
+      });
+      toast.success(
+        response.already_exported
+          ? "Matter File Q&A note already exported."
+          : "Matter File Q&A note exported.",
+      );
+    },
+    onError: (err) => {
+      toast.error(apiErrorMessage(err, "Could not export the Matter File Q&A note."));
+    },
+  });
+
+  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canSubmit || qaMutation.isPending) return;
+    qaMutation.mutate();
+  }
+
+  const visibleLimitations = result ? safeMatterFileLimitations(result.limitations) : [];
+  const answerText = result ? safeMatterFileText(result.answer) : null;
+  const structuredItems = result
+    ? safeMatterFileStructuredItems(result.structured_items ?? [])
+    : [];
+  const historyEntries = historyQuery.data?.entries ?? [];
+
+  function reopenHistoryEntry(entry: MatterFileQAHistoryEntry) {
+    setQuestion(entry.question);
+    setAnswerMode(entry.answer_mode);
+    setResult(matterFileHistoryEntryToResponse(entry));
+  }
+
+  return (
+    <Card data-testid="matter-file-qa-section">
+      <CardContent className="p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge tone="brand">Ask case file</Badge>
+              <Badge tone="neutral">Uploaded documents only</Badge>
+            </div>
+            <h2 className="mt-2 text-base font-semibold text-[var(--color-ink)]">
+              Matter File Q&A
+            </h2>
+            <p className="mt-1 max-w-3xl text-sm text-[var(--color-mute)]">
+              Answers use uploaded matter documents only and require lawyer review.
+            </p>
+          </div>
+          {result ? (
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <Badge tone={matterFileQATone(result.status)}>
+                {matterFileQAStatusLabel(result.status)}
+              </Badge>
+              <Badge tone="neutral">{compactLabel(result.confidence)}</Badge>
+            </div>
+          ) : null}
+        </div>
+
+        <form
+          className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_13rem_auto] lg:items-end"
+          onSubmit={handleSubmit}
+        >
+          <div>
+            <Label htmlFor="matter-file-qa-question">Question</Label>
+            <Textarea
+              id="matter-file-qa-question"
+              value={question}
+              onChange={(event) => setQuestion(event.target.value)}
+              placeholder="Ask what the uploaded record says about sections, allegations, evidence, or dates."
+              className="mt-1.5 min-h-20"
+              maxLength={800}
+              data-testid="matter-file-qa-question"
+            />
+          </div>
+          <div>
+            <Label htmlFor="matter-file-qa-mode">Answer mode</Label>
+            <select
+              id="matter-file-qa-mode"
+              className={`${selectClassName()} mt-1.5`}
+              value={answerMode}
+              onChange={(event) =>
+                setAnswerMode(event.target.value as MatterFileQAAnswerMode)
+              }
+              data-testid="matter-file-qa-mode"
+            >
+              {MATTER_FILE_QA_MODES.map((mode) => (
+                <option key={mode.value} value={mode.value}>
+                  {mode.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <Button
+            type="submit"
+            size="md"
+            disabled={!canSubmit || qaMutation.isPending}
+            data-testid="matter-file-qa-submit"
+          >
+            {qaMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            ) : (
+              <Send className="h-4 w-4" aria-hidden />
+            )}
+            Ask
+          </Button>
+        </form>
+
+        {!canAsk ? (
+          <div
+            className="mt-3 rounded-md border border-[var(--color-line)] bg-[var(--color-bg-2)] px-3 py-2 text-sm text-[var(--color-mute)]"
+            data-testid="matter-file-qa-disabled"
+          >
+            AI generation access is required to ask the case file.
+          </div>
+        ) : null}
+
+        <div className="mt-4" aria-live="polite">
+          {qaMutation.isPending ? (
+            <div
+              className="flex items-center gap-2 rounded-md border border-[var(--color-line)] px-3 py-3 text-sm text-[var(--color-mute)]"
+              data-testid="matter-file-qa-loading"
+            >
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              Reading indexed matter chunks...
+            </div>
+          ) : qaMutation.isError ? (
+            <div
+              className="flex items-start gap-2 rounded-md border border-[var(--color-line)] bg-[var(--color-bg-2)] px-3 py-3 text-sm text-[var(--color-mute)]"
+              data-testid="matter-file-qa-error"
+            >
+              <AlertTriangle className="mt-0.5 h-4 w-4 text-[var(--color-warning-500)]" aria-hidden />
+              <span>{apiErrorMessage(qaMutation.error, "Could not ask the case file.")}</span>
+            </div>
+          ) : result ? (
+            <div
+              className="rounded-md border border-[var(--color-line)]"
+              data-testid={`matter-file-qa-result-${result.status}`}
+            >
+              <div className="flex flex-col gap-2 border-b border-[var(--color-line)] px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-2 text-sm font-semibold text-[var(--color-ink)]">
+                  <MessageSquareText className="h-4 w-4 text-[var(--color-mute)]" aria-hidden />
+                  {matterFileQAStatusLabel(result.status)}
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  <Badge tone={matterFileQATone(result.status)}>
+                    {matterFileQAStatusLabel(result.status)}
+                  </Badge>
+                  <Badge tone="neutral">{compactLabel(result.confidence)}</Badge>
+                  {result.model_run_id ? <Badge tone="neutral">Model run recorded</Badge> : null}
+                  {result.history_entry_id ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={exportMutation.isPending}
+                      onClick={() => exportMutation.mutate(result.history_entry_id ?? "")}
+                      data-testid="matter-file-qa-export-current"
+                    >
+                      {exportMutation.isPending ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                      ) : (
+                        <Save className="h-3.5 w-3.5" aria-hidden />
+                      )}
+                      Export note
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+              <div className="px-3 py-3">
+                <p className="text-sm text-[var(--color-mute)]">
+                  {matterFileQAStateCopy(result.status)}
+                </p>
+                {answerText ? (
+                  <p className="mt-3 max-w-4xl text-sm leading-6 text-[var(--color-ink)]">
+                    {answerText}
+                  </p>
+                ) : result.status === "answered" || result.status === "partial_answer" ? (
+                  <p className="mt-3 text-sm text-[var(--color-mute)]">
+                    The answer was withheld because it did not meet Matter File Q&A display rules.
+                  </p>
+                ) : null}
+
+                {visibleLimitations.length > 0 ? (
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {visibleLimitations.map((limitation) => (
+                      <Badge key={limitation} tone="neutral">
+                        {limitation}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : null}
+
+                {structuredItems.length > 0 ? (
+                  <div
+                    className="mt-4 grid gap-2"
+                    data-testid="matter-file-qa-structured-items"
+                  >
+                    {structuredItems.map((item, index) => (
+                      <article
+                        key={`${item.item_type}-${item.label}-${index}`}
+                        className="rounded-md border border-[var(--color-line-2)] px-3 py-2"
+                        data-testid={`matter-file-qa-structured-item-${item.item_type}`}
+                      >
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                          <div>
+                            <div className="text-xs font-medium uppercase tracking-[0.08em] text-[var(--color-mute)]">
+                              {compactLabel(item.item_type)}
+                            </div>
+                            <div className="mt-1 text-sm font-semibold text-[var(--color-ink)]">
+                              {item.label}
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            <Badge tone="neutral">{compactLabel(item.confidence)}</Badge>
+                            <Badge tone="neutral">
+                              {compactLabel(item.evidence_status)}
+                            </Badge>
+                          </div>
+                        </div>
+                        <p className="mt-2 text-sm leading-6 text-[var(--color-ink)]">
+                          {item.value}
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {item.source_ids.map((sourceId) => (
+                            <Badge key={sourceId} tone="neutral">
+                              Source {sourceId.replace(/^src_/, "")}
+                            </Badge>
+                          ))}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                ) : null}
+
+                {result.sources.length > 0 ? (
+                  <div className="mt-4 grid gap-2" data-testid="matter-file-qa-sources">
+                    {result.sources.map((source) => {
+                      const isKnownAttachment = knownAttachmentIds.has(source.attachment_id);
+
+                      return (
+                        <article
+                          key={`${source.source_id}-${source.chunk_id}`}
+                          className="rounded-md border border-[var(--color-line-2)] px-3 py-2"
+                        >
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            {isKnownAttachment ? (
+                              <Link
+                                href={matterFileSourceHref(matterId, source.attachment_id)}
+                                className="text-sm font-medium text-[var(--color-ink)] hover:underline"
+                                data-testid={`matter-file-qa-source-${source.source_id}`}
+                              >
+                                {source.attachment_name}
+                              </Link>
+                            ) : (
+                              <span
+                                className="text-sm font-medium text-[var(--color-ink)]"
+                                data-testid={`matter-file-qa-source-${source.source_id}`}
+                              >
+                                {source.attachment_name}
+                              </span>
+                            )}
+                            <div className="flex flex-wrap gap-1.5">
+                              <Badge tone="neutral">Chunk {source.chunk_index + 1}</Badge>
+                              {source.page_number ? (
+                                <Badge tone="neutral">Page {source.page_number}</Badge>
+                              ) : null}
+                              <Badge tone="neutral">Score {source.score}</Badge>
+                              {!isKnownAttachment ? (
+                                <Badge tone="neutral">Source link unavailable</Badge>
+                              ) : null}
+                            </div>
+                          </div>
+                          <p className="mt-2 text-xs leading-5 text-[var(--color-mute)]">
+                            {source.snippet}
+                          </p>
+                        </article>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : (
+            <div
+              className="rounded-md border border-[var(--color-line)] bg-[var(--color-bg-2)] px-3 py-3 text-sm text-[var(--color-mute)]"
+              data-testid="matter-file-qa-empty"
+            >
+              Ask a question about uploaded matter documents.
+            </div>
+          )}
+        </div>
+
+        <div
+          className="mt-4 border-t border-[var(--color-line)] pt-4"
+          data-testid="matter-file-qa-history"
+        >
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-[var(--color-ink)]">
+                Recent Q&A
+              </h3>
+              <p className="mt-0.5 text-xs text-[var(--color-mute)]">
+                Saved answers use bounded snippets from uploaded matter documents.
+              </p>
+            </div>
+            {historyQuery.isFetching ? (
+              <span
+                className="inline-flex items-center gap-1.5 text-xs text-[var(--color-mute)]"
+                data-testid="matter-file-qa-history-loading"
+              >
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                Loading history
+              </span>
+            ) : null}
+          </div>
+
+          {historyQuery.isError ? (
+            <div
+              className="mt-3 rounded-md border border-[var(--color-line)] bg-[var(--color-bg-2)] px-3 py-2 text-sm text-[var(--color-mute)]"
+              data-testid="matter-file-qa-history-error"
+            >
+              {apiErrorMessage(historyQuery.error, "Could not load Matter File Q&A history.")}
+            </div>
+          ) : historyEntries.length > 0 ? (
+            <div className="mt-3 grid gap-2">
+              {historyEntries.map((entry) => {
+                const safeAnswer = safeMatterFileText(entry.answer);
+                const safeSources = entry.sources.slice(0, 3);
+
+                return (
+                  <article
+                    key={entry.id}
+                    className="rounded-md border border-[var(--color-line-2)] px-3 py-2"
+                    data-testid="matter-file-qa-history-entry"
+                  >
+                    <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <Badge tone={matterFileQATone(entry.answer_status)}>
+                            {matterFileQAStatusLabel(entry.answer_status)}
+                          </Badge>
+                          <Badge tone="neutral">{compactLabel(entry.answer_mode)}</Badge>
+                          <Badge tone="neutral">{compactDateTime(entry.created_at)}</Badge>
+                          {entry.exported_note_id ? (
+                            <Badge tone="neutral">Exported</Badge>
+                          ) : null}
+                        </div>
+                        <p className="mt-2 text-sm font-medium text-[var(--color-ink)]">
+                          {entry.question}
+                        </p>
+                        {safeAnswer ? (
+                          <p className="mt-1 line-clamp-2 text-sm leading-5 text-[var(--color-mute)]">
+                            {safeAnswer}
+                          </p>
+                        ) : (
+                          <p className="mt-1 text-sm text-[var(--color-mute)]">
+                            {matterFileQAStateCopy(entry.answer_status)}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex shrink-0 flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => reopenHistoryEntry(entry)}
+                          data-testid={`matter-file-qa-history-reopen-${entry.id}`}
+                        >
+                          Reopen
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={exportMutation.isPending}
+                          onClick={() => exportMutation.mutate(entry.id)}
+                          data-testid={`matter-file-qa-history-export-${entry.id}`}
+                        >
+                          {exportMutation.isPending ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                          ) : (
+                            <Save className="h-3.5 w-3.5" aria-hidden />
+                          )}
+                          Export note
+                        </Button>
+                      </div>
+                    </div>
+
+                    {safeSources.length > 0 ? (
+                      <div className="mt-3 grid gap-1.5">
+                        {safeSources.map((source) => {
+                          const isKnownAttachment = knownAttachmentIds.has(
+                            source.attachment_id,
+                          );
+
+                          return (
+                            <div
+                              key={`${entry.id}-${source.source_id}-${source.chunk_id}`}
+                              className="rounded-md bg-[var(--color-bg-2)] px-2 py-1.5"
+                            >
+                              <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                                {isKnownAttachment ? (
+                                  <Link
+                                    href={matterFileSourceHref(
+                                      matterId,
+                                      source.attachment_id,
+                                    )}
+                                    className="font-medium text-[var(--color-ink)] hover:underline"
+                                    data-testid={`matter-file-qa-history-source-${source.source_id}`}
+                                  >
+                                    {source.attachment_name}
+                                  </Link>
+                                ) : (
+                                  <span
+                                    className="font-medium text-[var(--color-ink)]"
+                                    data-testid={`matter-file-qa-history-source-${source.source_id}`}
+                                  >
+                                    {source.attachment_name}
+                                  </span>
+                                )}
+                                <Badge tone="neutral">Chunk {source.chunk_index + 1}</Badge>
+                                {!isKnownAttachment ? (
+                                  <Badge tone="neutral">Source link unavailable</Badge>
+                                ) : null}
+                              </div>
+                              <p className="mt-1 text-xs leading-5 text-[var(--color-mute)]">
+                                {source.snippet}
+                              </p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <div
+              className="mt-3 rounded-md border border-[var(--color-line)] bg-[var(--color-bg-2)] px-3 py-2 text-sm text-[var(--color-mute)]"
+              data-testid="matter-file-qa-history-empty"
+            >
+              No saved Matter File Q&A yet.
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
