@@ -181,6 +181,141 @@ export const matterTimelineResponse = z.object({
 export type MatterTimelineItem = z.infer<typeof matterTimelineItem>;
 export type MatterTimelineResponse = z.infer<typeof matterTimelineResponse>;
 
+export const matterFileQAAnswerMode = z.enum([
+  "direct",
+  "summary",
+  "sections",
+  "allegations",
+  "evidence",
+  "chronology",
+  "gaps",
+]);
+
+export const matterFileQAStatus = z.enum([
+  "answered",
+  "partial_answer",
+  "insufficient_evidence",
+  "processing_required",
+  "no_documents",
+  "error",
+]);
+
+export const matterFileQAConfidence = z.enum([
+  "high",
+  "medium",
+  "low",
+  "insufficient",
+]);
+
+export const matterFileQAStructuredItemType = z.enum([
+  "section",
+  "allegation",
+  "evidence",
+  "chronology",
+  "gap",
+]);
+
+export const matterFileQAEvidenceStatus = z.enum([
+  "supported",
+  "partial",
+  "insufficient_evidence",
+]);
+
+export const matterFileQASource = z
+  .object({
+    source_id: z.string().min(1),
+    attachment_id: z.string().min(1),
+    attachment_name: z.string(),
+    chunk_id: z.string().min(1),
+    chunk_index: z.number().int(),
+    document_type: z.string().nullable().optional(),
+    page_number: z.number().int().nullable().optional(),
+    snippet: z.string().max(800),
+    score: z.number().int(),
+    matched_terms: z.array(z.string()).default([]),
+  })
+  .strict();
+
+export const matterFileQAStructuredItem = z
+  .object({
+    item_type: matterFileQAStructuredItemType,
+    label: z.string().min(1).max(160),
+    value: z.string().min(1).max(800),
+    source_ids: z.array(z.string().min(1)).min(1).max(12),
+    confidence: matterFileQAConfidence,
+    evidence_status: matterFileQAEvidenceStatus,
+  })
+  .strict();
+
+export const matterFileQAResponse = z
+  .object({
+    matter_id: z.string(),
+    question: z.string(),
+    status: matterFileQAStatus,
+    answer: z.string().nullable().optional(),
+    confidence: matterFileQAConfidence,
+    sources: z.array(matterFileQASource).default([]),
+    structured_items: z.array(matterFileQAStructuredItem).default([]),
+    limitations: z.array(z.string()).default([]),
+    provider: z.string(),
+    generated_at: z.string(),
+    model_run_id: z.string().nullable().optional(),
+    history_entry_id: z.string().nullable().optional(),
+  })
+  .strict();
+
+export const matterFileQAHistoryEntry = z
+  .object({
+    id: z.string().min(1),
+    matter_id: z.string(),
+    question: z.string().min(1),
+    answer_status: matterFileQAStatus,
+    answer: z.string().nullable().optional(),
+    confidence: matterFileQAConfidence,
+    answer_mode: matterFileQAAnswerMode,
+    sources: z.array(matterFileQASource).default([]),
+    structured_items: z.array(matterFileQAStructuredItem).default([]),
+    limitations: z.array(z.string()).default([]),
+    model_run_id: z.string().nullable().optional(),
+    exported_note_id: z.string().nullable().optional(),
+    exported_at: z.string().nullable().optional(),
+    created_at: z.string(),
+  })
+  .strict();
+
+export const matterFileQAHistoryResponse = z
+  .object({
+    matter_id: z.string(),
+    entries: z.array(matterFileQAHistoryEntry).default([]),
+  })
+  .strict();
+
+export const matterFileQAExportNoteResponse = z
+  .object({
+    matter_id: z.string(),
+    entry_id: z.string().min(1),
+    note_id: z.string().min(1),
+    already_exported: z.boolean(),
+    exported_at: z.string(),
+  })
+  .strict();
+
+export type MatterFileQAAnswerMode = z.infer<typeof matterFileQAAnswerMode>;
+export type MatterFileQAStatus = z.infer<typeof matterFileQAStatus>;
+export type MatterFileQAConfidence = z.infer<typeof matterFileQAConfidence>;
+export type MatterFileQASource = z.infer<typeof matterFileQASource>;
+export type MatterFileQAStructuredItem = z.infer<
+  typeof matterFileQAStructuredItem
+>;
+export type MatterFileQAResponse = z.infer<typeof matterFileQAResponse>;
+export type MatterFileQAHistoryEntry = z.infer<typeof matterFileQAHistoryEntry>;
+export type MatterFileQAHistoryResponse = z.infer<
+  typeof matterFileQAHistoryResponse
+>;
+export type MatterFileQAExportNoteResponse = z.infer<
+  typeof matterFileQAExportNoteResponse
+>;
+
 export const proceedingSignal = z.object({
   id: z.string(),
   matter_id: z.string(),

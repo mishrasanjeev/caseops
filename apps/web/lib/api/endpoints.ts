@@ -34,6 +34,10 @@ import {
   type LitigationIntelligenceReviewMutationResponse,
   type Matter,
   type MatterAuditList,
+  type MatterFileQAAnswerMode,
+  type MatterFileQAExportNoteResponse,
+  type MatterFileQAHistoryResponse,
+  type MatterFileQAResponse,
   type LitigationIntelligenceReviewResponse,
   type MockHearingListResponse,
   type MockHearingSession,
@@ -77,6 +81,9 @@ import {
   legalKnowledgeGraphResponse,
   matter,
   matterAuditList,
+  matterFileQAExportNoteResponse,
+  matterFileQAHistoryResponse,
+  matterFileQAResponse,
   litigationIntelligenceReviewMutationResponse,
   litigationIntelligenceReviewResponse,
   matterStrategyEntry,
@@ -240,6 +247,47 @@ export async function fetchMatterTimeline(input: {
   }`;
   const data = await apiRequest<unknown>(path);
   return matterTimelineResponse.parse(data);
+}
+
+export async function askMatterFileQuestion(input: {
+  matterId: string;
+  question: string;
+  answerMode?: MatterFileQAAnswerMode;
+  documentTypeFilter?: string[] | null;
+  limit?: number;
+}): Promise<MatterFileQAResponse> {
+  const matterId = encodeURIComponent(input.matterId);
+  const data = await apiRequest<unknown>(`/api/ai/matters/${matterId}/file-qa`, {
+    method: "POST",
+    body: {
+      question: input.question,
+      answer_mode: input.answerMode ?? "direct",
+      document_type_filter: input.documentTypeFilter ?? null,
+      limit: input.limit ?? 8,
+    },
+  });
+  return matterFileQAResponse.parse(data);
+}
+
+export async function fetchMatterFileQAHistory(input: {
+  matterId: string;
+}): Promise<MatterFileQAHistoryResponse> {
+  const matterId = encodeURIComponent(input.matterId);
+  const data = await apiRequest<unknown>(`/api/ai/matters/${matterId}/file-qa/history`);
+  return matterFileQAHistoryResponse.parse(data);
+}
+
+export async function exportMatterFileQANote(input: {
+  matterId: string;
+  entryId: string;
+}): Promise<MatterFileQAExportNoteResponse> {
+  const matterId = encodeURIComponent(input.matterId);
+  const entryId = encodeURIComponent(input.entryId);
+  const data = await apiRequest<unknown>(
+    `/api/ai/matters/${matterId}/file-qa/${entryId}/export-note`,
+    { method: "POST" },
+  );
+  return matterFileQAExportNoteResponse.parse(data);
 }
 
 export async function fetchProceedingIntelligence(input: {

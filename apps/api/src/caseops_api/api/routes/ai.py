@@ -31,6 +31,12 @@ from caseops_api.schemas.contracts import (
     PlaybookComparisonResponse,
     PlaybookInstallResponse,
 )
+from caseops_api.schemas.matter_file_qa import (
+    MatterFileQAExportNoteResponse,
+    MatterFileQAHistoryResponse,
+    MatterFileQARequest,
+    MatterFileQAResponse,
+)
 from caseops_api.services.briefing import generate_matter_brief
 from caseops_api.services.contract_intelligence import (
     compare_playbook,
@@ -40,6 +46,11 @@ from caseops_api.services.contract_intelligence import (
 )
 from caseops_api.services.contract_review import generate_contract_review
 from caseops_api.services.identity import SessionContext
+from caseops_api.services.matter_file_qa import (
+    ask_matter_file_question,
+    export_matter_file_qa_note,
+    list_matter_file_qa_history,
+)
 from caseops_api.services.matter_review import (
     generate_matter_document_review,
     search_matter_documents,
@@ -121,6 +132,67 @@ async def search_current_company_matter_documents(
         context=context,
         matter_id=matter_id,
         payload=payload,
+    )
+
+
+@router.post(
+    "/matters/{matter_id}/file-qa",
+    response_model=MatterFileQAResponse,
+    summary="Ask a source-grounded question over uploaded matter file chunks",
+)
+@limiter.limit(ai_route_rate_limit, key_func=tenant_aware_key)
+async def ask_current_company_matter_file_question(
+    request: Request,
+    matter_id: str,
+    payload: MatterFileQARequest,
+    context: AIGenerator,
+    session: DbSession,
+) -> MatterFileQAResponse:
+    return ask_matter_file_question(
+        session,
+        context=context,
+        matter_id=matter_id,
+        payload=payload,
+    )
+
+
+@router.get(
+    "/matters/{matter_id}/file-qa/history",
+    response_model=MatterFileQAHistoryResponse,
+    summary="List saved Matter File Q&A history for a matter",
+)
+@limiter.limit(ai_route_rate_limit, key_func=tenant_aware_key)
+async def list_current_company_matter_file_qa_history(
+    request: Request,
+    matter_id: str,
+    context: AIGenerator,
+    session: DbSession,
+) -> MatterFileQAHistoryResponse:
+    return list_matter_file_qa_history(
+        session,
+        context=context,
+        matter_id=matter_id,
+    )
+
+
+@router.post(
+    "/matters/{matter_id}/file-qa/{entry_id}/export-note",
+    response_model=MatterFileQAExportNoteResponse,
+    summary="Export a saved Matter File Q&A answer to a matter note",
+)
+@limiter.limit(ai_route_rate_limit, key_func=tenant_aware_key)
+async def export_current_company_matter_file_qa_note(
+    request: Request,
+    matter_id: str,
+    entry_id: str,
+    context: AIGenerator,
+    session: DbSession,
+) -> MatterFileQAExportNoteResponse:
+    return export_matter_file_qa_note(
+        session,
+        context=context,
+        matter_id=matter_id,
+        entry_id=entry_id,
     )
 
 

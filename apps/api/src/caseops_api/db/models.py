@@ -1368,6 +1368,72 @@ class MatterNote(Base):
     author_membership: Mapped[CompanyMembership] = relationship(back_populates="authored_notes")
 
 
+class MatterFileQAEntry(Base):
+    __tablename__ = "matter_file_qa_entries"
+    __table_args__ = (
+        CheckConstraint(
+            "answer_status IN ("
+            "'answered', 'partial_answer', 'insufficient_evidence', "
+            "'processing_required', 'no_documents', 'error'"
+            ")",
+            name="ck_matter_file_qa_entries_answer_status",
+        ),
+        CheckConstraint(
+            "answer_mode IN ("
+            "'direct', 'summary', 'sections', 'allegations', "
+            "'evidence', 'chronology', 'gaps'"
+            ")",
+            name="ck_matter_file_qa_entries_answer_mode",
+        ),
+        CheckConstraint(
+            "confidence IN ('high', 'medium', 'low', 'insufficient')",
+            name="ck_matter_file_qa_entries_confidence",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    actor_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    answer_status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    answer: Mapped[str | None] = mapped_column(Text, nullable=True)
+    confidence: Mapped[str] = mapped_column(String(16), nullable=False)
+    answer_mode: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    sources_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    structured_items_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    limitations_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    model_run_id: Mapped[str | None] = mapped_column(
+        ForeignKey("model_runs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    exported_note_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matter_notes.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    exported_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+        index=True,
+    )
+
+
 class MatterTask(Base):
     __tablename__ = "matter_tasks"
 

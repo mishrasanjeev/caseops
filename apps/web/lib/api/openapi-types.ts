@@ -317,6 +317,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ai/matters/{matter_id}/file-qa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ask a source-grounded question over uploaded matter file chunks */
+        post: operations["ask_current_company_matter_file_question_api_ai_matters__matter_id__file_qa_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ai/matters/{matter_id}/file-qa/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List saved Matter File Q&A history for a matter */
+        get: operations["list_current_company_matter_file_qa_history_api_ai_matters__matter_id__file_qa_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ai/matters/{matter_id}/file-qa/{entry_id}/export-note": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Export a saved Matter File Q&A answer to a matter note */
+        post: operations["export_current_company_matter_file_qa_note_api_ai_matters__matter_id__file_qa__entry_id__export_note_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ai/matters/{matter_id}/search": {
         parameters: {
             query?: never;
@@ -9691,6 +9742,173 @@ export interface components {
             /** Timeline */
             timeline?: components["schemas"]["MatterSummaryTimelineEvent"][];
         };
+        /** MatterFileQAExportNoteResponse */
+        MatterFileQAExportNoteResponse: {
+            /** Already Exported */
+            already_exported: boolean;
+            /** Entry Id */
+            entry_id: string;
+            /**
+             * Exported At
+             * Format: date-time
+             */
+            exported_at: string;
+            /** Matter Id */
+            matter_id: string;
+            /** Note Id */
+            note_id: string;
+        };
+        /** MatterFileQAHistoryEntry */
+        MatterFileQAHistoryEntry: {
+            /** Answer */
+            answer?: string | null;
+            /**
+             * Answer Mode
+             * @enum {string}
+             */
+            answer_mode: "direct" | "summary" | "sections" | "allegations" | "evidence" | "chronology" | "gaps";
+            /**
+             * Answer Status
+             * @enum {string}
+             */
+            answer_status: "answered" | "partial_answer" | "insufficient_evidence" | "processing_required" | "no_documents" | "error";
+            /**
+             * Confidence
+             * @enum {string}
+             */
+            confidence: "high" | "medium" | "low" | "insufficient";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Exported At */
+            exported_at?: string | null;
+            /** Exported Note Id */
+            exported_note_id?: string | null;
+            /** Id */
+            id: string;
+            /** Limitations */
+            limitations?: string[];
+            /** Matter Id */
+            matter_id: string;
+            /** Model Run Id */
+            model_run_id?: string | null;
+            /** Question */
+            question: string;
+            /** Sources */
+            sources?: components["schemas"]["MatterFileQASource"][];
+            /** Structured Items */
+            structured_items?: components["schemas"]["MatterFileQAStructuredItem"][];
+        };
+        /** MatterFileQAHistoryResponse */
+        MatterFileQAHistoryResponse: {
+            /** Entries */
+            entries?: components["schemas"]["MatterFileQAHistoryEntry"][];
+            /** Matter Id */
+            matter_id: string;
+        };
+        /** MatterFileQARequest */
+        MatterFileQARequest: {
+            /**
+             * Answer Mode
+             * @default direct
+             * @enum {string}
+             */
+            answer_mode: "direct" | "summary" | "sections" | "allegations" | "evidence" | "chronology" | "gaps";
+            /** Document Type Filter */
+            document_type_filter?: string[] | null;
+            /**
+             * Limit
+             * @default 8
+             */
+            limit: number;
+            /** Question */
+            question: string;
+        };
+        /** MatterFileQAResponse */
+        MatterFileQAResponse: {
+            /** Answer */
+            answer?: string | null;
+            /**
+             * Confidence
+             * @enum {string}
+             */
+            confidence: "high" | "medium" | "low" | "insufficient";
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** History Entry Id */
+            history_entry_id?: string | null;
+            /** Limitations */
+            limitations?: string[];
+            /** Matter Id */
+            matter_id: string;
+            /** Model Run Id */
+            model_run_id?: string | null;
+            /** Provider */
+            provider: string;
+            /** Question */
+            question: string;
+            /** Sources */
+            sources?: components["schemas"]["MatterFileQASource"][];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "answered" | "partial_answer" | "insufficient_evidence" | "processing_required" | "no_documents" | "error";
+            /** Structured Items */
+            structured_items?: components["schemas"]["MatterFileQAStructuredItem"][];
+        };
+        /** MatterFileQASource */
+        MatterFileQASource: {
+            /** Attachment Id */
+            attachment_id: string;
+            /** Attachment Name */
+            attachment_name: string;
+            /** Chunk Id */
+            chunk_id: string;
+            /** Chunk Index */
+            chunk_index: number;
+            /** Document Type */
+            document_type?: string | null;
+            /** Matched Terms */
+            matched_terms?: string[];
+            /** Page Number */
+            page_number?: number | null;
+            /** Score */
+            score: number;
+            /** Snippet */
+            snippet: string;
+            /** Source Id */
+            source_id: string;
+        };
+        /** MatterFileQAStructuredItem */
+        MatterFileQAStructuredItem: {
+            /**
+             * Confidence
+             * @enum {string}
+             */
+            confidence: "high" | "medium" | "low" | "insufficient";
+            /**
+             * Evidence Status
+             * @enum {string}
+             */
+            evidence_status: "supported" | "partial" | "insufficient_evidence";
+            /**
+             * Item Type
+             * @enum {string}
+             */
+            item_type: "section" | "allegation" | "evidence" | "chronology" | "gap";
+            /** Label */
+            label: string;
+            /** Source Ids */
+            source_ids: string[];
+            /** Value */
+            value: string;
+        };
         /** MatterHearingCreateRequest */
         MatterHearingCreateRequest: {
             /** Forum Name */
@@ -13474,6 +13692,104 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MatterDocumentReviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ask_current_company_matter_file_question_api_ai_matters__matter_id__file_qa_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MatterFileQARequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterFileQAResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_current_company_matter_file_qa_history_api_ai_matters__matter_id__file_qa_history_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterFileQAHistoryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_current_company_matter_file_qa_note_api_ai_matters__matter_id__file_qa__entry_id__export_note_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterFileQAExportNoteResponse"];
                 };
             };
             /** @description Validation Error */
