@@ -28,6 +28,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 import time
 from dataclasses import dataclass
 
@@ -38,8 +39,12 @@ from sqlalchemy.orm import Session, selectinload
 
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
+    AuthorityCitation,
     AuthorityDocument,
+    Judge,
     Matter,
+    MatterCauseListEntry,
+    MatterHearing,
     ModelRun,
     Recommendation,
     RecommendationDecision,
@@ -111,6 +116,30 @@ class RetrievedAuthority:
     identifier: str
     text: str
     aliases: tuple[str, ...] = ()
+    rerank_explanation: str | None = None
+
+
+@dataclass(frozen=True)
+class BenchCitationRerankTrace:
+    status: str
+    policy_enabled: bool
+    sample_size: int = 0
+    recall_at_10: str = "not-measured"
+    explanation: str = ""
+    candidate_authority_ids: tuple[str, ...] = ()
+    boosted_authority_ids: tuple[str, ...] = ()
+    source_authority_ids: tuple[str, ...] = ()
+    per_authority_explanations: dict[str, str] | None = None
+
+    def metadata(self) -> dict[str, object]:
+        return {
+            "status": self.status,
+            "policy_enabled": self.policy_enabled,
+            "sample_size_band": f"n={self.sample_size}, recall@10={self.recall_at_10}",
+            "candidate_authority_ids": list(self.candidate_authority_ids),
+            "boosted_authority_ids": list(self.boosted_authority_ids),
+            "source_authority_ids": list(self.source_authority_ids),
+        }
 
 
 # Per the 2026-04-20 bias directive
@@ -165,6 +194,270 @@ _OUTCOME_BIAS: dict[str, dict[str, tuple[str, ...]]] = {
     },
 }
 
+_BENCH_CITATION_MIN_SAMPLE = 5
+_BENCH_RERANK_PURPOSE = "authority_rerank:bench_citation_relevance"
+_BENCH_RERANK_MODEL = "bench-citation-relevance-rerank-v1"
+_APPROVING_TREATMENTS = {"followed"}
+
+
+def _normalize_bench_token(value: str | None) -> str:
+    if not value:
+        return ""
+    value = value.lower()
+    value = re.sub(r"\bhon'?ble\b", " ", value)
+    value = re.sub(r"\b(?:mr|ms|mrs|dr)\.?\b", " ", value)
+    value = re.sub(r"\b(?:chief\s+justice|justice|j)\b", " ", value)
+    value = re.sub(r"[^a-z0-9]+", " ", value)
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def _json_bench_values(raw: str | None) -> list[str]:
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(parsed, list):
+        return []
+    values: list[str] = []
+    for item in parsed:
+        if isinstance(item, str):
+            values.append(item)
+        elif isinstance(item, dict):
+            for key in ("judge_id", "full_name", "matched_alias", "name"):
+                val = item.get(key)
+                if isinstance(val, str) and val.strip():
+                    values.append(val)
+    return values
+
+
+def _matter_bench_terms(session: Session, matter: Matter) -> set[str]:
+    values: list[str] = []
+    hearings = session.scalars(
+        select(MatterHearing)
+        .where(MatterHearing.matter_id == matter.id)
+        .where(MatterHearing.judge_name.is_not(None))
+        .order_by(MatterHearing.hearing_on.asc())
+    ).all()
+    values.extend(h.judge_name or "" for h in hearings)
+
+    listings = session.scalars(
+        select(MatterCauseListEntry)
+        .where(MatterCauseListEntry.matter_id == matter.id)
+        .order_by(MatterCauseListEntry.listing_date.desc())
+    ).all()
+    judge_ids: set[str] = set()
+    for listing in listings:
+        values.append(listing.bench_name or "")
+        for val in _json_bench_values(listing.judges_json):
+            values.append(val)
+            if len(val) == 36:
+                judge_ids.add(val)
+    if judge_ids:
+        judges = session.scalars(select(Judge).where(Judge.id.in_(judge_ids))).all()
+        values.extend(j.full_name for j in judges)
+
+    return {
+        normalized
+        for normalized in (_normalize_bench_token(v) for v in values)
+        if normalized
+    }
+
+
+def _authority_matches_bench(doc: AuthorityDocument, bench_terms: set[str]) -> bool:
+    values = [doc.bench_name or ""]
+    values.extend(_json_bench_values(doc.judges_json))
+    for value in values:
+        normalized = _normalize_bench_token(value)
+        if not normalized:
+            continue
+        for term in bench_terms:
+            if term == normalized or term in normalized or normalized in term:
+                return True
+    return False
+
+
+def _approving_bench_citation_sources(
+    session: Session,
+    *,
+    candidate_ids: list[str],
+    bench_terms: set[str],
+) -> dict[str, list[str]]:
+    if not candidate_ids:
+        return {}
+    rows = session.execute(
+        select(AuthorityCitation, AuthorityDocument)
+        .join(
+            AuthorityDocument,
+            AuthorityCitation.source_authority_document_id == AuthorityDocument.id,
+        )
+        .where(AuthorityCitation.cited_authority_document_id.in_(candidate_ids))
+        .where(AuthorityCitation.treatment.in_(_APPROVING_TREATMENTS))
+    ).all()
+    out: dict[str, list[str]] = {}
+    for citation, source_doc in rows:
+        if not _authority_matches_bench(source_doc, bench_terms):
+            continue
+        cited_id = citation.cited_authority_document_id
+        if cited_id:
+            out.setdefault(cited_id, []).append(source_doc.id)
+    return out
+
+
+def _apply_bench_citation_rerank(
+    session: Session,
+    results,
+    *,
+    context: SessionContext,
+    matter: Matter,
+) -> tuple[list, BenchCitationRerankTrace]:
+    candidate_ids = [r.authority_document_id for r in results]
+    from caseops_api.services.tenant_ai_policy import resolve_tenant_policy
+
+    policy = resolve_tenant_policy(session, company_id=context.company.id)
+    if not policy.predictive_bench_strategy_enabled:
+        return list(results), BenchCitationRerankTrace(
+            status="policy_disabled",
+            policy_enabled=False,
+            candidate_authority_ids=tuple(candidate_ids),
+            explanation=(
+                "Tenant bench-citation rerank policy is disabled; "
+                "general relevance order kept."
+            ),
+        )
+
+    if not results:
+        return [], BenchCitationRerankTrace(
+            status="no_candidates",
+            policy_enabled=True,
+            explanation="No retrieved authorities were available for bench rerank.",
+        )
+
+    bench_terms = _matter_bench_terms(session, matter)
+    if not bench_terms:
+        return list(results), BenchCitationRerankTrace(
+            status="no_bench_context",
+            policy_enabled=True,
+            candidate_authority_ids=tuple(candidate_ids),
+            explanation="No hearing or cause-list bench was assigned to this matter.",
+        )
+
+    docs = session.scalars(
+        select(AuthorityDocument).where(AuthorityDocument.id.in_(candidate_ids))
+    ).all()
+    doc_by_id = {doc.id: doc for doc in docs}
+    authored_ids = {
+        doc_id
+        for doc_id, doc in doc_by_id.items()
+        if _authority_matches_bench(doc, bench_terms)
+    }
+    approving_sources = _approving_bench_citation_sources(
+        session,
+        candidate_ids=candidate_ids,
+        bench_terms=bench_terms,
+    )
+    source_ids = set(authored_ids)
+    for ids in approving_sources.values():
+        source_ids.update(ids)
+    sample_size = len(source_ids)
+    sample_band = f"n={sample_size}, recall@10=not-measured"
+    if sample_size < _BENCH_CITATION_MIN_SAMPLE:
+        return list(results), BenchCitationRerankTrace(
+            status="insufficient_bench_history",
+            policy_enabled=True,
+            sample_size=sample_size,
+            candidate_authority_ids=tuple(candidate_ids),
+            source_authority_ids=tuple(sorted(source_ids)),
+            explanation=(
+                "Insufficient bench-citation history for rerank "
+                f"({sample_band}); general relevance order kept."
+            ),
+        )
+
+    scores: dict[str, int] = {}
+    explanations: dict[str, str] = {}
+    for doc_id in candidate_ids:
+        boost_sources: list[str] = []
+        reasons: list[str] = []
+        if doc_id in authored_ids:
+            scores[doc_id] = max(scores.get(doc_id, 0), 2)
+            boost_sources.append(doc_id)
+            reasons.append("bench_authored")
+        if approving_sources.get(doc_id):
+            scores[doc_id] = max(scores.get(doc_id, 0), 1)
+            boost_sources.extend(approving_sources[doc_id])
+            reasons.append("approvingly_cited_by_bench")
+        if reasons:
+            unique_sources = tuple(dict.fromkeys(boost_sources))
+            explanations[doc_id] = (
+                "bench-citation relevance rerank: "
+                f"{sample_band}; reason={'+'.join(reasons)}; "
+                f"source_ids={','.join(unique_sources)}"
+            )
+
+    reranked = sorted(
+        list(results),
+        key=lambda r: scores.get(r.authority_document_id, 0),
+        reverse=True,
+    )
+    boosted_ids = [doc_id for doc_id in candidate_ids if scores.get(doc_id, 0) > 0]
+    return reranked, BenchCitationRerankTrace(
+        status="applied",
+        policy_enabled=True,
+        sample_size=sample_size,
+        candidate_authority_ids=tuple(candidate_ids),
+        boosted_authority_ids=tuple(boosted_ids),
+        source_authority_ids=tuple(sorted(source_ids)),
+        per_authority_explanations=explanations,
+        explanation=(
+            "Applied bench-citation relevance rerank using citation-grounded source IDs "
+            f"({sample_band})."
+        ),
+    )
+
+
+def _record_bench_citation_rerank(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter: Matter,
+    trace: BenchCitationRerankTrace,
+) -> ModelRun:
+    metadata = trace.metadata()
+    prompt_hash = hashlib.sha256(
+        json.dumps(metadata, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()
+    completion = LLMCompletion(
+        text=trace.explanation,
+        provider="internal",
+        model=_BENCH_RERANK_MODEL,
+        prompt_tokens=0,
+        completion_tokens=0,
+        latency_ms=0,
+    )
+    run = _write_model_run(
+        session,
+        context=context,
+        matter_id=matter.id,
+        purpose=_BENCH_RERANK_PURPOSE,
+        completion=completion,
+        prompt_hash=prompt_hash,
+        status_label=trace.status,
+    )
+    from caseops_api.services.audit import record_from_context
+
+    record_from_context(
+        session,
+        context,
+        action="authority_rerank.bench_citation_relevance",
+        target_type="matter",
+        target_id=matter.id,
+        matter_id=matter.id,
+        metadata={**metadata, "model_run_id": run.id},
+    )
+    return run
+
 
 def _rerank_by_outcome_bias(
     session: Session, results, *, matter
@@ -214,6 +507,26 @@ def _gather_authorities(
     matter=None,
     limit: int = 6,
 ) -> list[RetrievedAuthority]:
+    authorities, _trace = _gather_authorities_with_trace(
+        session,
+        query=query,
+        forum_level=forum_level,
+        matter=matter,
+        limit=limit,
+    )
+    return authorities
+
+
+def _gather_authorities_with_trace(
+    session: Session,
+    *,
+    query: str,
+    forum_level: str | None,
+    matter=None,
+    context: SessionContext | None = None,
+    enable_bench_citation_rerank: bool = False,
+    limit: int = 6,
+) -> tuple[list[RetrievedAuthority], BenchCitationRerankTrace | None]:
     # Precedent cascades: a High Court matter can (and typically should) rely
     # on Supreme Court precedent. Only filter by forum when the matter is at
     # the Supreme Court itself — otherwise broaden the search.
@@ -250,7 +563,16 @@ def _gather_authorities(
     # mapping.
     if matter is not None:
         results = _rerank_by_outcome_bias(session, results, matter=matter)
+    trace: BenchCitationRerankTrace | None = None
+    if enable_bench_citation_rerank and context is not None and matter is not None:
+        results, trace = _apply_bench_citation_rerank(
+            session,
+            results,
+            context=context,
+            matter=matter,
+        )
     results = results[:limit]
+    explanations = trace.per_authority_explanations if trace else {}
 
     picked: list[RetrievedAuthority] = []
     for result in results[:limit]:
@@ -270,9 +592,14 @@ def _gather_authorities(
                 identifier=identifier,
                 text=text,
                 aliases=tuple(dict.fromkeys(aliases)),
+                rerank_explanation=(
+                    explanations.get(result.authority_document_id)
+                    if explanations
+                    else None
+                ),
             )
         )
-    return picked
+    return picked, trace
 
 
 _TYPE_FRAMING: dict[str, str] = {
@@ -339,10 +666,13 @@ def _build_prompt(
     # a stable handle to reference. The verifier still matches on the
     # full identifier text; the [N] number is just a UX cue for the
     # model.
-    authority_block = "\n".join(
-        f"[{i}] CITATION: {a.identifier}\n    EXCERPT: {a.text[:600]}"
-        for i, a in enumerate(authorities, start=1)
-    ) or "(no authorities retrieved)"
+    authority_lines: list[str] = []
+    for i, authority in enumerate(authorities, start=1):
+        line = f"[{i}] CITATION: {authority.identifier}\n    EXCERPT: {authority.text[:600]}"
+        if authority.rerank_explanation:
+            line += f"\n    RERANK_EXPLANATION: {authority.rerank_explanation}"
+        authority_lines.append(line)
+    authority_block = "\n".join(authority_lines) or "(no authorities retrieved)"
     user = (
         "Respond with json. Produce a CaseOps recommendation object.\n\n"
         f"RECOMMENDATION_TYPE: {rec_type}\n"
@@ -559,13 +889,24 @@ def generate_recommendation(
     except Exception:
         # SQLite tests etc. — no-op
         pass
-    retrieved = _gather_authorities(
+    retrieved, bench_rerank_trace = _gather_authorities_with_trace(
         session,
         query=_build_retrieval_query(matter, rec_type),
         forum_level=matter.forum_level,
         matter=matter,
+        context=context,
+        enable_bench_citation_rerank=(rec_type == "authority"),
     )
     _stage("gather_authorities")
+    if bench_rerank_trace is not None:
+        _record_bench_citation_rerank(
+            session,
+            context=context,
+            matter=matter,
+            trace=bench_rerank_trace,
+        )
+        session.commit()
+        _stage("record_bench_rerank")
 
     llm = provider or build_provider(purpose=PURPOSE_RECOMMENDATIONS)
     messages = _build_prompt(rec_type=rec_type, matter=matter, authorities=retrieved)
