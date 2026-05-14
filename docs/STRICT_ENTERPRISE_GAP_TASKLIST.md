@@ -64,8 +64,13 @@ P1 status after commit `8466911`:
 - `P1-004` `Implemented` Mobile and axe sweeps cover the smoke surfaces.
 - `P1-005` `Implemented` Security CI gates cover dependency advisories,
   gitleaks, license allow-list, and Cloud Run secret-reference checks.
-- `P1-006` `Missing` Postgres-backed DB validation tests remain deferred until
-  CI has a Postgres service container.
+- `P1-006` `Stale-doc` Reconciled against `AQ-005` (closed 2026-04-25).
+  Postgres-backed validation suite is live and wired into CI; this entry was
+  not updated when AQ-005 closed.
+  Source of truth: `.github/workflows/ci.yml` `postgres-validation` job
+  (lines 63+, `pgvector/pgvector:pg17` service container) +
+  `apps/api/tests/test_postgres_validation.py`. See `AQ-005` below for the
+  current closure evidence.
 - `P1-007` `Implemented` AI route governance gate enforces rate limits for
   `/api/ai/*` and `/api/recommendations/*` mutations.
 - `P1-008` `Implemented` Upload size cap and abuse tests landed.
@@ -513,8 +518,26 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
 - `WTD-12.2` `Missing` Connector health UI.
   Evidence: `docs/WORK_TO_BE_DONE.md:703-705`.
 
-- `WTD-12.3` `Missing` Email ingest and calendar sync.
-  Evidence: `docs/WORK_TO_BE_DONE.md:707-709`.
+- `WTD-12.3a` `Implemented` Calendar sync (split from former `WTD-12.3`,
+  reconciled 2026-05-14). OAuth-backed Outlook + Google calendar sync, bulk
+  backfill, encrypted credentials, per-event sync ledger.
+  Evidence: `apps/api/src/caseops_api/services/calendar_sync.py`,
+  `apps/api/src/caseops_api/api/routes/calendar.py`,
+  `apps/api/src/caseops_api/schemas/calendar.py`,
+  `apps/api/alembic/versions/20260507_0001_legalworkspace_calendar_notifications.py`,
+  `apps/api/tests/test_calendar.py`,
+  `apps/api/tests/test_legalworkspace_calendar_sync.py`,
+  `apps/api/tests/test_outlook_bulk_sync.py`,
+  `apps/web/app/app/calendar/page.tsx`.
+
+- `WTD-12.3b` `Missing` Inbound email ingest (split from former `WTD-12.3`,
+  2026-05-14). No mailbox-receiver / IMAP / inbound webhook exists that
+  routes inbound mail into matters. Existing email surfaces
+  (`services/email_templates.py`, `services/email_suppression.py`) are
+  outbound-only — they do not satisfy this gap.
+  Evidence: `docs/WORK_TO_BE_DONE.md:707-709`; no `services/email_ingest*`,
+  `services/inbound_email*`, or `routes/inbound*` on `main`
+  (HEAD `58116d2`).
 
 ## Stale-Doc Items To Correct In docs/WORK_TO_BE_DONE.md
 
