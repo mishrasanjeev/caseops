@@ -17,8 +17,8 @@ spec:
         # Anthropic / Pine Labs keys all use secretKeyRef.
         run.googleapis.com/secrets: "caseops-auth-secret=projects/__PROJECT_NUMBER__/secrets/caseops-auth-secret,caseops-database-url=projects/__PROJECT_NUMBER__/secrets/caseops-database-url,caseops-openai-api-key=projects/__PROJECT_NUMBER__/secrets/caseops-openai-api-key,caseops-sendgrid-webhook-public-key=projects/__PROJECT_NUMBER__/secrets/caseops-sendgrid-webhook-public-key"
     spec:
-      containerConcurrency: 80
-      timeoutSeconds: 900
+      containerConcurrency: 40
+      timeoutSeconds: 300
       serviceAccountName: "__SERVICE_ACCOUNT__"
       containers:
         - image: "__API_IMAGE__"
@@ -115,5 +115,5 @@ spec:
                   key: "latest"
           resources:
             limits:
-              cpu: "1"
-              memory: "1Gi"
+              cpu: "2"
+              memory: "4Gi"
