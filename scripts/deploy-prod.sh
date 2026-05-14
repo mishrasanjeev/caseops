@@ -30,6 +30,10 @@ PROJECT=perfect-period-305406
 REGION=asia-south1
 REPO=caseops-images
 REGISTRY="${REGION}-docker.pkg.dev/${PROJECT}/${REPO}"
+API_CPU=2
+API_MEMORY=4Gi
+API_CONCURRENCY=40
+API_TIMEOUT=300s
 
 TAG="${1:-$(git rev-parse --short=7 HEAD)}"
 API_IMAGE="${REGISTRY}/caseops-api:${TAG}"
@@ -62,8 +66,16 @@ echo "  migrate-job completed."
 # env from the manifest, so the new pods will NOT try to migrate again.
 echo "--- 3/5 deploy caseops-api ---"
 gcloud run deploy caseops-api \
-  --image "${API_IMAGE}" --region "${REGION}" --project "${PROJECT}" --quiet
-echo "  caseops-api at 100% traffic on ${TAG}."
+  --region "${REGION}" \
+  --project "${PROJECT}" \
+  --quiet \
+  --concurrency "${API_CONCURRENCY}" \
+  --timeout "${API_TIMEOUT}" \
+  --container api \
+  --image "${API_IMAGE}" \
+  --cpu "${API_CPU}" \
+  --memory "${API_MEMORY}"
+echo "  caseops-api at 100% traffic on ${TAG} (${API_CPU} CPU, ${API_MEMORY}, concurrency ${API_CONCURRENCY})."
 
 # Step 4 — deploy web.
 echo "--- 4/5 deploy caseops-web ---"
