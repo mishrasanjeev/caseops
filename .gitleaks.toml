@@ -5,14 +5,25 @@
 # entries for files that legitimately contain `key=` assignments
 # whose values are eval-test scenario identifiers, NOT secrets.
 #
-# Anchor incident: 2026-05-01 — scheduled gitleaks run flagged 8
-# false positives on `apps/api/src/caseops_api/scripts/eval_*.py`
-# where `key="quashing-482"`, `key="498a-cruelty"`, etc. are
-# CitationCase / EvalCase dataclass fields naming legal eval
-# scenarios. Entropy on dotted slug strings happens to clear the
-# generic-api-key threshold, but these are never written to a
-# response, never sent to a third party, and never persisted as
-# auth material.
+# Anchor incidents:
+#  - 2026-05-01: scheduled gitleaks run flagged 8 false positives on
+#    `apps/api/src/caseops_api/scripts/eval_*.py` where
+#    `key="quashing-482"`, `key="498a-cruelty"`, etc. are CitationCase
+#    / EvalCase dataclass fields naming legal eval scenarios. Entropy
+#    on dotted slug strings happens to clear the generic-api-key
+#    threshold, but these are never written to a response, never sent
+#    to a third party, and never persisted as auth material.
+#  - 2026-05-09: scheduled `--all` history scan flagged two historical
+#    findings that no longer apply to the live codebase:
+#      (1) `pg-validation-secret-at-least-32-bytes` in
+#          `.github/workflows/ci.yml` (commit 34ded21, 2026-04-25) -
+#          a CI-only test placeholder, never a production secret.
+#      (2) Pine Labs MCP `X-Client-Secret` literal in `.mcp.json`
+#          (commit 9bb22e1, 2026-04-21) - a sandbox/test credential
+#          that has been retired; `.mcp.json` is now gitignored. The
+#          historical `.mcp.json` finding is suppressed by exact
+#          `.gitleaksignore` fingerprint, not by secret-value regex, so
+#          future accidental reintroductions still fail the scan.
 #
 # Reference: https://github.com/gitleaks/gitleaks#configuration
 
@@ -31,4 +42,8 @@ paths = [
 regexes = [
     '''LW-S10-NOTIFY''',
     '''CTR-LW9-UNGROUNDED''',
+    # CI-test placeholder for the Postgres validation job's
+    # CASEOPS_AUTH_SECRET env. Hard-coded literal in
+    # `.github/workflows/ci.yml` and unchanged across history.
+    '''pg-validation-secret-at-least-32-bytes''',
 ]
