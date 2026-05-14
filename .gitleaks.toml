@@ -16,14 +16,14 @@
 #  - 2026-05-09: scheduled `--all` history scan flagged two historical
 #    findings that no longer apply to the live codebase:
 #      (1) `pg-validation-secret-at-least-32-bytes` in
-#          `.github/workflows/ci.yml` (commit 34ded21, 2026-04-25) —
+#          `.github/workflows/ci.yml` (commit 34ded21, 2026-04-25) -
 #          a CI-only test placeholder, never a production secret.
 #      (2) Pine Labs MCP `X-Client-Secret` literal in `.mcp.json`
-#          (commit 9bb22e1, 2026-04-21) — a sandbox/test credential
-#          that has been retired; `.mcp.json` is now gitignored. Both
-#          findings are allowlisted by exact fingerprint so future
-#          accidental reintroductions of these patterns will still
-#          fail the scan.
+#          (commit 9bb22e1, 2026-04-21) - a sandbox/test credential
+#          that has been retired; `.mcp.json` is now gitignored. The
+#          historical `.mcp.json` finding is suppressed by exact
+#          `.gitleaksignore` fingerprint, not by secret-value regex, so
+#          future accidental reintroductions still fail the scan.
 #
 # Reference: https://github.com/gitleaks/gitleaks#configuration
 
@@ -46,11 +46,4 @@ regexes = [
     # CASEOPS_AUTH_SECRET env. Hard-coded literal in
     # `.github/workflows/ci.yml` and unchanged across history.
     '''pg-validation-secret-at-least-32-bytes''',
-    # Retired Pine Labs MCP sandbox client secret, historical only —
-    # the literal was committed to `.mcp.json` on 2026-04-21
-    # (commit 9bb22e1) and remained in the file until this change
-    # removed `.mcp.json` from tracking. The credential is no longer
-    # in use; allowlisted by exact value so a real production secret
-    # cannot coincidentally bypass the scan.
-    '''024dd66a367549b380bd322ff6c3b279''',
 ]
