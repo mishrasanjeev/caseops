@@ -59,7 +59,13 @@ describe("DashboardPage", () => {
     replaceMock.mockReset();
   });
 
-  it("redirects active workspaces to Today", async () => {
+  // P0-1 (2026-05-15): Home (/app) is the portfolio dashboard. It must
+  // NOT redirect active workspaces to /app/today — that hid the
+  // dashboard behind a redirect and contradicted the 2026-05-02
+  // product decision (commit db0fdc2). /app/today remains reachable
+  // via its own Sidebar nav item. This test is the regression guard
+  // against re-introducing the redirect a third time.
+  it("renders the dashboard for active workspaces and does not redirect", async () => {
     listMattersMock.mockResolvedValue({
       matters: [
         {
@@ -79,7 +85,11 @@ describe("DashboardPage", () => {
 
     render(withClient(<DashboardPage />));
 
-    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith("/app/today"));
+    expect(
+      await screen.findByRole("heading", { name: /Good to have you back/i }),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(listMattersMock).toHaveBeenCalledTimes(1));
+    expect(replaceMock).not.toHaveBeenCalled();
   });
 
   it("keeps first-time workspaces on the dashboard", async () => {

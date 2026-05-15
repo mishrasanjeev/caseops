@@ -4,8 +4,9 @@
  *   - GET /api/me/today is reachable from the QA workspace and
  *     returns the 5-stream payload.
  *   - /app/today renders all 5 sections.
- *   - /app auto-redirects to /app/today when the QA workspace has
- *     at least one active matter.
+ *   - /app renders the portfolio dashboard and does NOT redirect to
+ *     /app/today (P0-1, 2026-05-15 — the redirect was removed; Home
+ *     and Today are distinct surfaces, Today reachable via Sidebar).
  *   - GET /api/matters/{id}/next-action is reachable and returns
  *     either a NextAction or null (never 5xx).
  *   - The matter cockpit page renders without 5xx (the
@@ -123,20 +124,27 @@ test.describe("PG-004 — Today cockpit prod verification", () => {
     expect(foundCount).toBeGreaterThanOrEqual(1);
   });
 
-  test("/app redirects to /app/today when workspace has ≥1 active matter", async ({
+  test("/app renders the portfolio dashboard and does NOT redirect to /app/today", async ({
     page,
   }) => {
+    // P0-1 (2026-05-15): Home is the portfolio dashboard. Even on a
+    // workspace WITH active matters it must stay on /app and render
+    // the dashboard — the old useEffect redirect to /app/today was
+    // removed. Today stays reachable via its own Sidebar nav item.
     const matterId = await firstActiveMatterId(page);
     if (!matterId) {
-      test.skip(true, "QA workspace has no active matters; redirect path doesn't apply.");
+      test.skip(true, "QA workspace has no active matters; this guards the active-workspace path.");
       return;
     }
 
     await page.goto(`${PROD_BASE_URL}/app`, { waitUntil: "networkidle" });
-    // The redirect is a client-side router.replace() inside a
-    // useEffect, so wait briefly for it to resolve.
-    await page.waitForURL(/\/app\/today$/, { timeout: 10_000 });
-    expect(page.url()).toMatch(/\/app\/today$/);
+    // Give any (regressed) client-side redirect a window to fire so a
+    // re-introduced redirect would fail this assertion, not pass it.
+    await page.waitForTimeout(3_000);
+    expect(page.url()).toMatch(/\/app$/);
+    await expect(
+      page.getByRole("heading", { name: /Good to have you back/i }),
+    ).toBeVisible();
   });
 
   test("GET /api/matters/{id}/next-action returns a NextAction or null", async ({
