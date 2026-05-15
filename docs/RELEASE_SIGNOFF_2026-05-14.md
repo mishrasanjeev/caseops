@@ -17,8 +17,10 @@
 
 - Expected commit: `05b3025d63a10a86eb30a1637f4bc9625bb33a65`
 - Observed commit or build id:
-  - API image: `asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api:05b3025d63a10a86eb30a1637f4bc9625bb33a65`
-  - Web image: `asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-web:05b3025d63a10a86eb30a1637f4bc9625bb33a65`
+  - API image repository: `asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api`
+  - API image tag / commit: `05b3025d63a10a86eb30a1637f4bc9625bb33a65`
+  - Web image repository: `asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-web`
+  - Web image tag / commit: `05b3025d63a10a86eb30a1637f4bc9625bb33a65`
 - Proof:
   - API revision `caseops-api-00137-57k` serves 100% traffic.
   - Web revision `caseops-web-00126-l97` serves 100% traffic.
