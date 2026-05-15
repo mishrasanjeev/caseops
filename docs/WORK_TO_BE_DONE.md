@@ -738,7 +738,18 @@ Beyond what §4 and §5 add.
 
 ### 12.3 Email and calendar
 
-- **Done when:** At least one email ingest (for intake) and one calendar sync (for hearing dates) are live.
+This item is split for ledger accuracy:
+
+#### 12.3a Calendar sync -- **DONE for bounded manual sync**
+
+- **Landed:** bounded manual Outlook bulk sync for hearing dates.
+- **Still open elsewhere:** durable always-on calendar automation remains gated
+  on Temporal and the notification service.
+
+#### 12.3b Inbound email ingest -- **MISSING**
+
+- **Done when:** inbound email capture is live for intake and/or matter
+  communications, including threading, tenant scoping, and auditability.
 
 ---
 
@@ -787,7 +798,16 @@ These are explicitly deferred by PRD §20.5.
 
 ## 15. Suggested sequencing
 
-Sprints A–F (security, frontend spine, AI core, drafting v1) all **shipped** — see §1.1 phase ladder (phases 2–14b). The remaining plan:
+Sprints A–F (security, frontend spine, AI core, drafting v1) all **shipped** — see §1.1 phase ladder (phases 2–14b). The current next-milestone order is authoritative over the older sprint labels retained below:
+
+1. Staging proof: configure staging Workload Identity / secrets, run the staging deploy path, and capture runtime proof.
+2. `G-116` inbound email ingest: close `WTD-12.3b` / `PG-106` without touching calendar sync.
+3. `PG-001` conflict check: finish the remaining intake-gate scope.
+4. `WTD-7.2` tasks/deadlines: matter-cockpit Tasks + Deadlines tabs and admin task templates.
+5. Durable notifications / Temporal: land `WTD-5.1` and then the durable-delivery parts of `WTD-5.3`.
+6. AI eval harness: complete the golden-dataset and CI-gated evaluation work under `WTD-11.4`.
+
+Older planning context:
 
 **Sprint G — Phase 15 full corpus ingestion (1–2 weeks, operator-driven).**
 §4.2 "Phase 15 full corpus ingestion" sub-list. Delhi / Bombay / Karnataka / Madras / Telangana HCs + Supreme Court, 2015–2024. Runs on a workstation or a Cloud Run Job; doesn't block application work. Output: a complete recall@10 benchmark on a fixed legal-eval set before the first paying customer.

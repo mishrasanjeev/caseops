@@ -42,6 +42,27 @@ restates them as gaps, treat as `Stale-doc`.
 | LLM perf calibration | Per-purpose timeouts for OpenAI; `reasoning_effort=low` for gpt-5.x. | `9d16087` |
 | Matter cockpit next-action surface (partial) | "+ Add hearing" CTA on cockpit empty-state; shared `ScheduleHearingDialog` component. | `f641e4b` |
 
+## Additional Closed Product Items Reconciled 2026-05-14
+
+### `G-128` Authority rerank consumes judge-favorability / bench-citation signal
+
+Status: **`Implemented`**.
+Evidence:
+- `services/recommendations.py::_rerank_by_outcome_bias` consumes
+  `AuthorityDocument.outcome_label` for the judge-favorability / outcome-bias
+  signal.
+- `services/recommendations.py::_apply_bench_citation_rerank` applies the
+  bench-citation signal when predictive bench policy is enabled, using
+  bench-authored authorities and authorities approvingly cited (`treatment =
+  "followed"`) by the bench.
+- Guardrails: policy-off and insufficient-history paths keep the original
+  relevance order; applied reranks are recorded as `ModelRun` purpose
+  `authority_rerank:bench_citation_relevance` and audited as
+  `authority_rerank.bench_citation_relevance`.
+- Tests: `apps/api/tests/test_recommendations_bench_rerank.py` covers authored
+  authority boosts, approving citation boosts, policy-off, insufficient-history,
+  and real `generate_recommendation` recording.
+
 ## Cross-Reference: Already Tracked in Other Strict Ledgers
 
 Do not re-classify these here. Burn-down lives under the linked ID.
@@ -67,7 +88,8 @@ Do not re-classify these here. Burn-down lives under the linked ID.
 | Route-wide accessibility automation | `WTD-11.7` | `Missing` | STRICT_ENTERPRISE_GAP_TASKLIST |
 | Broader court adapters / per-tenant credentials | `WTD-12.1` | `Missing` | STRICT_ENTERPRISE_GAP_TASKLIST |
 | Connector health UI | `WTD-12.2` | `Missing` | STRICT_ENTERPRISE_GAP_TASKLIST |
-| Email ingest + calendar sync | `WTD-12.3` | `Missing` | STRICT_ENTERPRISE_GAP_TASKLIST |
+| Calendar sync | `WTD-12.3a` | `Implemented` | STRICT_ENTERPRISE_GAP_TASKLIST |
+| Inbound email ingest | `WTD-12.3b` | `Missing` | STRICT_ENTERPRISE_GAP_TASKLIST |
 | Backend coverage threshold ratchet | `AQ-001` | `Partially implemented` | STRICT_ENTERPRISE_GAP_TASKLIST |
 | Page-level UI coverage | `AQ-003` | `Partially implemented` | STRICT_ENTERPRISE_GAP_TASKLIST |
 | API route operation-level coverage | `AQ-004` | `Partially implemented` | STRICT_ENTERPRISE_GAP_TASKLIST |
@@ -391,19 +413,16 @@ Status: **`Missing`**. Estimated days: 6-8 (mostly compliance work + admin UI fo
 | Phase 4 — Enterprise Trust Pack | `PG-009`, `WTD-10.1`, `WTD-10.3`, `PG-207`, observability follow-ons |
 | Phase 5 — CLM (only if resourced) | `PG-008` (full), `PG-110` for contracts |
 
-## Suggested Burn-Down Order (next 30 days, single-engineer)
+## Next Milestone Order (reconciled 2026-05-14)
 
-If the team commits to Phase 1 only, the cheapest high-leverage day-by-day order is:
+The next implementation sequence is:
 
-1. `PG-107` bench-strategy governance decision (0 days, decision-only).
-2. `PG-001` conflict check workflow (4-5 days). Anchors law-firm intake credibility.
-3. `PG-004` matter command center / Today view (5-7 days). Highest visible daily-driver win.
-4. `PG-101` global command palette (3-4 days). Multiplier on `PG-004`.
-5. `PG-108` coverage confidence UI (3-4 days). Buyer-facing AI trust signal.
-6. `PG-109` source-used / source-ignored panel (2-3 days). Same theme.
-7. `PG-105` mobile hearing mode (5-6 days). Solo-lawyer differentiator.
-
-That's ~22-29 engineer-days = 4-5 weeks for one engineer. After that the team revisits the ledger.
+1. Staging proof: configure staging Workload Identity / secrets, run the staging deploy path, and capture runtime proof.
+2. `G-116` inbound email ingest: close `WTD-12.3b` / `PG-106`.
+3. `PG-001` conflict check workflow: finish the remaining intake-gate scope.
+4. `WTD-7.2` tasks/deadlines: matter-cockpit Tasks + Deadlines tabs and admin task templates.
+5. Durable notifications / Temporal: land `WTD-5.1`, then durable-delivery `WTD-5.3`.
+6. AI eval harness: complete `WTD-11.4` / per-workflow golden evaluation gating.
 
 ## Claude Discipline
 
