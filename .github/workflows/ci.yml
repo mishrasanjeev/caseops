@@ -238,38 +238,82 @@ jobs:
   # ---------------------------------------------------------------------------
   # Staging deploy skeleton (Sprint 14 / BG-044).
   #
-  # Guarded on the GCP_WORKLOAD_IDENTITY_PROVIDER secret so forks and
-  # contributors without GCP credentials never trigger a deploy. Runs
-  # on `main` only, after api + web + e2e all pass. Builds a container
-  # image, pushes to Artifact Registry, runs Alembic against the
-  # staging Cloud SQL instance, then deploys to Cloud Run with
-  # observability on.
+  # Guarded on explicit staging config so forks and contributors without GCP
+  # credentials never trigger a deploy. Runs on `main` only, after api + web +
+  # e2e all pass. Until the full API+Web runtime proof path is implemented, a
+  # fully configured staging job fails closed before deployment instead of
+  # silently performing an API-only deploy.
   #
-  # When GCP credentials land, the secrets required are:
+  # When GCP credentials land, the secrets required for the current gate are:
   #   GCP_PROJECT_ID
   #   GCP_REGION
   #   GCP_WORKLOAD_IDENTITY_PROVIDER
   #   GCP_DEPLOY_SA (service account email with run.admin + artifactregistry.writer + cloudsql.client)
-  #   CASEOPS_DATABASE_URL (staging)
-  #   CASEOPS_AUTH_SECRET (staging, ≥ 32 bytes)
-  # until then the job is a visible no-op so the workflow shape is
-  # reviewable in PRs.
+  #   CASEOPS_DATABASE_URL_STAGING
+  # Additional staging auth/runtime secrets must exist in GCP Secret Manager
+  # before the full staging deploy path can be enabled.
   deploy-staging:
     name: Cloud Run deploy (staging)
     runs-on: ubuntu-latest
     needs: [api, web, e2e]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     timeout-minutes: 25
+    permissions:
+      contents: read
+      # Required by google-github-actions/auth once staging Workload Identity is
+      # configured. The staging gate skips before auth when config is absent.
+      id-token: write
     steps:
-      - name: Gate on GCP credentials
+      - name: Gate on staging deploy configuration
         id: credgate
+        env:
+          HAS_GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID != '' }}
+          HAS_GCP_REGION: ${{ secrets.GCP_REGION != '' }}
+          HAS_GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER != '' }}
+          HAS_GCP_DEPLOY_SA: ${{ secrets.GCP_DEPLOY_SA != '' }}
+          HAS_CASEOPS_DATABASE_URL_STAGING: ${{ secrets.CASEOPS_DATABASE_URL_STAGING != '' }}
         run: |
-          if [ -z "${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}" ]; then
-            echo "GCP_WORKLOAD_IDENTITY_PROVIDER not set — deploy is a visible no-op."
+          missing=()
+          [ "$HAS_GCP_PROJECT_ID" = "true" ] || missing+=("GCP_PROJECT_ID")
+          [ "$HAS_GCP_REGION" = "true" ] || missing+=("GCP_REGION")
+          [ "$HAS_GCP_WORKLOAD_IDENTITY_PROVIDER" = "true" ] || missing+=("GCP_WORKLOAD_IDENTITY_PROVIDER")
+          [ "$HAS_GCP_DEPLOY_SA" = "true" ] || missing+=("GCP_DEPLOY_SA")
+          [ "$HAS_CASEOPS_DATABASE_URL_STAGING" = "true" ] || missing+=("CASEOPS_DATABASE_URL_STAGING")
+
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "Staging deploy skipped because required config is missing:"
+            printf '  - %s\n' "${missing[@]}"
+            {
+              echo "### Staging deploy skipped"
+              echo
+              echo "Required config is missing:"
+              printf -- "- %s\n" "${missing[@]}"
+            } >> "$GITHUB_STEP_SUMMARY"
             echo "deploy=skip" >> "$GITHUB_OUTPUT"
           else
+            echo "Required staging deploy config is present."
             echo "deploy=run" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Fail closed until full staging proof workflow exists
+        if: steps.credgate.outputs.deploy == 'run'
+        run: |
+          echo "Staging deploy config is present, but the workflow still lacks full API+Web runtime proof."
+          echo "Required before enabling deploy: staging web deploy, migration proof, API health, Web health, smoke proof, and SHA/revision capture."
+          {
+            echo "### Staging deploy blocked"
+            echo
+            echo "Required staging config is present, but the workflow is intentionally fail-closed until the full proof path exists."
+            echo
+            echo "Required proof before deploy enablement:"
+            echo "- API image SHA and Cloud Run revision"
+            echo "- Web image SHA and Cloud Run revision"
+            echo "- Migration execution result"
+            echo "- API health check"
+            echo "- Web health check"
+            echo "- Smoke test evidence"
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 1
 
       - name: Checkout
         if: steps.credgate.outputs.deploy == 'run'
