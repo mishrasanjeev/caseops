@@ -34,6 +34,14 @@ API_CPU=2
 API_MEMORY=4Gi
 API_CONCURRENCY=40
 API_TIMEOUT=300s
+# P1-2 (2026-05-15 perf review): keep one API instance always warm.
+# caseops-api previously had no minScale (scaled to 0), so the first
+# login after any idle window paid a 3-8s Python + SQLAlchemy + Cloud
+# SQL + clamav-sidecar cold start — the dominant cause of "login is
+# slow". One always-on cpu=2/4Gi instance trades ~$35-50/mo for a
+# consistently warm auth path. Override with API_MIN_INSTANCES=0 for a
+# cost-only deploy.
+API_MIN_INSTANCES="${API_MIN_INSTANCES:-1}"
 
 TAG="${1:-$(git rev-parse --short=7 HEAD)}"
 API_IMAGE="${REGISTRY}/caseops-api:${TAG}"
@@ -74,8 +82,9 @@ gcloud run deploy caseops-api \
   --container api \
   --image "${API_IMAGE}" \
   --cpu "${API_CPU}" \
-  --memory "${API_MEMORY}"
-echo "  caseops-api at 100% traffic on ${TAG} (${API_CPU} CPU, ${API_MEMORY}, concurrency ${API_CONCURRENCY})."
+  --memory "${API_MEMORY}" \
+  --min-instances "${API_MIN_INSTANCES}"
+echo "  caseops-api at 100% traffic on ${TAG} (${API_CPU} CPU, ${API_MEMORY}, concurrency ${API_CONCURRENCY}, min-instances ${API_MIN_INSTANCES})."
 
 # Step 4 — deploy web.
 echo "--- 4/5 deploy caseops-web ---"
