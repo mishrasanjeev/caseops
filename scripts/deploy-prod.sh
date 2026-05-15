@@ -42,6 +42,14 @@ API_TIMEOUT=300s
 # consistently warm auth path. Override with API_MIN_INSTANCES=0 for a
 # cost-only deploy.
 API_MIN_INSTANCES="${API_MIN_INSTANCES:-1}"
+# P1-2b (2026-05-15 perf review): keep one web instance warm too.
+# /sign-in is `dynamic = "force-dynamic"` (SSR per request, no CDN
+# cache), so with web minScale=0 the first hit after an idle window
+# cold-starts the Next.js node server (~1-3s) before the login form is
+# even usable — the leading cold-path login latency once the API is
+# warm. caseops-web is stateless (no DB / sidecar); one cpu=1/512Mi
+# warm instance is ~$10-18/mo. Override with WEB_MIN_INSTANCES=0.
+WEB_MIN_INSTANCES="${WEB_MIN_INSTANCES:-1}"
 
 TAG="${1:-$(git rev-parse --short=7 HEAD)}"
 API_IMAGE="${REGISTRY}/caseops-api:${TAG}"
@@ -79,18 +87,19 @@ gcloud run deploy caseops-api \
   --quiet \
   --concurrency "${API_CONCURRENCY}" \
   --timeout "${API_TIMEOUT}" \
+  --min-instances "${API_MIN_INSTANCES}" \
   --container api \
   --image "${API_IMAGE}" \
   --cpu "${API_CPU}" \
-  --memory "${API_MEMORY}" \
-  --min-instances "${API_MIN_INSTANCES}"
+  --memory "${API_MEMORY}"
 echo "  caseops-api at 100% traffic on ${TAG} (${API_CPU} CPU, ${API_MEMORY}, concurrency ${API_CONCURRENCY}, min-instances ${API_MIN_INSTANCES})."
 
 # Step 4 — deploy web.
 echo "--- 4/5 deploy caseops-web ---"
 gcloud run deploy caseops-web \
-  --image "${WEB_IMAGE}" --region "${REGION}" --project "${PROJECT}" --quiet
-echo "  caseops-web at 100% traffic on ${TAG}."
+  --image "${WEB_IMAGE}" --region "${REGION}" --project "${PROJECT}" --quiet \
+  --min-instances "${WEB_MIN_INSTANCES}"
+echo "  caseops-web at 100% traffic on ${TAG} (min-instances ${WEB_MIN_INSTANCES})."
 
 # Step 5 — staleness sweep. Fails the script if the public domain
 # doesn't return the new image tag, so you don't think you deployed
