@@ -64,8 +64,10 @@ P1 status after commit `8466911`:
 - `P1-004` `Implemented` Mobile and axe sweeps cover the smoke surfaces.
 - `P1-005` `Implemented` Security CI gates cover dependency advisories,
   gitleaks, license allow-list, and Cloud Run secret-reference checks.
-- `P1-006` `Missing` Postgres-backed DB validation tests remain deferred until
-  CI has a Postgres service container.
+- `P1-006` `Implemented` Postgres-backed DB validation tests are live through
+  `AQ-005`: CI has a `pgvector/pgvector:pg17` service container and runs the
+  Postgres validation marker suite. The broader all-DB-sensitive-test expansion
+  remains a separate `AQ-005` follow-on gap.
 - `P1-007` `Implemented` AI route governance gate enforces rate limits for
   `/api/ai/*` and `/api/recommendations/*` mutations.
 - `P1-008` `Implemented` Upload size cap and abuse tests landed.
@@ -513,8 +515,14 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
 - `WTD-12.2` `Missing` Connector health UI.
   Evidence: `docs/WORK_TO_BE_DONE.md:703-705`.
 
-- `WTD-12.3` `Missing` Email ingest and calendar sync.
-  Evidence: `docs/WORK_TO_BE_DONE.md:707-709`.
+- `WTD-12.3a` `Implemented` Calendar sync.
+  Evidence: bounded manual Outlook bulk sync is tracked as `EH-PROV-02` below;
+  durable always-on automation remains gated on `WTD-5.1` Temporal.
+
+- `WTD-12.3b` `Missing` Inbound email ingest for intake and matter
+  communications.
+  Evidence: `docs/WORK_TO_BE_DONE.md:739-741` and `PG-106` in
+  `docs/STRICT_PRODUCT_GAPS_2026-04-30.md`.
 
 ## Stale-Doc Items To Correct In docs/WORK_TO_BE_DONE.md
 
@@ -714,11 +722,14 @@ re-discovering them as new findings.
   The literal `blocked_pending_temporal` is the enterprise-readable
   source of truth.
 
-### Closure pre-conditions for both items
+### Closure pre-conditions
 
-Both items remain open in this ledger until the merged commit is
+`EH-PROV-01` remains open in this ledger until the merged commit is
 deployed to `caseops.ai` via `scripts/deploy-prod.sh`, the
 `Prod verification (Playwright)` workflow has run against the
-deployed SHA, and (for EH-PROV-01) the operator-side SendGrid
-dashboard + Secret Manager steps in
-`docs/runbooks/sendgrid-event-webhook.md` are complete.
+deployed SHA, and the operator-side SendGrid dashboard + Secret Manager
+steps in `docs/runbooks/sendgrid-event-webhook.md` are complete.
+
+`EH-PROV-02` is closed for bounded manual calendar sync. Durable
+always-on calendar automation is not closed by that work and remains
+tracked under `WTD-5.1` / `WTD-5.3`.

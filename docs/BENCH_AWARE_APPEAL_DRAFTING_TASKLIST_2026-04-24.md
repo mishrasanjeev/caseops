@@ -416,8 +416,9 @@ Recommended placement:
 - Start after C-2 review fixes are stable.
 - Can run in parallel with Phase C-3 if a separate worker owns only judge,
   drafting, and matter UI files.
-- Should not replace P1-006 Postgres CI or P1-009 backup/restore if the goal
-  is enterprise sign-off; those remain hardening gaps.
+- Should not replace current enterprise hardening work. Historical note:
+  P1-006 Postgres CI and P1-009 backup/restore were open when this tasklist was
+  written; the current strict enterprise ledger now marks both implemented.
 
 Suggested branch name:
 

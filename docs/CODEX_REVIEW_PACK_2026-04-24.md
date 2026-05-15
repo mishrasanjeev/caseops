@@ -5,6 +5,10 @@ Hand-off snapshot for Codex review. All 5 P0s and 8 of 10 P1s from
 P1s are P1-006 Postgres-backed DB validation and P1-009 backup/restore
 drill evidence.
 
+Supersession note (2026-05-14): the current strict enterprise ledger now marks
+both P1-006 and P1-009 implemented. This review pack preserves the original
+2026-04-24 hand-off state for audit history only.
+
 ## Verdict
 
 **`GO with caveat`** — release-grade for the production surface that
@@ -55,7 +59,7 @@ Bug-fix summary spreadsheet: `C:\Users\mishr\Downloads\CaseOps_BugFix_Ram_2026-0
 
 ## Known limitations / open work
 
-1. **P1-006 Postgres-backed DB validation tests** — still uses sqlite in CI. Adding a Postgres service container is outside today's scope. Tracked in `docs/STRICT_ENTERPRISE_GAP_TASKLIST.md`.
+1. **P1-006 Postgres-backed DB validation tests** — superseded 2026-05-14; tracked as implemented in `docs/STRICT_ENTERPRISE_GAP_TASKLIST.md` via `AQ-005`. This line records the original 2026-04-24 limitation.
 2. **P1-009 backup/restore drill** — runbook exists; the actual drill against a clean environment hasn't been re-run in this session.
 3. **P1-002 route matrix waivers (16 routes)** — explicit TODO+date entries in `apps/api/tests/test_route_coverage_matrix.py::ALLOWED_UNTESTED`. Each is real test gap, not a fix-now blocker.
 4. **P1-003 page matrix waivers (20 pages)** — same shape in `apps/web/app/__page-coverage-matrix.test.ts::ALLOWED_UNTESTED`.

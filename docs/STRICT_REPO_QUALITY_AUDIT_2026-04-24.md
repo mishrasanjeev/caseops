@@ -326,6 +326,11 @@ Acceptance:
 
 Status: `Partially implemented`.
 
+Supersession note (2026-05-14): `AQ-005` added Postgres-backed validation in
+CI, and `docs/STRICT_ENTERPRISE_GAP_TASKLIST.md` now marks `P1-006`
+`Implemented`. The broader expansion to all DB-sensitive tests remains tracked
+as an `AQ-005` follow-on, not as a reopening of `P1-006`.
+
 Required fix:
 
 - Add PostgreSQL-backed tests for unique constraints, foreign keys, nullable and
