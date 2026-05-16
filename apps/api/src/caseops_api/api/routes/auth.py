@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response
 
 from caseops_api.api.dependencies import DbSession, get_current_context
 from caseops_api.core.cookies import (
@@ -21,6 +21,7 @@ from caseops_api.schemas.employees import (
 from caseops_api.services.employees import (
     complete_account_setup,
     complete_password_reset,
+    record_employee_login_async,
     start_password_reset,
 )
 from caseops_api.services.identity import (
@@ -64,6 +65,7 @@ async def login(
     response: Response,
     payload: LoginRequest,
     session: DbSession,
+    background: BackgroundTasks,
 ) -> AuthSessionResponse:
     auth = authenticate_user(
         session,
@@ -71,6 +73,11 @@ async def login(
         password=payload.password,
         company_slug=payload.company_slug,
     )
+    # P1-1: defer the employee.login audit + last_login write off the
+    # login hot path. Runs after the response is sent, on its own fresh
+    # DB session (record_employee_login_async opens one via
+    # get_session_factory) — never the request session.
+    background.add_task(record_employee_login_async, auth.membership.id)
     # EG-001: set the HttpOnly session cookie + JS-readable CSRF
     # cookie. The body still carries access_token for one release so
     # SDKs / automation that already use Bearer auth keep working

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -60,6 +61,8 @@ from caseops_api.schemas.employees import (
 from caseops_api.services.audit import record_audit, record_from_context
 from caseops_api.services.employee_mailer import send_employee_account_link
 from caseops_api.services.identity import SessionContext
+
+logger = logging.getLogger(__name__)
 
 ACCOUNT_SETUP_TTL = timedelta(hours=24)
 PASSWORD_RESET_TTL = timedelta(minutes=60)
@@ -1917,6 +1920,52 @@ def record_employee_login(
     session.commit()
 
 
+def record_employee_login_async(membership_id: str) -> None:
+    """Background-task entrypoint for the deferred employee.login write.
+
+    P1-1: the login route (auth.login) schedules this via FastAPI
+    BackgroundTasks so the audit INSERT + last_login UPDATE + commit no
+    longer sit on the login critical path.
+
+    The request that triggered login has already returned and its
+    request-scoped session is closed — so this opens a FRESH session
+    via get_session_factory() and never touches the request session.
+    Best-effort: a failure to record the login audit must never affect
+    the (already-sent) login response, so exceptions are swallowed
+    after a rollback. session.commit() is preserved (inside
+    record_employee_login) — it is not dropped.
+    """
+    from caseops_api.db.session import get_session_factory
+
+    session = get_session_factory()()
+    try:
+        membership = session.scalar(
+            select(CompanyMembership)
+            .options(
+                joinedload(CompanyMembership.user),
+                joinedload(CompanyMembership.employee_profile),
+            )
+            .where(CompanyMembership.id == membership_id)
+        )
+        if membership is not None:
+            record_employee_login(session, membership=membership)
+    except Exception:  # noqa: BLE001 - fire-and-forget; never propagate to the worker
+        # Best-effort, but NOT silent: a dropped login audit is a gap in
+        # the security audit trail, so emit a WARNING + full traceback
+        # for ops. The auth-derived membership id is deliberately NOT
+        # interpolated — CodeQL py/clear-text-logging-sensitive-data
+        # treats values flowing from the authentication path as
+        # sensitive. The traceback plus the request-scoped tenant/user
+        # logging context (set_tenant_context) are sufficient to
+        # diagnose which login dropped its audit.
+        logger.warning(
+            "deferred employee.login audit write failed", exc_info=True
+        )
+        session.rollback()
+    finally:
+        session.close()
+
+
 __all__ = [
     "commit_employee_offboarding",
     "complete_account_setup",
@@ -1928,6 +1977,7 @@ __all__ = [
     "list_employees",
     "preview_employee_offboarding",
     "record_employee_login",
+    "record_employee_login_async",
     "resend_employee_setup",
     "start_password_reset",
     "update_employee",
