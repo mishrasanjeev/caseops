@@ -753,6 +753,155 @@ export async function fetchMatterWorkspace(matterId: string): Promise<unknown> {
   return apiRequest<unknown>(`/api/matters/${matterId}/workspace`);
 }
 
+export type MatterTaskRecord = {
+  id: string;
+  matter_id: string;
+  created_by_membership_id: string | null;
+  created_by_name: string | null;
+  owner_membership_id: string | null;
+  owner_name: string | null;
+  title: string;
+  description: string | null;
+  due_on: string | null;
+  status: "todo" | "in_progress" | "blocked" | "completed";
+  priority: "low" | "medium" | "high" | "urgent";
+  source_type: "user" | "proceeding_intelligence";
+  source_ref_id: string | null;
+  source_label: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MatterTaskCreateInput = {
+  title: string;
+  description?: string | null;
+  owner_membership_id?: string | null;
+  due_on?: string | null;
+  status?: MatterTaskRecord["status"];
+  priority?: MatterTaskRecord["priority"];
+};
+
+export type MatterTaskUpdateInput = Partial<MatterTaskCreateInput>;
+
+export type MatterTaskListResponse = {
+  matter_id: string;
+  tasks: MatterTaskRecord[];
+};
+
+export async function listMatterTasks(
+  matterId: string,
+  options: { includeCompleted?: boolean } = {},
+): Promise<MatterTaskListResponse> {
+  const params = new URLSearchParams();
+  if (options.includeCompleted !== undefined) {
+    params.set("include_completed", String(options.includeCompleted));
+  }
+  const qs = params.toString();
+  return apiRequest<MatterTaskListResponse>(
+    `/api/matters/${matterId}/tasks${qs ? `?${qs}` : ""}`,
+  );
+}
+
+export async function createMatterTask(
+  matterId: string,
+  input: MatterTaskCreateInput,
+): Promise<MatterTaskRecord> {
+  return apiRequest<MatterTaskRecord>(`/api/matters/${matterId}/tasks`, {
+    method: "POST",
+    body: input,
+  });
+}
+
+export async function updateMatterTask(
+  matterId: string,
+  taskId: string,
+  input: MatterTaskUpdateInput,
+): Promise<MatterTaskRecord> {
+  return apiRequest<MatterTaskRecord>(`/api/matters/${matterId}/tasks/${taskId}`, {
+    method: "PATCH",
+    body: input,
+  });
+}
+
+export type MatterDeadlineRecord = {
+  id: string;
+  matter_id: string;
+  source: string;
+  kind: string;
+  title: string;
+  notes: string | null;
+  due_on: string;
+  status: "open" | "done" | "cancelled" | "missed";
+  assignee_membership_id: string | null;
+  source_ref_type: string | null;
+  source_ref_id: string | null;
+  created_by_membership_id: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MatterDeadlineCreateInput = {
+  source?: "custom";
+  kind?: string;
+  title: string;
+  notes?: string | null;
+  due_on: string;
+  assignee_membership_id?: string | null;
+};
+
+export type MatterDeadlineUpdateInput = {
+  title?: string;
+  notes?: string | null;
+  due_on?: string;
+  status?: MatterDeadlineRecord["status"];
+  assignee_membership_id?: string | null;
+};
+
+export type MatterDeadlineListResponse = {
+  matter_id: string;
+  deadlines: MatterDeadlineRecord[];
+};
+
+export async function listMatterDeadlines(
+  matterId: string,
+  options: { includeDone?: boolean } = {},
+): Promise<MatterDeadlineListResponse> {
+  const params = new URLSearchParams();
+  if (options.includeDone !== undefined) {
+    params.set("include_done", String(options.includeDone));
+  }
+  const qs = params.toString();
+  return apiRequest<MatterDeadlineListResponse>(
+    `/api/matters/${matterId}/deadlines${qs ? `?${qs}` : ""}`,
+  );
+}
+
+export async function createMatterDeadline(
+  matterId: string,
+  input: MatterDeadlineCreateInput,
+): Promise<MatterDeadlineRecord> {
+  return apiRequest<MatterDeadlineRecord>(`/api/matters/${matterId}/deadlines`, {
+    method: "POST",
+    body: input,
+  });
+}
+
+export async function updateMatterDeadline(
+  matterId: string,
+  deadlineId: string,
+  input: MatterDeadlineUpdateInput,
+): Promise<MatterDeadlineRecord> {
+  return apiRequest<MatterDeadlineRecord>(
+    `/api/matters/${matterId}/deadlines/${deadlineId}`,
+    {
+      method: "PATCH",
+      body: input,
+    },
+  );
+}
+
 export type MatterAuditFilters = {
   since?: string;
   until?: string;

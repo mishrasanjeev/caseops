@@ -26,6 +26,10 @@ describe("MatterCockpitNav", () => {
       "href",
       "/app/matters/m-1/litigation-intelligence",
     );
+    expect(screen.getByRole("link", { name: "Tasks & Deadlines" })).toHaveAttribute(
+      "href",
+      "/app/matters/m-1/tasks",
+    );
     expect(screen.getByRole("link", { name: "Knowledge Graph" })).toHaveAttribute(
       "href",
       "/app/matters/m-1/knowledge-graph",

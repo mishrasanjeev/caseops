@@ -803,7 +803,7 @@ Sprints Aâ€“F (security, frontend spine, AI core, drafting v1) all **shipped** â
 1. Staging proof: configure staging Workload Identity / secrets, run the staging deploy path, and capture runtime proof.
 2. `G-116` inbound email ingest: close `WTD-12.3b` / `PG-106` without touching calendar sync.
 3. `PG-001` conflict check: finish the remaining intake-gate scope.
-4. `WTD-7.2` tasks/deadlines: matter-cockpit Tasks + Deadlines tabs and admin task templates.
+4. `WTD-7.2` tasks/deadlines: matter-cockpit foundation implemented; admin task templates remain.
 5. Durable notifications / Temporal: land `WTD-5.1` and then the durable-delivery parts of `WTD-5.3`.
 6. AI eval harness: complete the golden-dataset and CI-gated evaluation work under `WTD-11.4`.
 

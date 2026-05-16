@@ -13,6 +13,7 @@ export function MatterCockpitNav({ matterId }: { matterId: string }) {
   const tabs: Tab[] = [
     { href: base, label: "Overview" },
     { href: `${base}/timeline`, label: "Timeline" },
+    { href: `${base}/tasks`, label: "Tasks & Deadlines" },
     { href: `${base}/documents`, label: "Documents" },
     { href: `${base}/drafts`, label: "Drafts" },
     { href: `${base}/hearings`, label: "Hearings" },

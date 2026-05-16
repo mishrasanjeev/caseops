@@ -200,10 +200,8 @@ describe("CalendarPage", () => {
     const deadlineLink = await screen.findByTestId("calendar-event-deadline:d1");
 
     expect(hearingLink.getAttribute("href")).toBe("/app/matters/m1/hearings");
-    // Tasks + deadlines deep-link to the matter cockpit root for now;
-    // when the matter cockpit gains a Tasks tab they'll route to it.
-    expect(taskLink.getAttribute("href")).toBe("/app/matters/m2");
-    expect(deadlineLink.getAttribute("href")).toBe("/app/matters/m3");
+    expect(taskLink.getAttribute("href")).toBe("/app/matters/m2/tasks");
+    expect(deadlineLink.getAttribute("href")).toBe("/app/matters/m3/tasks");
   });
 
   it("shows '+N more' when a single day has more than 3 events", async () => {

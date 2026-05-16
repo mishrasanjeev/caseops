@@ -2630,6 +2630,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matters/{matter_id}/deadlines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List matter deadlines */
+        get: operations["get_current_company_matter_deadlines_api_matters__matter_id__deadlines_get"];
+        put?: never;
+        /** Create a matter deadline */
+        post: operations["post_current_company_matter_deadline_api_matters__matter_id__deadlines_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/{matter_id}/deadlines/{deadline_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update a matter deadline */
+        patch: operations["patch_current_company_matter_deadline_api_matters__matter_id__deadlines__deadline_id__patch"];
+        trace?: never;
+    };
     "/api/matters/{matter_id}/drafts": {
         parameters: {
             query?: never;
@@ -3446,7 +3481,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** List matter tasks */
+        get: operations["get_current_company_matter_tasks_api_matters__matter_id__tasks_get"];
         put?: never;
         /** Add a task to a matter workspace */
         post: operations["post_current_company_matter_task_api_matters__matter_id__tasks_post"];
@@ -9732,6 +9768,96 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** MatterDeadlineCreateRequest */
+        MatterDeadlineCreateRequest: {
+            /** Assignee Membership Id */
+            assignee_membership_id?: string | null;
+            /**
+             * Due On
+             * Format: date
+             */
+            due_on: string;
+            /**
+             * Kind
+             * @default manual
+             */
+            kind: string;
+            /** Notes */
+            notes?: string | null;
+            /**
+             * Source
+             * @default custom
+             * @constant
+             */
+            source: "custom";
+            /** Title */
+            title: string;
+        };
+        /** MatterDeadlineListResponse */
+        MatterDeadlineListResponse: {
+            /** Deadlines */
+            deadlines: components["schemas"]["MatterDeadlineRecord"][];
+            /** Matter Id */
+            matter_id: string;
+        };
+        /** MatterDeadlineRecord */
+        MatterDeadlineRecord: {
+            /** Assignee Membership Id */
+            assignee_membership_id: string | null;
+            /** Completed At */
+            completed_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Membership Id */
+            created_by_membership_id: string | null;
+            /**
+             * Due On
+             * Format: date
+             */
+            due_on: string;
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Matter Id */
+            matter_id: string;
+            /** Notes */
+            notes: string | null;
+            /** Source */
+            source: string;
+            /** Source Ref Id */
+            source_ref_id: string | null;
+            /** Source Ref Type */
+            source_ref_type: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "open" | "done" | "cancelled" | "missed";
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** MatterDeadlineUpdateRequest */
+        MatterDeadlineUpdateRequest: {
+            /** Assignee Membership Id */
+            assignee_membership_id?: string | null;
+            /** Due On */
+            due_on?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Status */
+            status?: ("open" | "done" | "cancelled" | "missed") | null;
+            /** Title */
+            title?: string | null;
+        };
         /** MatterDocumentReviewGenerateRequest */
         MatterDocumentReviewGenerateRequest: {
             /** Focus */
@@ -10508,6 +10634,13 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** MatterTaskListResponse */
+        MatterTaskListResponse: {
+            /** Matter Id */
+            matter_id: string;
+            /** Tasks */
+            tasks: components["schemas"]["MatterTaskRecord"][];
+        };
         /** MatterTaskRecord */
         MatterTaskRecord: {
             /** Completed At */
@@ -10538,6 +10671,16 @@ export interface components {
              * @enum {string}
              */
             priority: "low" | "medium" | "high" | "urgent";
+            /** Source Label */
+            source_label?: string | null;
+            /** Source Ref Id */
+            source_ref_id?: string | null;
+            /**
+             * Source Type
+             * @default user
+             * @enum {string}
+             */
+            source_type: "user" | "proceeding_intelligence";
             /**
              * Status
              * @enum {string}
@@ -18631,6 +18774,110 @@ export interface operations {
             };
         };
     };
+    get_current_company_matter_deadlines_api_matters__matter_id__deadlines_get: {
+        parameters: {
+            query?: {
+                include_done?: boolean;
+            };
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterDeadlineListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_current_company_matter_deadline_api_matters__matter_id__deadlines_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MatterDeadlineCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterDeadlineRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_current_company_matter_deadline_api_matters__matter_id__deadlines__deadline_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+                deadline_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MatterDeadlineUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterDeadlineRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_current_company_matter_drafts_api_matters__matter_id__drafts_get: {
         parameters: {
             query?: never;
@@ -20382,6 +20629,39 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_current_company_matter_tasks_api_matters__matter_id__tasks_get: {
+        parameters: {
+            query?: {
+                include_completed?: boolean;
+            };
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterTaskListResponse"];
+                };
             };
             /** @description Validation Error */
             422: {
