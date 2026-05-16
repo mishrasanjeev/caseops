@@ -177,9 +177,11 @@ def authenticate_user(
         _raise_bad_request("Multiple company memberships found. Please specify a company slug.")
 
     membership = memberships[0]
-    from caseops_api.services.employees import record_employee_login
-
-    record_employee_login(session, membership=membership)
+    # P1-1: the employee.login audit row + last_login stamp used to be
+    # written here (synchronous INSERT + UPDATE + commit on the login
+    # critical path). It is now deferred to a FastAPI BackgroundTask in
+    # the /auth/login route (record_employee_login_async, fresh session).
+    # authenticate_user no longer mutates the DB.
     return _build_auth_response(
         session,
         SessionContext(company=membership.company, user=membership.user, membership=membership)

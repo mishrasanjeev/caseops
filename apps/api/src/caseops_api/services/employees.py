@@ -1917,6 +1917,41 @@ def record_employee_login(
     session.commit()
 
 
+def record_employee_login_async(membership_id: str) -> None:
+    """Background-task entrypoint for the deferred employee.login write.
+
+    P1-1: the login route (auth.login) schedules this via FastAPI
+    BackgroundTasks so the audit INSERT + last_login UPDATE + commit no
+    longer sit on the login critical path.
+
+    The request that triggered login has already returned and its
+    request-scoped session is closed — so this opens a FRESH session
+    via get_session_factory() and never touches the request session.
+    Best-effort: a failure to record the login audit must never affect
+    the (already-sent) login response, so exceptions are swallowed
+    after a rollback. session.commit() is preserved (inside
+    record_employee_login) — it is not dropped.
+    """
+    from caseops_api.db.session import get_session_factory
+
+    session = get_session_factory()()
+    try:
+        membership = session.scalar(
+            select(CompanyMembership)
+            .options(
+                joinedload(CompanyMembership.user),
+                joinedload(CompanyMembership.employee_profile),
+            )
+            .where(CompanyMembership.id == membership_id)
+        )
+        if membership is not None:
+            record_employee_login(session, membership=membership)
+    except Exception:  # noqa: BLE001 - fire-and-forget; never propagate to the worker
+        session.rollback()
+    finally:
+        session.close()
+
+
 __all__ = [
     "commit_employee_offboarding",
     "complete_account_setup",
@@ -1928,6 +1963,7 @@ __all__ = [
     "list_employees",
     "preview_employee_offboarding",
     "record_employee_login",
+    "record_employee_login_async",
     "resend_employee_setup",
     "start_password_reset",
     "update_employee",
