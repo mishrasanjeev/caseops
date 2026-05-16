@@ -115,6 +115,24 @@ class TodayDeadline:
     days_until: int
 
 
+# Per-stream row cap for GET /api/me/today. The Today feed is a
+# triage glance, not a list view — a single user is never meant to
+# action hundreds of items from one morning screen. Capping keeps the
+# payload bounded; the matters / hearings / calendar list views remain
+# the unbounded source of truth. next-action does NOT use this cap (it
+# passes limit=None) so its single-most-urgent pick is never skewed by
+# truncation. No prior local constant existed for this.
+MAX_PER_STREAM = 100
+
+_STREAM_KEYS: tuple[str, ...] = (
+    "hearings_next_7d",
+    "tasks_due_or_overdue",
+    "drafts_in_review",
+    "overdue_invoices",
+    "deadlines_next_7d",
+)
+
+
 @dataclass(frozen=True)
 class TodayView:
     today: date
@@ -124,6 +142,17 @@ class TodayView:
     drafts_in_review: list[TodayDraftInReview]
     overdue_invoices: list[TodayInvoice]
     deadlines_next_7d: list[TodayDeadline]
+    # Additive bounding metadata (response-shape extension, not a
+    # breaking change — the five arrays above are unchanged). Keyed by
+    # the stream names in _STREAM_KEYS.
+    #   stream_limits    — the per-stream cap that was applied
+    #   stream_counts    — number of rows RETURNED (== len(array) ≤ cap;
+    #                       intentionally not an unbounded total, which
+    #                       would cost an extra COUNT per stream)
+    #   stream_truncated — True iff more rows existed beyond the cap
+    stream_limits: dict[str, int]
+    stream_counts: dict[str, int]
+    stream_truncated: dict[str, bool]
 
 
 # ---------------------------------------------------------------
@@ -142,15 +171,52 @@ def build_today_view(
     deterministic tests; defaults to ``date.today()``."""
     today = today or date.today()
     horizon_end = today + timedelta(days=max(0, horizon_days))
+    # Read the module constant at call time so tests can monkeypatch it.
+    cap = MAX_PER_STREAM
+    # Over-fetch one row past the cap: if we get cap+1 back, the stream
+    # is truncated. Cheaper than a separate COUNT(*) per stream.
+    probe = cap + 1
+
+    raw = {
+        "hearings_next_7d": _hearings(
+            session, context, today, horizon_end, limit=probe,
+        ),
+        "tasks_due_or_overdue": _tasks(
+            session, context, today, horizon_end, limit=probe,
+        ),
+        "drafts_in_review": _drafts_in_review(session, context, limit=probe),
+        "overdue_invoices": _overdue_invoices(
+            session, context, today, limit=probe,
+        ),
+        "deadlines_next_7d": _deadlines(
+            session, context, today, horizon_end, limit=probe,
+        ),
+    }
+
+    bounded: dict[str, list] = {}
+    stream_truncated: dict[str, bool] = {}
+    stream_counts: dict[str, int] = {}
+    stream_limits: dict[str, int] = {}
+    for key in _STREAM_KEYS:
+        rows = raw[key]
+        truncated = len(rows) > cap
+        kept = rows[:cap]
+        bounded[key] = kept
+        stream_truncated[key] = truncated
+        stream_counts[key] = len(kept)
+        stream_limits[key] = cap
 
     return TodayView(
         today=today,
         horizon_days=horizon_days,
-        hearings_next_7d=_hearings(session, context, today, horizon_end),
-        tasks_due_or_overdue=_tasks(session, context, today, horizon_end),
-        drafts_in_review=_drafts_in_review(session, context),
-        overdue_invoices=_overdue_invoices(session, context, today),
-        deadlines_next_7d=_deadlines(session, context, today, horizon_end),
+        hearings_next_7d=bounded["hearings_next_7d"],
+        tasks_due_or_overdue=bounded["tasks_due_or_overdue"],
+        drafts_in_review=bounded["drafts_in_review"],
+        overdue_invoices=bounded["overdue_invoices"],
+        deadlines_next_7d=bounded["deadlines_next_7d"],
+        stream_limits=stream_limits,
+        stream_counts=stream_counts,
+        stream_truncated=stream_truncated,
     )
 
 
@@ -170,9 +236,14 @@ def _matter_ref(matter: Matter) -> MatterRef:
 
 
 def _hearings(
-    session: Session, context: SessionContext, today: date, horizon_end: date,
+    session: Session,
+    context: SessionContext,
+    today: date,
+    horizon_end: date,
+    *,
+    limit: int | None = None,
 ) -> list[TodayHearing]:
-    rows = session.execute(
+    stmt = (
         select(MatterHearing, Matter)
         .join(Matter, Matter.id == MatterHearing.matter_id)
         .where(
@@ -183,7 +254,10 @@ def _hearings(
             MatterHearing.hearing_on <= horizon_end,
         )
         .order_by(MatterHearing.hearing_on.asc())
-    ).all()
+    )
+    if limit is not None:
+        stmt = stmt.limit(limit)
+    rows = session.execute(stmt).all()
     return [
         TodayHearing(
             id=h.id,
@@ -202,9 +276,11 @@ def _tasks(
     context: SessionContext,
     today: date,
     horizon_end: date,
+    *,
+    limit: int | None = None,
 ) -> list[TodayTask]:
     membership_id = context.membership.id
-    rows = session.execute(
+    stmt = (
         select(MatterTask, Matter)
         .join(Matter, Matter.id == MatterTask.matter_id)
         .where(
@@ -228,7 +304,10 @@ def _tasks(
             MatterTask.due_on.asc(),
             MatterTask.created_at.asc(),
         )
-    ).all()
+    )
+    if limit is not None:
+        stmt = stmt.limit(limit)
+    rows = session.execute(stmt).all()
     return [
         TodayTask(
             id=t.id,
@@ -244,9 +323,12 @@ def _tasks(
 
 
 def _drafts_in_review(
-    session: Session, context: SessionContext,
+    session: Session,
+    context: SessionContext,
+    *,
+    limit: int | None = None,
 ) -> list[TodayDraftInReview]:
-    rows = session.execute(
+    stmt = (
         select(Draft, Matter)
         .join(Matter, Matter.id == Draft.matter_id)
         .where(
@@ -255,7 +337,10 @@ def _drafts_in_review(
             Draft.status == DraftStatus.IN_REVIEW,
         )
         .order_by(Draft.updated_at.desc())
-    ).all()
+    )
+    if limit is not None:
+        stmt = stmt.limit(limit)
+    rows = session.execute(stmt).all()
     return [
         TodayDraftInReview(
             id=d.id,
@@ -270,9 +355,13 @@ def _drafts_in_review(
 
 
 def _overdue_invoices(
-    session: Session, context: SessionContext, today: date,
+    session: Session,
+    context: SessionContext,
+    today: date,
+    *,
+    limit: int | None = None,
 ) -> list[TodayInvoice]:
-    rows = session.execute(
+    stmt = (
         select(MatterInvoice, Matter)
         .join(Matter, Matter.id == MatterInvoice.matter_id)
         .where(
@@ -285,7 +374,10 @@ def _overdue_invoices(
             ),
         )
         .order_by(MatterInvoice.due_on.asc())
-    ).all()
+    )
+    if limit is not None:
+        stmt = stmt.limit(limit)
+    rows = session.execute(stmt).all()
     return [
         TodayInvoice(
             id=inv.id,
@@ -303,9 +395,14 @@ def _overdue_invoices(
 
 
 def _deadlines(
-    session: Session, context: SessionContext, today: date, horizon_end: date,
+    session: Session,
+    context: SessionContext,
+    today: date,
+    horizon_end: date,
+    *,
+    limit: int | None = None,
 ) -> list[TodayDeadline]:
-    rows = session.execute(
+    stmt = (
         select(MatterDeadline, Matter)
         .join(Matter, Matter.id == MatterDeadline.matter_id)
         .where(
@@ -315,7 +412,10 @@ def _deadlines(
             MatterDeadline.due_on <= horizon_end,
         )
         .order_by(MatterDeadline.due_on.asc())
-    ).all()
+    )
+    if limit is not None:
+        stmt = stmt.limit(limit)
+    rows = session.execute(stmt).all()
     out: list[TodayDeadline] = []
     for d, m in rows:
         days_until = (d.due_on - today).days
