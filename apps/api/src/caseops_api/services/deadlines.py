@@ -16,16 +16,18 @@ from typing import Literal
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from caseops_api.db.models import (
+    CompanyMembership,
     Matter,
     MatterDeadline,
     MatterDeadlineStatus,
 )
+from caseops_api.schemas.matters import MatterDeadlineRecord, MatterDeadlineUpdateRequest
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.identity import SessionContext
-from caseops_api.services.matter_access import assert_access
+from caseops_api.services.matter_access import assert_access, can_access
 
 _VALID_SOURCES = {"hearing", "draft", "contract", "intake", "custom", "followup"}
 
@@ -43,6 +45,69 @@ def _load_matter(session: Session, context: SessionContext, matter_id: str) -> M
         )
     assert_access(session, context=context, matter=matter)
     return matter
+
+
+def _get_company_membership(
+    session: Session,
+    *,
+    company_id: str,
+    membership_id: str,
+) -> CompanyMembership:
+    membership = session.scalar(
+        select(CompanyMembership)
+        .options(joinedload(CompanyMembership.user))
+        .where(
+            CompanyMembership.id == membership_id,
+            CompanyMembership.company_id == company_id,
+            CompanyMembership.is_active.is_(True),
+        )
+    )
+    if membership is None or not membership.user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Assignee does not belong to this company.",
+        )
+    return membership
+
+
+def _assert_membership_can_access_matter(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter: Matter,
+    membership: CompanyMembership,
+) -> None:
+    candidate_context = SessionContext(
+        company=context.company,
+        user=membership.user,
+        membership=membership,
+    )
+    if can_access(session, context=candidate_context, matter=matter):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Assignee cannot access this matter.",
+    )
+
+
+def deadline_record(deadline: MatterDeadline) -> MatterDeadlineRecord:
+    return MatterDeadlineRecord(
+        id=deadline.id,
+        matter_id=deadline.matter_id,
+        source=deadline.source,
+        kind=deadline.kind,
+        title=deadline.title,
+        notes=deadline.notes,
+        due_on=deadline.due_on,
+        status=deadline.status,
+        assignee_membership_id=deadline.assignee_membership_id,
+        source_ref_type=deadline.source_ref_type,
+        source_ref_id=deadline.source_ref_id,
+        created_by_membership_id=deadline.created_by_membership_id,
+        completed_at=deadline.completed_at,
+        created_at=deadline.created_at,
+        updated_at=deadline.updated_at,
+    )
 
 
 def list_deadlines(
@@ -67,6 +132,24 @@ def list_deadlines(
     return list(session.scalars(stmt))
 
 
+def list_deadline_records(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+    include_done: bool = False,
+) -> list[MatterDeadlineRecord]:
+    return [
+        deadline_record(deadline)
+        for deadline in list_deadlines(
+            session,
+            context=context,
+            matter_id=matter_id,
+            include_done=include_done,
+        )
+    ]
+
+
 def create_deadline(
     session: Session,
     *,
@@ -81,7 +164,19 @@ def create_deadline(
     source_ref_type: str | None = None,
     source_ref_id: str | None = None,
 ) -> MatterDeadline:
-    _load_matter(session, context, matter_id)
+    matter = _load_matter(session, context, matter_id)
+    if assignee_membership_id:
+        assignee = _get_company_membership(
+            session,
+            company_id=context.company.id,
+            membership_id=assignee_membership_id,
+        )
+        _assert_membership_can_access_matter(
+            session,
+            context=context,
+            matter=matter,
+            membership=assignee,
+        )
     source_norm = (source or "").strip().lower()
     if source_norm not in _VALID_SOURCES:
         raise HTTPException(
@@ -123,6 +218,106 @@ def create_deadline(
             "source": source_norm,
             "kind": deadline.kind,
             "due_on": due_on.isoformat(),
+        },
+    )
+    session.commit()
+    session.refresh(deadline)
+    return deadline
+
+
+def update_deadline(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+    deadline_id: str,
+    payload: MatterDeadlineUpdateRequest,
+) -> MatterDeadline:
+    matter = _load_matter(session, context, matter_id)
+    deadline = session.scalar(
+        select(MatterDeadline).where(
+            MatterDeadline.id == deadline_id,
+            MatterDeadline.matter_id == matter_id,
+        )
+    )
+    if deadline is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Deadline not found."
+        )
+
+    updates = payload.model_dump(exclude_unset=True)
+    assignee_membership_id = updates.pop("assignee_membership_id", None)
+    assignee_changed = "assignee_membership_id" in payload.model_dump(exclude_unset=True)
+    if assignee_changed:
+        if assignee_membership_id is None:
+            deadline.assignee_membership_id = None
+        else:
+            assignee = _get_company_membership(
+                session,
+                company_id=context.company.id,
+                membership_id=assignee_membership_id,
+            )
+            _assert_membership_can_access_matter(
+                session,
+                context=context,
+                matter=matter,
+                membership=assignee,
+            )
+            deadline.assignee_membership_id = assignee.id
+
+    previous_status = deadline.status
+    changed_fields: set[str] = set()
+    for field_name, value in updates.items():
+        if field_name == "title":
+            value = value.strip()
+        elif field_name == "notes" and isinstance(value, str):
+            value = value.strip() or None
+        if getattr(deadline, field_name) != value:
+            changed_fields.add(field_name)
+            setattr(deadline, field_name, value)
+    if assignee_changed:
+        changed_fields.add("assignee_membership_id")
+
+    if previous_status != deadline.status:
+        changed_fields.add("status")
+        now = datetime.now(UTC)
+        if deadline.status in {
+            MatterDeadlineStatus.DONE,
+            MatterDeadlineStatus.CANCELLED,
+        }:
+            deadline.completed_at = deadline.completed_at or now
+        elif deadline.status == MatterDeadlineStatus.OPEN:
+            deadline.completed_at = None
+
+    action = "deadline.updated"
+    if previous_status != deadline.status:
+        if deadline.status == MatterDeadlineStatus.DONE:
+            action = "deadline.complete"
+        elif previous_status == MatterDeadlineStatus.DONE and (
+            deadline.status == MatterDeadlineStatus.OPEN
+        ):
+            action = "deadline.reopen"
+        elif deadline.status == MatterDeadlineStatus.CANCELLED:
+            action = "deadline.cancel"
+        elif deadline.status == MatterDeadlineStatus.MISSED:
+            action = "deadline.miss"
+
+    session.add(deadline)
+    session.flush()
+    record_from_context(
+        session,
+        context,
+        action=action,
+        target_type="matter_deadline",
+        target_id=deadline.id,
+        matter_id=deadline.matter_id,
+        metadata={
+            "status": deadline.status,
+            "changed_fields": sorted(changed_fields),
+            "source": deadline.source,
+            "kind": deadline.kind,
+            "has_notes": bool(deadline.notes),
+            "has_source_ref": bool(deadline.source_ref_id),
         },
     )
     session.commit()
@@ -181,6 +376,9 @@ def transition_deadline(
 
 __all__ = [
     "create_deadline",
+    "deadline_record",
+    "list_deadline_records",
     "list_deadlines",
     "transition_deadline",
+    "update_deadline",
 ]

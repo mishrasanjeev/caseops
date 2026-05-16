@@ -29,6 +29,7 @@ from caseops_api.db.models import (
     MatterInvoiceLineItem,
     MatterInvoicePaymentAttempt,
     MatterNote,
+    MatterProceedingSignal,
     MatterStatus,
     MatterStayStatus,
     MatterTag,
@@ -93,6 +94,7 @@ from caseops_api.services.document_storage import (
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import (
     assert_access,
+    can_access,
     visible_matters_filter,
 )
 from caseops_api.services.matter_tags import slugify_tag
@@ -486,6 +488,16 @@ def _note_record(note: MatterNote) -> MatterNoteRecord:
 
 
 def _task_record(task: MatterTask) -> MatterTaskRecord:
+    return _task_record_with_source(task)
+
+
+def _task_record_with_source(
+    task: MatterTask,
+    *,
+    source_type: str = "user",
+    source_ref_id: str | None = None,
+    source_label: str | None = None,
+) -> MatterTaskRecord:
     return MatterTaskRecord(
         id=task.id,
         matter_id=task.matter_id,
@@ -506,6 +518,9 @@ def _task_record(task: MatterTask) -> MatterTaskRecord:
         due_on=task.due_on,
         status=task.status,
         priority=task.priority,
+        source_type=source_type,
+        source_ref_id=source_ref_id,
+        source_label=source_label,
         completed_at=task.completed_at,
         created_at=task.created_at,
         updated_at=task.updated_at,
@@ -944,6 +959,26 @@ def _get_matter_model(session: Session, *, context: SessionContext, matter_id: s
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Matter not found.")
     assert_access(session, context=context, matter=matter)
     return matter
+
+
+def _assert_membership_can_access_matter(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter: Matter,
+    membership: CompanyMembership,
+) -> None:
+    candidate_context = SessionContext(
+        company=context.company,
+        user=membership.user,
+        membership=membership,
+    )
+    if can_access(session, context=candidate_context, matter=matter):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Assignee cannot access this matter.",
+    )
 
 
 def _get_matter_attachment_model(
@@ -1570,6 +1605,12 @@ def create_matter_task(
             company_id=context.company.id,
             membership_id=payload.owner_membership_id,
         )
+        _assert_membership_can_access_matter(
+            session,
+            context=context,
+            matter=matter,
+            membership=owner,
+        )
         owner_membership_id = owner.id
         owner_name = owner.user.full_name
 
@@ -1586,6 +1627,22 @@ def create_matter_task(
     )
     session.add(task)
     session.flush()
+    record_from_context(
+        session,
+        context,
+        action="matter_task.created",
+        target_type="matter_task",
+        target_id=task.id,
+        matter_id=matter.id,
+        metadata={
+            "status": task.status,
+            "priority": task.priority,
+            "due_on": task.due_on.isoformat() if task.due_on else None,
+            "has_description": bool(task.description),
+            "has_owner": bool(task.owner_membership_id),
+            "source_type": "user",
+        },
+    )
     _append_activity(
         session,
         matter_id=matter.id,
@@ -1609,6 +1666,61 @@ def create_matter_task(
     )
     assert refreshed_task is not None
     return _task_record(refreshed_task)
+
+
+def list_matter_tasks(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+    include_completed: bool = True,
+) -> list[MatterTaskRecord]:
+    matter = _get_matter_model(session, context=context, matter_id=matter_id)
+    stmt = (
+        select(MatterTask)
+        .options(
+            joinedload(MatterTask.created_by_membership).joinedload(CompanyMembership.user),
+            joinedload(MatterTask.owner_membership).joinedload(CompanyMembership.user),
+        )
+        .where(MatterTask.matter_id == matter.id)
+        .order_by(
+            MatterTask.due_on.is_(None),
+            MatterTask.due_on.asc(),
+            MatterTask.created_at.asc(),
+            MatterTask.id.asc(),
+        )
+    )
+    if not include_completed:
+        stmt = stmt.where(MatterTask.status != MatterTaskStatus.COMPLETED)
+    tasks = list(session.scalars(stmt))
+    if not tasks:
+        return []
+
+    signals_by_task = {
+        signal.generated_task_id: signal
+        for signal in session.scalars(
+            select(MatterProceedingSignal).where(
+                MatterProceedingSignal.matter_id == matter.id,
+                MatterProceedingSignal.generated_task_id.in_([task.id for task in tasks]),
+            )
+        )
+        if signal.generated_task_id
+    }
+    rows: list[MatterTaskRecord] = []
+    for task in tasks:
+        signal = signals_by_task.get(task.id)
+        if signal is None:
+            rows.append(_task_record(task))
+            continue
+        rows.append(
+            _task_record_with_source(
+                task,
+                source_type="proceeding_intelligence",
+                source_ref_id=signal.id,
+                source_label=signal.signal_type,
+            )
+        )
+    return rows
 
 
 def update_matter_task(
@@ -1643,9 +1755,18 @@ def update_matter_task(
                 company_id=context.company.id,
                 membership_id=owner_membership_id,
             )
+            _assert_membership_can_access_matter(
+                session,
+                context=context,
+                matter=matter,
+                membership=owner,
+            )
             task.owner_membership_id = owner.id
 
     previous_status = task.status
+    previous_due_on = task.due_on
+    previous_priority = task.priority
+    previous_owner = task.owner_membership_id
     for field_name, value in updates.items():
         setattr(task, field_name, value)
     if task.status == MatterTaskStatus.COMPLETED:
@@ -1654,6 +1775,38 @@ def update_matter_task(
         task.completed_at = None
 
     session.add(task)
+    action = "matter_task.updated"
+    if previous_status != task.status:
+        if task.status == MatterTaskStatus.COMPLETED:
+            action = "matter_task.completed"
+        elif previous_status == MatterTaskStatus.COMPLETED:
+            action = "matter_task.reopened"
+    changed_fields = sorted(
+        field
+        for field, changed in {
+            "status": previous_status != task.status,
+            "due_on": previous_due_on != task.due_on,
+            "priority": previous_priority != task.priority,
+            "owner_membership_id": previous_owner != task.owner_membership_id,
+            "title": "title" in updates,
+            "description": "description" in updates,
+        }.items()
+        if changed
+    )
+    record_from_context(
+        session,
+        context,
+        action=action,
+        target_type="matter_task",
+        target_id=task.id,
+        matter_id=matter.id,
+        metadata={
+            "status": task.status,
+            "changed_fields": changed_fields,
+            "has_description": bool(task.description),
+            "has_owner": bool(task.owner_membership_id),
+        },
+    )
     _append_activity(
         session,
         matter_id=matter.id,

@@ -423,14 +423,18 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
   `apps/web/lib/api/openapi-types.ts:1`.
 
 - `WTD-7.2` `Partially implemented` Generic task and deadline model beyond
-  contract-only obligations (re-graded 2026-04-26 from Missing — both
-  models exist; UX surfaces are the remaining gap).
-  Evidence: `apps/api/src/caseops_api/db/models.py:607` (`MatterTask`),
-  `apps/api/src/caseops_api/db/models.py:3266` (`MatterDeadline`),
-  `apps/api/src/caseops_api/services/calendar_service.py` (unified
-  feed across hearings, tasks, deadlines).
-  Remaining: matter-cockpit Tasks tab + Deadlines tab + admin
-  task templates per practice-area.
+  contract-only obligations (updated 2026-05-16). Tasks/Deadlines Cockpit
+  foundation is implemented for matter-scoped create/list/update/complete/
+  reopen using existing task/deadline records; generated proceeding
+  intelligence lineage is preserved.
+  Evidence: `apps/api/src/caseops_api/db/models.py` (`MatterTask` and
+  `MatterDeadline`),
+  `apps/api/src/caseops_api/api/routes/matters.py` (matter task/deadline
+  cockpit endpoints), `apps/web/app/app/matters/[id]/tasks/page.tsx`
+  (matter cockpit task/deadline page), and
+  `apps/api/src/caseops_api/services/calendar_service.py` (unified feed
+  across hearings, tasks, deadlines).
+  Remaining: admin task templates per practice-area remain missing.
 
 - `WTD-7.3` `Partially implemented` Model-evaluation admin gate and cost rollup.
   Evidence: `docs/WORK_TO_BE_DONE.md:541-545`,

@@ -21,6 +21,9 @@ MatterForumLevelLiteral = Literal[
 ]
 MatterTaskStatusLiteral = Literal["todo", "in_progress", "blocked", "completed"]
 MatterTaskPriorityLiteral = Literal["low", "medium", "high", "urgent"]
+MatterTaskSourceTypeLiteral = Literal["user", "proceeding_intelligence"]
+MatterDeadlineStatusLiteral = Literal["open", "done", "cancelled", "missed"]
+MatterDeadlineSourceLiteral = Literal["custom"]
 MatterCourtOrderKindLiteral = Literal[
     "daily_order",
     "interim_order",
@@ -331,9 +334,57 @@ class MatterTaskRecord(BaseModel):
     due_on: date | None
     status: MatterTaskStatusLiteral
     priority: MatterTaskPriorityLiteral
+    source_type: MatterTaskSourceTypeLiteral = "user"
+    source_ref_id: str | None = None
+    source_label: str | None = None
     completed_at: datetime | None
     created_at: datetime
     updated_at: datetime
+
+
+class MatterTaskListResponse(BaseModel):
+    matter_id: str
+    tasks: list[MatterTaskRecord]
+
+
+class MatterDeadlineCreateRequest(BaseModel):
+    source: MatterDeadlineSourceLiteral = "custom"
+    kind: str = Field(default="manual", min_length=1, max_length=64)
+    title: str = Field(min_length=2, max_length=255)
+    notes: str | None = Field(default=None, max_length=4000)
+    due_on: date
+    assignee_membership_id: str | None = None
+
+
+class MatterDeadlineUpdateRequest(BaseModel):
+    title: str | None = Field(default=None, min_length=2, max_length=255)
+    notes: str | None = Field(default=None, max_length=4000)
+    due_on: date | None = None
+    status: MatterDeadlineStatusLiteral | None = None
+    assignee_membership_id: str | None = None
+
+
+class MatterDeadlineRecord(BaseModel):
+    id: str
+    matter_id: str
+    source: str
+    kind: str
+    title: str
+    notes: str | None
+    due_on: date
+    status: MatterDeadlineStatusLiteral
+    assignee_membership_id: str | None
+    source_ref_type: str | None
+    source_ref_id: str | None
+    created_by_membership_id: str | None
+    completed_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class MatterDeadlineListResponse(BaseModel):
+    matter_id: str
+    deadlines: list[MatterDeadlineRecord]
 
 
 class MatterHearingCreateRequest(BaseModel):

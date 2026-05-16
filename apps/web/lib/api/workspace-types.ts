@@ -116,9 +116,23 @@ export type WorkspaceTask = {
   id: string;
   title: string;
   description?: string | null;
-  status: string;
+  status: "todo" | "in_progress" | "blocked" | "completed" | string;
   due_on?: string | null;
+  priority?: string | null;
+  owner_membership_id?: string | null;
   owner_name?: string | null;
+  source_type?: "user" | "proceeding_intelligence";
+  source_ref_id?: string | null;
+  source_label?: string | null;
+};
+
+export type WorkspaceMembership = {
+  membership_id: string;
+  user_id: string;
+  full_name: string;
+  email: string;
+  role: string;
+  is_active: boolean;
 };
 
 export type WorkspaceNote = {
@@ -165,6 +179,8 @@ export type WorkspaceCauseListEntry = {
 
 export type WorkspaceResponse = {
   matter: WorkspaceMatter;
+  assignee: WorkspaceMembership | null;
+  available_assignees: WorkspaceMembership[];
   hearings: WorkspaceHearing[];
   attachments: WorkspaceAttachment[];
   invoices: WorkspaceInvoice[];

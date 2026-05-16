@@ -720,9 +720,9 @@ function deepLinkForEvent(event: CalendarEventRecord): string {
     case "hearing":
       return `/app/matters/${event.matter_id}/hearings`;
     case "task":
-      return `/app/matters/${event.matter_id}`;
+      return `/app/matters/${event.matter_id}/tasks`;
     case "deadline":
-      return `/app/matters/${event.matter_id}`;
+      return `/app/matters/${event.matter_id}/tasks`;
   }
 }
 

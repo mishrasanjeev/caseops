@@ -89,6 +89,10 @@ from caseops_api.schemas.matters import (
     MatterCourtSyncPullRequest,
     MatterCourtSyncRunRecord,
     MatterCreateRequest,
+    MatterDeadlineCreateRequest,
+    MatterDeadlineListResponse,
+    MatterDeadlineRecord,
+    MatterDeadlineUpdateRequest,
     MatterDocumentTypeLiteral,
     MatterHearingCreateRequest,
     MatterHearingRecord,
@@ -100,6 +104,7 @@ from caseops_api.schemas.matters import (
     MatterNoteRecord,
     MatterRecord,
     MatterTaskCreateRequest,
+    MatterTaskListResponse,
     MatterTaskRecord,
     MatterTaskUpdateRequest,
     MatterTimelineResponse,
@@ -127,6 +132,12 @@ from caseops_api.services.bench_matcher import (
 from caseops_api.services.court_sync_jobs import (
     create_matter_court_sync_job,
     run_matter_court_sync_job,
+)
+from caseops_api.services.deadlines import (
+    create_deadline,
+    deadline_record,
+    list_deadline_records,
+    update_deadline,
 )
 from caseops_api.services.document_jobs import run_document_processing_job
 from caseops_api.services.draft_compare import (
@@ -208,6 +219,7 @@ from caseops_api.services.matters import (
     get_matter,
     get_matter_attachment_download,
     get_matter_workspace,
+    list_matter_tasks,
     list_matters,
     matter_code_available,
     request_matter_attachment_processing,
@@ -1830,6 +1842,28 @@ async def post_current_company_matter_task(
     return create_matter_task(session, context=context, matter_id=matter_id, payload=payload)
 
 
+@router.get(
+    "/{matter_id}/tasks",
+    response_model=MatterTaskListResponse,
+    summary="List matter tasks",
+)
+async def get_current_company_matter_tasks(
+    matter_id: str,
+    context: CurrentContext,
+    session: DbSession,
+    include_completed: bool = Query(True),
+) -> MatterTaskListResponse:
+    return MatterTaskListResponse(
+        matter_id=matter_id,
+        tasks=list_matter_tasks(
+            session,
+            context=context,
+            matter_id=matter_id,
+            include_completed=include_completed,
+        ),
+    )
+
+
 @router.patch(
     "/{matter_id}/tasks/{task_id}",
     response_model=MatterTaskRecord,
@@ -1848,6 +1882,76 @@ async def patch_current_company_matter_task(
         matter_id=matter_id,
         task_id=task_id,
         payload=payload,
+    )
+
+
+@router.get(
+    "/{matter_id}/deadlines",
+    response_model=MatterDeadlineListResponse,
+    summary="List matter deadlines",
+)
+async def get_current_company_matter_deadlines(
+    matter_id: str,
+    context: CurrentContext,
+    session: DbSession,
+    include_done: bool = Query(True),
+) -> MatterDeadlineListResponse:
+    return MatterDeadlineListResponse(
+        matter_id=matter_id,
+        deadlines=list_deadline_records(
+            session,
+            context=context,
+            matter_id=matter_id,
+            include_done=include_done,
+        ),
+    )
+
+
+@router.post(
+    "/{matter_id}/deadlines",
+    response_model=MatterDeadlineRecord,
+    summary="Create a matter deadline",
+)
+async def post_current_company_matter_deadline(
+    matter_id: str,
+    payload: MatterDeadlineCreateRequest,
+    context: MatterWriter,
+    session: DbSession,
+) -> MatterDeadlineRecord:
+    deadline = create_deadline(
+        session,
+        context=context,
+        matter_id=matter_id,
+        source=payload.source,
+        kind=payload.kind,
+        title=payload.title,
+        due_on=payload.due_on,
+        notes=payload.notes,
+        assignee_membership_id=payload.assignee_membership_id,
+    )
+    return deadline_record(deadline)
+
+
+@router.patch(
+    "/{matter_id}/deadlines/{deadline_id}",
+    response_model=MatterDeadlineRecord,
+    summary="Update a matter deadline",
+)
+async def patch_current_company_matter_deadline(
+    matter_id: str,
+    deadline_id: str,
+    payload: MatterDeadlineUpdateRequest,
+    context: MatterWriter,
+    session: DbSession,
+) -> MatterDeadlineRecord:
+    return deadline_record(
+        update_deadline(
+            session,
+            context=context,
+            matter_id=matter_id,
+            deadline_id=deadline_id,
+            payload=payload,
+        )
     )
 
 

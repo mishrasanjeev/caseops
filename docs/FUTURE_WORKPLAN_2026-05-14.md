@@ -32,8 +32,11 @@ product, or enterprise evidence from the strict ledgers.
      end-to-end runtime proof.
 
 3. **`WTD-7.2` tasks/deadlines**
-   - Add matter-cockpit Tasks and Deadlines tabs.
-   - Add admin task templates per practice area.
+   - The matter-cockpit Tasks/Deadlines foundation is implemented: users can
+     create, list, complete, and reopen matter-scoped tasks/deadlines, with
+     generated proceeding-intelligence lineage preserved.
+   - Remaining before full closure: admin task templates per practice area
+     remain missing.
 
 4. **Durable notifications / Temporal**
    - Land `WTD-5.1` Temporal durable workflows first.
