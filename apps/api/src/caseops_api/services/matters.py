@@ -10,6 +10,7 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from caseops_api.db.models import (
+    AuditResult,
     CompanyMembership,
     Court,
     DocumentProcessingAction,
@@ -19,6 +20,7 @@ from caseops_api.db.models import (
     MatterActivity,
     MatterAttachment,
     MatterCauseListEntry,
+    MatterConflictCheckStatus,
     MatterCourtOrder,
     MatterCourtSyncJob,
     MatterCourtSyncRun,
@@ -27,6 +29,7 @@ from caseops_api.db.models import (
     MatterInvoiceLineItem,
     MatterInvoicePaymentAttempt,
     MatterNote,
+    MatterStatus,
     MatterStayStatus,
     MatterTag,
     MatterTagAssignment,
@@ -74,6 +77,10 @@ from caseops_api.schemas.matters import (
     ResolvedBenchMember,
 )
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.conflict_checks import (
+    ConflictGateDecision,
+    evaluate_matter_opening_gate,
+)
 from caseops_api.services.document_jobs import (
     enqueue_processing_job,
     load_latest_processing_jobs,
@@ -119,6 +126,50 @@ DOCUMENT_TYPE_DEFAULT_LIFECYCLE: dict[str, str] = {
     "billing": "administrative",
     "other": "other",
 }
+
+
+def _status_value(value: object) -> str | None:
+    if value is None:
+        return None
+    return str(value)
+
+
+def _conflict_gate_metadata(
+    *,
+    decision: ConflictGateDecision,
+    from_status: str,
+    to_status: str,
+) -> dict[str, object]:
+    metadata: dict[str, object] = {
+        "from_status": from_status,
+        "to_status": to_status,
+        "conflict_gate": {
+            "reason": decision.reason,
+            "latest_check_id": decision.latest_check_id,
+            "latest_status": decision.latest_status,
+            "latest_ran_at": decision.latest_ran_at.isoformat()
+            if decision.latest_ran_at
+            else None,
+        },
+    }
+    return metadata
+
+
+def _conflict_gate_block_detail(decision: ConflictGateDecision) -> str:
+    if decision.reason == "missing_check":
+        return (
+            "Matter cannot be activated until a conflict check is completed "
+            "as clear or waived."
+        )
+    if decision.latest_status == MatterConflictCheckStatus.CONFLICTED.value:
+        return (
+            "Matter cannot be activated because the latest conflict check "
+            "indicates a possible conflict requiring review."
+        )
+    return (
+        "Matter cannot be activated because the latest conflict check "
+        "requires review or waiver."
+    )
 
 
 def _order_has_active_stay(order: MatterCourtOrder) -> bool:
@@ -926,6 +977,32 @@ def create_matter(
     context: SessionContext,
     payload: MatterCreateRequest,
 ) -> MatterRecord:
+    if payload.status == MatterStatus.ACTIVE.value:
+        record_from_context(
+            session,
+            context,
+            action="matter.status_transition.blocked",
+            target_type="matter",
+            result=AuditResult.DENIED,
+            metadata={
+                "from_status": None,
+                "to_status": MatterStatus.ACTIVE.value,
+                "conflict_gate": {
+                    "reason": "direct_active_create_blocked",
+                    "latest_check_id": None,
+                    "latest_status": None,
+                    "latest_ran_at": None,
+                },
+            },
+            commit=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Matter cannot be created as active. Create it in intake and "
+                "complete conflict clearance before activation."
+            ),
+        )
     existing_matter = session.scalar(
         select(Matter).where(
             Matter.company_id == context.company.id,
@@ -1238,6 +1315,40 @@ def update_matter(
     matter = _get_matter_model(session, context=context, matter_id=matter_id)
 
     updates = payload.model_dump(exclude_unset=True)
+    status_before = _status_value(matter.status)
+    requested_status = _status_value(updates.get("status"))
+    opening_gate_decision: ConflictGateDecision | None = None
+    if requested_status == MatterStatus.ACTIVE.value and (
+        status_before != MatterStatus.ACTIVE.value
+    ):
+        opening_gate_decision = evaluate_matter_opening_gate(
+            session,
+            company_id=context.company.id,
+            matter_id=matter.id,
+            expected_opposing_party_name=updates.get("opposing_party")
+            if "opposing_party" in updates
+            else matter.opposing_party,
+        )
+        if not opening_gate_decision.allowed:
+            record_from_context(
+                session,
+                context,
+                action="matter.status_transition.blocked",
+                target_type="matter",
+                target_id=matter.id,
+                matter_id=matter.id,
+                result=AuditResult.DENIED,
+                metadata=_conflict_gate_metadata(
+                    decision=opening_gate_decision,
+                    from_status=status_before,
+                    to_status=MatterStatus.ACTIVE.value,
+                ),
+                commit=True,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=_conflict_gate_block_detail(opening_gate_decision),
+            )
     claim_before = {
         "claim_amount_minor": matter.claim_amount_minor,
         "claim_currency": matter.claim_currency,
@@ -1319,6 +1430,27 @@ def update_matter(
         "claim_currency": matter.claim_currency,
         "claim_amount_notes": matter.claim_amount_notes,
     }
+    status_after = _status_value(matter.status)
+    if status_before != status_after:
+        status_metadata: dict[str, object] = {
+            "from_status": status_before,
+            "to_status": status_after,
+        }
+        if opening_gate_decision is not None:
+            status_metadata = _conflict_gate_metadata(
+                decision=opening_gate_decision,
+                from_status=status_before or "",
+                to_status=status_after or "",
+            )
+        record_from_context(
+            session,
+            context,
+            action="matter.status_transition.completed",
+            target_type="matter",
+            target_id=matter.id,
+            matter_id=matter.id,
+            metadata=status_metadata,
+        )
     if claim_after != claim_before:
         record_from_context(
             session,

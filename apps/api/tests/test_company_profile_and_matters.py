@@ -47,7 +47,7 @@ def test_authenticated_user_can_create_and_list_matters(client: TestClient) -> N
             "matter_code": "BLR-2026-001",
             "client_name": "Rao Family Office",
             "opposing_party": "State of Karnataka",
-            "status": "active",
+            "status": "intake",
             "practice_area": "Criminal",
             "forum_level": "high_court",
             "court_name": "Karnataka High Court",
@@ -88,6 +88,16 @@ def test_authenticated_user_can_update_a_matter(client: TestClient) -> None:
         },
     )
     matter_id = create_response.json()["id"]
+    conflict_response = client.post(
+        f"/api/matters/{matter_id}/conflict-checks",
+        headers=auth_headers(token),
+        json={
+            "opposing_party_name": "Beta Projects",
+            "related_party_names": [],
+        },
+    )
+    assert conflict_response.status_code == 200, conflict_response.text
+    assert conflict_response.json()["status"] == "cleared"
 
     update_response = client.patch(
         f"/api/matters/{matter_id}",

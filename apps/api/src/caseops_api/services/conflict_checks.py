@@ -3,8 +3,8 @@
 Surface every potential overlap between a matter's opposing/related
 parties and existing clients, matters, and contacts in the same tenant.
 A partner reviews the candidates and records `cleared`, `conflicted`, or
-`waived`. The intake gate (deferred to v2) will block matter status
-promotion until the latest check is `cleared` or `waived`.
+`waived`. The intake gate blocks matter status promotion until the latest
+check is `cleared` or `waived`.
 
 The matcher is deliberately simple for v1: case-insensitive normalised
 substring match + Jaccard token overlap on length-≥2 tokens. False
@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
@@ -40,6 +41,19 @@ from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import assert_access
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
+_GATE_ALLOWED_STATUSES = {
+    MatterConflictCheckStatus.CLEARED.value,
+    MatterConflictCheckStatus.WAIVED.value,
+}
+
+
+@dataclass(frozen=True)
+class ConflictGateDecision:
+    allowed: bool
+    reason: str
+    latest_check_id: str | None = None
+    latest_status: str | None = None
+    latest_ran_at: datetime | None = None
 
 
 def _normalise(text: str) -> str:
@@ -303,6 +317,73 @@ def list_conflict_checks(
     return [_record(r) for r in rows]
 
 
+def evaluate_matter_opening_gate(
+    session: Session,
+    *,
+    company_id: str,
+    matter_id: str,
+    expected_opposing_party_name: str | None = None,
+) -> ConflictGateDecision:
+    """Return whether the latest conflict check permits intake -> active.
+
+    PG-001 gates matter opening on the latest tenant/matter-scoped check.
+    Older clear checks are intentionally stale once a newer pending or
+    conflicted check exists.
+    """
+    latest = session.scalar(
+        select(MatterConflictCheck)
+        .where(
+            MatterConflictCheck.company_id == company_id,
+            MatterConflictCheck.matter_id == matter_id,
+        )
+        .order_by(
+            MatterConflictCheck.ran_at.desc(),
+            MatterConflictCheck.created_at.desc(),
+            MatterConflictCheck.id.desc(),
+        )
+        .limit(1)
+    )
+    if latest is None:
+        return ConflictGateDecision(allowed=False, reason="missing_check")
+
+    if latest.status in _GATE_ALLOWED_STATUSES:
+        if (
+            expected_opposing_party_name
+            and _normalise(latest.opposing_party_name)
+            != _normalise(expected_opposing_party_name)
+        ):
+            return ConflictGateDecision(
+                allowed=False,
+                reason="stale_party_scope",
+                latest_check_id=latest.id,
+                latest_status=latest.status,
+                latest_ran_at=latest.ran_at,
+            )
+        reason = (
+            "clear"
+            if latest.status == MatterConflictCheckStatus.CLEARED.value
+            else "waived"
+        )
+        return ConflictGateDecision(
+            allowed=True,
+            reason=reason,
+            latest_check_id=latest.id,
+            latest_status=latest.status,
+            latest_ran_at=latest.ran_at,
+        )
+
+    reason = "requires_review"
+    if latest.status == MatterConflictCheckStatus.CONFLICTED.value:
+        reason = "possible_conflict"
+    return ConflictGateDecision(
+        allowed=False,
+        reason=reason,
+        latest_check_id=latest.id,
+        latest_status=latest.status,
+        latest_ran_at=latest.ran_at,
+    )
+
+
 def resolve_conflict_check(
     session: Session,
     *,
@@ -368,6 +449,8 @@ def resolve_conflict_check(
 
 
 __all__ = [
+    "ConflictGateDecision",
+    "evaluate_matter_opening_gate",
     "list_conflict_checks",
     "resolve_conflict_check",
     "run_conflict_check",
