@@ -1950,13 +1950,16 @@ def record_employee_login_async(membership_id: str) -> None:
         if membership is not None:
             record_employee_login(session, membership=membership)
     except Exception:  # noqa: BLE001 - fire-and-forget; never propagate to the worker
-        # Best-effort, but NOT silent: ops needs to see a dropped login
-        # audit (it's a gap in the security audit trail). membership_id
-        # is a UUID — no PII / no secrets in the log line.
+        # Best-effort, but NOT silent: a dropped login audit is a gap in
+        # the security audit trail, so emit a WARNING + full traceback
+        # for ops. The auth-derived membership id is deliberately NOT
+        # interpolated — CodeQL py/clear-text-logging-sensitive-data
+        # treats values flowing from the authentication path as
+        # sensitive. The traceback plus the request-scoped tenant/user
+        # logging context (set_tenant_context) are sufficient to
+        # diagnose which login dropped its audit.
         logger.warning(
-            "deferred employee.login write failed (membership_id=%s)",
-            membership_id,
-            exc_info=True,
+            "deferred employee.login audit write failed", exc_info=True
         )
         session.rollback()
     finally:
