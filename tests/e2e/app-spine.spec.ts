@@ -114,10 +114,16 @@ test.describe("App spine", () => {
     await expect(dialog).toBeHidden();
     await expect(page.getByText(code, { exact: false }).first()).toBeVisible();
 
-    // PG-004: active workspaces should land on the Today cockpit when
-    // they hit /app. First-time empty workspaces stay on the dashboard
-    // above; this branch protects the active-workspace redirect.
+    // P0-1 (2026-05-15): Home (/app) is the portfolio dashboard for
+    // every workspace, active or empty — it must NOT redirect to
+    // /app/today. Today is reachable via its own Sidebar nav item.
     await page.goto("/app");
+    await page.waitForURL("**/app");
+    await expect(
+      page.getByRole("heading", { name: /Good to have you back/i }),
+    ).toBeVisible();
+    // Today is still reachable as a distinct surface via the Sidebar.
+    await page.getByRole("link", { name: "Today", exact: true }).click();
     await page.waitForURL(/\/app\/today$/);
     await page.goto("/app/matters");
     await page.waitForURL("**/app/matters");
