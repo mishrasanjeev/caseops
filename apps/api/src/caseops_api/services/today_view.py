@@ -22,9 +22,14 @@ Returns five streams keyed by urgency:
 All five share a common `MatterRef` (id + title + matter_code) so the
 frontend can deeplink to the matter cockpit.
 
-Tenant isolation is enforced via `Matter.company_id == context.company.id`
-on every join. The function never reads a row outside the caller's
-tenant.
+Isolation is enforced on every join by BOTH:
+  1. tenant     — `Matter.company_id == context.company.id`
+  2. matter-ACL — `visible_matters_filter(session, context=context)`,
+     the same predicate `list_matters` uses, so restricted /
+     team-scoped / ethical-walled matters the caller is not entitled
+     to never surface in the Today feed or in next-action.
+The function never reads a row outside the caller's tenant, and never
+a matter the caller could not also see in the matters list.
 """
 from __future__ import annotations
 
@@ -47,6 +52,7 @@ from caseops_api.db.models import (
     MatterTaskStatus,
 )
 from caseops_api.services.identity import SessionContext
+from caseops_api.services.matter_access import visible_matters_filter
 
 
 @dataclass(frozen=True)
@@ -136,24 +142,26 @@ def build_today_view(
     deterministic tests; defaults to ``date.today()``."""
     today = today or date.today()
     horizon_end = today + timedelta(days=max(0, horizon_days))
-    company_id = context.company.id
-    membership_id = context.membership.id
 
     return TodayView(
         today=today,
         horizon_days=horizon_days,
-        hearings_next_7d=_hearings(session, company_id, today, horizon_end),
-        tasks_due_or_overdue=_tasks(
-            session, company_id, membership_id, today, horizon_end,
-        ),
-        drafts_in_review=_drafts_in_review(session, company_id),
-        overdue_invoices=_overdue_invoices(session, company_id, today),
-        deadlines_next_7d=_deadlines(session, company_id, today, horizon_end),
+        hearings_next_7d=_hearings(session, context, today, horizon_end),
+        tasks_due_or_overdue=_tasks(session, context, today, horizon_end),
+        drafts_in_review=_drafts_in_review(session, context),
+        overdue_invoices=_overdue_invoices(session, context, today),
+        deadlines_next_7d=_deadlines(session, context, today, horizon_end),
     )
 
 
 # ---------------------------------------------------------------
-# Per-stream queries — each enforces `Matter.company_id == company_id`.
+# Per-stream queries. Each enforces BOTH:
+#   1. tenant isolation  — Matter.company_id == context.company.id
+#   2. matter-access ACL — visible_matters_filter(...) so restricted
+#      / team-scoped / ethical-walled matters the caller is not
+#      entitled to never surface in the Today feed or next-action.
+# This is the SAME predicate list_matters uses, so the Today cockpit
+# can never show a matter the matters list would hide.
 # ---------------------------------------------------------------
 
 
@@ -162,13 +170,14 @@ def _matter_ref(matter: Matter) -> MatterRef:
 
 
 def _hearings(
-    session: Session, company_id: str, today: date, horizon_end: date,
+    session: Session, context: SessionContext, today: date, horizon_end: date,
 ) -> list[TodayHearing]:
     rows = session.execute(
         select(MatterHearing, Matter)
         .join(Matter, Matter.id == MatterHearing.matter_id)
         .where(
-            Matter.company_id == company_id,
+            Matter.company_id == context.company.id,
+            visible_matters_filter(session, context=context),
             MatterHearing.status == MatterHearingStatus.SCHEDULED,
             MatterHearing.hearing_on >= today,
             MatterHearing.hearing_on <= horizon_end,
@@ -190,16 +199,17 @@ def _hearings(
 
 def _tasks(
     session: Session,
-    company_id: str,
-    membership_id: str,
+    context: SessionContext,
     today: date,
     horizon_end: date,
 ) -> list[TodayTask]:
+    membership_id = context.membership.id
     rows = session.execute(
         select(MatterTask, Matter)
         .join(Matter, Matter.id == MatterTask.matter_id)
         .where(
-            Matter.company_id == company_id,
+            Matter.company_id == context.company.id,
+            visible_matters_filter(session, context=context),
             MatterTask.status != MatterTaskStatus.COMPLETED,
             or_(
                 # Owner-scoped: tasks I own OR unassigned tasks
@@ -234,13 +244,14 @@ def _tasks(
 
 
 def _drafts_in_review(
-    session: Session, company_id: str,
+    session: Session, context: SessionContext,
 ) -> list[TodayDraftInReview]:
     rows = session.execute(
         select(Draft, Matter)
         .join(Matter, Matter.id == Draft.matter_id)
         .where(
-            Matter.company_id == company_id,
+            Matter.company_id == context.company.id,
+            visible_matters_filter(session, context=context),
             Draft.status == DraftStatus.IN_REVIEW,
         )
         .order_by(Draft.updated_at.desc())
@@ -259,13 +270,14 @@ def _drafts_in_review(
 
 
 def _overdue_invoices(
-    session: Session, company_id: str, today: date,
+    session: Session, context: SessionContext, today: date,
 ) -> list[TodayInvoice]:
     rows = session.execute(
         select(MatterInvoice, Matter)
         .join(Matter, Matter.id == MatterInvoice.matter_id)
         .where(
-            Matter.company_id == company_id,
+            Matter.company_id == context.company.id,
+            visible_matters_filter(session, context=context),
             MatterInvoice.due_on.is_not(None),
             MatterInvoice.due_on < today,
             MatterInvoice.status.in_(
@@ -291,13 +303,14 @@ def _overdue_invoices(
 
 
 def _deadlines(
-    session: Session, company_id: str, today: date, horizon_end: date,
+    session: Session, context: SessionContext, today: date, horizon_end: date,
 ) -> list[TodayDeadline]:
     rows = session.execute(
         select(MatterDeadline, Matter)
         .join(Matter, Matter.id == MatterDeadline.matter_id)
         .where(
-            Matter.company_id == company_id,
+            Matter.company_id == context.company.id,
+            visible_matters_filter(session, context=context),
             MatterDeadline.due_on >= today - timedelta(days=14),
             MatterDeadline.due_on <= horizon_end,
         )
@@ -370,31 +383,34 @@ def build_matter_next_action(
     horizon_end = today + timedelta(days=7)
 
     # Reuse the per-stream queries by reading just one matter's slice.
-    # Cheaper than re-querying — we already have these joined views.
+    # Each helper applies visible_matters_filter, so a matter the
+    # caller is not entitled to (restricted / team-scoped / walled)
+    # yields zero candidates here and next-action returns None — the
+    # same isolation the Today feed gets. (Per-matter SQL scoping to
+    # avoid the whole-tenant scan is a separate perf change, P1-3.)
     hearings = [
         h for h in _hearings(
-            session, context.company.id, today, horizon_end,
+            session, context, today, horizon_end,
         ) if h.matter.id == matter_id
     ]
     tasks = [
         t for t in _tasks(
-            session, context.company.id, context.membership.id,
-            today, horizon_end,
+            session, context, today, horizon_end,
         ) if t.matter.id == matter_id
     ]
     drafts = [
         d for d in _drafts_in_review(
-            session, context.company.id,
+            session, context,
         ) if d.matter.id == matter_id
     ]
     invoices = [
         i for i in _overdue_invoices(
-            session, context.company.id, today,
+            session, context, today,
         ) if i.matter.id == matter_id
     ]
     deadlines = [
         d for d in _deadlines(
-            session, context.company.id, today, horizon_end,
+            session, context, today, horizon_end,
         ) if d.matter.id == matter_id
     ]
 
