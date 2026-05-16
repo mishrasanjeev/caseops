@@ -64,7 +64,7 @@ test.describe("Per-matter Outside Counsel", () => {
         matter_code: unique("OCWS").toUpperCase(),
         practice_area: "civil",
         forum_level: "high_court",
-        status: "active",
+        status: "intake",
       },
     });
     const matter = (await matterResp.json()) as { id: string };
@@ -155,7 +155,7 @@ test.describe("Per-matter Outside Counsel", () => {
         matter_code: unique("MOC").toUpperCase(),
         practice_area: "civil",
         forum_level: "high_court",
-        status: "active",
+        status: "intake",
       },
     });
     expect(matterResp.status()).toBe(200);

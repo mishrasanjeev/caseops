@@ -174,7 +174,7 @@ def test_summary_only_matter_court_order_is_skipped(client: TestClient) -> None:
             "matter_code": f"PI-SUMMARY-ORDER-{uuid4().hex[:6]}",
             "practice_area": "Commercial",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
         },
     )
     assert response.status_code == 200, response.text
@@ -638,7 +638,7 @@ def test_predictive_route_uses_aggregate_evidence(client: TestClient) -> None:
             "matter_code": f"PI-AGG-{uuid4().hex[:6]}",
             "practice_area": "Commercial",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
         },
     )
     assert matter.status_code == 200, matter.text
@@ -695,7 +695,7 @@ def test_private_matter_order_not_included_in_public_aggregate(
             "matter_code": f"PI-PRIVATE-{uuid4().hex[:6]}",
             "practice_area": "Commercial",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
         },
     )
     assert matter.status_code == 200, matter.text

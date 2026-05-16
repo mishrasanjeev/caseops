@@ -21,7 +21,7 @@ def _create_matter(client: TestClient, token: str, code: str) -> str:
             "matter_code": code,
             "practice_area": "Commercial",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
         },
     )
     assert resp.status_code == 200, resp.text
@@ -61,7 +61,7 @@ def test_422_validation_has_errors_array(client: TestClient) -> None:
             "matter_code": "T",
             "practice_area": "?",
             "forum_level": "bad",
-            "status": "active",
+            "status": "intake",
         },
     )
     assert resp.status_code == 422

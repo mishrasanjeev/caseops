@@ -60,7 +60,7 @@ test.describe("Hari II bug regressions", () => {
         matter_code: unique("B14").toUpperCase(),
         practice_area: "criminal",
         forum_level: "high_court",
-        status: "active",
+        status: "intake",
       },
     });
     expect(resp.status()).toBe(200);
@@ -113,7 +113,7 @@ test.describe("Hari II bug regressions", () => {
         matter_code: taken,
         practice_area: "civil",
         forum_level: "high_court",
-        status: "active",
+        status: "intake",
       },
     });
     expect(mk.status()).toBe(200);
@@ -180,7 +180,7 @@ test.describe("Hari II bug regressions", () => {
         matter_code: taken,
         practice_area: "civil",
         forum_level: "high_court",
-        status: "active",
+        status: "intake",
       },
     });
     expect(mk.status()).toBe(200);
@@ -248,7 +248,7 @@ test.describe("Hari II bug regressions", () => {
         matter_code: unique("B19").toUpperCase(),
         practice_area: "civil",
         forum_level: "high_court",
-        status: "active",
+        status: "intake",
       },
     });
     const matter = (await mk.json()) as { id: string };
@@ -330,7 +330,7 @@ test.describe("Hari II bug regressions", () => {
         matter_code: unique("B13").toUpperCase(),
         practice_area: "civil",
         forum_level: "high_court",
-        status: "active",
+        status: "intake",
       },
     });
     const matter = (await mk.json()) as { id: string };
@@ -373,7 +373,7 @@ test.describe("Hari II bug regressions", () => {
         matter_code: unique("B13IA").toUpperCase(),
         practice_area: "civil",
         forum_level: "high_court",
-        status: "active",
+        status: "intake",
       },
     });
     const matter = (await mk.json()) as { id: string };
@@ -439,7 +439,7 @@ test.describe("Hari II bug regressions", () => {
         matter_code: unique("B11").toUpperCase(),
         practice_area: "civil",
         forum_level: "high_court",
-        status: "active",
+        status: "intake",
       },
     });
     const matter = (await mk.json()) as { id: string };
@@ -496,7 +496,7 @@ test.describe("Hari II bug regressions", () => {
         matter_code: unique("B11POP").toUpperCase(),
         practice_area: "civil",
         forum_level: "high_court",
-        status: "active",
+        status: "intake",
       },
     });
     const matter = (await mk.json()) as { id: string };

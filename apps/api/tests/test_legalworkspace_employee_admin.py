@@ -608,7 +608,7 @@ def test_employee_matter_access_lists_every_matter_with_grant_state(client: Test
             "matter_code": "B48-OPEN",
             "practice_area": "criminal",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
         },
     )
     assert open_matter.status_code == 200, open_matter.text
@@ -622,7 +622,7 @@ def test_employee_matter_access_lists_every_matter_with_grant_state(client: Test
             "matter_code": "B48-RES",
             "practice_area": "criminal",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
         },
     )
     assert restricted_matter.status_code == 200, restricted_matter.text
@@ -676,7 +676,7 @@ def test_employee_matter_access_lists_every_matter_with_grant_state(client: Test
             "matter_code": "B48-OTHER",
             "practice_area": "criminal",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
         },
     )
     assert other_matter.status_code == 200, other_matter.text

@@ -85,7 +85,7 @@ def _create_matter(
         "practice_area": "Commercial",
         "forum_level": forum_level,
         "court_name": court_name,
-        "status": status,
+        "status": "intake" if status == "active" else status,
         "next_hearing_on": next_hearing_on,
         "claim_amount_minor": claim_amount_minor,
         "claim_currency": "INR",
@@ -94,7 +94,36 @@ def _create_matter(
     }
     response = client.post("/api/matters/", headers=_auth(token), json=payload)
     assert response.status_code == 200, response.text
-    return response.json()
+    matter = response.json()
+    if status == "active":
+        conflict = client.post(
+            f"/api/matters/{matter['id']}/conflict-checks",
+            headers=_auth(token),
+            json={
+                "opposing_party_name": opposing_party or "Unrelated Co",
+                "related_party_names": [],
+            },
+        )
+        assert conflict.status_code == 200, conflict.text
+        conflict_body = conflict.json()
+        if conflict_body["status"] != "cleared":
+            waived = client.patch(
+                f"/api/conflict-checks/{conflict_body['id']}",
+                headers=_auth(token),
+                json={
+                    "status": "waived",
+                    "resolution_note": "Test fixture activation.",
+                },
+            )
+            assert waived.status_code == 200, waived.text
+        activate = client.patch(
+            f"/api/matters/{matter['id']}",
+            headers=_auth(token),
+            json={"status": "active"},
+        )
+        assert activate.status_code == 200, activate.text
+        return activate.json()
+    return matter
 
 
 def _seed_court_and_attach(matter_id: str, *, forum_level: str = "high_court") -> str:
@@ -448,7 +477,7 @@ def test_lw_s1_claim_currency_validation(client: TestClient) -> None:
             "matter_code": "CUR-LOWER",
             "practice_area": "Commercial",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
             "claim_amount_minor": 1_000,
             "claim_currency": "usd",
         },
@@ -472,7 +501,7 @@ def test_lw_s1_claim_currency_validation(client: TestClient) -> None:
             "matter_code": "CUR-BAD",
             "practice_area": "Commercial",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
             "claim_amount_minor": 1_000,
             "claim_currency": "12$",
         },

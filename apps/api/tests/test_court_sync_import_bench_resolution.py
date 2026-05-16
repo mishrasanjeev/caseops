@@ -82,7 +82,7 @@ def test_court_sync_import_resolves_judges_inline(client: TestClient) -> None:
             "client_name": "TestClient Co.",
             "practice_area": "Commercial Litigation",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
         },
     )
     assert matter_resp.status_code == 200, matter_resp.text
@@ -160,7 +160,7 @@ def test_court_sync_import_resolves_judges_when_court_id_falls_back_to_forum_nam
             "client_name": "TestClient Co.",
             "practice_area": "Commercial Litigation",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
             "court_name": forum_name,
         },
     )
@@ -238,7 +238,7 @@ def test_bench_strategy_reads_dict_shaped_judges_json_after_inline_resolution(
             "client_name": "TestClient Co.",
             "practice_area": "Commercial Litigation",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
             "court_name": forum_name,
         },
     )
@@ -293,7 +293,7 @@ def test_court_sync_import_with_unknown_judge_does_not_break_import(
             "client_name": "TestClient Co.",
             "practice_area": "Commercial Litigation",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
         },
     )
     matter_id = matter_resp.json()["id"]

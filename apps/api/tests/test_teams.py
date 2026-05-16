@@ -156,7 +156,7 @@ def test_team_scoping_gates_visibility_for_member(client: TestClient) -> None:
                 "matter_code": code,
                 "practice_area": "criminal",
                 "forum_level": "high_court",
-                "status": "active",
+                "status": "intake",
             },
         )
         assert resp.status_code == 200, resp.text

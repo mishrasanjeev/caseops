@@ -100,19 +100,34 @@ Do not re-classify these here. Burn-down lives under the linked ID.
 ## P0 — New Gaps Tracked Here (Stop-Ship for "Best for Law Firms" claim)
 
 ### `PG-001` Conflict check workflow
-Status: **`Partially implemented`** (v1 MVP shipped 2026-04-30; intake gate deferred to v2).
+Status: **`Implemented`** (v1 MVP shipped 2026-04-30; intake gate closed 2026-05-16).
 Evidence:
 - DB: `MatterConflictCheck` model + migration `20260430_0001_matter_conflict_checks` (status enum: pending/cleared/conflicted/waived).
 - Service: `services/conflict_checks.py` with substring + Jaccard token-overlap scanner across `clients` + `matters`.
 - Routes: `POST /api/matters/{id}/conflict-checks`, `GET /api/matters/{id}/conflict-checks`, `PATCH /api/conflict-checks/{id}`.
 - Capabilities: `conflicts:run` (every fee-earner) + `conflicts:resolve` (staff only).
 - UI: `apps/web/components/matters/ConflictCheckCard.tsx` mounted on `/app/matters/[id]` cockpit. Run dialog + status badge + candidate list + clear / mark-conflicted / waive controls.
-- Tests: 6 backend cases (`tests/test_conflict_checks.py`); prod-Playwright spec runs scenario A (existing-client overlap) end-to-end.
-Remaining (v2):
-- Intake gate: block matter status promotion `intake → active` unless latest check is `cleared` or `waived`.
-- Contacts beyond `Client` (witnesses, opposing counsel, vendors) — needs separate contact table.
-- Bulk waiver / partner-approval email workflow.
-Estimated days remaining: 1-2.
+- Intake gate: `services/matters.py::create_matter` rejects normal API attempts
+  to create a matter directly as `active`, and `services/matters.py::update_matter`
+  blocks every non-active status transition into `active` unless the latest
+  tenant/matter-scoped conflict check is `cleared` or `waived`. Blocked and
+  allowed attempts write redacted audit metadata; a clear/waived check is stale
+  if activation changes the opposing-party scope it cleared. Matter access,
+  restricted matters, team scoping, ethical walls, and cross-tenant 404 behavior
+  are enforced before the gate.
+- Tests: backend coverage in `tests/test_conflict_checks.py` covers missing
+  check denial, clear allow, explicit waived allow, pending/conflicted/invalid
+  latest-check denial, stale older-clear/newer-unresolved denial, direct active
+  create denial, changed opposing-party stale-scope denial, cross-tenant
+  non-satisfaction, tenant/access gates, and redacted audit metadata; legacy
+  conflict scan/resolve behavior remains covered. Prod-Playwright spec runs
+  scenario A (existing-client overlap) end-to-end.
+Follow-on caveats:
+- Contacts beyond `Client` (witnesses, opposing counsel, vendors) need a
+  separate contact table before they can be scanned.
+- Bulk waiver / partner-approval email workflow is not part of the PG-001 gate.
+Estimated days remaining: 0 for the PG-001 intake gate; follow-ons tracked
+separately.
 
 ### `PG-002` Engagement letter / fee arrangement workflow
 Status: **`Missing`**.
@@ -419,10 +434,9 @@ The next implementation sequence is:
 
 1. Staging proof: configure staging Workload Identity / secrets, run the staging deploy path, and capture runtime proof.
 2. `G-116` inbound email ingest: close `WTD-12.3b` / `PG-106`.
-3. `PG-001` conflict check workflow: finish the remaining intake-gate scope.
-4. `WTD-7.2` tasks/deadlines: matter-cockpit Tasks + Deadlines tabs and admin task templates.
-5. Durable notifications / Temporal: land `WTD-5.1`, then durable-delivery `WTD-5.3`.
-6. AI eval harness: complete `WTD-11.4` / per-workflow golden evaluation gating.
+3. `WTD-7.2` tasks/deadlines: matter-cockpit Tasks + Deadlines tabs and admin task templates.
+4. Durable notifications / Temporal: land `WTD-5.1`, then durable-delivery `WTD-5.3`.
+5. AI eval harness: complete `WTD-11.4` / per-workflow golden evaluation gating.
 
 ## Claude Discipline
 

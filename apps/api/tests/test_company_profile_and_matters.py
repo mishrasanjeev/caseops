@@ -47,7 +47,7 @@ def test_authenticated_user_can_create_and_list_matters(client: TestClient) -> N
             "matter_code": "BLR-2026-001",
             "client_name": "Rao Family Office",
             "opposing_party": "State of Karnataka",
-            "status": "active",
+            "status": "intake",
             "practice_area": "Criminal",
             "forum_level": "high_court",
             "court_name": "Karnataka High Court",
@@ -88,6 +88,16 @@ def test_authenticated_user_can_update_a_matter(client: TestClient) -> None:
         },
     )
     matter_id = create_response.json()["id"]
+    conflict_response = client.post(
+        f"/api/matters/{matter_id}/conflict-checks",
+        headers=auth_headers(token),
+        json={
+            "opposing_party_name": "Beta Projects",
+            "related_party_names": [],
+        },
+    )
+    assert conflict_response.status_code == 200, conflict_response.text
+    assert conflict_response.json()["status"] == "cleared"
 
     update_response = client.patch(
         f"/api/matters/{matter_id}",
@@ -132,7 +142,7 @@ def test_matter_workspace_includes_notes_hearings_activity_and_assignment(
             "matter_code": "WRIT-2026-010",
             "practice_area": "Regulatory",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
         },
     )
     matter_id = matter_response.json()["id"]
@@ -205,7 +215,7 @@ def test_matter_tasks_can_be_created_and_updated(client: TestClient) -> None:
             "matter_code": "COMM-2026-404",
             "practice_area": "Commercial Litigation",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
         },
     )
     matter_id = matter_response.json()["id"]
@@ -266,7 +276,7 @@ def test_owner_can_import_court_sync_into_matter_workspace(client: TestClient) -
             "client_name": "North Arc Projects",
             "practice_area": "Commercial Litigation",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
         },
     )
     matter_id = matter_response.json()["id"]
@@ -418,7 +428,7 @@ def test_owner_can_queue_live_court_sync_pull(client: TestClient, monkeypatch) -
             "opposing_party": "State",
             "practice_area": "Commercial Litigation",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
             "court_name": "Delhi High Court",
             "judge_name": "Justice Mehta",
         },
@@ -500,7 +510,7 @@ def test_owner_can_pull_bombay_high_court_live_orders(client: TestClient, monkey
             "opposing_party": "Beta Projects Pvt Ltd",
             "practice_area": "Commercial Litigation",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
             "court_name": "Bombay High Court",
             "judge_name": "Justice Deshmukh",
         },
@@ -598,7 +608,7 @@ def test_owner_can_pull_hyderabad_high_court_live_cause_list(
             "opposing_party": "State",
             "practice_area": "Writ",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
             "court_name": "High Court for the State of Telangana",
             "judge_name": "Justice Rao",
         },
@@ -691,7 +701,7 @@ def test_owner_can_pull_karnataka_high_court_live_cause_list(
             "opposing_party": "State",
             "practice_area": "Writ",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
             "court_name": "Karnataka High Court",
         },
     )
@@ -762,7 +772,7 @@ def test_owner_can_pull_chennai_high_court_public_orders(
             "client_name": "General Counsel Office",
             "practice_area": "General Litigation",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
             "court_name": "Madras High Court",
         },
     )
@@ -808,7 +818,7 @@ def test_matter_attachment_upload_and_download_are_available_in_workspace(
             "matter_code": "COMM-2026-101",
             "practice_area": "Commercial Litigation",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
         },
     )
     matter_id = matter_response.json()["id"]
@@ -873,7 +883,7 @@ def test_cross_tenant_user_cannot_download_another_company_attachment(
             "matter_code": "SEC-2026-404",
             "practice_area": "Investigations",
             "forum_level": "lower_court",
-            "status": "active",
+            "status": "intake",
         },
     )
     first_matter_id = first_matter_response.json()["id"]
@@ -945,7 +955,7 @@ def test_pdf_attachment_is_marked_as_needing_ocr(client: TestClient) -> None:
             "matter_code": "SCAN-2026-019",
             "practice_area": "Litigation",
             "forum_level": "lower_court",
-            "status": "active",
+            "status": "intake",
         },
     )
     matter_id = matter_response.json()["id"]
@@ -994,7 +1004,7 @@ def test_pdf_attachment_can_be_indexed_when_pdf_extractor_returns_text(
             "matter_code": "PDF-2026-021",
             "practice_area": "Appellate",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
         },
     )
     matter_id = matter_response.json()["id"]
@@ -1047,7 +1057,7 @@ def test_scanned_pdf_attachment_can_be_indexed_when_ocr_returns_text(
             "matter_code": "SCAN-2026-022",
             "practice_area": "Litigation",
             "forum_level": "lower_court",
-            "status": "active",
+            "status": "intake",
         },
     )
     matter_id = matter_response.json()["id"]
@@ -1097,7 +1107,7 @@ def test_owner_can_retry_matter_attachment_processing_when_ocr_becomes_available
             "matter_code": "SCAN-2026-023",
             "practice_area": "Litigation",
             "forum_level": "lower_court",
-            "status": "active",
+            "status": "intake",
         },
     )
     matter_id = matter_response.json()["id"]
@@ -1177,7 +1187,7 @@ def test_member_cannot_reindex_matter_attachment(
             "matter_code": "SCAN-2026-024",
             "practice_area": "Advisory",
             "forum_level": "advisory",
-            "status": "active",
+            "status": "intake",
         },
     )
     matter_id = matter_response.json()["id"]
@@ -1210,7 +1220,7 @@ def test_time_entry_and_invoice_show_up_in_matter_workspace(client: TestClient) 
             "client_name": "Acme Holdings",
             "practice_area": "Arbitration",
             "forum_level": "arbitration",
-            "status": "active",
+            "status": "intake",
         },
     )
     matter_id = matter_response.json()["id"]
@@ -1308,7 +1318,7 @@ def test_member_cannot_create_invoice(client: TestClient) -> None:
             "matter_code": "ADV-2026-020",
             "practice_area": "Compliance",
             "forum_level": "advisory",
-            "status": "active",
+            "status": "intake",
         },
     )
     matter_id = matter_response.json()["id"]
@@ -1377,7 +1387,7 @@ def test_owner_can_create_and_sync_pine_labs_payment_link(
             "client_name": "Northstar Industries",
             "practice_area": "Commercial Litigation",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
         },
     )
     matter_id = matter_response.json()["id"]
@@ -1484,7 +1494,7 @@ def test_pine_labs_webhook_updates_invoice_status(
             "matter_code": "CONS-2026-030",
             "practice_area": "Consumer",
             "forum_level": "tribunal",
-            "status": "active",
+            "status": "intake",
         },
     )
     matter_id = matter_response.json()["id"]
@@ -1554,7 +1564,7 @@ def test_ai_matter_summary_brief_uses_workspace_data(client: TestClient) -> None
             "client_name": "BluePeak Energy",
             "practice_area": "Regulatory",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
             "court_name": "Delhi High Court",
             "next_hearing_on": "2026-05-03",
         },
@@ -1633,7 +1643,7 @@ def test_ai_hearing_prep_brief_flags_missing_workspace_data(client: TestClient) 
             "matter_code": "BAIL-2026-011",
             "practice_area": "Criminal",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
         },
     )
     matter_id = matter_response.json()["id"]
@@ -1692,7 +1702,7 @@ def test_owner_can_pull_central_delhi_district_court_public_service_status(
             "client_name": "BluePeak Energy",
             "practice_area": "Litigation Operations",
             "forum_level": "lower_court",
-            "status": "active",
+            "status": "intake",
             "court_name": "Central District Court, Delhi",
         },
     )
@@ -1738,7 +1748,7 @@ def test_ai_matter_document_review_uses_uploaded_attachment_text(
             "client_name": "Northwind Capital",
             "practice_area": "Commercial Litigation",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
         },
     )
     matter_id = matter_response.json()["id"]
@@ -1787,7 +1797,7 @@ def test_ai_matter_search_returns_ranked_snippets_from_uploaded_documents(
             "matter_code": "WRIT-2026-061",
             "practice_area": "Regulatory",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
         },
     )
     matter_id = matter_response.json()["id"]

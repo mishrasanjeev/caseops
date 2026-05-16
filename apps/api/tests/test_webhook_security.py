@@ -69,7 +69,7 @@ def _setup_invoice_with_attempt(
             "matter_code": "WHS-2026-001",
             "practice_area": "Commercial",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
         },
     )
     matter_id = matter_response.json()["id"]

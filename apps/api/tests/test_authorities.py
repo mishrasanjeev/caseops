@@ -292,7 +292,7 @@ def test_matter_brief_uses_authority_corpus(
             "matter_code": "ARBP-120-2026",
             "client_name": "Acme Holdings Pvt. Ltd.",
             "opposing_party": "Zenith Infra Pvt. Ltd.",
-            "status": "active",
+            "status": "intake",
             "practice_area": "Arbitration",
             "forum_level": "high_court",
             "court_name": "High Court of Delhi",

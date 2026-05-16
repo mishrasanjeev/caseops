@@ -23,7 +23,7 @@ def _create_matter(client: TestClient, token: str, code: str) -> str:
             "matter_code": code,
             "practice_area": "Commercial",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
             "description": "Seeded for drafting studio tests.",
             "court_name": "Delhi High Court",
             "judge_name": "Hon'ble Mr. Justice Bench",

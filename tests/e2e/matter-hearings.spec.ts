@@ -52,7 +52,7 @@ test.describe("Matter hearings (BUG-004 manual schedule)", () => {
         matter_code: matterCode,
         practice_area: "criminal",
         forum_level: "high_court",
-        status: "active",
+        status: "intake",
       },
     });
     expect(matterResp.status()).toBe(200);

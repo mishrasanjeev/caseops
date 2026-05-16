@@ -19,7 +19,7 @@ def _matter_id(client: TestClient, token: str, code: str) -> str:
             "matter_code": code,
             "practice_area": "Commercial",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
         },
     )
     assert resp.status_code == 200, resp.text
@@ -55,7 +55,7 @@ def test_matter_create_emits_audit_row(client: TestClient) -> None:
     assert event.actor_type == "human"
     meta = json.loads(event.metadata_json)
     assert meta["matter_code"] == "AUD-001"
-    assert meta["status"] == "active"
+    assert meta["status"] == "intake"
 
 
 def test_draft_state_machine_emits_one_row_per_transition(client: TestClient) -> None:

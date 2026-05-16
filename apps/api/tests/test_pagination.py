@@ -54,7 +54,7 @@ def _seed_matters(
                 "matter_code": f"PAGE-{i:03d}",
                 "practice_area": "Commercial",
                 "forum_level": "high_court",
-                "status": "active",
+                "status": "intake",
             },
         )
         assert resp.status_code == 200, resp.text

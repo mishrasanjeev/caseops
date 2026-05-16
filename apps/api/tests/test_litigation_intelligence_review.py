@@ -71,7 +71,7 @@ def _create_matter(client: TestClient, token: str, code: str) -> str:
             "practice_area": "Commercial",
             "forum_level": "high_court",
             "court_name": "Delhi High Court",
-            "status": "active",
+            "status": "intake",
         },
     )
     assert response.status_code == 200, response.text

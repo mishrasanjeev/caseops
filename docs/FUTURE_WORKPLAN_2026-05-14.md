@@ -31,21 +31,16 @@ product, or enterprise evidence from the strict ledgers.
      admin-triggered mailbox connector, thread grouping, intake routing, and
      end-to-end runtime proof.
 
-3. **`PG-001` conflict check workflow**
-   - Finish the remaining intake gate: block matter promotion unless the latest
-     conflict check is cleared or waived.
-   - Keep the existing conflict-check MVP intact.
-
-4. **`WTD-7.2` tasks/deadlines**
+3. **`WTD-7.2` tasks/deadlines**
    - Add matter-cockpit Tasks and Deadlines tabs.
    - Add admin task templates per practice area.
 
-5. **Durable notifications / Temporal**
+4. **Durable notifications / Temporal**
    - Land `WTD-5.1` Temporal durable workflows first.
    - Then move notification delivery and retry under `WTD-5.3` onto durable
      workflow execution.
 
-6. **AI eval harness**
+5. **AI eval harness**
    - Complete `WTD-11.4` with per-workflow goldens and CI gating for model or
      prompt changes.
    - Cover citation validity, statute confusion, fact fabrication, required

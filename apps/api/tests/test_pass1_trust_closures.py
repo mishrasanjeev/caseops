@@ -27,7 +27,7 @@ def _create_matter(client: TestClient, token: str, code: str = "PASS1-001") -> s
             "matter_code": code,
             "practice_area": "Commercial",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
             "description": "Seeded for Pass-1 regression tests.",
             "court_name": "Delhi High Court",
         },

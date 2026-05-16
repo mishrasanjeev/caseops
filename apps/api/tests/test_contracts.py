@@ -64,7 +64,7 @@ def test_contract_workspace_includes_playbook_hits_obligations_and_activity(
             "matter_code": "COMM-CTR-2026-010",
             "practice_area": "Commercial",
             "forum_level": "advisory",
-            "status": "active",
+            "status": "intake",
         },
     )
     matter_id = matter_response.json()["id"]

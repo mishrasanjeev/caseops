@@ -202,7 +202,7 @@ describe("NewMatterDialog", () => {
         forum_district: null,
         forum_city: "New Delhi",
         forum_consumer_level: null,
-        status: "active",
+        status: "intake",
       }),
     );
     await waitFor(() => expect(toastSuccess).toHaveBeenCalled());

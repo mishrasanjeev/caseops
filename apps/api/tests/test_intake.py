@@ -182,7 +182,7 @@ def test_matter_code_available_endpoint(client: TestClient) -> None:
             "matter_code": "CR-2026-099",
             "practice_area": "criminal",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
         },
     )
     assert create.status_code == 200, create.text
