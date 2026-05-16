@@ -68,6 +68,7 @@ observability = [
 
 [project.scripts]
 caseops-document-worker = "caseops_api.workers.document_processor:main"
+caseops-notification-workflow-worker = "caseops_api.workers.notification_workflows:main"
 caseops-populate-authorities = "caseops_api.scripts.populate_authorities:main"
 caseops-ingest-corpus = "caseops_api.scripts.ingest_corpus:main"
 caseops-extract-authority-metadata = "caseops_api.scripts.extract_authority_metadata:main"

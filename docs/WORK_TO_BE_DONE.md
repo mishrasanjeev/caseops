@@ -440,6 +440,13 @@ Without this, the PRD's central promise does not exist.
 
 - **Traces to:** PRD §3.4, §14.4; `apps/api/src/caseops_api/workers/document_processor.py`
 - **Problem:** Custom DB-polling worker; stale-job recovery is manual; no replay.
+- **Landed:** WTD-5.1a durable workflow foundation landed for the notification
+  track: disabled-by-default workflow config health, a safe
+  `caseops-notification-workflow-worker` config-check entrypoint, and a
+  deterministic no-op notification-intent probe that records only redacted audit
+  metadata. It does not send email/SMS/WhatsApp, schedule reminders, scan for
+  due work, or call external providers. Notification delivery remains under
+  WTD-5.3.
 - **Done when:**
   - Temporal deployed (docker-compose entry + Cloud Run/GKE manifest path).
   - Workflows ported: `DocumentIngestionWorkflow`, `CourtSyncWorkflow`, `DraftingWorkflow`, `HearingPackWorkflow`, `RecommendationWorkflow`.

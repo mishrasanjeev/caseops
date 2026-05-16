@@ -39,9 +39,15 @@ product, or enterprise evidence from the strict ledgers.
      remain missing.
 
 4. **Durable notifications / Temporal**
-   - Land `WTD-5.1` Temporal durable workflows first.
-   - Then move notification delivery and retry under `WTD-5.3` onto durable
-     workflow execution.
+   - `WTD-5.1a` durable workflow foundation is implemented for notifications:
+     disabled-by-default config health, a safe worker check entrypoint, and a
+     no-op notification-intent probe with redacted audit metadata.
+   - Remaining before full `WTD-5.1` closure: configure the real Temporal
+     backend/dependency, capture worker runtime proof, and retire/port existing
+     polling workers where applicable.
+   - `WTD-5.3` notification delivery/retry remains pending; this foundation
+     sends no email/SMS/WhatsApp, schedules no real reminders, and performs no
+     external provider calls.
 
 5. **AI eval harness**
    - Complete `WTD-11.4` with per-workflow goldens and CI gating for model or
