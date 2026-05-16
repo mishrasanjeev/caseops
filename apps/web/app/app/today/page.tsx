@@ -90,18 +90,72 @@ function TodayBody({ data }: { data: TodayView }) {
     );
   }
 
+  const tr = data.stream_truncated;
+  const lim = data.stream_limits;
   return (
     <div className="grid gap-5 lg:grid-cols-2">
-      <HearingsCard hearings={data.hearings_next_7d} />
-      <DeadlinesCard deadlines={data.deadlines_next_7d} />
-      <TasksCard tasks={data.tasks_due_or_overdue} />
-      <DraftsInReviewCard drafts={data.drafts_in_review} />
-      <OverdueInvoicesCard invoices={data.overdue_invoices} />
+      <HearingsCard
+        hearings={data.hearings_next_7d}
+        truncated={!!tr?.hearings_next_7d}
+        limit={lim?.hearings_next_7d}
+      />
+      <DeadlinesCard
+        deadlines={data.deadlines_next_7d}
+        truncated={!!tr?.deadlines_next_7d}
+        limit={lim?.deadlines_next_7d}
+      />
+      <TasksCard
+        tasks={data.tasks_due_or_overdue}
+        truncated={!!tr?.tasks_due_or_overdue}
+        limit={lim?.tasks_due_or_overdue}
+      />
+      <DraftsInReviewCard
+        drafts={data.drafts_in_review}
+        truncated={!!tr?.drafts_in_review}
+        limit={lim?.drafts_in_review}
+      />
+      <OverdueInvoicesCard
+        invoices={data.overdue_invoices}
+        truncated={!!tr?.overdue_invoices}
+        limit={lim?.overdue_invoices}
+      />
     </div>
   );
 }
 
-function HearingsCard({ hearings }: { hearings: TodayHearing[] }) {
+// PG-perf (2026-05-16): a Today stream is capped server-side
+// (MAX_PER_STREAM). When the cap is hit we show a quiet note so the
+// user knows the screen isn't the full list — full pagination is a
+// separate follow-up; the matters / hearings / calendar list views
+// remain the unbounded source of truth.
+function TruncationNote({
+  truncated,
+  limit,
+}: {
+  truncated?: boolean;
+  limit?: number;
+}) {
+  if (!truncated) return null;
+  return (
+    <p
+      className="mt-3 text-xs text-[var(--color-mute)]"
+      data-testid="today-stream-truncated"
+    >
+      {limit ? `Showing the first ${limit}.` : "Showing a capped subset."} More
+      available — open the matter list views to see everything.
+    </p>
+  );
+}
+
+function HearingsCard({
+  hearings,
+  truncated,
+  limit,
+}: {
+  hearings: TodayHearing[];
+  truncated?: boolean;
+  limit?: number;
+}) {
   if (hearings.length === 0) {
     return (
       <Card data-testid="today-hearings">
@@ -150,12 +204,21 @@ function HearingsCard({ hearings }: { hearings: TodayHearing[] }) {
             </li>
           ))}
         </ul>
+        <TruncationNote truncated={truncated} limit={limit} />
       </CardContent>
     </Card>
   );
 }
 
-function DeadlinesCard({ deadlines }: { deadlines: TodayDeadline[] }) {
+function DeadlinesCard({
+  deadlines,
+  truncated,
+  limit,
+}: {
+  deadlines: TodayDeadline[];
+  truncated?: boolean;
+  limit?: number;
+}) {
   if (deadlines.length === 0) {
     return (
       <Card data-testid="today-deadlines">
@@ -202,12 +265,21 @@ function DeadlinesCard({ deadlines }: { deadlines: TodayDeadline[] }) {
             </li>
           ))}
         </ul>
+        <TruncationNote truncated={truncated} limit={limit} />
       </CardContent>
     </Card>
   );
 }
 
-function TasksCard({ tasks }: { tasks: TodayTask[] }) {
+function TasksCard({
+  tasks,
+  truncated,
+  limit,
+}: {
+  tasks: TodayTask[];
+  truncated?: boolean;
+  limit?: number;
+}) {
   if (tasks.length === 0) {
     return (
       <Card data-testid="today-tasks">
@@ -263,12 +335,21 @@ function TasksCard({ tasks }: { tasks: TodayTask[] }) {
             </li>
           ))}
         </ul>
+        <TruncationNote truncated={truncated} limit={limit} />
       </CardContent>
     </Card>
   );
 }
 
-function DraftsInReviewCard({ drafts }: { drafts: TodayDraftInReview[] }) {
+function DraftsInReviewCard({
+  drafts,
+  truncated,
+  limit,
+}: {
+  drafts: TodayDraftInReview[];
+  truncated?: boolean;
+  limit?: number;
+}) {
   if (drafts.length === 0) {
     return (
       <Card data-testid="today-drafts-in-review">
@@ -313,12 +394,21 @@ function DraftsInReviewCard({ drafts }: { drafts: TodayDraftInReview[] }) {
             </li>
           ))}
         </ul>
+        <TruncationNote truncated={truncated} limit={limit} />
       </CardContent>
     </Card>
   );
 }
 
-function OverdueInvoicesCard({ invoices }: { invoices: TodayInvoice[] }) {
+function OverdueInvoicesCard({
+  invoices,
+  truncated,
+  limit,
+}: {
+  invoices: TodayInvoice[];
+  truncated?: boolean;
+  limit?: number;
+}) {
   if (invoices.length === 0) {
     return (
       <Card data-testid="today-overdue-invoices">
@@ -372,6 +462,7 @@ function OverdueInvoicesCard({ invoices }: { invoices: TodayInvoice[] }) {
             </li>
           ))}
         </ul>
+        <TruncationNote truncated={truncated} limit={limit} />
       </CardContent>
     </Card>
   );

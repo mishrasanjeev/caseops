@@ -1517,6 +1517,14 @@ export type TodayDeadline = {
   days_until: number;
 };
 
+// Stream keys are stable; the metadata maps below are keyed by these.
+export type TodayStreamKey =
+  | "hearings_next_7d"
+  | "tasks_due_or_overdue"
+  | "drafts_in_review"
+  | "overdue_invoices"
+  | "deadlines_next_7d";
+
 export type TodayView = {
   today: string;
   horizon_days: number;
@@ -1525,6 +1533,13 @@ export type TodayView = {
   drafts_in_review: TodayDraftInReview[];
   overdue_invoices: TodayInvoice[];
   deadlines_next_7d: TodayDeadline[];
+  // Additive bounding metadata (response-shape extension, not a
+  // breaking change). Optional on the client so a new web bundle
+  // talking to an older API — or vice versa — degrades gracefully:
+  // absent metadata simply means "no truncation affordance".
+  stream_limits?: Record<TodayStreamKey, number>;
+  stream_counts?: Record<TodayStreamKey, number>;
+  stream_truncated?: Record<TodayStreamKey, boolean>;
 };
 
 export async function fetchTodayView(input?: {

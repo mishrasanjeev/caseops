@@ -83,6 +83,14 @@ class TodayViewResponse(BaseModel):
     drafts_in_review: list[_DraftInReviewResponse]
     overdue_invoices: list[_InvoiceResponse]
     deadlines_next_7d: list[_DeadlineResponse]
+    # Additive bounding metadata — see TodayView in services/today_view.
+    # The five arrays above are unchanged; these maps (keyed by the
+    # same stream names) tell the client when a stream was capped so it
+    # can show a "showing first N" affordance. Response-shape extension,
+    # not a breaking change.
+    stream_limits: dict[str, int]
+    stream_counts: dict[str, int]
+    stream_truncated: dict[str, bool]
 
 
 @router.get(
@@ -174,4 +182,7 @@ async def get_my_today_view(
             )
             for d in view.deadlines_next_7d
         ],
+        stream_limits=view.stream_limits,
+        stream_counts=view.stream_counts,
+        stream_truncated=view.stream_truncated,
     )
