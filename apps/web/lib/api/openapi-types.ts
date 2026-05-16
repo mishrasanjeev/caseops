@@ -12951,6 +12951,18 @@ export interface components {
             horizon_days: number;
             /** Overdue Invoices */
             overdue_invoices: components["schemas"]["_InvoiceResponse"][];
+            /** Stream Counts */
+            stream_counts: {
+                [key: string]: number;
+            };
+            /** Stream Limits */
+            stream_limits: {
+                [key: string]: number;
+            };
+            /** Stream Truncated */
+            stream_truncated: {
+                [key: string]: boolean;
+            };
             /** Tasks Due Or Overdue */
             tasks_due_or_overdue: components["schemas"]["_TaskResponse"][];
             /**
