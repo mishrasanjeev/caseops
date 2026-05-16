@@ -45,4 +45,74 @@ describe("TodayPage smoke", () => {
       expect(screen.getByRole("heading", { name: /today/i })).toBeInTheDocument();
     });
   });
+
+  // Bounds feature: a populated stream flagged truncated must show the
+  // "Showing the first N" affordance; an un-flagged (or metadata-absent)
+  // stream must NOT. Copy must say "first N", never "N total".
+  const oneHearingView = (
+    truncated: boolean | undefined,
+  ): endpoints.TodayView =>
+    ({
+      today: "2026-05-16",
+      horizon_days: 7,
+      hearings_next_7d: [
+        {
+          id: "h1",
+          matter: { id: "m1", title: "Matter One", matter_code: "M-1" },
+          hearing_on: "2026-05-18",
+          forum_name: "Court 7",
+          judge_name: null,
+          purpose: "Arguments",
+        },
+      ],
+      tasks_due_or_overdue: [],
+      drafts_in_review: [],
+      overdue_invoices: [],
+      deadlines_next_7d: [],
+      ...(truncated === undefined
+        ? {}
+        : {
+            stream_limits: { hearings_next_7d: 100 } as Record<
+              endpoints.TodayStreamKey,
+              number
+            >,
+            stream_counts: { hearings_next_7d: 100 } as Record<
+              endpoints.TodayStreamKey,
+              number
+            >,
+            stream_truncated: { hearings_next_7d: truncated } as Record<
+              endpoints.TodayStreamKey,
+              boolean
+            >,
+          }),
+    }) as unknown as endpoints.TodayView;
+
+  it("shows the truncation affordance for a capped stream", async () => {
+    vi.spyOn(endpoints, "fetchTodayView").mockResolvedValue(
+      oneHearingView(true),
+    );
+    renderWithQuery(<TodayPage />);
+    const note = await screen.findByTestId("today-stream-truncated");
+    expect(note).toBeInTheDocument();
+    expect(note.textContent).toMatch(/Showing the first 100/);
+    expect(note.textContent).not.toMatch(/total/i);
+  });
+
+  it("does not show the affordance when the stream is not truncated", async () => {
+    vi.spyOn(endpoints, "fetchTodayView").mockResolvedValue(
+      oneHearingView(false),
+    );
+    renderWithQuery(<TodayPage />);
+    await screen.findByText(/Matter One/);
+    expect(screen.queryByTestId("today-stream-truncated")).toBeNull();
+  });
+
+  it("degrades gracefully when bounding metadata is absent (old API)", async () => {
+    vi.spyOn(endpoints, "fetchTodayView").mockResolvedValue(
+      oneHearingView(undefined),
+    );
+    renderWithQuery(<TodayPage />);
+    await screen.findByText(/Matter One/);
+    expect(screen.queryByTestId("today-stream-truncated")).toBeNull();
+  });
 });
