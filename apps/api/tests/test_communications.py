@@ -11,11 +11,17 @@ Slice 1 contract:
 """
 from __future__ import annotations
 
+import base64
+import json
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from fastapi.testclient import TestClient
+from sqlalchemy import func, select
 
 from tests.test_auth_company import auth_headers, bootstrap_company
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def _create_matter(client: TestClient, headers: dict[str, str], code: str) -> str:
@@ -31,6 +37,63 @@ def _create_matter(client: TestClient, headers: dict[str, str], code: str) -> st
     )
     assert resp.status_code == 200, resp.text
     return resp.json()["id"]
+
+
+def _login(client: TestClient, email: str, password: str, slug: str) -> str:
+    resp = client.post(
+        "/api/auth/login",
+        json={"email": email, "password": password, "company_slug": slug},
+    )
+    assert resp.status_code == 200, resp.text
+    return resp.json()["access_token"]
+
+
+def _invite_member(
+    client: TestClient,
+    owner_headers: dict[str, str],
+    *,
+    email: str,
+    role: str = "member",
+) -> dict:
+    resp = client.post(
+        "/api/companies/current/users",
+        headers=owner_headers,
+        json={
+            "full_name": "Comms Member",
+            "email": email,
+            "password": "MemberPass123!",
+            "role": role,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+def _email_payload(message_id: str = "msg-001") -> dict:
+    return {
+        "provider": "manual",
+        "provider_message_id": message_id,
+        "sender_email": "client@example.in",
+        "sender_name": "Client Sender",
+        "to_recipients": ["lawyer@asterlegal.in"],
+        "cc_recipients": ["associate@asterlegal.in"],
+        "subject": "Filing instructions",
+        "received_at": "2026-05-15T10:30:00Z",
+        "body_preview": "Client sent filing instructions and a notice attachment.",
+        "body_text": (
+            "Privileged filing instructions. Full text must live in "
+            "document storage, not the audit metadata."
+        ),
+        "attachments": [
+            {
+                "filename": "notice.pdf",
+                "content_type": "application/pdf",
+                "content_base64": base64.b64encode(
+                    b"%PDF-1.4\n% inbound email attachment\n"
+                ).decode("ascii"),
+            }
+        ],
+    }
 
 
 def test_create_then_list_communication(client: TestClient) -> None:
@@ -190,3 +253,395 @@ def test_create_requires_communications_write_capability(
         json={"channel": "note", "body": "viewer attempt — should 403"},
     )
     assert write.status_code == 403
+
+
+def test_inbound_email_import_stores_preview_attachments_and_redacted_audit(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    headers = auth_headers(str(bootstrap["access_token"]))
+    matter_id = _create_matter(client, headers, "G116-001")
+
+    payload = _email_payload()
+    resp = client.post(
+        f"/api/matters/{matter_id}/communications/import-email",
+        headers=headers,
+        json=payload,
+    )
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["duplicate"] is False
+    assert body["match_basis"] == "explicit_matter_selection"
+    assert body["automation_mode"] == "manual_only"
+    assert body["communication"]["direction"] == "inbound"
+    assert body["communication"]["channel"] == "email"
+    assert body["communication"]["subject"] == "Filing instructions"
+    assert body["communication"]["recipient_email"] == "client@example.in"
+    assert body["communication"]["body"] == (
+        "Client sent filing instructions and a notice attachment."
+    )
+    assert body["body_attachment_id"] in body["attachment_ids"]
+    assert len(body["attachment_ids"]) == 2
+    assert len(body["processing_job_ids"]) == 2
+
+    from caseops_api.db.models import (
+        AuditEvent,
+        Communication,
+        DocumentProcessingJob,
+        MatterAttachment,
+    )
+    from caseops_api.db.session import get_session_factory
+
+    with get_session_factory()() as session:
+        comm = session.get(Communication, body["communication"]["id"])
+        assert comm is not None
+        assert comm.external_message_id == "manual:msg-001"
+        assert comm.metadata_json["sender_email"] == "client@example.in"
+        assert comm.metadata_json["to_recipients"] == ["lawyer@asterlegal.in"]
+        assert comm.metadata_json["cc_recipients"] == ["associate@asterlegal.in"]
+        assert comm.metadata_json["bcc_recipient_count"] == 0
+        assert comm.metadata_json["match_basis"] == "explicit_matter_selection"
+        assert comm.metadata_json["automation_mode"] == "manual_only"
+        assert comm.body != payload["body_text"]
+
+        attachments = list(
+            session.scalars(
+                select(MatterAttachment).where(
+                    MatterAttachment.id.in_(body["attachment_ids"])
+                )
+            )
+        )
+        assert {a.original_filename for a in attachments} == {
+            "email-body.txt",
+            "notice.pdf",
+        }
+        assert all(a.matter_id == matter_id for a in attachments)
+        assert all("/matters/" in a.storage_key for a in attachments)
+        assert all(a.document_type == "correspondence" for a in attachments)
+
+        job_count = session.scalar(
+            select(func.count())
+            .select_from(DocumentProcessingJob)
+            .where(DocumentProcessingJob.attachment_id.in_(body["attachment_ids"]))
+        )
+        assert job_count == 2
+
+        audit = session.scalar(
+            select(AuditEvent).where(
+                AuditEvent.action == "inbound_email.imported",
+                AuditEvent.target_id == comm.id,
+            )
+        )
+        assert audit is not None
+        metadata = json.loads(audit.metadata_json or "{}")
+        assert metadata["provider"] == "manual"
+        assert metadata["match_basis"] == "explicit_matter_selection"
+        assert metadata["automation_mode"] == "manual_only"
+        assert metadata["attachment_count"] == 1
+        audit_surface = audit.metadata_json or ""
+        assert "Privileged filing instructions" not in audit_surface
+        assert "inbound email attachment" not in audit_surface
+        assert "msg-001" not in audit_surface
+
+
+def test_inbound_email_import_is_idempotent_by_provider_message_and_scope(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    headers = auth_headers(str(bootstrap["access_token"]))
+    matter_id = _create_matter(client, headers, "G116-IDEMP")
+    other_matter_id = _create_matter(client, headers, "G116-IDEMP-OTHER")
+    payload = _email_payload("thread-777")
+
+    first = client.post(
+        f"/api/matters/{matter_id}/communications/import-email",
+        headers=headers,
+        json=payload,
+    )
+    second = client.post(
+        f"/api/matters/{matter_id}/communications/import-email",
+        headers=headers,
+        json={**payload, "subject": "Duplicate should not overwrite"},
+    )
+    other_scope = client.post(
+        f"/api/matters/{other_matter_id}/communications/import-email",
+        headers=headers,
+        json={**payload, "subject": "Same provider id, different matter"},
+    )
+
+    assert first.status_code == 200, first.text
+    assert second.status_code == 200, second.text
+    assert other_scope.status_code == 200, other_scope.text
+    first_body = first.json()
+    second_body = second.json()
+    other_body = other_scope.json()
+    assert second_body["duplicate"] is True
+    assert second_body["communication"]["id"] == first_body["communication"]["id"]
+    assert second_body["attachment_ids"] == first_body["attachment_ids"]
+    assert other_body["duplicate"] is False
+    assert other_body["communication"]["id"] != first_body["communication"]["id"]
+    assert other_body["attachment_ids"] != first_body["attachment_ids"]
+
+    from caseops_api.db.models import Communication, MatterAttachment
+    from caseops_api.db.session import get_session_factory
+
+    with get_session_factory()() as session:
+        comm_count = session.scalar(
+            select(func.count())
+            .select_from(Communication)
+            .where(
+                Communication.matter_id == matter_id,
+                Communication.external_message_id == "manual:thread-777",
+            )
+        )
+        assert comm_count == 1
+        scoped_comm_count = session.scalar(
+            select(func.count())
+            .select_from(Communication)
+            .where(Communication.external_message_id == "manual:thread-777")
+        )
+        assert scoped_comm_count == 2
+        attachment_count = session.scalar(
+            select(func.count())
+            .select_from(MatterAttachment)
+            .where(MatterAttachment.matter_id == matter_id)
+        )
+        assert attachment_count == 2
+        other_attachment_count = session.scalar(
+            select(func.count())
+            .select_from(MatterAttachment)
+            .where(MatterAttachment.matter_id == other_matter_id)
+        )
+        assert other_attachment_count == 2
+
+
+def test_inbound_email_import_rejects_oversized_base64_before_storage(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    headers = auth_headers(str(bootstrap["access_token"]))
+    matter_id = _create_matter(client, headers, "G116-SIZE")
+
+    from caseops_api.core.settings import get_settings
+    from caseops_api.db.models import Communication, DocumentProcessingJob, MatterAttachment
+    from caseops_api.db.session import get_session_factory
+
+    settings = get_settings()
+    original_max = settings.max_attachment_size_bytes
+    settings.max_attachment_size_bytes = 4
+    try:
+        payload = _email_payload("oversized-base64")
+        payload["body_text"] = None
+        payload["attachments"][0]["content_base64"] = "A" * 32
+        resp = client.post(
+            f"/api/matters/{matter_id}/communications/import-email",
+            headers=headers,
+            json=payload,
+        )
+    finally:
+        settings.max_attachment_size_bytes = original_max
+
+    assert resp.status_code == 413, resp.text
+    with get_session_factory()() as session:
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(Communication)
+                .where(Communication.matter_id == matter_id)
+            )
+            == 0
+        )
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(MatterAttachment)
+                .where(MatterAttachment.matter_id == matter_id)
+            )
+            == 0
+        )
+        assert (
+            session.scalar(
+                select(func.count()).select_from(DocumentProcessingJob)
+            )
+            == 0
+        )
+
+
+def test_inbound_email_import_does_not_cross_tenant_source_matter(
+    client: TestClient,
+) -> None:
+    company_a = bootstrap_company(client)
+    headers_a = auth_headers(str(company_a["access_token"]))
+    matter_a = _create_matter(client, headers_a, "G116-TENANT-A")
+    import_a = client.post(
+        f"/api/matters/{matter_a}/communications/import-email",
+        headers=headers_a,
+        json=_email_payload("tenant-shared"),
+    )
+    assert import_a.status_code == 200, import_a.text
+    client.cookies.clear()
+
+    resp_b = client.post(
+        "/api/bootstrap/company",
+        json={
+            "company_name": "Other Inbound LLP",
+            "company_slug": "other-inbound",
+            "company_type": "law_firm",
+            "owner_full_name": "Other Owner",
+            "owner_email": "owner@other-inbound.example",
+            "owner_password": "OtherStrong!234",
+        },
+    )
+    assert resp_b.status_code == 200, resp_b.text
+    headers_b = auth_headers(str(resp_b.json()["access_token"]))
+    matter_b = _create_matter(client, headers_b, "G116-TENANT-B")
+    import_b = client.post(
+        f"/api/matters/{matter_b}/communications/import-email",
+        headers=headers_b,
+        json=_email_payload("tenant-shared"),
+    )
+    assert import_b.status_code == 200, import_b.text
+    assert import_b.json()["duplicate"] is False
+    assert import_b.json()["communication"]["id"] != import_a.json()["communication"]["id"]
+    client.cookies.clear()
+
+    leak = client.post(
+        f"/api/matters/{matter_a}/communications/import-email",
+        headers=headers_b,
+        json=_email_payload("tenant-leak"),
+    )
+    assert leak.status_code == 404
+
+    from caseops_api.db.models import Communication
+    from caseops_api.db.session import get_session_factory
+
+    with get_session_factory()() as session:
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(Communication)
+                .where(Communication.external_message_id == "manual:tenant-shared")
+            )
+            == 2
+        )
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(Communication)
+                .where(Communication.external_message_id == "manual:tenant-leak")
+            )
+            == 0
+        )
+
+
+def test_inbound_email_import_respects_restricted_wall_and_team_scoping(
+    client: TestClient,
+) -> None:
+    slug = "g116-access"
+    bootstrap = client.post(
+        "/api/bootstrap/company",
+        json={
+            "company_name": "G116 Access LLP",
+            "company_slug": slug,
+            "company_type": "law_firm",
+            "owner_full_name": "Access Owner",
+            "owner_email": "owner@g116-access.example",
+            "owner_password": "OwnerStrong!234",
+        },
+    ).json()
+    owner_token = str(bootstrap["access_token"])
+    owner_headers = auth_headers(owner_token)
+    member = _invite_member(
+        client,
+        owner_headers,
+        email="member@g116-access.example",
+    )
+    member_token = _login(
+        client,
+        "member@g116-access.example",
+        "MemberPass123!",
+        slug,
+    )
+    member_headers = auth_headers(member_token)
+
+    restricted_matter = _create_matter(client, owner_headers, "G116-REST")
+    restricted = client.post(
+        f"/api/matters/{restricted_matter}/access/restricted",
+        headers=owner_headers,
+        json={"restricted": True},
+    )
+    assert restricted.status_code == 200, restricted.text
+    denied = client.post(
+        f"/api/matters/{restricted_matter}/communications/import-email",
+        headers=member_headers,
+        json=_email_payload("restricted-denied"),
+    )
+    assert denied.status_code == 404
+
+    walled_matter = _create_matter(client, owner_headers, "G116-WALL")
+    wall = client.post(
+        f"/api/matters/{walled_matter}/access/walls",
+        headers=owner_headers,
+        json={"excluded_membership_id": member["membership_id"]},
+    )
+    assert wall.status_code == 200, wall.text
+    walled = client.post(
+        f"/api/matters/{walled_matter}/communications/import-email",
+        headers=member_headers,
+        json=_email_payload("walled-denied"),
+    )
+    assert walled.status_code == 404
+
+    team = client.post(
+        "/api/teams/",
+        headers=owner_headers,
+        json={"name": "Litigation", "slug": "litigation"},
+    )
+    assert team.status_code == 201, team.text
+    team_matter = _create_matter(client, owner_headers, "G116-TEAM")
+    assign = client.patch(
+        f"/api/matters/{team_matter}",
+        headers=owner_headers,
+        json={"team_id": team.json()["id"]},
+    )
+    assert assign.status_code == 200, assign.text
+    scope = client.put(
+        "/api/teams/scoping",
+        headers=owner_headers,
+        json={"enabled": True},
+    )
+    assert scope.status_code == 200, scope.text
+    team_denied = client.post(
+        f"/api/matters/{team_matter}/communications/import-email",
+        headers=member_headers,
+        json=_email_payload("team-denied"),
+    )
+    assert team_denied.status_code == 404
+
+
+def test_inbound_email_import_has_no_autonomous_sweep_surface() -> None:
+    service_src = (REPO_ROOT / Path(
+        "apps/api/src/caseops_api/services/communications.py"
+    )).read_text(encoding="utf-8")
+    route_src = (REPO_ROOT / Path(
+        "apps/api/src/caseops_api/api/routes/communications.py"
+    )).read_text(encoding="utf-8")
+    combined = service_src + "\n" + route_src
+    assert "mailbox_sweep" not in combined
+    assert "sync_mailbox" not in combined
+    assert "poll_inbound" not in combined
+    assert '"automation_mode": "manual_only"' in combined
+
+
+def test_g116_docs_mark_inbound_email_foundation_partial() -> None:
+    future = (REPO_ROOT / "docs/FUTURE_WORKPLAN_2026-05-14.md").read_text(
+        encoding="utf-8"
+    )
+    strict = (REPO_ROOT / "docs/STRICT_ENTERPRISE_GAP_TASKLIST.md").read_text(
+        encoding="utf-8"
+    )
+    assert "`G-116` inbound email ingest" in future
+    assert "manual inbound email import foundation" in future
+    assert "`WTD-12.3b` `Partially implemented`" in strict
+    assert "explicit matter selection" in strict

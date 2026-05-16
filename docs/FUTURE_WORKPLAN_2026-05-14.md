@@ -23,9 +23,13 @@ product, or enterprise evidence from the strict ledgers.
      signoff task.
 
 2. **`G-116` inbound email ingest**
-   - Implement inbound email capture for intake and/or matter communications.
-   - Close `WTD-12.3b` / `PG-106` only after threading, tenant scoping, and
-     auditability are covered.
+   - manual inbound email import foundation is in progress for matter
+     communications: explicit matter selection, tenant/matter access gates,
+     provider-message idempotency, redacted audit, and attachment storage via
+     the existing matter attachment pipeline.
+   - Remaining before closing `WTD-12.3b` / `PG-106`: provider/webhook or
+     admin-triggered mailbox connector, thread grouping, intake routing, and
+     end-to-end runtime proof.
 
 3. **`PG-001` conflict check workflow**
    - Finish the remaining intake gate: block matter promotion unless the latest

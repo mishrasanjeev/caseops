@@ -74,3 +74,52 @@ class CommunicationCreateRequest(BaseModel):
 class CommunicationListResponse(BaseModel):
     matter_id: str
     communications: list[CommunicationRecord]
+
+
+class InboundEmailAttachmentImport(BaseModel):
+    """One attachment from a manually selected inbound email.
+
+    Content is base64 so this foundation can be exercised through a
+    JSON-only backend path. The service decodes it and immediately
+    routes it through the existing matter attachment storage pipeline.
+    """
+
+    filename: str = Field(min_length=1, max_length=255)
+    content_type: str | None = Field(default=None, max_length=255)
+    content_base64: str = Field(min_length=1)
+
+
+class InboundEmailImportRequest(BaseModel):
+    """Manual inbound-email import into an explicitly selected matter.
+
+    This is deliberately not a mailbox sweep. The matter is selected by
+    the URL path and access-checked by the same matter visibility rules
+    as the rest of the communications/document surface.
+    """
+
+    provider: str = Field(min_length=1, max_length=40, pattern=r"^[A-Za-z0-9_.-]+$")
+    provider_message_id: str = Field(min_length=1, max_length=255)
+    sender_email: EmailStr
+    sender_name: str | None = Field(default=None, max_length=255)
+    to_recipients: list[EmailStr] = Field(default_factory=list, max_length=50)
+    cc_recipients: list[EmailStr] = Field(default_factory=list, max_length=50)
+    bcc_recipients: list[EmailStr] = Field(default_factory=list, max_length=50)
+    subject: str | None = Field(default=None, max_length=400)
+    received_at: datetime | None = None
+    body_preview: str | None = Field(default=None, max_length=1000)
+    body_text: str | None = Field(default=None, max_length=200000)
+    attachments: list[InboundEmailAttachmentImport] = Field(
+        default_factory=list,
+        max_length=20,
+    )
+
+
+class InboundEmailImportResponse(BaseModel):
+    matter_id: str
+    communication: CommunicationRecord
+    duplicate: bool
+    body_attachment_id: str | None
+    attachment_ids: list[str]
+    processing_job_ids: list[str]
+    match_basis: Literal["explicit_matter_selection"] = "explicit_matter_selection"
+    automation_mode: Literal["manual_only"] = "manual_only"
