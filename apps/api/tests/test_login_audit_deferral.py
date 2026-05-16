@@ -18,6 +18,8 @@ from sqlalchemy import select
 
 from caseops_api.db.models import AuditEvent, EmployeeProfile
 from caseops_api.db.session import get_session_factory
+from caseops_api.services.employees import record_employee_login_async
+from caseops_api.services.identity import authenticate_user
 from tests.test_auth_company import auth_headers, bootstrap_company
 
 _SLUG = "aster-legal"  # bootstrap_company's fixed slug
@@ -80,6 +82,76 @@ def test_login_succeeds_and_defers_employee_login_write(
         )
         assert prof is not None
         assert prof.last_login_at is not None, "last_login_at not stamped"
+
+
+def test_authenticate_user_does_not_write_synchronously(
+    client: TestClient,
+) -> None:
+    """Genuine deferral proof — independent of TestClient's
+    background-task behavior. Calling authenticate_user directly must
+    perform NO audit/last_login write (hot path is read-only after
+    password verification). Only record_employee_login_async does it."""
+    owner_token = str(bootstrap_company(client)["access_token"])
+    email = "sync-proof@asterlegal.in"
+    membership_id = _create_employee(client, owner_token, email)
+    factory = get_session_factory()
+
+    # Call the hot-path function directly.
+    with factory() as s:
+        auth = authenticate_user(
+            s, email=email, password="EmployeePass123!", company_slug=_SLUG
+        )
+        assert auth.access_token
+        # Same session: authenticate_user must not have flushed/written
+        # an employee.login row, and must not have stamped last_login.
+        assert (
+            s.scalar(
+                select(AuditEvent).where(
+                    AuditEvent.action == "employee.login",
+                    AuditEvent.actor_membership_id == membership_id,
+                )
+            )
+            is None
+        )
+
+    # Independent fresh session: still nothing (authenticate_user did
+    # not commit anything either).
+    with factory() as s:
+        assert (
+            s.scalar(
+                select(AuditEvent).where(
+                    AuditEvent.action == "employee.login",
+                    AuditEvent.actor_membership_id == membership_id,
+                )
+            )
+            is None
+        )
+        prof = s.scalar(
+            select(EmployeeProfile).where(
+                EmployeeProfile.membership_id == membership_id
+            )
+        )
+        assert prof is not None and prof.last_login_at is None
+
+    # The deferred entrypoint (what the BackgroundTask runs) DOES write.
+    record_employee_login_async(membership_id)
+
+    with factory() as s:
+        assert (
+            s.scalar(
+                select(AuditEvent).where(
+                    AuditEvent.action == "employee.login",
+                    AuditEvent.actor_membership_id == membership_id,
+                )
+            )
+            is not None
+        )
+        prof = s.scalar(
+            select(EmployeeProfile).where(
+                EmployeeProfile.membership_id == membership_id
+            )
+        )
+        assert prof is not None and prof.last_login_at is not None
 
 
 def test_login_without_employee_profile_still_succeeds(

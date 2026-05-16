@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -60,6 +61,8 @@ from caseops_api.schemas.employees import (
 from caseops_api.services.audit import record_audit, record_from_context
 from caseops_api.services.employee_mailer import send_employee_account_link
 from caseops_api.services.identity import SessionContext
+
+logger = logging.getLogger(__name__)
 
 ACCOUNT_SETUP_TTL = timedelta(hours=24)
 PASSWORD_RESET_TTL = timedelta(minutes=60)
@@ -1947,6 +1950,14 @@ def record_employee_login_async(membership_id: str) -> None:
         if membership is not None:
             record_employee_login(session, membership=membership)
     except Exception:  # noqa: BLE001 - fire-and-forget; never propagate to the worker
+        # Best-effort, but NOT silent: ops needs to see a dropped login
+        # audit (it's a gap in the security audit trail). membership_id
+        # is a UUID — no PII / no secrets in the log line.
+        logger.warning(
+            "deferred employee.login write failed (membership_id=%s)",
+            membership_id,
+            exc_info=True,
+        )
         session.rollback()
     finally:
         session.close()
