@@ -46,7 +46,7 @@ def _create_matter(
         "matter_code": code,
         "client_name": "Acme Industries",
         "opposing_party": "Beta Projects",
-        "status": "active",
+        "status": "intake",
         "practice_area": "Commercial Litigation",
         "forum_level": forum_level,
     }
@@ -173,7 +173,7 @@ def test_lw_s4_rejects_mismatched_catalog_metadata_and_preserves_legacy_fallback
         json={
             "title": "Bad forum mismatch",
             "matter_code": "LW-S4-BAD",
-            "status": "active",
+            "status": "intake",
             "practice_area": "Commercial",
             "forum_level": "supreme_court",
             "forum_catalog_entry_id": "hc:delhi",
@@ -187,7 +187,7 @@ def test_lw_s4_rejects_mismatched_catalog_metadata_and_preserves_legacy_fallback
         json={
             "title": "Bad unmapped catalog court spoof",
             "matter_code": "LW-S4-SPOOF-UNMAPPED",
-            "status": "active",
+            "status": "intake",
             "practice_area": "Commercial",
             "forum_level": "high_court",
             "forum_catalog_entry_id": "hc:calcutta",
@@ -202,7 +202,7 @@ def test_lw_s4_rejects_mismatched_catalog_metadata_and_preserves_legacy_fallback
         json={
             "title": "Bad mapped catalog court spoof",
             "matter_code": "LW-S4-SPOOF-MAPPED",
-            "status": "active",
+            "status": "intake",
             "practice_area": "Commercial",
             "forum_level": "high_court",
             "forum_catalog_entry_id": "hc:delhi",

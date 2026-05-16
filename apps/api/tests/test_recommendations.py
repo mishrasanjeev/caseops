@@ -76,7 +76,7 @@ def _setup_matter(client: TestClient) -> tuple[str, str, str]:
                 "Limited challenge under Section 34 of the Arbitration Act. "
                 "Primary ground considered: patent illegality."
             ),
-            "status": "active",
+            "status": "intake",
         },
     )
     assert matter.status_code == 200, matter.text
@@ -96,7 +96,7 @@ def _create_matter(client: TestClient, token: str, *, code: str) -> str:
             "client_name": "Aster Legal",
             "opposing_party": "NHAI",
             "description": "Access control regression matter.",
-            "status": "active",
+            "status": "intake",
         },
     )
     assert response.status_code == 200, response.text

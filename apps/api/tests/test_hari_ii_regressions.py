@@ -32,7 +32,7 @@ def _mk_matter(client: TestClient, token: str, **overrides) -> dict:
         "matter_code": "HARI-REG-001",
         "practice_area": "criminal",
         "forum_level": "high_court",
-        "status": "active",
+        "status": "intake",
     } | overrides
     resp = client.post(
         "/api/matters/", json=body, headers=auth_headers(token),

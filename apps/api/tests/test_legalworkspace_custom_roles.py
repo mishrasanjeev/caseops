@@ -97,7 +97,7 @@ def _create_matter(client: TestClient, token: str, code: str) -> int:
             "matter_code": code,
             "practice_area": "Commercial",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
         },
     )
     return response.status_code

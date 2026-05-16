@@ -23,7 +23,7 @@ def _create_matter(
             "matter_code": matter_code,
             "client_name": "Aster Group",
             "opposing_party": "Contoso Infra",
-            "status": "active",
+            "status": "intake",
             "practice_area": practice_area,
             "forum_level": forum_level,
             "court_name": court_name,

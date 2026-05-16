@@ -45,7 +45,7 @@ def _create_matter(client: TestClient, token: str, code: str) -> dict:
             "matter_code": code,
             "practice_area": "criminal",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
             "court_name": "Delhi High Court",
         },
     )

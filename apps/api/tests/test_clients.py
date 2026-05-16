@@ -24,11 +24,24 @@ def _mk_matter(client: TestClient, token: str, code: str = "CL-001") -> dict:
             "matter_code": code,
             "practice_area": "civil",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
         },
     )
     assert resp.status_code == 200, resp.text
-    return resp.json()
+    matter = resp.json()
+    conflict = client.post(
+        f"/api/matters/{matter['id']}/conflict-checks",
+        headers=auth_headers(token),
+        json={"opposing_party_name": "Unrelated Co", "related_party_names": []},
+    )
+    assert conflict.status_code == 200, conflict.text
+    activate = client.patch(
+        f"/api/matters/{matter['id']}",
+        headers=auth_headers(token),
+        json={"status": "active"},
+    )
+    assert activate.status_code == 200, activate.text
+    return activate.json()
 
 
 def _mk_client(client: TestClient, token: str, **overrides) -> dict:

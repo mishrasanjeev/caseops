@@ -142,7 +142,7 @@ def _setup_matter(client: TestClient, *, forum_level: str = "high_court") -> tup
                 "quashing under BNSS s.528. If the HC declines, the next "
                 "route is an Article 136 SLP to the Supreme Court."
             ),
-            "status": "active",
+            "status": "intake",
         },
     )
     assert matter.status_code == 200, matter.text

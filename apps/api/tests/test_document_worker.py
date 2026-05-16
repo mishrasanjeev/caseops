@@ -41,7 +41,7 @@ def test_recover_stale_processing_jobs_requeues_stuck_work(client: TestClient) -
             "matter_code": "WORKER-2026-001",
             "practice_area": "Litigation",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
         },
     )
     matter_id = matter_response.json()["id"]
@@ -110,7 +110,7 @@ def test_scheduled_reprocessing_retry_can_be_drained_by_worker(
             "matter_code": "WORKER-2026-002",
             "practice_area": "Litigation",
             "forum_level": "lower_court",
-            "status": "active",
+            "status": "intake",
         },
     )
     matter_id = matter_response.json()["id"]
@@ -261,7 +261,7 @@ def test_live_court_sync_jobs_can_be_recovered_and_drained(
             "opposing_party": "State",
             "practice_area": "Commercial Litigation",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
             "court_name": "Delhi High Court",
             "judge_name": "Justice Mehta",
         },

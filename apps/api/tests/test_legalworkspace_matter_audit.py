@@ -55,7 +55,7 @@ def _create_matter(
             "matter_code": code,
             "practice_area": "Commercial",
             "forum_level": "high_court",
-            "status": "active",
+            "status": "intake",
         },
     )
     assert response.status_code == 200, response.text
