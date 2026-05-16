@@ -519,10 +519,17 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
   Evidence: bounded manual Outlook bulk sync is tracked as `EH-PROV-02` below;
   durable always-on automation remains gated on `WTD-5.1` Temporal.
 
-- `WTD-12.3b` `Missing` Inbound email ingest for intake and matter
-  communications.
-  Evidence: `docs/WORK_TO_BE_DONE.md:739-741` and `PG-106` in
-  `docs/STRICT_PRODUCT_GAPS_2026-04-30.md`.
+- `WTD-12.3b` `Partially implemented` Inbound email ingest foundation for
+  matter communications.
+  Evidence: manual explicit matter selection endpoint
+  `POST /api/matters/{matter_id}/communications/import-email`, provider/message
+  idempotency on `(company_id, matter_id, external_message_id)`, tenant +
+  restricted matter + ethical wall + team scoping via the existing matter access
+  gate, full body/attachments routed through matter attachment storage, and
+  redacted `inbound_email.imported` audit metadata.
+  Remaining: provider/webhook or admin-triggered mailbox connector, thread
+  grouping, intake routing, and runtime proof. Autonomous mailbox sweep remains
+  out of scope unless explicitly approved.
 
 ## Stale-Doc Items To Correct In docs/WORK_TO_BE_DONE.md
 

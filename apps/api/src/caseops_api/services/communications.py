@@ -14,11 +14,16 @@ because that confirms the matter exists.
 """
 from __future__ import annotations
 
+import base64
+import binascii
+import hashlib
 import logging
 from datetime import UTC, datetime
+from io import BytesIO
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from caseops_api.core.settings import get_settings
@@ -27,20 +32,39 @@ from caseops_api.db.models import (
     CommunicationChannel,
     CommunicationDirection,
     CommunicationStatus,
+    DocumentProcessingAction,
+    DocumentProcessingTargetType,
     EmailTemplate,
     Matter,
+    MatterActivity,
+    MatterAttachment,
 )
 from caseops_api.schemas.communications import (
     CommunicationCreateRequest,
     CommunicationListResponse,
     CommunicationRecord,
+    InboundEmailAttachmentImport,
+    InboundEmailImportRequest,
+    InboundEmailImportResponse,
 )
 from caseops_api.schemas.email_templates import EmailSendRequest
+from caseops_api.services.audit import record_from_context
+from caseops_api.services.document_jobs import enqueue_processing_job
+from caseops_api.services.document_storage import (
+    delete_stored_document,
+    persist_matter_attachment,
+    resolve_storage_path,
+    sanitize_filename,
+)
 from caseops_api.services.email_templates import render_template
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import assert_access
 
 logger = logging.getLogger(__name__)
+
+_EMAIL_BODY_ATTACHMENT_TYPE = "correspondence"
+_EMAIL_BODY_LIFECYCLE_STAGE = "administrative"
+_MAX_AUDIT_HASH_LEN = 16
 
 
 def _load_matter(
@@ -112,6 +136,313 @@ def create_matter_communication(
     session.commit()
     session.refresh(row)
     return CommunicationRecord.model_validate(row)
+
+
+def _normalised_provider(provider: str) -> str:
+    return provider.strip().lower()
+
+
+def _external_message_id(provider: str, provider_message_id: str) -> str:
+    return f"{_normalised_provider(provider)}:{provider_message_id.strip()}"
+
+
+def _message_hash(provider_message_id: str) -> str:
+    return hashlib.sha256(provider_message_id.encode("utf-8")).hexdigest()[
+        :_MAX_AUDIT_HASH_LEN
+    ]
+
+
+def _email_domain(address: str) -> str | None:
+    if "@" not in address:
+        return None
+    domain = address.rsplit("@", 1)[1].strip().lower()
+    return domain or None
+
+
+def _preview_from_payload(payload: InboundEmailImportRequest) -> str:
+    if payload.body_preview and payload.body_preview.strip():
+        return payload.body_preview.strip()
+    if payload.body_text and payload.body_text.strip():
+        return "[Email body stored as matter attachment; preview not provided]"
+    return "[No email body preview provided]"
+
+
+def _decode_attachment_content(attachment: InboundEmailAttachmentImport) -> BytesIO:
+    encoded = attachment.content_base64.strip()
+    max_bytes = get_settings().max_attachment_size_bytes
+    max_encoded_chars = ((max_bytes + 2) // 3) * 4 + 4
+    if len(encoded) > max_encoded_chars:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail=f"Attachments must be {max_bytes} bytes or smaller.",
+        )
+    try:
+        raw = base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Attachment {attachment.filename!r} is not valid base64.",
+        ) from exc
+    if len(raw) > max_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail=f"Attachments must be {max_bytes} bytes or smaller.",
+        )
+    return BytesIO(raw)
+
+
+def _persist_inbound_attachment(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter: Matter,
+    filename: str,
+    content_type: str | None,
+    stream: BytesIO,
+) -> tuple[MatterAttachment, str, str]:
+    """Persist one imported email artifact without committing.
+
+    This mirrors the matter upload pipeline: upload validation, storage,
+    virus scan, MatterAttachment row, processing job, and matter activity.
+    The caller owns the transaction so the Communication row, metadata,
+    audit event, and all imported attachments commit together.
+    """
+    from caseops_api.services.file_security import verify_upload
+    from caseops_api.services.virus_scan import reject_if_infected
+
+    verify_upload(filename=filename, content_type=content_type, stream=stream)
+    attachment = MatterAttachment(
+        matter_id=matter.id,
+        uploaded_by_membership_id=context.membership.id,
+        original_filename=sanitize_filename(filename),
+        storage_key="pending",
+        content_type=content_type,
+        size_bytes=0,
+        sha256_hex="0" * 64,
+        document_type=_EMAIL_BODY_ATTACHMENT_TYPE,
+        lifecycle_stage=_EMAIL_BODY_LIFECYCLE_STAGE,
+    )
+    session.add(attachment)
+    session.flush()
+
+    stored = persist_matter_attachment(
+        company_id=context.company.id,
+        matter_id=matter.id,
+        attachment_id=attachment.id,
+        filename=filename,
+        stream=stream,
+    )
+    try:
+        reject_if_infected(resolve_storage_path(stored.storage_key), filename=filename)
+    except Exception:
+        try:
+            delete_stored_document(stored.storage_key)
+        except Exception:
+            logger.warning(
+                "inbound_email.attachment_cleanup_failed",
+                extra={"attachment_id": attachment.id},
+            )
+        raise
+
+    attachment.storage_key = stored.storage_key
+    attachment.size_bytes = stored.size_bytes
+    attachment.sha256_hex = stored.sha256_hex
+    job = enqueue_processing_job(
+        session,
+        company_id=context.company.id,
+        requested_by_membership_id=context.membership.id,
+        target_type=DocumentProcessingTargetType.MATTER_ATTACHMENT,
+        attachment_id=attachment.id,
+        action=DocumentProcessingAction.INITIAL_INDEX,
+    )
+    session.add(attachment)
+    session.add(
+        MatterActivity(
+            matter_id=matter.id,
+            actor_membership_id=context.membership.id,
+            event_type="inbound_email_attachment_added",
+            title="Inbound email artifact imported",
+            detail=f"{attachment.original_filename} queued for document processing.",
+        )
+    )
+    return attachment, job.id, stored.storage_key
+
+
+def _existing_import_response(
+    *,
+    matter_id: str,
+    row: Communication,
+) -> InboundEmailImportResponse:
+    metadata = row.metadata_json or {}
+    attachment_ids = list(metadata.get("attachment_ids") or [])
+    body_attachment_id = metadata.get("body_attachment_id")
+    if body_attachment_id and body_attachment_id not in attachment_ids:
+        attachment_ids = [body_attachment_id, *attachment_ids]
+    return InboundEmailImportResponse(
+        matter_id=matter_id,
+        communication=CommunicationRecord.model_validate(row),
+        duplicate=True,
+        body_attachment_id=body_attachment_id,
+        attachment_ids=attachment_ids,
+        processing_job_ids=list(metadata.get("processing_job_ids") or []),
+    )
+
+
+def import_inbound_email(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+    payload: InboundEmailImportRequest,
+) -> InboundEmailImportResponse:
+    """Import one explicitly selected inbound email into a matter.
+
+    No mailbox sweep, no autonomous polling, and no provider webhook
+    acceptance happens here. A signed-in fee-earner selects the matter,
+    the standard matter access rules run, then we persist a preview in
+    Communications and the full body/attachments through MatterAttachment.
+    """
+    matter = _load_matter(session, context=context, matter_id=matter_id)
+    provider = _normalised_provider(payload.provider)
+    provider_message_id = payload.provider_message_id.strip()
+    external_id = _external_message_id(provider, provider_message_id)
+
+    existing = session.scalar(
+        select(Communication).where(
+            Communication.company_id == context.company.id,
+            Communication.matter_id == matter.id,
+            Communication.external_message_id == external_id,
+        )
+    )
+    if existing is not None:
+        return _existing_import_response(matter_id=matter.id, row=existing)
+
+    received_at = payload.received_at or datetime.now(UTC)
+    body_preview = _preview_from_payload(payload)
+    sender_email = str(payload.sender_email).strip().lower()
+    stored_keys: list[str] = []
+    imported_attachments: list[MatterAttachment] = []
+    processing_job_ids: list[str] = []
+    body_attachment_id: str | None = None
+
+    row = Communication(
+        company_id=context.company.id,
+        matter_id=matter.id,
+        direction=CommunicationDirection.INBOUND,
+        channel=CommunicationChannel.EMAIL,
+        subject=payload.subject.strip() if payload.subject else None,
+        body=body_preview,
+        recipient_name=payload.sender_name.strip() if payload.sender_name else None,
+        recipient_email=sender_email,
+        status=CommunicationStatus.LOGGED,
+        occurred_at=received_at,
+        external_message_id=external_id,
+        created_by_membership_id=context.membership.id,
+    )
+    session.add(row)
+
+    try:
+        session.flush()
+        if payload.body_text and payload.body_text.strip():
+            body_stream = BytesIO(payload.body_text.encode("utf-8"))
+            body_attachment, job_id, storage_key = _persist_inbound_attachment(
+                session,
+                context=context,
+                matter=matter,
+                filename="email-body.txt",
+                content_type="text/plain",
+                stream=body_stream,
+            )
+            imported_attachments.append(body_attachment)
+            processing_job_ids.append(job_id)
+            stored_keys.append(storage_key)
+            body_attachment_id = body_attachment.id
+
+        for attachment_payload in payload.attachments:
+            attachment, job_id, storage_key = _persist_inbound_attachment(
+                session,
+                context=context,
+                matter=matter,
+                filename=attachment_payload.filename,
+                content_type=attachment_payload.content_type,
+                stream=_decode_attachment_content(attachment_payload),
+            )
+            imported_attachments.append(attachment)
+            processing_job_ids.append(job_id)
+            stored_keys.append(storage_key)
+
+        attachment_ids = [attachment.id for attachment in imported_attachments]
+        row.metadata_json = {
+            "source": "manual_inbound_email_import",
+            "provider": provider,
+            "provider_message_id": provider_message_id,
+            "sender_email": sender_email,
+            "sender_name": payload.sender_name.strip() if payload.sender_name else None,
+            "to_recipients": [str(email).lower() for email in payload.to_recipients],
+            "cc_recipients": [str(email).lower() for email in payload.cc_recipients],
+            "bcc_recipient_count": len(payload.bcc_recipients),
+            "received_at": received_at.isoformat(),
+            "body_preview_chars": len(body_preview),
+            "body_attachment_id": body_attachment_id,
+            "attachment_ids": attachment_ids,
+            "processing_job_ids": processing_job_ids,
+            "match_basis": "explicit_matter_selection",
+            "automation_mode": "manual_only",
+        }
+        session.add(row)
+        record_from_context(
+            session,
+            context,
+            action="inbound_email.imported",
+            target_type="communication",
+            target_id=row.id,
+            matter_id=matter.id,
+            metadata={
+                "provider": provider,
+                "provider_message_id_hash": _message_hash(provider_message_id),
+                "sender_domain": _email_domain(sender_email),
+                "attachment_count": len(payload.attachments),
+                "has_body_attachment": body_attachment_id is not None,
+                "match_basis": "explicit_matter_selection",
+                "automation_mode": "manual_only",
+            },
+        )
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        for storage_key in stored_keys:
+            try:
+                delete_stored_document(storage_key)
+            except Exception:
+                logger.warning("inbound_email.duplicate_cleanup_failed")
+        existing_after_race = session.scalar(
+            select(Communication).where(
+                Communication.company_id == context.company.id,
+                Communication.matter_id == matter.id,
+                Communication.external_message_id == external_id,
+            )
+        )
+        if existing_after_race is not None:
+            return _existing_import_response(matter_id=matter.id, row=existing_after_race)
+        raise
+    except Exception:
+        session.rollback()
+        for storage_key in stored_keys:
+            try:
+                delete_stored_document(storage_key)
+            except Exception:
+                logger.warning("inbound_email.failed_import_cleanup_failed")
+        raise
+
+    session.refresh(row)
+    return InboundEmailImportResponse(
+        matter_id=matter.id,
+        communication=CommunicationRecord.model_validate(row),
+        duplicate=False,
+        body_attachment_id=body_attachment_id,
+        attachment_ids=[attachment.id for attachment in imported_attachments],
+        processing_job_ids=processing_job_ids,
+    )
 
 
 def send_matter_email(
@@ -410,6 +741,7 @@ def apply_sendgrid_communication_event(
 __all__ = [
     "apply_sendgrid_communication_event",
     "create_matter_communication",
+    "import_inbound_email",
     "list_matter_communications",
     "send_matter_email",
 ]

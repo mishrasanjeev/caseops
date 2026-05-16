@@ -37,6 +37,7 @@ REQUIRED_AUDIT_SERVICES: set[str] = {
     "authority_annotations",
     "contracts",
     "calendar_sync",
+    "communications",
     "employee_imports",
     "employees",
     "outside_counsel",

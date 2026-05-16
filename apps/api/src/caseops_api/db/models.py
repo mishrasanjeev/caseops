@@ -6392,6 +6392,14 @@ class Communication(Base):
     SendGrid send + template + delivery webhook on the same row."""
 
     __tablename__ = "communications"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            "matter_id",
+            "external_message_id",
+            name="uq_communications_message_scope",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(
         String(36), primary_key=True, default=lambda: str(uuid4())

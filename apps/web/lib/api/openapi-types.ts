@@ -2482,6 +2482,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matters/{matter_id}/communications/import-email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Manually import one inbound email into an explicitly selected matter. */
+        post: operations["import_current_matter_inbound_email_api_matters__matter_id__communications_import_email_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matters/{matter_id}/communications/send-email": {
         parameters: {
             query?: never;
@@ -8207,6 +8224,85 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /**
+         * InboundEmailAttachmentImport
+         * @description One attachment from a manually selected inbound email.
+         *
+         *     Content is base64 so this foundation can be exercised through a
+         *     JSON-only backend path. The service decodes it and immediately
+         *     routes it through the existing matter attachment storage pipeline.
+         */
+        InboundEmailAttachmentImport: {
+            /** Content Base64 */
+            content_base64: string;
+            /** Content Type */
+            content_type?: string | null;
+            /** Filename */
+            filename: string;
+        };
+        /**
+         * InboundEmailImportRequest
+         * @description Manual inbound-email import into an explicitly selected matter.
+         *
+         *     This is deliberately not a mailbox sweep. The matter is selected by
+         *     the URL path and access-checked by the same matter visibility rules
+         *     as the rest of the communications/document surface.
+         */
+        InboundEmailImportRequest: {
+            /** Attachments */
+            attachments?: components["schemas"]["InboundEmailAttachmentImport"][];
+            /** Bcc Recipients */
+            bcc_recipients?: string[];
+            /** Body Preview */
+            body_preview?: string | null;
+            /** Body Text */
+            body_text?: string | null;
+            /** Cc Recipients */
+            cc_recipients?: string[];
+            /** Provider */
+            provider: string;
+            /** Provider Message Id */
+            provider_message_id: string;
+            /** Received At */
+            received_at?: string | null;
+            /**
+             * Sender Email
+             * Format: email
+             */
+            sender_email: string;
+            /** Sender Name */
+            sender_name?: string | null;
+            /** Subject */
+            subject?: string | null;
+            /** To Recipients */
+            to_recipients?: string[];
+        };
+        /** InboundEmailImportResponse */
+        InboundEmailImportResponse: {
+            /** Attachment Ids */
+            attachment_ids: string[];
+            /**
+             * Automation Mode
+             * @default manual_only
+             * @constant
+             */
+            automation_mode: "manual_only";
+            /** Body Attachment Id */
+            body_attachment_id: string | null;
+            communication: components["schemas"]["CommunicationRecord"];
+            /** Duplicate */
+            duplicate: boolean;
+            /**
+             * Match Basis
+             * @default explicit_matter_selection
+             * @constant
+             */
+            match_basis: "explicit_matter_selection";
+            /** Matter Id */
+            matter_id: string;
+            /** Processing Job Ids */
+            processing_job_ids: string[];
         };
         /** IntakeRequestCreateRequest */
         IntakeRequestCreateRequest: {
@@ -18201,6 +18297,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CommunicationRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_current_matter_inbound_email_api_matters__matter_id__communications_import_email_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InboundEmailImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboundEmailImportResponse"];
                 };
             };
             /** @description Validation Error */

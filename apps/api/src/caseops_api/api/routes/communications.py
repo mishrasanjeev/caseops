@@ -19,10 +19,13 @@ from caseops_api.schemas.communications import (
     CommunicationCreateRequest,
     CommunicationListResponse,
     CommunicationRecord,
+    InboundEmailImportRequest,
+    InboundEmailImportResponse,
 )
 from caseops_api.schemas.email_templates import EmailSendRequest
 from caseops_api.services.communications import (
     create_matter_communication,
+    import_inbound_email,
     list_matter_communications,
     send_matter_email,
 )
@@ -67,6 +70,25 @@ async def post_current_matter_communication(
 ) -> CommunicationRecord:
     return create_matter_communication(
         session, context=context, matter_id=matter_id, payload=payload,
+    )
+
+
+@router.post(
+    "/{matter_id}/communications/import-email",
+    response_model=InboundEmailImportResponse,
+    summary="Manually import one inbound email into an explicitly selected matter.",
+)
+async def import_current_matter_inbound_email(
+    matter_id: str,
+    payload: InboundEmailImportRequest,
+    context: CommunicationsWriter,
+    session: DbSession,
+) -> InboundEmailImportResponse:
+    return import_inbound_email(
+        session,
+        context=context,
+        matter_id=matter_id,
+        payload=payload,
     )
 
 
