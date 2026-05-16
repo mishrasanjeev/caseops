@@ -66,7 +66,7 @@ async function createMatterAndInvoice(
       matter_code: matterCode,
       practice_area: "commercial",
       forum_level: "high_court",
-      status: "active",
+      status: "intake",
     },
   });
   expect(matterResp.status()).toBe(200);

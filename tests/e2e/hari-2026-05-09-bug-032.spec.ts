@@ -64,7 +64,7 @@ async function createMatter(
       matter_code: code,
       practice_area: "criminal",
       forum_level: "high_court",
-      status: "active",
+      status: "intake",
       court_name: "Delhi High Court",
     },
   });

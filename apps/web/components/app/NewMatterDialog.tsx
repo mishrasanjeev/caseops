@@ -78,7 +78,7 @@ export function NewMatterDialog() {
       client_name: "",
       opposing_party: "",
       practice_area: "",
-      status: "active",
+      status: "intake",
       description: "",
     },
   });

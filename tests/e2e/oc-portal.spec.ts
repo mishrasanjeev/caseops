@@ -50,7 +50,7 @@ async function bootstrapAndCreateMatter(
       matter_code: `OCE-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
       client_name: "OC Test Client",
       opposing_party: "Counter Party",
-      status: "active",
+      status: "intake",
       practice_area: "Commercial",
       forum_level: "high_court",
     },

@@ -55,7 +55,7 @@ async function createMatter(page: Page, code: string): Promise<string> {
       forum_level: "high_court",
       court_name: "Delhi High Court",
       description: "Matter seeded for Hari VII regression checks.",
-      status: "active",
+      status: "intake",
     },
     headers: { "X-CSRF-Token": await csrf(page) },
   });

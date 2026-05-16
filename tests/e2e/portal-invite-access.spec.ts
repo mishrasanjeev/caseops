@@ -57,7 +57,7 @@ test.describe("Admin portal invitations", () => {
         matter_code: unique("PIA").toUpperCase(),
         client_name: "Portal Client",
         opposing_party: "Portal Respondent",
-        status: "active",
+        status: "intake",
         practice_area: "Commercial",
         forum_level: "high_court",
       },
