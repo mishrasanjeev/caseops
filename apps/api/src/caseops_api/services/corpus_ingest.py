@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from caseops_api.core.settings import get_settings
@@ -379,6 +380,15 @@ def _already_indexed(session: Session, canonical_key: str) -> bool:
     return existing is not None
 
 
+def _is_duplicate_canonical_key_error(exc: IntegrityError) -> bool:
+    message = str(getattr(exc, "orig", exc))
+    return "canonical_key" in message and (
+        "uq_authority_document_canonical_key" in message
+        or "UNIQUE constraint failed" in message
+        or "duplicate key value violates unique constraint" in message
+    )
+
+
 def persist_judgment(
     session: Session,
     *,
@@ -655,6 +665,18 @@ def ingest_local_directory(
             summary.inserted_documents += 1
             summary.inserted_chunks += len(chunks)
             summary.processed_files += 1
+        except IntegrityError as exc:
+            session.rollback()
+            if _is_duplicate_canonical_key_error(exc):
+                summary.skipped_files += 1
+                logger.info(
+                    "Skipped duplicate corpus PDF after concurrent insert: %s",
+                    path.name,
+                )
+                continue
+            summary.failed_files += 1
+            summary.errors.append(f"{path.name}: {exc}")
+            logger.exception("Failed to ingest %s", path.name)
         except Exception as exc:
             session.rollback()
             summary.failed_files += 1

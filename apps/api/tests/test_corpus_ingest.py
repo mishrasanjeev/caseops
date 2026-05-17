@@ -299,6 +299,41 @@ def test_ingest_dedupes_before_pdf_parse(
     assert second.skipped_files == 1
 
 
+def test_ingest_treats_canonical_key_race_as_skip(
+    client: TestClient, tmp_path: Path, monkeypatch
+) -> None:
+    pdf = tmp_path / "WP_3_of_2015.pdf"
+    _write_pdf(pdf, "First ingestion.\nAnother line.")
+    factory = get_session_factory()
+    with factory() as session:
+        first = ingest_local_directory(
+            session,
+            directory=tmp_path,
+            court="hc",
+            forum_level="high_court",
+            year=2015,
+            embedding_provider=MockProvider(dimensions=128),
+        )
+    assert first.inserted_documents == 1
+
+    monkeypatch.setattr(
+        "caseops_api.services.corpus_ingest._already_indexed",
+        lambda *args, **kwargs: False,
+    )
+    with factory() as session:
+        second = ingest_local_directory(
+            session,
+            directory=tmp_path,
+            court="hc",
+            forum_level="high_court",
+            year=2015,
+            embedding_provider=MockProvider(dimensions=128),
+        )
+    assert second.inserted_documents == 0
+    assert second.skipped_files == 1
+    assert second.failed_files == 0
+
+
 def test_parse_judgment_pdf_returns_none_on_blank_file(tmp_path: Path) -> None:
     pdf = tmp_path / "empty.pdf"
     pdf.write_bytes(b"%PDF-1.4\n%%EOF\n")
