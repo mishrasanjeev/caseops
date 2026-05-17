@@ -406,8 +406,18 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
   Remaining scope: scheduled auto-trigger, authority matching, DOCX/PDF export.
   Evidence: `docs/WORK_TO_BE_DONE.md:389-392`.
 
-- `WTD-5.1` `Missing` Temporal durable workflows.
-  Evidence: `docs/WORK_TO_BE_DONE.md:407-415`.
+- `WTD-5.1` `Partially implemented` Durable workflow foundation.
+  `WTD-5.1a` adds disabled-by-default notification workflow config health,
+  a safe worker check entrypoint, and a deterministic no-op notification-intent
+  probe with redacted audit metadata. It adds no notification delivery,
+  reminder scheduling, external provider calls, staging/prod deploy changes, or
+  autonomous scans.
+  Evidence: `apps/api/src/caseops_api/services/durable_workflows.py`,
+  `apps/api/src/caseops_api/workers/notification_workflows.py`,
+  `apps/api/tests/test_durable_workflows.py`.
+  Remaining: real Temporal backend/dependency configuration, runtime worker
+  proof, explicit retry policies/timeouts/versioning, and porting/retiring the
+  existing polling workers where applicable.
 
 - `WTD-5.2` `Missing` Agent identity, scoped grants, approval gates, and
   budgets.
