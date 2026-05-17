@@ -147,10 +147,10 @@ class Settings(BaseSettings):
     outlook_tenant_id: str = Field(default="organizations")
     outlook_redirect_uri: str | None = Field(default=None)
 
-    # WTD-5.1a durable workflow foundation. Disabled by default; this
-    # slice only adds safe config/health plumbing and a no-op workflow
-    # probe. Real notification delivery and reminder scheduling remain
-    # blocked until WTD-5.3 explicitly lands.
+    # WTD-5.1 durable workflow foundation. Disabled by default; these
+    # slices only add safe Temporal config/worker plumbing and no-op
+    # notification-intent probes. Real notification delivery and reminder
+    # scheduling remain blocked until WTD-5.3 explicitly lands.
     durable_workflows_enabled: bool = Field(default=False)
     durable_workflows_backend: str = Field(default="disabled")
     temporal_address: str | None = Field(default=None)
@@ -158,6 +158,11 @@ class Settings(BaseSettings):
     temporal_task_queue_notifications: str = Field(
         default="caseops-notification-workflows",
     )
+    temporal_api_key: str | None = Field(default=None)
+    temporal_tls_enabled: bool = Field(default=False)
+    temporal_worker_identity: str = Field(default="caseops-notification-workflow-worker")
+    temporal_worker_build_id: str = Field(default="caseops-wtd51b-notification-worker-v1")
+    temporal_worker_graceful_shutdown_seconds: int = Field(default=10, ge=1, le=120)
 
     auth_rate_limit_login_per_minute: int = Field(default=20, ge=1)
     auth_rate_limit_bootstrap_per_hour: int = Field(default=10, ge=1)

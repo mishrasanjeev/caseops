@@ -42,9 +42,14 @@ product, or enterprise evidence from the strict ledgers.
    - `WTD-5.1a` durable workflow foundation is implemented for notifications:
      disabled-by-default config health, a safe worker check entrypoint, and a
      no-op notification-intent probe with redacted audit metadata.
+   - `WTD-5.1b` Temporal runtime foundation is implemented for notifications:
+     the real Python Temporal SDK dependency is declared, client and worker
+     construction is redacted, a no-op runtime-proof workflow/activity exists,
+     and retry policy, timeouts, task queue, and version metadata are explicit.
    - Remaining before full `WTD-5.1` closure: configure the real Temporal
-     backend/dependency, capture worker runtime proof, and retire/port existing
-     polling workers where applicable.
+     service in an operator-owned environment, capture live worker runtime
+     proof against that service, and retire/port existing polling workers where
+     applicable.
    - `WTD-5.3` notification delivery/retry remains pending; this foundation
      sends no email/SMS/WhatsApp, schedules no real reminders, and performs no
      external provider calls.

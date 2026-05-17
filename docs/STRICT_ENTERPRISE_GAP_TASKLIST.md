@@ -412,12 +412,19 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
   probe with redacted audit metadata. It adds no notification delivery,
   reminder scheduling, external provider calls, staging/prod deploy changes, or
   autonomous scans.
+  `WTD-5.1b` adds the real Temporal SDK dependency, redacted Temporal client
+  and worker config construction, a guarded worker runtime entrypoint, and a
+  deterministic no-op notification-intent workflow/activity with explicit retry
+  policy, timeouts, task queue, and version metadata. It still adds no
+  notification delivery, reminder scheduling, external provider calls,
+  staging/prod deploy changes, corpus jobs, or autonomous scans.
   Evidence: `apps/api/src/caseops_api/services/durable_workflows.py`,
   `apps/api/src/caseops_api/workers/notification_workflows.py`,
+  `apps/api/src/caseops_api/workflows/notification_intents.py`,
   `apps/api/tests/test_durable_workflows.py`.
-  Remaining: real Temporal backend/dependency configuration, runtime worker
-  proof, explicit retry policies/timeouts/versioning, and porting/retiring the
-  existing polling workers where applicable.
+  Remaining: operator-owned Temporal service configuration, live runtime worker
+  proof against that service, and porting/retiring the existing polling workers
+  where applicable.
 
 - `WTD-5.2` `Missing` Agent identity, scoped grants, approval gates, and
   budgets.
