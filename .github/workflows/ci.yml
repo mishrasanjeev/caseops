@@ -16,10 +16,10 @@ permissions:
   contents: read
 
 jobs:
-  api:
-    name: API (ruff + pytest)
+  api-ruff:
+    name: API ruff
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
 
@@ -39,9 +39,134 @@ jobs:
         working-directory: apps/api
         run: uv run ruff check src tests
 
-      - name: Pytest with coverage (P1-001 per-area gates)
+  api-test-shards:
+    name: API pytest coverage shard ${{ matrix.shard }}/${{ matrix.total_shards }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+        total_shards: [4]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Sync API deps
         working-directory: apps/api
-        run: uv run pytest -q --cov=caseops_api --cov-report=json:coverage.json --cov-report=term
+        run: uv sync --all-extras --dev
+
+      - name: Select deterministic test shard
+        working-directory: apps/api
+        env:
+          PYTEST_SHARD: ${{ matrix.shard }}
+          PYTEST_TOTAL_SHARDS: ${{ matrix.total_shards }}
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import os
+
+          shard = int(os.environ["PYTEST_SHARD"])
+          total_shards = int(os.environ["PYTEST_TOTAL_SHARDS"])
+          files = sorted(Path("tests").rglob("test_*.py"))
+          selected = [
+              path.as_posix()
+              for index, path in enumerate(files)
+              if index % total_shards == shard - 1
+          ]
+
+          if not selected:
+              raise SystemExit(f"No tests selected for shard {shard}/{total_shards}")
+
+          Path(".pytest-shard-files").write_text("\n".join(selected) + "\n", encoding="utf-8")
+          print(
+              f"Selected {len(selected)} of {len(files)} test files "
+              f"for shard {shard}/{total_shards}:"
+          )
+          for path in selected:
+              print(f"  {path}")
+          PY
+
+      - name: Pytest with coverage shard (P1-001 per-area gates)
+        id: pytest
+        working-directory: apps/api
+        run: |
+          xargs -a .pytest-shard-files -d '\n' -r uv run pytest -q \
+            --durations=25 \
+            --durations-min=1.0 \
+            --cov=caseops_api \
+            --cov-report=
+
+      - name: Prepare coverage shard artifact
+        if: always()
+        working-directory: apps/api
+        run: |
+          if [ -f .coverage ]; then
+            mv .coverage "coverage-shard-${{ matrix.shard }}"
+          elif [ "${{ steps.pytest.outcome }}" = "success" ]; then
+            echo "::error::.coverage was not produced for shard ${{ matrix.shard }}"
+            exit 1
+          else
+            echo "No coverage data produced because pytest shard ${{ matrix.shard }} did not complete."
+          fi
+
+      - name: Upload coverage shard data
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-coverage-shard-${{ matrix.shard }}
+          path: apps/api/coverage-shard-${{ matrix.shard }}
+          retention-days: 1
+          if-no-files-found: warn
+
+  api:
+    name: API (ruff + pytest)
+    runs-on: ubuntu-latest
+    needs: [api-ruff, api-test-shards]
+    if: always()
+    timeout-minutes: 15
+    steps:
+      - name: Fail if API prerequisites failed
+        if: needs['api-ruff'].result != 'success' || needs['api-test-shards'].result != 'success'
+        run: |
+          echo "API ruff result: ${{ needs['api-ruff'].result }}"
+          echo "API pytest shard result: ${{ needs['api-test-shards'].result }}"
+          exit 1
+
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Sync API deps
+        working-directory: apps/api
+        run: uv sync --all-extras --dev
+
+      - name: Download coverage shard data
+        uses: actions/download-artifact@v4
+        with:
+          pattern: api-coverage-shard-*
+          path: apps/api/coverage-parts
+          merge-multiple: true
+
+      - name: Combine coverage reports
+        working-directory: apps/api
+        run: |
+          uv run coverage combine coverage-parts/coverage-shard-*
+          uv run coverage report
+          uv run coverage json -o coverage.json
 
       - name: Coverage gate (per-area thresholds)
         working-directory: apps/api
