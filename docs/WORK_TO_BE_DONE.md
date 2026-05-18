@@ -456,6 +456,12 @@ Without this, the PRD's central promise does not exist.
   queue, and version metadata. It still does not send email/SMS/WhatsApp/push,
   create calendar invites, schedule reminders, scan for due work, run corpus
   jobs, modify staging/prod deploy paths, or call external providers.
+- **Proof attempt:** WTD-5.1c operator runtime proof was attempted against the
+  local/operator environment and recorded as `NO-GO`: required Temporal
+  activation and connection config was absent, so the foundation failed closed
+  and no live no-op workflow was run. No notification delivery, reminder
+  scheduling, external provider calls, corpus jobs, staging/prod deploy path
+  changes, or new workflows were added.
 - **Done when:**
   - Temporal deployed in an operator-owned environment and live worker runtime
     proof captured against that service.
