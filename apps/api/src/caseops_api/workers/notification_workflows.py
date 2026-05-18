@@ -82,7 +82,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         "reminder_scheduling_enabled": False,
         "external_provider_calls_enabled": False,
         "runtime_defaults": temporal_runtime_defaults().public_dict(),
-        "status": status.public_dict(),
+        "status": status.worker_check_dict(),
     }
     sys.stdout.write(json.dumps(payload, sort_keys=True) + "\n")
     if args.require_available and not status.available:

@@ -72,6 +72,22 @@ class DurableWorkflowConfigStatus:
             "foundation_version": self.foundation_version,
         }
 
+    def worker_check_dict(self) -> dict[str, object]:
+        return {
+            "enabled": self.enabled,
+            "backend": _public_backend_name(self.backend),
+            "available": self.available,
+            "reason": self.reason,
+            "missing_config_names": list(self.missing_config_names),
+            "missing_dependencies": list(self.missing_dependencies),
+            "address_configured": self.address_configured,
+            "namespace_configured": self.namespace_configured,
+            "task_queue_configured": self.task_queue_configured,
+            "worker_identity_configured": self.worker_identity_configured,
+            "worker_build_id_configured": self.worker_build_id_configured,
+            "foundation_version": self.foundation_version,
+        }
+
 
 @dataclass(frozen=True, slots=True)
 class NotificationIntentProbeResult:

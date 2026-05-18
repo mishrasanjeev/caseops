@@ -342,6 +342,8 @@ def test_notification_workflow_worker_check_config_never_sends(
     assert payload["external_provider_calls_enabled"] is False
     assert payload["runtime_defaults"]["foundation_version"] == "wtd_5_1b_v1"
     assert payload["status"]["available"] is False
+    assert "api_key_configured" not in payload["status"]
+    assert "tls_enabled" not in payload["status"]
 
     assert notification_workflows.main(["--require-available"]) == 2
     assert notification_workflows.main(["--run"]) == 2
