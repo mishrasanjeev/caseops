@@ -299,6 +299,40 @@ def test_ingest_dedupes_before_pdf_parse(
     assert second.skipped_files == 1
 
 
+def test_ingest_dedupes_on_source_reference_when_file_size_changes(
+    client: TestClient, tmp_path: Path
+) -> None:
+    pdf = tmp_path / "WP_2_size_changed_of_2015.pdf"
+    _write_pdf(pdf, "First ingestion.\nAnother line.")
+    factory = get_session_factory()
+    with factory() as session:
+        first = ingest_local_directory(
+            session,
+            directory=tmp_path,
+            court="hc",
+            forum_level="high_court",
+            year=2015,
+            embedding_provider=MockProvider(dimensions=128),
+        )
+    assert first.inserted_documents == 1
+
+    # Upstream buckets can republish the same filename with different bytes.
+    # The size-sensitive canonical key changes, but source_reference remains
+    # the same corpus identity and must still skip.
+    _write_pdf(pdf, "First ingestion republished with a changed byte size.\nAnother line.")
+    with factory() as session:
+        second = ingest_local_directory(
+            session,
+            directory=tmp_path,
+            court="hc",
+            forum_level="high_court",
+            year=2015,
+            embedding_provider=MockProvider(dimensions=128),
+        )
+    assert second.inserted_documents == 0
+    assert second.skipped_files == 1
+
+
 def test_ingest_treats_canonical_key_race_as_skip(
     client: TestClient, tmp_path: Path, monkeypatch
 ) -> None:

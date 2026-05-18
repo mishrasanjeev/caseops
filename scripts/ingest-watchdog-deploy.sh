@@ -18,6 +18,7 @@ VM_NAME=caseops-ingest-vm
 VM_ZONE=asia-south1-c
 SQL_INSTANCE=${PROJECT}:${REGION}:caseops-db
 IMAGE="${REGION}-docker.pkg.dev/${PROJECT}/caseops-images/${JOB}:latest"
+ENV_VARS="^|^PROJECT=${PROJECT}|ZONE=${VM_ZONE}|INSTANCE=${VM_NAME}|STALE_THRESHOLD_SEC=7200|RESET_COOLDOWN_SEC=1800"
 
 CTX_DIR="$(cd "$(dirname "$0")"/ingest-watchdog && pwd)"
 
@@ -44,7 +45,7 @@ gcloud run jobs $ACTION "${JOB}" \
   --service-account="${SA}" \
   --set-secrets="CASEOPS_DATABASE_URL=caseops-database-url:latest" \
   --set-cloudsql-instances="${SQL_INSTANCE}" \
-  --set-env-vars="PROJECT=${PROJECT},ZONE=${VM_ZONE},INSTANCE=${VM_NAME},STALE_THRESHOLD_SEC=7200,RESET_COOLDOWN_SEC=1800" \
+  --set-env-vars="${ENV_VARS}" \
   --memory=512Mi --cpu=1 --task-timeout=300s --max-retries=0 --quiet
 
 echo "=== grant scheduler permission to run ${JOB} (idempotent) ==="

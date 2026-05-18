@@ -380,6 +380,17 @@ def _already_indexed(session: Session, canonical_key: str) -> bool:
     return existing is not None
 
 
+def _already_indexed_source_reference(
+    session: Session, *, source: str, source_reference: str
+) -> bool:
+    existing = session.scalar(
+        select(AuthorityDocument.id)
+        .where(AuthorityDocument.source == source)
+        .where(AuthorityDocument.source_reference == source_reference)
+    )
+    return existing is not None
+
+
 def _is_duplicate_canonical_key_error(exc: IntegrityError) -> bool:
     message = str(getattr(exc, "orig", exc))
     return "canonical_key" in message and (
@@ -635,7 +646,15 @@ def ingest_local_directory(
     for path in pdfs:
         try:
             canonical_key = _canonical_key_for(path, court, year)
-            if _already_indexed(session, canonical_key):
+            source = "ecourts-hc" if forum_level == "high_court" else "ecourts-sc"
+            if _already_indexed(
+                session,
+                canonical_key,
+            ) or _already_indexed_source_reference(
+                session,
+                source=source,
+                source_reference=path.name,
+            ):
                 summary.skipped_files += 1
                 if delete_after:
                     path.unlink(missing_ok=True)
