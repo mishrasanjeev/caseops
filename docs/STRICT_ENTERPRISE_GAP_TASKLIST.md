@@ -422,6 +422,11 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
   `apps/api/src/caseops_api/workers/notification_workflows.py`,
   `apps/api/src/caseops_api/workflows/notification_intents.py`,
   `apps/api/tests/test_durable_workflows.py`.
+  `WTD-5.1c` operator runtime proof was attempted and recorded as NO-GO
+  because the local/operator environment did not provide the required Temporal
+  activation and connection config. The proof remained fail-closed and did not
+  run notification delivery, reminder scheduling, external provider calls, or
+  new workflows.
   Remaining: operator-owned Temporal service configuration, live runtime worker
   proof against that service, and porting/retiring the existing polling workers
   where applicable.

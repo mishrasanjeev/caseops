@@ -50,6 +50,9 @@ product, or enterprise evidence from the strict ledgers.
      service in an operator-owned environment, capture live worker runtime
      proof against that service, and retire/port existing polling workers where
      applicable.
+   - `WTD-5.1c` operator runtime proof was attempted and failed closed:
+     the local/operator environment did not provide the required Temporal
+     activation and connection config, so no live no-op workflow was run.
    - `WTD-5.3` notification delivery/retry remains pending; this foundation
      sends no email/SMS/WhatsApp, schedules no real reminders, and performs no
      external provider calls.
