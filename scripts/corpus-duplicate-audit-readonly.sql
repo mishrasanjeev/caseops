@@ -293,13 +293,13 @@ dup_docs_base AS (
 ),
 classified AS (
     SELECT source, source_reference
-    FROM dup_docs
+    FROM dup_docs_base
     GROUP BY source, source_reference
     HAVING COUNT(text_hash) <> COUNT(*)
         OR COUNT(DISTINCT text_hash) <> 1
 )
 SELECT d.*
-FROM dup_docs d
+FROM dup_docs_base d
 JOIN classified c
   ON c.source = d.source
  AND c.source_reference = d.source_reference
@@ -343,7 +343,7 @@ same_ref_groups AS (
     GROUP BY ad.source, ad.source_reference
     HAVING COUNT(*) > 1
 ),
-dup_docs AS (
+dup_docs_base AS (
     SELECT
         ad.id,
         ad.source,
