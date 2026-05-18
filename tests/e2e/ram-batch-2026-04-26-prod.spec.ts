@@ -20,7 +20,13 @@
  * Defaults: PROD_BASE_URL=https://caseops.ai if unset. Skips with a
  * clear message if RAM_TEST_PASSWORD env var is missing.
  */
-import { expect, test, type Page } from "@playwright/test";
+import {
+  expect,
+  test,
+  type APIRequestContext,
+  type APIResponse,
+  type Page,
+} from "@playwright/test";
 
 // `??` treats empty string as a value; an unset GitHub repo variable
 // materializes as "" in the workflow. Trim + truthy-check.
@@ -48,6 +54,64 @@ async function signIn(_page: Page): Promise<void> {
   // bodies; safe to drop on next refactor.
 }
 
+
+async function expectApiOk(resp: APIResponse, action: string): Promise<void> {
+  if (!resp.ok()) {
+    throw new Error(`${action} failed: ${resp.status()} ${await resp.text()}`);
+  }
+}
+
+async function clearConflictGate(
+  request: APIRequestContext,
+  headers: Record<string, string>,
+  matterId: string,
+  opposingPartyName: string,
+): Promise<void> {
+  const runResp = await request.post(
+    `${PROD_API_BASE_URL}/api/matters/${matterId}/conflict-checks`,
+    {
+      headers,
+      data: {
+        opposing_party_name: opposingPartyName,
+        related_party_names: [],
+      },
+    },
+  );
+  await expectApiOk(runResp, "POST conflict check");
+  const check = await runResp.json() as { id: string; status: string };
+  if (check.status === "pending") {
+    const clearResp = await request.patch(
+      `${PROD_API_BASE_URL}/api/conflict-checks/${check.id}`,
+      {
+        headers,
+        data: {
+          status: "cleared",
+          resolution_note: "Prod verification setup cleared before activation.",
+        },
+      },
+    );
+    await expectApiOk(clearResp, "PATCH conflict check cleared");
+    return;
+  }
+  expect(["cleared", "waived"]).toContain(check.status);
+}
+
+async function activateMatterAfterConflictClearance(
+  request: APIRequestContext,
+  headers: Record<string, string>,
+  matterId: string,
+  opposingPartyName: string,
+): Promise<void> {
+  await clearConflictGate(request, headers, matterId, opposingPartyName);
+  const activateResp = await request.patch(
+    `${PROD_API_BASE_URL}/api/matters/${matterId}`,
+    {
+      headers,
+      data: { status: "active" },
+    },
+  );
+  await expectApiOk(activateResp, "PATCH matter active");
+}
 
 async function firstMatterId(page: Page): Promise<string | null> {
   const ids = await allMatterIds(page);
@@ -847,7 +911,6 @@ test.describe("Ram batch 2026-04-26 — prod verification of c58305b fixes", () 
           client_name: "Probe Client",
           practice_area: "Commercial Litigation",
           forum_level: "high_court",
-          status: "active",
           court_name: "Delhi High Court",
         },
       },
@@ -860,6 +923,12 @@ test.describe("Ram batch 2026-04-26 — prod verification of c58305b fixes", () 
       return;
     }
     const matterId = (await createResp.json()).id as string;
+    await activateMatterAfterConflictClearance(
+      request,
+      headers,
+      matterId,
+      `${matterCode} no-conflict opposing party`,
+    );
 
     // 2. Try a list of known Delhi HC judge names. The first one whose
     // bench_resolver match populates judges_json wins. If NONE match,
@@ -1138,7 +1207,7 @@ test.describe("Ram batch 2026-04-26 — prod verification of c58305b fixes", () 
           title: "BUG-024 citation grounding probe",
           matter_code: matterCode, client_name: "Probe Client",
           practice_area: "Criminal", forum_level: "high_court",
-          status: "active", court_name: "Delhi High Court",
+          court_name: "Delhi High Court",
           description:
             "Bail application for accused under IPC s.302 — alleged " +
             "murder of complainant on 15 January 2024 at residence in " +
@@ -1152,6 +1221,12 @@ test.describe("Ram batch 2026-04-26 — prod verification of c58305b fixes", () 
     );
     expect(createResp.ok()).toBeTruthy();
     const matterId = (await createResp.json()).id as string;
+    await activateMatterAfterConflictClearance(
+      request,
+      headers,
+      matterId,
+      `${matterCode} no-conflict opposing party`,
+    );
 
     // BUG-024 is `Partially fixed` (2026-04-29 honest re-verdict): the
     // 192d0a8 fix lowered the citation-grounding rejection RATE but
