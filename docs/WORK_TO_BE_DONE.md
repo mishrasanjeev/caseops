@@ -447,10 +447,20 @@ Without this, the PRD's central promise does not exist.
   metadata. It does not send email/SMS/WhatsApp, schedule reminders, scan for
   due work, or call external providers. Notification delivery remains under
   WTD-5.3.
+- **Landed:** WTD-5.1b Temporal runtime foundation landed for the notification
+  track: `temporalio` is now a locked backend dependency, Temporal client and
+  worker config construction fail closed and redact config values, the worker
+  can start only when the Temporal backend is explicitly enabled and fully
+  configured, and a deterministic no-op notification-intent workflow/activity
+  provides the runtime-proof shape with explicit retry policy, timeouts, task
+  queue, and version metadata. It still does not send email/SMS/WhatsApp/push,
+  create calendar invites, schedule reminders, scan for due work, run corpus
+  jobs, modify staging/prod deploy paths, or call external providers.
 - **Done when:**
-  - Temporal deployed (docker-compose entry + Cloud Run/GKE manifest path).
+  - Temporal deployed in an operator-owned environment and live worker runtime
+    proof captured against that service.
   - Workflows ported: `DocumentIngestionWorkflow`, `CourtSyncWorkflow`, `DraftingWorkflow`, `HearingPackWorkflow`, `RecommendationWorkflow`.
-  - Each workflow has explicit retry policy, timeouts, and a versioning strategy.
+  - Each non-notification workflow has explicit retry policy, timeouts, and a versioning strategy.
   - Old custom-polling worker retired.
 
 ### 5.2 Grantex (or equivalent) agent identity
