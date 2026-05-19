@@ -49,7 +49,6 @@ test.describe("BUG-032 Hari 2026-05-09 — court-order manual create prod verifi
           matter_code: matterCode,
           practice_area: "criminal",
           forum_level: "high_court",
-          status: "active",
           court_name: "Delhi High Court",
         },
       },

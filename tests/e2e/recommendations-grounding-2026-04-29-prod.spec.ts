@@ -24,7 +24,13 @@
  *     --config playwright.prod-ram.config.ts \
  *     -g "recommendations grounding"
  */
-import { expect, test, type Page } from "@playwright/test";
+import {
+  expect,
+  test,
+  type APIRequestContext,
+  type APIResponse,
+  type Page,
+} from "@playwright/test";
 
 const envOr = (key: string, fallback: string): string => {
   const v = (process.env[key] ?? "").trim();
@@ -44,6 +50,64 @@ async function cookieHeader(page: Page): Promise<string> {
 async function csrfToken(page: Page): Promise<string | undefined> {
   const cookies = await page.context().cookies();
   return cookies.find((c) => c.name === "caseops_csrf")?.value;
+}
+
+async function expectApiOk(resp: APIResponse, action: string): Promise<void> {
+  if (!resp.ok()) {
+    throw new Error(`${action} failed: ${resp.status()} ${await resp.text()}`);
+  }
+}
+
+async function clearConflictGate(
+  request: APIRequestContext,
+  headers: Record<string, string>,
+  matterId: string,
+  opposingPartyName: string,
+): Promise<void> {
+  const runResp = await request.post(
+    `${PROD_API_BASE_URL}/api/matters/${matterId}/conflict-checks`,
+    {
+      headers,
+      data: {
+        opposing_party_name: opposingPartyName,
+        related_party_names: [],
+      },
+    },
+  );
+  await expectApiOk(runResp, "POST conflict check");
+  const check = await runResp.json() as { id: string; status: string };
+  if (check.status === "pending") {
+    const clearResp = await request.patch(
+      `${PROD_API_BASE_URL}/api/conflict-checks/${check.id}`,
+      {
+        headers,
+        data: {
+          status: "cleared",
+          resolution_note: "Prod verification setup cleared before activation.",
+        },
+      },
+    );
+    await expectApiOk(clearResp, "PATCH conflict check cleared");
+    return;
+  }
+  expect(["cleared", "waived"]).toContain(check.status);
+}
+
+async function activateMatterAfterConflictClearance(
+  request: APIRequestContext,
+  headers: Record<string, string>,
+  matterId: string,
+  opposingPartyName: string,
+): Promise<void> {
+  await clearConflictGate(request, headers, matterId, opposingPartyName);
+  const activateResp = await request.patch(
+    `${PROD_API_BASE_URL}/api/matters/${matterId}`,
+    {
+      headers,
+      data: { status: "active" },
+    },
+  );
+  await expectApiOk(activateResp, "PATCH matter active");
 }
 
 async function createFreshMatter(page: Page, csrf: string): Promise<string> {
@@ -71,12 +135,22 @@ async function createFreshMatter(page: Page, csrf: string): Promise<string> {
         client_name: "Acme Pvt Ltd",
         opposing_party: "Beta Engineering Ltd",
         description: "Limited challenge under Section 34 of the Arbitration and Conciliation Act, 1996 on patent illegality grounds.",
-        status: "active",
       },
     },
   );
-  expect(resp.ok(), `POST /api/matters/ failed: ${resp.status()} ${await resp.text()}`).toBeTruthy();
+  await expectApiOk(resp, "POST /api/matters/");
   const body = await resp.json();
+  await activateMatterAfterConflictClearance(
+    page.context().request,
+    {
+      Cookie: cookie,
+      "X-CSRF-Token": csrf,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body.id,
+    "Beta Engineering Ltd",
+  );
   return body.id;
 }
 
@@ -240,7 +314,6 @@ test.describe("Recommendations grounding fix (2026-04-29) — prod verification"
           court_name: "Delhi High Court",
           client_name: seedClient,
           description: "Existing matter for conflict probe.",
-          status: "active",
         },
       },
     );
@@ -264,7 +337,6 @@ test.describe("Recommendations grounding fix (2026-04-29) — prod verification"
           client_name: "Beta Corp",
           opposing_party: seedClient,
           description: "New matter whose opposing_party hits matter A.",
-          status: "active",
         },
       },
     );
