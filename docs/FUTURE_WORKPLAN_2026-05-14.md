@@ -58,7 +58,10 @@ product, or enterprise evidence from the strict ledgers.
      external provider calls.
 
 5. **AI eval harness**
-   - Complete `WTD-11.4` with per-workflow goldens and CI gating for model or
-     prompt changes.
+   - `WTD-11.4` now has a deterministic offline fixture foundation for
+     source grounding, refusal behavior, prompt-injection handling, and
+     unsafe wording detection.
+   - Complete `WTD-11.4` with broader per-workflow goldens and CI gating for
+     model or prompt changes.
    - Cover citation validity, statute confusion, fact fabrication, required
      section coverage, formatting compliance, and adverse-treatment detection.

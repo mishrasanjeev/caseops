@@ -725,10 +725,25 @@ Beyond what §4 and §5 add.
 - **Traces to:** PRD §19.4
 - **Done when:** All scenarios from PRD §19.4 covered (issue, expiry, revocation, out-of-scope, unauthorized tool, approval block, audit record, budget enforcement).
 
-### 11.4 AI safety tests
+### 11.4 WTD-11.4 AI safety tests -- PARTIAL foundation
 
 - **Traces to:** PRD §19.6
-- **Done when:** Citation accuracy benchmark, hallucination under low context, refusal on weak evidence, prompt-injection resistance, data-exfiltration red-team tests are automated and run in CI.
+- **Foundation landed:** Offline fixture-only harness
+  `caseops-eval-ai-safety` evaluates checked-in JSON goldens and already
+  generated outputs without live LLM calls, production data, corpus jobs, or
+  Temporal. It emits machine-readable JSON and blocks missing/invalid sources,
+  copied prompt injection, directive legal-advice wording, guaranteed
+  outcome/win-probability/judge-reputation wording, and emotion/biometric/
+  psychological/mental-health/voice/lie-detection scoring.
+- **Evidence:** `apps/api/src/caseops_api/scripts/eval_ai_safety.py`,
+  `apps/api/tests/fixtures/ai_safety_eval/`,
+  `apps/api/tests/test_eval_ai_safety.py`, and
+  `docs/runbooks/ai-safety-eval-harness.md`.
+- **Remaining done when:** per-workflow golden coverage spans drafting,
+  citation validity, statute confusion, fact fabrication, Matter File Q&A,
+  recommendations, Litigation Strategy, hearing packs, prompt-injection
+  resistance, data-exfiltration red-team cases, and CI gating for model or
+  prompt changes.
 
 ### 11.5 Payment tests
 
@@ -815,7 +830,7 @@ These are explicitly deferred by PRD §20.5.
 | §18.3 Backup/restore | Implicit | Documented + drilled | §8.3 |
 | §19.3 Tenant leakage tests | Absent | Present | §11.1 |
 | §19.4 Grantex tests | Absent | Present | §11.3 |
-| §19.6 AI safety tests | Absent | Present | §11.4 |
+| §19.6 AI safety tests | Partial foundation | Full per-workflow CI gate | §11.4 |
 
 ---
 
@@ -828,7 +843,8 @@ Sprints A–F (security, frontend spine, AI core, drafting v1) all **shipped** �
 3. `PG-001` conflict check: finish the remaining intake-gate scope.
 4. `WTD-7.2` tasks/deadlines: matter-cockpit foundation implemented; admin task templates remain.
 5. Durable notifications / Temporal: land `WTD-5.1` and then the durable-delivery parts of `WTD-5.3`.
-6. AI eval harness: complete the golden-dataset and CI-gated evaluation work under `WTD-11.4`.
+6. AI eval harness: expand the `WTD-11.4` offline foundation into
+   per-workflow goldens and CI-gated evaluation for model or prompt changes.
 
 Older planning context:
 
