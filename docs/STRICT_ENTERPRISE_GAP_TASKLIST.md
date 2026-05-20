@@ -521,8 +521,17 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
 - `WTD-11.2` `Missing` Authorization matrix tests.
   Evidence: `docs/WORK_TO_BE_DONE.md:664-666`.
 
-- `WTD-11.4` `Missing` AI safety benchmark automation.
-  Evidence: `docs/WORK_TO_BE_DONE.md:673-676`.
+- `WTD-11.4` `Partially implemented` AI safety benchmark automation.
+  Foundation evidence: `apps/api/src/caseops_api/scripts/eval_ai_safety.py`
+  adds an offline JSON-fixture harness, `apps/api/tests/fixtures/ai_safety_eval/`
+  carries pass and negative detector fixtures, `apps/api/tests/test_eval_ai_safety.py`
+  covers fixture loading, source grounding, refusal behavior, prompt-injection
+  handling, unsupported legal advice/prediction wording, sensitive scoring,
+  machine-readable output, CLI exit codes, and status docs. Runbook:
+  `docs/runbooks/ai-safety-eval-harness.md`.
+  Remaining before full closure: per-workflow golden expansion, richer citation
+  validity/statute-confusion/fact-fabrication checks, and an explicit CI gate
+  for prompt/model changes.
 
 - `WTD-11.5` `Partially implemented` Payment verification depth.
   Evidence: `docs/WORK_TO_BE_DONE.md:678-680`,
