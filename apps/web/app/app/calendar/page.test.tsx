@@ -77,6 +77,29 @@ describe("CalendarPage", () => {
     fetchCalendarSyncStatusMock.mockResolvedValue({
       provider_available: true,
       durable_automation: "blocked_pending_temporal",
+      notification_delivery: "pending_wtd_5_3",
+      capabilities: {
+        sync_mode: "manual_bounded",
+        manual_sync_available: true,
+        durable_automation: "blocked_pending_temporal",
+        notification_delivery: "pending_wtd_5_3",
+        email_invitation_candidates: "deferred_pending_review_queue",
+      },
+      provider_config: [
+        {
+          provider: "outlook",
+          configured: true,
+          missing_config_names: [],
+        },
+      ],
+      conflict_summary: {
+        has_conflicts: false,
+        candidate_count: 0,
+        duplicate_provider_event_count: 0,
+        changed_event_candidate_count: 0,
+        changed_event_detection: "unsupported_no_provider_snapshot",
+      },
+      conflict_candidates: [],
       connections: [],
       syncs: [],
     });
@@ -118,6 +141,77 @@ describe("CalendarPage", () => {
       await screen.findByText(/Microsoft Graph OAuth is not configured/i),
     ).toBeInTheDocument();
     expect(screen.getByTestId("calendar-ics-download")).toBeInTheDocument();
+  });
+
+  it("renders bounded sync status without claiming durable automation", async () => {
+    fetchCalendarEventsMock.mockResolvedValueOnce({
+      range_from: "2026-04-01",
+      range_to: "2026-05-31",
+      events: [],
+    });
+    render(withClient(<CalendarPage />));
+    const panel = await screen.findByTestId("calendar-sync-status-panel");
+    expect(within(panel).getByText("Manual visible-range sync")).toBeInTheDocument();
+    expect(within(panel).getByText("Pending Temporal proof")).toBeInTheDocument();
+    expect(within(panel).getByText("Pending WTD-5.3")).toBeInTheDocument();
+    expect(within(panel).getByText("Review queue pending")).toBeInTheDocument();
+  });
+
+  it("shows sync conflict candidates from safe metadata only", async () => {
+    fetchCalendarEventsMock.mockResolvedValueOnce({
+      range_from: "2026-04-01",
+      range_to: "2026-05-31",
+      events: [],
+    });
+    fetchCalendarSyncStatusMock.mockResolvedValueOnce({
+      provider_available: true,
+      durable_automation: "blocked_pending_temporal",
+      notification_delivery: "pending_wtd_5_3",
+      capabilities: {
+        sync_mode: "manual_bounded",
+        manual_sync_available: true,
+        durable_automation: "blocked_pending_temporal",
+        notification_delivery: "pending_wtd_5_3",
+        email_invitation_candidates: "deferred_pending_review_queue",
+      },
+      provider_config: [
+        {
+          provider: "outlook",
+          configured: true,
+          missing_config_names: [],
+        },
+      ],
+      conflict_summary: {
+        has_conflicts: true,
+        candidate_count: 1,
+        duplicate_provider_event_count: 1,
+        changed_event_candidate_count: 0,
+        changed_event_detection: "unsupported_no_provider_snapshot",
+      },
+      conflict_candidates: [
+        {
+          id: "dup-provider-event:abc",
+          conflict_type: "duplicate_provider_event_id",
+          severity: "review",
+          provider: "outlook",
+          calendar_connection_id: "conn-1",
+          provider_event_id: "remote-event-1",
+          duplicate_count: 2,
+          source_ids: ["hearing-1", "hearing-2"],
+          source_types: ["matter_hearing"],
+          sync_ids: ["sync-1", "sync-2"],
+          message:
+            "Multiple CaseOps calendar sync records point to the same Outlook event.",
+        },
+      ],
+      connections: [],
+      syncs: [],
+    });
+    render(withClient(<CalendarPage />));
+    const status = await screen.findByTestId("calendar-conflict-status");
+    expect(within(status).getByText(/1 candidate/)).toBeInTheDocument();
+    expect(within(status).getByText(/remote-event-1/)).toBeInTheDocument();
+    expect(status.textContent).not.toMatch(/storage_key|access_token|raw email/i);
   });
 
   it("renders an event chip for each event returned by the API", async () => {

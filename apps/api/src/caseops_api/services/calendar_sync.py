@@ -31,6 +31,10 @@ from caseops_api.schemas.calendar import (
     CalendarConnectionStartResponse,
     CalendarEventSyncRecord,
     CalendarEventSyncResponse,
+    CalendarProviderConfigStatus,
+    CalendarSyncCapabilityStatus,
+    CalendarSyncConflictCandidate,
+    CalendarSyncConflictSummary,
     CalendarSyncStatusResponse,
     OutlookBulkSyncItem,
     OutlookBulkSyncRequest,
@@ -324,6 +328,65 @@ def _sync_record(sync: CalendarEventSync) -> CalendarEventSyncRecord:
         created_at=sync.created_at,
         updated_at=sync.updated_at,
     )
+
+
+def _missing_outlook_config_names(provider: OutlookProvider) -> list[str]:
+    """Return config names only; never expose configured values."""
+    if provider.configured:
+        return []
+    settings = get_settings()
+    missing: list[str] = []
+    if not settings.outlook_client_id:
+        missing.append("OUTLOOK_CLIENT_ID")
+    if not settings.outlook_client_secret:
+        missing.append("OUTLOOK_CLIENT_SECRET")
+    if not settings.outlook_redirect_uri:
+        missing.append("OUTLOOK_REDIRECT_URI")
+    return missing
+
+
+def _provider_config_status(provider: OutlookProvider) -> CalendarProviderConfigStatus:
+    return CalendarProviderConfigStatus(
+        configured=provider.configured,
+        missing_config_names=_missing_outlook_config_names(provider),
+    )
+
+
+def _duplicate_conflict_candidates(
+    syncs: list[CalendarEventSync],
+) -> list[CalendarSyncConflictCandidate]:
+    grouped: dict[tuple[str, str], list[CalendarEventSync]] = {}
+    for sync in syncs:
+        if not sync.provider_event_id:
+            continue
+        key = (sync.calendar_connection_id, sync.provider_event_id)
+        grouped.setdefault(key, []).append(sync)
+
+    candidates: list[CalendarSyncConflictCandidate] = []
+    for (connection_id, provider_event_id), rows in sorted(grouped.items()):
+        if len(rows) < 2:
+            continue
+        rows = sorted(rows, key=lambda row: (row.source_type, row.source_id, row.id))
+        candidate_id = hashlib.sha256(
+            f"{connection_id}:{provider_event_id}".encode()
+        ).hexdigest()[:16]
+        candidates.append(
+            CalendarSyncConflictCandidate(
+                id=f"dup-provider-event:{candidate_id}",
+                conflict_type="duplicate_provider_event_id",
+                calendar_connection_id=connection_id,
+                provider_event_id=provider_event_id,
+                duplicate_count=len(rows),
+                source_ids=[row.source_id for row in rows],
+                source_types=sorted({row.source_type for row in rows}),  # type: ignore[list-item]
+                sync_ids=[row.id for row in rows],
+                message=(
+                    "Multiple CaseOps calendar sync records point to the same "
+                    "Outlook event. Review before running another manual sync."
+                ),
+            )
+        )
+    return candidates
 
 
 def _safe_error(exc: BaseException) -> str:
@@ -798,8 +861,25 @@ def sync_status(
             .order_by(CalendarEventSync.updated_at.desc())
         )
     )
+    conflict_candidates = _duplicate_conflict_candidates(syncs)
     return CalendarSyncStatusResponse(
         provider_available=provider.configured,
+        notification_delivery="pending_wtd_5_3",
+        capabilities=CalendarSyncCapabilityStatus(
+            manual_sync_available=provider.configured,
+            durable_automation="blocked_pending_temporal",
+            notification_delivery="pending_wtd_5_3",
+            email_invitation_candidates="deferred_pending_review_queue",
+        ),
+        provider_config=[_provider_config_status(provider)],
+        conflict_summary=CalendarSyncConflictSummary(
+            has_conflicts=bool(conflict_candidates),
+            candidate_count=len(conflict_candidates),
+            duplicate_provider_event_count=len(conflict_candidates),
+            changed_event_candidate_count=0,
+            changed_event_detection="unsupported_no_provider_snapshot",
+        ),
+        conflict_candidates=conflict_candidates,
         connections=[_connection_record(row) for row in connections],
         syncs=[_sync_record(row) for row in syncs],
     )

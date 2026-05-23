@@ -5709,8 +5709,110 @@ export interface components {
         CalendarEventSyncResponse: {
             sync: components["schemas"]["CalendarEventSyncRecord"];
         };
+        /** CalendarProviderConfigStatus */
+        CalendarProviderConfigStatus: {
+            /** Configured */
+            configured: boolean;
+            /** Missing Config Names */
+            missing_config_names?: string[];
+            /**
+             * Provider
+             * @default outlook
+             * @constant
+             */
+            provider: "outlook";
+        };
+        /** CalendarSyncCapabilityStatus */
+        CalendarSyncCapabilityStatus: {
+            /**
+             * Durable Automation
+             * @default blocked_pending_temporal
+             * @constant
+             */
+            durable_automation: "blocked_pending_temporal";
+            /**
+             * Email Invitation Candidates
+             * @default deferred_pending_review_queue
+             * @constant
+             */
+            email_invitation_candidates: "deferred_pending_review_queue";
+            /** Manual Sync Available */
+            manual_sync_available: boolean;
+            /**
+             * Notification Delivery
+             * @default pending_wtd_5_3
+             * @constant
+             */
+            notification_delivery: "pending_wtd_5_3";
+            /**
+             * Sync Mode
+             * @default manual_bounded
+             * @constant
+             */
+            sync_mode: "manual_bounded";
+        };
+        /** CalendarSyncConflictCandidate */
+        CalendarSyncConflictCandidate: {
+            /** Calendar Connection Id */
+            calendar_connection_id: string;
+            /**
+             * Conflict Type
+             * @constant
+             */
+            conflict_type: "duplicate_provider_event_id";
+            /** Duplicate Count */
+            duplicate_count: number;
+            /** Id */
+            id: string;
+            /** Message */
+            message: string;
+            /**
+             * Provider
+             * @default outlook
+             * @constant
+             */
+            provider: "outlook";
+            /** Provider Event Id */
+            provider_event_id: string;
+            /**
+             * Severity
+             * @default review
+             * @constant
+             */
+            severity: "review";
+            /** Source Ids */
+            source_ids: string[];
+            /** Source Types */
+            source_types: ("matter_hearing" | "matter_deadline" | "matter_task")[];
+            /** Sync Ids */
+            sync_ids: string[];
+        };
+        /** CalendarSyncConflictSummary */
+        CalendarSyncConflictSummary: {
+            /** Candidate Count */
+            candidate_count: number;
+            /**
+             * Changed Event Candidate Count
+             * @default 0
+             */
+            changed_event_candidate_count: number;
+            /**
+             * Changed Event Detection
+             * @default unsupported_no_provider_snapshot
+             * @constant
+             */
+            changed_event_detection: "unsupported_no_provider_snapshot";
+            /** Duplicate Provider Event Count */
+            duplicate_provider_event_count: number;
+            /** Has Conflicts */
+            has_conflicts: boolean;
+        };
         /** CalendarSyncStatusResponse */
         CalendarSyncStatusResponse: {
+            capabilities: components["schemas"]["CalendarSyncCapabilityStatus"];
+            /** Conflict Candidates */
+            conflict_candidates: components["schemas"]["CalendarSyncConflictCandidate"][];
+            conflict_summary: components["schemas"]["CalendarSyncConflictSummary"];
             /** Connections */
             connections: components["schemas"]["CalendarConnectionRecord"][];
             /**
@@ -5719,8 +5821,16 @@ export interface components {
              * @constant
              */
             durable_automation: "blocked_pending_temporal";
+            /**
+             * Notification Delivery
+             * @default pending_wtd_5_3
+             * @constant
+             */
+            notification_delivery: "pending_wtd_5_3";
             /** Provider Available */
             provider_available: boolean;
+            /** Provider Config */
+            provider_config: components["schemas"]["CalendarProviderConfigStatus"][];
             /** Syncs */
             syncs: components["schemas"]["CalendarEventSyncRecord"][];
         };

@@ -23,6 +23,11 @@ CalendarProviderLiteral = Literal["outlook"]
 CalendarConnectionStatusLiteral = Literal["connected", "revoked", "error"]
 CalendarSyncSourceTypeLiteral = Literal["matter_hearing", "matter_deadline", "matter_task"]
 CalendarEventSyncStatusLiteral = Literal["pending", "synced", "failed", "deleted"]
+CalendarSyncModeLiteral = Literal["manual_bounded"]
+CalendarNotificationDeliveryLiteral = Literal["pending_wtd_5_3"]
+CalendarEmailInvitationCandidateLiteral = Literal["deferred_pending_review_queue"]
+CalendarConflictTypeLiteral = Literal["duplicate_provider_event_id"]
+CalendarConflictSeverityLiteral = Literal["review"]
 NotificationRuleScopeTypeLiteral = Literal["company", "matter", "user"]
 NotificationRuleEventTypeLiteral = Literal[
     "hearing_upcoming",
@@ -112,9 +117,54 @@ class CalendarEventSyncResponse(BaseModel):
     sync: CalendarEventSyncRecord
 
 
+class CalendarProviderConfigStatus(BaseModel):
+    provider: CalendarProviderLiteral = "outlook"
+    configured: bool
+    missing_config_names: list[str] = Field(default_factory=list)
+
+
+class CalendarSyncCapabilityStatus(BaseModel):
+    sync_mode: CalendarSyncModeLiteral = "manual_bounded"
+    manual_sync_available: bool
+    durable_automation: Literal["blocked_pending_temporal"] = "blocked_pending_temporal"
+    notification_delivery: CalendarNotificationDeliveryLiteral = "pending_wtd_5_3"
+    email_invitation_candidates: CalendarEmailInvitationCandidateLiteral = (
+        "deferred_pending_review_queue"
+    )
+
+
+class CalendarSyncConflictCandidate(BaseModel):
+    id: str
+    conflict_type: CalendarConflictTypeLiteral
+    severity: CalendarConflictSeverityLiteral = "review"
+    provider: CalendarProviderLiteral = "outlook"
+    calendar_connection_id: str
+    provider_event_id: str
+    duplicate_count: int = Field(ge=2)
+    source_ids: list[str]
+    source_types: list[CalendarSyncSourceTypeLiteral]
+    sync_ids: list[str]
+    message: str
+
+
+class CalendarSyncConflictSummary(BaseModel):
+    has_conflicts: bool
+    candidate_count: int = Field(ge=0)
+    duplicate_provider_event_count: int = Field(ge=0)
+    changed_event_candidate_count: int = Field(default=0, ge=0)
+    changed_event_detection: Literal["unsupported_no_provider_snapshot"] = (
+        "unsupported_no_provider_snapshot"
+    )
+
+
 class CalendarSyncStatusResponse(BaseModel):
     provider_available: bool
     durable_automation: Literal["blocked_pending_temporal"] = "blocked_pending_temporal"
+    notification_delivery: CalendarNotificationDeliveryLiteral = "pending_wtd_5_3"
+    capabilities: CalendarSyncCapabilityStatus
+    provider_config: list[CalendarProviderConfigStatus]
+    conflict_summary: CalendarSyncConflictSummary
+    conflict_candidates: list[CalendarSyncConflictCandidate]
     connections: list[CalendarConnectionRecord]
     syncs: list[CalendarEventSyncRecord]
 
