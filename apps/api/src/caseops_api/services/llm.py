@@ -87,6 +87,7 @@ class LLMCallContext:
 
     tenant_id: str | None = None
     matter_id: str | None = None
+    actor_membership_id: str | None = None
     purpose: str = "unspecified"
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -156,6 +157,11 @@ def _rough_token_estimate(text: str) -> int:
     # ~4 characters per token is a reasonable rough bound for English-heavy
     # legal text; the mock never needs to be precise.
     return max(1, len(text) // 4)
+
+
+def _estimate_call_tokens(messages: list[LLMMessage], max_tokens: int) -> int:
+    prompt_estimate = sum(_rough_token_estimate(message.content) for message in messages)
+    return max(1, prompt_estimate + max(max_tokens, 0))
 
 
 def _mock_plain_response(prompt: str) -> str:
@@ -992,6 +998,20 @@ def generate_structured[T: BaseModel](
                     "workspace admin to adjust the policy."
                 ),
             )
+        from caseops_api.services.ai_token_governance import (
+            assert_ai_token_quota_allows_call,
+        )
+
+        assert_ai_token_quota_allows_call(
+            session,
+            company_id=context.tenant_id,
+            actor_membership_id=context.actor_membership_id,
+            matter_id=context.matter_id,
+            purpose=context.purpose,
+            provider=provider.name,
+            model=provider.model,
+            estimated_tokens=_estimate_call_tokens(messages, max_tokens),
+        )
     completion = provider.generate(
         messages=messages,
         temperature=temperature,

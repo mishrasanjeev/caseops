@@ -355,6 +355,7 @@ def generate_hearing_pack(
     llm_context = LLMCallContext(
         tenant_id=context.company.id,
         matter_id=matter.id,
+        actor_membership_id=context.membership.id,
         purpose=PURPOSE,
     )
     def _invoke(active: LLMProvider) -> tuple[_LLMPackResponse, LLMCompletion]:

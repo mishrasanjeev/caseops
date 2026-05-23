@@ -1005,7 +1005,10 @@ def generate_draft_version(
     # their own tier via build_provider(purpose=...).
     llm = provider or build_provider(purpose=PURPOSE_DRAFTING)
     llm_context = LLMCallContext(
-        tenant_id=context.company.id, matter_id=matter.id, purpose=PURPOSE
+        tenant_id=context.company.id,
+        matter_id=matter.id,
+        actor_membership_id=context.membership.id,
+        purpose=PURPOSE,
     )
     def _invoke(active_llm: LLMProvider):
         return generate_structured(

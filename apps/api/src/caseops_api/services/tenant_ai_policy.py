@@ -32,6 +32,8 @@ class ResolvedAIPolicy:
     allowed_hearing_pack: tuple[str, ...]
     max_tokens_per_session: int
     monthly_token_budget: int | None
+    user_monthly_token_budget: int | None
+    token_warning_threshold_percent: int
     external_share_requires_approval: bool
     training_opt_in: bool
     # PG-107 (2026-05-01) — opt-in predictive bench analytics.
@@ -59,6 +61,8 @@ DEFAULT_POLICY = ResolvedAIPolicy(
     allowed_hearing_pack=(),
     max_tokens_per_session=16384,
     monthly_token_budget=None,
+    user_monthly_token_budget=None,
+    token_warning_threshold_percent=90,
     external_share_requires_approval=True,
     training_opt_in=False,
 )
@@ -78,6 +82,10 @@ def resolve_tenant_policy(
             allowed_hearing_pack=DEFAULT_POLICY.allowed_hearing_pack,
             max_tokens_per_session=DEFAULT_POLICY.max_tokens_per_session,
             monthly_token_budget=DEFAULT_POLICY.monthly_token_budget,
+            user_monthly_token_budget=DEFAULT_POLICY.user_monthly_token_budget,
+            token_warning_threshold_percent=(
+                DEFAULT_POLICY.token_warning_threshold_percent
+            ),
             external_share_requires_approval=DEFAULT_POLICY.external_share_requires_approval,
             training_opt_in=DEFAULT_POLICY.training_opt_in,
             predictive_bench_strategy_enabled=DEFAULT_POLICY.predictive_bench_strategy_enabled,
@@ -91,6 +99,14 @@ def resolve_tenant_policy(
         max_tokens_per_session=int(row.max_tokens_per_session),
         monthly_token_budget=(
             int(row.monthly_token_budget) if row.monthly_token_budget is not None else None
+        ),
+        user_monthly_token_budget=(
+            int(row.user_monthly_token_budget)
+            if row.user_monthly_token_budget is not None
+            else None
+        ),
+        token_warning_threshold_percent=int(
+            getattr(row, "token_warning_threshold_percent", 90) or 90
         ),
         external_share_requires_approval=bool(row.external_share_requires_approval),
         training_opt_in=bool(row.training_opt_in),

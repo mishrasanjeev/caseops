@@ -6147,9 +6147,9 @@ class TenantAIPolicy(Base):
 
     One row per company; the LLM provider factory reads
     ``allowed_models_*`` to refuse a request that violates the policy
-    before any call is billed. Enforcement of token_budget and
-    external_share_requires_approval will wire into the drafting +
-    export pipelines in a follow-on.
+    before any call is billed. Monthly token budgets use nullable
+    columns: NULL means unlimited so existing tenants keep current AI
+    behaviour until an admin sets a cap.
     """
 
     __tablename__ = "tenant_ai_policies"
@@ -6178,6 +6178,12 @@ class TenantAIPolicy(Base):
     )
     monthly_token_budget: Mapped[int | None] = mapped_column(
         Integer, nullable=True
+    )
+    user_monthly_token_budget: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    token_warning_threshold_percent: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=90
     )
     external_share_requires_approval: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True

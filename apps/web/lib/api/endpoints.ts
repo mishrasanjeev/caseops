@@ -674,6 +674,48 @@ export type TenantAIPolicy = {
   predictive_bench_strategy_enabled: boolean;
 };
 
+export type AITokenQuotaState = "unlimited" | "ok" | "warning" | "hard_limit";
+
+export type AITokenUserUsage = {
+  actor_membership_id: string;
+  user_label: string;
+  used_tokens: number;
+  run_count: number;
+  state: AITokenQuotaState;
+  remaining_tokens: number | null;
+};
+
+export type AITokenMatterUsage = {
+  matter_id: string;
+  matter_code: string;
+  matter_title: string;
+  used_tokens: number;
+  run_count: number;
+};
+
+export type AITokenPurposeModelUsage = {
+  purpose: string;
+  provider: string;
+  model: string;
+  used_tokens: number;
+  run_count: number;
+};
+
+export type AITokenGovernanceSummary = {
+  company_id: string;
+  period_start: string;
+  period_end: string;
+  firm_quota_tokens: number | null;
+  user_quota_tokens: number | null;
+  warning_threshold_percent: number;
+  firm_used_tokens: number;
+  firm_remaining_tokens: number | null;
+  firm_state: AITokenQuotaState;
+  top_users: AITokenUserUsage[];
+  usage_by_matter: AITokenMatterUsage[];
+  usage_by_purpose_model: AITokenPurposeModelUsage[];
+};
+
 export type StorageQuotaState = "unlimited" | "ok" | "warning" | "hard_limit";
 
 export type StorageUploadPolicy = {
@@ -723,6 +765,34 @@ export async function updateStorageGovernance(input: {
   return apiRequest<FirmStorageUsageSummary>("/api/admin/storage-governance", {
     method: "PATCH",
     body: { quota_bytes: input.quotaBytes },
+  });
+}
+
+export async function getAITokenGovernance(input?: {
+  since?: string | null;
+  until?: string | null;
+}): Promise<AITokenGovernanceSummary> {
+  const qs = new URLSearchParams();
+  if (input?.since) qs.set("since", input.since);
+  if (input?.until) qs.set("until", input.until);
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  return apiRequest<AITokenGovernanceSummary>(
+    `/api/admin/ai-token-governance${suffix}`,
+  );
+}
+
+export async function updateAITokenGovernance(input: {
+  firmQuotaTokens: number | null;
+  userQuotaTokens: number | null;
+  warningThresholdPercent: number;
+}): Promise<AITokenGovernanceSummary> {
+  return apiRequest<AITokenGovernanceSummary>("/api/admin/ai-token-governance", {
+    method: "PATCH",
+    body: {
+      firm_quota_tokens: input.firmQuotaTokens,
+      user_quota_tokens: input.userQuotaTokens,
+      warning_threshold_percent: input.warningThresholdPercent,
+    },
   });
 }
 
