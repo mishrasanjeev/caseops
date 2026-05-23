@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from caseops_api.schemas.litigation_strategy import LitigationStrategyPayload
 
@@ -22,6 +22,15 @@ RecommendationTypeLiteral = Literal[
     "remedy",
     "next_best_action",
     "litigation_strategy",
+]
+RecommendationObjectiveContextLiteral = Literal[
+    "litigation_strategy",
+    "settlement_strategy",
+    "compliance_risk",
+    "contract_risk",
+    "case_preparation",
+    "appeal_strategy",
+    "custom_goal",
 ]
 ConfidenceLiteral = Literal["low", "medium", "high"]
 DecisionLiteral = Literal["accepted", "rejected", "edited", "deferred"]
@@ -87,6 +96,16 @@ class RecommendationListResponse(BaseModel):
 
 class RecommendationGenerateRequest(BaseModel):
     type: RecommendationTypeLiteral = "authority"
+    recommendation_context: RecommendationObjectiveContextLiteral | None = None
+    custom_goal: str | None = Field(default=None, max_length=600)
+
+    @field_validator("custom_goal", mode="before")
+    @classmethod
+    def _normalize_custom_goal(cls, value: object) -> str | None:
+        if value is None:
+            return None
+        text = " ".join(str(value).split())
+        return text or None
 
 
 class RecommendationDecisionRequest(BaseModel):

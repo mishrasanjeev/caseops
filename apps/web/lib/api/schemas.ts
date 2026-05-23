@@ -683,6 +683,15 @@ export const recommendationType = z.enum([
   "next_best_action",
   "litigation_strategy",
 ]);
+export const recommendationObjectiveContext = z.enum([
+  "litigation_strategy",
+  "settlement_strategy",
+  "compliance_risk",
+  "contract_risk",
+  "case_preparation",
+  "appeal_strategy",
+  "custom_goal",
+]);
 export const recommendationStatus = z.enum([
   "proposed",
   "accepted",
@@ -1334,6 +1343,9 @@ export type RecommendationOption = z.infer<typeof recommendationOption>;
 export type RecommendationDecision = z.infer<typeof recommendationDecision>;
 export type RecommendationList = z.infer<typeof recommendationList>;
 export type RecommendationType = z.infer<typeof recommendationType>;
+export type RecommendationObjectiveContext = z.infer<
+  typeof recommendationObjectiveContext
+>;
 export type DecisionKind = z.infer<typeof decisionKind>;
 export type MatterAuditEvent = z.infer<typeof matterAuditEvent>;
 export type MatterAuditList = z.infer<typeof matterAuditList>;

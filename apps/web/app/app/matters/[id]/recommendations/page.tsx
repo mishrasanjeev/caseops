@@ -26,6 +26,7 @@ import {
 import { EmptyState } from "@/components/ui/EmptyState";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { Textarea } from "@/components/ui/Textarea";
 import { apiErrorMessage, isApiErrorShape } from "@/lib/api/config";
 import {
   generateRecommendation,
@@ -35,6 +36,7 @@ import {
 import type {
   DecisionKind,
   Recommendation,
+  RecommendationObjectiveContext,
   RecommendationType,
 } from "@/lib/api/schemas";
 import { cn } from "@/lib/cn";
@@ -56,6 +58,25 @@ const CONFIDENCE_TONE: Record<string, string> = {
   low: "bg-slate-100 text-slate-700 border-slate-200",
 };
 
+type ObjectiveSelection = RecommendationObjectiveContext | "default";
+
+const OBJECTIVE_OPTIONS: { value: ObjectiveSelection; label: string }[] = [
+  { value: "default", label: "Matter status" },
+  { value: "litigation_strategy", label: "Litigation strategy" },
+  { value: "settlement_strategy", label: "Settlement strategy" },
+  { value: "compliance_risk", label: "Compliance risk" },
+  { value: "contract_risk", label: "Contract risk" },
+  { value: "case_preparation", label: "Case preparation" },
+  { value: "appeal_strategy", label: "Appeal strategy" },
+  { value: "custom_goal", label: "Custom goal" },
+];
+
+type GenerateInput = {
+  type: RecommendationType;
+  recommendationContext?: RecommendationObjectiveContext | null;
+  customGoal?: string | null;
+};
+
 function formatDateTime(value: string): string {
   try {
     return new Date(value).toLocaleString(undefined, {
@@ -75,6 +96,9 @@ export default function MatterRecommendationsPage() {
   const matterId = params.id;
   const queryClient = useQueryClient();
   const [pendingType, setPendingType] = useState<RecommendationType | null>(null);
+  const [selectedObjective, setSelectedObjective] =
+    useState<ObjectiveSelection>("default");
+  const [customGoal, setCustomGoal] = useState("");
   // BUG-016 (Ram 2026-04-26): the backend returns actionable 422 detail
   // when citation grounding fails ("Add more detail to the matter
   // description ... or check corpus coverage before retrying.") but
@@ -94,10 +118,10 @@ export default function MatterRecommendationsPage() {
   });
 
   const generateMutation = useMutation({
-    mutationFn: (type: RecommendationType) =>
-      generateRecommendation({ matterId, type }),
-    onMutate: (type) => {
-      setPendingType(type);
+    mutationFn: (input: GenerateInput) =>
+      generateRecommendation({ matterId, ...input }),
+    onMutate: (input) => {
+      setPendingType(input.type);
       setLastError(null); // clear stale guidance when retrying
     },
     onSettled: () => setPendingType(null),
@@ -108,7 +132,7 @@ export default function MatterRecommendationsPage() {
       setLastError(null);
       toast.success("Recommendation ready for review");
     },
-    onError: (err, type) => {
+    onError: (err, input) => {
       // BUG-012 Hari 2026-04-21: previously we hard-coded "Refused on
       // purpose" for EVERY 422 and discarded the backend's actionable
       // detail. Surface the backend's actionable text.
@@ -118,13 +142,31 @@ export default function MatterRecommendationsPage() {
         err, "Could not generate a recommendation.",
       );
       setLastError({
-        type,
+        type: input.type,
         message,
         problemType: isApiErrorShape(err) ? err.problemType : null,
       });
       toast.error(message);
     },
   });
+
+  const buildGenerateInput = (type: RecommendationType): GenerateInput => {
+    const trimmedGoal = customGoal.trim();
+    return {
+      type,
+      recommendationContext:
+        selectedObjective === "default" ? null : selectedObjective,
+      customGoal: selectedObjective === "custom_goal" ? trimmedGoal : null,
+    };
+  };
+
+  const handleGenerate = (type: RecommendationType) => {
+    if (selectedObjective === "custom_goal" && customGoal.trim().length === 0) {
+      toast.error("Add a custom goal before generating.");
+      return;
+    }
+    generateMutation.mutate(buildGenerateInput(type));
+  };
 
   const decisionMutation = useMutation({
     mutationFn: (input: {
@@ -168,7 +210,7 @@ export default function MatterRecommendationsPage() {
             <Button
               size="sm"
               data-testid="recommendation-retry-from-banner"
-              onClick={() => generateMutation.mutate(lastError.type)}
+              onClick={() => generateMutation.mutate(buildGenerateInput(lastError.type))}
               disabled={generateMutation.isPending}
             >
               Try again
@@ -193,13 +235,45 @@ export default function MatterRecommendationsPage() {
               rows are not lawyer-owned strategy work product.
             </CardDescription>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex w-full flex-col gap-3 md:max-w-3xl">
+            <div className="grid gap-3 md:grid-cols-[minmax(14rem,18rem),1fr]">
+              <label className="flex flex-col gap-1 text-xs font-medium text-[var(--color-mute)]">
+                Objective
+                <select
+                  value={selectedObjective}
+                  onChange={(event) =>
+                    setSelectedObjective(event.target.value as ObjectiveSelection)
+                  }
+                  data-testid="recommendation-objective-select"
+                  className="h-10 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm text-[var(--color-ink)] shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-500)] focus-visible:ring-offset-1"
+                >
+                  {OBJECTIVE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {selectedObjective === "custom_goal" ? (
+                <label className="flex flex-col gap-1 text-xs font-medium text-[var(--color-mute)]">
+                  Custom goal
+                  <Textarea
+                    value={customGoal}
+                    maxLength={600}
+                    onChange={(event) => setCustomGoal(event.target.value)}
+                    data-testid="recommendation-custom-goal"
+                    className="min-h-10"
+                  />
+                </label>
+              ) : null}
+            </div>
+            <div className="flex flex-wrap gap-2">
             <GenerateButton
               type="authority"
               label="Authority"
               pendingType={pendingType}
               disabled={generateMutation.isPending}
-              onClick={() => generateMutation.mutate("authority")}
+              onClick={() => handleGenerate("authority")}
               testId="generate-authority-recommendation"
               variant="primary"
             />
@@ -208,14 +282,14 @@ export default function MatterRecommendationsPage() {
               label="Forum"
               pendingType={pendingType}
               disabled={generateMutation.isPending}
-              onClick={() => generateMutation.mutate("forum")}
+              onClick={() => handleGenerate("forum")}
             />
             <GenerateButton
               type="remedy"
               label="Remedy"
               pendingType={pendingType}
               disabled={generateMutation.isPending}
-              onClick={() => generateMutation.mutate("remedy")}
+              onClick={() => handleGenerate("remedy")}
               testId="generate-remedy-recommendation"
             />
             <GenerateButton
@@ -223,9 +297,10 @@ export default function MatterRecommendationsPage() {
               label="Next-best action"
               pendingType={pendingType}
               disabled={generateMutation.isPending}
-              onClick={() => generateMutation.mutate("next_best_action")}
+              onClick={() => handleGenerate("next_best_action")}
               testId="generate-nba-recommendation"
             />
+            </div>
           </div>
         </CardHeader>
         <CardContent className="py-5 text-sm text-[var(--color-mute)]">
