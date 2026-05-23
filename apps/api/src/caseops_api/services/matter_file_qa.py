@@ -19,6 +19,7 @@ from caseops_api.db.models import (
     ModelRun,
 )
 from caseops_api.schemas.matter_file_qa import (
+    MatterFileQAAnalysisLanguage,
     MatterFileQAConfidence,
     MatterFileQAEvidenceStatus,
     MatterFileQAExportNoteResponse,
@@ -30,6 +31,7 @@ from caseops_api.schemas.matter_file_qa import (
     MatterFileQAStatus,
     MatterFileQAStructuredItem,
     MatterFileQAStructuredItemType,
+    MatterFileQATranslationStatus,
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.identity import SessionContext
@@ -53,6 +55,16 @@ MIN_RETRIEVAL_SCORE = 20
 SOURCE_SNIPPET_LIMIT = 700
 STRUCTURED_MODES = {"sections", "allegations", "evidence", "chronology", "gaps"}
 STRUCTURED_ITEM_LIMIT = 12
+SUPPORTED_ANALYSIS_LANGUAGES: dict[MatterFileQAAnalysisLanguage, str] = {
+    "en": "English",
+    "hi": "Hindi",
+    "mr": "Marathi",
+    "gu": "Gujarati",
+    "ta": "Tamil",
+    "te": "Telugu",
+    "kn": "Kannada",
+    "bn": "Bengali",
+}
 
 _CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]+")
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+|\n+")
@@ -75,11 +87,21 @@ _DATE_RE = re.compile(
     r")\b",
     re.IGNORECASE,
 )
+_SOURCE_ID_TEXT_RE = re.compile(r"\bsrc_\d+\b", re.IGNORECASE)
+_LEGAL_REFERENCE_TERM_RE = re.compile(
+    r"\b("
+    r"ipc|bns|bnss|crpc|cpc|section|article|act|statute|authority|"
+    r"precedent|judgment|supreme court|high court|court"
+    r")\b",
+    re.IGNORECASE,
+)
 _FORBIDDEN_ANSWER_RE = re.compile(
     r"\b("
     r"guaranteed outcome|guaranteed to win|will win|will lose|"
-    r"win probability|loss probability|win\s*(?:[/-]|\s+)\s*loss|judge reputation|"
-    r"judge likes|judge dislikes|judge likes/dislikes|favorable judge|legal[- ]advice|"
+    r"success probability|outcome prediction|win probability|loss probability|"
+    r"win\s*(?:[/-]|\s+)\s*loss|judge reputation|judge shopping|best judge|"
+    r"most suitable judge|judge likes|judge dislikes|judge likes/dislikes|"
+    r"favorable judge|legal[- ]advice|"
     r"emotion|emotional|emotional instability|psychological|psychological diagnosis|"
     r"biometric|mental[- ]health|lie detection|reveal all tenant documents|"
     r"reveal tenant data|reveal all documents"
@@ -100,6 +122,7 @@ class _LLMMatterFileQAStructuredItem(BaseModel):
 class _LLMMatterFileQAResponse(BaseModel):
     status: Literal["answered", "partial_answer", "insufficient_evidence"]
     answer: str = Field(default="", max_length=5000)
+    local_language_analysis: str | None = Field(default=None, max_length=5000)
     confidence: Literal["high", "medium", "low", "insufficient"] = "insufficient"
     source_ids: list[str] = Field(default_factory=list, max_length=12)
     structured_items: list[_LLMMatterFileQAStructuredItem] = Field(
@@ -138,6 +161,7 @@ def ask_matter_file_question(
     matter = _get_matter_model(session, context=context, matter_id=matter_id)
     question = _normalize_text(payload.question)
     document_type_filter = _normalize_document_type_filter(payload.document_type_filter)
+    analysis_language = payload.analysis_language
 
     if not matter.attachments:
         return _finalize_response(
@@ -150,6 +174,7 @@ def ask_matter_file_question(
                 matter_id=matter.id,
                 question=question,
                 status="no_documents",
+                analysis_language=analysis_language,
                 limitations=[
                     "No uploaded matter documents are available for Matter File Q&A.",
                     "Only uploaded matter documents are allowed in this slice.",
@@ -172,6 +197,7 @@ def ask_matter_file_question(
                 matter_id=matter.id,
                 question=question,
                 status="processing_required",
+                analysis_language=analysis_language,
                 limitations=[
                     "Uploaded matter documents exist, but no usable indexed chunks were found.",
                     "Run or retry document processing before asking this question.",
@@ -191,6 +217,7 @@ def ask_matter_file_question(
                 matter_id=matter.id,
                 question=question,
                 status="insufficient_evidence",
+                analysis_language=analysis_language,
                 limitations=[
                     "No uploaded matter document chunk supported the question.",
                     "The answer was refused rather than using model memory or public authorities.",
@@ -201,6 +228,7 @@ def ask_matter_file_question(
     messages = _build_messages(
         question=question,
         answer_mode=payload.answer_mode,
+        analysis_language=analysis_language,
         retrieved=retrieved,
     )
     prompt_hash = _prompt_hash(messages)
@@ -233,11 +261,13 @@ def ask_matter_file_question(
                 purpose=PURPOSE,
                 metadata={
                     "answer_mode": payload.answer_mode,
+                    "analysis_language": analysis_language,
+                    "translation_requested": analysis_language != "en",
                     "retrieved_source_count": len(retrieved),
                 },
             ),
             temperature=0.0,
-            max_tokens=1800,
+            max_tokens=2600 if analysis_language != "en" else 1800,
             on_model_run=_on_model_run,
             session=session,
         )
@@ -250,6 +280,7 @@ def ask_matter_file_question(
             matter_id=matter.id,
             question=question,
             status="insufficient_evidence",
+            analysis_language=analysis_language,
             limitations=[
                 "The model response could not be validated as source-cited JSON.",
                 "The answer was refused rather than returning unsupported text.",
@@ -271,6 +302,7 @@ def ask_matter_file_question(
         matter_id=matter.id,
         question=question,
         answer_mode=payload.answer_mode,
+        analysis_language=analysis_language,
         llm_payload=llm_payload,
         retrieved=retrieved,
         model_run_id=model_run.id if model_run is not None else None,
@@ -501,8 +533,10 @@ def _build_messages(
     *,
     question: str,
     answer_mode: str,
+    analysis_language: MatterFileQAAnalysisLanguage,
     retrieved: list[_RetrievedSource],
 ) -> list[LLMMessage]:
+    language_name = SUPPORTED_ANALYSIS_LANGUAGES[analysis_language]
     system = (
         "You are CaseOps Matter File Q&A. Answer only from the uploaded matter "
         "document chunks provided in this prompt. Do not use model memory, public "
@@ -515,6 +549,7 @@ def _build_messages(
     parts = [
         "MATTER_FILE_QA",
         f"ANSWER_MODE: {answer_mode}",
+        f"ANALYSIS_LANGUAGE: {analysis_language} ({language_name})",
         f"QUESTION: {question}",
         "",
         "SOURCES:",
@@ -537,7 +572,11 @@ def _build_messages(
             "Respond with JSON matching this schema:",
             "{",
             '  "status": "answered|partial_answer|insufficient_evidence",',
-            '  "answer": "short answer from the sources only",',
+            '  "answer": "English authoritative answer from the sources only",',
+            (
+                '  "local_language_analysis": '
+                '"optional translation aid in the requested non-English language",'
+            ),
             '  "confidence": "high|medium|low|insufficient",',
             '  "source_ids": ["src_1"],',
             '  "structured_items": [',
@@ -555,6 +594,21 @@ def _build_messages(
             (
                 "Every answered or partial_answer result must cite only "
                 "SOURCE_ID values provided above."
+            ),
+            (
+                "The answer field must always be English and is the authoritative "
+                "legal analysis for lawyer review."
+            ),
+            (
+                "If ANALYSIS_LANGUAGE is en, return null or an empty string for "
+                "local_language_analysis."
+            ),
+            (
+                "If ANALYSIS_LANGUAGE is not en, local_language_analysis must be a "
+                "translation aid only: preserve the English answer's meaning, do "
+                "not add facts, sources, statutes, authorities, conclusions, legal "
+                "advice, outcome predictions, or new source IDs, and do not replace "
+                "the original source snippets."
             ),
             (
                 "For sections, allegations, evidence, chronology, and gaps modes, "
@@ -575,6 +629,7 @@ def _response_from_llm(
     matter_id: str,
     question: str,
     answer_mode: str,
+    analysis_language: MatterFileQAAnalysisLanguage,
     llm_payload: _LLMMatterFileQAResponse,
     retrieved: list[_RetrievedSource],
     model_run_id: str | None,
@@ -630,15 +685,29 @@ def _response_from_llm(
             matter_id=matter_id,
             question=question,
             status="insufficient_evidence",
+            analysis_language=analysis_language,
             limitations=reasons,
             model_run_id=model_run_id,
         )
+
+    local_analysis, translation_status, translation_warning = (
+        _local_language_analysis_from_payload(
+            analysis_language=analysis_language,
+            english_answer=llm_payload.answer,
+            raw_value=llm_payload.local_language_analysis,
+            allowed_source_ids=allowed_source_ids,
+        )
+    )
 
     if llm_payload.status == "insufficient_evidence":
         return _refusal_response(
             matter_id=matter_id,
             question=question,
             status="insufficient_evidence",
+            analysis_language=analysis_language,
+            local_language_analysis=local_analysis,
+            translation_status=translation_status,
+            translation_warning=translation_warning,
             limitations=llm_payload.limitations
             or ["The uploaded matter chunks do not support an answer."],
             model_run_id=model_run_id,
@@ -652,6 +721,10 @@ def _response_from_llm(
         question=question,
         status=llm_payload.status,
         answer=_normalize_text(llm_payload.answer),
+        analysis_language=analysis_language,
+        local_language_analysis=local_analysis,
+        translation_status=translation_status,
+        translation_warning=translation_warning,
         confidence=llm_payload.confidence,
         sources=sources,
         structured_items=structured_items,
@@ -660,6 +733,59 @@ def _response_from_llm(
         generated_at=datetime.now(UTC),
         model_run_id=model_run_id,
     )
+
+
+def _local_language_analysis_from_payload(
+    *,
+    analysis_language: MatterFileQAAnalysisLanguage,
+    english_answer: str,
+    raw_value: str | None,
+    allowed_source_ids: set[str],
+) -> tuple[str | None, MatterFileQATranslationStatus, str | None]:
+    if analysis_language == "en":
+        return None, "not_requested", None
+
+    value = _bounded_snippet(raw_value or "", limit=5000)
+    if not value:
+        return (
+            None,
+            "not_available",
+            "Local-language analysis was not returned; the English answer remains authoritative.",
+        )
+    if _FORBIDDEN_ANSWER_RE.search(value):
+        return (
+            None,
+            "failed_closed",
+            "Local-language analysis was withheld because it did not meet safety validation.",
+        )
+    cited_source_ids = {match.group(0).lower() for match in _SOURCE_ID_TEXT_RE.finditer(value)}
+    allowed_normalized = {source_id.lower() for source_id in allowed_source_ids}
+    if cited_source_ids - allowed_normalized:
+        return (
+            None,
+            "failed_closed",
+            "Local-language analysis was withheld because it cited unsupported source IDs.",
+        )
+    if _has_new_english_legal_reference_terms(value, english_answer):
+        return (
+            None,
+            "failed_closed",
+            "Local-language analysis was withheld because it added unsupported legal references.",
+        )
+    return value, "provided", None
+
+
+def _has_new_english_legal_reference_terms(value: str, english_answer: str) -> bool:
+    local_terms = {
+        match.group(0).lower() for match in _LEGAL_REFERENCE_TERM_RE.finditer(value)
+    }
+    if not local_terms:
+        return False
+    answer_terms = {
+        match.group(0).lower()
+        for match in _LEGAL_REFERENCE_TERM_RE.finditer(english_answer or "")
+    }
+    return bool(local_terms - answer_terms)
 
 
 def _structured_items_for_response(
@@ -1052,14 +1178,33 @@ def _refusal_response(
     question: str,
     status: MatterFileQAStatus,
     limitations: list[str],
+    analysis_language: MatterFileQAAnalysisLanguage = "en",
+    local_language_analysis: str | None = None,
+    translation_status: MatterFileQATranslationStatus | None = None,
+    translation_warning: str | None = None,
     model_run_id: str | None = None,
 ) -> MatterFileQAResponse:
     confidence: MatterFileQAConfidence = "insufficient"
+    if translation_status is None:
+        translation_status = "not_requested" if analysis_language == "en" else "not_available"
+    if (
+        analysis_language != "en"
+        and translation_warning is None
+        and local_language_analysis is None
+    ):
+        translation_warning = (
+            "Local-language analysis was not produced for this refusal state; "
+            "the English refusal remains authoritative."
+        )
     return MatterFileQAResponse(
         matter_id=matter_id,
         question=question,
         status=status,
         answer=None,
+        analysis_language=analysis_language,
+        local_language_analysis=local_language_analysis,
+        translation_status=translation_status,
+        translation_warning=translation_warning,
         confidence=confidence,
         sources=[],
         limitations=_safe_limitations(limitations),
@@ -1104,6 +1249,10 @@ def _history_entry_record(entry: MatterFileQAEntry) -> MatterFileQAHistoryEntry:
         question=_bounded_snippet(entry.question, limit=800),
         answer_status=entry.answer_status,
         answer=_bounded_snippet(entry.answer, limit=5000) if entry.answer else None,
+        analysis_language="en",
+        local_language_analysis=None,
+        translation_status="not_requested",
+        translation_warning=None,
         confidence=entry.confidence,
         answer_mode=entry.answer_mode,
         sources=_coerce_sources(entry.sources_json or []),
@@ -1147,6 +1296,8 @@ def _finalize_response(
             "status": response.status,
             "confidence": response.confidence,
             "answer_mode": answer_mode,
+            "analysis_language": response.analysis_language,
+            "translation_status": response.translation_status,
             "structured_item_count": len(response.structured_items),
             "source_count": len(response.sources),
             "source_attachment_ids": [source.attachment_id for source in response.sources],

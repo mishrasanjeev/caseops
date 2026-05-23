@@ -432,6 +432,7 @@ describe("MatterDocumentsPage", () => {
       matterId: "m1",
       question: "Which IPC sections are invoked?",
       answerMode: "sections",
+      analysisLanguage: "en",
       limit: 8,
     });
     expect(await screen.findByTestId("matter-file-qa-result-answered")).toHaveTextContent(
@@ -448,6 +449,70 @@ describe("MatterDocumentsPage", () => {
     expect(screen.getByText("Page 3")).toBeInTheDocument();
     expect(screen.getByTestId("matter-file-qa-section").textContent).not.toMatch(
       /legal advice/i,
+    );
+  });
+
+  it("sends a local-language Matter File Q&A request and renders the labelled aid", async () => {
+    useCapabilityMock.mockImplementation((cap: string) => cap === "ai:generate");
+    askMatterFileQuestionMock.mockResolvedValue({
+      matter_id: "m1",
+      question: "Which payment default is recorded?",
+      status: "answered",
+      answer: "The uploaded file records non-payment under Invoice A-12.",
+      analysis_language: "hi",
+      local_language_analysis:
+        "अपलोड की गई फ़ाइल Invoice A-12 के तहत भुगतान न होने को दर्ज करती है.",
+      translation_status: "provided",
+      translation_warning: null,
+      confidence: "medium",
+      sources: [
+        {
+          source_id: "src_1",
+          attachment_id: "a1",
+          attachment_name: "complaint.pdf",
+          chunk_id: "chunk1",
+          chunk_index: 0,
+          document_type: "complaint_petition",
+          page_number: null,
+          snippet: "The complaint records non-payment under Invoice A-12.",
+          score: 82,
+          matched_terms: ["payment"],
+        },
+      ],
+      structured_items: [],
+      limitations: ["Only uploaded matter document chunks were used."],
+      provider: "caseops-matter-file-qa-v1",
+      generated_at: "2026-05-13T10:00:00Z",
+      model_run_id: "run1",
+    });
+
+    render(withClient(<MatterDocumentsPage />));
+    await userEvent.type(
+      screen.getByTestId("matter-file-qa-question"),
+      "Which payment default is recorded?",
+    );
+    await userEvent.selectOptions(screen.getByTestId("matter-file-qa-language"), "hi");
+    await userEvent.click(screen.getByTestId("matter-file-qa-submit"));
+
+    await waitFor(() => expect(askMatterFileQuestionMock).toHaveBeenCalledTimes(1));
+    expect(askMatterFileQuestionMock).toHaveBeenCalledWith({
+      matterId: "m1",
+      question: "Which payment default is recorded?",
+      answerMode: "direct",
+      analysisLanguage: "hi",
+      limit: 8,
+    });
+    expect(await screen.findByTestId("matter-file-qa-result-answered")).toHaveTextContent(
+      "English authoritative answer",
+    );
+    expect(screen.getByTestId("matter-file-qa-local-language-analysis")).toHaveTextContent(
+      "Hindi translation aid",
+    );
+    expect(screen.getByTestId("matter-file-qa-local-language-analysis")).toHaveTextContent(
+      "Invoice A-12",
+    );
+    expect(screen.getByTestId("matter-file-qa-sources")).toHaveTextContent(
+      "The complaint records non-payment under Invoice A-12.",
     );
   });
 
@@ -796,7 +861,7 @@ describe("MatterDocumentsPage", () => {
 
     const section = screen.getByTestId("matter-file-qa-section");
     expect(section.textContent).not.toMatch(
-      /legal[- ]advice|guaranteed outcome|guaranteed to win|will win|will lose|win probability|loss probability|win\s*(?:[/-]|\s+)\s*loss|judge reputation|judge likes|judge dislikes|favorable judge|emotion|psychological|biometric|mental[- ]health|lie detection/i,
+      /legal[- ]advice|guaranteed outcome|guaranteed to win|will win|will lose|success probability|outcome prediction|win probability|loss probability|win\s*(?:[/-]|\s+)\s*loss|judge reputation|judge shopping|best judge|most suitable judge|judge likes|judge dislikes|favorable judge|emotion|psychological|biometric|mental[- ]health|lie detection/i,
     );
   });
 
@@ -809,11 +874,16 @@ describe("MatterDocumentsPage", () => {
       "guaranteed to win",
       "will win",
       "will lose",
+      "success probability",
+      "outcome prediction",
       "win probability",
       "loss probability",
       "win/loss",
       "win loss",
       "judge reputation",
+      "judge shopping",
+      "best judge",
+      "most suitable judge",
       "judge likes",
       "judge dislikes",
       "judge likes/dislikes",
@@ -877,7 +947,7 @@ describe("MatterDocumentsPage", () => {
       );
       unmount();
     }
-  });
+  }, 30000);
 
   it("rejects invalid Matter File Q&A API shapes in the frontend schema", () => {
     const validResponse = {

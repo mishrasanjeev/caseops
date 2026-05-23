@@ -10457,6 +10457,12 @@ export interface components {
         };
         /** MatterFileQAHistoryEntry */
         MatterFileQAHistoryEntry: {
+            /**
+             * Analysis Language
+             * @default en
+             * @enum {string}
+             */
+            analysis_language: "en" | "hi" | "mr" | "gu" | "ta" | "te" | "kn" | "bn";
             /** Answer */
             answer?: string | null;
             /**
@@ -10487,6 +10493,8 @@ export interface components {
             id: string;
             /** Limitations */
             limitations?: string[];
+            /** Local Language Analysis */
+            local_language_analysis?: string | null;
             /** Matter Id */
             matter_id: string;
             /** Model Run Id */
@@ -10497,6 +10505,14 @@ export interface components {
             sources?: components["schemas"]["MatterFileQASource"][];
             /** Structured Items */
             structured_items?: components["schemas"]["MatterFileQAStructuredItem"][];
+            /**
+             * Translation Status
+             * @default not_requested
+             * @enum {string}
+             */
+            translation_status: "not_requested" | "provided" | "not_available" | "failed_closed";
+            /** Translation Warning */
+            translation_warning?: string | null;
         };
         /** MatterFileQAHistoryResponse */
         MatterFileQAHistoryResponse: {
@@ -10507,6 +10523,12 @@ export interface components {
         };
         /** MatterFileQARequest */
         MatterFileQARequest: {
+            /**
+             * Analysis Language
+             * @default en
+             * @enum {string}
+             */
+            analysis_language: "en" | "hi" | "mr" | "gu" | "ta" | "te" | "kn" | "bn";
             /**
              * Answer Mode
              * @default direct
@@ -10525,6 +10547,12 @@ export interface components {
         };
         /** MatterFileQAResponse */
         MatterFileQAResponse: {
+            /**
+             * Analysis Language
+             * @default en
+             * @enum {string}
+             */
+            analysis_language: "en" | "hi" | "mr" | "gu" | "ta" | "te" | "kn" | "bn";
             /** Answer */
             answer?: string | null;
             /**
@@ -10541,6 +10569,8 @@ export interface components {
             history_entry_id?: string | null;
             /** Limitations */
             limitations?: string[];
+            /** Local Language Analysis */
+            local_language_analysis?: string | null;
             /** Matter Id */
             matter_id: string;
             /** Model Run Id */
@@ -10558,6 +10588,14 @@ export interface components {
             status: "answered" | "partial_answer" | "insufficient_evidence" | "processing_required" | "no_documents" | "error";
             /** Structured Items */
             structured_items?: components["schemas"]["MatterFileQAStructuredItem"][];
+            /**
+             * Translation Status
+             * @default not_requested
+             * @enum {string}
+             */
+            translation_status: "not_requested" | "provided" | "not_available" | "failed_closed";
+            /** Translation Warning */
+            translation_warning?: string | null;
         };
         /** MatterFileQASource */
         MatterFileQASource: {

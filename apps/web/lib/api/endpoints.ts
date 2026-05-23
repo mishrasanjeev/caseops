@@ -37,6 +37,7 @@ import {
   type Matter,
   type MatterAuditList,
   type MatterFileQAAnswerMode,
+  type MatterFileQAAnalysisLanguage,
   type MatterFileQAExportNoteResponse,
   type MatterFileQAHistoryResponse,
   type MatterFileQAResponse,
@@ -257,6 +258,7 @@ export async function askMatterFileQuestion(input: {
   matterId: string;
   question: string;
   answerMode?: MatterFileQAAnswerMode;
+  analysisLanguage?: MatterFileQAAnalysisLanguage;
   documentTypeFilter?: string[] | null;
   limit?: number;
 }): Promise<MatterFileQAResponse> {
@@ -266,6 +268,7 @@ export async function askMatterFileQuestion(input: {
     body: {
       question: input.question,
       answer_mode: input.answerMode ?? "direct",
+      analysis_language: input.analysisLanguage ?? "en",
       document_type_filter: input.documentTypeFilter ?? null,
       limit: input.limit ?? 8,
     },

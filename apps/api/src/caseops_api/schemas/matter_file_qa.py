@@ -23,6 +23,13 @@ MatterFileQAStatus = Literal[
     "error",
 ]
 MatterFileQAConfidence = Literal["high", "medium", "low", "insufficient"]
+MatterFileQAAnalysisLanguage = Literal["en", "hi", "mr", "gu", "ta", "te", "kn", "bn"]
+MatterFileQATranslationStatus = Literal[
+    "not_requested",
+    "provided",
+    "not_available",
+    "failed_closed",
+]
 MatterFileQAStructuredItemType = Literal[
     "section",
     "allegation",
@@ -37,6 +44,7 @@ class MatterFileQARequest(BaseModel):
     question: str = Field(min_length=4, max_length=800)
     document_type_filter: list[str] | None = Field(default=None, max_length=12)
     answer_mode: MatterFileQAAnswerMode = "direct"
+    analysis_language: MatterFileQAAnalysisLanguage = "en"
     limit: int = Field(default=8, ge=3, le=12)
 
 
@@ -67,6 +75,10 @@ class MatterFileQAResponse(BaseModel):
     question: str
     status: MatterFileQAStatus
     answer: str | None = None
+    analysis_language: MatterFileQAAnalysisLanguage = "en"
+    local_language_analysis: str | None = Field(default=None, max_length=5000)
+    translation_status: MatterFileQATranslationStatus = "not_requested"
+    translation_warning: str | None = Field(default=None, max_length=320)
     confidence: MatterFileQAConfidence
     sources: list[MatterFileQASource] = Field(default_factory=list)
     structured_items: list[MatterFileQAStructuredItem] = Field(default_factory=list)
@@ -83,6 +95,10 @@ class MatterFileQAHistoryEntry(BaseModel):
     question: str
     answer_status: MatterFileQAStatus
     answer: str | None = None
+    analysis_language: MatterFileQAAnalysisLanguage = "en"
+    local_language_analysis: str | None = Field(default=None, max_length=5000)
+    translation_status: MatterFileQATranslationStatus = "not_requested"
+    translation_warning: str | None = Field(default=None, max_length=320)
     confidence: MatterFileQAConfidence
     answer_mode: MatterFileQAAnswerMode
     sources: list[MatterFileQASource] = Field(default_factory=list)

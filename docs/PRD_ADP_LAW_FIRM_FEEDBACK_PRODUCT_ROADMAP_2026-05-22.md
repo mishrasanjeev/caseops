@@ -1630,6 +1630,10 @@ Tests:
 Type: Backend + Web
 Priority: P2
 Dependencies: Matter File Q&A, model governance
+Status: Foundation implemented 2026-05-23; Matter File Q&A requests now accept
+an allow-listed analysis language, preserve the English answer as authoritative,
+return local-language analysis as a separate translation aid when safe, and
+fail closed to English-only/refusal states without translating source evidence.
 
 Scope:
 
