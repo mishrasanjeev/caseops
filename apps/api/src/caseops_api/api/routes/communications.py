@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from caseops_api.api.dependencies import (
     DbSession,
@@ -19,6 +19,8 @@ from caseops_api.schemas.communications import (
     CommunicationCreateRequest,
     CommunicationListResponse,
     CommunicationRecord,
+    CommunicationTimelineFilter,
+    CommunicationTimelineResponse,
     InboundEmailImportRequest,
     InboundEmailImportResponse,
 )
@@ -26,6 +28,7 @@ from caseops_api.schemas.email_templates import EmailSendRequest
 from caseops_api.services.communications import (
     create_matter_communication,
     import_inbound_email,
+    list_matter_communication_timeline,
     list_matter_communications,
     send_matter_email,
 )
@@ -39,6 +42,10 @@ CommunicationsViewer = Annotated[
 ]
 CommunicationsWriter = Annotated[
     SessionContext, Depends(require_capability("communications:write")),
+]
+CommunicationTimelineQuery = Annotated[
+    CommunicationTimelineFilter,
+    Query(alias="filter"),
 ]
 
 
@@ -54,6 +61,25 @@ async def list_current_matter_communications(
 ) -> CommunicationListResponse:
     return list_matter_communications(
         session, context=context, matter_id=matter_id,
+    )
+
+
+@router.get(
+    "/{matter_id}/communications/timeline",
+    response_model=CommunicationTimelineResponse,
+    summary="List the unified communications timeline for a matter (ADP-05).",
+)
+async def list_current_matter_communication_timeline(
+    matter_id: str,
+    context: CommunicationsViewer,
+    session: DbSession,
+    selected_filter: CommunicationTimelineQuery = "all",
+) -> CommunicationTimelineResponse:
+    return list_matter_communication_timeline(
+        session,
+        context=context,
+        matter_id=matter_id,
+        selected_filter=selected_filter,
     )
 
 

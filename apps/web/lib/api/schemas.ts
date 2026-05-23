@@ -1808,6 +1808,30 @@ export const communicationChannel = z.enum([
 export const communicationStatus = z.enum([
   "logged", "queued", "sent", "delivered", "opened", "bounced", "failed",
 ]);
+export const communicationTimelineFilter = z.enum([
+  "all",
+  "email",
+  "platform",
+  "notes",
+  "attachments",
+  "internal",
+]);
+export const communicationTimelineItemType = z.enum([
+  "platform_message",
+  "imported_email",
+  "email_thread",
+  "attachment",
+  "internal_note",
+  "client_visible_note",
+  "outside_counsel_visible_update",
+]);
+export const communicationVisibilityLabel = z.enum([
+  "internal",
+  "firm_only",
+  "client_visible",
+  "outside_counsel_visible",
+  "imported_email",
+]);
 
 export const communicationRecord = z.object({
   id: z.string(),
@@ -1835,11 +1859,61 @@ export const communicationListResponse = z.object({
   communications: z.array(communicationRecord),
 });
 
+export const communicationTimelineAttachmentReference = z.object({
+  id: z.string(),
+  filename: z.string(),
+  content_type: z.string().nullable(),
+  size_bytes: z.number().int().nullable(),
+  document_type: z.string().nullable(),
+  uploaded_by_membership_id: z.string().nullable(),
+  submitted_by_portal_user_id: z.string().nullable(),
+  created_at: z.string(),
+});
+
+export const communicationTimelineItem = z.object({
+  id: z.string(),
+  item_type: communicationTimelineItemType,
+  visibility: communicationVisibilityLabel,
+  occurred_at: z.string(),
+  title: z.string(),
+  preview: z.string().nullable().optional(),
+  actor_label: z.string().nullable().optional(),
+  direction: communicationDirection.nullable().optional(),
+  channel: communicationChannel.nullable().optional(),
+  status: communicationStatus.nullable().optional(),
+  thread_key: z.string().nullable().optional(),
+  source_type: z.string(),
+  source_id: z.string(),
+  communication_id: z.string().nullable().optional(),
+  note_id: z.string().nullable().optional(),
+  attachment_id: z.string().nullable().optional(),
+  attachment: communicationTimelineAttachmentReference.nullable().optional(),
+  metadata: z.record(
+    z.string(),
+    z.union([z.string(), z.boolean(), z.number(), z.null()]),
+  ).default({}),
+});
+
+export const communicationTimelineResponse = z.object({
+  matter_id: z.string(),
+  filter: communicationTimelineFilter,
+  generated_at: z.string(),
+  items: z.array(communicationTimelineItem),
+});
+
 export type CommunicationDirection = z.infer<typeof communicationDirection>;
 export type CommunicationChannel = z.infer<typeof communicationChannel>;
 export type CommunicationStatus = z.infer<typeof communicationStatus>;
 export type CommunicationRecord = z.infer<typeof communicationRecord>;
 export type CommunicationListResponse = z.infer<typeof communicationListResponse>;
+export type CommunicationTimelineFilter = z.infer<typeof communicationTimelineFilter>;
+export type CommunicationTimelineItemType = z.infer<typeof communicationTimelineItemType>;
+export type CommunicationVisibilityLabel = z.infer<typeof communicationVisibilityLabel>;
+export type CommunicationTimelineAttachmentReference = z.infer<
+  typeof communicationTimelineAttachmentReference
+>;
+export type CommunicationTimelineItem = z.infer<typeof communicationTimelineItem>;
+export type CommunicationTimelineResponse = z.infer<typeof communicationTimelineResponse>;
 
 // Phase B M11 slice 2 — email templates + send action.
 export const emailTemplateVariable = z.object({

@@ -14,9 +14,11 @@ import {
   Loader2,
   Mail,
   MessageSquare,
+  Paperclip,
   Phone,
   Plus,
   Send,
+  ShieldCheck,
   StickyNote,
   Users,
 } from "lucide-react";
@@ -32,14 +34,15 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { apiErrorMessage } from "@/lib/api/config";
 import {
   createMatterCommunication,
-  fetchMatterCommunications,
+  fetchMatterCommunicationTimeline,
   listEmailTemplates,
   renderEmailTemplate,
   sendMatterEmail,
 } from "@/lib/api/endpoints";
 import type {
   CommunicationChannel,
-  CommunicationRecord,
+  CommunicationTimelineFilter,
+  CommunicationTimelineItem,
   EmailTemplateRecord,
 } from "@/lib/api/schemas";
 import { useCapability } from "@/lib/capabilities";
@@ -61,6 +64,36 @@ const CHANNEL_LABEL: Record<CommunicationChannel, string> = {
   note: "Note",
 };
 
+const TIMELINE_FILTERS: Array<{
+  key: CommunicationTimelineFilter;
+  label: string;
+}> = [
+  { key: "all", label: "All" },
+  { key: "email", label: "Email" },
+  { key: "platform", label: "Platform" },
+  { key: "notes", label: "Notes" },
+  { key: "attachments", label: "Attachments" },
+  { key: "internal", label: "Internal" },
+];
+
+const VISIBILITY_LABEL: Record<CommunicationTimelineItem["visibility"], string> = {
+  internal: "Internal",
+  firm_only: "Firm only",
+  client_visible: "Client visible",
+  outside_counsel_visible: "Outside counsel",
+  imported_email: "Imported email",
+};
+
+const ITEM_TYPE_LABEL: Record<CommunicationTimelineItem["item_type"], string> = {
+  platform_message: "Platform",
+  imported_email: "Imported email",
+  email_thread: "Email thread",
+  attachment: "Attachment",
+  internal_note: "Internal note",
+  client_visible_note: "Client note",
+  outside_counsel_visible_update: "Outside counsel",
+};
+
 function formatLocal(iso: string): string {
   const d = new Date(iso);
   return d.toLocaleString(undefined, {
@@ -80,10 +113,16 @@ export default function MatterCommunicationsPage() {
 
   const [composing, setComposing] = useState(false);
   const [sending, setSending] = useState(false);
+  const [timelineFilter, setTimelineFilter] =
+    useState<CommunicationTimelineFilter>("all");
 
   const query = useQuery({
-    queryKey: ["matters", matterId, "communications"],
-    queryFn: () => fetchMatterCommunications(matterId),
+    queryKey: ["matters", matterId, "communications", "timeline", timelineFilter],
+    queryFn: () =>
+      fetchMatterCommunicationTimeline({
+        matterId,
+        filter: timelineFilter,
+      }),
   });
 
   const templatesQuery = useQuery({
@@ -153,7 +192,8 @@ export default function MatterCommunicationsPage() {
             Communications
           </h1>
           <p className="mt-1 text-xs text-[var(--color-mute)]">
-            Log calls, meetings, emails, and notes against this matter.
+            Review platform messages, imported emails, notes, and attachment
+            references in chronological order.
           </p>
         </div>
         {canWrite ? (
@@ -201,9 +241,14 @@ export default function MatterCommunicationsPage() {
         />
       ) : null}
 
+      <TimelineFilterBar
+        selected={timelineFilter}
+        onSelect={setTimelineFilter}
+      />
+
       {query.isError ? (
         <QueryErrorState
-          title="Could not load communications"
+          title="Could not load communication timeline"
           error={query.error}
           onRetry={query.refetch}
         />
@@ -213,10 +258,10 @@ export default function MatterCommunicationsPage() {
           <Skeleton className="h-16 w-full" />
           <Skeleton className="h-16 w-full" />
         </div>
-      ) : query.data && query.data.communications.length > 0 ? (
+      ) : query.data && query.data.items.length > 0 ? (
         <ul className="flex flex-col gap-2">
-          {query.data.communications.map((row) => (
-            <CommunicationRow key={row.id} row={row} />
+          {query.data.items.map((row) => (
+            <CommunicationTimelineRow key={row.id} row={row} />
           ))}
         </ul>
       ) : (
@@ -234,16 +279,56 @@ export default function MatterCommunicationsPage() {
   );
 }
 
-function CommunicationRow({ row }: { row: CommunicationRecord }) {
-  const Icon = CHANNEL_ICON[row.channel];
+function TimelineFilterBar({
+  selected,
+  onSelect,
+}: {
+  selected: CommunicationTimelineFilter;
+  onSelect: (filter: CommunicationTimelineFilter) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2" aria-label="Timeline filters">
+      {TIMELINE_FILTERS.map((filter) => (
+        <button
+          key={filter.key}
+          type="button"
+          onClick={() => onSelect(filter.key)}
+          className={cn(
+            "rounded-md border px-3 py-1.5 text-xs font-medium transition",
+            selected === filter.key
+              ? "border-[var(--color-accent)] bg-[var(--color-accent)] text-white"
+              : "border-[var(--color-line)] bg-white text-[var(--color-ink-2)] hover:border-[var(--color-accent)]",
+          )}
+          data-testid={`comm-timeline-filter-${filter.key}`}
+        >
+          {filter.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function CommunicationTimelineRow({ row }: { row: CommunicationTimelineItem }) {
+  const Icon =
+    row.item_type === "attachment"
+      ? Paperclip
+      : row.item_type === "internal_note"
+        ? ShieldCheck
+        : row.channel
+          ? CHANNEL_ICON[row.channel]
+          : MessageSquare;
   const accent =
     row.direction === "outbound"
       ? "bg-[var(--color-accent)]"
+      : row.item_type === "internal_note"
+        ? "bg-[var(--color-warning-500)]"
+        : row.item_type === "attachment"
+          ? "bg-[var(--color-success-500)]"
       : "bg-[var(--color-info-500)]";
   return (
     <li
       className="rounded-md border border-[var(--color-line)] bg-white p-4"
-      data-testid={`communication-${row.id}`}
+      data-testid={`communication-timeline-${row.id}`}
     >
       <div className="flex items-start gap-3">
         <span
@@ -257,25 +342,58 @@ function CommunicationRow({ row }: { row: CommunicationRecord }) {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
             <span className="text-sm font-semibold text-[var(--color-ink)]">
-              {row.subject ?? `${CHANNEL_LABEL[row.channel]} (${row.direction})`}
+              {row.title}
             </span>
             <span className="text-xs text-[var(--color-mute)]">
               <CalendarClock className="mr-1 inline h-3 w-3" aria-hidden />
               {formatLocal(row.occurred_at)}
             </span>
-            {row.recipient_name ? (
+            {row.actor_label ? (
               <span className="text-xs text-[var(--color-mute)]">
-                with {row.recipient_name}
+                {row.actor_label}
               </span>
             ) : null}
           </div>
-          <p className="mt-1 whitespace-pre-wrap text-sm text-[var(--color-ink-2)]">
-            {row.body}
-          </p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <span className="rounded bg-[var(--color-line-1)] px-2 py-0.5 text-[11px] font-medium text-[var(--color-ink-2)]">
+              {ITEM_TYPE_LABEL[row.item_type]}
+            </span>
+            <span className="rounded bg-[var(--color-line-1)] px-2 py-0.5 text-[11px] font-medium text-[var(--color-ink-2)]">
+              {VISIBILITY_LABEL[row.visibility]}
+            </span>
+            {row.thread_key ? (
+              <span className="rounded bg-[var(--color-line-1)] px-2 py-0.5 text-[11px] font-medium text-[var(--color-mute)]">
+                Threaded
+              </span>
+            ) : null}
+          </div>
+          {row.preview ? (
+            <p className="mt-2 whitespace-pre-wrap text-sm text-[var(--color-ink-2)]">
+              {row.preview}
+            </p>
+          ) : null}
+          {row.attachment ? (
+            <div className="mt-3 rounded-md border border-[var(--color-line)] bg-[var(--color-line-1)]/40 px-3 py-2 text-xs text-[var(--color-ink-2)]">
+              <Paperclip className="mr-1 inline h-3.5 w-3.5" aria-hidden />
+              <span className="font-medium">{row.attachment.filename}</span>
+              {row.attachment.size_bytes !== null ? (
+                <span className="text-[var(--color-mute)]">
+                  {" "}
+                  ({formatBytes(row.attachment.size_bytes)})
+                </span>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </div>
     </li>
   );
+}
+
+function formatBytes(value: number): string {
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function LogForm({

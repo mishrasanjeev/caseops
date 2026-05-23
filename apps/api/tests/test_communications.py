@@ -416,6 +416,323 @@ def test_inbound_email_import_is_idempotent_by_provider_message_and_scope(
         assert other_attachment_count == 2
 
 
+def test_unified_communication_timeline_mixes_sources_and_redacts_payloads(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    headers = auth_headers(str(bootstrap["access_token"]))
+    matter_id = _create_matter(client, headers, "ADP05-MIXED")
+
+    old_comm = client.post(
+        f"/api/matters/{matter_id}/communications",
+        headers=headers,
+        json={
+            "channel": "phone",
+            "direction": "outbound",
+            "subject": "Intro call",
+            "body": "Called the client to confirm receipt.",
+            "occurred_at": "2026-05-15T09:00:00Z",
+        },
+    )
+    assert old_comm.status_code == 200, old_comm.text
+    payload = _email_payload("timeline-mixed")
+    imported = client.post(
+        f"/api/matters/{matter_id}/communications/import-email",
+        headers=headers,
+        json=payload,
+    )
+    assert imported.status_code == 200, imported.text
+    note = client.post(
+        f"/api/matters/{matter_id}/notes",
+        headers=headers,
+        json={"body": "Internal note for firm-only follow-up."},
+    )
+    assert note.status_code == 200, note.text
+
+    timeline = client.get(
+        f"/api/matters/{matter_id}/communications/timeline",
+        headers=headers,
+    )
+    assert timeline.status_code == 200, timeline.text
+    body = timeline.json()
+    assert body["matter_id"] == matter_id
+    assert body["filter"] == "all"
+
+    items = body["items"]
+    item_types = {item["item_type"] for item in items}
+    assert {
+        "platform_message",
+        "imported_email",
+        "internal_note",
+        "attachment",
+    }.issubset(item_types)
+    occurred = [item["occurred_at"] for item in items]
+    assert occurred == sorted(occurred)
+
+    imported_item = next(
+        item for item in items if item["item_type"] == "imported_email"
+    )
+    assert imported_item["visibility"] == "imported_email"
+    assert imported_item["preview"] == payload["body_preview"]
+    assert imported_item["thread_key"] == "manual:timeline-mixed"
+    assert imported_item["metadata"]["body_is_preview"] is True
+
+    attachment_items = [
+        item for item in items if item["item_type"] == "attachment"
+    ]
+    assert len(attachment_items) == 2
+    assert all(item["attachment"] for item in attachment_items)
+    assert all(item["visibility"] == "imported_email" for item in attachment_items)
+    assert any(
+        item["metadata"]["is_email_body_attachment"] is True
+        for item in attachment_items
+    )
+
+    response_surface = json.dumps(body)
+    assert payload["body_text"] not in response_surface
+    assert payload["attachments"][0]["content_base64"] not in response_surface
+    assert "storage_key" not in response_surface
+    assert "sha256" not in response_surface
+    assert "extracted_text" not in response_surface
+
+
+def test_unified_communication_timeline_filters_and_visibility_labels(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    headers = auth_headers(str(bootstrap["access_token"]))
+    matter_id = _create_matter(client, headers, "ADP05-FILTER")
+
+    client.post(
+        f"/api/matters/{matter_id}/communications",
+        headers=headers,
+        json={
+            "channel": "meeting",
+            "body": "Platform meeting note.",
+            "occurred_at": "2026-05-15T08:00:00Z",
+        },
+    )
+    client.post(
+        f"/api/matters/{matter_id}/communications/import-email",
+        headers=headers,
+        json=_email_payload("thread-777"),
+    )
+    client.post(
+        f"/api/matters/{matter_id}/notes",
+        headers=headers,
+        json={"body": "Internal note should stay internal."},
+    )
+
+    email = client.get(
+        f"/api/matters/{matter_id}/communications/timeline?filter=email",
+        headers=headers,
+    )
+    assert email.status_code == 200, email.text
+    email_items = email.json()["items"]
+    assert email_items
+    assert all(
+        item["visibility"] == "imported_email" or item["channel"] == "email"
+        for item in email_items
+    )
+    assert {
+        item["thread_key"] for item in email_items if item["thread_key"]
+    } == {"manual:thread-777"}
+
+    attachments = client.get(
+        f"/api/matters/{matter_id}/communications/timeline?filter=attachments",
+        headers=headers,
+    )
+    assert attachments.status_code == 200, attachments.text
+    assert {
+        item["item_type"] for item in attachments.json()["items"]
+    } == {"attachment"}
+
+    notes = client.get(
+        f"/api/matters/{matter_id}/communications/timeline?filter=notes",
+        headers=headers,
+    )
+    assert notes.status_code == 200, notes.text
+    assert any(item["item_type"] == "internal_note" for item in notes.json()["items"])
+
+    from caseops_api.db.models import MatterAttachment, PortalUser, PortalUserRole
+    from caseops_api.db.session import get_session_factory
+
+    with get_session_factory()() as session:
+        portal_user = PortalUser(
+            company_id=bootstrap["company"]["id"],
+            email="oc-timeline@example.in",
+            full_name="Outside Counsel",
+            role=PortalUserRole.OUTSIDE_COUNSEL,
+        )
+        session.add(portal_user)
+        session.flush()
+        session.add(
+            MatterAttachment(
+                matter_id=matter_id,
+                uploaded_by_membership_id=None,
+                submitted_by_portal_user_id=portal_user.id,
+                original_filename="oc-work-product.pdf",
+                storage_key="test-only/no-payload",
+                content_type="application/pdf",
+                size_bytes=128,
+                sha256_hex="1" * 64,
+            )
+        )
+        session.commit()
+
+    refreshed = client.get(
+        f"/api/matters/{matter_id}/communications/timeline?filter=attachments",
+        headers=headers,
+    )
+    assert refreshed.status_code == 200, refreshed.text
+    assert any(
+        item["visibility"] == "outside_counsel_visible"
+        for item in refreshed.json()["items"]
+    )
+
+
+def test_unified_communication_timeline_enforces_tenant_and_matter_access(
+    client: TestClient,
+) -> None:
+    company_a = bootstrap_company(client)
+    headers_a = auth_headers(str(company_a["access_token"]))
+    matter_a = _create_matter(client, headers_a, "ADP05-TENANT-A")
+    client.post(
+        f"/api/matters/{matter_a}/communications",
+        headers=headers_a,
+        json={"channel": "note", "body": "Tenant A timeline item"},
+    )
+    client.cookies.clear()
+
+    resp_b = client.post(
+        "/api/bootstrap/company",
+        json={
+            "company_name": "Other Timeline LLP",
+            "company_slug": "other-timeline",
+            "company_type": "law_firm",
+            "owner_full_name": "Other Owner",
+            "owner_email": "owner@other-timeline.example",
+            "owner_password": "OtherStrong!234",
+        },
+    )
+    assert resp_b.status_code == 200, resp_b.text
+    headers_b = auth_headers(str(resp_b.json()["access_token"]))
+    client.cookies.clear()
+
+    leak = client.get(
+        f"/api/matters/{matter_a}/communications/timeline",
+        headers=headers_b,
+    )
+    assert leak.status_code == 404
+
+    slug = "adp05-access"
+    bootstrap = client.post(
+        "/api/bootstrap/company",
+        json={
+            "company_name": "ADP05 Access LLP",
+            "company_slug": slug,
+            "company_type": "law_firm",
+            "owner_full_name": "Access Owner",
+            "owner_email": "owner@adp05-access.example",
+            "owner_password": "OwnerStrong!234",
+        },
+    ).json()
+    owner_token = str(bootstrap["access_token"])
+    owner_headers = auth_headers(owner_token)
+    member = _invite_member(
+        client,
+        owner_headers,
+        email="member@adp05-access.example",
+    )
+    member_token = _login(
+        client,
+        "member@adp05-access.example",
+        "MemberPass123!",
+        slug,
+    )
+    member_headers = auth_headers(member_token)
+
+    restricted_matter = _create_matter(client, owner_headers, "ADP05-REST")
+    assert client.post(
+        f"/api/matters/{restricted_matter}/access/restricted",
+        headers=owner_headers,
+        json={"restricted": True},
+    ).status_code == 200
+    restricted = client.get(
+        f"/api/matters/{restricted_matter}/communications/timeline",
+        headers=member_headers,
+    )
+    assert restricted.status_code == 404
+
+    walled_matter = _create_matter(client, owner_headers, "ADP05-WALL")
+    assert client.post(
+        f"/api/matters/{walled_matter}/access/walls",
+        headers=owner_headers,
+        json={"excluded_membership_id": member["membership_id"]},
+    ).status_code == 200
+    walled = client.get(
+        f"/api/matters/{walled_matter}/communications/timeline",
+        headers=member_headers,
+    )
+    assert walled.status_code == 404
+
+    team = client.post(
+        "/api/teams/",
+        headers=owner_headers,
+        json={"name": "Timeline Team", "slug": "timeline-team"},
+    )
+    assert team.status_code == 201, team.text
+    team_matter = _create_matter(client, owner_headers, "ADP05-TEAM")
+    assert client.patch(
+        f"/api/matters/{team_matter}",
+        headers=owner_headers,
+        json={"team_id": team.json()["id"]},
+    ).status_code == 200
+    assert client.put(
+        "/api/teams/scoping",
+        headers=owner_headers,
+        json={"enabled": True},
+    ).status_code == 200
+    team_denied = client.get(
+        f"/api/matters/{team_matter}/communications/timeline",
+        headers=member_headers,
+    )
+    assert team_denied.status_code == 404
+
+
+def test_internal_matter_notes_do_not_leak_to_portal_communications(
+    client: TestClient,
+) -> None:
+    from tests.test_portal_matters import (
+        _bootstrap,
+        _invite_client_portal_user,
+        _seed_matter,
+        _verify_and_session,
+    )
+
+    boot = _bootstrap(
+        client,
+        slug="adp05-portal",
+        email="owner@adp05-portal.example",
+    )
+    token = str(boot["access_token"])
+    matter_id = _seed_matter(boot["company"]["id"], code="ADP05-PORTAL")
+    headers = auth_headers(token)
+    note = client.post(
+        f"/api/matters/{matter_id}/notes",
+        headers=headers,
+        json={"body": "Internal ADP-05 note hidden from portal."},
+    )
+    assert note.status_code == 200, note.text
+
+    _, debug = _invite_client_portal_user(client, token, matter_id)
+    _verify_and_session(client, debug)
+    listing = client.get(f"/api/portal/matters/{matter_id}/communications")
+    assert listing.status_code == 200, listing.text
+    surface = json.dumps(listing.json())
+    assert "Internal ADP-05 note hidden from portal." not in surface
+
+
 def test_inbound_email_import_rejects_oversized_base64_before_storage(
     client: TestClient,
 ) -> None:

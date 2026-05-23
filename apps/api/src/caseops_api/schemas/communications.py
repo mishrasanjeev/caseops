@@ -11,6 +11,25 @@ CommunicationChannel = Literal["email", "sms", "phone", "meeting", "note"]
 CommunicationStatus = Literal[
     "logged", "queued", "sent", "delivered", "opened", "bounced", "failed",
 ]
+CommunicationTimelineFilter = Literal[
+    "all", "email", "platform", "notes", "attachments", "internal",
+]
+CommunicationTimelineItemType = Literal[
+    "platform_message",
+    "imported_email",
+    "email_thread",
+    "attachment",
+    "internal_note",
+    "client_visible_note",
+    "outside_counsel_visible_update",
+]
+CommunicationVisibilityLabel = Literal[
+    "internal",
+    "firm_only",
+    "client_visible",
+    "outside_counsel_visible",
+    "imported_email",
+]
 
 
 class CommunicationRecord(BaseModel):
@@ -74,6 +93,52 @@ class CommunicationCreateRequest(BaseModel):
 class CommunicationListResponse(BaseModel):
     matter_id: str
     communications: list[CommunicationRecord]
+
+
+class CommunicationTimelineAttachmentReference(BaseModel):
+    """Bounded attachment card for the unified communications timeline.
+
+    The timeline intentionally exposes existing matter attachment metadata
+    only. It never returns storage keys, hashes, extracted text, OCR text, or
+    attachment payloads.
+    """
+
+    id: str
+    filename: str
+    content_type: str | None
+    size_bytes: int | None
+    document_type: str | None
+    uploaded_by_membership_id: str | None
+    submitted_by_portal_user_id: str | None
+    created_at: datetime
+
+
+class CommunicationTimelineItem(BaseModel):
+    id: str
+    item_type: CommunicationTimelineItemType
+    visibility: CommunicationVisibilityLabel
+    occurred_at: datetime
+    title: str
+    preview: str | None = None
+    actor_label: str | None = None
+    direction: CommunicationDirection | None = None
+    channel: CommunicationChannel | None = None
+    status: CommunicationStatus | None = None
+    thread_key: str | None = None
+    source_type: str
+    source_id: str
+    communication_id: str | None = None
+    note_id: str | None = None
+    attachment_id: str | None = None
+    attachment: CommunicationTimelineAttachmentReference | None = None
+    metadata: dict[str, str | int | bool | None] = Field(default_factory=dict)
+
+
+class CommunicationTimelineResponse(BaseModel):
+    matter_id: str
+    filter: CommunicationTimelineFilter
+    generated_at: datetime
+    items: list[CommunicationTimelineItem]
 
 
 class InboundEmailAttachmentImport(BaseModel):
