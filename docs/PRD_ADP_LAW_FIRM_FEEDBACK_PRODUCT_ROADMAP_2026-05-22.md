@@ -1601,6 +1601,11 @@ Tests:
 Type: Backend + Web
 Priority: P1
 Dependencies: Existing bounded Outlook sync
+Status: Foundation implemented 2026-05-23; calendar sync status now
+distinguishes manual bounded Outlook sync from durable automation, reports
+provider config names only, exposes review-only duplicate provider event
+conflict candidates, and keeps email invitation candidates deferred to a
+review queue without autonomous calendar creation.
 
 Scope:
 

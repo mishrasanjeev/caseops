@@ -239,6 +239,52 @@ def test_outlook_start_reports_safe_unavailable_state(client: TestClient) -> Non
         set_outlook_provider_for_tests(None)
 
 
+def test_sync_status_reports_bounded_manual_state_and_missing_config_names(
+    client: TestClient,
+) -> None:
+    try:
+        set_outlook_provider_for_tests(MissingOutlookProvider())
+        bootstrap = bootstrap_company(client)
+        token = str(bootstrap["access_token"])
+        response = client.get("/api/calendar/sync-status", headers=_auth(token))
+        assert response.status_code == 200, response.text
+        body = response.json()
+
+        assert body["provider_available"] is False
+        assert body["durable_automation"] == "blocked_pending_temporal"
+        assert body["notification_delivery"] == "pending_wtd_5_3"
+        assert body["capabilities"] == {
+            "sync_mode": "manual_bounded",
+            "manual_sync_available": False,
+            "durable_automation": "blocked_pending_temporal",
+            "notification_delivery": "pending_wtd_5_3",
+            "email_invitation_candidates": "deferred_pending_review_queue",
+        }
+        assert body["provider_config"] == [
+            {
+                "provider": "outlook",
+                "configured": False,
+                "missing_config_names": [
+                    "OUTLOOK_CLIENT_ID",
+                    "OUTLOOK_CLIENT_SECRET",
+                    "OUTLOOK_REDIRECT_URI",
+                ],
+            }
+        ]
+        assert body["conflict_summary"] == {
+            "has_conflicts": False,
+            "candidate_count": 0,
+            "duplicate_provider_event_count": 0,
+            "changed_event_candidate_count": 0,
+            "changed_event_detection": "unsupported_no_provider_snapshot",
+        }
+        assert body["conflict_candidates"] == []
+        assert "raw-access-token" not in response.text
+        assert "raw-refresh-token" not in response.text
+    finally:
+        set_outlook_provider_for_tests(None)
+
+
 def test_manual_hearing_sync_is_idempotent_and_audited(client: TestClient) -> None:
     provider = StubOutlookProvider()
     try:
@@ -265,6 +311,7 @@ def test_manual_hearing_sync_is_idempotent_and_audited(client: TestClient) -> No
         status = client.get("/api/calendar/sync-status", headers=_auth(token))
         assert status.status_code == 200, status.text
         assert status.json()["syncs"][0]["source_id"] == hearing["id"]
+        assert status.json()["capabilities"]["sync_mode"] == "manual_bounded"
 
         factory = get_session_factory()
         with factory() as session:
@@ -278,6 +325,68 @@ def test_manual_hearing_sync_is_idempotent_and_audited(client: TestClient) -> No
                 )
             )
             assert len(audits) == 2
+    finally:
+        set_outlook_provider_for_tests(None)
+
+
+def test_sync_status_reports_duplicate_provider_event_conflict_candidate(
+    client: TestClient,
+) -> None:
+    provider = StubOutlookProvider()
+    try:
+        bootstrap = bootstrap_company(client)
+        token = str(bootstrap["access_token"])
+        connection_id = _connect_outlook(client, token, provider)
+        matter = _create_matter(client, token, "LW-S10-CONFLICT")
+        first_hearing = _schedule_hearing(client, token, str(matter["id"]))
+        second_hearing = _schedule_hearing(
+            client,
+            token,
+            str(matter["id"]),
+            purpose="Second listing",
+        )
+
+        first = client.post(
+            f"/api/calendar/sync/hearings/{first_hearing['id']}",
+            headers=_auth(token),
+        )
+        assert first.status_code == 200, first.text
+        provider_event_id = first.json()["sync"]["provider_event_id"]
+
+        factory = get_session_factory()
+        with factory() as session:
+            connection = session.get(UserCalendarConnection, connection_id)
+            assert connection is not None
+            duplicate = CalendarEventSync(
+                company_id=connection.company_id,
+                calendar_connection_id=connection.id,
+                source_type="matter_hearing",
+                source_id=str(second_hearing["id"]),
+                provider_event_id=provider_event_id,
+                sync_status="synced",
+                last_synced_at=datetime.now(UTC),
+            )
+            session.add(duplicate)
+            session.commit()
+
+        response = client.get("/api/calendar/sync-status", headers=_auth(token))
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["conflict_summary"]["has_conflicts"] is True
+        assert body["conflict_summary"]["candidate_count"] == 1
+        assert body["conflict_summary"]["duplicate_provider_event_count"] == 1
+        assert body["conflict_summary"]["changed_event_detection"] == (
+            "unsupported_no_provider_snapshot"
+        )
+        candidate = body["conflict_candidates"][0]
+        assert candidate["conflict_type"] == "duplicate_provider_event_id"
+        assert candidate["duplicate_count"] == 2
+        assert candidate["provider_event_id"] == provider_event_id
+        assert sorted(candidate["source_ids"]) == sorted(
+            [first_hearing["id"], second_hearing["id"]]
+        )
+        assert "raw-access-token" not in response.text
+        assert "raw-refresh-token" not in response.text
     finally:
         set_outlook_provider_for_tests(None)
 
@@ -304,6 +413,20 @@ def test_manual_hearing_sync_failure_persists_safe_status(
         assert "raw-access-token" not in response.text
     finally:
         set_outlook_provider_for_tests(None)
+
+
+def test_calendar_openapi_exposes_no_autonomous_sync_routes(
+    client: TestClient,
+) -> None:
+    calendar_paths = {
+        path
+        for path in client.get("/openapi.json").json()["paths"]
+        if path.startswith("/api/calendar")
+    }
+    joined = " ".join(sorted(calendar_paths)).lower()
+    assert "webhook" not in joined
+    assert "poll" not in joined
+    assert "sweep" not in joined
 
 
 def test_sync_denies_ethically_walled_matter_hearing(client: TestClient) -> None:

@@ -209,6 +209,11 @@ export default function CalendarPage() {
 
   const today = new Date();
   const todayKey = isoDate(today);
+  const syncStatus = syncStatusQuery.data;
+  const providerConfig = syncStatus?.provider_config?.[0] ?? null;
+  const missingConfigNames = providerConfig?.missing_config_names ?? [];
+  const conflictSummary = syncStatus?.conflict_summary ?? null;
+  const conflictCandidates = syncStatus?.conflict_candidates ?? [];
 
   const navigate = (delta: 1 | -1) => {
     setCursor((c) => {
@@ -367,6 +372,74 @@ export default function CalendarPage() {
             {outlookMessage ? (
               <div className="mt-1 text-xs text-[var(--color-warning-700,#8a5a00)]">
                 {outlookMessage}
+              </div>
+            ) : null}
+            {syncStatus ? (
+              <div
+                className="mt-3 grid gap-2 text-xs text-[var(--color-ink-2)] sm:grid-cols-2 lg:grid-cols-4"
+                data-testid="calendar-sync-status-panel"
+              >
+                <div>
+                  <div className="font-medium text-[var(--color-ink)]">Sync mode</div>
+                  <div>Manual visible-range sync</div>
+                </div>
+                <div>
+                  <div className="font-medium text-[var(--color-ink)]">Durable sync</div>
+                  <div>Pending Temporal proof</div>
+                </div>
+                <div>
+                  <div className="font-medium text-[var(--color-ink)]">Reminder delivery</div>
+                  <div>
+                    {syncStatus.notification_delivery === "pending_wtd_5_3"
+                      ? "Pending WTD-5.3"
+                      : syncStatus.notification_delivery}
+                  </div>
+                </div>
+                <div>
+                  <div className="font-medium text-[var(--color-ink)]">Email invitations</div>
+                  <div>Review queue pending</div>
+                </div>
+              </div>
+            ) : null}
+            {missingConfigNames.length > 0 ? (
+              <div
+                className="mt-2 text-xs text-[var(--color-mute)]"
+                data-testid="calendar-provider-config-status"
+              >
+                Missing Outlook config: {missingConfigNames.join(", ")}
+              </div>
+            ) : null}
+            {conflictSummary ? (
+              <div
+                className="mt-3 text-xs text-[var(--color-ink-2)]"
+                data-testid="calendar-conflict-status"
+              >
+                <div className="font-medium text-[var(--color-ink)]">
+                  Conflict review:{" "}
+                  {conflictSummary.has_conflicts
+                    ? `${conflictSummary.candidate_count} candidate${
+                        conflictSummary.candidate_count === 1 ? "" : "s"
+                      }`
+                    : "no candidates"}
+                </div>
+                {conflictSummary.changed_event_detection ===
+                "unsupported_no_provider_snapshot" ? (
+                  <div className="text-[var(--color-mute)]">
+                    Changed title/time detection needs provider snapshots and is not
+                    automated here.
+                  </div>
+                ) : null}
+                {conflictCandidates.length > 0 ? (
+                  <ul className="mt-1 space-y-1">
+                    {conflictCandidates.slice(0, 3).map((candidate) => (
+                      <li key={candidate.id}>
+                        {candidate.duplicate_count} CaseOps items reference Outlook
+                        event {candidate.provider_event_id}; review before another
+                        manual sync.
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
               </div>
             ) : null}
           </div>

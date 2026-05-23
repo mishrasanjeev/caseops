@@ -1727,9 +1727,54 @@ export const calendarEventSyncResponse = z.object({
   sync: calendarEventSyncRecord,
 });
 
+export const calendarProviderConfigStatus = z.object({
+  provider: z.literal("outlook").default("outlook"),
+  configured: z.boolean(),
+  missing_config_names: z.array(z.string()).default([]),
+});
+
+export const calendarSyncCapabilityStatus = z.object({
+  sync_mode: z.literal("manual_bounded").default("manual_bounded"),
+  manual_sync_available: z.boolean(),
+  durable_automation: z.literal("blocked_pending_temporal").default("blocked_pending_temporal"),
+  notification_delivery: z.literal("pending_wtd_5_3").default("pending_wtd_5_3"),
+  email_invitation_candidates: z
+    .literal("deferred_pending_review_queue")
+    .default("deferred_pending_review_queue"),
+});
+
+export const calendarSyncConflictCandidate = z.object({
+  id: z.string(),
+  conflict_type: z.literal("duplicate_provider_event_id"),
+  severity: z.literal("review").default("review"),
+  provider: z.literal("outlook").default("outlook"),
+  calendar_connection_id: z.string(),
+  provider_event_id: z.string(),
+  duplicate_count: z.number().int().min(2),
+  source_ids: z.array(z.string()),
+  source_types: z.array(z.enum(["matter_hearing", "matter_deadline", "matter_task"])),
+  sync_ids: z.array(z.string()),
+  message: z.string(),
+});
+
+export const calendarSyncConflictSummary = z.object({
+  has_conflicts: z.boolean(),
+  candidate_count: z.number().int().min(0),
+  duplicate_provider_event_count: z.number().int().min(0),
+  changed_event_candidate_count: z.number().int().min(0).default(0),
+  changed_event_detection: z
+    .literal("unsupported_no_provider_snapshot")
+    .default("unsupported_no_provider_snapshot"),
+});
+
 export const calendarSyncStatusResponse = z.object({
   provider_available: z.boolean(),
   durable_automation: z.literal("blocked_pending_temporal"),
+  notification_delivery: z.literal("pending_wtd_5_3").default("pending_wtd_5_3"),
+  capabilities: calendarSyncCapabilityStatus,
+  provider_config: z.array(calendarProviderConfigStatus).default([]),
+  conflict_summary: calendarSyncConflictSummary,
+  conflict_candidates: z.array(calendarSyncConflictCandidate).default([]),
   connections: z.array(calendarConnectionRecord),
   syncs: z.array(calendarEventSyncRecord),
 });
@@ -1794,6 +1839,10 @@ export type CalendarConnectionListResponse = z.infer<typeof calendarConnectionLi
 export type CalendarConnectionStartResponse = z.infer<typeof calendarConnectionStartResponse>;
 export type CalendarEventSyncRecord = z.infer<typeof calendarEventSyncRecord>;
 export type CalendarEventSyncResponse = z.infer<typeof calendarEventSyncResponse>;
+export type CalendarProviderConfigStatus = z.infer<typeof calendarProviderConfigStatus>;
+export type CalendarSyncCapabilityStatus = z.infer<typeof calendarSyncCapabilityStatus>;
+export type CalendarSyncConflictCandidate = z.infer<typeof calendarSyncConflictCandidate>;
+export type CalendarSyncConflictSummary = z.infer<typeof calendarSyncConflictSummary>;
 export type CalendarSyncStatusResponse = z.infer<typeof calendarSyncStatusResponse>;
 export type OutlookBulkSyncItem = z.infer<typeof outlookBulkSyncItem>;
 export type OutlookBulkSyncResponse = z.infer<typeof outlookBulkSyncResponse>;
