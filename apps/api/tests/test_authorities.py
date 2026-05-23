@@ -1,9 +1,21 @@
 from __future__ import annotations
 
+import json
+from datetime import date
+
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 import caseops_api.services.authority_sources as authority_sources
-from caseops_api.db.models import AuthorityDocumentType, MatterForumLevel
+from caseops_api.db.models import (
+    AuditEvent,
+    AuthorityDocument,
+    AuthorityDocumentChunk,
+    AuthorityDocumentType,
+    MatterForumLevel,
+    ModelRun,
+)
+from caseops_api.db.session import get_session_factory
 from caseops_api.services.authority_sources import (
     ADAPTERS,
     SOURCE_CATEGORY_HIGH_COURT,
@@ -169,6 +181,53 @@ def _register_ingest_ready_test_source(monkeypatch, source_key: str) -> None:
     )
 
 
+def _seed_contextual_cheque_authority() -> str:
+    factory = get_session_factory()
+    with factory() as session:
+        document = AuthorityDocument(
+            source="test_contextual_authority_source",
+            adapter_name="caseops-test-contextual-authorities-v1",
+            court_name="High Court of Delhi",
+            forum_level=MatterForumLevel.HIGH_COURT,
+            document_type=AuthorityDocumentType.JUDGMENT,
+            title="Cheque dishonour demand notice limitation under Section 138",
+            case_reference="CRL.A. 138/2026",
+            bench_name="Justice A. Rao",
+            neutral_citation=None,
+            decision_date=date(2026, 5, 1),
+            canonical_key="test-contextual-cheque-dishonour-section-138",
+            source_reference="https://official.example.test/cheque-138.pdf",
+            summary=(
+                "Indexed fixture discussing Section 138 cheque dishonour, "
+                "insufficient funds, and demand notice timing."
+            ),
+            document_text=(
+                "The indexed judgment considers a cheque dishonoured for "
+                "insufficient funds, statutory demand notice timing, and "
+                "the limitation question under Sections 138 and 142 of the "
+                "Negotiable Instruments Act."
+            ),
+            extracted_char_count=260,
+        )
+        document.chunks = [
+            AuthorityDocumentChunk(
+                chunk_index=0,
+                content=(
+                    "A cheque was dishonoured for insufficient funds. The "
+                    "demand notice was served after thirty five days. The "
+                    "court analysed Section 138 and Section 142 of the "
+                    "Negotiable Instruments Act."
+                ),
+                token_count=34,
+            )
+        ]
+        session.add(document)
+        session.flush()
+        document_id = document.id
+        session.commit()
+        return document_id
+
+
 def test_owner_can_ingest_and_search_authority_corpus(
     client: TestClient,
     monkeypatch,
@@ -208,7 +267,10 @@ def test_owner_can_ingest_and_search_authority_corpus(
     )
     assert search_response.status_code == 200
     payload = search_response.json()
+    assert payload["mode"] == "keyword"
     assert payload["provider"] == "caseops-authority-search-v2"
+    assert payload["contextual_plan"] is None
+    assert payload["coverage_notice"] is None
     assert payload["results"][0]["title"] == "Acme Holdings Pvt. Ltd. v. Zenith Infra Pvt. Ltd."
     assert "maintainability" in payload["results"][0]["snippet"].lower()
 
@@ -666,4 +728,119 @@ def test_pg110_search_offset_pagination(client: TestClient, monkeypatch) -> None
     ).json()
     assert page2["offset"] == 5
     assert [r["authority_document_id"] for r in page2["results"]] == [f"d{i}" for i in range(5, 10)]
+
+
+def test_contextual_cheque_bounce_query_returns_source_backed_result_and_redacted_audit(
+    client: TestClient,
+) -> None:
+    bootstrap_payload = bootstrap_company(client)
+    token = str(bootstrap_payload["access_token"])
+    company_id = str(bootstrap_payload["company"]["id"])
+    authority_id = _seed_contextual_cheque_authority()
+
+    response = client.post(
+        "/api/authorities/search",
+        headers=auth_headers(token),
+        json={
+            "query": (
+                "Cheque bounced due to insufficient funds and notice was sent "
+                "after 35 days."
+            ),
+            "mode": "contextual",
+            "limit": 5,
+            "language": "any",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["mode"] == "contextual"
+    assert body["provider"] == "caseops-authority-contextual-search-v1"
+    assert body["contextual_plan"] is not None
+    plan = body["contextual_plan"]
+    assert "Section 138 Negotiable Instruments Act" in plan["statutes_or_sections"]
+    assert "demand notice timing for cheque dishonour" in plan["likely_issues"]
+    assert "after 35 days" in plan["timing_signals"]
+    assert body["coverage_notice"] is None
+    assert body["results"]
+    result = next(
+        item for item in body["results"] if item["authority_document_id"] == authority_id
+    )
+    assert result["source_reference"].endswith("cheque-138.pdf")
+    assert "Section 138" in result["relevance_reason"]
+    response_text = json.dumps(body).casefold()
+    for forbidden in (
+        "success probability",
+        "best judge",
+        "most suitable judge",
+        "judge shopping",
+        "guaranteed outcome",
+    ):
+        assert forbidden not in response_text
+
+    factory = get_session_factory()
+    with factory() as session:
+        audit = session.scalar(
+            select(AuditEvent)
+            .where(
+                AuditEvent.company_id == company_id,
+                AuditEvent.action == "authority_search.contextual_executed",
+            )
+            .order_by(AuditEvent.created_at.desc())
+        )
+        assert audit is not None
+        assert audit.result == "success"
+        metadata = json.loads(audit.metadata_json or "{}")
+        assert metadata["mode"] == "contextual"
+        assert metadata["query_sha256"]
+        assert metadata["query_length"] > 0
+        assert metadata["result_count"] >= 1
+        audit_blob = audit.metadata_json or ""
+        assert "Cheque bounced" not in audit_blob
+        assert "notice was sent" not in audit_blob
+        for forbidden_key in (
+            "prompt",
+            "answer",
+            "snippet",
+            "document_text",
+            "source_payload",
+            "judgment_text",
+        ):
+            assert forbidden_key not in audit_blob
+        assert session.scalar(select(ModelRun)) is None
+
+
+def test_contextual_search_returns_limited_coverage_without_model_memory(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    from caseops_api.services import authorities as svc
+
+    monkeypatch.setattr(svc, "search_authority_catalog", lambda *a, **kw: [])
+    bootstrap_payload = bootstrap_company(client)
+    token = str(bootstrap_payload["access_token"])
+
+    response = client.post(
+        "/api/authorities/search",
+        headers=auth_headers(token),
+        json={
+            "query": "Unindexed fact pattern with a procedural timing issue",
+            "mode": "contextual",
+            "limit": 5,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["results"] == []
+    assert body["contextual_plan"] is not None
+    assert body["coverage_notice"] == (
+        "No indexed authority matched the planned contextual query. Results are "
+        "limited to existing source-backed corpus records."
+    )
+    assert body["provider"] == "caseops-authority-contextual-search-v1"
+    assert "success probability" not in json.dumps(body).casefold()
+    factory = get_session_factory()
+    with factory() as session:
+        assert session.scalar(select(ModelRun)) is None
 

@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 AuthorityForumLevelLiteral = Literal["high_court", "supreme_court"]
 AuthorityDocumentTypeLiteral = Literal["judgment", "order", "practice_direction", "notice"]
+AuthoritySearchModeLiteral = Literal["keyword", "contextual"]
 
 
 class AuthoritySourceRecord(BaseModel):
@@ -65,7 +66,8 @@ class AuthorityDocumentListResponse(BaseModel):
 
 
 class AuthoritySearchRequest(BaseModel):
-    query: str = Field(min_length=2, max_length=300)
+    query: str = Field(min_length=2, max_length=600)
+    mode: AuthoritySearchModeLiteral = "keyword"
     # PG-110 (2026-05-01): bump ceiling 10→50 so pagination is useful;
     # 50 is still small enough to keep retrieval+rerank under 10s.
     limit: int = Field(default=10, ge=1, le=50)
@@ -81,6 +83,16 @@ class AuthoritySearchRequest(BaseModel):
     forum_level: AuthorityForumLevelLiteral | None = None
     court_name: str | None = Field(default=None, min_length=2, max_length=255)
     document_type: AuthorityDocumentTypeLiteral | None = None
+
+
+class AuthorityContextualQueryPlan(BaseModel):
+    key_facts: list[str] = Field(default_factory=list, max_length=6)
+    likely_issues: list[str] = Field(default_factory=list, max_length=6)
+    statutes_or_sections: list[str] = Field(default_factory=list, max_length=6)
+    procedural_posture: list[str] = Field(default_factory=list, max_length=4)
+    jurisdiction_hints: list[str] = Field(default_factory=list, max_length=4)
+    timing_signals: list[str] = Field(default_factory=list, max_length=4)
+    planned_query: str = Field(max_length=360)
 
 
 AuthorityCitationTreatmentLiteral = Literal[
@@ -110,6 +122,7 @@ class AuthoritySearchResult(BaseModel):
     snippet: str
     score: int
     matched_terms: list[str]
+    relevance_reason: str | None = None
     # PG-006 Phase 1B (2026-05-01) — good-law signal. Lightweight
     # rollup so the search result list can show a single-glance
     # treatment badge without a per-row N+1 fetch. ``worst_treatment``
@@ -123,9 +136,12 @@ class AuthoritySearchResult(BaseModel):
 
 class AuthoritySearchResponse(BaseModel):
     query: str
+    mode: AuthoritySearchModeLiteral = "keyword"
     provider: str
     generated_at: datetime
     results: list[AuthoritySearchResult]
+    contextual_plan: AuthorityContextualQueryPlan | None = None
+    coverage_notice: str | None = None
     # PG-110 (2026-05-01) — pagination metadata. ``total_after_filter``
     # is the size of the ranked+language-filtered result set; ``offset``
     # echoes back the request so the UI can compute Prev/Next visibility.

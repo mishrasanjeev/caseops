@@ -4826,6 +4826,23 @@ export interface components {
             /** Title */
             title?: string | null;
         };
+        /** AuthorityContextualQueryPlan */
+        AuthorityContextualQueryPlan: {
+            /** Jurisdiction Hints */
+            jurisdiction_hints?: string[];
+            /** Key Facts */
+            key_facts?: string[];
+            /** Likely Issues */
+            likely_issues?: string[];
+            /** Planned Query */
+            planned_query: string;
+            /** Procedural Posture */
+            procedural_posture?: string[];
+            /** Statutes Or Sections */
+            statutes_or_sections?: string[];
+            /** Timing Signals */
+            timing_signals?: string[];
+        };
         /** AuthorityCorpusStats */
         AuthorityCorpusStats: {
             /** Chunk Count */
@@ -4955,6 +4972,12 @@ export interface components {
              */
             limit: number;
             /**
+             * Mode
+             * @default keyword
+             * @enum {string}
+             */
+            mode: "keyword" | "contextual";
+            /**
              * Offset
              * @default 0
              */
@@ -4964,11 +4987,20 @@ export interface components {
         };
         /** AuthoritySearchResponse */
         AuthoritySearchResponse: {
+            contextual_plan?: components["schemas"]["AuthorityContextualQueryPlan"] | null;
+            /** Coverage Notice */
+            coverage_notice?: string | null;
             /**
              * Generated At
              * Format: date-time
              */
             generated_at: string;
+            /**
+             * Mode
+             * @default keyword
+             * @enum {string}
+             */
+            mode: "keyword" | "contextual";
             /**
              * Offset
              * @default 0
@@ -5015,6 +5047,8 @@ export interface components {
             forum_level: "high_court" | "supreme_court";
             /** Matched Terms */
             matched_terms: string[];
+            /** Relevance Reason */
+            relevance_reason?: string | null;
             /** Score */
             score: number;
             /** Snippet */
