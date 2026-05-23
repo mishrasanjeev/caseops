@@ -969,6 +969,7 @@ def generate_litigation_strategy(
     call_context = LLMCallContext(
         tenant_id=context.company.id,
         matter_id=matter.id,
+        actor_membership_id=context.membership.id,
         purpose="recommendation:litigation_strategy",
     )
 

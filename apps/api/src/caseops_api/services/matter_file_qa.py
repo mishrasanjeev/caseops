@@ -229,6 +229,7 @@ def ask_matter_file_question(
             context=LLMCallContext(
                 tenant_id=context.company.id,
                 matter_id=matter.id,
+                actor_membership_id=context.membership.id,
                 purpose=PURPOSE,
                 metadata={
                     "answer_mode": payload.answer_mode,

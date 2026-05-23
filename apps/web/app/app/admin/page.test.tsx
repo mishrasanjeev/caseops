@@ -68,6 +68,51 @@ describe("AdminPage audit export (P0-001 cookie-auth regression)", () => {
           predictive_bench_strategy_enabled: false,
         });
       }
+      if (url.includes("/api/admin/ai-token-governance")) {
+        const body = typeof init?.body === "string" ? JSON.parse(init.body) : {};
+        return jsonResponse({
+          company_id: "company-1",
+          period_start: "2026-05-01T00:00:00Z",
+          period_end: "2026-06-01T00:00:00Z",
+          firm_quota_tokens:
+            init?.method === "PATCH" ? body.firm_quota_tokens : 100000,
+          user_quota_tokens:
+            init?.method === "PATCH" ? body.user_quota_tokens : 25000,
+          warning_threshold_percent:
+            init?.method === "PATCH" ? body.warning_threshold_percent : 90,
+          firm_used_tokens: 75000,
+          firm_remaining_tokens: 25000,
+          firm_state: "warning",
+          top_users: [
+            {
+              actor_membership_id: "membership-1",
+              user_label: "Owner One",
+              used_tokens: 60000,
+              run_count: 4,
+              state: "warning",
+              remaining_tokens: 0,
+            },
+          ],
+          usage_by_matter: [
+            {
+              matter_id: "matter-1",
+              matter_code: "EXT-001",
+              matter_title: "External access matter",
+              used_tokens: 60000,
+              run_count: 3,
+            },
+          ],
+          usage_by_purpose_model: [
+            {
+              purpose: "matter_summary",
+              provider: "mock",
+              model: "caseops-mock-1",
+              used_tokens: 75000,
+              run_count: 5,
+            },
+          ],
+        });
+      }
       if (url.includes("/api/admin/storage-governance")) {
         const body = typeof init?.body === "string" ? JSON.parse(init.body) : {};
         return jsonResponse({
@@ -301,6 +346,50 @@ describe("AdminPage audit export (P0-001 cookie-auth regression)", () => {
     const [, init] = patchCall!;
     expect(JSON.parse(String(init.body))).toEqual({
       quota_bytes: 6442450944,
+    });
+  });
+
+  it("shows AI token governance and patches monthly quotas", async () => {
+    const user = userEvent.setup();
+    renderWithQuery(<AdminPage />);
+
+    const firmInput = await screen.findByTestId("firm-ai-token-quota-input");
+    const userInput = await screen.findByTestId("user-ai-token-quota-input");
+    const warningInput = await screen.findByTestId("ai-token-warning-input");
+    await waitFor(() =>
+      expect((firmInput as HTMLInputElement).value).toBe("100000"),
+    );
+    expect((userInput as HTMLInputElement).value).toBe("25000");
+    expect((warningInput as HTMLInputElement).value).toBe("90");
+
+    await user.clear(firmInput);
+    await user.type(firmInput, "150000");
+    await user.clear(userInput);
+    await user.type(userInput, "30000");
+    await user.clear(warningInput);
+    await user.type(warningInput, "80");
+    await user.click(screen.getByTestId("ai-token-governance-save"));
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          ([request, init]) =>
+            String(request).includes("/api/admin/ai-token-governance") &&
+            init?.method === "PATCH",
+        ),
+      ).toBe(true),
+    );
+    const patchCall = fetchMock.mock.calls.find(
+      ([request, init]) =>
+        String(request).includes("/api/admin/ai-token-governance") &&
+        init?.method === "PATCH",
+    );
+    expect(patchCall).toBeDefined();
+    const [, init] = patchCall!;
+    expect(JSON.parse(String(init.body))).toEqual({
+      firm_quota_tokens: 150000,
+      user_quota_tokens: 30000,
+      warning_threshold_percent: 80,
     });
   });
 });

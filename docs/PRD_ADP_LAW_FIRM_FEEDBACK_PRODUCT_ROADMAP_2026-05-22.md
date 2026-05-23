@@ -1418,19 +1418,33 @@ Tests:
 Type: Backend + Web
 Priority: P1
 Dependencies: ModelRun, TenantAIPolicy
+Status: Foundation implemented 2026-05-23; firm quota uses existing
+`tenant_ai_policies.monthly_token_budget`, user quota uses nullable
+`tenant_ai_policies.user_monthly_token_budget`, and `null` quota means
+unlimited/no hard cap.
 
 Scope:
 
 - User/firm quota settings.
 - Usage dashboard.
 - Hard/soft limits.
-- Quota enforcement before provider call.
-- Activity report export.
+- Quota enforcement before provider call on shared structured AI paths
+  that pass tenant/session context.
+- Activity report export remains a follow-up; the foundation exposes
+  admin rollups by user, matter, purpose/model, and current month.
 
 Out of scope:
 
 - New provider contracts.
 - Prompt/answer inspection dashboard.
+- Billing/payment for additional tokens.
+
+Follow-up:
+
+- Direct provider-call paths and corpus/background title re-extraction
+  need separate accounting before quota enforcement is broadened beyond
+  shared structured product paths. ADP-02 does not run or modify corpus
+  jobs.
 
 Tests:
 
@@ -1438,6 +1452,7 @@ Tests:
 - Over quota blocks.
 - Admin update audit.
 - ModelRun rollup accuracy.
+- Cross-tenant isolation and no prompt/answer/source payload leakage.
 
 ### ADP-03: Objective-Based Recommendations
 

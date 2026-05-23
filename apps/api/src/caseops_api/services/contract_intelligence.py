@@ -27,6 +27,7 @@ the 15-rule default Indian commercial playbook onto a contract's
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from dataclasses import dataclass
@@ -46,6 +47,7 @@ from caseops_api.db.models import (
     ContractObligationPriority,
     ContractObligationStatus,
     ContractPlaybookRule,
+    ModelRun,
 )
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.llm import (
@@ -61,6 +63,41 @@ from caseops_api.services.llm import (
 from caseops_api.services.llm_http import provider_failure_http_exception
 
 logger = logging.getLogger(__name__)
+
+
+def _prompt_hash(messages: list[LLMMessage]) -> str:
+    return hashlib.sha256(
+        json.dumps(
+            [{"role": m.role, "content": m.content} for m in messages],
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+
+
+def _write_model_run(
+    session: Session,
+    *,
+    completion,
+    context: LLMCallContext,
+    messages: list[LLMMessage],
+) -> None:
+    session.add(
+        ModelRun(
+            company_id=context.tenant_id,
+            matter_id=context.matter_id,
+            actor_membership_id=context.actor_membership_id,
+            purpose=context.purpose,
+            provider=completion.provider,
+            model=completion.model,
+            prompt_hash=_prompt_hash(messages),
+            prompt_tokens=completion.prompt_tokens,
+            completion_tokens=completion.completion_tokens,
+            latency_ms=completion.latency_ms,
+            status="ok",
+        )
+    )
+    session.flush()
 
 
 def _structured_with_retry(
@@ -82,10 +119,17 @@ def _structured_with_retry(
     case without doubling tokens on the happy path.
     """
     def _call(p):
-        return generate_structured(
+        payload, completion = generate_structured(
             p, schema=schema, messages=messages, context=context,
             temperature=temperature, max_tokens=max_tokens, session=session,
         )
+        _write_model_run(
+            session,
+            completion=completion,
+            context=context,
+            messages=messages,
+        )
+        return payload, completion
     try:
         return _call(provider)
     except LLMQuotaExhaustedError as exc:
@@ -452,6 +496,7 @@ def extract_clauses(
         purpose=PURPOSE_METADATA_EXTRACT,
         tenant_id=context.company.id,
         matter_id=None,
+        actor_membership_id=context.membership.id if context.membership else None,
     )
     payload, completion = _structured_with_retry(
         provider,
@@ -582,6 +627,7 @@ def extract_obligations(
         purpose=PURPOSE_METADATA_EXTRACT,
         tenant_id=context.company.id,
         matter_id=None,
+        actor_membership_id=context.membership.id if context.membership else None,
     )
     payload, completion = _structured_with_retry(
         provider,
@@ -734,6 +780,7 @@ def compare_playbook(
         purpose=PURPOSE_RECOMMENDATIONS,
         tenant_id=context.company.id,
         matter_id=None,
+        actor_membership_id=context.membership.id if context.membership else None,
     )
     payload, completion = _structured_with_retry(
         provider,

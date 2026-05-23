@@ -20,6 +20,10 @@ from caseops_api.api.dependencies import (
     require_capability,
 )
 from caseops_api.db.models import AuditEvent, AuditExportJob
+from caseops_api.schemas.ai_token_governance import (
+    AITokenGovernancePatchRequest,
+    AITokenGovernanceSummary,
+)
 from caseops_api.schemas.audit import (
     AuditExportAsyncRequest,
     AuditExportJobListResponse,
@@ -28,6 +32,10 @@ from caseops_api.schemas.audit import (
 from caseops_api.schemas.storage_governance import (
     FirmStorageQuotaPatchRequest,
     FirmStorageUsageSummary,
+)
+from caseops_api.services.ai_token_governance import (
+    get_ai_token_governance_summary,
+    update_ai_token_governance,
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.audit_exports import (
@@ -359,6 +367,51 @@ def patch_storage_governance(
         session,
         context=context,
         quota_bytes=payload.quota_bytes,
+    )
+
+
+@router.get(
+    "/ai-token-governance",
+    response_model=AITokenGovernanceSummary,
+    summary="Read firm AI token usage, quota, and ModelRun rollups.",
+)
+def get_ai_token_governance(
+    context: WorkspaceAdmin,
+    session: DbSession,
+    since: str | None = Query(default=None),
+    until: str | None = Query(default=None),
+) -> AITokenGovernanceSummary:
+    period_start = _parse_iso(since, field="since")
+    period_end = _parse_iso(until, field="until")
+    if period_start is not None and period_end is not None and period_start >= period_end:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="since must be earlier than until.",
+        )
+    return get_ai_token_governance_summary(
+        session,
+        company_id=context.company.id,
+        period_start=period_start,
+        period_end=period_end,
+    )
+
+
+@router.patch(
+    "/ai-token-governance",
+    response_model=AITokenGovernanceSummary,
+    summary="Update monthly AI token quotas. Null quota means unlimited.",
+)
+def patch_ai_token_governance(
+    payload: AITokenGovernancePatchRequest,
+    context: WorkspaceAdmin,
+    session: DbSession,
+) -> AITokenGovernanceSummary:
+    return update_ai_token_governance(
+        session,
+        context=context,
+        firm_quota_tokens=payload.firm_quota_tokens,
+        user_quota_tokens=payload.user_quota_tokens,
+        warning_threshold_percent=payload.warning_threshold_percent,
     )
 
 

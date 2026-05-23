@@ -259,6 +259,7 @@ def generate_matter_summary(
     call_ctx = LLMCallContext(
         tenant_id=context.company.id,
         matter_id=matter.id,
+        actor_membership_id=context.membership.id,
         purpose="matter_summary",
     )
 

@@ -917,6 +917,7 @@ def generate_recommendation(
     _call_context = LLMCallContext(
         tenant_id=context.company.id,
         matter_id=matter.id,
+        actor_membership_id=context.membership.id,
         purpose=f"recommendation:{rec_type}",
     )
 
