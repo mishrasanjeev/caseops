@@ -40,6 +40,15 @@ const {
       notes: [],
       court_orders: [],
       cause_list_entries: [],
+      storage_governance: {
+        company_id: "company-1",
+        used_bytes: 1024,
+        quota_bytes: 4096,
+        remaining_bytes: 3072,
+        max_upload_size_bytes: 26214400,
+        state: "ok",
+        warning_threshold_percent: 90,
+      },
     } as unknown,
   },
   useCapabilityMock: vi.fn(),
@@ -93,6 +102,13 @@ function attachments(list: Array<Record<string, unknown>>) {
   workspaceData.current = { ...(workspaceData.current as object), attachments: list };
 }
 
+function storageGovernance(value: Record<string, unknown>) {
+  workspaceData.current = {
+    ...(workspaceData.current as object),
+    storage_governance: value,
+  };
+}
+
 describe("MatterDocumentsPage", () => {
   beforeEach(() => {
     uploadMock.mockReset();
@@ -127,6 +143,15 @@ describe("MatterDocumentsPage", () => {
     toastSuccess.mockReset();
     toastError.mockReset();
     workspaceData.current = { ...(workspaceData.current as object), court_orders: [] };
+    storageGovernance({
+      company_id: "company-1",
+      used_bytes: 1024,
+      quota_bytes: 4096,
+      remaining_bytes: 3072,
+      max_upload_size_bytes: 26214400,
+      state: "ok",
+      warning_threshold_percent: 90,
+    });
     attachments([]);
   });
 
@@ -1223,6 +1248,39 @@ describe("MatterDocumentsPage", () => {
       matterId: "m1",
       attachmentId: "aff1",
     });
+  });
+
+  it("shows storage upload limits to document uploaders", () => {
+    useCapabilityMock.mockImplementation((cap: string) => cap === "documents:upload");
+
+    render(withClient(<MatterDocumentsPage />));
+
+    expect(screen.getByTestId("matter-storage-upload-policy")).toHaveTextContent(
+      "Max file 25.0 MB",
+    );
+    expect(screen.getByTestId("matter-storage-upload-policy")).toHaveTextContent(
+      "Firm quota remaining 3.0 KB",
+    );
+  });
+
+  it("blocks the upload control when the firm storage hard limit is reached", () => {
+    useCapabilityMock.mockImplementation((cap: string) => cap === "documents:upload");
+    storageGovernance({
+      company_id: "company-1",
+      used_bytes: 4096,
+      quota_bytes: 4096,
+      remaining_bytes: 0,
+      max_upload_size_bytes: 26214400,
+      state: "hard_limit",
+      warning_threshold_percent: 90,
+    });
+
+    render(withClient(<MatterDocumentsPage />));
+
+    expect(screen.getByTestId("matter-storage-upload-blocked")).toHaveTextContent(
+      "Firm storage quota reached",
+    );
+    expect(screen.getByTestId("matter-attachment-upload")).toBeDisabled();
   });
 
   it("keeps affidavit prep copy within legal-safety boundaries", async () => {

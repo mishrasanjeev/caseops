@@ -60,6 +60,10 @@ from caseops_api.services.document_storage import (
     sanitize_filename,
 )
 from caseops_api.services.file_security import verify_upload
+from caseops_api.services.storage_governance import (
+    StorageQuotaExceeded,
+    assert_storage_quota_allows_upload,
+)
 from caseops_api.services.virus_scan import reject_if_infected
 
 
@@ -162,6 +166,7 @@ def upload_oc_work_product(
     )
     _require_grant_permission(_grant, "can_upload")
     verify_upload(filename=filename, content_type=content_type, stream=stream)
+    audit_matter_id = matter.id
 
     attachment = MatterAttachment(
         matter_id=matter.id,
@@ -183,6 +188,12 @@ def upload_oc_work_product(
             attachment_id=attachment.id,
             filename=filename,
             stream=stream,
+            before_store=lambda size_bytes: assert_storage_quota_allows_upload(
+                session,
+                company_id=portal_user.company_id,
+                matter_id=matter.id,
+                incoming_size_bytes=size_bytes,
+            ),
         )
         try:
             reject_if_infected(
@@ -217,6 +228,26 @@ def upload_oc_work_product(
             ip=request_ip,
             commit=True,
         )
+    except StorageQuotaExceeded as exc:
+        session.rollback()
+        record_audit(
+            session,
+            company_id=portal_user.company_id,
+            actor_type=AuditActorType.SYSTEM,
+            actor_label=f"portal:{portal_user.email}",
+            target_type="matter",
+            target_id=audit_matter_id,
+            matter_id=audit_matter_id,
+            action="storage_quota.upload_blocked",
+            result=AuditResult.DENIED,
+            metadata={
+                **exc.audit_metadata(),
+                "actor_surface": "outside_counsel_portal",
+            },
+            ip=request_ip,
+            commit=True,
+        )
+        raise exc.to_http_exception() from exc
     except Exception:
         session.rollback()
         raise

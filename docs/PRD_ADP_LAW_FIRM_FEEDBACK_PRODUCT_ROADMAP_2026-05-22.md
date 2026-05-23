@@ -1390,6 +1390,8 @@ Verification:
 Type: Backend + Web
 Priority: P1
 Dependencies: Existing attachment metadata and upload limits
+Status: Foundation implemented 2026-05-22; firm quota uses nullable
+`companies.storage_quota_bytes`, where `null` means unlimited/no hard quota.
 
 Scope:
 

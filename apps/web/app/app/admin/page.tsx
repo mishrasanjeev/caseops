@@ -1,8 +1,9 @@
 "use client";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Download,
+  HardDrive,
   MailPlus,
   Shield,
   ShieldCheck,
@@ -11,7 +12,7 @@ import {
   Wrench,
 } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { RoadmapStub } from "@/components/app/RoadmapStub";
@@ -28,7 +29,12 @@ import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { API_BASE_URL, apiErrorMessage } from "@/lib/api/config";
-import { listMatters } from "@/lib/api/endpoints";
+import {
+  getStorageGovernance,
+  listMatters,
+  updateStorageGovernance,
+  type FirmStorageUsageSummary,
+} from "@/lib/api/endpoints";
 import {
   invitePortalUser,
   type PortalUserRole,
@@ -51,7 +57,45 @@ function untilIsoOrNull(local: string): string | null {
   return `${local}T23:59:59Z`;
 }
 
+const GIB = 1024 ** 3;
+
+function humanSize(bytes: number | null | undefined): string {
+  if (bytes === null || bytes === undefined) return "Unlimited";
+  if (bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let size = bytes;
+  let i = 0;
+  while (size >= 1024 && i < units.length - 1) {
+    size /= 1024;
+    i += 1;
+  }
+  return `${size.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+}
+
+function quotaGbInput(summary: FirmStorageUsageSummary | undefined): string {
+  if (!summary || summary.quota_bytes === null) return "";
+  const value = summary.quota_bytes / GIB;
+  return value.toFixed(2).replace(/\.?0+$/, "");
+}
+
+function quotaBytesFromInput(value: string): number | null {
+  if (!value.trim()) return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new Error("Quota must be a non-negative number of GiB.");
+  }
+  return Math.round(parsed * GIB);
+}
+
+function storageStateLabel(state: string): string {
+  if (state === "hard_limit") return "Hard limit";
+  if (state === "warning") return "Warning";
+  if (state === "unlimited") return "Unlimited";
+  return "OK";
+}
+
 export default function AdminPage() {
+  const queryClient = useQueryClient();
   const canAdmin = useCapability("workspace:admin");
   const canAudit = useCapability("audit:export");
   const canManageUsers = useCapability("company:manage_users");
@@ -70,6 +114,31 @@ export default function AdminPage() {
   const [portalCanReply, setPortalCanReply] = useState(true);
   const [portalCanUpload, setPortalCanUpload] = useState(false);
   const [portalCanInvoice, setPortalCanInvoice] = useState(false);
+  const [storageQuotaGb, setStorageQuotaGb] = useState("");
+
+  const storageQuery = useQuery({
+    queryKey: ["admin", "storage-governance"],
+    queryFn: getStorageGovernance,
+    enabled: canAdmin,
+  });
+
+  useEffect(() => {
+    setStorageQuotaGb(quotaGbInput(storageQuery.data));
+  }, [storageQuery.data?.quota_bytes]);
+
+  const storageMutation = useMutation({
+    mutationFn: () =>
+      updateStorageGovernance({
+        quotaBytes: quotaBytesFromInput(storageQuotaGb),
+      }),
+    onSuccess: (data) => {
+      queryClient.setQueryData(["admin", "storage-governance"], data);
+      toast.success("Storage quota updated.");
+    },
+    onError: (err) => {
+      toast.error(apiErrorMessage(err, "Could not update storage quota."));
+    },
+  });
 
   const portalMattersQuery = useQuery({
     queryKey: ["admin", "portal-invite", "matters"],
@@ -307,6 +376,144 @@ export default function AdminPage() {
           )}
         </CardContent>
       </Card>
+
+      {canAdmin ? (
+        <Card data-testid="storage-governance-card">
+          <CardHeader className="flex-row items-start justify-between gap-4">
+            <div>
+              <CardTitle as="h2">Storage governance</CardTitle>
+              <CardDescription>
+                Firm-level usage, quota, and largest matter files.
+              </CardDescription>
+            </div>
+            <HardDrive className="h-5 w-5 text-[var(--color-brand-700)]" aria-hidden />
+          </CardHeader>
+          <CardContent>
+            {storageQuery.isPending ? (
+              <p className="text-sm text-[var(--color-mute)]">
+                Loading storage usage...
+              </p>
+            ) : storageQuery.data ? (
+              <div className="flex flex-col gap-4">
+                <div className="grid gap-3 md:grid-cols-4">
+                  <div className="rounded-md border border-[var(--color-line)] px-3 py-2">
+                    <div className="text-xs text-[var(--color-mute)]">Used</div>
+                    <div className="text-lg font-semibold text-[var(--color-ink)]">
+                      {humanSize(storageQuery.data.used_bytes)}
+                    </div>
+                  </div>
+                  <div className="rounded-md border border-[var(--color-line)] px-3 py-2">
+                    <div className="text-xs text-[var(--color-mute)]">Quota</div>
+                    <div className="text-lg font-semibold text-[var(--color-ink)]">
+                      {humanSize(storageQuery.data.quota_bytes)}
+                    </div>
+                  </div>
+                  <div className="rounded-md border border-[var(--color-line)] px-3 py-2">
+                    <div className="text-xs text-[var(--color-mute)]">Remaining</div>
+                    <div className="text-lg font-semibold text-[var(--color-ink)]">
+                      {humanSize(storageQuery.data.remaining_bytes)}
+                    </div>
+                  </div>
+                  <div className="rounded-md border border-[var(--color-line)] px-3 py-2">
+                    <div className="text-xs text-[var(--color-mute)]">State</div>
+                    <div className="text-lg font-semibold text-[var(--color-ink)]">
+                      {storageStateLabel(storageQuery.data.state)}
+                    </div>
+                  </div>
+                </div>
+
+                <form
+                  className="flex flex-wrap items-end gap-3"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    storageMutation.mutate();
+                  }}
+                >
+                  <div className="flex min-w-48 flex-col gap-1.5">
+                    <Label htmlFor="storage-quota-gb">
+                      Firm quota in GiB
+                    </Label>
+                    <Input
+                      id="storage-quota-gb"
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={storageQuotaGb}
+                      onChange={(event) => setStorageQuotaGb(event.target.value)}
+                      placeholder="Blank for unlimited"
+                      data-testid="storage-quota-input"
+                    />
+                  </div>
+                  <Button
+                    type="submit"
+                    disabled={storageMutation.isPending}
+                    data-testid="storage-quota-save"
+                  >
+                    {storageMutation.isPending ? "Saving..." : "Save quota"}
+                  </Button>
+                </form>
+
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <div>
+                    <h3 className="text-sm font-semibold text-[var(--color-ink)]">
+                      Usage by matter
+                    </h3>
+                    <div className="mt-2 overflow-hidden rounded-md border border-[var(--color-line)]">
+                      {(storageQuery.data.usage_by_matter.slice(0, 5)).map((matter) => (
+                        <div
+                          key={matter.matter_id}
+                          className="flex items-center justify-between gap-3 border-b border-[var(--color-line-2)] px-3 py-2 text-sm last:border-0"
+                        >
+                          <span className="min-w-0 truncate">
+                            {matter.matter_code} - {matter.matter_title}
+                          </span>
+                          <span className="shrink-0 text-[var(--color-mute)]">
+                            {humanSize(matter.used_bytes)}
+                          </span>
+                        </div>
+                      ))}
+                      {storageQuery.data.usage_by_matter.length === 0 ? (
+                        <div className="px-3 py-2 text-sm text-[var(--color-mute)]">
+                          No stored matter files yet.
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-[var(--color-ink)]">
+                      Largest files
+                    </h3>
+                    <div className="mt-2 overflow-hidden rounded-md border border-[var(--color-line)]">
+                      {(storageQuery.data.largest_files.slice(0, 5)).map((file) => (
+                        <div
+                          key={file.attachment_id}
+                          className="flex items-center justify-between gap-3 border-b border-[var(--color-line-2)] px-3 py-2 text-sm last:border-0"
+                        >
+                          <span className="min-w-0 truncate">
+                            {file.original_filename}
+                          </span>
+                          <span className="shrink-0 text-[var(--color-mute)]">
+                            {humanSize(file.size_bytes)}
+                          </span>
+                        </div>
+                      ))}
+                      {storageQuery.data.largest_files.length === 0 ? (
+                        <div className="px-3 py-2 text-sm text-[var(--color-mute)]">
+                          No files to report.
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-[var(--color-mute)]">
+                Storage usage could not be loaded.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader className="flex-row items-start justify-between gap-4">

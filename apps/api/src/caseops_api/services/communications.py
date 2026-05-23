@@ -59,6 +59,11 @@ from caseops_api.services.document_storage import (
 from caseops_api.services.email_templates import render_template
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import assert_access
+from caseops_api.services.storage_governance import (
+    StorageQuotaExceeded,
+    assert_storage_quota_allows_upload,
+    record_storage_quota_blocked_upload,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -231,6 +236,12 @@ def _persist_inbound_attachment(
         attachment_id=attachment.id,
         filename=filename,
         stream=stream,
+        before_store=lambda size_bytes: assert_storage_quota_allows_upload(
+            session,
+            company_id=context.company.id,
+            matter_id=matter.id,
+            incoming_size_bytes=size_bytes,
+        ),
     )
     try:
         reject_if_infected(resolve_storage_path(stored.storage_key), filename=filename)
@@ -425,6 +436,20 @@ def import_inbound_email(
         if existing_after_race is not None:
             return _existing_import_response(matter_id=matter.id, row=existing_after_race)
         raise
+    except StorageQuotaExceeded as exc:
+        session.rollback()
+        for storage_key in stored_keys:
+            try:
+                delete_stored_document(storage_key)
+            except Exception:
+                logger.warning("inbound_email.quota_block_cleanup_failed")
+        record_storage_quota_blocked_upload(
+            session,
+            context=context,
+            matter_id=matter.id,
+            error=exc,
+        )
+        raise exc.to_http_exception() from exc
     except Exception:
         session.rollback()
         for storage_key in stored_keys:
