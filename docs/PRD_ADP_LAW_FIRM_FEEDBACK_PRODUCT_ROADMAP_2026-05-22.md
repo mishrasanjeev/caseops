@@ -1459,6 +1459,10 @@ Tests:
 Type: Backend + Web
 Priority: P1
 Dependencies: Existing recommendations service
+Status: Foundation implemented 2026-05-23; recommendation requests now accept
+an optional objective context and bounded custom goal. Existing type-only
+requests remain valid. Custom goals are safety-checked before provider calls
+and audit metadata stores only hash/length/category, not raw goal text.
 
 Scope:
 
@@ -1467,12 +1471,22 @@ Scope:
 - Separate observations/actions/missing info/risks.
 - Block outcome-prediction and judge-shopping requests.
 
+Out of scope:
+
+- Contextual legal research retrieval beyond the existing recommendation
+  source pattern.
+- Settlement probability, success probability, judge shopping, best
+  court/bench/judge logic, or final legal advice.
+- User-facing notification delivery.
+
 Tests:
 
 - Context affects output.
 - Custom goal safety handling.
 - Forbidden wording scan.
 - Matter access enforcement.
+- ADP-02 token quota blocks over-limit recommendation calls before provider
+  invocation.
 
 ### ADP-04: Contextual Legal Research Foundation
 

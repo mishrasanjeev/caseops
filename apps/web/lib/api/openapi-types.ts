@@ -12615,6 +12615,10 @@ export interface components {
         };
         /** RecommendationGenerateRequest */
         RecommendationGenerateRequest: {
+            /** Custom Goal */
+            custom_goal?: string | null;
+            /** Recommendation Context */
+            recommendation_context?: ("litigation_strategy" | "settlement_strategy" | "compliance_risk" | "contract_risk" | "case_preparation" | "appeal_strategy" | "custom_goal") | null;
             /**
              * Type
              * @default authority

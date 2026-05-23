@@ -54,11 +54,56 @@ describe("RecommendationsPage", () => {
         screen.getByTestId("generate-authority-recommendation"),
       ).toBeInTheDocument(),
     );
+    expect(screen.getByTestId("recommendation-objective-select")).toBeInTheDocument();
     // BUG-016: the persistent error Card must NOT render when no
     // generation has failed.
     expect(
       screen.queryByTestId("recommendation-last-error"),
     ).not.toBeInTheDocument();
+  });
+
+  it("sends the selected objective context and bounded custom goal", async () => {
+    listRecommendationsMock.mockResolvedValue({
+      matter_id: "m-1",
+      recommendations: [],
+    });
+    generateRecommendationMock.mockResolvedValue({
+      id: "rec-custom",
+      matter_id: "m-1",
+      type: "authority",
+      title: "Custom objective recommendation",
+      rationale: "Source-backed observations.",
+      primary_option_index: 0,
+      assumptions: [],
+      missing_facts: [],
+      confidence: "medium",
+      review_required: true,
+      status: "proposed",
+      next_action: null,
+      created_at: "2026-05-23T00:00:00Z",
+      options: [],
+      decisions: [],
+      retrieved_authorities: [],
+      strategy_payload: null,
+    });
+
+    render(withClient(<RecommendationsPage />));
+    const objective = await screen.findByTestId("recommendation-objective-select");
+    fireEvent.change(objective, { target: { value: "custom_goal" } });
+    const goal = await screen.findByTestId("recommendation-custom-goal");
+    fireEvent.change(goal, {
+      target: { value: "Prepare evidence gaps for cross-examination" },
+    });
+    fireEvent.click(screen.getByTestId("generate-authority-recommendation"));
+
+    await waitFor(() =>
+      expect(generateRecommendationMock).toHaveBeenCalledWith({
+        matterId: "m-1",
+        type: "authority",
+        recommendationContext: "custom_goal",
+        customGoal: "Prepare evidence gaps for cross-examination",
+      }),
+    );
   });
 
   it("labels AI recommendations distinctly and excludes lawyer strategy entries", async () => {

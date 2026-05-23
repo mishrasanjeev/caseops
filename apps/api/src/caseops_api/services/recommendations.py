@@ -39,6 +39,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
+    AuditResult,
     AuthorityCitation,
     AuthorityDocument,
     Judge,
@@ -86,6 +87,139 @@ SUPPORTED_TYPES = {
     "litigation_strategy",
 }
 CONFIDENCE_LEVELS = ("low", "medium", "high")
+SUPPORTED_OBJECTIVE_CONTEXTS = {
+    "litigation_strategy",
+    "settlement_strategy",
+    "compliance_risk",
+    "contract_risk",
+    "case_preparation",
+    "appeal_strategy",
+    "custom_goal",
+}
+
+
+@dataclass(frozen=True)
+class RecommendationObjective:
+    context: str | None = None
+    custom_goal: str | None = None
+
+    @property
+    def audit_context(self) -> str:
+        return self.context or "default_matter_status"
+
+    def custom_goal_metadata(self) -> dict[str, object]:
+        if not self.custom_goal:
+            return {"present": False}
+        return {
+            "present": True,
+            "sha256": hashlib.sha256(self.custom_goal.encode("utf-8")).hexdigest(),
+            "length": len(self.custom_goal),
+            "category": "safe_custom_goal",
+        }
+
+
+_OBJECTIVE_FRAMING: dict[str, str] = {
+    "litigation_strategy": (
+        "Frame the recommendation around litigation posture, procedural options, "
+        "source-backed risks, and lawyer-review next steps."
+    ),
+    "settlement_strategy": (
+        "Frame the recommendation around settlement posture, negotiation levers, "
+        "missing information, and risks for lawyer review. Do not estimate odds "
+        "or settlement probability."
+    ),
+    "compliance_risk": (
+        "Frame the recommendation around compliance gaps, regulatory exposure, "
+        "evidence needs, and mitigations for lawyer review."
+    ),
+    "contract_risk": (
+        "Frame the recommendation around contractual risk, clause posture, "
+        "document gaps, and possible drafting or negotiation actions for lawyer review."
+    ),
+    "case_preparation": (
+        "Frame the recommendation around case-preparation tasks, source readiness, "
+        "missing facts, witness/document gaps, and hearing-preparation actions."
+    ),
+    "appeal_strategy": (
+        "Frame the recommendation around appeal readiness, grounds completeness, "
+        "limitation or procedural gaps, and source-backed options for lawyer review. "
+        "Do not predict appeal success."
+    ),
+    "custom_goal": (
+        "Frame the recommendation around the approved custom lawyer-review goal "
+        "while preserving the same source-grounding and safety boundaries."
+    ),
+}
+
+_OBJECTIVE_RETRIEVAL_HINTS: dict[str, str] = {
+    "litigation_strategy": "litigation strategy procedural posture evidence gaps",
+    "settlement_strategy": "settlement negotiation compromise consent terms risk",
+    "compliance_risk": "compliance regulatory obligation penalty mitigation",
+    "contract_risk": "contract clause breach indemnity termination liability",
+    "case_preparation": "case preparation evidence witness document readiness",
+    "appeal_strategy": "appeal grounds limitation review appellate procedure",
+    "custom_goal": "custom lawyer review objective source-backed recommendation",
+}
+
+_UNSAFE_CUSTOM_GOAL_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    (
+        "outcome_prediction",
+        re.compile(
+            r"\b(success probability|win probability|loss probability|odds of "
+            r"(?:winning|losing)|chance of (?:winning|success)|predict(?:ed)? "
+            r"outcome|will win|will lose|guarante(?:e|ed|es))\b",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "judge_shopping",
+        re.compile(
+            r"\b(best judge|most suitable judge|best bench|most suitable bench|"
+            r"best court|judge shopping|bench shopping|judge reputation|"
+            r"favo[u]?rable judge|judge likes|judge dislikes)\b",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "illegal_or_unethical",
+        re.compile(
+            r"\b(bribe|fabricate evidence|destroy evidence|hide evidence|"
+            r"mislead (?:the )?court|perjury|false affidavit|forge|forged|"
+            r"backdate|tamper)\b",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "legal_advice_as_final_instruction",
+        re.compile(
+            r"\b(give legal advice|legal advice:|advise (?:me|us|the client) to|"
+            r"tell (?:me|us|the client) (?:exactly )?what to do)\b",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "emotion_biometric_psychological",
+        re.compile(
+            r"\b(emotion|emotional|biometric|psychological|mental[- ]health|"
+            r"voice scoring|lie detection|stress analysis|personality score)\b",
+            re.IGNORECASE,
+        ),
+    ),
+)
+
+_UNSAFE_OUTPUT_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    _UNSAFE_CUSTOM_GOAL_PATTERNS[0],
+    _UNSAFE_CUSTOM_GOAL_PATTERNS[1],
+    _UNSAFE_CUSTOM_GOAL_PATTERNS[4],
+    (
+        "legal_advice_as_final_instruction",
+        re.compile(
+            r"\b(legal advice:|(?:i\s+)?advise (?:you|the client) to|"
+            r"you should (?:file|settle|withdraw|appeal|sue))\b",
+            re.IGNORECASE,
+        ),
+    ),
+)
 
 
 class _LLMOption(BaseModel):
@@ -602,6 +736,147 @@ def _gather_authorities_with_trace(
     return picked, trace
 
 
+def _normalize_custom_goal(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = re.sub(r"\s+", " ", value).strip()
+    return normalized or None
+
+
+def _classify_unsafe_text(
+    value: str | None,
+    *,
+    patterns: tuple[tuple[str, re.Pattern[str]], ...],
+) -> str | None:
+    if not value:
+        return None
+    for category, pattern in patterns:
+        if pattern.search(value):
+            return category
+    return None
+
+
+def _record_blocked_objective(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter: Matter,
+    rec_type: str,
+    objective: RecommendationObjective,
+    reason_category: str,
+) -> None:
+    from caseops_api.services.audit import record_from_context
+
+    record_from_context(
+        session,
+        context,
+        action="recommendation.objective_blocked",
+        target_type="matter",
+        target_id=matter.id,
+        matter_id=matter.id,
+        result=AuditResult.DENIED,
+        metadata={
+            "type": rec_type,
+            "recommendation_context": objective.audit_context,
+            "reason_category": reason_category,
+            "custom_goal": objective.custom_goal_metadata(),
+        },
+    )
+    session.commit()
+
+
+def _resolve_objective(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter: Matter,
+    rec_type: str,
+    recommendation_context: str | None,
+    custom_goal: str | None,
+) -> RecommendationObjective:
+    normalized_goal = _normalize_custom_goal(custom_goal)
+    objective_context = recommendation_context
+    if objective_context is None and normalized_goal:
+        objective_context = "custom_goal"
+    if objective_context is not None and objective_context not in SUPPORTED_OBJECTIVE_CONTEXTS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Recommendation context {objective_context!r} is not supported. "
+                f"Supported contexts: {sorted(SUPPORTED_OBJECTIVE_CONTEXTS)}"
+            ),
+        )
+    if objective_context != "custom_goal":
+        normalized_goal = None
+
+    objective = RecommendationObjective(
+        context=objective_context,
+        custom_goal=normalized_goal,
+    )
+    if objective_context == "custom_goal" and not normalized_goal:
+        _record_blocked_objective(
+            session,
+            context=context,
+            matter=matter,
+            rec_type=rec_type,
+            objective=objective,
+            reason_category="missing_custom_goal",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="A custom recommendation goal is required for custom_goal context.",
+        )
+    reason = _classify_unsafe_text(
+        normalized_goal,
+        patterns=_UNSAFE_CUSTOM_GOAL_PATTERNS,
+    )
+    if reason is not None:
+        _record_blocked_objective(
+            session,
+            context=context,
+            matter=matter,
+            rec_type=rec_type,
+            objective=objective,
+            reason_category=reason,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                "The custom recommendation goal is unsupported. Reframe it as "
+                "source-backed decision support for lawyer review without outcome "
+                "prediction, judge selection, illegal conduct, or final legal advice."
+            ),
+        )
+    return objective
+
+
+def _response_text_parts(parsed: _LLMResponse) -> list[str]:
+    parts = [
+        parsed.title,
+        parsed.rationale,
+        parsed.primary_recommendation_label or "",
+        parsed.next_action or "",
+    ]
+    parts.extend(parsed.assumptions)
+    parts.extend(parsed.missing_facts)
+    for option in parsed.options:
+        parts.extend(
+            [
+                option.label,
+                option.rationale,
+                option.risk_notes or "",
+            ]
+        )
+    return parts
+
+
+def _classify_unsafe_response(parsed: _LLMResponse) -> str | None:
+    return _classify_unsafe_text(
+        "\n".join(_response_text_parts(parsed)),
+        patterns=_UNSAFE_OUTPUT_PATTERNS,
+    )
+
+
 _TYPE_FRAMING: dict[str, str] = {
     "forum": (
         "Recommend which forum (court, bench, jurisdiction) the client "
@@ -634,8 +909,16 @@ def _build_prompt(
     rec_type: str,
     matter: Matter,
     authorities: list[RetrievedAuthority],
+    objective: RecommendationObjective | None = None,
 ) -> list[LLMMessage]:
     framing = _TYPE_FRAMING.get(rec_type, _TYPE_FRAMING["authority"])
+    objective = objective or RecommendationObjective()
+    objective_context = objective.context or "default_matter_status"
+    objective_framing = (
+        _OBJECTIVE_FRAMING.get(objective.context or "", "")
+        or "Frame the recommendation from matter status, posture, and retrieved sources."
+    )
+    custom_goal_line = objective.custom_goal or "none"
     # BUG-024 / BUG-033 / BUG-034 (Ram + Hari 2026-04-27): explicit
     # constraint to use the EXACT citation text from the numbered list.
     # Prior wording ("do not invent citations") was too loose — the
@@ -660,6 +943,19 @@ def _build_prompt(
         "3. If no listed authority supports an option, set "
         "`supporting_citations: []`, lower `confidence` to \"low\", and "
         "explain in `missing_facts`.\n\n"
+        "SAFETY RULES (HARD):\n"
+        "1. This is decision support for lawyer review, not a final instruction.\n"
+        "2. Do not provide success probability, win/loss odds, guaranteed outcomes, "
+        "judge-shopping guidance, best-judge/best-bench recommendations, judge "
+        "reputation scores, or emotion/biometric/psychological/voice analysis.\n"
+        "3. Do not tell the lawyer or client exactly what to do. Use possible "
+        "actions for lawyer review, source-backed observations, missing information, "
+        "and risks or uncertainties.\n\n"
+        "OUTPUT ORGANIZATION:\n"
+        "- Put `Source-backed observations`, `Possible next actions for lawyer "
+        "review`, `Missing information`, and `Risks/uncertainties` sections in "
+        "`rationale` where the evidence supports them.\n"
+        "- Keep every option review-required and source-grounded.\n\n"
         f"TASK: {framing}"
     )
     # Numbered citations make verbatim-copy unambiguous + give the model
@@ -676,6 +972,9 @@ def _build_prompt(
     user = (
         "Respond with json. Produce a CaseOps recommendation object.\n\n"
         f"RECOMMENDATION_TYPE: {rec_type}\n"
+        f"RECOMMENDATION_CONTEXT: {objective_context}\n"
+        f"OBJECTIVE_FRAMING: {objective_framing}\n"
+        f"CUSTOM_GOAL: {custom_goal_line}\n"
         f"MATTER_TITLE: {matter.title}\n"
         f"FORUM: {matter.forum_level or 'unknown'}\n"
         f"COURT: {matter.court_name or 'unknown'}\n"
@@ -837,6 +1136,8 @@ def generate_recommendation(
     context: SessionContext,
     matter_id: str,
     rec_type: str,
+    recommendation_context: str | None = None,
+    custom_goal: str | None = None,
     provider: LLMProvider | None = None,
 ) -> Recommendation:
     # BUG-015 (Ram 2026-04-26 Critical reopen) deep dive: prior fix
@@ -876,6 +1177,15 @@ def generate_recommendation(
         )
     matter = _load_matter(session, context=context, matter_id=matter_id)
     _stage("load_matter")
+    objective = _resolve_objective(
+        session,
+        context=context,
+        matter=matter,
+        rec_type=rec_type,
+        recommendation_context=recommendation_context,
+        custom_goal=custom_goal,
+    )
+    _stage("resolve_objective")
     # BUG-015 deep dive: prior reproductions showed _gather_authorities
     # hangs for 5+ minutes under heavy concurrent corpus INSERT load
     # (citation extraction + EN sweep TITLES both writing
@@ -891,7 +1201,7 @@ def generate_recommendation(
         pass
     retrieved, bench_rerank_trace = _gather_authorities_with_trace(
         session,
-        query=_build_retrieval_query(matter, rec_type),
+        query=_build_retrieval_query(matter, rec_type, objective=objective),
         forum_level=matter.forum_level,
         matter=matter,
         context=context,
@@ -909,7 +1219,12 @@ def generate_recommendation(
         _stage("record_bench_rerank")
 
     llm = provider or build_provider(purpose=PURPOSE_RECOMMENDATIONS)
-    messages = _build_prompt(rec_type=rec_type, matter=matter, authorities=retrieved)
+    messages = _build_prompt(
+        rec_type=rec_type,
+        matter=matter,
+        authorities=retrieved,
+        objective=objective,
+    )
     prompt_hash = _prompt_hash(messages)
     _stage("build_prompt")
 
@@ -981,6 +1296,29 @@ def generate_recommendation(
             noun="recommendation",
             exc=exc,
         ) from exc
+
+    unsafe_output_category = _classify_unsafe_response(parsed)
+    if unsafe_output_category is not None:
+        run = _write_model_run(
+            session,
+            context=context,
+            matter_id=matter.id,
+            purpose=f"recommendation:{rec_type}",
+            completion=completion,
+            prompt_hash=prompt_hash,
+            status_label="rejected_unsafe_output",
+            error=f"unsafe_recommendation_output:{unsafe_output_category}",
+        )
+        session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                "The recommendation output was refused because it used unsupported "
+                "wording. Reframe the objective for source-backed lawyer review. "
+                "No recommendation was saved."
+            ),
+            headers={"X-Model-Run-Id": run.id},
+        )
 
     cleaned_options, report = _filter_and_verify_options(parsed.options, retrieved)
     _stage("filter_and_verify")
@@ -1086,6 +1424,8 @@ def generate_recommendation(
         matter_id=matter.id,
         metadata={
             "type": rec_type,
+            "recommendation_context": objective.audit_context,
+            "custom_goal": objective.custom_goal_metadata(),
             "option_count": len(cleaned_options),
             "verified_citations": total_verified_citations,
             "confidence": confidence,
@@ -1103,7 +1443,11 @@ def generate_recommendation(
     return recommendation
 
 
-def _build_retrieval_query(matter: Matter, rec_type: str) -> str:
+def _build_retrieval_query(
+    matter: Matter,
+    rec_type: str,
+    objective: RecommendationObjective | None = None,
+) -> str:
     parts = [matter.title]
     if matter.practice_area:
         parts.append(matter.practice_area)
@@ -1138,6 +1482,11 @@ def _build_retrieval_query(matter: Matter, rec_type: str) -> str:
             "Article 137 curative limitation condonation interim "
             "stay status quo"
         )
+    objective = objective or RecommendationObjective()
+    if objective.context:
+        parts.append(_OBJECTIVE_RETRIEVAL_HINTS.get(objective.context, ""))
+    if objective.custom_goal:
+        parts.append(objective.custom_goal[:300])
     return " ".join(p for p in parts if p)
 
 

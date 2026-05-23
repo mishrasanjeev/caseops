@@ -55,6 +55,7 @@ import {
   type PredictiveIntelligenceResponse,
   type Recommendation,
   type RecommendationList,
+  type RecommendationObjectiveContext,
   type RecommendationType,
   authContext,
   authSession,
@@ -1073,12 +1074,18 @@ export async function listRecommendations(matterId: string): Promise<Recommendat
 export async function generateRecommendation(input: {
   matterId: string;
   type: RecommendationType;
+  recommendationContext?: RecommendationObjectiveContext | null;
+  customGoal?: string | null;
 }): Promise<Recommendation> {
   const data = await apiRequest<unknown>(
     `/api/matters/${input.matterId}/recommendations`,
     {
       method: "POST",
-      body: { type: input.type },
+      body: {
+        type: input.type,
+        recommendation_context: input.recommendationContext ?? null,
+        custom_goal: input.customGoal ?? null,
+      },
     },
   );
   return recommendation.parse(data);

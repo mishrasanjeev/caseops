@@ -274,6 +274,8 @@ async def create_recommendation(
         context=context,
         matter_id=matter_id,
         rec_type=payload.type,
+        recommendation_context=payload.recommendation_context,
+        custom_goal=payload.custom_goal,
     )
     return _recommendation_record(recommendation)
 

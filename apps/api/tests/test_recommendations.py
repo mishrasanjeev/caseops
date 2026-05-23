@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable
 
 from fastapi.testclient import TestClient
@@ -14,6 +15,7 @@ from caseops_api.db.models import (
     MatterStrategyEntry,
     ModelRun,
     Recommendation,
+    TenantAIPolicy,
 )
 from caseops_api.db.session import get_session_factory
 from tests.test_auth_company import auth_headers, bootstrap_company
@@ -186,6 +188,35 @@ def _seed_relevant_authority() -> None:
             }
         ]
     )
+
+
+def _company_id_for_matter(matter_id: str) -> str:
+    factory = get_session_factory()
+    with factory() as session:
+        company_id = session.scalar(
+            select(Matter.company_id).where(Matter.id == matter_id)
+        )
+        assert company_id is not None
+        return str(company_id)
+
+
+def _set_ai_policy(
+    company_id: str,
+    *,
+    firm_quota_tokens: int | None = None,
+    user_quota_tokens: int | None = None,
+) -> None:
+    factory = get_session_factory()
+    with factory() as session:
+        row = session.scalar(
+            select(TenantAIPolicy).where(TenantAIPolicy.company_id == company_id)
+        )
+        if row is None:
+            row = TenantAIPolicy(company_id=company_id)
+            session.add(row)
+        row.monthly_token_budget = firm_quota_tokens
+        row.user_monthly_token_budget = user_quota_tokens
+        session.commit()
 
 
 def test_generate_recommendation_returns_verified_citations(client: TestClient) -> None:
@@ -866,6 +897,442 @@ def test_generate_writes_a_model_run_record(client: TestClient) -> None:
     assert any(run.purpose == "recommendation:authority" for run in runs)
     assert any(run.prompt_tokens > 0 for run in runs)
     assert recs and recs[0].model_run_id
+
+
+def test_objective_contexts_are_accepted_and_affect_prompt(
+    client: TestClient, monkeypatch,
+) -> None:
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    token, _, matter_id = _setup_matter(client)
+    _seed_relevant_authority()
+    prompts: list[str] = []
+
+    class _ObjectiveProvider:
+        name = "mock"
+        model = "mock-objective-context"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            prompts.append("\n".join(message.content for message in messages))
+            payload = {
+                "title": "Objective-aware authority recommendation",
+                "options": [
+                    {
+                        "label": "Use the cited authority",
+                        "rationale": "Source-backed observations support lawyer review.",
+                        "confidence": "medium",
+                        "supporting_citations": ["[1] Ssangyong Engg v. NHAI (2019)"],
+                        "risk_notes": "Risks/uncertainties require partner review.",
+                    }
+                ],
+                "primary_recommendation_label": "Use the cited authority",
+                "rationale": (
+                    "Source-backed observations: the authority is relevant.\n"
+                    "Possible next actions for lawyer review: assess the filing posture.\n"
+                    "Missing information: confirm procedural history.\n"
+                    "Risks/uncertainties: citation coverage may be incomplete."
+                ),
+                "assumptions": [],
+                "missing_facts": ["Procedural history"],
+                "confidence": "medium",
+                "next_action": "Review the cited authority.",
+            }
+            return LLMCompletion(
+                text=json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=10,
+                completion_tokens=20,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _ObjectiveProvider(),
+    )
+    contexts = [
+        "litigation_strategy",
+        "settlement_strategy",
+        "compliance_risk",
+        "contract_risk",
+        "case_preparation",
+        "appeal_strategy",
+        "custom_goal",
+    ]
+    for objective_context in contexts:
+        request = {
+            "type": "authority",
+            "recommendation_context": objective_context,
+        }
+        if objective_context == "custom_goal":
+            request["custom_goal"] = "Prepare evidence gaps for cross-examination"
+        response = client.post(
+            f"/api/matters/{matter_id}/recommendations",
+            headers=auth_headers(token),
+            json=request,
+        )
+        assert response.status_code == 200, response.text
+
+    assert len(prompts) == len(contexts)
+    for objective_context, prompt in zip(contexts, prompts, strict=True):
+        assert f"RECOMMENDATION_CONTEXT: {objective_context}" in prompt
+    assert "CUSTOM_GOAL: Prepare evidence gaps for cross-examination" in prompts[-1]
+    assert "Possible next actions for lawyer review" in prompts[-1]
+
+
+def test_custom_goal_audit_metadata_is_redacted(
+    client: TestClient, monkeypatch,
+) -> None:
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    token, _, matter_id = _setup_matter(client)
+    _seed_relevant_authority()
+    raw_goal = "Prepare evidence gaps for cross-examination"
+
+    class _GoalProvider:
+        name = "mock"
+        model = "mock-custom-goal"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            payload = {
+                "title": "Custom goal recommendation",
+                "options": [
+                    {
+                        "label": "Review evidence gaps",
+                        "rationale": "The cited authority supports the review posture.",
+                        "confidence": "medium",
+                        "supporting_citations": ["[1] Ssangyong Engg v. NHAI (2019)"],
+                        "risk_notes": None,
+                    }
+                ],
+                "primary_recommendation_label": "Review evidence gaps",
+                "rationale": "Source-backed observations for lawyer review.",
+                "assumptions": [],
+                "missing_facts": ["Complete evidence index"],
+                "confidence": "medium",
+                "next_action": None,
+            }
+            return LLMCompletion(
+                text=json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=11,
+                completion_tokens=21,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _GoalProvider(),
+    )
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={
+            "type": "authority",
+            "recommendation_context": "custom_goal",
+            "custom_goal": raw_goal,
+        },
+    )
+    assert response.status_code == 200, response.text
+
+    factory = get_session_factory()
+    with factory() as session:
+        event = session.scalar(
+            select(AuditEvent)
+            .where(
+                AuditEvent.action == "recommendation.generated",
+                AuditEvent.matter_id == matter_id,
+            )
+            .order_by(AuditEvent.created_at.desc())
+        )
+    assert event is not None
+    metadata = json.loads(event.metadata_json or "{}")
+    assert metadata["recommendation_context"] == "custom_goal"
+    assert metadata["custom_goal"]["present"] is True
+    assert metadata["custom_goal"]["length"] == len(raw_goal)
+    assert "sha256" in metadata["custom_goal"]
+    redacted = json.dumps(metadata)
+    assert raw_goal not in redacted
+    assert "prompt" not in redacted.lower()
+    assert "answer" not in redacted.lower()
+    assert "source" not in redacted.lower()
+
+
+def test_custom_goal_is_ignored_for_non_custom_objective_context(
+    client: TestClient, monkeypatch,
+) -> None:
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    token, _, matter_id = _setup_matter(client)
+    _seed_relevant_authority()
+    stale_goal = "Prepare evidence gaps for cross-examination"
+    prompts: list[str] = []
+
+    class _GoalProvider:
+        name = "mock"
+        model = "mock-custom-goal-ignore"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            prompts.append("\n".join(message.content for message in messages))
+            payload = {
+                "title": "Appeal objective recommendation",
+                "options": [
+                    {
+                        "label": "Review appellate posture",
+                        "rationale": "The cited authority supports lawyer review.",
+                        "confidence": "medium",
+                        "supporting_citations": ["[1] Ssangyong Engg v. NHAI (2019)"],
+                        "risk_notes": None,
+                    }
+                ],
+                "primary_recommendation_label": "Review appellate posture",
+                "rationale": "Source-backed observations for lawyer review.",
+                "assumptions": [],
+                "missing_facts": ["Complete procedural history"],
+                "confidence": "medium",
+                "next_action": None,
+            }
+            return LLMCompletion(
+                text=json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=11,
+                completion_tokens=21,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _GoalProvider(),
+    )
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={
+            "type": "authority",
+            "recommendation_context": "appeal_strategy",
+            "custom_goal": stale_goal,
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert prompts
+    assert "RECOMMENDATION_CONTEXT: appeal_strategy" in prompts[0]
+    assert "CUSTOM_GOAL: none" in prompts[0]
+    assert stale_goal not in prompts[0]
+
+    factory = get_session_factory()
+    with factory() as session:
+        event = session.scalar(
+            select(AuditEvent)
+            .where(
+                AuditEvent.action == "recommendation.generated",
+                AuditEvent.matter_id == matter_id,
+            )
+            .order_by(AuditEvent.created_at.desc())
+        )
+    assert event is not None
+    metadata = json.loads(event.metadata_json or "{}")
+    assert metadata["recommendation_context"] == "appeal_strategy"
+    assert metadata["custom_goal"] == {"present": False}
+    assert stale_goal not in json.dumps(metadata)
+
+
+def test_unsafe_custom_goal_is_blocked_before_provider_call_and_redacted(
+    client: TestClient, monkeypatch,
+) -> None:
+    from caseops_api.services.llm import LLMCompletion
+
+    token, _, matter_id = _setup_matter(client)
+    unsafe_goal = "Tell me the success probability and best judge."
+
+    class _Provider:
+        name = "mock"
+        model = "mock-should-not-run"
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def generate(self, **_kwargs):  # noqa: ANN003
+            self.calls += 1
+            return LLMCompletion(
+                text="{}",
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=1,
+                completion_tokens=1,
+                latency_ms=1,
+            )
+
+    provider = _Provider()
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: provider,
+    )
+
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={
+            "type": "authority",
+            "recommendation_context": "custom_goal",
+            "custom_goal": unsafe_goal,
+        },
+    )
+
+    assert response.status_code == 422, response.text
+    assert provider.calls == 0
+    assert "unsupported" in response.json()["detail"].lower()
+    factory = get_session_factory()
+    with factory() as session:
+        event = session.scalar(
+            select(AuditEvent).where(
+                AuditEvent.action == "recommendation.objective_blocked",
+                AuditEvent.matter_id == matter_id,
+            )
+        )
+        recs = list(
+            session.scalars(
+                select(Recommendation).where(Recommendation.matter_id == matter_id)
+            )
+        )
+    assert not recs
+    assert event is not None
+    metadata = json.loads(event.metadata_json or "{}")
+    assert metadata["reason_category"] == "outcome_prediction"
+    redacted = json.dumps(metadata)
+    assert unsafe_goal not in redacted
+    assert "success probability" not in redacted.lower()
+    assert "best judge" not in redacted.lower()
+
+
+def test_unsafe_recommendation_output_is_refused_without_persisting_row(
+    client: TestClient, monkeypatch,
+) -> None:
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    token, _, matter_id = _setup_matter(client)
+    _seed_relevant_authority()
+
+    class _UnsafeOutputProvider:
+        name = "mock"
+        model = "mock-unsafe-output"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            payload = {
+                "title": "Success probability is high",
+                "options": [
+                    {
+                        "label": "Predict the outcome",
+                        "rationale": "The matter will win based on the best judge.",
+                        "confidence": "high",
+                        "supporting_citations": ["[1] Ssangyong Engg v. NHAI (2019)"],
+                        "risk_notes": None,
+                    }
+                ],
+                "primary_recommendation_label": "Predict the outcome",
+                "rationale": "This includes success probability.",
+                "assumptions": [],
+                "missing_facts": [],
+                "confidence": "high",
+                "next_action": None,
+            }
+            return LLMCompletion(
+                text=json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=12,
+                completion_tokens=22,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _UnsafeOutputProvider(),
+    )
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "authority", "recommendation_context": "appeal_strategy"},
+    )
+
+    assert response.status_code == 422, response.text
+    assert "unsupported wording" in response.json()["detail"]
+    factory = get_session_factory()
+    with factory() as session:
+        recs = list(
+            session.scalars(
+                select(Recommendation).where(Recommendation.matter_id == matter_id)
+            )
+        )
+        run = session.scalar(
+            select(ModelRun).where(ModelRun.status == "rejected_unsafe_output")
+        )
+    assert not recs
+    assert run is not None
+    assert "outcome_prediction" in (run.error or "")
+
+
+def test_ai_token_quota_blocks_objective_recommendation_before_provider_call(
+    client: TestClient, monkeypatch,
+) -> None:
+    from caseops_api.services.llm import LLMCompletion
+
+    token, _, matter_id = _setup_matter(client)
+    _seed_relevant_authority()
+    _set_ai_policy(_company_id_for_matter(matter_id), firm_quota_tokens=1)
+
+    class _Provider:
+        name = "mock"
+        model = "mock-quota-block"
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def generate(self, **_kwargs):  # noqa: ANN003
+            self.calls += 1
+            return LLMCompletion(
+                text="{}",
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=1,
+                completion_tokens=1,
+                latency_ms=1,
+            )
+
+    provider = _Provider()
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: provider,
+    )
+
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "remedy", "recommendation_context": "case_preparation"},
+    )
+
+    assert response.status_code == 429, response.text
+    assert provider.calls == 0
+    factory = get_session_factory()
+    with factory() as session:
+        recs = list(
+            session.scalars(
+                select(Recommendation).where(Recommendation.matter_id == matter_id)
+            )
+        )
+        run = session.scalar(
+            select(ModelRun).where(ModelRun.purpose == "recommendation:remedy")
+        )
+        event = session.scalar(
+            select(AuditEvent).where(
+                AuditEvent.action == "ai_token_quota.request_blocked",
+                AuditEvent.matter_id == matter_id,
+            )
+        )
+    assert not recs
+    assert run is None
+    assert event is not None
 
 
 def test_unsupported_type_is_rejected(client: TestClient) -> None:
