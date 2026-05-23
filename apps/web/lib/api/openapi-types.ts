@@ -2552,6 +2552,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matters/{matter_id}/communications/timeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the unified communications timeline for a matter (ADP-05). */
+        get: operations["list_current_matter_communication_timeline_api_matters__matter_id__communications_timeline_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matters/{matter_id}/conflict-checks": {
         parameters: {
             query?: never;
@@ -6082,6 +6099,101 @@ export interface components {
             status: "logged" | "queued" | "sent" | "delivered" | "opened" | "bounced" | "failed";
             /** Subject */
             subject: string | null;
+        };
+        /**
+         * CommunicationTimelineAttachmentReference
+         * @description Bounded attachment card for the unified communications timeline.
+         *
+         *     The timeline intentionally exposes existing matter attachment metadata
+         *     only. It never returns storage keys, hashes, extracted text, OCR text, or
+         *     attachment payloads.
+         */
+        CommunicationTimelineAttachmentReference: {
+            /** Content Type */
+            content_type: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Document Type */
+            document_type: string | null;
+            /** Filename */
+            filename: string;
+            /** Id */
+            id: string;
+            /** Size Bytes */
+            size_bytes: number | null;
+            /** Submitted By Portal User Id */
+            submitted_by_portal_user_id: string | null;
+            /** Uploaded By Membership Id */
+            uploaded_by_membership_id: string | null;
+        };
+        /** CommunicationTimelineItem */
+        CommunicationTimelineItem: {
+            /** Actor Label */
+            actor_label?: string | null;
+            attachment?: components["schemas"]["CommunicationTimelineAttachmentReference"] | null;
+            /** Attachment Id */
+            attachment_id?: string | null;
+            /** Channel */
+            channel?: ("email" | "sms" | "phone" | "meeting" | "note") | null;
+            /** Communication Id */
+            communication_id?: string | null;
+            /** Direction */
+            direction?: ("outbound" | "inbound") | null;
+            /** Id */
+            id: string;
+            /**
+             * Item Type
+             * @enum {string}
+             */
+            item_type: "platform_message" | "imported_email" | "email_thread" | "attachment" | "internal_note" | "client_visible_note" | "outside_counsel_visible_update";
+            /** Metadata */
+            metadata?: {
+                [key: string]: string | number | boolean | null;
+            };
+            /** Note Id */
+            note_id?: string | null;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Preview */
+            preview?: string | null;
+            /** Source Id */
+            source_id: string;
+            /** Source Type */
+            source_type: string;
+            /** Status */
+            status?: ("logged" | "queued" | "sent" | "delivered" | "opened" | "bounced" | "failed") | null;
+            /** Thread Key */
+            thread_key?: string | null;
+            /** Title */
+            title: string;
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "internal" | "firm_only" | "client_visible" | "outside_counsel_visible" | "imported_email";
+        };
+        /** CommunicationTimelineResponse */
+        CommunicationTimelineResponse: {
+            /**
+             * Filter
+             * @enum {string}
+             */
+            filter: "all" | "email" | "platform" | "notes" | "attachments" | "internal";
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Items */
+            items: components["schemas"]["CommunicationTimelineItem"][];
+            /** Matter Id */
+            matter_id: string;
         };
         /** CompanyProfileResponse */
         CompanyProfileResponse: {
@@ -18898,6 +19010,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CommunicationRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_current_matter_communication_timeline_api_matters__matter_id__communications_timeline_get: {
+        parameters: {
+            query?: {
+                filter?: "all" | "email" | "platform" | "notes" | "attachments" | "internal";
+            };
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommunicationTimelineResponse"];
                 };
             };
             /** @description Validation Error */

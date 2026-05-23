@@ -1532,25 +1532,35 @@ Tests:
 Type: Backend + Web
 Priority: P1
 Dependencies: Communications, manual inbound email import
+Status: Foundation implemented 2026-05-23; matter communications now expose a
+read-only unified timeline over existing platform communications, manual
+imported emails, matter attachment references, and internal matter notes.
+The foundation does not add mailbox sweep, provider sync, autonomous polling,
+webhooks, notification delivery, or external email sending changes.
 
 Scope:
 
 - Unified matter timeline.
 - Platform messages, imported email, attachments, internal notes.
-- Thread grouping foundation.
-- Visibility labels.
+- Thread grouping foundation using existing provider/message metadata.
+- Visibility labels for internal, firm-only, client-visible,
+  outside-counsel-visible, and imported-email items.
 
 Out of scope:
 
 - Provider mailbox sweep.
 - External email sending changes.
+- Gmail/Outlook provider sync, mailbox polling, user-facing notifications,
+  and attachment/body payload duplication.
 
 Tests:
 
 - Timeline sort/filter.
 - Thread grouping.
 - Portal visibility denial for internal notes.
-- Audit redaction.
+- Attachment references without payload duplication.
+- Matter access, cross-tenant, restricted/team/ethical-wall denial.
+- No autonomous mailbox sweep/provider connector surface.
 
 ### ADP-06: Safe Judge/Court Analytics Expansion
 

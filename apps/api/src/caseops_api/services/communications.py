@@ -38,11 +38,18 @@ from caseops_api.db.models import (
     Matter,
     MatterActivity,
     MatterAttachment,
+    MatterNote,
+    PortalUser,
+    PortalUserRole,
 )
 from caseops_api.schemas.communications import (
     CommunicationCreateRequest,
     CommunicationListResponse,
     CommunicationRecord,
+    CommunicationTimelineAttachmentReference,
+    CommunicationTimelineFilter,
+    CommunicationTimelineItem,
+    CommunicationTimelineResponse,
     InboundEmailAttachmentImport,
     InboundEmailImportRequest,
     InboundEmailImportResponse,
@@ -70,6 +77,7 @@ logger = logging.getLogger(__name__)
 _EMAIL_BODY_ATTACHMENT_TYPE = "correspondence"
 _EMAIL_BODY_LIFECYCLE_STAGE = "administrative"
 _MAX_AUDIT_HASH_LEN = 16
+_TIMELINE_LIMIT = 500
 
 
 def _load_matter(
@@ -107,6 +115,367 @@ def list_matter_communications(
     return CommunicationListResponse(
         matter_id=matter.id,
         communications=[CommunicationRecord.model_validate(r) for r in rows],
+    )
+
+
+def _as_value(value: object) -> str:
+    return str(getattr(value, "value", value))
+
+
+def _timeline_preview(text: str | None, *, max_chars: int = 320) -> str | None:
+    if text is None:
+        return None
+    cleaned = " ".join(text.split())
+    if not cleaned:
+        return None
+    if len(cleaned) <= max_chars:
+        return cleaned
+    return cleaned[: max_chars - 1].rstrip() + "…"
+
+
+def _is_imported_email(row: Communication) -> bool:
+    metadata = row.metadata_json or {}
+    return isinstance(metadata, dict) and (
+        metadata.get("source") == "manual_inbound_email_import"
+        or metadata.get("automation_mode") == "manual_only"
+    )
+
+
+def _communication_visibility(row: Communication) -> str:
+    metadata = row.metadata_json or {}
+    if _is_imported_email(row):
+        return "imported_email"
+    if isinstance(metadata, dict):
+        if metadata.get("portal_visible") is False:
+            return "internal"
+        if metadata.get("portal_user_id"):
+            return "client_visible"
+        if (
+            metadata.get("outside_counsel_portal_user_id")
+            or metadata.get("actor_surface") == "outside_counsel_portal"
+        ):
+            return "outside_counsel_visible"
+    return "firm_only"
+
+
+def _communication_item_type(row: Communication) -> str:
+    metadata = row.metadata_json or {}
+    if _is_imported_email(row):
+        return "imported_email"
+    if (
+        _as_value(row.channel) == CommunicationChannel.NOTE.value
+        and isinstance(metadata, dict)
+        and metadata.get("portal_user_id")
+    ):
+        return "client_visible_note"
+    if (
+        isinstance(metadata, dict)
+        and (
+            metadata.get("outside_counsel_portal_user_id")
+            or metadata.get("actor_surface") == "outside_counsel_portal"
+        )
+    ):
+        return "outside_counsel_visible_update"
+    return "platform_message"
+
+
+def _communication_thread_key(row: Communication) -> str | None:
+    if _as_value(row.channel) != CommunicationChannel.EMAIL.value:
+        return None
+    metadata = row.metadata_json or {}
+    if isinstance(metadata, dict):
+        for key in (
+            "provider_thread_id",
+            "thread_id",
+            "conversation_id",
+            "provider_conversation_id",
+        ):
+            value = metadata.get(key)
+            if isinstance(value, str) and value.strip():
+                provider = _normalised_provider(
+                    str(metadata.get("provider") or "email")
+                )
+                return f"{provider}:{value.strip()}"
+    return row.external_message_id
+
+
+def _communication_title(row: Communication) -> str:
+    if row.subject and row.subject.strip():
+        return row.subject.strip()
+    channel = _as_value(row.channel)
+    direction = _as_value(row.direction)
+    if _is_imported_email(row):
+        return "Imported email"
+    return f"{str(channel).replace('_', ' ').title()} ({direction})"
+
+
+def _communication_actor(row: Communication) -> str | None:
+    metadata = row.metadata_json or {}
+    if _is_imported_email(row):
+        sender_name = metadata.get("sender_name") if isinstance(metadata, dict) else None
+        return str(sender_name).strip() if sender_name else "Imported email sender"
+    if isinstance(metadata, dict):
+        if metadata.get("portal_user_id"):
+            return "Client portal"
+        if (
+            metadata.get("outside_counsel_portal_user_id")
+            or metadata.get("actor_surface") == "outside_counsel_portal"
+        ):
+            return "Outside counsel portal"
+    if row.recipient_name:
+        return row.recipient_name
+    return "Firm user"
+
+
+def _timeline_attachment_reference(
+    attachment: MatterAttachment,
+) -> CommunicationTimelineAttachmentReference:
+    return CommunicationTimelineAttachmentReference(
+        id=attachment.id,
+        filename=attachment.original_filename,
+        content_type=attachment.content_type,
+        size_bytes=attachment.size_bytes,
+        document_type=attachment.document_type,
+        uploaded_by_membership_id=attachment.uploaded_by_membership_id,
+        submitted_by_portal_user_id=attachment.submitted_by_portal_user_id,
+        created_at=attachment.created_at,
+    )
+
+
+def _attachment_visibility(
+    attachment: MatterAttachment,
+    *,
+    email_attachment_ids: set[str],
+    portal_roles_by_id: dict[str, str],
+) -> str:
+    if attachment.id in email_attachment_ids:
+        return "imported_email"
+    if attachment.submitted_by_portal_user_id:
+        role = portal_roles_by_id.get(attachment.submitted_by_portal_user_id)
+        if role == PortalUserRole.OUTSIDE_COUNSEL.value:
+            return "outside_counsel_visible"
+        return "client_visible"
+    return "firm_only"
+
+
+def _attachment_preview(
+    attachment: MatterAttachment, *, email_attachment_ids: set[str],
+) -> str:
+    if attachment.id in email_attachment_ids:
+        if attachment.original_filename == "email-body.txt":
+            return "Email body is stored as a matter attachment; body content is not shown here."
+        return "Attachment imported from a manually selected email."
+    if attachment.submitted_by_portal_user_id:
+        return "Portal-uploaded matter attachment reference."
+    return "Matter attachment reference."
+
+
+def _timeline_filter_matches(
+    item: CommunicationTimelineItem,
+    selected: CommunicationTimelineFilter,
+) -> bool:
+    if selected == "all":
+        return True
+    if selected == "email":
+        return item.item_type in {"imported_email", "email_thread"} or (
+            item.channel == "email"
+        ) or item.visibility == "imported_email"
+    if selected == "platform":
+        return item.item_type in {
+            "platform_message",
+            "client_visible_note",
+            "outside_counsel_visible_update",
+        } and item.visibility != "imported_email"
+    if selected == "notes":
+        return item.item_type in {"internal_note", "client_visible_note"} or (
+            item.channel == "note"
+        )
+    if selected == "attachments":
+        return item.item_type == "attachment"
+    if selected == "internal":
+        return item.visibility in {"internal", "firm_only"}
+    return True
+
+
+def list_matter_communication_timeline(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+    selected_filter: CommunicationTimelineFilter = "all",
+) -> CommunicationTimelineResponse:
+    """Read-only unified matter communications timeline.
+
+    ADP-05 deliberately composes existing records only: communications,
+    manually imported email artifacts, internal matter notes, and matter
+    attachment references. It does not poll mailboxes, accept provider
+    webhooks, copy payloads, or expose storage keys/full email bodies.
+    """
+    matter = _load_matter(session, context=context, matter_id=matter_id)
+    communications = list(
+        session.scalars(
+            select(Communication)
+            .where(Communication.matter_id == matter.id)
+            .order_by(Communication.occurred_at.asc(), Communication.created_at.asc())
+            .limit(_TIMELINE_LIMIT)
+        )
+    )
+    notes = list(
+        session.scalars(
+            select(MatterNote)
+            .where(MatterNote.matter_id == matter.id)
+            .order_by(MatterNote.created_at.asc())
+            .limit(_TIMELINE_LIMIT)
+        )
+    )
+    attachments = list(
+        session.scalars(
+            select(MatterAttachment)
+            .where(MatterAttachment.matter_id == matter.id)
+            .order_by(MatterAttachment.created_at.asc())
+            .limit(_TIMELINE_LIMIT)
+        )
+    )
+
+    thread_counts: dict[str, int] = {}
+    for row in communications:
+        thread_key = _communication_thread_key(row)
+        if thread_key:
+            thread_counts[thread_key] = thread_counts.get(thread_key, 0) + 1
+
+    email_attachment_ids: set[str] = set()
+    email_attachment_sources: dict[str, Communication] = {}
+    for row in communications:
+        metadata = row.metadata_json or {}
+        if not isinstance(metadata, dict) or not _is_imported_email(row):
+            continue
+        ids = list(metadata.get("attachment_ids") or [])
+        body_attachment_id = metadata.get("body_attachment_id")
+        if body_attachment_id:
+            ids.append(body_attachment_id)
+        for attachment_id in ids:
+            if isinstance(attachment_id, str):
+                email_attachment_ids.add(attachment_id)
+                email_attachment_sources[attachment_id] = row
+
+    portal_ids = {
+        attachment.submitted_by_portal_user_id
+        for attachment in attachments
+        if attachment.submitted_by_portal_user_id
+    }
+    portal_roles_by_id: dict[str, str] = {}
+    if portal_ids:
+        portal_roles_by_id = {
+            user.id: user.role
+            for user in session.scalars(
+                select(PortalUser).where(
+                    PortalUser.company_id == context.company.id,
+                    PortalUser.id.in_(portal_ids),
+                )
+            )
+        }
+
+    items: list[CommunicationTimelineItem] = []
+    for row in communications:
+        thread_key = _communication_thread_key(row)
+        metadata = {
+            "thread_message_count": thread_counts.get(thread_key, 0)
+            if thread_key
+            else 0,
+            "has_attachments": bool(
+                isinstance(row.metadata_json, dict)
+                and row.metadata_json.get("attachment_ids")
+            ),
+            "body_is_preview": _is_imported_email(row),
+        }
+        items.append(
+            CommunicationTimelineItem(
+                id=f"communication:{row.id}",
+                item_type=_communication_item_type(row),
+                visibility=_communication_visibility(row),
+                occurred_at=row.occurred_at,
+                title=_communication_title(row),
+                preview=_timeline_preview(row.body),
+                actor_label=_communication_actor(row),
+                direction=_as_value(row.direction),
+                channel=_as_value(row.channel),
+                status=_as_value(row.status),
+                thread_key=thread_key,
+                source_type="communication",
+                source_id=row.id,
+                communication_id=row.id,
+                metadata=metadata,
+            )
+        )
+
+    for note in notes:
+        items.append(
+            CommunicationTimelineItem(
+                id=f"note:{note.id}",
+                item_type="internal_note",
+                visibility="internal",
+                occurred_at=note.created_at,
+                title="Internal note",
+                preview=_timeline_preview(note.body),
+                actor_label="Firm user",
+                source_type="matter_note",
+                source_id=note.id,
+                note_id=note.id,
+                metadata={"internal_only": True},
+            )
+        )
+
+    for attachment in attachments:
+        email_source = email_attachment_sources.get(attachment.id)
+        source_label = "attachment"
+        metadata = {
+            "size_bytes": attachment.size_bytes,
+            "is_email_body_attachment": (
+                attachment.original_filename == "email-body.txt"
+                and attachment.id in email_attachment_ids
+            ),
+            "from_imported_email": attachment.id in email_attachment_ids,
+        }
+        if email_source is not None:
+            source_label = "imported_email_attachment"
+            metadata["communication_id"] = email_source.id
+        items.append(
+            CommunicationTimelineItem(
+                id=f"attachment:{attachment.id}",
+                item_type="attachment",
+                visibility=_attachment_visibility(
+                    attachment,
+                    email_attachment_ids=email_attachment_ids,
+                    portal_roles_by_id=portal_roles_by_id,
+                ),
+                occurred_at=attachment.created_at,
+                title=f"Attachment: {attachment.original_filename}",
+                preview=_attachment_preview(
+                    attachment,
+                    email_attachment_ids=email_attachment_ids,
+                ),
+                actor_label="Attachment reference",
+                thread_key=_communication_thread_key(email_source)
+                if email_source is not None
+                else None,
+                source_type=source_label,
+                source_id=attachment.id,
+                communication_id=email_source.id if email_source is not None else None,
+                attachment_id=attachment.id,
+                attachment=_timeline_attachment_reference(attachment),
+                metadata=metadata,
+            )
+        )
+
+    filtered = [
+        item for item in items if _timeline_filter_matches(item, selected_filter)
+    ]
+    filtered.sort(key=lambda item: (item.occurred_at, item.id))
+    return CommunicationTimelineResponse(
+        matter_id=matter.id,
+        filter=selected_filter,
+        generated_at=datetime.now(UTC),
+        items=filtered[:_TIMELINE_LIMIT],
     )
 
 

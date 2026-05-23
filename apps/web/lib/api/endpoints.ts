@@ -15,6 +15,8 @@ import {
   type CommunicationDirection,
   type CommunicationListResponse,
   type CommunicationRecord,
+  type CommunicationTimelineFilter,
+  type CommunicationTimelineResponse,
   type ContractsList,
   type DecisionKind,
   type Draft,
@@ -69,6 +71,7 @@ import {
   outlookBulkSyncResponse,
   communicationListResponse,
   communicationRecord,
+  communicationTimelineResponse,
   contractsList,
   draft,
   draftList,
@@ -4338,6 +4341,21 @@ export async function fetchMatterCommunications(
     `/api/matters/${matterId}/communications`,
   );
   return communicationListResponse.parse(data);
+}
+
+export async function fetchMatterCommunicationTimeline(input: {
+  matterId: string;
+  filter?: CommunicationTimelineFilter;
+}): Promise<CommunicationTimelineResponse> {
+  const params = new URLSearchParams();
+  if (input.filter && input.filter !== "all") {
+    params.set("filter", input.filter);
+  }
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  const data = await apiRequest<unknown>(
+    `/api/matters/${input.matterId}/communications/timeline${suffix}`,
+  );
+  return communicationTimelineResponse.parse(data);
 }
 
 export async function createMatterCommunication(input: {
