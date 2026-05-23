@@ -1568,6 +1568,12 @@ Type: Backend + Web
 Priority: P1
 Dependencies: Judge catalog, authority metadata
 
+Status: Foundation implemented 2026-05-23; court and judge profiles now expose
+read-only descriptive context analytics from existing authority metadata, with
+source-backed case lists, bounded summaries, sample-size gating, and limitation
+messages. No provider calls, corpus jobs, or predictive judge/court selection
+features were added.
+
 Scope:
 
 - Descriptive judge profile expansion.

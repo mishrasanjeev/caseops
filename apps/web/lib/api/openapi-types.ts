@@ -4571,6 +4571,13 @@ export interface components {
              */
             updated_at: string;
         };
+        /** AnalyticsCount */
+        AnalyticsCount: {
+            /** Count */
+            count: number;
+            /** Label */
+            label: string;
+        };
         /** AnnotationCreateRequest */
         AnnotationCreateRequest: {
             /** Bbox */
@@ -4763,6 +4770,33 @@ export interface components {
              */
             token_type: "bearer";
             user: components["schemas"]["UserSummary"];
+        };
+        /** AuthorityAnalyticsCase */
+        AuthorityAnalyticsCase: {
+            /** Bench Name */
+            bench_name: string | null;
+            /** Case Reference */
+            case_reference: string | null;
+            /** Court Name */
+            court_name: string;
+            /** Decision Date */
+            decision_date: string | null;
+            /** Id */
+            id: string;
+            /** Neutral Citation */
+            neutral_citation: string | null;
+            /** Practice Area */
+            practice_area: string;
+            /** Source */
+            source: string;
+            /** Source Reference */
+            source_reference: string | null;
+            /** Statutes Or Sections */
+            statutes_or_sections?: string[];
+            /** Summary Preview */
+            summary_preview?: string | null;
+            /** Title */
+            title: string;
         };
         /**
          * AuthorityAnnotationCreateRequest
@@ -7130,6 +7164,7 @@ export interface components {
         };
         /** CourtProfileResponse */
         CourtProfileResponse: {
+            analytics?: components["schemas"]["DescriptiveAnalytics"] | null;
             /** Authority Document Count */
             authority_document_count: number;
             court: components["schemas"]["CourtRecord"];
@@ -7244,6 +7279,33 @@ export interface components {
             count: number;
             /** Year */
             year: number;
+        };
+        /** DescriptiveAnalytics */
+        DescriptiveAnalytics: {
+            /** Analyzed Document Count */
+            analyzed_document_count: number;
+            /** Case List */
+            case_list?: components["schemas"]["AuthorityAnalyticsCase"][];
+            /** Court Counts */
+            court_counts?: components["schemas"]["AnalyticsCount"][];
+            /** Disclaimer */
+            disclaimer: string;
+            /** Limitations */
+            limitations?: string[];
+            /** Pattern Claims Suppressed */
+            pattern_claims_suppressed: boolean;
+            /** Practice Area Counts */
+            practice_area_counts?: components["schemas"]["AnalyticsCount"][];
+            /** Practice Area Trends */
+            practice_area_trends?: components["schemas"]["PracticeAreaTrendPoint"][];
+            /** Sample Size */
+            sample_size: number;
+            /** Sample Size Label */
+            sample_size_label: string;
+            /** Sample Size Threshold */
+            sample_size_threshold: number;
+            /** Statute Counts */
+            statute_counts?: components["schemas"]["AnalyticsCount"][];
         };
         /** DocumentProcessingJobRecord */
         DocumentProcessingJobRecord: {
@@ -8985,6 +9047,7 @@ export interface components {
         };
         /** JudgeProfileResponse */
         JudgeProfileResponse: {
+            analytics?: components["schemas"]["DescriptiveAnalytics"] | null;
             /** Authority Document Count */
             authority_document_count: number;
             /** Career */
@@ -12477,6 +12540,15 @@ export interface components {
             area: string;
             /** Count */
             count: number;
+        };
+        /** PracticeAreaTrendPoint */
+        PracticeAreaTrendPoint: {
+            /** Area */
+            area: string;
+            /** Count */
+            count: number;
+            /** Year */
+            year: number;
         };
         /** PredictionConfidence */
         PredictionConfidence: {

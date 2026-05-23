@@ -2382,12 +2382,54 @@ export type CourtAuthorityStub = {
   neutral_citation: string | null;
 };
 
+export type CourtAnalyticsCount = {
+  label: string;
+  count: number;
+};
+
+export type CourtPracticeAreaTrendPoint = {
+  year: number;
+  area: string;
+  count: number;
+};
+
+export type CourtAnalyticsCase = {
+  id: string;
+  title: string;
+  court_name: string;
+  bench_name: string | null;
+  decision_date: string | null;
+  case_reference: string | null;
+  neutral_citation: string | null;
+  source: string;
+  source_reference: string | null;
+  practice_area: string;
+  statutes_or_sections: string[];
+  summary_preview: string | null;
+};
+
+export type CourtDescriptiveAnalytics = {
+  disclaimer: string;
+  sample_size: number;
+  analyzed_document_count: number;
+  sample_size_threshold: number;
+  sample_size_label: string;
+  pattern_claims_suppressed: boolean;
+  limitations: string[];
+  case_list: CourtAnalyticsCase[];
+  practice_area_counts: CourtAnalyticsCount[];
+  statute_counts: CourtAnalyticsCount[];
+  court_counts: CourtAnalyticsCount[];
+  practice_area_trends: CourtPracticeAreaTrendPoint[];
+};
+
 export type CourtProfile = {
   court: CourtRecord;
   judges: JudgeRecord[];
   portfolio_matter_count: number;
   authority_document_count: number;
   recent_authorities: CourtAuthorityStub[];
+  analytics?: CourtDescriptiveAnalytics | null;
 };
 
 export async function listCourts(params?: {
@@ -2430,6 +2472,7 @@ export type JudgeProfile = {
   portfolio_matter_count: number;
   authority_document_count: number;
   recent_authorities: CourtAuthorityStub[];
+  analytics?: CourtDescriptiveAnalytics | null;
   // P1 (Sprint P, 2026-04-25). Backend ships these today; the web
   // page just needs to render them. Optional with default fallback so
   // older cached responses don't break the type checker.

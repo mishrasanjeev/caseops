@@ -40,6 +40,36 @@ const PROFILE_FIXTURE = {
   portfolio_matter_count: 7,
   authority_document_count: 412,
   recent_authorities: [],
+  analytics: {
+    disclaimer:
+      "Descriptive historical context from indexed source records only; not legal advice, not a forecast, and not a forum-selection recommendation.",
+    sample_size: 6,
+    analyzed_document_count: 6,
+    sample_size_threshold: 5,
+    sample_size_label: "descriptive",
+    pattern_claims_suppressed: false,
+    limitations: ["Counts are descriptive metadata from indexed authority records."],
+    practice_area_counts: [{ label: "Commercial / Arbitration", count: 4 }],
+    statute_counts: [{ label: "Arbitration Act", count: 4 }],
+    court_counts: [],
+    practice_area_trends: [],
+    case_list: [
+      {
+        id: "auth-1",
+        title: "Acme v Zenith",
+        court_name: "Delhi High Court",
+        bench_name: "Justice A",
+        decision_date: "2026-01-01",
+        case_reference: "ARB.P. 1/2026",
+        neutral_citation: "2026:DHC:1",
+        source: "official",
+        source_reference: "https://official.example.test/acme.pdf",
+        practice_area: "Commercial / Arbitration",
+        statutes_or_sections: ["Section 11 Arbitration Act"],
+        summary_preview: "Bounded source-backed metadata summary.",
+      },
+    ],
+  },
   benches: [],
 };
 
@@ -65,6 +95,9 @@ describe("CourtProfilePage", () => {
     expect(screen.getByText("Your matters here")).toBeInTheDocument();
     expect(screen.getByText("2")).toBeInTheDocument(); // judges count
     expect(screen.getByText("7")).toBeInTheDocument(); // matters count
+    expect(screen.getByTestId("court-context-explorer")).toBeInTheDocument();
+    expect(screen.getByText("Court Context Explorer")).toBeInTheDocument();
+    expect(screen.getByText("Acme v Zenith")).toBeInTheDocument();
   });
 
   it("renders error state with retry when query fails", async () => {
