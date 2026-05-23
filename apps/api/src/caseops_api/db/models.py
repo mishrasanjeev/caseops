@@ -529,6 +529,9 @@ class Company(Base):
     website_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     practice_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
+    # ADP-01 storage governance. Null means no firm quota is enforced;
+    # this preserves legacy tenants until an admin sets a limit.
+    storage_quota_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     # Sprint 8c: when true, matter visibility for non-owners is gated
     # on team membership (plus existing ethical-wall + grant rules).
     # Default false means teams are metadata-only; flipping this on is

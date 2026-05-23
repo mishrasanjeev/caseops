@@ -68,6 +68,42 @@ describe("AdminPage audit export (P0-001 cookie-auth regression)", () => {
           predictive_bench_strategy_enabled: false,
         });
       }
+      if (url.includes("/api/admin/storage-governance")) {
+        const body = typeof init?.body === "string" ? JSON.parse(init.body) : {};
+        return jsonResponse({
+          company_id: "company-1",
+          used_bytes: 1073741824,
+          quota_bytes:
+            init?.method === "PATCH" ? body.quota_bytes : 5368709120,
+          remaining_bytes:
+            init?.method === "PATCH" && body.quota_bytes !== null
+              ? Math.max(body.quota_bytes - 1073741824, 0)
+              : 4294967296,
+          max_upload_size_bytes: 26214400,
+          state: "ok",
+          warning_threshold_percent: 90,
+          usage_by_matter: [
+            {
+              matter_id: "matter-1",
+              matter_code: "EXT-001",
+              matter_title: "External access matter",
+              used_bytes: 1073741824,
+              attachment_count: 2,
+            },
+          ],
+          largest_files: [
+            {
+              attachment_id: "file-1",
+              matter_id: "matter-1",
+              matter_code: "EXT-001",
+              matter_title: "External access matter",
+              original_filename: "pleading.pdf",
+              size_bytes: 1048576,
+            },
+          ],
+          archive_candidates: [],
+        });
+      }
       if (url.includes("/api/matters/")) {
         return jsonResponse({
           matters: [
@@ -232,6 +268,39 @@ describe("AdminPage audit export (P0-001 cookie-auth regression)", () => {
       can_upload: true,
       can_invoice: true,
       can_reply: false,
+    });
+  });
+
+  it("shows storage governance and patches the firm quota", async () => {
+    const user = userEvent.setup();
+    renderWithQuery(<AdminPage />);
+
+    const input = await screen.findByTestId("storage-quota-input");
+    await waitFor(() =>
+      expect((input as HTMLInputElement).value).toBe("5"),
+    );
+    await user.clear(input);
+    await user.type(input, "6");
+    await user.click(screen.getByTestId("storage-quota-save"));
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          ([request, init]) =>
+            String(request).includes("/api/admin/storage-governance") &&
+            init?.method === "PATCH",
+        ),
+      ).toBe(true),
+    );
+    const patchCall = fetchMock.mock.calls.find(
+      ([request, init]) =>
+        String(request).includes("/api/admin/storage-governance") &&
+        init?.method === "PATCH",
+    );
+    expect(patchCall).toBeDefined();
+    const [, init] = patchCall!;
+    expect(JSON.parse(String(init.body))).toEqual({
+      quota_bytes: 6442450944,
     });
   });
 });

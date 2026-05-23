@@ -4,6 +4,7 @@ import hashlib
 import os
 import re
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO
@@ -146,6 +147,7 @@ def persist_matter_attachment(
     attachment_id: str,
     filename: str,
     stream: BinaryIO,
+    before_store: Callable[[int], None] | None = None,
 ) -> StoredDocument:
     return persist_workspace_attachment(
         company_id=company_id,
@@ -153,6 +155,7 @@ def persist_matter_attachment(
         attachment_id=attachment_id,
         filename=filename,
         stream=stream,
+        before_store=before_store,
     )
 
 
@@ -182,6 +185,7 @@ def persist_workspace_attachment(
     filename: str,
     stream: BinaryIO,
     namespace: str = "matters",
+    before_store: Callable[[int], None] | None = None,
 ) -> StoredDocument:
     safe_filename = sanitize_filename(filename)
     safe_company_id = _safe_storage_segment(company_id, "company id")
@@ -199,6 +203,8 @@ def persist_workspace_attachment(
     backend = _storage_backend()
 
     try:
+        if before_store is not None:
+            before_store(size_bytes)
         if backend == "local":
             root = _document_root()
             target_path = (root / relative_path).resolve()

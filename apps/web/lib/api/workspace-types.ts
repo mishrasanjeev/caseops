@@ -71,6 +71,16 @@ export type WorkspaceAttachment = {
   created_at: string;
 };
 
+export type WorkspaceStorageGovernance = {
+  company_id: string;
+  used_bytes: number;
+  quota_bytes: number | null;
+  remaining_bytes: number | null;
+  max_upload_size_bytes: number;
+  state: "unlimited" | "ok" | "warning" | "hard_limit";
+  warning_threshold_percent: number;
+};
+
 export type WorkspacePaymentAttempt = {
   id: string;
   status: string;
@@ -181,6 +191,7 @@ export type WorkspaceResponse = {
   matter: WorkspaceMatter;
   assignee: WorkspaceMembership | null;
   available_assignees: WorkspaceMembership[];
+  storage_governance?: WorkspaceStorageGovernance;
   hearings: WorkspaceHearing[];
   attachments: WorkspaceAttachment[];
   invoices: WorkspaceInvoice[];

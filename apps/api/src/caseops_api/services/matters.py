@@ -98,6 +98,12 @@ from caseops_api.services.matter_access import (
     visible_matters_filter,
 )
 from caseops_api.services.matter_tags import slugify_tag
+from caseops_api.services.storage_governance import (
+    StorageQuotaExceeded,
+    assert_storage_quota_allows_upload,
+    get_storage_upload_policy,
+    record_storage_quota_blocked_upload,
+)
 
 logger = logging.getLogger(__name__)
 ACTIVE_STAY_STATUSES = {"granted", "continued", "modified"}
@@ -1540,6 +1546,10 @@ def get_matter_workspace(
             else None
         ),
         available_assignees=available_assignees,
+        storage_governance=get_storage_upload_policy(
+            session,
+            company_id=context.company.id,
+        ),
         tasks=[_task_record(task) for task in sorted(matter.tasks, key=_task_sort_key)],
         cause_list_entries=[
             _cause_list_entry_record(entry) for entry in matter.cause_list_entries
@@ -2503,6 +2513,7 @@ def create_matter_attachment(
     hearing_id: str | None = None,
 ) -> tuple[MatterAttachmentRecord, str]:
     matter = _get_matter_model(session, context=context, matter_id=matter_id)
+    audit_matter_id = matter.id
     linked_court_order_id = _validated_attachment_court_order_id(
         session,
         matter_id=matter.id,
@@ -2546,6 +2557,12 @@ def create_matter_attachment(
             attachment_id=attachment.id,
             filename=filename,
             stream=stream,
+            before_store=lambda size_bytes: assert_storage_quota_allows_upload(
+                session,
+                company_id=context.company.id,
+                matter_id=matter.id,
+                incoming_size_bytes=size_bytes,
+            ),
         )
         # §9.3: ClamAV scan on the persisted bytes. Skipped when
         # CASEOPS_CLAMAV_HOST is unset; raises 400 on infection.
@@ -2602,6 +2619,15 @@ def create_matter_attachment(
                 linked_court_order_id=linked_court_order_id,
             )
         session.commit()
+    except StorageQuotaExceeded as exc:
+        session.rollback()
+        record_storage_quota_blocked_upload(
+            session,
+            context=context,
+            matter_id=audit_matter_id,
+            error=exc,
+        )
+        raise exc.to_http_exception() from exc
     except Exception:
         session.rollback()
         raise

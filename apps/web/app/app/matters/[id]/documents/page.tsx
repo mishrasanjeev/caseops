@@ -464,6 +464,11 @@ export default function MatterDocumentsPage() {
   const hearingsById = new Map<string, WorkspaceHearing>(
     hearings.map((h) => [h.id, h]),
   );
+  const storagePolicy = data.storage_governance;
+  const uploadBlockedByQuota =
+    storagePolicy?.state === "hard_limit" &&
+    storagePolicy.quota_bytes !== null &&
+    (storagePolicy.remaining_bytes ?? 0) <= 0;
   const isFiltered =
     searchQ.trim().length > 0 || hearingFilter !== HEARING_FILTER_ALL;
   const affidavitSection = (
@@ -584,6 +589,29 @@ export default function MatterDocumentsPage() {
           />
         </div>
       </div>
+      {storagePolicy ? (
+        <div
+          className="mt-3 flex flex-wrap items-center gap-2 text-xs text-[var(--color-mute)]"
+          data-testid="matter-storage-upload-policy"
+        >
+          <span>Max file {humanSize(storagePolicy.max_upload_size_bytes)}</span>
+          <span>
+            Firm quota remaining{" "}
+            {storagePolicy.remaining_bytes === null
+              ? "Unlimited"
+              : humanSize(storagePolicy.remaining_bytes)}
+          </span>
+          {uploadBlockedByQuota ? (
+            <span
+              className="inline-flex items-center gap-1 font-medium text-red-700"
+              data-testid="matter-storage-upload-blocked"
+            >
+              <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
+              Firm storage quota reached
+            </span>
+          ) : null}
+        </div>
+      ) : null}
       <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
         <div className="w-full">
           <Label htmlFor="upload-linked-order">Linked order</Label>
@@ -644,7 +672,7 @@ export default function MatterDocumentsPage() {
           <Button
             type="button"
             size="sm"
-            disabled={uploadMutation.isPending}
+            disabled={uploadMutation.isPending || uploadBlockedByQuota}
             onClick={() => fileInput.current?.click()}
             data-testid="matter-attachment-upload"
           >

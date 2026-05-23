@@ -25,6 +25,10 @@ from caseops_api.schemas.audit import (
     AuditExportJobListResponse,
     AuditExportJobRecord,
 )
+from caseops_api.schemas.storage_governance import (
+    FirmStorageQuotaPatchRequest,
+    FirmStorageUsageSummary,
+)
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.audit_exports import (
     enqueue_export,
@@ -34,6 +38,10 @@ from caseops_api.services.audit_exports import (
     run_export_job,
 )
 from caseops_api.services.identity import SessionContext
+from caseops_api.services.storage_governance import (
+    get_firm_storage_summary,
+    update_firm_storage_quota,
+)
 
 router = APIRouter()
 # Capability gate: the dependency itself rejects with 403 before the
@@ -319,6 +327,39 @@ from caseops_api.db.models import TenantAIPolicy  # noqa: E402
 WorkspaceAdmin = Annotated[
     SessionContext, Depends(require_capability("workspace:admin"))
 ]
+
+
+@router.get(
+    "/storage-governance",
+    response_model=FirmStorageUsageSummary,
+    summary="Read firm storage usage, quota, and matter/file rollups.",
+)
+def get_storage_governance(
+    context: WorkspaceAdmin,
+    session: DbSession,
+) -> FirmStorageUsageSummary:
+    return get_firm_storage_summary(
+        session,
+        company_id=context.company.id,
+        context=context,
+    )
+
+
+@router.patch(
+    "/storage-governance",
+    response_model=FirmStorageUsageSummary,
+    summary="Update this firm's storage quota. Null quota means unlimited.",
+)
+def patch_storage_governance(
+    payload: FirmStorageQuotaPatchRequest,
+    context: WorkspaceAdmin,
+    session: DbSession,
+) -> FirmStorageUsageSummary:
+    return update_firm_storage_quota(
+        session,
+        context=context,
+        quota_bytes=payload.quota_bytes,
+    )
 
 
 class TenantAIPolicyResponse(BaseModel):

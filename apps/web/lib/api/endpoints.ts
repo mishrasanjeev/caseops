@@ -674,6 +674,58 @@ export type TenantAIPolicy = {
   predictive_bench_strategy_enabled: boolean;
 };
 
+export type StorageQuotaState = "unlimited" | "ok" | "warning" | "hard_limit";
+
+export type StorageUploadPolicy = {
+  company_id: string;
+  used_bytes: number;
+  quota_bytes: number | null;
+  remaining_bytes: number | null;
+  max_upload_size_bytes: number;
+  state: StorageQuotaState;
+  warning_threshold_percent: number;
+};
+
+export type StorageMatterUsage = {
+  matter_id: string;
+  matter_code: string;
+  matter_title: string;
+  used_bytes: number;
+  attachment_count: number;
+};
+
+export type StorageLargestFile = {
+  attachment_id: string;
+  matter_id: string;
+  matter_code: string;
+  matter_title: string;
+  original_filename: string;
+  size_bytes: number;
+};
+
+export type StorageArchiveCandidate = StorageMatterUsage & {
+  reason: string;
+};
+
+export type FirmStorageUsageSummary = StorageUploadPolicy & {
+  usage_by_matter: StorageMatterUsage[];
+  largest_files: StorageLargestFile[];
+  archive_candidates: StorageArchiveCandidate[];
+};
+
+export async function getStorageGovernance(): Promise<FirmStorageUsageSummary> {
+  return apiRequest<FirmStorageUsageSummary>("/api/admin/storage-governance");
+}
+
+export async function updateStorageGovernance(input: {
+  quotaBytes: number | null;
+}): Promise<FirmStorageUsageSummary> {
+  return apiRequest<FirmStorageUsageSummary>("/api/admin/storage-governance", {
+    method: "PATCH",
+    body: { quota_bytes: input.quotaBytes },
+  });
+}
+
 export async function getTenantAIPolicy(): Promise<TenantAIPolicy> {
   return apiRequest<TenantAIPolicy>("/api/admin/tenant-ai-policy");
 }

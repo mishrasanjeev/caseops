@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from caseops_api.schemas.billing import InvoiceRecord, TimeEntryRecord
 from caseops_api.schemas.document_processing import DocumentProcessingJobRecord
 from caseops_api.schemas.matter_tags import MatterTagRecord
+from caseops_api.schemas.storage_governance import StorageUploadPolicy
 
 MatterStatusLiteral = Literal["intake", "active", "on_hold", "closed"]
 MatterForumLevelLiteral = Literal[
@@ -708,6 +709,7 @@ class MatterWorkspaceResponse(BaseModel):
     matter: MatterRecord
     assignee: MatterWorkspaceMembership | None
     available_assignees: list[MatterWorkspaceMembership]
+    storage_governance: StorageUploadPolicy
     tasks: list[MatterTaskRecord]
     cause_list_entries: list[MatterCauseListEntryRecord]
     court_orders: list[MatterCourtOrderRecord]

@@ -180,6 +180,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/storage-governance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read firm storage usage, quota, and matter/file rollups. */
+        get: operations["get_storage_governance_api_admin_storage_governance_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update this firm's storage quota. Null quota means unlimited. */
+        patch: operations["patch_storage_governance_api_admin_storage_governance_patch"];
+        trace?: never;
+    };
     "/api/admin/tenant-ai-policy": {
         parameters: {
             query?: never;
@@ -7881,6 +7899,37 @@ export interface components {
             /** Template Type */
             template_type: string;
         };
+        /** FirmStorageQuotaPatchRequest */
+        FirmStorageQuotaPatchRequest: {
+            /** Quota Bytes */
+            quota_bytes: number | null;
+        };
+        /** FirmStorageUsageSummary */
+        FirmStorageUsageSummary: {
+            /** Archive Candidates */
+            archive_candidates: components["schemas"]["StorageArchiveCandidate"][];
+            /** Company Id */
+            company_id: string;
+            /** Largest Files */
+            largest_files: components["schemas"]["StorageLargestFile"][];
+            /** Max Upload Size Bytes */
+            max_upload_size_bytes: number;
+            /** Quota Bytes */
+            quota_bytes: number | null;
+            /** Remaining Bytes */
+            remaining_bytes: number | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "unlimited" | "ok" | "warning" | "hard_limit";
+            /** Usage By Matter */
+            usage_by_matter: components["schemas"]["StorageMatterUsage"][];
+            /** Used Bytes */
+            used_bytes: number;
+            /** Warning Threshold Percent */
+            warning_threshold_percent: number;
+        };
         /** ForumCatalogEntryRecord */
         ForumCatalogEntryRecord: {
             /** City */
@@ -10870,6 +10919,7 @@ export interface components {
             matter: components["schemas"]["MatterRecord"];
             /** Notes */
             notes: components["schemas"]["MatterNoteRecord"][];
+            storage_governance: components["schemas"]["StorageUploadPolicy"];
             /** Tasks */
             tasks: components["schemas"]["MatterTaskRecord"][];
             /** Time Entries */
@@ -12797,6 +12847,69 @@ export interface components {
             sections: components["schemas"]["StatuteSectionListItem"][];
             statute: components["schemas"]["StatuteRecord"];
         };
+        /** StorageArchiveCandidate */
+        StorageArchiveCandidate: {
+            /** Attachment Count */
+            attachment_count: number;
+            /** Matter Code */
+            matter_code: string;
+            /** Matter Id */
+            matter_id: string;
+            /** Matter Title */
+            matter_title: string;
+            /** Reason */
+            reason: string;
+            /** Used Bytes */
+            used_bytes: number;
+        };
+        /** StorageLargestFile */
+        StorageLargestFile: {
+            /** Attachment Id */
+            attachment_id: string;
+            /** Matter Code */
+            matter_code: string;
+            /** Matter Id */
+            matter_id: string;
+            /** Matter Title */
+            matter_title: string;
+            /** Original Filename */
+            original_filename: string;
+            /** Size Bytes */
+            size_bytes: number;
+        };
+        /** StorageMatterUsage */
+        StorageMatterUsage: {
+            /** Attachment Count */
+            attachment_count: number;
+            /** Matter Code */
+            matter_code: string;
+            /** Matter Id */
+            matter_id: string;
+            /** Matter Title */
+            matter_title: string;
+            /** Used Bytes */
+            used_bytes: number;
+        };
+        /** StorageUploadPolicy */
+        StorageUploadPolicy: {
+            /** Company Id */
+            company_id: string;
+            /** Max Upload Size Bytes */
+            max_upload_size_bytes: number;
+            /** Quota Bytes */
+            quota_bytes: number | null;
+            /** Remaining Bytes */
+            remaining_bytes: number | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "unlimited" | "ok" | "warning" | "hard_limit";
+            /** Used Bytes */
+            used_bytes: number;
+            /** Warning Threshold Percent */
+            warning_threshold_percent: number;
+        };
         /**
          * StrategyRisk
          * @description One downside the lawyer must factor in before pursuing the
@@ -13661,6 +13774,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PortalInviteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_storage_governance_api_admin_storage_governance_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FirmStorageUsageSummary"];
+                };
+            };
+        };
+    };
+    patch_storage_governance_api_admin_storage_governance_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FirmStorageQuotaPatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FirmStorageUsageSummary"];
                 };
             };
             /** @description Validation Error */
