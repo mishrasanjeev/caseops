@@ -7,6 +7,7 @@ the `Matter.court_name` freeform column still works.
 """
 from __future__ import annotations
 
+import json
 import re
 from collections import Counter
 from datetime import datetime
@@ -31,6 +32,16 @@ from caseops_api.services.identity import SessionContext
 
 router = APIRouter()
 CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
+
+_ANALYTICS_MIN_SAMPLE_SIZE = 5
+_ANALYTICS_CASE_LIST_LIMIT = 25
+_ANALYTICS_WORKING_SET_LIMIT = 500
+_MAX_SUMMARY_PREVIEW_CHARS = 280
+_MAX_SECTION_LABEL_CHARS = 100
+_ANALYTICS_DISCLAIMER = (
+    "Descriptive historical context from indexed source records only; not legal "
+    "advice, not a forecast, and not a forum-selection recommendation."
+)
 
 
 _HONORIFIC_RE = re.compile(
@@ -155,6 +166,252 @@ def _practice_area_histogram(
             tally["Other"] += 1
 
     return tally.most_common(limit)
+
+
+def _collapse_space(value: str | None) -> str:
+    return re.sub(r"\s+", " ", value or "").strip()
+
+
+def _bounded_text(value: str | None, *, max_chars: int) -> str | None:
+    text = _collapse_space(value)
+    if not text:
+        return None
+    if len(text) <= max_chars:
+        return text
+    return f"{text[: max_chars - 1].rstrip()}..."
+
+
+def _practice_area_from_blob(blob: str | None) -> str:
+    text = _collapse_space(blob)
+    if not text:
+        return "Other"
+    for area, rx in _PRACTICE_AREAS:
+        if rx.search(text):
+            return area
+    return "Other"
+
+
+def _iter_json_strings(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        text = _collapse_space(value)
+        return [text] if text else []
+    if isinstance(value, list):
+        labels: list[str] = []
+        for item in value:
+            labels.extend(_iter_json_strings(item))
+        return labels
+    if isinstance(value, dict):
+        preferred = (
+            "label",
+            "section",
+            "section_name",
+            "section_number",
+            "statute",
+            "act",
+            "title",
+            "name",
+        )
+        labels: list[str] = []
+        for key in preferred:
+            if key in value:
+                labels.extend(_iter_json_strings(value[key]))
+        if labels:
+            return labels
+        for item in value.values():
+            labels.extend(_iter_json_strings(item))
+        return labels
+    return [_collapse_space(str(value))]
+
+
+def _section_labels(sections_json: str | None, *, limit: int = 12) -> list[str]:
+    raw = _collapse_space(sections_json)
+    if not raw:
+        return []
+    try:
+        parsed: Any = json.loads(raw)
+        candidates = _iter_json_strings(parsed)
+    except json.JSONDecodeError:
+        candidates = re.split(r"[;\n|]+", raw)
+
+    labels: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        label = _bounded_text(candidate, max_chars=_MAX_SECTION_LABEL_CHARS)
+        if not label:
+            continue
+        key = label.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        labels.append(label)
+        if len(labels) >= limit:
+            break
+    return labels
+
+
+def _statute_label(section_label: str) -> str:
+    text = _collapse_space(section_label)
+    if not text:
+        return "Unspecified statute"
+    act_patterns = (
+        (r"negotiable\s+instruments\s+act", "Negotiable Instruments Act"),
+        (r"arbitration(?:\s+and\s+conciliation)?\s+act", "Arbitration Act"),
+        (r"indian\s+contract\s+act|contract\s+act", "Indian Contract Act"),
+        (r"specific\s+relief\s+act", "Specific Relief Act"),
+        (r"companies\s+act", "Companies Act"),
+        (r"insolvency|bankruptcy|ibc", "Insolvency and Bankruptcy Code"),
+        (r"income\s+tax\s+act", "Income Tax Act"),
+        (r"goods\s+and\s+services\s+tax|gst", "GST law"),
+        (r"constitution\s+of\s+india|article\s+\d+", "Constitution of India"),
+        (r"criminal\s+procedure|crpc", "Code of Criminal Procedure"),
+        (r"civil\s+procedure|cpc", "Code of Civil Procedure"),
+        (r"indian\s+penal\s+code|ipc", "Indian Penal Code"),
+        (r"bharatiya\s+nyaya\s+sanhita|bns\b", "Bharatiya Nyaya Sanhita"),
+        (r"bnss\b|bharatiya\s+nagarik\s+suraksha", "BNSS"),
+        (r"ndps", "NDPS Act"),
+        (r"pmla", "PMLA"),
+        (r"uapa", "UAPA"),
+    )
+    for pattern, label in act_patterns:
+        if re.search(pattern, text, flags=re.IGNORECASE):
+            return label
+    return text
+
+
+def _count_models(counter: Counter[str], *, limit: int = 10) -> list[AnalyticsCount]:
+    return [
+        AnalyticsCount(label=label, count=count)
+        for label, count in sorted(
+            counter.items(), key=lambda item: (-item[1], item[0].casefold())
+        )[:limit]
+    ]
+
+
+def _analytics_limitations(
+    *,
+    sample_size: int,
+    analyzed_document_count: int,
+    missing_source_reference_count: int,
+) -> list[str]:
+    limitations = [
+        "Counts are descriptive metadata from indexed authority records."
+    ]
+    if sample_size < _ANALYTICS_MIN_SAMPLE_SIZE:
+        limitations.append(
+            "Sample size is below the threshold for pattern language; review the "
+            "case list rather than inferring tendencies."
+        )
+    if analyzed_document_count < sample_size:
+        limitations.append(
+            f"Case and count details use the latest {analyzed_document_count} "
+            f"of {sample_size} indexed authorities."
+        )
+    if missing_source_reference_count:
+        limitations.append(
+            "Some authorities do not yet have source links in the catalog metadata."
+        )
+    return limitations
+
+
+def _authority_rows_for_filter(session: Any, authority_filter: Any) -> list[Any]:
+    return list(
+        session.execute(
+            select(
+                AuthorityDocument.id,
+                AuthorityDocument.title,
+                AuthorityDocument.court_name,
+                AuthorityDocument.bench_name,
+                AuthorityDocument.decision_date,
+                AuthorityDocument.case_reference,
+                AuthorityDocument.neutral_citation,
+                AuthorityDocument.source,
+                AuthorityDocument.source_reference,
+                AuthorityDocument.summary,
+                AuthorityDocument.sections_cited_json,
+            )
+            .where(authority_filter)
+            .order_by(AuthorityDocument.decision_date.desc().nulls_last())
+            .limit(_ANALYTICS_WORKING_SET_LIMIT)
+        ).all()
+    )
+
+
+def _build_descriptive_analytics(
+    *,
+    rows: list[Any],
+    sample_size: int,
+    include_court_counts: bool,
+) -> DescriptiveAnalytics:
+    missing_source_reference_count = sum(1 for row in rows if not row.source_reference)
+    pattern_claims_suppressed = sample_size < _ANALYTICS_MIN_SAMPLE_SIZE
+    practice_counts: Counter[str] = Counter()
+    statute_counts: Counter[str] = Counter()
+    court_counts: Counter[str] = Counter()
+    trend_counts: Counter[tuple[int, str]] = Counter()
+    case_list: list[AuthorityAnalyticsCase] = []
+
+    for index, row in enumerate(rows):
+        sections = _section_labels(row.sections_cited_json)
+        sections_blob = " ".join(sections) or row.sections_cited_json
+        practice_area = _practice_area_from_blob(sections_blob)
+        practice_counts[practice_area] += 1
+        if row.court_name:
+            court_counts[row.court_name] += 1
+        for section in sections:
+            statute_counts[_statute_label(section)] += 1
+        if row.decision_date and not pattern_claims_suppressed:
+            trend_counts[(row.decision_date.year, practice_area)] += 1
+        if index < _ANALYTICS_CASE_LIST_LIMIT:
+            case_list.append(
+                AuthorityAnalyticsCase(
+                    id=row.id,
+                    title=row.title,
+                    court_name=row.court_name,
+                    bench_name=row.bench_name,
+                    decision_date=(
+                        row.decision_date.isoformat() if row.decision_date else None
+                    ),
+                    case_reference=row.case_reference,
+                    neutral_citation=row.neutral_citation,
+                    source=row.source,
+                    source_reference=row.source_reference,
+                    practice_area=practice_area,
+                    statutes_or_sections=sections[:6],
+                    summary_preview=_bounded_text(
+                        row.summary, max_chars=_MAX_SUMMARY_PREVIEW_CHARS
+                    ),
+                )
+            )
+
+    trend_points = [
+        PracticeAreaTrendPoint(year=year, area=area, count=count)
+        for (year, area), count in sorted(
+            trend_counts.items(), key=lambda item: (item[0][0], item[0][1])
+        )[:24]
+    ]
+
+    return DescriptiveAnalytics(
+        disclaimer=_ANALYTICS_DISCLAIMER,
+        sample_size=sample_size,
+        analyzed_document_count=len(rows),
+        sample_size_threshold=_ANALYTICS_MIN_SAMPLE_SIZE,
+        sample_size_label=(
+            "insufficient" if pattern_claims_suppressed else "descriptive"
+        ),
+        pattern_claims_suppressed=pattern_claims_suppressed,
+        limitations=_analytics_limitations(
+            sample_size=sample_size,
+            analyzed_document_count=len(rows),
+            missing_source_reference_count=missing_source_reference_count,
+        ),
+        case_list=case_list,
+        practice_area_counts=_count_models(practice_counts, limit=8),
+        statute_counts=_count_models(statute_counts, limit=10),
+        court_counts=_count_models(court_counts, limit=8) if include_court_counts else [],
+        practice_area_trends=trend_points,
+    )
 
 
 class CourtRecord(BaseModel):
@@ -306,12 +563,54 @@ class AuthorityStub(BaseModel):
     neutral_citation: str | None
 
 
+class AnalyticsCount(BaseModel):
+    label: str
+    count: int
+
+
+class PracticeAreaTrendPoint(BaseModel):
+    year: int
+    area: str
+    count: int
+
+
+class AuthorityAnalyticsCase(BaseModel):
+    id: str
+    title: str
+    court_name: str
+    bench_name: str | None
+    decision_date: str | None
+    case_reference: str | None
+    neutral_citation: str | None
+    source: str
+    source_reference: str | None
+    practice_area: str
+    statutes_or_sections: list[str] = Field(default_factory=list)
+    summary_preview: str | None = None
+
+
+class DescriptiveAnalytics(BaseModel):
+    disclaimer: str
+    sample_size: int
+    analyzed_document_count: int
+    sample_size_threshold: int
+    sample_size_label: str
+    pattern_claims_suppressed: bool
+    limitations: list[str] = Field(default_factory=list)
+    case_list: list[AuthorityAnalyticsCase] = Field(default_factory=list)
+    practice_area_counts: list[AnalyticsCount] = Field(default_factory=list)
+    statute_counts: list[AnalyticsCount] = Field(default_factory=list)
+    court_counts: list[AnalyticsCount] = Field(default_factory=list)
+    practice_area_trends: list[PracticeAreaTrendPoint] = Field(default_factory=list)
+
+
 class CourtProfileResponse(BaseModel):
     court: CourtRecord
     judges: list[JudgeRecord]
     portfolio_matter_count: int
     authority_document_count: int
     recent_authorities: list[AuthorityStub]
+    analytics: DescriptiveAnalytics | None = None
 
 
 class PracticeAreaCount(BaseModel):
@@ -345,6 +644,7 @@ class JudgeProfileResponse(BaseModel):
     portfolio_matter_count: int
     authority_document_count: int
     recent_authorities: list[AuthorityStub]
+    analytics: DescriptiveAnalytics | None = None
     # Layer-2 derived tiles. `practice_areas` is a histogram of sections /
     # statutes cited in this judge's judgments (pulled from
     # authority_document_chunks.sections_cited_json). Empty list when
@@ -520,6 +820,12 @@ def get_judge_profile(
         int(round(100 * structured_count / authority_count))
         if authority_count else 0
     )
+    analytics_rows = _authority_rows_for_filter(session, authority_filter)
+    analytics = _build_descriptive_analytics(
+        rows=analytics_rows,
+        sample_size=authority_count,
+        include_court_counts=True,
+    )
 
     # Recent authorities: dedup by doc id; order by date desc.
     recent_authorities = list(
@@ -599,6 +905,7 @@ def get_judge_profile(
         court=CourtRecord.model_validate(court),
         portfolio_matter_count=int(portfolio_count),
         authority_document_count=authority_count,
+        analytics=analytics,
         recent_authorities=[
             AuthorityStub(
                 id=row.id,
@@ -679,6 +986,13 @@ def get_court_profile(
         )
         or 0
     )
+    court_authority_filter = AuthorityDocument.court_name == court.name
+    analytics_rows = _authority_rows_for_filter(session, court_authority_filter)
+    analytics = _build_descriptive_analytics(
+        rows=analytics_rows,
+        sample_size=int(authority_count),
+        include_court_counts=False,
+    )
     recent_authorities = list(
         session.execute(
             select(
@@ -698,6 +1012,7 @@ def get_court_profile(
         judges=[JudgeRecord.model_validate(j) for j in judges],
         portfolio_matter_count=int(portfolio_count),
         authority_document_count=int(authority_count),
+        analytics=analytics,
         recent_authorities=[
             AuthorityStub(
                 id=row.id,
