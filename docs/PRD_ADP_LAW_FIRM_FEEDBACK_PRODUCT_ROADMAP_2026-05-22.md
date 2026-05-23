@@ -1493,6 +1493,13 @@ Tests:
 Type: Backend + Web
 Priority: P1
 Dependencies: Authority corpus/retrieval, source validation
+Status: Foundation implemented 2026-05-23; authority search now supports an
+optional contextual mode that deterministically extracts bounded issue,
+statute, fact, timing, posture, and jurisdiction hints, then queries existing
+indexed authority records only. No LLM planner, corpus ingest, backfill, or
+embedding job is required. Audit metadata stores hashes/counts/filter flags,
+not raw fact patterns, snippets, judgment text, prompts, answers, or source
+payloads.
 
 Scope:
 
@@ -1505,6 +1512,11 @@ Scope:
 Out of scope:
 
 - Running new corpus ingest/backfill jobs.
+- Model-memory answers, legal advice, outcome prediction, success
+  probability, judge reputation scoring, judge shopping, best judge, or most
+  suitable judge logic.
+- Judgment monitoring, law amendment alerts, and user-facing notification
+  delivery.
 
 Tests:
 
@@ -1512,6 +1524,8 @@ Tests:
 - Keyword query compatibility.
 - Filter behavior.
 - No fabricated authorities.
+- Redacted contextual search audit metadata.
+- No ModelRun/provider call for deterministic contextual planning.
 
 ### ADP-05: Unified Communication Timeline Foundation
 

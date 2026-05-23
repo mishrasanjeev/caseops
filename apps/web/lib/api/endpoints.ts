@@ -3343,6 +3343,7 @@ export type AuthorityForumLevel =
   | "tribunal";
 
 export type AuthorityDocumentType = "judgment" | "order" | "statute" | "regulation" | "other";
+export type AuthoritySearchMode = "keyword" | "contextual";
 
 // PG-006 Phase 1B (2026-05-01) — good-law signal carried alongside
 // every search result so the result card can surface a treatment
@@ -3363,7 +3364,7 @@ export type AuthoritySearchResult = {
   court_name: string;
   forum_level: AuthorityForumLevel;
   document_type: AuthorityDocumentType;
-  decision_date: string;
+  decision_date: string | null;
   case_reference: string | null;
   bench_name: string | null;
   summary: string;
@@ -3372,12 +3373,24 @@ export type AuthoritySearchResult = {
   snippet: string;
   score: number;
   matched_terms: string[];
+  relevance_reason: string | null;
   worst_treatment: AuthorityCitationTreatment | null;
   adverse_count: number;
 };
 
+export type AuthorityContextualQueryPlan = {
+  key_facts: string[];
+  likely_issues: string[];
+  statutes_or_sections: string[];
+  procedural_posture: string[];
+  jurisdiction_hints: string[];
+  timing_signals: string[];
+  planned_query: string;
+};
+
 export async function searchAuthorities(input: {
   query: string;
+  mode?: AuthoritySearchMode;
   limit?: number;
   // PG-110 (2026-05-01): pagination + language filter.
   offset?: number;
@@ -3387,9 +3400,12 @@ export async function searchAuthorities(input: {
   documentType?: AuthorityDocumentType | null;
 }): Promise<{
   query: string;
+  mode: AuthoritySearchMode;
   provider: string;
   generated_at: string;
   results: AuthoritySearchResult[];
+  contextual_plan: AuthorityContextualQueryPlan | null;
+  coverage_notice: string | null;
   total_after_filter: number;
   offset: number;
 }> {
@@ -3397,6 +3413,7 @@ export async function searchAuthorities(input: {
     method: "POST",
     body: {
       query: input.query,
+      mode: input.mode ?? "keyword",
       limit: input.limit ?? 10,
       offset: input.offset ?? 0,
       language: input.language ?? "en",

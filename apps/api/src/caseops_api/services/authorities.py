@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 # reranker path downstream is left unchanged per the spec.
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
+    AuditResult,
     AuthorityCitation,
     AuthorityDocument,
     AuthorityDocumentChunk,
@@ -27,6 +28,7 @@ from caseops_api.db.models import (
     MembershipRole,
 )
 from caseops_api.schemas.authorities import (
+    AuthorityContextualQueryPlan,
     AuthorityCorpusStats,
     AuthorityDocumentListResponse,
     AuthorityDocumentRecord,
@@ -38,6 +40,7 @@ from caseops_api.schemas.authorities import (
     AuthoritySourceListResponse,
     AuthoritySourceRecord,
 )
+from caseops_api.services.audit import record_from_context
 from caseops_api.services.authority_sources import (
     AuthoritySourceDocument,
     get_authority_source_adapter,
@@ -109,6 +112,238 @@ _FORUM_PRECEDENT_BOOSTS: dict[str, dict[str, int]] = {
         "arbitration": 0,
     },
 }
+
+
+_SECTION_PATTERN = re.compile(
+    r"\b(?:section|sec\.?|s\.)\s*([0-9]{1,4}[a-z]?(?:\([^)]+\))?)",
+    re.IGNORECASE,
+)
+_TIMING_PATTERN = re.compile(
+    r"\b(?:after|within|beyond|delay(?:ed)?(?:\s+by)?|late(?:\s+by)?)\s+"
+    r"([0-9]{1,3})\s*(?:days?|day)\b",
+    re.IGNORECASE,
+)
+
+
+def _compact_text(value: str | None, *, max_chars: int) -> str:
+    text = re.sub(r"\s+", " ", value or "").strip()
+    if len(text) <= max_chars:
+        return text
+    clipped = text[:max_chars].rsplit(" ", 1)[0].strip()
+    return clipped or text[:max_chars].strip()
+
+
+def _append_unique(items: list[str], value: str, *, limit: int) -> None:
+    candidate = _compact_text(value, max_chars=90)
+    if not candidate:
+        return
+    seen = {item.casefold() for item in items}
+    if candidate.casefold() not in seen and len(items) < limit:
+        items.append(candidate)
+
+
+def _contains_any(text: str, terms: tuple[str, ...]) -> bool:
+    return any(term in text for term in terms)
+
+
+def _build_contextual_query_plan(query: str) -> AuthorityContextualQueryPlan:
+    normalized_query = _compact_text(query, max_chars=600)
+    lower = normalized_query.casefold()
+    key_facts: list[str] = []
+    likely_issues: list[str] = []
+    statutes_or_sections: list[str] = []
+    procedural_posture: list[str] = []
+    jurisdiction_hints: list[str] = []
+    timing_signals: list[str] = []
+
+    for match in _SECTION_PATTERN.finditer(normalized_query):
+        _append_unique(
+            statutes_or_sections,
+            f"Section {match.group(1).upper()}",
+            limit=6,
+        )
+
+    cheque_context = _contains_any(lower, ("cheque", "check"))
+    dishonour_context = _contains_any(
+        lower,
+        ("bounce", "bounced", "dishonour", "dishonored", "dishonoured"),
+    )
+    if cheque_context and dishonour_context:
+        _append_unique(key_facts, "cheque dishonour", limit=6)
+        _append_unique(
+            likely_issues,
+            "Section 138 cheque dishonour",
+            limit=6,
+        )
+        _append_unique(
+            statutes_or_sections,
+            "Section 138 Negotiable Instruments Act",
+            limit=6,
+        )
+    if "insufficient funds" in lower:
+        _append_unique(key_facts, "dishonour for insufficient funds", limit=6)
+    if "notice" in lower:
+        _append_unique(key_facts, "statutory demand notice", limit=6)
+        if cheque_context:
+            _append_unique(
+                likely_issues,
+                "demand notice timing for cheque dishonour",
+                limit=6,
+            )
+            _append_unique(
+                statutes_or_sections,
+                "Section 142 Negotiable Instruments Act",
+                limit=6,
+            )
+
+    for match in _TIMING_PATTERN.finditer(normalized_query):
+        _append_unique(timing_signals, match.group(0), limit=4)
+    if _contains_any(lower, ("limitation", "time barred", "time-barred")):
+        _append_unique(likely_issues, "limitation", limit=6)
+
+    posture_terms = {
+        "appeal": "appeal",
+        "writ": "writ petition",
+        "quashing": "quashing petition",
+        "bail": "bail application",
+        "arbitration": "arbitration petition",
+        "complaint": "complaint",
+        "revision": "revision",
+    }
+    for needle, label in posture_terms.items():
+        if needle in lower:
+            _append_unique(procedural_posture, label, limit=4)
+
+    jurisdiction_terms = {
+        "supreme court": "Supreme Court",
+        "high court": "High Court",
+        "delhi": "Delhi",
+        "bombay": "Bombay",
+        "mumbai": "Bombay",
+        "karnataka": "Karnataka",
+        "madras": "Madras",
+        "telangana": "Telangana",
+        "nclt": "NCLT",
+        "tribunal": "Tribunal",
+    }
+    for needle, label in jurisdiction_terms.items():
+        if needle in lower:
+            _append_unique(jurisdiction_hints, label, limit=4)
+
+    planned_parts = [
+        normalized_query,
+        *statutes_or_sections,
+        *likely_issues,
+        *key_facts,
+        *timing_signals,
+        *procedural_posture,
+        *jurisdiction_hints,
+    ]
+    planned_query = _compact_text(" ".join(planned_parts), max_chars=360)
+    return AuthorityContextualQueryPlan(
+        key_facts=key_facts,
+        likely_issues=likely_issues,
+        statutes_or_sections=statutes_or_sections,
+        procedural_posture=procedural_posture,
+        jurisdiction_hints=jurisdiction_hints,
+        timing_signals=timing_signals,
+        planned_query=planned_query or normalized_query,
+    )
+
+
+def _contextual_relevance_reason(
+    result: AuthoritySearchResult,
+    plan: AuthorityContextualQueryPlan,
+) -> str:
+    result_text = " ".join(
+        part
+        for part in (result.title, result.summary, result.snippet)
+        if part
+    ).casefold()
+    reasons: list[str] = []
+
+    for section in plan.statutes_or_sections:
+        core = re.sub(r"[^a-z0-9]+", " ", section.casefold()).strip()
+        if core and core in re.sub(r"[^a-z0-9]+", " ", result_text):
+            _append_unique(reasons, section, limit=3)
+    for issue in (*plan.likely_issues, *plan.key_facts):
+        tokens = [
+            token
+            for token in re.findall(r"[a-z0-9]{4,}", issue.casefold())
+            if token not in {"section", "statutory"}
+        ]
+        if tokens and any(token in result_text for token in tokens):
+            _append_unique(reasons, issue, limit=3)
+    for timing in plan.timing_signals:
+        if any(token in result_text for token in re.findall(r"[0-9]{1,3}", timing)):
+            _append_unique(reasons, timing, limit=3)
+
+    if not reasons:
+        return (
+            "Source-backed match from indexed title, summary, and snippet overlap "
+            "with the contextual query."
+        )
+    return (
+        "Source-backed match on "
+        + "; ".join(reasons[:3])
+        + ". Verify the source record before relying on it."
+    )
+
+
+def _contextual_coverage_notice(
+    *,
+    total_after_filter: int,
+    raw_count: int,
+) -> str | None:
+    if total_after_filter > 0:
+        return None
+    if raw_count > 0:
+        return (
+            "Indexed authorities matched before the current filters were applied; "
+            "broaden filters or language selection to review them."
+        )
+    return (
+        "No indexed authority matched the planned contextual query. Results are "
+        "limited to existing source-backed corpus records."
+    )
+
+
+def _record_contextual_search_audit(
+    session: Session,
+    *,
+    context: SessionContext,
+    payload: AuthoritySearchRequest,
+    plan: AuthorityContextualQueryPlan,
+    result_count: int,
+) -> None:
+    record_from_context(
+        session,
+        context,
+        action="authority_search.contextual_executed",
+        target_type="authority_search",
+        result=AuditResult.SUCCESS,
+        metadata={
+            "mode": payload.mode,
+            "query_sha256": hashlib.sha256(
+                payload.query.encode("utf-8")
+            ).hexdigest(),
+            "query_length": len(payload.query),
+            "planned_query_sha256": hashlib.sha256(
+                plan.planned_query.encode("utf-8")
+            ).hexdigest(),
+            "planned_query_length": len(plan.planned_query),
+            "key_fact_count": len(plan.key_facts),
+            "likely_issue_count": len(plan.likely_issues),
+            "statute_or_section_count": len(plan.statutes_or_sections),
+            "timing_signal_count": len(plan.timing_signals),
+            "result_count": result_count,
+            "language": payload.language,
+            "forum_level": payload.forum_level,
+            "document_type": payload.document_type,
+            "court_name_present": bool(payload.court_name),
+        },
+        commit=True,
+    )
 
 
 def _forum_precedent_boost(
@@ -743,7 +978,6 @@ def search_authorities(
     context: SessionContext,
     payload: AuthoritySearchRequest,
 ) -> AuthoritySearchResponse:
-    del context
     # PG-110 (2026-05-01): over-fetch from the catalog to give language
     # filter + offset enough room. After the 2026-04-28 sweep widened
     # to non-EN documents, top-ranked results frequently include Garo
@@ -751,10 +985,18 @@ def search_authorities(
     # leak into the user's view and dominate "why English content is
     # not coming" complaints. Filter at the route layer so the catalog
     # call stays a single source of truth for retrieval + rerank.
+    contextual_plan = (
+        _build_contextual_query_plan(payload.query)
+        if payload.mode == "contextual"
+        else None
+    )
+    search_query = (
+        contextual_plan.planned_query if contextual_plan is not None else payload.query
+    )
     overfetch = max((payload.offset + payload.limit) * 5, 50)
     raw = search_authority_catalog(
         session,
-        query=payload.query,
+        query=search_query,
         limit=overfetch,
         forum_level=payload.forum_level,
         court_name=payload.court_name,
@@ -790,12 +1032,44 @@ def search_authorities(
         )
         for r in page
     ]
+    if contextual_plan is not None:
+        enriched_page = [
+            r.model_copy(
+                update={
+                    "relevance_reason": _contextual_relevance_reason(
+                        r, contextual_plan
+                    ),
+                },
+            )
+            for r in enriched_page
+        ]
+        _record_contextual_search_audit(
+            session,
+            context=context,
+            payload=payload,
+            plan=contextual_plan,
+            result_count=total,
+        )
 
     return AuthoritySearchResponse(
         query=payload.query,
-        provider="caseops-authority-search-v2",
+        mode=payload.mode,
+        provider=(
+            "caseops-authority-contextual-search-v1"
+            if contextual_plan is not None
+            else "caseops-authority-search-v2"
+        ),
         generated_at=datetime.now(UTC),
         results=enriched_page,
+        contextual_plan=contextual_plan,
+        coverage_notice=(
+            _contextual_coverage_notice(
+                total_after_filter=total,
+                raw_count=len(raw),
+            )
+            if contextual_plan is not None
+            else None
+        ),
         total_after_filter=total,
         offset=payload.offset,
     )

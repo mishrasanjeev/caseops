@@ -37,6 +37,7 @@ import { ApiError, apiErrorMessage } from "@/lib/api/config";
 import {
   type AuthorityDocumentType,
   type AuthorityForumLevel,
+  type AuthoritySearchMode,
   type AuthoritySearchResult,
   createAuthorityAnnotation,
   fetchAuthorityCorpusStats,
@@ -71,6 +72,7 @@ export default function ResearchPage() {
   const [forumLevel, setForumLevel] = useState<ForumFilter>("any");
   const [courtName, setCourtName] = useState("");
   const [documentType, setDocumentType] = useState<DocTypeFilter>("any");
+  const [searchMode, setSearchMode] = useState<AuthoritySearchMode>("keyword");
   // PG-110 (2026-05-01): language filter + pagination. Default "en"
   // because the 2026-04-28 ingest sweep dropped the EN-only filter,
   // so without a default users were seeing Garo / Hindi / Tamil
@@ -94,11 +96,20 @@ export default function ResearchPage() {
     queryKey: [
       "authorities",
       "search",
-      { q: pendingQuery, forumLevel, courtName, documentType, language, page },
+      {
+        q: pendingQuery,
+        forumLevel,
+        courtName,
+        documentType,
+        language,
+        searchMode,
+        page,
+      },
     ],
     queryFn: () =>
       searchAuthorities({
         query: pendingQuery,
+        mode: searchMode,
         limit: PAGE_SIZE,
         offset: page * PAGE_SIZE,
         language,
@@ -149,9 +160,11 @@ export default function ResearchPage() {
   // current `offset` could land outside the new filtered range.
   useEffect(() => {
     setPage(0);
-  }, [language, forumLevel, courtName, documentType]);
+  }, [language, forumLevel, courtName, documentType, searchMode]);
 
   const results = searchQuery.data?.results ?? [];
+  const contextualPlan = searchQuery.data?.contextual_plan ?? null;
+  const coverageNotice = searchQuery.data?.coverage_notice ?? null;
   const totalAfterFilter = searchQuery.data?.total_after_filter ?? 0;
   const hasSearched = pendingQuery.length > 0;
   const hasNextPage = (page + 1) * PAGE_SIZE < totalAfterFilter;
@@ -217,12 +230,52 @@ export default function ResearchPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Label className="text-xs text-[var(--color-mute-2)]">
+                Mode
+              </Label>
+              <div
+                className="inline-flex rounded-md border border-[var(--color-line)] bg-white"
+                data-testid="research-mode-toggle"
+              >
+                <button
+                  type="button"
+                  onClick={() => setSearchMode("keyword")}
+                  data-testid="research-mode-keyword"
+                  className={`px-3 py-1 text-xs font-medium ${
+                    searchMode === "keyword"
+                      ? "bg-[var(--color-ink)] text-white"
+                      : "text-[var(--color-ink-2)]"
+                  }`}
+                  aria-pressed={searchMode === "keyword"}
+                >
+                  Keyword
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSearchMode("contextual")}
+                  data-testid="research-mode-contextual"
+                  className={`px-3 py-1 text-xs font-medium ${
+                    searchMode === "contextual"
+                      ? "bg-[var(--color-ink)] text-white"
+                      : "text-[var(--color-ink-2)]"
+                  }`}
+                  aria-pressed={searchMode === "contextual"}
+                >
+                  Context
+                </button>
+              </div>
+            </div>
             <div className="flex items-center gap-2">
               <Search className="h-4 w-4 text-[var(--color-mute)]" aria-hidden />
               <Input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Triple test for bail under BNSS s.483; parity; custody duration"
+                placeholder={
+                  searchMode === "contextual"
+                    ? "Cheque bounced due to insufficient funds and notice was sent after 35 days"
+                    : "Triple test for bail under BNSS s.483; parity; custody duration"
+                }
                 aria-label="Research query"
                 data-testid="research-query-input"
                 className="flex-1"
@@ -383,10 +436,48 @@ export default function ResearchPage() {
         <EmptyState
           icon={Scale}
           title="No authorities matched"
-          description="Broaden your filters or rephrase the query. The corpus is still growing."
+          description={
+            coverageNotice ??
+            "Broaden your filters or rephrase the query. The corpus is still growing."
+          }
         />
       ) : (
         <>
+          {contextualPlan ? (
+            <div
+              className="rounded-lg border border-[var(--color-line)] bg-[var(--color-bg-2)] px-4 py-3 text-xs text-[var(--color-ink-2)]"
+              data-testid="research-contextual-plan"
+            >
+              <span className="font-semibold text-[var(--color-ink)]">
+                Context extracted
+              </span>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {[
+                  ...contextualPlan.statutes_or_sections,
+                  ...contextualPlan.likely_issues,
+                  ...contextualPlan.key_facts,
+                  ...contextualPlan.timing_signals,
+                ]
+                  .slice(0, 8)
+                  .map((item) => (
+                    <span
+                      key={item}
+                      className="rounded-full border border-[var(--color-line)] bg-white px-2 py-0.5"
+                    >
+                      {item}
+                    </span>
+                  ))}
+              </div>
+            </div>
+          ) : null}
+          {coverageNotice ? (
+            <div
+              className="rounded-lg border border-[var(--color-warn-600)]/30 bg-[var(--color-warn-50)] px-4 py-3 text-xs text-[var(--color-warn-700)]"
+              data-testid="research-coverage-notice"
+            >
+              {coverageNotice}
+            </div>
+          ) : null}
           <ul className="flex flex-col gap-3" data-testid="research-results">
             {results.map((result) => (
               <AuthorityCard
@@ -554,6 +645,14 @@ function AuthorityCard({
           {result.summary ? (
             <p className="mt-1 text-xs italic text-[var(--color-mute)]">
               {result.summary}
+            </p>
+          ) : null}
+          {result.relevance_reason ? (
+            <p
+              className="mt-2 rounded-[var(--radius-md)] border border-[var(--color-line)] bg-[var(--color-bg-2)] px-3 py-2 text-xs text-[var(--color-ink-2)]"
+              data-testid="research-result-relevance"
+            >
+              {result.relevance_reason}
             </p>
           ) : null}
           {/* BUG-021 (Ram 2026-04-26): older HC PDFs in our corpus
