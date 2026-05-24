@@ -48,6 +48,11 @@ from caseops_api.schemas.drafts import (
     DraftRecord,
     DraftReviewRequest,
 )
+from caseops_api.schemas.google_drive_imports import (
+    GoogleDriveImportDryRunRequest,
+    GoogleDriveImportDryRunResponse,
+    GoogleDriveProviderConfigStatus,
+)
 from caseops_api.schemas.hearing_coach import (
     HearingCoachReportResponse,
     HearingCoachRunRequest,
@@ -158,6 +163,10 @@ from caseops_api.services.drafting import (
 )
 from caseops_api.services.filing_bundle import render_filing_bundle
 from caseops_api.services.filing_checklist import build_filing_checklist
+from caseops_api.services.google_drive_imports import (
+    dry_run_google_drive_import,
+    google_drive_provider_config_status,
+)
 from caseops_api.services.hearing_packs import (
     generate_hearing_pack,
     get_latest_hearing_pack,
@@ -403,6 +412,49 @@ async def dry_run_current_company_matter_import(
         context=context,
         parsed_import=parsed_import,
         available_document_filenames=document_filenames,
+    )
+
+
+@router.get(
+    "/imports/drive/provider-config",
+    response_model=GoogleDriveProviderConfigStatus,
+    summary="Report Google Drive manual-import provider config status",
+    description=(
+        "Returns whether the Google Drive provider is configured. Reports "
+        "missing environment variable NAMES only — never client IDs, "
+        "client secrets, redirect URIs, OAuth tokens, refresh tokens, or "
+        "Drive payloads. Fails closed when any required setting is unset."
+    ),
+)
+async def get_google_drive_provider_config_status(
+    context: CurrentContext,
+) -> GoogleDriveProviderConfigStatus:
+    return google_drive_provider_config_status()
+
+
+@router.post(
+    "/{matter_id}/imports/drive/dry-run",
+    response_model=GoogleDriveImportDryRunResponse,
+    summary="Dry-run a manual Google Drive folder import for a matter",
+    description=(
+        "Validates user-supplied Google Drive folder/file metadata against "
+        "the matter's storage rules and returns a per-file import plan. "
+        "Does not contact Google. Writes no attachments, storage objects, "
+        "OCR jobs, corpus jobs, or embeddings. Stores no OAuth tokens or "
+        "Drive payloads. Records a redacted audit summary only."
+    ),
+)
+async def dry_run_current_company_matter_google_drive_import(
+    matter_id: str,
+    payload: GoogleDriveImportDryRunRequest,
+    context: DocumentUploader,
+    session: DbSession,
+) -> GoogleDriveImportDryRunResponse:
+    return dry_run_google_drive_import(
+        session,
+        context=context,
+        matter_id=matter_id,
+        payload=payload,
     )
 
 
