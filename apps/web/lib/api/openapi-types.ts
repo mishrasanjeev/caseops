@@ -4536,6 +4536,109 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/statutes/legal-updates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List this tenant's in-app legal update alerts. */
+        get: operations["get_legal_updates_api_statutes_legal_updates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/statutes/legal-updates/digest-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Preview an in-app-only legal update digest. */
+        get: operations["get_legal_update_digest_preview_api_statutes_legal_updates_digest_preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/statutes/legal-updates/watchlists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List this tenant's legal update watchlists. */
+        get: operations["get_legal_update_watchlists_api_statutes_legal_updates_watchlists_get"];
+        put?: never;
+        /** Create a bounded in-app legal update watchlist. */
+        post: operations["post_legal_update_watchlist_api_statutes_legal_updates_watchlists_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/statutes/legal-updates/watchlists/{watchlist_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update or archive a legal update watchlist. */
+        patch: operations["patch_legal_update_watchlist_api_statutes_legal_updates_watchlists__watchlist_id__patch"];
+        trace?: never;
+    };
+    "/api/statutes/legal-updates/watchlists/{watchlist_id}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run or preview deterministic in-app legal update matches against existing records only. */
+        post: operations["post_legal_update_watchlist_run_api_statutes_legal_updates_watchlists__watchlist_id__run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/statutes/legal-updates/{update_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Mark an in-app legal update alert read or dismissed. */
+        patch: operations["patch_legal_update_api_statutes_legal_updates__update_id__patch"];
+        trace?: never;
+    };
     "/api/statutes/{statute_id}": {
         parameters: {
             query?: never;
@@ -10375,6 +10478,245 @@ export interface components {
             source_record_count: number;
             /** Status */
             status: ("completed" | "no_source_records") | "not_materialized";
+        };
+        /** LegalUpdateActionRequest */
+        LegalUpdateActionRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "read" | "dismiss";
+        };
+        /** LegalUpdateDigestPreviewResponse */
+        LegalUpdateDigestPreviewResponse: {
+            /**
+             * Delivery Note
+             * @default In-app preview only. External legal update delivery is pending WTD-5.3.
+             */
+            delivery_note: string;
+            /**
+             * Delivery Status
+             * @default in_app_only
+             * @constant
+             */
+            delivery_status: "in_app_only";
+            /** Dismissed Count */
+            dismissed_count: number;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Unread Count */
+            unread_count: number;
+            /** Updates */
+            updates: components["schemas"]["LegalUpdateRecord"][];
+        };
+        /** LegalUpdateListResponse */
+        LegalUpdateListResponse: {
+            /** Updates */
+            updates: components["schemas"]["LegalUpdateRecord"][];
+        };
+        /** LegalUpdateRecord */
+        LegalUpdateRecord: {
+            /** Authority Document Id */
+            authority_document_id: string | null;
+            /** Company Id */
+            company_id: string;
+            /** Contract Id */
+            contract_id: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Decision Date */
+            decision_date: string | null;
+            /** Dismissed At */
+            dismissed_at: string | null;
+            /** Effective Date */
+            effective_date: string | null;
+            /** Id */
+            id: string;
+            /** Is Read */
+            is_read: boolean;
+            /** Jurisdiction */
+            jurisdiction: string | null;
+            /** Matter Id */
+            matter_id: string | null;
+            /** Provenance Status */
+            provenance_status: string;
+            /** Published Date */
+            published_date: string | null;
+            /** Read At */
+            read_at: string | null;
+            /** Relevance Explanation */
+            relevance_explanation: string;
+            /** Section Number */
+            section_number: string | null;
+            /** Snippet */
+            snippet?: string | null;
+            /** Source Category */
+            source_category: string;
+            /** Source Key */
+            source_key: string;
+            /** Source Url */
+            source_url: string | null;
+            /** Statute Id */
+            statute_id: string | null;
+            /** Statute Name */
+            statute_name: string | null;
+            /** Statute Section Id */
+            statute_section_id: string | null;
+            /** Title */
+            title: string;
+            /**
+             * Update Type
+             * @enum {string}
+             */
+            update_type: "amendment" | "notification" | "regulation" | "circular" | "order" | "practice_direction";
+            /** Watchlist Id */
+            watchlist_id: string;
+        };
+        /** LegalUpdateRunRequest */
+        LegalUpdateRunRequest: {
+            /**
+             * Limit
+             * @default 20
+             */
+            limit: number;
+            /**
+             * Preview Only
+             * @default false
+             */
+            preview_only: boolean;
+        };
+        /** LegalUpdateRunResponse */
+        LegalUpdateRunResponse: {
+            /** Created Count */
+            created_count: number;
+            /**
+             * Delivery Status
+             * @default in_app_only
+             * @constant
+             */
+            delivery_status: "in_app_only";
+            /** Matched Count */
+            matched_count: number;
+            /** Matches */
+            matches: components["schemas"]["LegalUpdateRecord"][];
+            /** Preview Only */
+            preview_only: boolean;
+            /** Watchlist Id */
+            watchlist_id: string;
+        };
+        /** LegalUpdateWatchlistCreateRequest */
+        LegalUpdateWatchlistCreateRequest: {
+            /** Contract Id */
+            contract_id?: string | null;
+            /** Jurisdiction */
+            jurisdiction?: string | null;
+            /** Matter Id */
+            matter_id?: string | null;
+            /** Name */
+            name: string;
+            /** Practice Area */
+            practice_area?: string | null;
+            /** Since Date */
+            since_date?: string | null;
+            /** Source Category */
+            source_category?: string | null;
+            /** Source Key */
+            source_key?: string | null;
+            /** Statute Id */
+            statute_id?: string | null;
+            /** Statute Terms */
+            statute_terms?: string[];
+            /** Until Date */
+            until_date?: string | null;
+            /** Update Types */
+            update_types?: ("amendment" | "notification" | "regulation" | "circular" | "order" | "practice_direction")[];
+        };
+        /** LegalUpdateWatchlistListResponse */
+        LegalUpdateWatchlistListResponse: {
+            /** Watchlists */
+            watchlists: components["schemas"]["LegalUpdateWatchlistRecord"][];
+        };
+        /** LegalUpdateWatchlistRecord */
+        LegalUpdateWatchlistRecord: {
+            /** Archived At */
+            archived_at: string | null;
+            /** Company Id */
+            company_id: string;
+            /** Contract Id */
+            contract_id: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Membership Id */
+            created_by_membership_id: string | null;
+            /** Id */
+            id: string;
+            /** Is Archived */
+            is_archived: boolean;
+            /** Jurisdiction */
+            jurisdiction: string | null;
+            /** Matter Id */
+            matter_id: string | null;
+            /** Name */
+            name: string;
+            /** Practice Area */
+            practice_area: string | null;
+            /** Since Date */
+            since_date: string | null;
+            /** Source Category */
+            source_category: string | null;
+            /** Source Key */
+            source_key: string | null;
+            /** Statute Id */
+            statute_id: string | null;
+            /** Statute Terms */
+            statute_terms: string[];
+            /** Until Date */
+            until_date: string | null;
+            /** Update Types */
+            update_types: ("amendment" | "notification" | "regulation" | "circular" | "order" | "practice_direction")[];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** LegalUpdateWatchlistUpdateRequest */
+        LegalUpdateWatchlistUpdateRequest: {
+            /** Contract Id */
+            contract_id?: string | null;
+            /** Is Archived */
+            is_archived?: boolean | null;
+            /** Jurisdiction */
+            jurisdiction?: string | null;
+            /** Matter Id */
+            matter_id?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Practice Area */
+            practice_area?: string | null;
+            /** Since Date */
+            since_date?: string | null;
+            /** Source Category */
+            source_category?: string | null;
+            /** Source Key */
+            source_key?: string | null;
+            /** Statute Id */
+            statute_id?: string | null;
+            /** Statute Terms */
+            statute_terms?: string[] | null;
+            /** Until Date */
+            until_date?: string | null;
+            /** Update Types */
+            update_types?: ("amendment" | "notification" | "regulation" | "circular" | "order" | "practice_direction")[] | null;
         };
         /**
          * LimitationFlag
@@ -24995,6 +25337,227 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StatuteListResponse"];
+                };
+            };
+        };
+    };
+    get_legal_updates_api_statutes_legal_updates_get: {
+        parameters: {
+            query?: {
+                include_dismissed?: boolean;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalUpdateListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_legal_update_digest_preview_api_statutes_legal_updates_digest_preview_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalUpdateDigestPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_legal_update_watchlists_api_statutes_legal_updates_watchlists_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalUpdateWatchlistListResponse"];
+                };
+            };
+        };
+    };
+    post_legal_update_watchlist_api_statutes_legal_updates_watchlists_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LegalUpdateWatchlistCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalUpdateWatchlistRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_legal_update_watchlist_api_statutes_legal_updates_watchlists__watchlist_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                watchlist_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LegalUpdateWatchlistUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalUpdateWatchlistRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_legal_update_watchlist_run_api_statutes_legal_updates_watchlists__watchlist_id__run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                watchlist_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LegalUpdateRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalUpdateRunResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_legal_update_api_statutes_legal_updates__update_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                update_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LegalUpdateActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalUpdateRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

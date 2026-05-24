@@ -1936,6 +1936,11 @@ Tests:
 Type: Backend + Web
 Priority: P3
 Dependencies: Statute model/source registry
+Status: Implemented in ADP-18 foundation (2026-05-24)
+Design: In-app only; manual deterministic matching against existing Statute,
+StatuteSection, AuthorityDocument, and source-registry metadata. No external
+delivery, scheduler, provider call, OCR, corpus ingest/backfill, or embedding
+job is introduced.
 
 Scope:
 
