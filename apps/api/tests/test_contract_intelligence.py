@@ -586,3 +586,512 @@ def test_parse_redline_docx_empty_on_clean_document() -> None:
     assert result.insertion_count == 0
     assert result.deletion_count == 0
     assert result.paragraph_count >= 1
+
+
+# ---------------------------------------------------------------------------
+# ADP-13: party-perspective contract clause extraction
+# ---------------------------------------------------------------------------
+
+
+def _seed_party_contract(client: TestClient, token: str) -> tuple[str, str, str, str]:
+    import uuid as _uuid
+    from datetime import UTC, datetime
+
+    from sqlalchemy import text as _sql_text
+
+    from caseops_api.db.models import (
+        Contract,
+        ContractAttachment,
+        DocumentProcessingStatus,
+    )
+    from caseops_api.db.session import get_session_factory
+
+    contract_id = _create_contract(client, token)
+    attachment_id = str(_uuid.uuid4())
+    factory = get_session_factory()
+    with factory() as s:
+        contract = s.get(Contract, contract_id)
+        att = ContractAttachment(
+            id=attachment_id,
+            contract_id=contract_id,
+            original_filename="msa.pdf",
+            storage_key=f"contracts/{contract_id}/{_uuid.uuid4()}.pdf",
+            content_type="application/pdf",
+            size_bytes=1024,
+            sha256_hex="0" * 64,
+            processing_status=DocumentProcessingStatus.INDEXED,
+            extracted_char_count=900,
+            extracted_text=(
+                "Master Services Agreement between Acme India Private Limited "
+                "(Supplier) and Beta Software Solutions Inc. (Customer). "
+                "Clause 4 Payment: Customer shall pay Supplier within "
+                "thirty days of receipt of invoice. "
+                "Clause 7 Notice: each party shall send notices to the "
+                "address listed in Schedule A. "
+                "Clause 9 Termination: Customer may terminate for convenience "
+                "on sixty days written notice. "
+                "Clause 11 Limitation of Liability: aggregate liability of "
+                "Supplier shall not exceed fees paid by Customer in the "
+                "prior twelve months. "
+                "Clause 12 Indemnity: Supplier indemnifies Customer for IP "
+                "infringement and breach of confidentiality. "
+                "Clause 14 Confidentiality: both parties shall keep "
+                "confidential information of the other party in strict "
+                "confidence. "
+                "Clause 18 Dispute Resolution: any dispute shall be referred "
+                "to arbitration seated in Mumbai. "
+                "Clause 19 Either party may invoke step-in rights upon "
+                "material breach."
+            ),
+            processed_at=datetime.now(UTC),
+        )
+        s.add(att)
+        s.commit()
+        company_id = contract.company_id
+        membership_id = next(iter(s.execute(
+            _sql_text(
+                "select id from company_memberships where company_id = :cid limit 1",
+            ),
+            {"cid": company_id},
+        ).scalars().all()))
+    return contract_id, attachment_id, company_id, membership_id
+
+
+def _make_party_provider(items: list[dict]):
+    import json as _json
+
+    from caseops_api.services.llm import LLMCompletion
+
+    class _PartyProvider:
+        name = "mock"
+        model = "mock-party-extract"
+
+        def generate(self, messages=None, **_kw):
+            assert messages is not None
+            return LLMCompletion(
+                text=_json.dumps({"items": items}),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=15,
+                completion_tokens=80,
+                latency_ms=7,
+            )
+
+    return _PartyProvider()
+
+
+def _party_payload(represented: str) -> dict:
+    return {
+        "first_party_name": "Acme India Private Limited",
+        "second_party_name": "Beta Software Solutions Inc.",
+        "first_party_aliases": ["Acme", "Supplier"],
+        "second_party_aliases": ["Beta", "Customer"],
+        "represented_party": represented,
+    }
+
+
+def _bearer(token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}"}
+
+
+def test_party_extract_vendor_and_customer_views_on_same_contract(
+    client: TestClient, monkeypatch,
+) -> None:
+    session_data = _bootstrap(client)
+    token = session_data["access_token"]
+    contract_id, attachment_id, _company_id, _membership_id = _seed_party_contract(
+        client, token,
+    )
+
+    items = [
+        {
+            "category": "payment",
+            "summary": "Customer must pay Supplier within 30 days of invoice.",
+            "assigned_party": "second",
+            "ambiguity_reason": "",
+            "snippet": "Customer shall pay Supplier within thirty days of receipt of invoice.",
+            "locator": "Clause 4",
+        },
+        {
+            "category": "liability_cap",
+            "summary": "Supplier liability capped at 12 months of fees.",
+            "assigned_party": "first",
+            "ambiguity_reason": "",
+            "snippet": "aggregate liability of Supplier shall not exceed fees paid by Customer in the prior twelve months.",
+            "locator": "Clause 11",
+        },
+        {
+            "category": "indemnity",
+            "summary": "Supplier indemnifies Customer for IP and confidentiality.",
+            "assigned_party": "first",
+            "ambiguity_reason": "",
+            "snippet": "Supplier indemnifies Customer for IP infringement and breach of confidentiality.",
+            "locator": "Clause 12",
+        },
+    ]
+    monkeypatch.setattr(
+        "caseops_api.services.contract_intelligence.build_provider",
+        lambda *a, **kw: _make_party_provider(items),
+    )
+
+    supplier_view = client.post(
+        f"/api/ai/contracts/{contract_id}/clauses/extract-by-party",
+        headers=_bearer(token),
+        json=_party_payload("first"),
+    )
+    assert supplier_view.status_code == 200, supplier_view.text
+    supplier_body = supplier_view.json()
+    assert supplier_body["represented_party"] == "first"
+    supplier_categories = {item["category"] for item in supplier_body["represented_items"]}
+    counterparty_categories = {item["category"] for item in supplier_body["counterparty_items"]}
+    assert "indemnity" in supplier_categories
+    assert "liability_cap" in supplier_categories
+    assert "payment" in counterparty_categories
+
+    customer_view = client.post(
+        f"/api/ai/contracts/{contract_id}/clauses/extract-by-party",
+        headers=_bearer(token),
+        json=_party_payload("second"),
+    )
+    assert customer_view.status_code == 200, customer_view.text
+    customer_body = customer_view.json()
+    assert customer_body["represented_party"] == "second"
+    customer_repr_categories = {item["category"] for item in customer_body["represented_items"]}
+    customer_counter_categories = {item["category"] for item in customer_body["counterparty_items"]}
+    assert "payment" in customer_repr_categories
+    assert "indemnity" in customer_counter_categories
+    assert "liability_cap" in customer_counter_categories
+
+    for item in supplier_body["represented_items"] + supplier_body["counterparty_items"]:
+        assert item["source"]["attachment_id"] == attachment_id
+        assert len(item["source"]["snippet"]) <= 280
+
+
+def test_party_extract_respects_alias_for_party_resolution(
+    client: TestClient, monkeypatch,
+) -> None:
+    session_data = _bootstrap(client)
+    token = session_data["access_token"]
+    contract_id, _attachment_id, _company_id, _membership_id = _seed_party_contract(
+        client, token,
+    )
+
+    items = [
+        {
+            "category": "indemnity",
+            "summary": "Supplier indemnifies Customer for IP and confidentiality.",
+            "assigned_party": "first",
+            "ambiguity_reason": "",
+            "snippet": "Supplier indemnifies Customer for IP infringement and breach of confidentiality.",
+            "locator": "Clause 12",
+        },
+    ]
+    monkeypatch.setattr(
+        "caseops_api.services.contract_intelligence.build_provider",
+        lambda *a, **kw: _make_party_provider(items),
+    )
+
+    response = client.post(
+        f"/api/ai/contracts/{contract_id}/clauses/extract-by-party",
+        headers=_bearer(token),
+        json=_party_payload("first"),
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert len(body["represented_items"]) == 1
+    assert body["represented_items"][0]["assigned_party"] == "first"
+
+    noisy_payload = {
+        **_party_payload("first"),
+        "first_party_aliases": ["Acme", "  ", "Supplier", ""],
+    }
+    response2 = client.post(
+        f"/api/ai/contracts/{contract_id}/clauses/extract-by-party",
+        headers=_bearer(token),
+        json=noisy_payload,
+    )
+    assert response2.status_code == 200, response2.text
+
+
+def test_party_extract_flags_ambiguous_items_separately(
+    client: TestClient, monkeypatch,
+) -> None:
+    session_data = _bootstrap(client)
+    token = session_data["access_token"]
+    contract_id, _attachment_id, _company_id, _membership_id = _seed_party_contract(
+        client, token,
+    )
+
+    items = [
+        {
+            "category": "termination",
+            "summary": "Either party may invoke step-in rights on material breach.",
+            "assigned_party": "ambiguous",
+            "ambiguity_reason": "Either party reference cannot be resolved without external context.",
+            "snippet": "Either party may invoke step-in rights upon material breach.",
+            "locator": "Clause 19",
+        },
+    ]
+    monkeypatch.setattr(
+        "caseops_api.services.contract_intelligence.build_provider",
+        lambda *a, **kw: _make_party_provider(items),
+    )
+
+    response = client.post(
+        f"/api/ai/contracts/{contract_id}/clauses/extract-by-party",
+        headers=_bearer(token),
+        json=_party_payload("first"),
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["represented_items"] == []
+    assert body["counterparty_items"] == []
+    assert len(body["ambiguous_items"]) == 1
+    assert body["ambiguous_items"][0]["category"] == "termination"
+    assert "Either party" in body["ambiguous_items"][0]["ambiguity_reason"]
+
+
+def test_party_extract_drops_items_with_unverified_source(
+    client: TestClient, monkeypatch,
+) -> None:
+    session_data = _bootstrap(client)
+    token = session_data["access_token"]
+    contract_id, _attachment_id, _company_id, _membership_id = _seed_party_contract(
+        client, token,
+    )
+
+    items = [
+        {
+            "category": "payment",
+            "summary": "Customer pays Supplier within 30 days.",
+            "assigned_party": "second",
+            "ambiguity_reason": "",
+            "snippet": "Customer shall pay Supplier within thirty days of receipt of invoice.",
+            "locator": "Clause 4",
+        },
+        {
+            "category": "indemnity",
+            "summary": "Supplier promises moon-shot indemnity for stellar damages.",
+            "assigned_party": "first",
+            "ambiguity_reason": "",
+            "snippet": "Supplier shall indemnify Customer for any damage caused by celestial impact events including meteor strikes.",
+            "locator": "Clause 99",
+        },
+    ]
+    monkeypatch.setattr(
+        "caseops_api.services.contract_intelligence.build_provider",
+        lambda *a, **kw: _make_party_provider(items),
+    )
+
+    response = client.post(
+        f"/api/ai/contracts/{contract_id}/clauses/extract-by-party",
+        headers=_bearer(token),
+        json=_party_payload("first"),
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["dropped_source_unverified_count"] == 1
+    assert len(body["counterparty_items"]) == 1
+    assert body["counterparty_items"][0]["category"] == "payment"
+    surviving_summaries = " ".join(
+        item["summary"]
+        for item in body["represented_items"] + body["counterparty_items"]
+    )
+    assert "celestial" not in surviving_summaries
+    assert "moon-shot" not in surviving_summaries
+
+
+def test_party_extract_409_when_no_contract_text_available(
+    client: TestClient,
+) -> None:
+    session_data = _bootstrap(client)
+    token = session_data["access_token"]
+    contract_id = _create_contract(client, token)
+
+    response = client.post(
+        f"/api/ai/contracts/{contract_id}/clauses/extract-by-party",
+        headers=_bearer(token),
+        json=_party_payload("first"),
+    )
+    assert response.status_code == 409, response.text
+    assert "extracted attachment text" in response.json()["detail"]
+
+
+def test_party_extract_writes_model_run_for_token_governance(
+    client: TestClient, monkeypatch,
+) -> None:
+    from sqlalchemy import select
+
+    from caseops_api.db.models import ModelRun
+    from caseops_api.db.session import get_session_factory
+
+    session_data = _bootstrap(client)
+    token = session_data["access_token"]
+    contract_id, _attachment_id, company_id, _membership_id = _seed_party_contract(
+        client, token,
+    )
+
+    items = [
+        {
+            "category": "payment",
+            "summary": "Customer pays Supplier in 30 days.",
+            "assigned_party": "second",
+            "ambiguity_reason": "",
+            "snippet": "Customer shall pay Supplier within thirty days of receipt of invoice.",
+            "locator": "Clause 4",
+        },
+    ]
+    monkeypatch.setattr(
+        "caseops_api.services.contract_intelligence.build_provider",
+        lambda *a, **kw: _make_party_provider(items),
+    )
+
+    response = client.post(
+        f"/api/ai/contracts/{contract_id}/clauses/extract-by-party",
+        headers=_bearer(token),
+        json=_party_payload("first"),
+    )
+    assert response.status_code == 200, response.text
+
+    factory = get_session_factory()
+    with factory() as s:
+        runs = list(s.scalars(
+            select(ModelRun).where(ModelRun.company_id == company_id)
+        ))
+    assert len(runs) >= 1
+    assert any(r.model == "mock-party-extract" for r in runs)
+    assert all(r.prompt_hash and len(r.prompt_hash) == 64 for r in runs)
+
+
+def test_party_extract_audit_metadata_is_redacted(
+    client: TestClient, monkeypatch,
+) -> None:
+    import json as _json
+
+    from sqlalchemy import select
+
+    from caseops_api.db.models import AuditEvent
+    from caseops_api.db.session import get_session_factory
+
+    session_data = _bootstrap(client)
+    token = session_data["access_token"]
+    contract_id, _attachment_id, company_id, _membership_id = _seed_party_contract(
+        client, token,
+    )
+
+    items = [
+        {
+            "category": "confidentiality",
+            "summary": "Both parties keep confidential info confidential.",
+            "assigned_party": "both",
+            "ambiguity_reason": "",
+            "snippet": "both parties shall keep confidential information of the other party in strict confidence.",
+            "locator": "Clause 14",
+        },
+    ]
+    monkeypatch.setattr(
+        "caseops_api.services.contract_intelligence.build_provider",
+        lambda *a, **kw: _make_party_provider(items),
+    )
+
+    response = client.post(
+        f"/api/ai/contracts/{contract_id}/clauses/extract-by-party",
+        headers=_bearer(token),
+        json=_party_payload("first"),
+    )
+    assert response.status_code == 200, response.text
+
+    factory = get_session_factory()
+    with factory() as s:
+        event = s.scalar(
+            select(AuditEvent)
+            .where(AuditEvent.company_id == company_id)
+            .where(AuditEvent.action == "contract.party_clauses.extract")
+            .order_by(AuditEvent.created_at.desc(), AuditEvent.id.desc())
+        )
+        assert event is not None
+        metadata = _json.loads(event.metadata_json or "{}")
+
+    assert metadata["represented_party"] == "first"
+    assert metadata["first_party_alias_count"] == 2
+    assert metadata["second_party_alias_count"] == 2
+    assert metadata["represented_item_count"] == 1
+    assert metadata["ambiguous_item_count"] == 0
+    assert metadata["dropped_source_unverified_count"] == 0
+    assert isinstance(metadata["party_metadata_hash"], str)
+    assert len(metadata["party_metadata_hash"]) == 64
+
+    redacted = _json.dumps(metadata)
+    for needle in [
+        "Acme India",
+        "Beta Software",
+        "Clause 14",
+        "both parties shall keep",
+        "confidential information",
+    ]:
+        assert needle not in redacted, (needle, redacted)
+
+
+def test_existing_clauses_extract_endpoint_unchanged_by_adp13(
+    client: TestClient, monkeypatch,
+) -> None:
+    import json as _json
+
+    from sqlalchemy import select
+
+    from caseops_api.db.models import ContractClause
+    from caseops_api.db.session import get_session_factory
+    from caseops_api.services.llm import LLMCompletion
+
+    session_data = _bootstrap(client)
+    token = session_data["access_token"]
+    contract_id, _attachment_id, _company_id, _membership_id = _seed_party_contract(
+        client, token,
+    )
+
+    class _ValidClauseProvider:
+        name = "mock"
+        model = "mock-valid-clauses"
+
+        def generate(self, messages=None, **_kw):
+            assert messages is not None
+            return LLMCompletion(
+                text=_json.dumps({
+                    "clauses": [
+                        {
+                            "clause_type": "limitation_of_liability",
+                            "title": "Liability cap",
+                            "clause_text": "Aggregate liability shall not exceed fees paid in the prior 12 months.",
+                            "risk_level": "medium",
+                            "rationale": "Standard 12-month cap.",
+                        }
+                    ]
+                }),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=10,
+                completion_tokens=20,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.contract_intelligence.build_provider",
+        lambda *a, **kw: _ValidClauseProvider(),
+    )
+
+    response = client.post(
+        f"/api/ai/contracts/{contract_id}/clauses/extract",
+        headers=_bearer(token),
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["contract_id"] == contract_id
+    assert body["inserted"] == 1
+
+    factory = get_session_factory()
+    with factory() as s:
+        rows = list(s.scalars(
+            select(ContractClause).where(ContractClause.contract_id == contract_id)
+        ))
+    assert len(rows) == 1
+    assert rows[0].clause_type == "limitation_of_liability"

@@ -49,6 +49,14 @@ from caseops_api.db.models import (
     ContractPlaybookRule,
     ModelRun,
 )
+from caseops_api.schemas.contracts import (
+    PartyClauseAmbiguousItem,
+    PartyClauseExtractionRequest,
+    PartyClauseExtractionResponse,
+    PartyClauseItem,
+    PartyClauseSourceEvidence,
+)
+from caseops_api.services.audit import record_from_context
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.llm import (
     PURPOSE_METADATA_EXTRACT,
@@ -911,6 +919,304 @@ def _playbook_messages(
 
 
 # ---------------------------------------------------------------------------
+# ADP-13: party-perspective contract clause extraction (stateless)
+# ---------------------------------------------------------------------------
+
+
+_PARTY_CATEGORY_VOCABULARY: tuple[str, ...] = (
+    "obligation",
+    "indemnity",
+    "payment",
+    "notice",
+    "termination",
+    "liability_cap",
+    "confidentiality",
+    "dispute_resolution",
+)
+_PARTY_CLAUSE_MAX_ITEMS = 40
+_PARTY_SNIPPET_MAX_CHARS = 280
+_PARTY_CONTRACT_TEXT_MAX_CHARS = 30_000
+
+
+class _PartyClauseLlmItem(BaseModel):
+    category: Literal[
+        "obligation",
+        "indemnity",
+        "payment",
+        "notice",
+        "termination",
+        "liability_cap",
+        "confidentiality",
+        "dispute_resolution",
+    ]
+    summary: str = Field(min_length=1, max_length=280)
+    assigned_party: Literal["first", "second", "both", "ambiguous"]
+    ambiguity_reason: str = Field(default="", max_length=280)
+    snippet: str = Field(min_length=1, max_length=600)
+    locator: str | None = Field(default=None, max_length=120)
+
+
+class _PartyClauseExtractionLlmPayload(BaseModel):
+    items: list[_PartyClauseLlmItem] = Field(
+        default_factory=list, max_length=_PARTY_CLAUSE_MAX_ITEMS
+    )
+
+
+@dataclass
+class _PartyContractCorpus:
+    text: str
+    normalised: str
+    attachment_lookup: list[tuple[str, str]]
+
+
+def _normalise_for_match(value: str) -> str:
+    # Whitespace-collapse + case-fold so the LLM's lightly-paraphrased
+    # snippet still matches without us false-rejecting on punctuation/case
+    # drift. Anchored substring containment is the safety check, not a
+    # similarity score.
+    return " ".join(value.lower().split())
+
+
+def _build_party_corpus(contract: Contract) -> _PartyContractCorpus:
+    pieces: list[str] = []
+    attachment_lookup: list[tuple[str, str]] = []
+    for attachment in contract.attachments:
+        text = getattr(attachment, "extracted_text", None)
+        if text:
+            pieces.append(text)
+            attachment_lookup.append(
+                (attachment.id, _normalise_for_match(text)),
+            )
+            continue
+        chunk_parts: list[str] = []
+        for chunk in getattr(attachment, "chunks", []) or []:
+            if chunk.content:
+                chunk_parts.append(chunk.content)
+        if chunk_parts:
+            joined = "\n\n".join(chunk_parts)
+            pieces.append(joined)
+            attachment_lookup.append((attachment.id, _normalise_for_match(joined)))
+    joined_text = "\n\n".join(pieces)
+    return _PartyContractCorpus(
+        text=joined_text,
+        normalised=_normalise_for_match(joined_text),
+        attachment_lookup=attachment_lookup,
+    )
+
+
+def _verify_snippet(
+    snippet: str,
+    corpus: _PartyContractCorpus,
+) -> tuple[str | None, str]:
+    bounded_snippet = snippet.strip()[:_PARTY_SNIPPET_MAX_CHARS]
+    if not bounded_snippet:
+        return None, ""
+    haystack_snippet = _normalise_for_match(bounded_snippet)
+    if not haystack_snippet:
+        return None, ""
+    if haystack_snippet not in corpus.normalised:
+        return None, bounded_snippet
+    matched_attachment_id: str | None = None
+    for attachment_id, attachment_norm in corpus.attachment_lookup:
+        if haystack_snippet in attachment_norm:
+            matched_attachment_id = attachment_id
+            break
+    return matched_attachment_id, bounded_snippet
+
+
+def _party_metadata_hash(payload: PartyClauseExtractionRequest) -> str:
+    canonical = json.dumps(
+        {
+            "first_party_name": payload.first_party_name.strip().lower(),
+            "second_party_name": payload.second_party_name.strip().lower(),
+            "first_party_aliases": sorted(
+                alias.strip().lower() for alias in payload.first_party_aliases
+            ),
+            "second_party_aliases": sorted(
+                alias.strip().lower() for alias in payload.second_party_aliases
+            ),
+            "represented_party": payload.represented_party,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _party_extraction_messages(
+    *,
+    contract: Contract,
+    text: str,
+    payload: PartyClauseExtractionRequest,
+) -> list[LLMMessage]:
+    first_aliases = ", ".join(payload.first_party_aliases) or "(none provided)"
+    second_aliases = ", ".join(payload.second_party_aliases) or "(none provided)"
+    system = (
+        "You extract source-backed, party-specific contract items from "
+        "commercial contracts drafted under Indian law. You categorize each "
+        "item into one of the eight allowed categories: "
+        f"{', '.join(_PARTY_CATEGORY_VOCABULARY)}. "
+        "For every item you MUST quote a short verbatim or lightly normalised "
+        "snippet (<= 280 chars) that you found in the contract text — never "
+        "invent a snippet. Assign each item to the party that owes / holds "
+        "the duty: first, second, both, or ambiguous. Mark ambiguous when "
+        "the contract uses 'either party', 'the parties', or pronouns that "
+        "cannot be resolved from context. Do not invent items. Do not give "
+        "legal advice, outcome predictions, or success-probability scoring."
+    )
+    user = (
+        "Identify items for the eight categories above, from the perspective "
+        "of both parties (you will mark each item's assigned_party). Use the "
+        "party names and aliases provided to disambiguate.\n\n"
+        f"FIRST PARTY: {payload.first_party_name}\n"
+        f"FIRST PARTY ALIASES: {first_aliases}\n"
+        f"SECOND PARTY: {payload.second_party_name}\n"
+        f"SECOND PARTY ALIASES: {second_aliases}\n"
+        f"CONTRACT TITLE: {contract.title}\n\n"
+        "=== CONTRACT TEXT ===\n"
+        f"{_truncate(text, _PARTY_CONTRACT_TEXT_MAX_CHARS)}\n"
+        "=== END ===\n\n"
+        f"Return at most {_PARTY_CLAUSE_MAX_ITEMS} items. JSON: "
+        "{ \"items\": [ { category, summary, assigned_party, "
+        "ambiguity_reason, snippet, locator } ] }. "
+        "ambiguity_reason is only required when assigned_party=ambiguous."
+    )
+    return [
+        LLMMessage(role="system", content=system),
+        LLMMessage(role="user", content=user),
+    ]
+
+
+def extract_party_clauses(
+    session: Session,
+    *,
+    context: SessionContext,
+    contract_id: str,
+    payload: PartyClauseExtractionRequest,
+) -> PartyClauseExtractionResponse:
+    """Run party-perspective clause extraction.
+
+    Stateless: writes only a ``ModelRun`` row (ADP-02 token governance)
+    and returns a per-perspective response. Every item is validated against
+    the contract's extracted text — items whose snippet cannot be located
+    are dropped and counted (``dropped_source_unverified_count``). Items
+    the LLM marks ``ambiguous`` are surfaced separately and are NEVER
+    silently assigned to the represented party.
+    """
+    contract = _load_contract(
+        session, context=context, contract_id=contract_id,
+    )
+    corpus = _build_party_corpus(contract)
+    if not corpus.text.strip():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Contract has no extracted attachment text — upload a "
+                "readable PDF or DOCX before requesting party extraction."
+            ),
+        )
+
+    provider = build_provider(purpose=PURPOSE_METADATA_EXTRACT)
+    messages = _party_extraction_messages(
+        contract=contract, text=corpus.text, payload=payload,
+    )
+    call_context = LLMCallContext(
+        purpose=PURPOSE_METADATA_EXTRACT,
+        tenant_id=context.company.id,
+        matter_id=None,
+        actor_membership_id=context.membership.id if context.membership else None,
+    )
+    llm_payload, completion = _structured_with_retry(
+        provider,
+        schema=_PartyClauseExtractionLlmPayload,
+        messages=messages,
+        context=call_context,
+        temperature=0.0,
+        max_tokens=8192,
+        session=session,
+        feature="extract party-perspective clauses",
+    )
+
+    represented_items: list[PartyClauseItem] = []
+    counterparty_items: list[PartyClauseItem] = []
+    ambiguous_items: list[PartyClauseAmbiguousItem] = []
+    dropped = 0
+    represented_party = payload.represented_party
+
+    for item in llm_payload.items:
+        attachment_id, bounded_snippet = _verify_snippet(item.snippet, corpus)
+        if attachment_id is None:
+            dropped += 1
+            continue
+        source = PartyClauseSourceEvidence(
+            attachment_id=attachment_id,
+            locator=item.locator,
+            snippet=bounded_snippet,
+        )
+        bounded_summary = item.summary.strip()[:280]
+        if item.assigned_party == "ambiguous":
+            ambiguous_items.append(
+                PartyClauseAmbiguousItem(
+                    category=item.category,
+                    summary=bounded_summary,
+                    ambiguity_reason=(
+                        item.ambiguity_reason.strip()[:280]
+                        or "Party reference could not be resolved from context."
+                    ),
+                    source=source,
+                )
+            )
+            continue
+        clause = PartyClauseItem(
+            category=item.category,
+            summary=bounded_summary,
+            assigned_party=item.assigned_party,
+            source=source,
+        )
+        is_represented = (
+            item.assigned_party == "both"
+            or item.assigned_party == represented_party
+        )
+        if is_represented:
+            represented_items.append(clause)
+        else:
+            counterparty_items.append(clause)
+
+    record_from_context(
+        session,
+        context,
+        action="contract.party_clauses.extract",
+        target_type="contract",
+        target_id=contract.id,
+        metadata={
+            "represented_party": represented_party,
+            "first_party_alias_count": len(payload.first_party_aliases),
+            "second_party_alias_count": len(payload.second_party_aliases),
+            "represented_item_count": len(represented_items),
+            "counterparty_item_count": len(counterparty_items),
+            "ambiguous_item_count": len(ambiguous_items),
+            "dropped_source_unverified_count": dropped,
+            "party_metadata_hash": _party_metadata_hash(payload),
+            "provider": completion.provider,
+            "model": completion.model,
+        },
+    )
+
+    return PartyClauseExtractionResponse(
+        contract_id=contract.id,
+        represented_party=represented_party,
+        first_party_name=payload.first_party_name,
+        second_party_name=payload.second_party_name,
+        represented_items=represented_items,
+        counterparty_items=counterparty_items,
+        ambiguous_items=ambiguous_items,
+        dropped_source_unverified_count=dropped,
+        provider=completion.provider,
+        model=completion.model,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -959,6 +1265,7 @@ __all__ = [
     "compare_playbook",
     "extract_clauses",
     "extract_obligations",
+    "extract_party_clauses",
     "install_default_playbook_rules",
 ]
 

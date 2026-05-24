@@ -251,6 +251,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ai/contracts/{contract_id}/clauses/extract-by-party": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Extract party-perspective contract items with source-validated snippets (ADP-13)
+         * @description Stateless per-call extraction that returns categorized items (obligations, indemnities, payment, notices, termination, liability caps, confidentiality, dispute resolution) grouped by represented-party perspective. Each item is source-validated against the uploaded contract text; items without a verifiable snippet are dropped and counted. Ambiguous party assignments are surfaced separately and never silently routed to the represented party. ModelRun token governance applies. Writes no contract rows; the existing /clauses/extract endpoint is unchanged.
+         */
+        post: operations["extract_current_company_contract_clauses_by_party_api_ai_contracts__contract_id__clauses_extract_by_party_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ai/contracts/{contract_id}/obligations/extract": {
         parameters: {
             query?: never;
@@ -12763,6 +12783,89 @@ export interface components {
             spend_records: components["schemas"]["OutsideCounselSpendRecord"][];
             summary: components["schemas"]["OutsideCounselPortfolioSummary"];
         };
+        /** PartyClauseAmbiguousItem */
+        PartyClauseAmbiguousItem: {
+            /** Ambiguity Reason */
+            ambiguity_reason: string;
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "obligation" | "indemnity" | "payment" | "notice" | "termination" | "liability_cap" | "confidentiality" | "dispute_resolution";
+            source: components["schemas"]["PartyClauseSourceEvidence"];
+            /** Summary */
+            summary: string;
+        };
+        /** PartyClauseExtractionRequest */
+        PartyClauseExtractionRequest: {
+            /** First Party Aliases */
+            first_party_aliases?: string[];
+            /** First Party Name */
+            first_party_name: string;
+            /**
+             * Represented Party
+             * @enum {string}
+             */
+            represented_party: "first" | "second";
+            /** Second Party Aliases */
+            second_party_aliases?: string[];
+            /** Second Party Name */
+            second_party_name: string;
+        };
+        /** PartyClauseExtractionResponse */
+        PartyClauseExtractionResponse: {
+            /** Ambiguous Items */
+            ambiguous_items?: components["schemas"]["PartyClauseAmbiguousItem"][];
+            /** Contract Id */
+            contract_id: string;
+            /** Counterparty Items */
+            counterparty_items?: components["schemas"]["PartyClauseItem"][];
+            /**
+             * Dropped Source Unverified Count
+             * @default 0
+             */
+            dropped_source_unverified_count: number;
+            /** First Party Name */
+            first_party_name: string;
+            /** Model */
+            model: string;
+            /** Provider */
+            provider: string;
+            /** Represented Items */
+            represented_items?: components["schemas"]["PartyClauseItem"][];
+            /**
+             * Represented Party
+             * @enum {string}
+             */
+            represented_party: "first" | "second";
+            /** Second Party Name */
+            second_party_name: string;
+        };
+        /** PartyClauseItem */
+        PartyClauseItem: {
+            /**
+             * Assigned Party
+             * @enum {string}
+             */
+            assigned_party: "first" | "second" | "both";
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "obligation" | "indemnity" | "payment" | "notice" | "termination" | "liability_cap" | "confidentiality" | "dispute_resolution";
+            source: components["schemas"]["PartyClauseSourceEvidence"];
+            /** Summary */
+            summary: string;
+        };
+        /** PartyClauseSourceEvidence */
+        PartyClauseSourceEvidence: {
+            /** Attachment Id */
+            attachment_id?: string | null;
+            /** Locator */
+            locator?: string | null;
+            /** Snippet */
+            snippet: string;
+        };
         /** PasswordResetStartRequest */
         PasswordResetStartRequest: {
             /** Company Slug */
@@ -14991,6 +15094,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ClauseExtractionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    extract_current_company_contract_clauses_by_party_api_ai_contracts__contract_id__clauses_extract_by_party_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contract_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PartyClauseExtractionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartyClauseExtractionResponse"];
                 };
             };
             /** @description Validation Error */

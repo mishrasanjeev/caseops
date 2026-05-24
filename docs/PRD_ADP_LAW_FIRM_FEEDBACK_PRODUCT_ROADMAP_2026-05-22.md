@@ -1770,6 +1770,21 @@ Tests:
 Type: Backend + Web
 Priority: P3
 Dependencies: Contract extraction
+Status: Foundation implemented 2026-05-24; new stateless
+`POST /api/ai/contracts/{contract_id}/clauses/extract-by-party` accepts
+first/second party names, aliases, and a represented-party perspective.
+Returns categorized items (obligations, indemnities, payment, notices,
+termination, liability cap, confidentiality, dispute resolution) split
+into represented vs counterparty buckets. Every item is source-validated
+against the uploaded contract text (whitespace-normalized, case-folded
+substring match); items without a verifiable snippet are dropped and
+counted. Ambiguous party assignments are surfaced separately and never
+silently routed to the represented party. ADP-02 ModelRun token-
+governance ledger applies. Existing `/clauses/extract` and
+`/obligations/extract` endpoints are unchanged. Audit metadata stores
+only perspective + alias counts + item counts + a sha256 hash of
+canonical party metadata. No DB migration. ADP-14 contract playbook
+admin remains deferred.
 
 Scope:
 
