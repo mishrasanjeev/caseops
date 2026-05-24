@@ -207,9 +207,9 @@ test.describe("Per-matter Outside Counsel", () => {
     await expect(
       page.getByText(/Lead counsel — bail application/i),
     ).toBeVisible();
-    // KPI cards — counsel assigned count + budget.
+    // KPI cards — counsel assigned count + agreed fee.
     await expect(page.getByText(/Counsel assigned/i)).toBeVisible();
-    await expect(page.getByText(/Approved budget/i)).toBeVisible();
+    await expect(page.getByText("Fee agreed", { exact: true })).toBeVisible();
     // Assign-counsel button is present for owners.
     await expect(page.getByTestId("matter-oc-assign-open")).toBeVisible();
   });
