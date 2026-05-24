@@ -258,7 +258,7 @@ def test_sync_status_reports_bounded_manual_state_and_missing_config_names(
             "manual_sync_available": False,
             "durable_automation": "blocked_pending_temporal",
             "notification_delivery": "pending_wtd_5_3",
-            "email_invitation_candidates": "deferred_pending_review_queue",
+            "email_invitation_candidates": "review_queue_available",
         }
         assert body["provider_config"] == [
             {

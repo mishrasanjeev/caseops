@@ -6812,6 +6812,100 @@ class Communication(Base):
     )
 
 
+class EmailCalendarCandidateStatus(StrEnum):
+    NEEDS_REVIEW = "needs_review"
+    APPROVED_CREATED = "approved_created"
+    REJECTED = "rejected"
+    DUPLICATE_SKIPPED = "duplicate_skipped"
+
+
+class EmailCalendarCandidate(Base):
+    """Reviewable calendar-event candidate detected from imported email metadata.
+
+    ADP-19 keeps this durable and matter-scoped so extraction remains
+    idempotent and approval can create an internal CaseOps calendar item
+    without touching any provider calendar.
+    """
+
+    __tablename__ = "email_calendar_candidates"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            "matter_id",
+            "communication_id",
+            "normalized_key",
+            name="uq_email_calendar_candidate_source_key",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    communication_id: Mapped[str] = mapped_column(
+        ForeignKey("communications.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    thread_key: Mapped[str | None] = mapped_column(String(180), nullable=True)
+    normalized_key: Mapped[str] = mapped_column(String(96), nullable=False)
+    detected_title: Mapped[str] = mapped_column(String(255), nullable=False)
+    detected_start_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        index=True,
+    )
+    detected_end_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    detected_location: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source_preview: Mapped[str | None] = mapped_column(String(280), nullable=True)
+    confidence_band: Mapped[str] = mapped_column(String(24), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=EmailCalendarCandidateStatus.NEEDS_REVIEW,
+        index=True,
+    )
+    duplicate_of_candidate_id: Mapped[str | None] = mapped_column(
+        ForeignKey("email_calendar_candidates.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_deadline_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matter_deadlines.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    reviewed_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False,
+    )
+
+
 # ---------------------------------------------------------------
 # Phase B M11 slice 2 — AutoMail email templates
 # ---------------------------------------------------------------

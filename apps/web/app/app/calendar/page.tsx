@@ -26,12 +26,19 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import {
   fetchCalendarEvents,
   fetchCalendarSyncStatus,
+  extractEmailInvitationCandidates,
   listCalendarConnections,
+  listEmailInvitationCandidates,
   revokeCalendarConnection,
+  reviewEmailInvitationCandidate,
   startOutlookCalendarConnection,
   syncOutlookVisibleRange,
 } from "@/lib/api/endpoints";
-import type { CalendarEventKind, CalendarEventRecord } from "@/lib/api/schemas";
+import type {
+  CalendarEventKind,
+  CalendarEventRecord,
+} from "@/lib/api/schemas";
+import type { EmailInvitationCandidateRecord } from "@/lib/api/endpoints";
 import { API_BASE_URL } from "@/lib/api/config";
 import { useCapability } from "@/lib/capabilities";
 import { cn } from "@/lib/cn";
@@ -80,6 +87,21 @@ function formatDateTime(value: string | null): string {
     });
   } catch {
     return value;
+  }
+}
+
+function candidateStatusLabel(status: EmailInvitationCandidateRecord["status"]): string {
+  switch (status) {
+    case "needs_review":
+      return "Needs review";
+    case "approved_created":
+      return "Created";
+    case "rejected":
+      return "Rejected";
+    case "duplicate_skipped":
+      return "Duplicate skipped";
+    default:
+      return status;
   }
 }
 
@@ -153,6 +175,33 @@ export default function CalendarPage() {
     queryKey: ["calendar", "sync-status"],
     queryFn: fetchCalendarSyncStatus,
   });
+  const emailCandidatesQuery = useQuery({
+    queryKey: ["calendar", "email-invitation-candidates"],
+    queryFn: () => listEmailInvitationCandidates({ limit: 20 }),
+  });
+  const extractCandidatesMutation = useMutation({
+    mutationFn: () => extractEmailInvitationCandidates({ limit: 50 }),
+    onSuccess: (result) => {
+      setOutlookMessage(
+        `Reviewed ${result.examined_count} imported emails; ${result.created_count} candidates added and ${result.duplicate_count} duplicates skipped.`,
+      );
+      void queryClient.invalidateQueries({
+        queryKey: ["calendar", "email-invitation-candidates"],
+      });
+      void queryClient.invalidateQueries({ queryKey: ["calendar", "sync-status"] });
+    },
+    onError: (error) => setOutlookMessage(String(error)),
+  });
+  const reviewCandidateMutation = useMutation({
+    mutationFn: reviewEmailInvitationCandidate,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["calendar", "email-invitation-candidates"],
+      });
+      void queryClient.invalidateQueries({ queryKey: ["calendar"] });
+    },
+    onError: (error) => setOutlookMessage(String(error)),
+  });
   const startOutlookMutation = useMutation({
     mutationFn: startOutlookCalendarConnection,
     onSuccess: (result) => {
@@ -214,6 +263,9 @@ export default function CalendarPage() {
   const missingConfigNames = providerConfig?.missing_config_names ?? [];
   const conflictSummary = syncStatus?.conflict_summary ?? null;
   const conflictCandidates = syncStatus?.conflict_candidates ?? [];
+  const emailCandidates = emailCandidatesQuery.data?.candidates ?? [];
+  const pendingEmailCandidateCount = emailCandidatesQuery.data?.pending_count ?? 0;
+  const duplicateEmailCandidateCount = emailCandidatesQuery.data?.duplicate_count ?? 0;
 
   const navigate = (delta: 1 | -1) => {
     setCursor((c) => {
@@ -397,7 +449,12 @@ export default function CalendarPage() {
                 </div>
                 <div>
                   <div className="font-medium text-[var(--color-ink)]">Email invitations</div>
-                  <div>Review queue pending</div>
+                  <div>
+                    {syncStatus.capabilities.email_invitation_candidates ===
+                    "review_queue_available"
+                      ? "Review queue available"
+                      : "Review queue pending"}
+                  </div>
                 </div>
               </div>
             ) : null}
@@ -442,6 +499,107 @@ export default function CalendarPage() {
                 ) : null}
               </div>
             ) : null}
+            <div
+              className="mt-4 border-t border-[var(--color-line-2)] pt-3 text-xs text-[var(--color-ink-2)]"
+              data-testid="calendar-email-candidates-panel"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <div className="font-medium text-[var(--color-ink)]">
+                    Email invitation candidates
+                  </div>
+                  <div className="text-[var(--color-mute)]">
+                    Review imported email candidates before creating internal
+                    CaseOps calendar items. External provider sync is not used.
+                  </div>
+                </div>
+                {canSyncCalendar ? (
+                  <button
+                    type="button"
+                    onClick={() => extractCandidatesMutation.mutate()}
+                    disabled={extractCandidatesMutation.isPending}
+                    className="inline-flex h-8 items-center rounded-md border border-[var(--color-line-2)] px-3 text-xs font-medium text-[var(--color-ink)] hover:bg-[var(--color-line-1)] disabled:opacity-60"
+                    data-testid="calendar-email-candidates-extract"
+                  >
+                    {extractCandidatesMutation.isPending
+                      ? "Scanning..."
+                      : "Scan imported emails"}
+                  </button>
+                ) : null}
+              </div>
+              <div className="mt-2 text-[var(--color-mute)]">
+                {emailCandidatesQuery.isPending
+                  ? "Loading candidates..."
+                  : `${pendingEmailCandidateCount} needs review, ${duplicateEmailCandidateCount} duplicate skipped.`}
+              </div>
+              {emailCandidates.length > 0 ? (
+                <ul className="mt-2 divide-y divide-[var(--color-line-2)]">
+                  {emailCandidates.slice(0, 4).map((candidate) => (
+                    <li key={candidate.id} className="py-2">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="font-medium text-[var(--color-ink)]">
+                            {candidate.detected_title}
+                          </div>
+                          <div className="text-[var(--color-mute)]">
+                            {candidate.matter_code} ·{" "}
+                            {formatDateTime(candidate.detected_start_at)}
+                            {candidate.detected_location
+                              ? ` · ${candidate.detected_location}`
+                              : ""}
+                          </div>
+                          <div className="mt-1">
+                            {candidateStatusLabel(candidate.status)} ·{" "}
+                            {candidate.confidence_band} confidence
+                          </div>
+                          {candidate.source_preview ? (
+                            <div className="mt-1 text-[var(--color-mute)]">
+                              {candidate.source_preview}
+                            </div>
+                          ) : null}
+                        </div>
+                        {candidate.status === "needs_review" && canSyncCalendar ? (
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                reviewCandidateMutation.mutate({
+                                  candidateId: candidate.id,
+                                  action: "approve",
+                                })
+                              }
+                              disabled={reviewCandidateMutation.isPending}
+                              className="inline-flex h-7 items-center rounded-md bg-[var(--color-ink)] px-2.5 text-xs font-medium text-white hover:bg-[var(--color-ink-2)] disabled:opacity-60"
+                              data-testid={`calendar-email-candidate-approve-${candidate.id}`}
+                            >
+                              Approve
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                reviewCandidateMutation.mutate({
+                                  candidateId: candidate.id,
+                                  action: "reject",
+                                })
+                              }
+                              disabled={reviewCandidateMutation.isPending}
+                              className="inline-flex h-7 items-center rounded-md border border-[var(--color-line-2)] px-2.5 text-xs font-medium text-[var(--color-ink)] hover:bg-[var(--color-line-1)] disabled:opacity-60"
+                              data-testid={`calendar-email-candidate-reject-${candidate.id}`}
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : !emailCandidatesQuery.isPending ? (
+                <div className="mt-2 text-[var(--color-mute)]">
+                  No imported email invitation candidates are waiting.
+                </div>
+              ) : null}
+            </div>
           </div>
           {canSyncCalendar ? (
             <div className="flex items-center gap-2">

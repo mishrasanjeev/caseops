@@ -25,9 +25,20 @@ CalendarSyncSourceTypeLiteral = Literal["matter_hearing", "matter_deadline", "ma
 CalendarEventSyncStatusLiteral = Literal["pending", "synced", "failed", "deleted"]
 CalendarSyncModeLiteral = Literal["manual_bounded"]
 CalendarNotificationDeliveryLiteral = Literal["pending_wtd_5_3"]
-CalendarEmailInvitationCandidateLiteral = Literal["deferred_pending_review_queue"]
+CalendarEmailInvitationCandidateLiteral = Literal[
+    "deferred_pending_review_queue",
+    "review_queue_available",
+]
 CalendarConflictTypeLiteral = Literal["duplicate_provider_event_id"]
 CalendarConflictSeverityLiteral = Literal["review"]
+EmailInvitationCandidateStatusLiteral = Literal[
+    "needs_review",
+    "approved_created",
+    "rejected",
+    "duplicate_skipped",
+]
+EmailInvitationCandidateReviewActionLiteral = Literal["approve", "reject"]
+EmailInvitationCandidateConfidenceLiteral = Literal["high", "medium", "low"]
 NotificationRuleScopeTypeLiteral = Literal["company", "matter", "user"]
 NotificationRuleEventTypeLiteral = Literal[
     "hearing_upcoming",
@@ -129,8 +140,53 @@ class CalendarSyncCapabilityStatus(BaseModel):
     durable_automation: Literal["blocked_pending_temporal"] = "blocked_pending_temporal"
     notification_delivery: CalendarNotificationDeliveryLiteral = "pending_wtd_5_3"
     email_invitation_candidates: CalendarEmailInvitationCandidateLiteral = (
-        "deferred_pending_review_queue"
+        "review_queue_available"
     )
+
+
+class EmailInvitationCandidateRecord(BaseModel):
+    id: str
+    company_id: str
+    matter_id: str
+    matter_title: str
+    matter_code: str
+    communication_id: str
+    thread_key: str | None
+    status: EmailInvitationCandidateStatusLiteral
+    detected_title: str = Field(min_length=1, max_length=255)
+    detected_start_at: datetime
+    detected_end_at: datetime | None
+    detected_location: str | None = Field(default=None, max_length=255)
+    source_preview: str | None = Field(default=None, max_length=280)
+    confidence_band: EmailInvitationCandidateConfidenceLiteral
+    duplicate_of_candidate_id: str | None
+    created_deadline_id: str | None
+    reviewed_by_membership_id: str | None
+    reviewed_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class EmailInvitationCandidateListResponse(BaseModel):
+    candidates: list[EmailInvitationCandidateRecord]
+    pending_count: int = Field(ge=0)
+    duplicate_count: int = Field(ge=0)
+
+
+class EmailInvitationCandidateExtractRequest(BaseModel):
+    matter_id: str | None = Field(default=None, min_length=1, max_length=36)
+    limit: int = Field(default=50, ge=1, le=200)
+
+
+class EmailInvitationCandidateExtractResponse(BaseModel):
+    examined_count: int = Field(ge=0)
+    created_count: int = Field(ge=0)
+    duplicate_count: int = Field(ge=0)
+    candidates: list[EmailInvitationCandidateRecord]
+
+
+class EmailInvitationCandidateReviewRequest(BaseModel):
+    action: EmailInvitationCandidateReviewActionLiteral
 
 
 class CalendarSyncConflictCandidate(BaseModel):

@@ -869,7 +869,7 @@ def sync_status(
             manual_sync_available=provider.configured,
             durable_automation="blocked_pending_temporal",
             notification_delivery="pending_wtd_5_3",
-            email_invitation_candidates="deferred_pending_review_queue",
+            email_invitation_candidates="review_queue_available",
         ),
         provider_config=[_provider_config_status(provider)],
         conflict_summary=CalendarSyncConflictSummary(

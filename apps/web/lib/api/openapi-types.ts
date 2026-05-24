@@ -934,6 +934,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/calendar/email-invitation-candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List reviewable email invitation calendar candidates. */
+        get: operations["get_email_invitation_candidates_api_calendar_email_invitation_candidates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/calendar/email-invitation-candidates/extract": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Deterministically extract reviewable calendar candidates from already imported email metadata. */
+        post: operations["post_email_invitation_candidate_extract_api_calendar_email_invitation_candidates_extract_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/calendar/email-invitation-candidates/{candidate_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Approve or reject one email invitation calendar candidate. */
+        patch: operations["patch_email_invitation_candidate_api_calendar_email_invitation_candidates__candidate_id__patch"];
+        trace?: never;
+    };
     "/api/calendar/events": {
         parameters: {
             query?: never;
@@ -6353,10 +6404,10 @@ export interface components {
             durable_automation: "blocked_pending_temporal";
             /**
              * Email Invitation Candidates
-             * @default deferred_pending_review_queue
-             * @constant
+             * @default review_queue_available
+             * @enum {string}
              */
-            email_invitation_candidates: "deferred_pending_review_queue";
+            email_invitation_candidates: "deferred_pending_review_queue" | "review_queue_available";
             /** Manual Sync Available */
             manual_sync_available: boolean;
             /**
@@ -8540,6 +8591,102 @@ export interface components {
              * @default facts
              */
             step_group: string;
+        };
+        /** EmailInvitationCandidateExtractRequest */
+        EmailInvitationCandidateExtractRequest: {
+            /**
+             * Limit
+             * @default 50
+             */
+            limit: number;
+            /** Matter Id */
+            matter_id?: string | null;
+        };
+        /** EmailInvitationCandidateExtractResponse */
+        EmailInvitationCandidateExtractResponse: {
+            /** Candidates */
+            candidates: components["schemas"]["EmailInvitationCandidateRecord"][];
+            /** Created Count */
+            created_count: number;
+            /** Duplicate Count */
+            duplicate_count: number;
+            /** Examined Count */
+            examined_count: number;
+        };
+        /** EmailInvitationCandidateListResponse */
+        EmailInvitationCandidateListResponse: {
+            /** Candidates */
+            candidates: components["schemas"]["EmailInvitationCandidateRecord"][];
+            /** Duplicate Count */
+            duplicate_count: number;
+            /** Pending Count */
+            pending_count: number;
+        };
+        /** EmailInvitationCandidateRecord */
+        EmailInvitationCandidateRecord: {
+            /** Communication Id */
+            communication_id: string;
+            /** Company Id */
+            company_id: string;
+            /**
+             * Confidence Band
+             * @enum {string}
+             */
+            confidence_band: "high" | "medium" | "low";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created Deadline Id */
+            created_deadline_id: string | null;
+            /** Detected End At */
+            detected_end_at: string | null;
+            /** Detected Location */
+            detected_location?: string | null;
+            /**
+             * Detected Start At
+             * Format: date-time
+             */
+            detected_start_at: string;
+            /** Detected Title */
+            detected_title: string;
+            /** Duplicate Of Candidate Id */
+            duplicate_of_candidate_id: string | null;
+            /** Id */
+            id: string;
+            /** Matter Code */
+            matter_code: string;
+            /** Matter Id */
+            matter_id: string;
+            /** Matter Title */
+            matter_title: string;
+            /** Reviewed At */
+            reviewed_at: string | null;
+            /** Reviewed By Membership Id */
+            reviewed_by_membership_id: string | null;
+            /** Source Preview */
+            source_preview?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "needs_review" | "approved_created" | "rejected" | "duplicate_skipped";
+            /** Thread Key */
+            thread_key: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** EmailInvitationCandidateReviewRequest */
+        EmailInvitationCandidateReviewRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "approve" | "reject";
         };
         /**
          * EmailRenderRequest
@@ -17549,6 +17696,107 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CalendarConnectionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_email_invitation_candidates_api_calendar_email_invitation_candidates_get: {
+        parameters: {
+            query?: {
+                matter_id?: string | null;
+                status?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailInvitationCandidateListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_email_invitation_candidate_extract_api_calendar_email_invitation_candidates_extract_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailInvitationCandidateExtractRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailInvitationCandidateExtractResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_email_invitation_candidate_api_calendar_email_invitation_candidates__candidate_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                candidate_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailInvitationCandidateReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailInvitationCandidateRecord"];
                 };
             };
             /** @description Validation Error */
