@@ -3776,6 +3776,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/outside-counsel/spend-records/{spend_record_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update outside counsel spend/payment status */
+        patch: operations["patch_current_company_outside_counsel_spend_record_api_outside_counsel_spend_records__spend_record_id__patch"];
+        trace?: never;
+    };
     "/api/outside-counsel/workspace": {
         parameters: {
             query?: never;
@@ -11931,6 +11948,8 @@ export interface components {
             created_at: string;
             /** Currency */
             currency: string;
+            /** Fee Agreed Minor */
+            fee_agreed_minor: number | null;
             /** Id */
             id: string;
             /** Internal Notes */
@@ -11979,6 +11998,48 @@ export interface components {
             /** Primary Contact Phone */
             primary_contact_phone?: string | null;
         };
+        /** OutsideCounselMatterSpendSummary */
+        OutsideCounselMatterSpendSummary: {
+            /** Approved Spend Minor */
+            approved_spend_minor: number;
+            /** Assigned Counsel Count */
+            assigned_counsel_count: number;
+            /**
+             * Currency
+             * @default INR
+             */
+            currency: string;
+            /** Currency Codes */
+            currency_codes: string[];
+            /** Currency Count */
+            currency_count: number;
+            /** Invoice Count */
+            invoice_count: number;
+            /** Matter Code */
+            matter_code: string;
+            /** Matter Id */
+            matter_id: string;
+            /** Matter Title */
+            matter_title: string;
+            /** Multi Currency */
+            multi_currency: boolean;
+            /** Overdue Invoice Count */
+            overdue_invoice_count: number;
+            /** Payment Status Counts */
+            payment_status_counts: {
+                [key: string]: number;
+            };
+            /** Pending Invoice Count */
+            pending_invoice_count: number;
+            /** Total Agreed Minor */
+            total_agreed_minor: number;
+            /** Total Paid Minor */
+            total_paid_minor: number;
+            /** Total Pending Minor */
+            total_pending_minor: number;
+            /** Total Spend Minor */
+            total_spend_minor: number;
+        };
         /** OutsideCounselPortfolioSummary */
         OutsideCounselPortfolioSummary: {
             /** Active Assignment Count */
@@ -11989,18 +12050,45 @@ export interface components {
             collected_invoice_minor: number;
             /** Company Id */
             company_id: string;
+            /**
+             * Currency
+             * @default INR
+             */
+            currency: string;
+            /** Currency Codes */
+            currency_codes: string[];
+            /** Currency Count */
+            currency_count: number;
             /** Disputed Spend Minor */
             disputed_spend_minor: number;
+            /** Multi Currency */
+            multi_currency: boolean;
             /** Outstanding Invoice Minor */
             outstanding_invoice_minor: number;
+            /** Overdue Invoice Count */
+            overdue_invoice_count: number;
+            /** Payment Status Counts */
+            payment_status_counts: {
+                [key: string]: number;
+            };
+            /** Pending Invoice Count */
+            pending_invoice_count: number;
             /** Preferred Panel Count */
             preferred_panel_count: number;
+            /** Profile Count */
+            profile_count: number;
             /** Profitability Signal Minor */
             profitability_signal_minor: number;
+            /** Total Agreed Minor */
+            total_agreed_minor: number;
             /** Total Budget Minor */
             total_budget_minor: number;
             /** Total Counsel Count */
             total_counsel_count: number;
+            /** Total Paid Minor */
+            total_paid_minor: number;
+            /** Total Pending Minor */
+            total_pending_minor: number;
             /** Total Spend Minor */
             total_spend_minor: number;
         };
@@ -12137,8 +12225,22 @@ export interface components {
             matter_title: string;
             /** Notes */
             notes: string | null;
+            /** Paid Amount Minor */
+            paid_amount_minor: number;
             /** Paid On */
             paid_on: string | null;
+            /**
+             * Payment Status
+             * @enum {string}
+             */
+            payment_status: "submitted" | "approved" | "partially_approved" | "disputed" | "paid";
+            /**
+             * Payment Tracking Status
+             * @enum {string}
+             */
+            payment_tracking_status: "unpaid" | "partially_paid" | "paid";
+            /** Pending Amount Minor */
+            pending_amount_minor: number;
             /** Recorded By Membership Id */
             recorded_by_membership_id: string | null;
             /** Recorded By Name */
@@ -12194,6 +12296,33 @@ export interface components {
              */
             status: "submitted" | "approved" | "partially_approved" | "disputed" | "paid";
         };
+        /** OutsideCounselSpendRecordUpdateRequest */
+        OutsideCounselSpendRecordUpdateRequest: {
+            /** Amount Minor */
+            amount_minor?: number | null;
+            /** Approved Amount Minor */
+            approved_amount_minor?: number | null;
+            /** Assignment Id */
+            assignment_id?: string | null;
+            /** Billed On */
+            billed_on?: string | null;
+            /** Currency */
+            currency?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Due On */
+            due_on?: string | null;
+            /** Invoice Reference */
+            invoice_reference?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Paid On */
+            paid_on?: string | null;
+            /** Stage Label */
+            stage_label?: string | null;
+            /** Status */
+            status?: ("submitted" | "approved" | "partially_approved" | "disputed" | "paid") | null;
+        };
         /** OutsideCounselUpdateRequest */
         OutsideCounselUpdateRequest: {
             /** Firm City */
@@ -12219,6 +12348,8 @@ export interface components {
         OutsideCounselWorkspaceResponse: {
             /** Assignments */
             assignments: components["schemas"]["OutsideCounselAssignmentRecord"][];
+            /** Matter Summaries */
+            matter_summaries: components["schemas"]["OutsideCounselMatterSpendSummary"][];
             /** Profiles */
             profiles: components["schemas"]["OutsideCounselRecord"][];
             /** Spend Records */
@@ -21904,6 +22035,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["OutsideCounselSpendRecordCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OutsideCounselSpendRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_current_company_outside_counsel_spend_record_api_outside_counsel_spend_records__spend_record_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                spend_record_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OutsideCounselSpendRecordUpdateRequest"];
             };
         };
         responses: {

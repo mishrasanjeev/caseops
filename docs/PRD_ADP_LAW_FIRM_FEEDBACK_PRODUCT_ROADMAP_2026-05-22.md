@@ -1654,6 +1654,11 @@ Tests:
 Type: Backend + Web
 Priority: P2
 Dependencies: Outside counsel foundations, billing/invoice models
+Status: Foundation implemented 2026-05-24; existing outside-counsel
+assignment/spend records now expose matter-level agreed/paid/pending rollups,
+payment-status summaries, redacted spend create/update audit events, and
+matter-access-filtered workspace data without payment processing or counsel
+reputation scoring.
 
 Scope:
 

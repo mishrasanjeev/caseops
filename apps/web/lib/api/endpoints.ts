@@ -1334,6 +1334,45 @@ export async function createOutsideCounselSpendRecord(input: {
   });
 }
 
+export async function updateOutsideCounselSpendRecord(input: {
+  spendRecordId: string;
+  patch: {
+    assignmentId?: string | null;
+    invoiceReference?: string | null;
+    stageLabel?: string | null;
+    description?: string | null;
+    currency?: string | null;
+    amountMinor?: number | null;
+    approvedAmountMinor?: number | null;
+    status?: OutsideCounselSpendStatus | null;
+    billedOn?: string | null;
+    dueOn?: string | null;
+    paidOn?: string | null;
+    notes?: string | null;
+  };
+}): Promise<unknown> {
+  return apiRequest<unknown>(
+    `/api/outside-counsel/spend-records/${input.spendRecordId}`,
+    {
+      method: "PATCH",
+      body: {
+        assignment_id: input.patch.assignmentId,
+        invoice_reference: input.patch.invoiceReference,
+        stage_label: input.patch.stageLabel,
+        description: input.patch.description,
+        currency: input.patch.currency,
+        amount_minor: input.patch.amountMinor,
+        approved_amount_minor: input.patch.approvedAmountMinor,
+        status: input.patch.status,
+        billed_on: input.patch.billedOn,
+        due_on: input.patch.dueOn,
+        paid_on: input.patch.paidOn,
+        notes: input.patch.notes,
+      },
+    },
+  );
+}
+
 // --- Outside counsel recommendations (BG-016 follow-up) ---
 // Backend: POST /api/outside-counsel/recommendations (capability:
 // outside_counsel:recommend). Ranks panel counsel by panel status,

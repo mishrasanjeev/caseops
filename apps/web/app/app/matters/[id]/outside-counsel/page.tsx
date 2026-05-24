@@ -41,6 +41,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { apiErrorMessage } from "@/lib/api/config";
 import {
   createOutsideCounselAssignment,
+  createOutsideCounselSpendRecord,
   fetchOutsideCounselWorkspace,
   setMatterOcCrossVisibility,
 } from "@/lib/api/endpoints";
@@ -83,15 +84,33 @@ export default function PerMatterOutsideCounselPage() {
       ),
     [workspaceQuery.data, matterId],
   );
+  const matterSummary = useMemo(
+    () =>
+      (workspaceQuery.data?.matter_summaries ?? []).find(
+        (summary) => summary.matter_id === matterId,
+      ),
+    [workspaceQuery.data, matterId],
+  );
   const currency =
     workspaceQuery.data?.summary.currency ??
     (matterAssignments[0]?.currency ?? "INR");
+  const currencyCodes = matterSummary?.currency_codes ?? [currency];
+  const hasMultipleCurrencies = matterSummary?.multi_currency ?? false;
 
   const totalBudget = matterAssignments.reduce(
     (acc, a) => acc + (a.budget_amount_minor ?? 0),
     0,
   );
   const totalSpend = matterSpend.reduce((acc, s) => acc + s.amount_minor, 0);
+  const totalPaid =
+    matterSummary?.total_paid_minor ??
+    matterSpend.reduce((acc, s) => acc + (s.paid_amount_minor ?? 0), 0);
+  const totalPending =
+    matterSummary?.total_pending_minor ??
+    matterSpend.reduce(
+      (acc, s) => acc + (s.pending_amount_minor ?? s.amount_minor),
+      0,
+    );
 
   return (
     <div className="flex flex-col gap-6">
@@ -105,10 +124,18 @@ export default function PerMatterOutsideCounselPage() {
         description="Counsel engaged on this matter. Add or remove assignments; budgets and spend track against the matter."
         actions={
           canManage ? (
-            <AssignCounselDialog
-              matterId={matterId}
-              availableCounsel={workspaceQuery.data?.profiles ?? []}
-            />
+            <div className="flex flex-wrap items-center gap-2">
+              <AssignCounselDialog
+                matterId={matterId}
+                availableCounsel={workspaceQuery.data?.profiles ?? []}
+              />
+              {matterAssignments.length > 0 ? (
+                <LogSpendDialog
+                  matterId={matterId}
+                  assignments={matterAssignments}
+                />
+              ) : null}
+            </div>
           ) : (
             <Link
               className="text-xs text-[var(--color-brand-700)] underline-offset-4 hover:underline"
@@ -120,7 +147,7 @@ export default function PerMatterOutsideCounselPage() {
         }
       />
 
-      <section className="grid gap-3 md:grid-cols-3">
+      <section className="grid gap-3 md:grid-cols-4">
         <KpiCard
           icon={Users}
           label="Counsel assigned"
@@ -128,7 +155,7 @@ export default function PerMatterOutsideCounselPage() {
         />
         <KpiCard
           icon={Banknote}
-          label="Approved budget"
+          label="Fee agreed"
           value={formatMoney(totalBudget, currency)}
         />
         <KpiCard
@@ -136,7 +163,20 @@ export default function PerMatterOutsideCounselPage() {
           label="Recorded spend"
           value={formatMoney(totalSpend, currency)}
         />
+        <KpiCard
+          icon={Banknote}
+          label="Paid"
+          value={formatMoney(totalPaid, currency)}
+        />
+        <KpiCard
+          icon={Banknote}
+          label="Pending"
+          value={formatMoney(totalPending, currency)}
+        />
       </section>
+      {hasMultipleCurrencies ? (
+        <CurrencyWarning currencyCodes={currencyCodes} />
+      ) : null}
 
       <CrossVisibilityCard
         matterId={matterId}
@@ -207,9 +247,12 @@ export default function PerMatterOutsideCounselPage() {
                   </div>
                   <div className="flex items-center justify-between text-xs text-[var(--color-mute)]">
                     <span>
-                      Budget:{" "}
-                      {a.budget_amount_minor != null
-                        ? formatMoney(a.budget_amount_minor, a.currency)
+                      Fee agreed:{" "}
+                      {(a.fee_agreed_minor ?? a.budget_amount_minor) != null
+                        ? formatMoney(
+                            a.fee_agreed_minor ?? a.budget_amount_minor ?? 0,
+                            a.currency,
+                          )
                         : "—"}
                     </span>
                     <span>
@@ -247,6 +290,24 @@ export default function PerMatterOutsideCounselPage() {
                     <div className="text-xs text-[var(--color-mute)]">
                       {s.counsel_name}
                       {s.stage_label ? ` · ${s.stage_label}` : ""}
+                      {s.invoice_reference ? ` · invoice ${s.invoice_reference}` : ""}
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--color-mute)]">
+                      <StatusBadge
+                        status={
+                          s.payment_tracking_status ??
+                          s.payment_status ??
+                          s.status
+                        }
+                      />
+                      <span>Paid {formatMoney(s.paid_amount_minor ?? 0, s.currency)}</span>
+                      <span>
+                        Pending{" "}
+                        {formatMoney(
+                          s.pending_amount_minor ?? s.amount_minor,
+                          s.currency,
+                        )}
+                      </span>
                     </div>
                   </div>
                   <div className="text-right text-sm font-semibold tabular text-[var(--color-ink)]">
@@ -259,6 +320,21 @@ export default function PerMatterOutsideCounselPage() {
         </Card>
       ) : null}
     </div>
+  );
+}
+
+
+function CurrencyWarning({
+  currencyCodes,
+}: {
+  currencyCodes: string[];
+}): React.JSX.Element {
+  return (
+    <p className="rounded-md border border-[var(--color-line)] bg-[var(--color-bg)] px-3 py-2 text-xs text-[var(--color-ink-2)]">
+      Multiple currencies are present ({currencyCodes.join(", ")}). Totals are
+      shown in stored minor units and should be reviewed by currency; this view
+      does not execute payments.
+    </p>
   );
 }
 
@@ -418,6 +494,187 @@ function AssignCounselDialog({
               data-testid="matter-oc-assign-submit"
             >
               {mutation.isPending ? "Assigning…" : "Assign"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+
+function LogSpendDialog({
+  matterId,
+  assignments,
+}: {
+  matterId: string;
+  assignments: {
+    id: string;
+    counsel_id: string;
+    counsel_name: string;
+    currency: string;
+  }[];
+}): React.JSX.Element {
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [assignmentId, setAssignmentId] = useState(assignments[0]?.id ?? "");
+  const [description, setDescription] = useState("");
+  const [invoiceReference, setInvoiceReference] = useState("");
+  const [amount, setAmount] = useState("");
+  const [status, setStatus] = useState("submitted");
+  const [dueOn, setDueOn] = useState("");
+
+  const selected =
+    assignments.find((assignment) => assignment.id === assignmentId) ??
+    assignments[0];
+  const amountMinor = amount ? Math.round(Number(amount) * 100) : 0;
+  const approvedAmountMinor =
+    status === "approved" || status === "paid" ? amountMinor : null;
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      createOutsideCounselSpendRecord({
+        matterId,
+        counselId: selected.counsel_id,
+        assignmentId: selected.id,
+        invoiceReference: invoiceReference.trim() || null,
+        description: description.trim(),
+        amountMinor,
+        approvedAmountMinor,
+        status: status as "submitted" | "approved" | "disputed" | "paid",
+        currency: selected.currency,
+        dueOn: dueOn || null,
+      }),
+    onSuccess: async () => {
+      toast.success("Spend recorded.");
+      setOpen(false);
+      setDescription("");
+      setInvoiceReference("");
+      setAmount("");
+      setStatus("submitted");
+      setDueOn("");
+      await queryClient.invalidateQueries({
+        queryKey: ["outside-counsel", "workspace"],
+      });
+    },
+    onError: (err) => {
+      toast.error(apiErrorMessage(err, "Could not record spend."));
+    },
+  });
+
+  const canSubmit =
+    Boolean(selected) &&
+    description.trim().length >= 2 &&
+    Number.isFinite(Number(amount)) &&
+    amountMinor >= 0 &&
+    !mutation.isPending;
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline" data-testid="matter-oc-spend-open">
+          <Plus className="h-4 w-4" aria-hidden /> Log spend
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Log outside-counsel spend</DialogTitle>
+          <DialogDescription>
+            Record factual invoice and payment status for this matter.
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          className="flex flex-col gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (canSubmit) mutation.mutate();
+          }}
+        >
+          <div>
+            <Label htmlFor="oc-spend-assignment">Counsel</Label>
+            <Select value={assignmentId} onValueChange={setAssignmentId}>
+              <SelectTrigger id="oc-spend-assignment">
+                <SelectValue placeholder="Pick an assignment" />
+              </SelectTrigger>
+              <SelectContent>
+                {assignments.map((assignment) => (
+                  <SelectItem key={assignment.id} value={assignment.id}>
+                    {assignment.counsel_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="oc-spend-invoice">Invoice reference</Label>
+            <Input
+              id="oc-spend-invoice"
+              value={invoiceReference}
+              onChange={(e) => setInvoiceReference(e.target.value)}
+              maxLength={120}
+              placeholder="optional"
+            />
+          </div>
+          <div>
+            <Label htmlFor="oc-spend-description">Description</Label>
+            <Input
+              id="oc-spend-description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              maxLength={500}
+              placeholder="Invoice or stage description"
+            />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <Label htmlFor="oc-spend-amount">Amount ({selected?.currency ?? "INR"})</Label>
+              <Input
+                id="oc-spend-amount"
+                type="number"
+                min={0}
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="0"
+              />
+            </div>
+            <div>
+              <Label htmlFor="oc-spend-due">Due date</Label>
+              <Input
+                id="oc-spend-due"
+                type="date"
+                value={dueOn}
+                onChange={(e) => setDueOn(e.target.value)}
+              />
+            </div>
+          </div>
+          <div>
+            <Label htmlFor="oc-spend-status">Payment status</Label>
+            <Select value={status} onValueChange={setStatus}>
+              <SelectTrigger id="oc-spend-status">
+                <SelectValue placeholder="Pick status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="submitted">Submitted</SelectItem>
+                <SelectItem value="approved">Approved</SelectItem>
+                <SelectItem value="disputed">Disputed</SelectItem>
+                <SelectItem value="paid">Paid</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={!canSubmit || assignments.length === 0}
+              data-testid="matter-oc-spend-submit"
+            >
+              {mutation.isPending ? "Recording..." : "Record spend"}
             </Button>
           </DialogFooter>
         </form>
