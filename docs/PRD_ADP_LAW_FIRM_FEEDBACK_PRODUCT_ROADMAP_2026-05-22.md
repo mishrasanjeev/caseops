@@ -1825,6 +1825,20 @@ table and LLM-backed `compare_playbook` remain unchanged. Web adds a
 compact "Compare against tenant playbook" panel in the contract
 Clauses tab. No ADP-15 work.
 
+Scope:
+
+- Tenant playbook CRUD.
+- Clause expectation rules.
+- Compare contract to playbook.
+- Matched/missing/deviation/needs-review statuses.
+
+Tests:
+
+- Tenant isolation.
+- Playbook compare.
+- Deviation source links.
+- Audit redaction.
+
 ### ADP-15: Drafting Data Extraction Review Queue
 
 Type: Backend + Web
