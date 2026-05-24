@@ -13,6 +13,7 @@ from caseops_api.services.court_format_profiles import (
     format_cause_title,
     list_profiles,
     resolve_profile,
+    validate_required_fields,
 )
 from caseops_api.services.draft_pdf_export import render_pdf_bytes
 
@@ -48,29 +49,40 @@ def test_court_name_fuzzy_match_resolves_supreme_court() -> None:
 
 
 def test_unknown_court_name_falls_through_to_generic() -> None:
-    profile = resolve_profile(court_name="Sessions Court, Pune")
+    profile = resolve_profile(court_name="Metaverse Forum, Pune")
     assert profile.key == "generic"
     profile2 = resolve_profile(court_name=None)
     assert profile2.key == "generic"
 
 
-def test_list_profiles_returns_ten_in_stable_order() -> None:
+def test_list_profiles_returns_adp16_profiles_in_stable_order() -> None:
     """PG-005 Sprint 5 (2026-05-01): expanded from 4 to 10 profiles —
     SC → HC (Delhi / Bombay / Madras / Calcutta / Karnataka) →
     tribunals (NCLT / NCLAT / DRT) → generic."""
     keys = [p.key for p in list_profiles()]
     assert keys == [
         "supreme_court",
+        "high_court",
         "delhi_hc",
         "bombay_hc",
         "madras_hc",
         "calcutta_hc",
         "karnataka_hc",
+        "district_court",
+        "tribunal",
         "nclt",
         "nclat",
         "drt",
         "generic",
     ]
+    categories = {p.category for p in list_profiles()}
+    assert {
+        "district_court",
+        "high_court",
+        "supreme_court",
+        "tribunal",
+        "generic",
+    }.issubset(categories)
 
 
 def test_render_pdf_bytes_produces_valid_pdf() -> None:
@@ -183,6 +195,64 @@ def test_drt_resolves_from_court_name() -> None:
     assert profile.key == "drt"
     profile_short = resolve_profile(court_name="DRT-III, Delhi")
     assert profile_short.key == "drt"
+
+
+def test_adp16_category_profiles_resolve_from_general_court_names() -> None:
+    assert resolve_profile(court_name="High Court of Rajasthan").key == "high_court"
+    assert resolve_profile(court_name="Sessions Court, Pune").key == "district_court"
+    assert resolve_profile(court_name="State Transport Appellate Tribunal").key == "tribunal"
+
+
+def test_adp16_required_fields_are_profile_and_template_aware() -> None:
+    district = resolve_profile(explicit_key="district_court")
+    findings = validate_required_fields(
+        district,
+        template_type="bail",
+        facts={
+            "complainant_name": "State",
+            "accused_name": "Amit Rao",
+            "fir_number": "145/2026",
+        },
+        matter_court_name="Sessions Court, Pune",
+    )
+
+    by_key = {finding.key: finding for finding in findings}
+    assert by_key["court_or_forum_name"].satisfied is True
+    assert by_key["party_names"].satisfied is True
+    assert by_key["fir_number"].satisfied is True
+    assert by_key["police_station"].satisfied is False
+    assert by_key["police_station"].source is None
+    assert by_key["case_number"].satisfied is False
+
+
+def test_adp16_supreme_court_template_fields_include_order_and_limitation() -> None:
+    profile = resolve_profile(explicit_key="supreme_court")
+    findings = validate_required_fields(
+        profile,
+        template_type="special_leave_petition",
+        facts={
+            "petitioner_name": "Anil Sharma",
+            "respondent_name": "Union of India",
+            "impugned_order_date": "2026-04-01",
+        },
+        matter_court_name=None,
+    )
+
+    by_key = {finding.key: finding for finding in findings}
+    assert by_key["petitioner_or_appellant"].satisfied is True
+    assert by_key["respondent_name"].satisfied is True
+    assert by_key["impugned_order_details"].satisfied is True
+    assert by_key["limitation_or_certification"].satisfied is False
+
+
+def test_adp16_generic_profile_has_no_required_field_findings() -> None:
+    profile = resolve_profile(explicit_key="generic")
+    assert validate_required_fields(
+        profile,
+        template_type="bail",
+        facts={},
+        matter_court_name=None,
+    ) == []
 
 
 def test_format_cause_title_supreme_court_uses_uppercase_versus() -> None:

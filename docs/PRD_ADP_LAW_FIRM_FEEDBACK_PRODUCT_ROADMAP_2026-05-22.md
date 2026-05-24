@@ -1883,6 +1883,12 @@ Type: Backend + Web
 Priority: P3
 Dependencies: Drafting templates
 
+Status (2026-05-24): In progress. Static court-profile foundation now covers
+District Court, High Court, Supreme Court, Tribunal, and Generic profiles with
+deterministic layout, heading, and required-field review rules. Export and
+filing checklist surfaces report missing required fields for lawyer review
+without blocking normal draft creation or fabricating values.
+
 Scope:
 
 - Format profiles for District Court, High Court, Supreme Court, Tribunal.

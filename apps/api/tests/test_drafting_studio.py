@@ -469,7 +469,42 @@ def test_pdf_export_explicit_court_profile_overrides_court_name(
     )
     assert resp.status_code == 200, resp.text
     assert resp.headers.get("x-caseops-court-profile") == "supreme_court"
+    assert resp.headers.get("x-caseops-court-profile-category") == "supreme_court"
     assert "supreme_court" in resp.headers["content-disposition"]
+
+
+def test_pdf_export_reports_required_field_gaps_without_blocking(
+    client: TestClient,
+) -> None:
+    token = str(bootstrap_company(client)["access_token"])
+    matter_id = _create_matter(client, token, "DS-PDF-REQ")
+    _seed_authority(neutral_citation="2024 SCC OnLine SC 1004")
+    draft_resp = client.post(
+        f"/api/matters/{matter_id}/drafts",
+        headers=auth_headers(token),
+        json={
+            "title": "Writ petition with missing order details",
+            "draft_type": "brief",
+            "template_type": "writ_petition",
+            "facts": {
+                "petitioner_name": "Aster Industries",
+                "respondent_name": "State of Karnataka",
+            },
+        },
+    )
+    assert draft_resp.status_code == 200, draft_resp.text
+    draft = draft_resp.json()
+    _generate(client, token, matter_id, draft["id"])
+
+    resp = client.get(
+        f"/api/matters/{matter_id}/drafts/{draft['id']}/export.pdf",
+        headers=auth_headers(token),
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.headers.get("x-caseops-court-profile") == "delhi_hc"
+    assert resp.headers.get("x-caseops-court-profile-category") == "high_court"
+    assert resp.headers.get("x-caseops-missing-required-fields") == "1"
 
 
 def test_pdf_export_unknown_court_profile_returns_422(client: TestClient) -> None:
@@ -517,9 +552,8 @@ def test_pdf_export_blocked_without_verified_citations(client: TestClient) -> No
     assert "verified citation" in detail.lower()
 
 
-def test_court_profiles_route_lists_ten_profiles(client: TestClient) -> None:
-    """GET /api/drafting/court-profiles returns 10 profiles in stable
-    order after PG-005 Sprint 5 (2026-05-01) added Madras HC, Calcutta
+def test_court_profiles_route_lists_adp16_profiles(client: TestClient) -> None:
+    """GET /api/drafting/court-profiles exposes ADP-16 profile metadata.
     HC, Karnataka HC, NCLT, NCLAT, DRT — the web PDF-export selector
     reads this directly."""
     token = str(bootstrap_company(client)["access_token"])
@@ -532,26 +566,78 @@ def test_court_profiles_route_lists_ten_profiles(client: TestClient) -> None:
     keys = [p["key"] for p in body["profiles"]]
     assert keys == [
         "supreme_court",
+        "high_court",
         "delhi_hc",
         "bombay_hc",
         "madras_hc",
         "calcutta_hc",
         "karnataka_hc",
+        "district_court",
+        "tribunal",
         "nclt",
         "nclat",
         "drt",
         "generic",
     ]
     sc = next(p for p in body["profiles"] if p["key"] == "supreme_court")
+    assert sc["category"] == "supreme_court"
     assert sc["page_number_position"] == "center"
     assert sc["body_font_size_pt"] == 12
+    assert sc["page_number_format"] == "{n}"
+    assert sc["required_fields"][0]["key"] == "petitioner_or_appellant"
+    district = next(p for p in body["profiles"] if p["key"] == "district_court")
+    assert district["category"] == "district_court"
+    assert district["cause_title_separator"] == "v."
+    assert district["layout_rules"]
     nclt = next(p for p in body["profiles"] if p["key"] == "nclt")
+    assert nclt["category"] == "tribunal"
     assert nclt["body_font_size_pt"] == 11
 
 
 def test_court_profiles_route_requires_auth(client: TestClient) -> None:
     resp = client.get("/api/drafting/court-profiles")
     assert resp.status_code in {401, 403}
+
+
+def test_filing_checklist_surfaces_court_required_field_findings(
+    client: TestClient,
+) -> None:
+    token = str(bootstrap_company(client)["access_token"])
+    matter_id = _create_matter(client, token, "DS-CHECKLIST-REQ")
+    draft_resp = client.post(
+        f"/api/matters/{matter_id}/drafts",
+        headers=auth_headers(token),
+        json={
+            "title": "District bail with incomplete facts",
+            "draft_type": "brief",
+            "template_type": "bail",
+            "facts": {
+                "complainant_name": "State",
+                "accused_name": "Ravi Verma",
+                "fir_number": "145/2026",
+            },
+        },
+    )
+    assert draft_resp.status_code == 200, draft_resp.text
+    draft = draft_resp.json()
+
+    resp = client.get(
+        f"/api/matters/{matter_id}/drafts/{draft['id']}/filing-checklist"
+        "?court_profile=district_court",
+        headers=auth_headers(token),
+    )
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["court_profile_key"] == "district_court"
+    assert body["missing_required_field_count"] == 2
+    findings = {item["key"]: item for item in body["required_field_findings"]}
+    assert findings["court_or_forum_name"]["satisfied"] is True
+    assert findings["party_names"]["satisfied"] is True
+    assert findings["fir_number"]["satisfied"] is True
+    assert findings["police_station"]["satisfied"] is False
+    assert findings["case_number"]["satisfied"] is False
+    assert all("storage_key" not in json.dumps(item) for item in findings.values())
 
 
 # ---------------------------------------------------------------

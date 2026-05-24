@@ -1779,8 +1779,7 @@ export function draftDocxUrl(matterId: string, draftId: string): string {
 
 // PG-005 Sprint 3 (2026-05-01) — court-format-aware PDF export.
 // `courtProfile` is optional; when omitted the API auto-resolves
-// from the matter's `court_name`. Known keys: supreme_court /
-// delhi_hc / bombay_hc / generic.
+// from the matter's `court_name`. Unknown keys fail closed server-side.
 export function draftPdfUrl(
   matterId: string,
   draftId: string,
@@ -1964,6 +1963,15 @@ export type FilingChecklistItem = {
   auto_satisfied_reason: string | null;
 };
 
+export type FilingRequiredFieldFinding = {
+  key: string;
+  label: string;
+  description: string;
+  required: boolean;
+  satisfied: boolean;
+  source: string | null;
+};
+
 export type FilingChecklistResponse = {
   matter_id: string;
   draft_id: string;
@@ -1974,6 +1982,8 @@ export type FilingChecklistResponse = {
   court_fee_note: string;
   limitation_note: string | null;
   copies_required: number;
+  required_field_findings: FilingRequiredFieldFinding[];
+  missing_required_field_count: number;
 };
 
 export async function fetchFilingChecklist(input: {
@@ -2015,9 +2025,27 @@ export function draftFilingBundleUrl(
 export type CourtFormatProfile = {
   key: string;
   display_name: string;
+  category: string;
   page_format: string;
+  layout_rules: string[];
+  heading_rules: string[];
   body_font_size_pt: number;
   page_number_position: string;
+  page_number_format: string;
+  margin_left_mm: number;
+  margin_right_mm: number;
+  margin_top_mm: number;
+  margin_bottom_mm: number;
+  cause_title_separator: string;
+  cause_title_party_case: string;
+  cause_title_numbered: boolean;
+  required_fields: {
+    key: string;
+    label: string;
+    description: string;
+    aliases: string[];
+    applies_to_templates: string[];
+  }[];
 };
 
 export async function listCourtFormatProfiles(): Promise<CourtFormatProfile[]> {

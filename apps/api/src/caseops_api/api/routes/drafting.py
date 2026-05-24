@@ -70,14 +70,34 @@ class TemplateRecommendationsResponse(BaseModel):
     recommendations: list[TemplateRecommendationResponse]
 
 
+class CourtRequiredFieldRuleResponse(BaseModel):
+    key: str
+    label: str
+    description: str
+    aliases: list[str]
+    applies_to_templates: list[str]
+
+
 class CourtFormatProfileResponse(BaseModel):
     """One row in the PDF-export court-profile selector."""
 
     key: str
     display_name: str
+    category: str
     page_format: str
+    layout_rules: list[str]
+    heading_rules: list[str]
     body_font_size_pt: int
     page_number_position: str
+    page_number_format: str
+    margin_left_mm: float
+    margin_right_mm: float
+    margin_top_mm: float
+    margin_bottom_mm: float
+    cause_title_separator: str
+    cause_title_party_case: str
+    cause_title_numbered: bool
+    required_fields: list[CourtRequiredFieldRuleResponse]
 
 
 class CourtFormatProfilesResponse(BaseModel):
@@ -175,9 +195,30 @@ async def get_court_format_profiles(
             CourtFormatProfileResponse(
                 key=p.key,
                 display_name=p.display_name,
+                category=p.category,
                 page_format=p.page_format,
+                layout_rules=list(p.layout_rules),
+                heading_rules=list(p.heading_rules),
                 body_font_size_pt=p.body_font_size_pt,
                 page_number_position=p.page_number_position,
+                page_number_format=p.page_number_format,
+                margin_left_mm=p.margin_left_mm,
+                margin_right_mm=p.margin_right_mm,
+                margin_top_mm=p.margin_top_mm,
+                margin_bottom_mm=p.margin_bottom_mm,
+                cause_title_separator=p.cause_title_separator,
+                cause_title_party_case=p.cause_title_party_case,
+                cause_title_numbered=p.cause_title_numbered,
+                required_fields=[
+                    CourtRequiredFieldRuleResponse(
+                        key=rule.key,
+                        label=rule.label,
+                        description=rule.description,
+                        aliases=list(rule.aliases),
+                        applies_to_templates=list(rule.applies_to_templates),
+                    )
+                    for rule in p.required_field_rules
+                ],
             )
             for p in list_profiles()
         ],

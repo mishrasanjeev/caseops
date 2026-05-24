@@ -27,6 +27,7 @@ from caseops_api.db.models import DraftStatus
 from caseops_api.services.court_format_profiles import (
     CourtFormatProfile,
     resolve_profile,
+    validate_required_fields,
 )
 from caseops_api.services.drafting import _load_draft, _load_matter
 from caseops_api.services.identity import SessionContext
@@ -40,8 +41,8 @@ def render_version_pdf(
     draft_id: str,
     version_id: str | None = None,
     court_profile_key: str | None = None,
-) -> tuple[bytes, str, str]:
-    """Return ``(pdf_bytes, suggested_filename, profile_key)``.
+) -> tuple[bytes, str, str, str, int]:
+    """Return ``(pdf_bytes, suggested_filename, profile_key, category, missing_count)``.
 
     ``court_profile_key`` overrides the auto-resolution from the
     matter's court name. Falls back to the draft's current version
@@ -92,6 +93,15 @@ def render_version_pdf(
         citations = json.loads(version.citations_json) if version.citations_json else []
     except json.JSONDecodeError:
         citations = []
+    required_field_findings = validate_required_fields(
+        profile,
+        template_type=draft.template_type or "",
+        facts=_draft_facts(draft),
+        matter_court_name=getattr(matter, "court_name", None),
+    )
+    missing_required_field_count = sum(
+        1 for finding in required_field_findings if not finding.satisfied
+    )
 
     pdf_bytes = render_pdf_bytes(
         profile=profile,
@@ -110,7 +120,13 @@ def render_version_pdf(
         ch if ch.isalnum() or ch in ("-", "_") else "-" for ch in draft.title
     ).strip("-")[:60] or "draft"
     filename = f"{safe_title}-r{version.revision}-{profile.key}.pdf"
-    return pdf_bytes, filename, profile.key
+    return (
+        pdf_bytes,
+        filename,
+        profile.key,
+        profile.category,
+        missing_required_field_count,
+    )
 
 
 def render_pdf_bytes(
@@ -297,6 +313,17 @@ def _ascii_safe(text: str) -> str:
             out,
         )
     return out
+
+
+def _draft_facts(draft: object) -> dict[str, object]:
+    facts_json = getattr(draft, "facts_json", None)
+    if not facts_json:
+        return {}
+    try:
+        parsed = json.loads(facts_json)
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
 
 
 __all__ = ["render_pdf_bytes", "render_version_pdf"]

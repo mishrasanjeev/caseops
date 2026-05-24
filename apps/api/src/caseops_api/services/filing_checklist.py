@@ -29,6 +29,7 @@ Data sources:
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -39,7 +40,9 @@ from caseops_api.db.models import Draft, MatterAttachment
 from caseops_api.schemas.drafting_templates import DraftTemplateType
 from caseops_api.services.court_format_profiles import (
     CourtFormatProfile,
+    CourtRequiredFieldFinding,
     resolve_profile,
+    validate_required_fields,
 )
 
 ChecklistCategory = Literal["document", "fee", "procedure", "service"]
@@ -67,6 +70,8 @@ class FilingChecklist:
     court_fee_note: str = ""
     limitation_note: str | None = None
     copies_required: int = 1
+    required_field_findings: list[CourtRequiredFieldFinding] = field(default_factory=list)
+    missing_required_field_count: int = 0
 
 
 # Base items every contested-matter filing needs. Court / template
@@ -163,7 +168,7 @@ def _court_overrides(profile: CourtFormatProfile) -> list[ChecklistItem]:
                 category="document",
             ),
         ]
-    if profile.key in {"delhi_hc", "bombay_hc", "madras_hc", "calcutta_hc", "karnataka_hc"}:
+    if profile.category == "high_court":
         return [
             ChecklistItem(
                 id="synopsis_and_dates",
@@ -207,6 +212,28 @@ def _court_overrides(profile: CourtFormatProfile) -> list[ChecklistItem]:
                 category="document",
             ),
         ]
+    if profile.category == "district_court":
+        return [
+            ChecklistItem(
+                id="court_format_required_fields",
+                label="Court-format required fields reviewed",
+                description=(
+                    "Confirm court/forum name, parties, and any template-specific "
+                    "criminal fields before filing."
+                ),
+                category="procedure",
+            ),
+            ChecklistItem(
+                id="process_fee",
+                label="Process fee / summons batta",
+                description=(
+                    "District Court filings often require process fee or summons "
+                    "batta; verify the local filing counter requirement."
+                ),
+                category="fee",
+                required=False,
+            ),
+        ]
     if profile.key == "drt":
         return [
             ChecklistItem(
@@ -226,6 +253,28 @@ def _court_overrides(profile: CourtFormatProfile) -> list[ChecklistItem]:
                     "and aggregate as on the date of filing."
                 ),
                 category="document",
+            ),
+        ]
+    if profile.key == "tribunal":
+        return [
+            ChecklistItem(
+                id="prescribed_tribunal_form",
+                label="Prescribed tribunal form",
+                description=(
+                    "Tribunal filings often use a prescribed form. Match the "
+                    "form to the tribunal and relief sought."
+                ),
+                category="document",
+            ),
+            ChecklistItem(
+                id="authorisation_document",
+                label="Authorisation document",
+                description=(
+                    "Attach board resolution, authority letter, or vakalat as "
+                    "applicable for the filing party."
+                ),
+                category="document",
+                required=False,
             ),
         ]
     return []
@@ -415,11 +464,14 @@ def _template_overrides(template_type: str) -> list[ChecklistItem]:
 def _copies_required(profile_key: str) -> int:
     return {
         "supreme_court": 6,  # 1 + 5
+        "high_court": 3,
         "delhi_hc": 3,
         "bombay_hc": 3,
         "madras_hc": 3,
         "calcutta_hc": 3,
         "karnataka_hc": 3,
+        "district_court": 2,
+        "tribunal": 5,
         "nclt": 5,
         "nclat": 5,
         "drt": 3,
@@ -453,7 +505,7 @@ def _court_fee_note(profile_key: str, template_type: str) -> str:
             "Probate court fee is computed on the aggregate estate "
             "value (Schedule III of most State Court-Fees Acts)."
         )
-    if profile_key in {"nclt", "nclat"}:
+    if profile_key in {"tribunal", "nclt", "nclat"}:
         return (
             "NCLT / NCLAT fees are fixed per petition type per the "
             "Schedule of Fees Rules. Confirm the current schedule "
@@ -464,6 +516,11 @@ def _court_fee_note(profile_key: str, template_type: str) -> str:
             "DRT application fee is computed on the debt amount per "
             "the DRT (Procedure) Rules 1993 + the relevant State "
             "Court-Fees Act."
+        )
+    if profile_key == "district_court":
+        return (
+            "District Court fee depends on the State Court-Fees Act, relief, "
+            "valuation, and process fee schedule. Verify locally before filing."
         )
     return (
         "Court fee depends on the State Court-Fees Act schedule + the "
@@ -582,6 +639,15 @@ def build_filing_checklist(
     )
 
     template_type = draft.template_type or ""
+    required_field_findings = validate_required_fields(
+        profile,
+        template_type=template_type,
+        facts=_draft_facts(draft),
+        matter_court_name=court_name,
+    )
+    missing_required_field_count = sum(
+        1 for finding in required_field_findings if not finding.satisfied
+    )
 
     items: list[ChecklistItem] = []
     items.extend(_BASE_CONTESTED_ITEMS)
@@ -647,7 +713,19 @@ def build_filing_checklist(
         court_fee_note=_court_fee_note(profile.key, template_type),
         limitation_note=_limitation_note(template_type),
         copies_required=_copies_required(profile.key),
+        required_field_findings=required_field_findings,
+        missing_required_field_count=missing_required_field_count,
     )
+
+
+def _draft_facts(draft: Draft) -> dict[str, object]:
+    if not draft.facts_json:
+        return {}
+    try:
+        parsed = json.loads(draft.facts_json)
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
 
 
 __all__ = [
