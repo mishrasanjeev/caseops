@@ -52,6 +52,7 @@ import type {
   AffidavitQuestion,
   AffidavitStatement,
   MatterFileQAAnswerMode,
+  MatterFileQAAnalysisLanguage,
   MatterFileQAHistoryEntry,
   MatterFileQAResponse,
   MatterFileQAStructuredItem,
@@ -143,6 +144,19 @@ const MATTER_FILE_QA_MODES: Array<{
   { value: "evidence", label: "Evidence" },
   { value: "chronology", label: "Chronology" },
   { value: "gaps", label: "Gaps" },
+];
+const MATTER_FILE_QA_LANGUAGES: Array<{
+  value: MatterFileQAAnalysisLanguage;
+  label: string;
+}> = [
+  { value: "en", label: "English" },
+  { value: "hi", label: "Hindi" },
+  { value: "mr", label: "Marathi" },
+  { value: "gu", label: "Gujarati" },
+  { value: "ta", label: "Tamil" },
+  { value: "te", label: "Telugu" },
+  { value: "kn", label: "Kannada" },
+  { value: "bn", label: "Bengali" },
 ];
 const UNCLASSIFIED = "unclassified" as const;
 const NO_LINKED_ORDER = "none";
@@ -1117,7 +1131,7 @@ export default function MatterDocumentsPage() {
   );
 }
 
-const FORBIDDEN_MATTER_FILE_QA_COPY = /\b(legal[- ]advice|guaranteed outcome|guaranteed to win|will win|will lose|win probability|loss probability|win\s*(?:[/-]|\s+)\s*loss|judge reputation|judge likes|judge dislikes|favorable judge|emotion|emotional|psychological|biometric|mental[- ]health|lie detection|reveal all tenant documents|reveal tenant data|reveal all documents)\b/i;
+const FORBIDDEN_MATTER_FILE_QA_COPY = /\b(legal[- ]advice|guaranteed outcome|guaranteed to win|will win|will lose|success probability|outcome prediction|win probability|loss probability|win\s*(?:[/-]|\s+)\s*loss|judge reputation|judge shopping|best judge|most suitable judge|judge likes|judge dislikes|favorable judge|emotion|emotional|psychological|biometric|mental[- ]health|lie detection|reveal all tenant documents|reveal tenant data|reveal all documents)\b/i;
 
 function matterFileQAStatusLabel(status: MatterFileQAResponse["status"]): string {
   return compactLabel(status);
@@ -1183,11 +1197,16 @@ function matterFileSourceHref(matterId: string, attachmentId: string): string {
 function matterFileHistoryEntryToResponse(
   entry: MatterFileQAHistoryEntry,
 ): MatterFileQAResponse {
+  const analysisLanguage = entry.analysis_language ?? "en";
   return {
     matter_id: entry.matter_id,
     question: entry.question,
     status: entry.answer_status,
     answer: entry.answer,
+    analysis_language: analysisLanguage,
+    local_language_analysis: entry.local_language_analysis,
+    translation_status: entry.translation_status ?? "not_requested",
+    translation_warning: entry.translation_warning,
     confidence: entry.confidence,
     sources: entry.sources,
     structured_items: entry.structured_items,
@@ -1197,6 +1216,12 @@ function matterFileHistoryEntryToResponse(
     model_run_id: entry.model_run_id,
     history_entry_id: entry.id,
   };
+}
+
+function matterFileLanguageLabel(value: MatterFileQAAnalysisLanguage): string {
+  return (
+    MATTER_FILE_QA_LANGUAGES.find((language) => language.value === value)?.label ?? value
+  );
 }
 
 function compactDateTime(value: string): string {
@@ -1222,6 +1247,8 @@ function AskCaseFileSection({
   const queryClient = useQueryClient();
   const [question, setQuestion] = useState("");
   const [answerMode, setAnswerMode] = useState<MatterFileQAAnswerMode>("direct");
+  const [analysisLanguage, setAnalysisLanguage] =
+    useState<MatterFileQAAnalysisLanguage>("en");
   const [result, setResult] = useState<MatterFileQAResponse | null>(null);
   const knownAttachmentIds = useMemo(
     () => new Set(attachments.map((attachment) => attachment.id)),
@@ -1236,6 +1263,7 @@ function AskCaseFileSection({
         matterId,
         question: trimmedQuestion,
         answerMode,
+        analysisLanguage,
         limit: 8,
       }),
     onMutate: () => setResult(null),
@@ -1276,6 +1304,10 @@ function AskCaseFileSection({
 
   const visibleLimitations = result ? safeMatterFileLimitations(result.limitations) : [];
   const answerText = result ? safeMatterFileText(result.answer) : null;
+  const localLanguageText = result
+    ? safeMatterFileText(result.local_language_analysis)
+    : null;
+  const resultAnalysisLanguage = result?.analysis_language ?? "en";
   const structuredItems = result
     ? safeMatterFileStructuredItems(result.structured_items ?? [])
     : [];
@@ -1284,6 +1316,7 @@ function AskCaseFileSection({
   function reopenHistoryEntry(entry: MatterFileQAHistoryEntry) {
     setQuestion(entry.question);
     setAnswerMode(entry.answer_mode);
+    setAnalysisLanguage(entry.analysis_language ?? "en");
     setResult(matterFileHistoryEntryToResponse(entry));
   }
 
@@ -1314,7 +1347,7 @@ function AskCaseFileSection({
         </div>
 
         <form
-          className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_13rem_auto] lg:items-end"
+          className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_13rem_12rem_auto] lg:items-end"
           onSubmit={handleSubmit}
         >
           <div>
@@ -1343,6 +1376,24 @@ function AskCaseFileSection({
               {MATTER_FILE_QA_MODES.map((mode) => (
                 <option key={mode.value} value={mode.value}>
                   {mode.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <Label htmlFor="matter-file-qa-language">Analysis language</Label>
+            <select
+              id="matter-file-qa-language"
+              className={`${selectClassName()} mt-1.5`}
+              value={analysisLanguage}
+              onChange={(event) =>
+                setAnalysisLanguage(event.target.value as MatterFileQAAnalysisLanguage)
+              }
+              data-testid="matter-file-qa-language"
+            >
+              {MATTER_FILE_QA_LANGUAGES.map((language) => (
+                <option key={language.value} value={language.value}>
+                  {language.label}
                 </option>
               ))}
             </select>
@@ -1403,6 +1454,11 @@ function AskCaseFileSection({
                     {matterFileQAStatusLabel(result.status)}
                   </Badge>
                   <Badge tone="neutral">{compactLabel(result.confidence)}</Badge>
+                  {resultAnalysisLanguage !== "en" ? (
+                    <Badge tone="neutral">
+                      {matterFileLanguageLabel(resultAnalysisLanguage)}
+                    </Badge>
+                  ) : null}
                   {result.model_run_id ? <Badge tone="neutral">Model run recorded</Badge> : null}
                   {result.history_entry_id ? (
                     <Button
@@ -1428,13 +1484,41 @@ function AskCaseFileSection({
                   {matterFileQAStateCopy(result.status)}
                 </p>
                 {answerText ? (
-                  <p className="mt-3 max-w-4xl text-sm leading-6 text-[var(--color-ink)]">
-                    {answerText}
-                  </p>
+                  <div className="mt-3 max-w-4xl">
+                    {resultAnalysisLanguage !== "en" ? (
+                      <div className="mb-1 text-xs font-medium uppercase tracking-[0.08em] text-[var(--color-mute)]">
+                        English authoritative answer
+                      </div>
+                    ) : null}
+                    <p className="text-sm leading-6 text-[var(--color-ink)]">
+                      {answerText}
+                    </p>
+                  </div>
                 ) : result.status === "answered" || result.status === "partial_answer" ? (
                   <p className="mt-3 text-sm text-[var(--color-mute)]">
                     The answer was withheld because it did not meet Matter File Q&A display rules.
                   </p>
+                ) : null}
+
+                {localLanguageText ? (
+                  <div
+                    className="mt-3 max-w-4xl rounded-md border border-[var(--color-line-2)] bg-[var(--color-bg-2)] px-3 py-2"
+                    data-testid="matter-file-qa-local-language-analysis"
+                  >
+                    <div className="text-xs font-medium uppercase tracking-[0.08em] text-[var(--color-mute)]">
+                      {matterFileLanguageLabel(resultAnalysisLanguage)} translation aid
+                    </div>
+                    <p className="mt-1 text-sm leading-6 text-[var(--color-ink)]">
+                      {localLanguageText}
+                    </p>
+                  </div>
+                ) : result.translation_warning ? (
+                  <div
+                    className="mt-3 rounded-md border border-[var(--color-line)] bg-[var(--color-bg-2)] px-3 py-2 text-sm text-[var(--color-mute)]"
+                    data-testid="matter-file-qa-translation-warning"
+                  >
+                    {result.translation_warning}
+                  </div>
                 ) : null}
 
                 {visibleLimitations.length > 0 ? (

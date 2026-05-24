@@ -175,7 +175,11 @@ def _mock_matter_file_qa_response(prompt: str) -> str:
     current_source_id: str | None = None
     collecting_text = False
     text_lines: list[str] = []
+    analysis_language = "en"
     for line in prompt.splitlines():
+        if line.startswith("ANALYSIS_LANGUAGE:"):
+            analysis_language = line.split(":", 1)[1].strip().split(" ", 1)[0] or "en"
+            continue
         if line.startswith("SOURCE_ID:"):
             current_source_id = line.split(":", 1)[1].strip()
             continue
@@ -206,16 +210,18 @@ def _mock_matter_file_qa_response(prompt: str) -> str:
         )
     safe_texts = [_mock_remove_document_instructions(text) for text in source_texts]
     preview = " ".join((safe_texts[0] or source_texts[0]).split()[:45])
-    return json.dumps(
-        {
-            "status": "answered",
-            "answer": f"The uploaded matter file states: {preview}",
-            "confidence": "medium",
-            "source_ids": source_ids[:2],
-            "limitations": ["Only uploaded matter document chunks were used."],
-        },
-        separators=(",", ":"),
-    )
+    payload = {
+        "status": "answered",
+        "answer": f"The uploaded matter file states: {preview}",
+        "confidence": "medium",
+        "source_ids": source_ids[:2],
+        "limitations": ["Only uploaded matter document chunks were used."],
+    }
+    if analysis_language != "en":
+        payload["local_language_analysis"] = (
+            f"Local-language aid ({analysis_language}): {preview}"
+        )
+    return json.dumps(payload, separators=(",", ":"))
 
 
 def _mock_remove_document_instructions(text: str) -> str:

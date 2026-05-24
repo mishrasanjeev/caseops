@@ -207,6 +207,24 @@ export const matterFileQAConfidence = z.enum([
   "insufficient",
 ]);
 
+export const matterFileQAAnalysisLanguage = z.enum([
+  "en",
+  "hi",
+  "mr",
+  "gu",
+  "ta",
+  "te",
+  "kn",
+  "bn",
+]);
+
+export const matterFileQATranslationStatus = z.enum([
+  "not_requested",
+  "provided",
+  "not_available",
+  "failed_closed",
+]);
+
 export const matterFileQAStructuredItemType = z.enum([
   "section",
   "allegation",
@@ -253,6 +271,10 @@ export const matterFileQAResponse = z
     question: z.string(),
     status: matterFileQAStatus,
     answer: z.string().nullable().optional(),
+    analysis_language: matterFileQAAnalysisLanguage.default("en"),
+    local_language_analysis: z.string().max(5000).nullable().optional(),
+    translation_status: matterFileQATranslationStatus.default("not_requested"),
+    translation_warning: z.string().max(320).nullable().optional(),
     confidence: matterFileQAConfidence,
     sources: z.array(matterFileQASource).default([]),
     structured_items: z.array(matterFileQAStructuredItem).default([]),
@@ -271,6 +293,10 @@ export const matterFileQAHistoryEntry = z
     question: z.string().min(1),
     answer_status: matterFileQAStatus,
     answer: z.string().nullable().optional(),
+    analysis_language: matterFileQAAnalysisLanguage.default("en"),
+    local_language_analysis: z.string().max(5000).nullable().optional(),
+    translation_status: matterFileQATranslationStatus.default("not_requested"),
+    translation_warning: z.string().max(320).nullable().optional(),
     confidence: matterFileQAConfidence,
     answer_mode: matterFileQAAnswerMode,
     sources: z.array(matterFileQASource).default([]),
@@ -303,6 +329,12 @@ export const matterFileQAExportNoteResponse = z
 export type MatterFileQAAnswerMode = z.infer<typeof matterFileQAAnswerMode>;
 export type MatterFileQAStatus = z.infer<typeof matterFileQAStatus>;
 export type MatterFileQAConfidence = z.infer<typeof matterFileQAConfidence>;
+export type MatterFileQAAnalysisLanguage = z.infer<
+  typeof matterFileQAAnalysisLanguage
+>;
+export type MatterFileQATranslationStatus = z.infer<
+  typeof matterFileQATranslationStatus
+>;
 export type MatterFileQASource = z.infer<typeof matterFileQASource>;
 export type MatterFileQAStructuredItem = z.infer<
   typeof matterFileQAStructuredItem

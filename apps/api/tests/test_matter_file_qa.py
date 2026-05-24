@@ -19,6 +19,7 @@ from caseops_api.db.models import (
     MatterNote,
     ModelRun,
     Team,
+    TenantAIPolicy,
 )
 from caseops_api.db.session import get_session_factory
 from caseops_api.services.llm import LLMCompletion
@@ -155,6 +156,19 @@ def _latest_audit(company_id: str) -> AuditEvent:
         return event
 
 
+def _set_ai_token_policy(company_id: str, *, firm_quota_tokens: int | None) -> None:
+    factory = get_session_factory()
+    with factory() as session:
+        policy = session.scalar(
+            select(TenantAIPolicy).where(TenantAIPolicy.company_id == company_id)
+        )
+        if policy is None:
+            policy = TenantAIPolicy(company_id=company_id)
+            session.add(policy)
+        policy.monthly_token_budget = firm_quota_tokens
+        session.commit()
+
+
 def test_matter_file_qa_answers_from_uploaded_chunks_and_persists_model_run(
     client: TestClient,
 ) -> None:
@@ -180,6 +194,9 @@ def test_matter_file_qa_answers_from_uploaded_chunks_and_persists_model_run(
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["status"] == "answered"
+    assert body["analysis_language"] == "en"
+    assert body["local_language_analysis"] is None
+    assert body["translation_status"] == "not_requested"
     assert "5,00,000" in body["answer"]
     assert body["sources"]
     assert body["sources"][0]["chunk_id"] in chunk_ids
@@ -700,6 +717,332 @@ class _LongAnswerProvider:
         )
 
 
+class _LocalLanguageProvider:
+    name = "test-local-language"
+    model = "test-local-language-model"
+
+    def __init__(self, *, local_language_analysis: str | None) -> None:
+        self.local_language_analysis = local_language_analysis
+
+    def generate(self, messages, *, temperature=0.0, max_tokens=1800):  # noqa: ANN001
+        return LLMCompletion(
+            text=json.dumps(
+                {
+                    "status": "answered",
+                    "answer": "The uploaded file records non-payment under Invoice A-12.",
+                    "local_language_analysis": self.local_language_analysis,
+                    "confidence": "high",
+                    "source_ids": ["src_1"],
+                    "limitations": [],
+                }
+            ),
+            provider=self.name,
+            model=self.model,
+            prompt_tokens=18,
+            completion_tokens=16,
+            latency_ms=1,
+        )
+
+
+class _CountingMatterFileQAProvider:
+    name = "test-counting-matter-file-qa"
+    model = "test-counting-matter-file-qa-model"
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def generate(self, messages, *, temperature=0.0, max_tokens=1800):  # noqa: ANN001
+        self.calls += 1
+        return LLMCompletion(
+            text=json.dumps(
+                {
+                    "status": "answered",
+                    "answer": "The uploaded file records non-payment.",
+                    "local_language_analysis": "Hindi aid: non-payment appears.",
+                    "confidence": "medium",
+                    "source_ids": ["src_1"],
+                    "limitations": [],
+                }
+            ),
+            provider=self.name,
+            model=self.model,
+            prompt_tokens=18,
+            completion_tokens=16,
+            latency_ms=1,
+        )
+
+
+def test_matter_file_qa_supported_local_language_returns_separate_analysis(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    local_analysis = "अपलोड की गई फ़ाइल Invoice A-12 के तहत भुगतान न होने को दर्ज करती है."
+    monkeypatch.setattr(
+        "caseops_api.services.matter_file_qa.build_provider",
+        lambda purpose=None: _LocalLanguageProvider(
+            local_language_analysis=local_analysis,
+        ),
+    )
+    boot = _bootstrap(client, f"mfq-s8-local-{uuid4().hex[:6]}")
+    token = str(boot["access_token"])
+    matter_id = _create_matter(client, token, "MFQ-S8-LOCAL")
+    _attachment_id, chunk_ids = _seed_attachment(
+        matter_id,
+        chunks=["The complaint records non-payment under Invoice A-12."],
+        original_filename="complaint.txt",
+    )
+
+    response = client.post(
+        f"/api/ai/matters/{matter_id}/file-qa",
+        headers=_auth(token),
+        json={
+            "question": "What payment default is recorded?",
+            "analysis_language": "hi",
+            "limit": 3,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "answered"
+    assert body["analysis_language"] == "hi"
+    assert body["answer"] == "The uploaded file records non-payment under Invoice A-12."
+    assert body["local_language_analysis"] == local_analysis
+    assert body["translation_status"] == "provided"
+    assert body["translation_warning"] is None
+    assert body["sources"][0]["chunk_id"] in chunk_ids
+    assert body["sources"][0]["snippet"] == "The complaint records non-payment under Invoice A-12."
+
+    factory = get_session_factory()
+    with factory() as session:
+        run = session.get(ModelRun, body["model_run_id"])
+        assert run is not None
+        assert run.purpose == "matter_file_qa"
+        entry = session.get(MatterFileQAEntry, body["history_entry_id"])
+        assert entry is not None
+        assert entry.answer == body["answer"]
+        assert local_analysis not in json.dumps(entry.sources_json)
+
+    event = _latest_audit(str(boot["company"]["id"]))
+    metadata = json.loads(event.metadata_json or "{}")
+    assert metadata["analysis_language"] == "hi"
+    assert metadata["translation_status"] == "provided"
+    serialized = event.metadata_json or ""
+    assert local_analysis not in serialized
+    assert "Invoice A-12" not in serialized
+
+
+def test_matter_file_qa_rejects_unsupported_analysis_language(client: TestClient) -> None:
+    boot = _bootstrap(client, f"mfq-s8-lang-{uuid4().hex[:6]}")
+    token = str(boot["access_token"])
+    matter_id = _create_matter(client, token, "MFQ-S8-LANG")
+    _seed_attachment(
+        matter_id,
+        chunks=["The complaint records non-payment under Invoice A-12."],
+    )
+
+    response = client.post(
+        f"/api/ai/matters/{matter_id}/file-qa",
+        headers=_auth(token),
+        json={
+            "question": "What payment default is recorded?",
+            "analysis_language": "fr",
+            "limit": 3,
+        },
+    )
+
+    assert response.status_code == 422, response.text
+
+
+def test_matter_file_qa_preserves_refusal_state_with_local_language(
+    client: TestClient,
+) -> None:
+    boot = _bootstrap(client, f"mfq-s8-refusal-{uuid4().hex[:6]}")
+    token = str(boot["access_token"])
+    matter_id = _create_matter(client, token, "MFQ-S8-REFUSAL")
+
+    response = client.post(
+        f"/api/ai/matters/{matter_id}/file-qa",
+        headers=_auth(token),
+        json={
+            "question": "What does the complaint say?",
+            "analysis_language": "mr",
+            "limit": 3,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "no_documents"
+    assert body["answer"] is None
+    assert body["analysis_language"] == "mr"
+    assert body["local_language_analysis"] is None
+    assert body["translation_status"] == "not_available"
+    assert "English refusal remains authoritative" in body["translation_warning"]
+
+
+def test_matter_file_qa_invalid_translated_source_id_fails_closed(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "caseops_api.services.matter_file_qa.build_provider",
+        lambda purpose=None: _LocalLanguageProvider(
+            local_language_analysis="Hindi aid cites src_999 for a new fact.",
+        ),
+    )
+    boot = _bootstrap(client, f"mfq-s8-bad-local-source-{uuid4().hex[:6]}")
+    token = str(boot["access_token"])
+    matter_id = _create_matter(client, token, "MFQ-S8-BAD-LOCAL")
+    _seed_attachment(
+        matter_id,
+        chunks=["The complaint records non-payment under Invoice A-12."],
+    )
+
+    response = client.post(
+        f"/api/ai/matters/{matter_id}/file-qa",
+        headers=_auth(token),
+        json={
+            "question": "What payment default is recorded?",
+            "analysis_language": "hi",
+            "limit": 3,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "answered"
+    assert body["answer"]
+    assert body["local_language_analysis"] is None
+    assert body["translation_status"] == "failed_closed"
+    assert "unsupported source IDs" in body["translation_warning"]
+    assert "src_999" not in json.dumps(body)
+
+
+def test_matter_file_qa_unsafe_translated_output_fails_closed(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "caseops_api.services.matter_file_qa.build_provider",
+        lambda purpose=None: _LocalLanguageProvider(
+            local_language_analysis="This is legal advice and a success probability.",
+        ),
+    )
+    boot = _bootstrap(client, f"mfq-s8-unsafe-local-{uuid4().hex[:6]}")
+    token = str(boot["access_token"])
+    matter_id = _create_matter(client, token, "MFQ-S8-UNSAFE-LOCAL")
+    _seed_attachment(
+        matter_id,
+        chunks=["The complaint records non-payment under Invoice A-12."],
+    )
+
+    response = client.post(
+        f"/api/ai/matters/{matter_id}/file-qa",
+        headers=_auth(token),
+        json={
+            "question": "What payment default is recorded?",
+            "analysis_language": "hi",
+            "limit": 3,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "answered"
+    assert body["answer"]
+    assert body["local_language_analysis"] is None
+    assert body["translation_status"] == "failed_closed"
+    rendered = json.dumps(body).lower()
+    assert "this is legal advice and" not in rendered
+    assert "success probability" not in rendered
+
+
+def test_matter_file_qa_translation_cannot_add_new_statute_references(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "caseops_api.services.matter_file_qa.build_provider",
+        lambda purpose=None: _LocalLanguageProvider(
+            local_language_analysis="Hindi aid adds IPC Section 420 as a new reference.",
+        ),
+    )
+    boot = _bootstrap(client, f"mfq-s8-new-statute-{uuid4().hex[:6]}")
+    token = str(boot["access_token"])
+    matter_id = _create_matter(client, token, "MFQ-S8-NEW-STATUTE")
+    _seed_attachment(
+        matter_id,
+        chunks=["The complaint records non-payment under Invoice A-12."],
+    )
+
+    response = client.post(
+        f"/api/ai/matters/{matter_id}/file-qa",
+        headers=_auth(token),
+        json={
+            "question": "What payment default is recorded?",
+            "analysis_language": "hi",
+            "limit": 3,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "answered"
+    assert body["answer"]
+    assert body["local_language_analysis"] is None
+    assert body["translation_status"] == "failed_closed"
+    assert "unsupported legal references" in body["translation_warning"]
+    rendered = json.dumps(body).lower()
+    assert "ipc section 420" not in rendered
+
+
+def test_matter_file_qa_local_language_quota_blocks_before_provider_call(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    provider = _CountingMatterFileQAProvider()
+    monkeypatch.setattr(
+        "caseops_api.services.matter_file_qa.build_provider",
+        lambda purpose=None: provider,
+    )
+    boot = _bootstrap(client, f"mfq-s8-quota-{uuid4().hex[:6]}")
+    token = str(boot["access_token"])
+    company_id = str(boot["company"]["id"])
+    matter_id = _create_matter(client, token, "MFQ-S8-QUOTA")
+    _seed_attachment(
+        matter_id,
+        chunks=["The complaint records non-payment under Invoice A-12."],
+    )
+    _set_ai_token_policy(company_id, firm_quota_tokens=1)
+
+    response = client.post(
+        f"/api/ai/matters/{matter_id}/file-qa",
+        headers=_auth(token),
+        json={
+            "question": "What payment default is recorded?",
+            "analysis_language": "hi",
+            "limit": 3,
+        },
+    )
+
+    assert response.status_code == 429, response.text
+    assert provider.calls == 0
+    factory = get_session_factory()
+    with factory() as session:
+        audit = session.scalar(
+            select(AuditEvent).where(
+                AuditEvent.company_id == company_id,
+                AuditEvent.action == "ai_token_quota.request_blocked",
+            )
+        )
+        assert audit is not None
+        serialized = audit.metadata_json or ""
+        assert "Invoice A-12" not in serialized
+        assert "prompt" not in serialized.lower()
+        assert "answer" not in serialized.lower()
+
+
 def test_matter_file_qa_invalid_model_source_id_fails_closed(
     client: TestClient,
     monkeypatch,
@@ -817,11 +1160,16 @@ def test_matter_file_qa_forbidden_generated_answer_copy_is_refused(
         "guaranteed to win",
         "will win",
         "will lose",
+        "success probability",
+        "outcome prediction",
         "win probability",
         "loss probability",
         "win/loss",
         "win loss",
         "judge reputation",
+        "judge shopping",
+        "best judge",
+        "most suitable judge",
         "judge likes",
         "judge dislikes",
         "judge likes/dislikes",
@@ -866,9 +1214,14 @@ def test_matter_file_qa_forbidden_generated_limitations_are_refused(
     )
     forbidden_phrases = [
         "judge reputation",
+        "judge shopping",
+        "best judge",
+        "most suitable judge",
         "guaranteed outcome",
         "will win",
         "will lose",
+        "success probability",
+        "outcome prediction",
         "win probability",
         "loss probability",
         "win/loss",
