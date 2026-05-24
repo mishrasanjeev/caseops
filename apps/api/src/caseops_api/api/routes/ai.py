@@ -27,6 +27,8 @@ from caseops_api.schemas.ai import (
 from caseops_api.schemas.contracts import (
     ClauseExtractionResponse,
     ObligationExtractionResponse,
+    PartyClauseExtractionRequest,
+    PartyClauseExtractionResponse,
     PlaybookComparisonFindingRecord,
     PlaybookComparisonResponse,
     PlaybookInstallResponse,
@@ -42,6 +44,7 @@ from caseops_api.services.contract_intelligence import (
     compare_playbook,
     extract_clauses,
     extract_obligations,
+    extract_party_clauses,
     install_default_playbook_rules,
 )
 from caseops_api.services.contract_review import generate_contract_review
@@ -241,6 +244,40 @@ async def extract_current_company_contract_clauses(
         provider=result.provider,
         model=result.model,
     )
+
+
+@router.post(
+    "/contracts/{contract_id}/clauses/extract-by-party",
+    response_model=PartyClauseExtractionResponse,
+    summary=(
+        "Extract party-perspective contract items with source-validated "
+        "snippets (ADP-13)"
+    ),
+    description=(
+        "Stateless per-call extraction that returns categorized items "
+        "(obligations, indemnities, payment, notices, termination, "
+        "liability caps, confidentiality, dispute resolution) grouped by "
+        "represented-party perspective. Each item is source-validated "
+        "against the uploaded contract text; items without a verifiable "
+        "snippet are dropped and counted. Ambiguous party assignments are "
+        "surfaced separately and never silently routed to the represented "
+        "party. ModelRun token governance applies. Writes no contract "
+        "rows; the existing /clauses/extract endpoint is unchanged."
+    ),
+)
+@limiter.limit(ai_route_rate_limit, key_func=tenant_aware_key)
+async def extract_current_company_contract_clauses_by_party(
+    request: Request,
+    contract_id: str,
+    payload: PartyClauseExtractionRequest,
+    context: AIGenerator,
+    session: DbSession,
+) -> PartyClauseExtractionResponse:
+    response = extract_party_clauses(
+        session, context=context, contract_id=contract_id, payload=payload,
+    )
+    session.commit()
+    return response
 
 
 @router.post(

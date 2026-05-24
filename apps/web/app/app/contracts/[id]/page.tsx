@@ -51,12 +51,16 @@ import {
   comparePlaybook,
   createContractLegalReference,
   extractContractClauses,
+  extractContractClausesByParty,
   extractContractObligations,
   fetchContractAttachmentRedline,
   fetchContractWorkspace,
   installDefaultPlaybook,
   rejectContractTermSuggestion,
   type ContractRedlineChange,
+  type PartyClauseAmbiguousItem,
+  type PartyClauseExtractionResult,
+  type PartyClauseItem,
   type PlaybookFinding,
   updateContractAttachmentMetadata,
   updateContractLegalReference,
@@ -154,6 +158,19 @@ export default function ContractDetailPage() {
     evidence_attachment_id: "__none",
     evidence_quote: "",
   });
+  // ADP-13: party-perspective clause extraction (stateless per-call;
+  // the result is held in component state so the user can flip
+  // perspective without re-uploading).
+  const [partyDraft, setPartyDraft] = useState({
+    first: "",
+    second: "",
+    firstAliases: "",
+    secondAliases: "",
+    represented: "first" as "first" | "second",
+  });
+  const [partyResult, setPartyResult] = useState<PartyClauseExtractionResult | null>(
+    null,
+  );
 
   const workspaceQuery = useQuery({
     queryKey: ["contracts", contractId, "workspace"],
@@ -277,6 +294,42 @@ export default function ContractDetailPage() {
     },
     onError: (err) =>
       toast.error(apiErrorMessage(err, "Could not extract clauses.")),
+  });
+
+  const splitAliases = (raw: string): string[] =>
+    raw
+      .split(/[,\n]/)
+      .map((part) => part.trim())
+      .filter((part) => part.length > 0);
+
+  const extractPartyClauses = useMutation({
+    mutationFn: () =>
+      extractContractClausesByParty({
+        contractId,
+        firstPartyName: partyDraft.first.trim(),
+        secondPartyName: partyDraft.second.trim(),
+        firstPartyAliases: splitAliases(partyDraft.firstAliases),
+        secondPartyAliases: splitAliases(partyDraft.secondAliases),
+        representedParty: partyDraft.represented,
+      }),
+    onSuccess: (result) => {
+      setPartyResult(result);
+      const total =
+        result.represented_items.length +
+        result.counterparty_items.length +
+        result.ambiguous_items.length;
+      const dropped = result.dropped_source_unverified_count;
+      toast.success(
+        `Extracted ${total} party-perspective item${total === 1 ? "" : "s"}` +
+          (dropped > 0
+            ? ` (${dropped} dropped — no verifiable source).`
+            : "."),
+      );
+    },
+    onError: (err) =>
+      toast.error(
+        apiErrorMessage(err, "Could not extract party-perspective clauses."),
+      ),
   });
 
   const extractObligations = useMutation({
@@ -723,6 +776,144 @@ export default function ContractDetailPage() {
                   ))}
                 </ul>
               )}
+            </CardContent>
+          </Card>
+          <Card className="mt-4" data-testid="party-perspective-panel">
+            <CardHeader>
+              <CardTitle>Party-perspective extraction</CardTitle>
+              <CardDescription>
+                Set the parties (with aliases) and the perspective you
+                represent. Items are source-validated against the uploaded
+                contract; ambiguous party references are surfaced separately
+                and never silently routed to your side.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="flex flex-col gap-1">
+                  <label
+                    className="text-xs uppercase tracking-[0.06em] text-[var(--color-mute)]"
+                    htmlFor="party-first-name"
+                  >
+                    First party
+                  </label>
+                  <Input
+                    id="party-first-name"
+                    data-testid="party-first-name"
+                    value={partyDraft.first}
+                    onChange={(event) =>
+                      setPartyDraft((prev) => ({
+                        ...prev,
+                        first: event.target.value,
+                      }))
+                    }
+                    placeholder="Acme India Private Limited"
+                  />
+                  <Textarea
+                    data-testid="party-first-aliases"
+                    rows={2}
+                    value={partyDraft.firstAliases}
+                    onChange={(event) =>
+                      setPartyDraft((prev) => ({
+                        ...prev,
+                        firstAliases: event.target.value,
+                      }))
+                    }
+                    placeholder="Aliases (comma-separated): Acme, Supplier"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label
+                    className="text-xs uppercase tracking-[0.06em] text-[var(--color-mute)]"
+                    htmlFor="party-second-name"
+                  >
+                    Second party
+                  </label>
+                  <Input
+                    id="party-second-name"
+                    data-testid="party-second-name"
+                    value={partyDraft.second}
+                    onChange={(event) =>
+                      setPartyDraft((prev) => ({
+                        ...prev,
+                        second: event.target.value,
+                      }))
+                    }
+                    placeholder="Beta Software Solutions Inc."
+                  />
+                  <Textarea
+                    data-testid="party-second-aliases"
+                    rows={2}
+                    value={partyDraft.secondAliases}
+                    onChange={(event) =>
+                      setPartyDraft((prev) => ({
+                        ...prev,
+                        secondAliases: event.target.value,
+                      }))
+                    }
+                    placeholder="Aliases (comma-separated): Beta, Customer"
+                  />
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-xs uppercase tracking-[0.06em] text-[var(--color-mute)]">
+                  Represented party
+                </span>
+                <label className="flex items-center gap-1 text-sm">
+                  <input
+                    type="radio"
+                    name="party-represented"
+                    value="first"
+                    data-testid="party-represented-first"
+                    checked={partyDraft.represented === "first"}
+                    onChange={() =>
+                      setPartyDraft((prev) => ({ ...prev, represented: "first" }))
+                    }
+                  />
+                  First party
+                </label>
+                <label className="flex items-center gap-1 text-sm">
+                  <input
+                    type="radio"
+                    name="party-represented"
+                    value="second"
+                    data-testid="party-represented-second"
+                    checked={partyDraft.represented === "second"}
+                    onChange={() =>
+                      setPartyDraft((prev) => ({ ...prev, represented: "second" }))
+                    }
+                  />
+                  Second party
+                </label>
+                {canGenerateAI ? (
+                  <Button
+                    size="sm"
+                    data-testid="party-extract-button"
+                    className="ml-auto"
+                    disabled={
+                      extractPartyClauses.isPending ||
+                      attachments.length === 0 ||
+                      partyDraft.first.trim().length < 2 ||
+                      partyDraft.second.trim().length < 2
+                    }
+                    onClick={() => extractPartyClauses.mutate()}
+                  >
+                    {extractPartyClauses.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />{" "}
+                        Extracting…
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-4 w-4" aria-hidden /> Extract by party
+                      </>
+                    )}
+                  </Button>
+                ) : null}
+              </div>
+              {partyResult ? (
+                <PartyExtractionResultPanel result={partyResult} />
+              ) : null}
             </CardContent>
           </Card>
         </TabsContent>
@@ -1477,5 +1668,119 @@ function RedlineRow({ change }: { change: ContractRedlineChange }) {
         {change.context_after}
       </p>
     </li>
+  );
+}
+
+function PartyExtractionResultPanel({
+  result,
+}: {
+  result: PartyClauseExtractionResult;
+}) {
+  const representedLabel =
+    result.represented_party === "first"
+      ? result.first_party_name || "First party"
+      : result.second_party_name || "Second party";
+  const counterpartyLabel =
+    result.represented_party === "first"
+      ? result.second_party_name || "Second party"
+      : result.first_party_name || "First party";
+  return (
+    <div
+      className="mt-2 flex flex-col gap-3"
+      data-testid="party-extract-results"
+    >
+      <div className="rounded-lg border border-[var(--color-line)] bg-white p-3">
+        <h4 className="text-xs uppercase tracking-[0.06em] text-[var(--color-mute)]">
+          Represented party — {representedLabel}
+        </h4>
+        <PartyItemList items={result.represented_items} emptyMsg="No items for the represented party." />
+      </div>
+      <div className="rounded-lg border border-[var(--color-line)] bg-white p-3">
+        <h4 className="text-xs uppercase tracking-[0.06em] text-[var(--color-mute)]">
+          Counterparty — {counterpartyLabel}
+        </h4>
+        <PartyItemList items={result.counterparty_items} emptyMsg="No items for the counterparty." />
+      </div>
+      {result.ambiguous_items.length > 0 ? (
+        <div
+          className="rounded-lg border border-amber-300 bg-amber-50 p-3"
+          data-testid="party-extract-ambiguous"
+        >
+          <h4 className="text-xs uppercase tracking-[0.06em] text-amber-900">
+            Ambiguous — needs review ({result.ambiguous_items.length})
+          </h4>
+          <ul className="mt-2 flex flex-col gap-2">
+            {result.ambiguous_items.map((item, idx) => (
+              <li
+                key={`amb-${idx}`}
+                className="text-sm text-amber-900"
+              >
+                <div className="font-medium">
+                  {item.category.replace(/_/g, " ")} — {item.summary}
+                </div>
+                <div className="text-xs italic">{item.ambiguity_reason}</div>
+                <PartySourceBadge source={item.source} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {result.dropped_source_unverified_count > 0 ? (
+        <p
+          className="text-xs text-[var(--color-mute)]"
+          data-testid="party-extract-dropped"
+        >
+          {result.dropped_source_unverified_count} item
+          {result.dropped_source_unverified_count === 1 ? "" : "s"} dropped —
+          source snippet could not be located in the uploaded contract.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function PartyItemList({
+  items,
+  emptyMsg,
+}: {
+  items: PartyClauseItem[];
+  emptyMsg: string;
+}) {
+  if (items.length === 0) {
+    return (
+      <p className="mt-2 text-xs text-[var(--color-mute)]">{emptyMsg}</p>
+    );
+  }
+  return (
+    <ul className="mt-2 flex flex-col gap-2">
+      {items.map((item, idx) => (
+        <li
+          key={`pi-${idx}`}
+          className="text-sm text-[var(--color-ink-2)]"
+        >
+          <div className="font-medium text-[var(--color-ink)]">
+            {item.category.replace(/_/g, " ")} — {item.summary}
+          </div>
+          <PartySourceBadge source={item.source} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function PartySourceBadge({
+  source,
+}: {
+  source: PartyClauseAmbiguousItem["source"];
+}) {
+  return (
+    <div className="mt-1 flex items-start gap-1 text-xs text-[var(--color-mute-2)]">
+      <span className="rounded bg-slate-100 px-1 py-0.5 font-medium">
+        Source
+      </span>
+      <span className="italic">
+        {source.locator ? `${source.locator}: ` : ""}“{source.snippet}”
+      </span>
+    </div>
   );
 }

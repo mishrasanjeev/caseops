@@ -4,9 +4,14 @@ import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { fetchWorkspaceMock, useCapabilityMock } = vi.hoisted(() => ({
+const {
+  fetchWorkspaceMock,
+  useCapabilityMock,
+  extractByPartyMock,
+} = vi.hoisted(() => ({
   fetchWorkspaceMock: vi.fn(),
   useCapabilityMock: vi.fn(),
+  extractByPartyMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api/endpoints", () => ({
@@ -24,6 +29,7 @@ vi.mock("@/lib/api/endpoints", () => ({
   fetchContractWorkspace: fetchWorkspaceMock,
   uploadContractAttachment: vi.fn(),
   extractContractClauses: vi.fn(),
+  extractContractClausesByParty: extractByPartyMock,
   extractContractObligations: vi.fn(),
   installDefaultPlaybook: vi.fn(),
   comparePlaybook: vi.fn(),
@@ -61,6 +67,7 @@ describe("ContractDetailPage", () => {
   beforeEach(() => {
     fetchWorkspaceMock.mockReset();
     useCapabilityMock.mockReset();
+    extractByPartyMock.mockReset();
     useCapabilityMock.mockImplementation(() => false);
     fetchWorkspaceMock.mockResolvedValue({
       contract: {
@@ -203,5 +210,125 @@ describe("ContractDetailPage", () => {
     await userEvent.click(screen.getByRole("tab", { name: /Terms/i }));
     expect(screen.getByText("2026-05-15")).toBeInTheDocument();
     expect(screen.getByText("12 months")).toBeInTheDocument();
+  });
+
+  it("runs party-perspective extraction and surfaces ambiguous + dropped items", async () => {
+    fetchWorkspaceMock.mockResolvedValue({
+      contract: {
+        id: "c1",
+        contract_code: "CT-1",
+        title: "Vendor MSA",
+        contract_type: "Master services agreement",
+        contract_type_key: "master_services_agreement",
+        contract_type_notes: null,
+        counterparty_name: "Acme Corp",
+        status: "draft",
+        effective_on: null,
+        expires_on: null,
+        renewal_on: null,
+        auto_renewal: false,
+        jurisdiction: null,
+        summary: null,
+      },
+      attachments: [
+        {
+          id: "a1",
+          original_filename: "msa.pdf",
+          content_type: "application/pdf",
+          size_bytes: 4096,
+          processing_status: "indexed",
+          attachment_role: "primary_contract",
+          parent_attachment_id: null,
+          document_date: null,
+          notes: null,
+          created_at: "2026-05-01T00:00:00Z",
+        },
+      ],
+      clauses: [],
+      obligations: [],
+      playbook_rules: [],
+      legal_references: [],
+      term_suggestions: [],
+    });
+    useCapabilityMock.mockImplementation((cap: string) => cap === "ai:generate");
+    extractByPartyMock.mockResolvedValue({
+      contract_id: "c1",
+      represented_party: "first",
+      first_party_name: "Acme India Pvt Ltd",
+      second_party_name: "Beta Software Inc.",
+      represented_items: [
+        {
+          category: "indemnity",
+          summary: "Supplier indemnifies Customer for IP",
+          assigned_party: "first",
+          source: {
+            attachment_id: "a1",
+            locator: "Clause 12",
+            snippet: "Supplier indemnifies Customer for IP infringement",
+          },
+        },
+      ],
+      counterparty_items: [
+        {
+          category: "payment",
+          summary: "Customer pays Supplier in 30 days",
+          assigned_party: "second",
+          source: {
+            attachment_id: "a1",
+            locator: "Clause 4",
+            snippet: "Customer shall pay Supplier within thirty days",
+          },
+        },
+      ],
+      ambiguous_items: [
+        {
+          category: "termination",
+          summary: "Either party may invoke step-in rights",
+          ambiguity_reason: "Either party reference is unresolved",
+          source: {
+            attachment_id: "a1",
+            locator: "Clause 19",
+            snippet: "Either party may invoke step-in rights",
+          },
+        },
+      ],
+      dropped_source_unverified_count: 2,
+      provider: "mock",
+      model: "mock-party-extract",
+    });
+
+    render(withClient(<ContractDetailPage />));
+    expect(await screen.findByText("Vendor MSA")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("tab", { name: /Clauses/i }));
+    await userEvent.type(
+      screen.getByTestId("party-first-name"),
+      "Acme India Pvt Ltd",
+    );
+    await userEvent.type(
+      screen.getByTestId("party-second-name"),
+      "Beta Software Inc.",
+    );
+    await userEvent.type(
+      screen.getByTestId("party-first-aliases"),
+      "Acme, Supplier",
+    );
+    await userEvent.click(screen.getByTestId("party-extract-button"));
+
+    await waitFor(() => expect(extractByPartyMock).toHaveBeenCalledTimes(1));
+    const callArg = extractByPartyMock.mock.calls[0][0];
+    expect(callArg.firstPartyAliases).toEqual(["Acme", "Supplier"]);
+    expect(callArg.representedParty).toBe("first");
+
+    expect(
+      await screen.findByText(/Represented party — Acme India Pvt Ltd/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Counterparty — Beta Software Inc\./i),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("party-extract-ambiguous")).toBeInTheDocument();
+    expect(screen.getByText(/Either party reference is unresolved/i)).toBeInTheDocument();
+    expect(screen.getByTestId("party-extract-dropped")).toHaveTextContent(
+      /2 items dropped/i,
+    );
   });
 });

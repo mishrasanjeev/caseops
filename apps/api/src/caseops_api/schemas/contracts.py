@@ -452,6 +452,76 @@ class ObligationExtractionResponse(BaseModel):
     model: str
 
 
+# --- ADP-13: party-perspective contract clause extraction ---------------
+
+PartyClauseCategoryLiteral = Literal[
+    "obligation",
+    "indemnity",
+    "payment",
+    "notice",
+    "termination",
+    "liability_cap",
+    "confidentiality",
+    "dispute_resolution",
+]
+PartyClauseAssignedPartyLiteral = Literal["first", "second", "both"]
+PartyClausePerspectiveLiteral = Literal["first", "second"]
+
+
+class PartyClauseExtractionRequest(BaseModel):
+    first_party_name: str = Field(min_length=2, max_length=255)
+    second_party_name: str = Field(min_length=2, max_length=255)
+    first_party_aliases: list[str] = Field(default_factory=list, max_length=20)
+    second_party_aliases: list[str] = Field(default_factory=list, max_length=20)
+    represented_party: PartyClausePerspectiveLiteral
+
+    @field_validator("first_party_aliases", "second_party_aliases", mode="after")
+    @classmethod
+    def _bounded_aliases(cls, value: list[str]) -> list[str]:
+        cleaned: list[str] = []
+        for alias in value:
+            stripped = alias.strip()
+            if not stripped:
+                continue
+            if len(stripped) > 120:
+                raise ValueError("Party alias must be 120 characters or fewer.")
+            cleaned.append(stripped)
+        return cleaned
+
+
+class PartyClauseSourceEvidence(BaseModel):
+    attachment_id: str | None = None
+    locator: str | None = Field(default=None, max_length=120)
+    snippet: str = Field(min_length=1, max_length=280)
+
+
+class PartyClauseItem(BaseModel):
+    category: PartyClauseCategoryLiteral
+    summary: str = Field(min_length=1, max_length=280)
+    assigned_party: PartyClauseAssignedPartyLiteral
+    source: PartyClauseSourceEvidence
+
+
+class PartyClauseAmbiguousItem(BaseModel):
+    category: PartyClauseCategoryLiteral
+    summary: str = Field(min_length=1, max_length=280)
+    ambiguity_reason: str = Field(min_length=1, max_length=280)
+    source: PartyClauseSourceEvidence
+
+
+class PartyClauseExtractionResponse(BaseModel):
+    contract_id: str
+    represented_party: PartyClausePerspectiveLiteral
+    first_party_name: str
+    second_party_name: str
+    represented_items: list[PartyClauseItem] = Field(default_factory=list)
+    counterparty_items: list[PartyClauseItem] = Field(default_factory=list)
+    ambiguous_items: list[PartyClauseAmbiguousItem] = Field(default_factory=list)
+    dropped_source_unverified_count: int = 0
+    provider: str
+    model: str
+
+
 class PlaybookInstallResponse(BaseModel):
     contract_id: str
     installed: int

@@ -3832,6 +3832,72 @@ export async function extractContractClauses(input: {
   );
 }
 
+export type PartyClauseCategory =
+  | "obligation"
+  | "indemnity"
+  | "payment"
+  | "notice"
+  | "termination"
+  | "liability_cap"
+  | "confidentiality"
+  | "dispute_resolution";
+
+export type PartyClauseSourceEvidence = {
+  attachment_id: string | null;
+  locator: string | null;
+  snippet: string;
+};
+
+export type PartyClauseItem = {
+  category: PartyClauseCategory;
+  summary: string;
+  assigned_party: "first" | "second" | "both";
+  source: PartyClauseSourceEvidence;
+};
+
+export type PartyClauseAmbiguousItem = {
+  category: PartyClauseCategory;
+  summary: string;
+  ambiguity_reason: string;
+  source: PartyClauseSourceEvidence;
+};
+
+export type PartyClauseExtractionResult = {
+  contract_id: string;
+  represented_party: "first" | "second";
+  first_party_name: string;
+  second_party_name: string;
+  represented_items: PartyClauseItem[];
+  counterparty_items: PartyClauseItem[];
+  ambiguous_items: PartyClauseAmbiguousItem[];
+  dropped_source_unverified_count: number;
+  provider: string;
+  model: string;
+};
+
+export async function extractContractClausesByParty(input: {
+  contractId: string;
+  firstPartyName: string;
+  secondPartyName: string;
+  firstPartyAliases: string[];
+  secondPartyAliases: string[];
+  representedParty: "first" | "second";
+}): Promise<PartyClauseExtractionResult> {
+  return apiRequest<PartyClauseExtractionResult>(
+    `/api/ai/contracts/${input.contractId}/clauses/extract-by-party`,
+    {
+      method: "POST",
+      body: {
+        first_party_name: input.firstPartyName,
+        second_party_name: input.secondPartyName,
+        first_party_aliases: input.firstPartyAliases,
+        second_party_aliases: input.secondPartyAliases,
+        represented_party: input.representedParty,
+      },
+    },
+  );
+}
+
 export async function extractContractObligations(input: {
   contractId: string;
 }): Promise<ContractIntelligenceSummary> {
