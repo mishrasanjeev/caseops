@@ -6,18 +6,24 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   approveDraftMock,
+  draftFilingBundleUrlMock,
+  draftPdfUrlMock,
   fetchDraftMock,
   finalizeDraftMock,
   generateDraftVersionMock,
+  listCourtFormatProfilesMock,
   requestDraftChangesMock,
   saveDraftEditsMock,
   submitDraftMock,
   useCapabilityMock,
 } = vi.hoisted(() => ({
   approveDraftMock: vi.fn(),
+  draftFilingBundleUrlMock: vi.fn(),
+  draftPdfUrlMock: vi.fn(),
   fetchDraftMock: vi.fn(),
   finalizeDraftMock: vi.fn(),
   generateDraftVersionMock: vi.fn(),
+  listCourtFormatProfilesMock: vi.fn(),
   requestDraftChangesMock: vi.fn(),
   saveDraftEditsMock: vi.fn(),
   submitDraftMock: vi.fn(),
@@ -27,11 +33,12 @@ const {
 vi.mock("@/lib/api/endpoints", () => ({
   approveDraft: approveDraftMock,
   draftDocxUrl: () => "https://api.test/draft.docx",
-  draftFilingBundleUrl: () => "https://api.test/bundle.zip",
-  draftPdfUrl: () => "https://api.test/draft.pdf",
+  draftFilingBundleUrl: draftFilingBundleUrlMock,
+  draftPdfUrl: draftPdfUrlMock,
   fetchDraft: fetchDraftMock,
   finalizeDraft: finalizeDraftMock,
   generateDraftVersion: generateDraftVersionMock,
+  listCourtFormatProfiles: listCourtFormatProfilesMock,
   requestDraftChanges: requestDraftChangesMock,
   saveDraftEdits: saveDraftEditsMock,
   submitDraft: submitDraftMock,
@@ -54,7 +61,12 @@ vi.mock("@/components/drafting/DraftCompareView", () => ({
 }));
 
 vi.mock("@/components/drafting/FilingChecklistCard", () => ({
-  FilingChecklistCard: () => <div data-testid="filing-checklist" />,
+  FilingChecklistCard: ({ courtProfile }: { courtProfile?: string }) => (
+    <div
+      data-testid="filing-checklist"
+      data-court-profile={courtProfile ?? "auto"}
+    />
+  ),
 }));
 
 import DraftDetailPage from "@/app/app/matters/[id]/drafts/[draftId]/page";
@@ -108,12 +120,71 @@ const BASE_DRAFT = {
 describe("MatterDraftDetailPage", () => {
   beforeEach(() => {
     approveDraftMock.mockReset();
+    draftFilingBundleUrlMock.mockReset();
+    draftPdfUrlMock.mockReset();
     fetchDraftMock.mockReset();
     finalizeDraftMock.mockReset();
     generateDraftVersionMock.mockReset();
+    listCourtFormatProfilesMock.mockReset();
     requestDraftChangesMock.mockReset();
     saveDraftEditsMock.mockReset();
     submitDraftMock.mockReset();
+    draftPdfUrlMock.mockImplementation(
+      (_matterId: string, _draftId: string, courtProfile?: string) =>
+        courtProfile
+          ? `https://api.test/draft.pdf?court_profile=${courtProfile}`
+          : "https://api.test/draft.pdf",
+    );
+    draftFilingBundleUrlMock.mockImplementation(
+      (
+        _matterId: string,
+        _draftId: string,
+        options?: { courtProfile?: string },
+      ) =>
+        options?.courtProfile
+          ? `https://api.test/bundle.zip?court_profile=${options.courtProfile}`
+          : "https://api.test/bundle.zip",
+    );
+    listCourtFormatProfilesMock.mockResolvedValue([
+      {
+        key: "supreme_court",
+        display_name: "Supreme Court of India",
+        category: "supreme_court",
+        page_format: "A4",
+        layout_rules: ["A4 paper with wider margins."],
+        heading_rules: ["Uppercase cause title."],
+        body_font_size_pt: 12,
+        page_number_position: "center",
+        page_number_format: "{n}",
+        margin_left_mm: 38.1,
+        margin_right_mm: 38.1,
+        margin_top_mm: 38.1,
+        margin_bottom_mm: 38.1,
+        cause_title_separator: "VERSUS",
+        cause_title_party_case: "upper",
+        cause_title_numbered: true,
+        required_fields: [],
+      },
+      {
+        key: "district_court",
+        display_name: "District Court",
+        category: "district_court",
+        page_format: "A4",
+        layout_rules: ["A4 paper with one inch margins."],
+        heading_rules: ["Title-case cause title."],
+        body_font_size_pt: 11,
+        page_number_position: "right",
+        page_number_format: "Page {n} of {total}",
+        margin_left_mm: 25.4,
+        margin_right_mm: 25.4,
+        margin_top_mm: 25.4,
+        margin_bottom_mm: 25.4,
+        cause_title_separator: "v.",
+        cause_title_party_case: "title",
+        cause_title_numbered: false,
+        required_fields: [],
+      },
+    ]);
     useCapabilityMock.mockReset();
     useCapabilityMock.mockImplementation((cap: string) => cap === "drafts:edit");
   });
@@ -194,5 +265,33 @@ describe("MatterDraftDetailPage", () => {
     );
     expect(screen.queryByTestId("draft-edit-toggle")).not.toBeInTheDocument();
     expect(screen.queryByTestId("draft-body-editor")).not.toBeInTheDocument();
+  });
+
+  it("ADP-16: applies selected court profile to export links and checklist", async () => {
+    fetchDraftMock.mockResolvedValue(BASE_DRAFT);
+
+    render(withClient(<DraftDetailPage />));
+
+    const selector = await screen.findByTestId("court-profile-select");
+    await waitFor(() =>
+      expect(screen.getByText("Supreme Court of India")).toBeInTheDocument(),
+    );
+    await userEvent.selectOptions(selector, "supreme_court");
+
+    expect(await screen.findByTestId("court-profile-details")).toHaveTextContent(
+      "Supreme Court",
+    );
+    expect(screen.getByTestId("filing-checklist")).toHaveAttribute(
+      "data-court-profile",
+      "supreme_court",
+    );
+    expect(screen.getByTestId("draft-download-pdf")).toHaveAttribute(
+      "href",
+      "https://api.test/draft.pdf?court_profile=supreme_court",
+    );
+    expect(screen.getByTestId("draft-download-filing-bundle")).toHaveAttribute(
+      "href",
+      "https://api.test/bundle.zip?court_profile=supreme_court",
+    );
   });
 });

@@ -7682,14 +7682,38 @@ export interface components {
         CourtFormatProfileResponse: {
             /** Body Font Size Pt */
             body_font_size_pt: number;
+            /** Category */
+            category: string;
+            /** Cause Title Numbered */
+            cause_title_numbered: boolean;
+            /** Cause Title Party Case */
+            cause_title_party_case: string;
+            /** Cause Title Separator */
+            cause_title_separator: string;
             /** Display Name */
             display_name: string;
+            /** Heading Rules */
+            heading_rules: string[];
             /** Key */
             key: string;
+            /** Layout Rules */
+            layout_rules: string[];
+            /** Margin Bottom Mm */
+            margin_bottom_mm: number;
+            /** Margin Left Mm */
+            margin_left_mm: number;
+            /** Margin Right Mm */
+            margin_right_mm: number;
+            /** Margin Top Mm */
+            margin_top_mm: number;
             /** Page Format */
             page_format: string;
+            /** Page Number Format */
+            page_number_format: string;
             /** Page Number Position */
             page_number_position: string;
+            /** Required Fields */
+            required_fields: components["schemas"]["CourtRequiredFieldRuleResponse"][];
         };
         /** CourtFormatProfilesResponse */
         CourtFormatProfilesResponse: {
@@ -7732,6 +7756,19 @@ export interface components {
             seat_city: string | null;
             /** Short Name */
             short_name: string;
+        };
+        /** CourtRequiredFieldRuleResponse */
+        CourtRequiredFieldRuleResponse: {
+            /** Aliases */
+            aliases: string[];
+            /** Applies To Templates */
+            applies_to_templates: string[];
+            /** Description */
+            description: string;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
         };
         /** CourtsListResponse */
         CourtsListResponse: {
@@ -8853,8 +8890,27 @@ export interface components {
             limitation_note?: string | null;
             /** Matter Id */
             matter_id: string;
+            /** Missing Required Field Count */
+            missing_required_field_count: number;
+            /** Required Field Findings */
+            required_field_findings: components["schemas"]["FilingRequiredFieldFindingResponse"][];
             /** Template Type */
             template_type: string;
+        };
+        /** FilingRequiredFieldFindingResponse */
+        FilingRequiredFieldFindingResponse: {
+            /** Description */
+            description: string;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Required */
+            required: boolean;
+            /** Satisfied */
+            satisfied: boolean;
+            /** Source */
+            source?: string | null;
         };
         /** FirmStorageQuotaPatchRequest */
         FirmStorageQuotaPatchRequest: {

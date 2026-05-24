@@ -44,9 +44,11 @@ import {
   fetchDraft,
   finalizeDraft,
   generateDraftVersion,
+  listCourtFormatProfiles,
   requestDraftChanges,
   saveDraftEdits,
   submitDraft,
+  type CourtFormatProfile,
 } from "@/lib/api/endpoints";
 import type { Draft, DraftStatus } from "@/lib/api/schemas";
 import { useCapability } from "@/lib/capabilities";
@@ -172,6 +174,66 @@ export default function MatterDraftDetailPage() {
   );
 }
 
+function CourtProfileSelector({
+  profiles,
+  selectedProfile,
+  value,
+  loading,
+  onChange,
+}: {
+  profiles: CourtFormatProfile[];
+  selectedProfile: CourtFormatProfile | undefined;
+  value: string;
+  loading: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="flex min-w-[220px] flex-col gap-1">
+      <label
+        htmlFor="court-profile-select"
+        className="text-xs font-medium text-[var(--color-mute)]"
+      >
+        Court profile
+      </label>
+      <select
+        id="court-profile-select"
+        className="rounded-md border border-[var(--color-line)] bg-white px-2 py-1.5 text-sm text-[var(--color-ink)]"
+        value={value}
+        disabled={loading}
+        onChange={(event) => onChange(event.target.value)}
+        data-testid="court-profile-select"
+      >
+        <option value="">Auto</option>
+        {profiles.map((profile) => (
+          <option key={profile.key} value={profile.key}>
+            {profile.display_name}
+          </option>
+        ))}
+      </select>
+      {selectedProfile ? (
+        <p
+          className="text-xs text-[var(--color-mute)]"
+          data-testid="court-profile-details"
+        >
+          {CATEGORY_LABEL[selectedProfile.category] ?? selectedProfile.category}
+          {" · "}
+          {selectedProfile.body_font_size_pt}pt
+          {" · "}
+          {selectedProfile.page_number_position} page numbers
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+const CATEGORY_LABEL: Record<string, string> = {
+  district_court: "District Court",
+  high_court: "High Court",
+  supreme_court: "Supreme Court",
+  tribunal: "Tribunal",
+  generic: "Generic",
+};
+
 function DraftBody({
   draft,
   matterId,
@@ -218,6 +280,16 @@ function DraftBody({
   const canApprove = status === "in_review";
   const canFinalize = status === "approved";
   const canExport = !!currentVersion;
+  const [courtProfileKey, setCourtProfileKey] = useState("");
+  const profilesQuery = useQuery({
+    queryKey: ["drafting", "court-profiles"],
+    queryFn: listCourtFormatProfiles,
+    enabled: canExport,
+  });
+  const exportCourtProfile = courtProfileKey || undefined;
+  const selectedProfile = profilesQuery.data?.find(
+    (profile) => profile.key === courtProfileKey,
+  );
 
   const verifiedCount = currentVersion?.verified_citation_count ?? 0;
 
@@ -320,6 +392,13 @@ function DraftBody({
           ) : null}
           {canExport ? (
             <>
+              <CourtProfileSelector
+                profiles={profilesQuery.data ?? []}
+                selectedProfile={selectedProfile}
+                value={courtProfileKey}
+                loading={profilesQuery.isLoading}
+                onChange={setCourtProfileKey}
+              />
               <Button
                 variant="outline"
                 href={draftDocxUrl(matterId, draft.id)}
@@ -329,14 +408,16 @@ function DraftBody({
               </Button>
               <Button
                 variant="outline"
-                href={draftPdfUrl(matterId, draft.id)}
+                href={draftPdfUrl(matterId, draft.id, exportCourtProfile)}
                 data-testid="draft-download-pdf"
               >
                 <Download className="h-4 w-4" aria-hidden /> Download PDF
               </Button>
               <Button
                 variant="outline"
-                href={draftFilingBundleUrl(matterId, draft.id)}
+                href={draftFilingBundleUrl(matterId, draft.id, {
+                  courtProfile: exportCourtProfile,
+                })}
                 data-testid="draft-download-filing-bundle"
               >
                 <FolderArchive className="h-4 w-4" aria-hidden /> Filing bundle
@@ -493,7 +574,11 @@ function DraftBody({
             revisions={draft.versions.map((v) => v.revision)}
           />
 
-          <FilingChecklistCard matterId={matterId} draftId={draft.id} />
+          <FilingChecklistCard
+            matterId={matterId}
+            draftId={draft.id}
+            courtProfile={exportCourtProfile}
+          />
 
           <Card>
             <CardHeader>

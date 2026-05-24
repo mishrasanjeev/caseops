@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { CheckCircle2, ClipboardList, Clock, Coins } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ClipboardList, Clock, Coins } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import {
@@ -101,6 +101,52 @@ function ChecklistBody({ data }: { data: FilingChecklistResponse }) {
         <span className="text-xs text-[var(--color-mute)]">
           ({data.items.length - totalRequired} optional)
         </span>
+      </div>
+
+      <div
+        className="rounded-md border border-[var(--color-line)] bg-[var(--color-bg)] px-3 py-2"
+        data-testid="filing-checklist-required-fields"
+      >
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm font-medium text-[var(--color-ink)]">
+            Court-format required fields
+          </p>
+          <span className="text-xs tabular text-[var(--color-mute)]">
+            {data.missing_required_field_count} missing
+          </span>
+        </div>
+        {data.required_field_findings.length === 0 ? (
+          <p className="mt-1 text-xs text-[var(--color-mute)]">
+            Generic profile has no additional court-format field checks.
+          </p>
+        ) : (
+          <ul className="mt-2 flex flex-col gap-1.5">
+            {data.required_field_findings.map((finding) => (
+              <li
+                key={finding.key}
+                className="flex items-start gap-2 text-xs text-[var(--color-ink-2)]"
+                data-testid={`required-field-${finding.key}`}
+              >
+                {finding.satisfied ? (
+                  <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-700" aria-hidden />
+                ) : (
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-700" aria-hidden />
+                )}
+                <span>
+                  <span className="font-medium">{finding.label}</span>
+                  {finding.satisfied ? (
+                    <span className="text-[var(--color-mute)]">
+                      {" "}
+                      satisfied from {finding.source ?? "matter metadata"}
+                    </span>
+                  ) : (
+                    <span className="text-amber-800"> needs review</span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       {data.limitation_note ? (

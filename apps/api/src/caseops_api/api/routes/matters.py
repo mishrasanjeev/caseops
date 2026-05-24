@@ -2789,7 +2789,13 @@ async def get_current_company_matter_draft_pdf(
     ``supreme_court``, ``delhi_hc``, ``bombay_hc``, ``generic``.
     Unknown key → 422.
     """
-    body, filename, profile_key = render_version_pdf(
+    (
+        body,
+        filename,
+        profile_key,
+        profile_category,
+        missing_required_field_count,
+    ) = render_version_pdf(
         session,
         context=context,
         matter_id=matter_id,
@@ -2803,6 +2809,8 @@ async def get_current_company_matter_draft_pdf(
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',
             "X-CaseOps-Court-Profile": profile_key,
+            "X-CaseOps-Court-Profile-Category": profile_category,
+            "X-CaseOps-Missing-Required-Fields": str(missing_required_field_count),
         },
     )
 
@@ -2873,6 +2881,15 @@ class FilingChecklistItemResponse(BaseModel):
     auto_satisfied_reason: str | None = None
 
 
+class FilingRequiredFieldFindingResponse(BaseModel):
+    key: str
+    label: str
+    description: str
+    required: bool
+    satisfied: bool
+    source: str | None = None
+
+
 class FilingChecklistResponse(BaseModel):
     matter_id: str
     draft_id: str
@@ -2883,6 +2900,8 @@ class FilingChecklistResponse(BaseModel):
     court_fee_note: str
     limitation_note: str | None = None
     copies_required: int
+    required_field_findings: list[FilingRequiredFieldFindingResponse]
+    missing_required_field_count: int
 
 
 @router.get(
@@ -2946,6 +2965,18 @@ async def get_current_company_matter_draft_filing_checklist(
         court_fee_note=checklist.court_fee_note,
         limitation_note=checklist.limitation_note,
         copies_required=checklist.copies_required,
+        required_field_findings=[
+            FilingRequiredFieldFindingResponse(
+                key=finding.key,
+                label=finding.label,
+                description=finding.description,
+                required=finding.required,
+                satisfied=finding.satisfied,
+                source=finding.source,
+            )
+            for finding in checklist.required_field_findings
+        ],
+        missing_required_field_count=checklist.missing_required_field_count,
     )
 
 
