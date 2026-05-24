@@ -48,11 +48,13 @@ import {
   CONTRACT_ATTACHMENT_ROLE_OPTIONS,
   CONTRACT_TYPE_OPTIONS,
   acceptContractTermSuggestion,
+  compareContractAgainstTenantPlaybook,
   comparePlaybook,
   createContractLegalReference,
   extractContractClauses,
   extractContractClausesByParty,
   extractContractObligations,
+  listTenantContractPlaybooks,
   fetchContractAttachmentRedline,
   fetchContractWorkspace,
   installDefaultPlaybook,
@@ -62,6 +64,8 @@ import {
   type PartyClauseExtractionResult,
   type PartyClauseItem,
   type PlaybookFinding,
+  type TenantPlaybookCompareResult,
+  type TenantPlaybookRecord,
   updateContractAttachmentMetadata,
   updateContractLegalReference,
   updateContractMetadata,
@@ -171,6 +175,11 @@ export default function ContractDetailPage() {
   const [partyResult, setPartyResult] = useState<PartyClauseExtractionResult | null>(
     null,
   );
+  // ADP-14: tenant playbook compare panel state.
+  const [selectedTenantPlaybookId, setSelectedTenantPlaybookId] =
+    useState<string>("__none");
+  const [tenantPlaybookCompareResult, setTenantPlaybookCompareResult] =
+    useState<TenantPlaybookCompareResult | null>(null);
 
   const workspaceQuery = useQuery({
     queryKey: ["contracts", contractId, "workspace"],
@@ -354,6 +363,35 @@ export default function ContractDetailPage() {
     },
     onError: (err) =>
       toast.error(apiErrorMessage(err, "Could not install playbook.")),
+  });
+
+  const tenantPlaybooksQuery = useQuery({
+    queryKey: ["contracts", "tenant-playbooks"],
+    queryFn: async () => (await listTenantContractPlaybooks()) as TenantPlaybookRecord[],
+  });
+
+  const runTenantPlaybookCompare = useMutation({
+    mutationFn: async () => {
+      if (selectedTenantPlaybookId === "__none") {
+        throw new Error("Select a tenant playbook first.");
+      }
+      return compareContractAgainstTenantPlaybook({
+        contractId,
+        playbookId: selectedTenantPlaybookId,
+      });
+    },
+    onSuccess: (result) => {
+      setTenantPlaybookCompareResult(result);
+      toast.success(
+        `Compared against ${result.playbook_name}: ${result.summary.matched} matched / ` +
+          `${result.summary.deviation} deviation / ${result.summary.missing} missing / ` +
+          `${result.summary.needs_review} needs review.`,
+      );
+    },
+    onError: (err) =>
+      toast.error(
+        apiErrorMessage(err, "Could not run the tenant playbook comparison."),
+      ),
   });
 
   const runPlaybookCompare = useMutation({
@@ -913,6 +951,65 @@ export default function ContractDetailPage() {
               </div>
               {partyResult ? (
                 <PartyExtractionResultPanel result={partyResult} />
+              ) : null}
+            </CardContent>
+          </Card>
+          <Card className="mt-4" data-testid="tenant-playbook-compare-panel">
+            <CardHeader>
+              <CardTitle>Compare against tenant playbook</CardTitle>
+              <CardDescription>
+                Deterministic check: each active rule in the selected
+                tenant-managed playbook is matched against this contract&apos;s
+                extracted clauses by clause type (and optional keyword pattern).
+                Missing findings carry no source link; deviation and matched
+                findings link to a specific clause.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <select
+                  className="rounded border border-[var(--color-line)] bg-white px-3 py-1 text-sm"
+                  data-testid="tenant-playbook-select"
+                  value={selectedTenantPlaybookId}
+                  onChange={(event) =>
+                    setSelectedTenantPlaybookId(event.target.value)
+                  }
+                >
+                  <option value="__none">Select a tenant playbook…</option>
+                  {(tenantPlaybooksQuery.data ?? [])
+                    .filter((pb) => !pb.is_archived)
+                    .map((pb) => (
+                      <option key={pb.id} value={pb.id}>
+                        {pb.name} ({pb.active_rule_count} active rule
+                        {pb.active_rule_count === 1 ? "" : "s"})
+                      </option>
+                    ))}
+                </select>
+                <Button
+                  size="sm"
+                  data-testid="tenant-playbook-compare-button"
+                  disabled={
+                    runTenantPlaybookCompare.isPending ||
+                    selectedTenantPlaybookId === "__none"
+                  }
+                  onClick={() => runTenantPlaybookCompare.mutate()}
+                >
+                  {runTenantPlaybookCompare.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden />{" "}
+                      Comparing…
+                    </>
+                  ) : (
+                    <>
+                      <Scale className="h-4 w-4" aria-hidden /> Compare playbook
+                    </>
+                  )}
+                </Button>
+              </div>
+              {tenantPlaybookCompareResult ? (
+                <TenantPlaybookCompareResultPanel
+                  result={tenantPlaybookCompareResult}
+                />
               ) : null}
             </CardContent>
           </Card>
@@ -1781,6 +1878,101 @@ function PartySourceBadge({
       <span className="italic">
         {source.locator ? `${source.locator}: ` : ""}“{source.snippet}”
       </span>
+    </div>
+  );
+}
+
+function TenantPlaybookCompareResultPanel({
+  result,
+}: {
+  result: TenantPlaybookCompareResult;
+}) {
+  const statusBadgeClass = (status: string) => {
+    switch (status) {
+      case "matched":
+        return "bg-emerald-100 text-emerald-900";
+      case "deviation":
+        return "bg-amber-100 text-amber-900";
+      case "missing":
+        return "bg-rose-100 text-rose-900";
+      default:
+        return "bg-slate-100 text-slate-900";
+    }
+  };
+  return (
+    <div
+      className="mt-2 flex flex-col gap-2"
+      data-testid="tenant-playbook-compare-results"
+    >
+      <div className="flex flex-wrap gap-2 text-xs text-[var(--color-mute)]">
+        <span
+          className="rounded bg-emerald-100 px-2 py-0.5 text-emerald-900"
+          data-testid="tpc-summary-matched"
+        >
+          matched: {result.summary.matched}
+        </span>
+        <span
+          className="rounded bg-amber-100 px-2 py-0.5 text-amber-900"
+          data-testid="tpc-summary-deviation"
+        >
+          deviation: {result.summary.deviation}
+        </span>
+        <span
+          className="rounded bg-rose-100 px-2 py-0.5 text-rose-900"
+          data-testid="tpc-summary-missing"
+        >
+          missing: {result.summary.missing}
+        </span>
+        <span
+          className="rounded bg-slate-100 px-2 py-0.5 text-slate-900"
+          data-testid="tpc-summary-needs-review"
+        >
+          needs review: {result.summary.needs_review}
+        </span>
+      </div>
+      <ul className="flex flex-col gap-2">
+        {result.findings.map((f) => (
+          <li
+            key={f.rule_id}
+            className="rounded-lg border border-[var(--color-line)] bg-white p-3"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="text-sm font-medium text-[var(--color-ink)]">
+                {f.rule_name}{" "}
+                <span className="text-xs text-[var(--color-mute)]">
+                  ({f.clause_type.replace(/_/g, " ")})
+                </span>
+              </div>
+              <span
+                className={`rounded px-2 py-0.5 text-xs font-medium ${statusBadgeClass(f.status)}`}
+              >
+                {f.status.replace(/_/g, " ")}
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-[var(--color-mute-2)]">
+              <span className="font-medium">Expected:</span> {f.expected_position}
+            </p>
+            {f.note ? (
+              <p className="mt-1 text-xs italic text-[var(--color-mute)]">
+                {f.note}
+              </p>
+            ) : null}
+            {f.source ? (
+              <p className="mt-1 text-xs text-[var(--color-mute-2)]">
+                <span className="rounded bg-slate-100 px-1 py-0.5 font-medium">
+                  Source clause
+                </span>{" "}
+                <span className="italic">“{f.source.snippet}”</span>
+              </p>
+            ) : (
+              <p className="mt-1 text-xs italic text-[var(--color-mute)]">
+                No source link — fallback guidance:{" "}
+                {f.fallback_text ?? "(none provided)"}
+              </p>
+            )}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

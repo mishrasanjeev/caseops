@@ -1426,6 +1426,77 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/contracts/tenant-playbooks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List tenant-managed contract playbooks */
+        get: operations["list_current_company_tenant_playbooks_api_contracts_tenant_playbooks_get"];
+        put?: never;
+        /** Create a tenant-managed contract playbook */
+        post: operations["create_current_company_tenant_playbook_api_contracts_tenant_playbooks_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/contracts/tenant-playbooks/{playbook_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Fetch a tenant-managed contract playbook with rules */
+        get: operations["get_current_company_tenant_playbook_api_contracts_tenant_playbooks__playbook_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update or archive a tenant-managed contract playbook */
+        patch: operations["update_current_company_tenant_playbook_api_contracts_tenant_playbooks__playbook_id__patch"];
+        trace?: never;
+    };
+    "/api/contracts/tenant-playbooks/{playbook_id}/rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List rules for a tenant-managed contract playbook */
+        get: operations["list_current_company_tenant_playbook_rules_api_contracts_tenant_playbooks__playbook_id__rules_get"];
+        put?: never;
+        /** Add a rule to a tenant-managed contract playbook */
+        post: operations["create_current_company_tenant_playbook_rule_api_contracts_tenant_playbooks__playbook_id__rules_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/contracts/tenant-playbooks/{playbook_id}/rules/{rule_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update or archive a tenant-managed contract playbook rule */
+        patch: operations["update_current_company_tenant_playbook_rule_api_contracts_tenant_playbooks__playbook_id__rules__rule_id__patch"];
+        trace?: never;
+    };
     "/api/contracts/{contract_id}": {
         parameters: {
             query?: never;
@@ -1643,6 +1714,26 @@ export interface paths {
         put?: never;
         /** Add a playbook rule to a contract */
         post: operations["post_current_company_contract_playbook_rule_api_contracts__contract_id__playbook_rules_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/contracts/{contract_id}/tenant-playbook-compare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Deterministically compare a contract's extracted clauses against a tenant-managed playbook
+         * @description Returns matched / missing / deviation / needs_review findings for each active rule. Matches link to existing ContractClause rows; missing findings carry no source link. No LLM call, no writes beyond a redacted audit row.
+         */
+        post: operations["compare_current_company_contract_against_tenant_playbook_api_contracts__contract_id__tenant_playbook_compare_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -14254,6 +14345,250 @@ export interface components {
             /** Predictive Bench Strategy Enabled */
             predictive_bench_strategy_enabled: boolean;
         };
+        /** TenantPlaybookCompareFinding */
+        TenantPlaybookCompareFinding: {
+            /** Clause Type */
+            clause_type: string;
+            /** Expected Position */
+            expected_position: string;
+            /** Fallback Text */
+            fallback_text?: string | null;
+            /** Note */
+            note?: string | null;
+            /** Rationale */
+            rationale?: string | null;
+            /** Rule Id */
+            rule_id: string;
+            /** Rule Name */
+            rule_name: string;
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "low" | "medium" | "high";
+            source?: components["schemas"]["TenantPlaybookCompareSource"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "matched" | "missing" | "deviation" | "needs_review";
+        };
+        /** TenantPlaybookCompareRequest */
+        TenantPlaybookCompareRequest: {
+            /** Playbook Id */
+            playbook_id: string;
+        };
+        /** TenantPlaybookCompareResponse */
+        TenantPlaybookCompareResponse: {
+            /** Contract Id */
+            contract_id: string;
+            /** Findings */
+            findings: components["schemas"]["TenantPlaybookCompareFinding"][];
+            /** Playbook Id */
+            playbook_id: string;
+            /** Playbook Name */
+            playbook_name: string;
+            summary: components["schemas"]["TenantPlaybookCompareSummary"];
+        };
+        /** TenantPlaybookCompareSource */
+        TenantPlaybookCompareSource: {
+            /** Clause Id */
+            clause_id: string;
+            /** Clause Type */
+            clause_type: string;
+            /** Snippet */
+            snippet: string;
+        };
+        /** TenantPlaybookCompareSummary */
+        TenantPlaybookCompareSummary: {
+            /** Deviation */
+            deviation: number;
+            /** Matched */
+            matched: number;
+            /** Missing */
+            missing: number;
+            /** Needs Review */
+            needs_review: number;
+            /** Total Rules */
+            total_rules: number;
+        };
+        /** TenantPlaybookCreateRequest */
+        TenantPlaybookCreateRequest: {
+            /** Contract Type Key */
+            contract_type_key?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Jurisdiction */
+            jurisdiction?: string | null;
+            /** Name */
+            name: string;
+            /** Party Perspective */
+            party_perspective?: ("first" | "second") | null;
+        };
+        /** TenantPlaybookDetail */
+        TenantPlaybookDetail: {
+            /** Active Rule Count */
+            active_rule_count: number;
+            /** Company Id */
+            company_id: string;
+            /** Contract Type Key */
+            contract_type_key?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description?: string | null;
+            /** Id */
+            id: string;
+            /** Is Archived */
+            is_archived: boolean;
+            /** Jurisdiction */
+            jurisdiction?: string | null;
+            /** Name */
+            name: string;
+            /** Party Perspective */
+            party_perspective?: ("first" | "second") | null;
+            /** Rule Count */
+            rule_count: number;
+            /** Rules */
+            rules?: components["schemas"]["TenantPlaybookRuleRecord"][];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** TenantPlaybookListResponse */
+        TenantPlaybookListResponse: {
+            /** Playbooks */
+            playbooks: components["schemas"]["TenantPlaybookRecord"][];
+        };
+        /** TenantPlaybookRecord */
+        TenantPlaybookRecord: {
+            /** Active Rule Count */
+            active_rule_count: number;
+            /** Company Id */
+            company_id: string;
+            /** Contract Type Key */
+            contract_type_key?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description?: string | null;
+            /** Id */
+            id: string;
+            /** Is Archived */
+            is_archived: boolean;
+            /** Jurisdiction */
+            jurisdiction?: string | null;
+            /** Name */
+            name: string;
+            /** Party Perspective */
+            party_perspective?: ("first" | "second") | null;
+            /** Rule Count */
+            rule_count: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** TenantPlaybookRuleCreateRequest */
+        TenantPlaybookRuleCreateRequest: {
+            /** Clause Type */
+            clause_type: string;
+            /** Expected Position */
+            expected_position: string;
+            /** Fallback Text */
+            fallback_text?: string | null;
+            /** Keyword Pattern */
+            keyword_pattern?: string | null;
+            /** Rationale */
+            rationale?: string | null;
+            /** Rule Name */
+            rule_name: string;
+            /**
+             * Severity
+             * @default medium
+             * @enum {string}
+             */
+            severity: "low" | "medium" | "high";
+        };
+        /** TenantPlaybookRuleRecord */
+        TenantPlaybookRuleRecord: {
+            /** Clause Type */
+            clause_type: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Expected Position */
+            expected_position: string;
+            /** Fallback Text */
+            fallback_text?: string | null;
+            /** Id */
+            id: string;
+            /** Is Archived */
+            is_archived: boolean;
+            /** Keyword Pattern */
+            keyword_pattern?: string | null;
+            /** Playbook Id */
+            playbook_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /** Rule Name */
+            rule_name: string;
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "low" | "medium" | "high";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** TenantPlaybookRuleUpdateRequest */
+        TenantPlaybookRuleUpdateRequest: {
+            /** Clause Type */
+            clause_type?: string | null;
+            /** Expected Position */
+            expected_position?: string | null;
+            /** Fallback Text */
+            fallback_text?: string | null;
+            /** Is Archived */
+            is_archived?: boolean | null;
+            /** Keyword Pattern */
+            keyword_pattern?: string | null;
+            /** Rationale */
+            rationale?: string | null;
+            /** Rule Name */
+            rule_name?: string | null;
+            /** Severity */
+            severity?: ("low" | "medium" | "high") | null;
+        };
+        /** TenantPlaybookUpdateRequest */
+        TenantPlaybookUpdateRequest: {
+            /** Contract Type Key */
+            contract_type_key?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Is Archived */
+            is_archived?: boolean | null;
+            /** Jurisdiction */
+            jurisdiction?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Party Perspective */
+            party_perspective?: ("first" | "second") | null;
+        };
         /** TimeEntryCreateRequest */
         TimeEntryCreateRequest: {
             /**
@@ -17498,6 +17833,240 @@ export interface operations {
             };
         };
     };
+    list_current_company_tenant_playbooks_api_contracts_tenant_playbooks_get: {
+        parameters: {
+            query?: {
+                include_archived?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantPlaybookListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_current_company_tenant_playbook_api_contracts_tenant_playbooks_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TenantPlaybookCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantPlaybookDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_current_company_tenant_playbook_api_contracts_tenant_playbooks__playbook_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                playbook_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantPlaybookDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_current_company_tenant_playbook_api_contracts_tenant_playbooks__playbook_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                playbook_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TenantPlaybookUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantPlaybookDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_current_company_tenant_playbook_rules_api_contracts_tenant_playbooks__playbook_id__rules_get: {
+        parameters: {
+            query?: {
+                include_archived?: boolean;
+            };
+            header?: never;
+            path: {
+                playbook_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantPlaybookRuleRecord"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_current_company_tenant_playbook_rule_api_contracts_tenant_playbooks__playbook_id__rules_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                playbook_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TenantPlaybookRuleCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantPlaybookRuleRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_current_company_tenant_playbook_rule_api_contracts_tenant_playbooks__playbook_id__rules__rule_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                playbook_id: string;
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TenantPlaybookRuleUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantPlaybookRuleRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_current_company_contract_api_contracts__contract_id__get: {
         parameters: {
             query?: never;
@@ -17990,6 +18559,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ContractPlaybookRuleRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    compare_current_company_contract_against_tenant_playbook_api_contracts__contract_id__tenant_playbook_compare_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contract_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TenantPlaybookCompareRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantPlaybookCompareResponse"];
                 };
             };
             /** @description Validation Error */

@@ -563,3 +563,128 @@ class RedlineParseResponse(BaseModel):
     deletion_count: int
     author_counts: dict[str, int]
     changes: list[RedlineChangeRecord]
+
+
+# --- ADP-14: tenant-managed contract playbooks + compare ----------------
+
+TenantPlaybookCompareStatusLiteral = Literal[
+    "matched",
+    "missing",
+    "deviation",
+    "needs_review",
+]
+
+
+class TenantPlaybookCreateRequest(BaseModel):
+    name: str = Field(min_length=2, max_length=255)
+    description: str | None = Field(default=None, max_length=2000)
+    contract_type_key: str | None = Field(default=None, max_length=80)
+    jurisdiction: str | None = Field(default=None, max_length=120)
+    party_perspective: Literal["first", "second"] | None = None
+
+
+class TenantPlaybookUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=255)
+    description: str | None = Field(default=None, max_length=2000)
+    contract_type_key: str | None = Field(default=None, max_length=80)
+    jurisdiction: str | None = Field(default=None, max_length=120)
+    party_perspective: Literal["first", "second"] | None = None
+    is_archived: bool | None = None
+
+
+class TenantPlaybookRuleCreateRequest(BaseModel):
+    rule_name: str = Field(min_length=2, max_length=255)
+    clause_type: str = Field(min_length=2, max_length=120)
+    expected_position: str = Field(min_length=2, max_length=2000)
+    fallback_text: str | None = Field(default=None, max_length=2000)
+    rationale: str | None = Field(default=None, max_length=2000)
+    keyword_pattern: str | None = Field(default=None, max_length=255)
+    severity: ContractPlaybookSeverityLiteral = "medium"
+
+
+class TenantPlaybookRuleUpdateRequest(BaseModel):
+    rule_name: str | None = Field(default=None, min_length=2, max_length=255)
+    clause_type: str | None = Field(default=None, min_length=2, max_length=120)
+    expected_position: str | None = Field(default=None, min_length=2, max_length=2000)
+    fallback_text: str | None = Field(default=None, max_length=2000)
+    rationale: str | None = Field(default=None, max_length=2000)
+    keyword_pattern: str | None = Field(default=None, max_length=255)
+    severity: ContractPlaybookSeverityLiteral | None = None
+    is_archived: bool | None = None
+
+
+class TenantPlaybookRuleRecord(BaseModel):
+    id: str
+    playbook_id: str
+    rule_name: str
+    clause_type: str
+    expected_position: str
+    fallback_text: str | None = None
+    rationale: str | None = None
+    keyword_pattern: str | None = None
+    severity: ContractPlaybookSeverityLiteral
+    is_archived: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class TenantPlaybookRecord(BaseModel):
+    id: str
+    company_id: str
+    name: str
+    description: str | None = None
+    contract_type_key: str | None = None
+    jurisdiction: str | None = None
+    party_perspective: Literal["first", "second"] | None = None
+    is_archived: bool
+    rule_count: int
+    active_rule_count: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class TenantPlaybookDetail(TenantPlaybookRecord):
+    rules: list[TenantPlaybookRuleRecord] = Field(default_factory=list)
+
+
+class TenantPlaybookListResponse(BaseModel):
+    playbooks: list[TenantPlaybookRecord]
+
+
+class TenantPlaybookCompareSource(BaseModel):
+    clause_id: str
+    clause_type: str
+    snippet: str = Field(max_length=280)
+
+
+class TenantPlaybookCompareFinding(BaseModel):
+    rule_id: str
+    rule_name: str
+    clause_type: str
+    severity: ContractPlaybookSeverityLiteral
+    status: TenantPlaybookCompareStatusLiteral
+    expected_position: str = Field(max_length=2000)
+    fallback_text: str | None = None
+    rationale: str | None = None
+    source: TenantPlaybookCompareSource | None = None
+    note: str | None = Field(default=None, max_length=280)
+
+
+class TenantPlaybookCompareSummary(BaseModel):
+    total_rules: int
+    matched: int
+    missing: int
+    deviation: int
+    needs_review: int
+
+
+class TenantPlaybookCompareRequest(BaseModel):
+    playbook_id: str = Field(min_length=1, max_length=36)
+
+
+class TenantPlaybookCompareResponse(BaseModel):
+    contract_id: str
+    playbook_id: str
+    playbook_name: str
+    findings: list[TenantPlaybookCompareFinding]
+    summary: TenantPlaybookCompareSummary

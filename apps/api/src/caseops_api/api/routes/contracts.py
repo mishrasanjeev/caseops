@@ -33,6 +33,15 @@ from caseops_api.schemas.contracts import (
     ContractWorkspaceResponse,
     RedlineChangeRecord,
     RedlineParseResponse,
+    TenantPlaybookCompareRequest,
+    TenantPlaybookCompareResponse,
+    TenantPlaybookCreateRequest,
+    TenantPlaybookDetail,
+    TenantPlaybookListResponse,
+    TenantPlaybookRuleCreateRequest,
+    TenantPlaybookRuleRecord,
+    TenantPlaybookRuleUpdateRequest,
+    TenantPlaybookUpdateRequest,
 )
 from caseops_api.services.contract_redline import parse_redline_docx
 from caseops_api.services.contracts import (
@@ -57,6 +66,16 @@ from caseops_api.services.contracts import (
 )
 from caseops_api.services.document_jobs import run_document_processing_job
 from caseops_api.services.identity import SessionContext
+from caseops_api.services.tenant_contract_playbooks import (
+    compare_contract_to_tenant_playbook,
+    create_tenant_playbook,
+    create_tenant_playbook_rule,
+    get_tenant_playbook,
+    list_tenant_playbook_rules,
+    list_tenant_playbooks,
+    update_tenant_playbook,
+    update_tenant_playbook_rule,
+)
 
 router = APIRouter()
 CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
@@ -91,6 +110,130 @@ async def create_current_company_contract(
     session: DbSession,
 ) -> ContractRecord:
     return create_contract(session, context=context, payload=payload)
+
+
+# ---------------------------------------------------------------------------
+# ADP-14: tenant-managed contract playbook admin (must register BEFORE
+# the `/{contract_id}` catch-all so the literal `tenant-playbooks` path
+# does not collide with a contract_id path param).
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/tenant-playbooks",
+    response_model=TenantPlaybookListResponse,
+    summary="List tenant-managed contract playbooks",
+)
+async def list_current_company_tenant_playbooks(
+    context: CurrentContext,
+    session: DbSession,
+    include_archived: bool = False,
+) -> TenantPlaybookListResponse:
+    return TenantPlaybookListResponse(
+        playbooks=list_tenant_playbooks(
+            session, context=context, include_archived=include_archived,
+        ),
+    )
+
+
+@router.post(
+    "/tenant-playbooks",
+    response_model=TenantPlaybookDetail,
+    summary="Create a tenant-managed contract playbook",
+)
+async def create_current_company_tenant_playbook(
+    payload: TenantPlaybookCreateRequest,
+    context: ContractRuleManager,
+    session: DbSession,
+) -> TenantPlaybookDetail:
+    return create_tenant_playbook(session, context=context, payload=payload)
+
+
+@router.get(
+    "/tenant-playbooks/{playbook_id}",
+    response_model=TenantPlaybookDetail,
+    summary="Fetch a tenant-managed contract playbook with rules",
+)
+async def get_current_company_tenant_playbook(
+    playbook_id: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> TenantPlaybookDetail:
+    return get_tenant_playbook(
+        session, context=context, playbook_id=playbook_id,
+    )
+
+
+@router.patch(
+    "/tenant-playbooks/{playbook_id}",
+    response_model=TenantPlaybookDetail,
+    summary="Update or archive a tenant-managed contract playbook",
+)
+async def update_current_company_tenant_playbook(
+    playbook_id: str,
+    payload: TenantPlaybookUpdateRequest,
+    context: ContractRuleManager,
+    session: DbSession,
+) -> TenantPlaybookDetail:
+    return update_tenant_playbook(
+        session, context=context, playbook_id=playbook_id, payload=payload,
+    )
+
+
+@router.get(
+    "/tenant-playbooks/{playbook_id}/rules",
+    response_model=list[TenantPlaybookRuleRecord],
+    summary="List rules for a tenant-managed contract playbook",
+)
+async def list_current_company_tenant_playbook_rules(
+    playbook_id: str,
+    context: CurrentContext,
+    session: DbSession,
+    include_archived: bool = False,
+) -> list[TenantPlaybookRuleRecord]:
+    return list_tenant_playbook_rules(
+        session,
+        context=context,
+        playbook_id=playbook_id,
+        include_archived=include_archived,
+    )
+
+
+@router.post(
+    "/tenant-playbooks/{playbook_id}/rules",
+    response_model=TenantPlaybookRuleRecord,
+    summary="Add a rule to a tenant-managed contract playbook",
+)
+async def create_current_company_tenant_playbook_rule(
+    playbook_id: str,
+    payload: TenantPlaybookRuleCreateRequest,
+    context: ContractRuleManager,
+    session: DbSession,
+) -> TenantPlaybookRuleRecord:
+    return create_tenant_playbook_rule(
+        session, context=context, playbook_id=playbook_id, payload=payload,
+    )
+
+
+@router.patch(
+    "/tenant-playbooks/{playbook_id}/rules/{rule_id}",
+    response_model=TenantPlaybookRuleRecord,
+    summary="Update or archive a tenant-managed contract playbook rule",
+)
+async def update_current_company_tenant_playbook_rule(
+    playbook_id: str,
+    rule_id: str,
+    payload: TenantPlaybookRuleUpdateRequest,
+    context: ContractRuleManager,
+    session: DbSession,
+) -> TenantPlaybookRuleRecord:
+    return update_tenant_playbook_rule(
+        session,
+        context=context,
+        playbook_id=playbook_id,
+        rule_id=rule_id,
+        payload=payload,
+    )
 
 
 @router.get("/{contract_id}", response_model=ContractRecord, summary="Get a contract by id")
@@ -483,4 +626,37 @@ async def parse_contract_attachment_redline(
             )
             for change in result.changes
         ],
+    )
+
+
+# ---------------------------------------------------------------------------
+# ADP-14: tenant-managed contract playbooks (admin) + deterministic compare
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/{contract_id}/tenant-playbook-compare",
+    response_model=TenantPlaybookCompareResponse,
+    summary=(
+        "Deterministically compare a contract's extracted clauses against a "
+        "tenant-managed playbook"
+    ),
+    description=(
+        "Returns matched / missing / deviation / needs_review findings for "
+        "each active rule. Matches link to existing ContractClause rows; "
+        "missing findings carry no source link. No LLM call, no writes "
+        "beyond a redacted audit row."
+    ),
+)
+async def compare_current_company_contract_against_tenant_playbook(
+    contract_id: str,
+    payload: TenantPlaybookCompareRequest,
+    context: ContractEditor,
+    session: DbSession,
+) -> TenantPlaybookCompareResponse:
+    return compare_contract_to_tenant_playbook(
+        session,
+        context=context,
+        contract_id=contract_id,
+        playbook_id=payload.playbook_id,
     )

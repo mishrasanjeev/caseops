@@ -1095,3 +1095,416 @@ def test_existing_clauses_extract_endpoint_unchanged_by_adp13(
         ))
     assert len(rows) == 1
     assert rows[0].clause_type == "limitation_of_liability"
+
+
+# ---------------------------------------------------------------------------
+# ADP-14: tenant-managed contract playbook admin + deterministic compare
+# ---------------------------------------------------------------------------
+
+
+def _make_playbook(
+    client: TestClient, token: str, *, name: str = "Vendor MSA playbook",
+) -> dict:
+    response = client.post(
+        "/api/contracts/tenant-playbooks",
+        headers=_bearer(token),
+        json={
+            "name": name,
+            "description": "Standard vendor MSA expectations",
+            "contract_type_key": "master_services_agreement",
+            "jurisdiction": "India",
+            "party_perspective": "first",
+        },
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def _make_rule(
+    client: TestClient,
+    token: str,
+    playbook_id: str,
+    *,
+    rule_name: str = "Liability cap",
+    clause_type: str = "limitation_of_liability",
+    keyword_pattern: str | None = "twelve months",
+    severity: str = "high",
+) -> dict:
+    payload = {
+        "rule_name": rule_name,
+        "clause_type": clause_type,
+        "expected_position": "Aggregate liability capped at 12 months of fees.",
+        "fallback_text": "Insert a 12-month aggregate cap on liability.",
+        "rationale": "Standard market position for SaaS MSAs.",
+        "severity": severity,
+    }
+    if keyword_pattern is not None:
+        payload["keyword_pattern"] = keyword_pattern
+    response = client.post(
+        f"/api/contracts/tenant-playbooks/{playbook_id}/rules",
+        headers=_bearer(token),
+        json=payload,
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def _attach_clauses(
+    contract_id: str,
+    clauses: list[tuple[str, str, str]],
+) -> None:
+    """Seed ContractClause rows on the contract (clause_type, title, body)."""
+    import uuid as _uuid
+
+    from caseops_api.db.models import ContractClause
+    from caseops_api.db.session import get_session_factory
+
+    factory = get_session_factory()
+    with factory() as s:
+        for clause_type, title, body in clauses:
+            s.add(
+                ContractClause(
+                    id=str(_uuid.uuid4()),
+                    contract_id=contract_id,
+                    title=title,
+                    clause_type=clause_type,
+                    clause_text=body,
+                    risk_level="medium",
+                    notes="[auto]",
+                )
+            )
+        s.commit()
+
+
+def test_tenant_playbook_crud_round_trip(client: TestClient) -> None:
+    session_data = _bootstrap(client)
+    token = session_data["access_token"]
+
+    pb = _make_playbook(client, token)
+    assert pb["is_archived"] is False
+    assert pb["rule_count"] == 0
+    assert pb["active_rule_count"] == 0
+
+    rule = _make_rule(client, token, pb["id"])
+    assert rule["severity"] == "high"
+    assert rule["keyword_pattern"] == "twelve months"
+
+    listed = client.get(
+        "/api/contracts/tenant-playbooks", headers=_bearer(token),
+    )
+    assert listed.status_code == 200
+    assert any(p["id"] == pb["id"] for p in listed.json()["playbooks"])
+
+    detail = client.get(
+        f"/api/contracts/tenant-playbooks/{pb['id']}", headers=_bearer(token),
+    )
+    assert detail.status_code == 200
+    assert detail.json()["rule_count"] == 1
+    assert detail.json()["active_rule_count"] == 1
+
+    # Archive the rule
+    rule_archive = client.patch(
+        f"/api/contracts/tenant-playbooks/{pb['id']}/rules/{rule['id']}",
+        headers=_bearer(token),
+        json={"is_archived": True},
+    )
+    assert rule_archive.status_code == 200
+    assert rule_archive.json()["is_archived"] is True
+
+    detail2 = client.get(
+        f"/api/contracts/tenant-playbooks/{pb['id']}", headers=_bearer(token),
+    )
+    assert detail2.json()["active_rule_count"] == 0
+    assert detail2.json()["rule_count"] == 1
+
+    # Archive the playbook
+    pb_archive = client.patch(
+        f"/api/contracts/tenant-playbooks/{pb['id']}",
+        headers=_bearer(token),
+        json={"is_archived": True, "description": "Archived for legacy."},
+    )
+    assert pb_archive.status_code == 200
+    assert pb_archive.json()["is_archived"] is True
+
+
+def test_tenant_playbook_isolation_across_companies(client: TestClient) -> None:
+    tenant_a = client.post(
+        "/api/bootstrap/company",
+        json={
+            "company_name": "ADP14 Tenant A",
+            "company_slug": "adp14-tenant-a",
+            "company_type": "law_firm",
+            "owner_full_name": "Owner A",
+            "owner_email": "owner-a@adp14.example",
+            "owner_password": "FoundersPass123!",
+        },
+    ).json()
+    tenant_b = client.post(
+        "/api/bootstrap/company",
+        json={
+            "company_name": "ADP14 Tenant B",
+            "company_slug": "adp14-tenant-b",
+            "company_type": "law_firm",
+            "owner_full_name": "Owner B",
+            "owner_email": "owner-b@adp14.example",
+            "owner_password": "FoundersPass123!",
+        },
+    ).json()
+    token_a = str(tenant_a["access_token"])
+    token_b = str(tenant_b["access_token"])
+
+    pb_a = _make_playbook(client, token_a, name="A playbook")
+    pb_b = _make_playbook(client, token_b, name="B playbook")
+
+    list_a = client.get(
+        "/api/contracts/tenant-playbooks", headers=_bearer(token_a),
+    ).json()["playbooks"]
+    assert {p["name"] for p in list_a} == {"A playbook"}
+
+    list_b = client.get(
+        "/api/contracts/tenant-playbooks", headers=_bearer(token_b),
+    ).json()["playbooks"]
+    assert {p["name"] for p in list_b} == {"B playbook"}
+
+    # B cannot fetch A's playbook
+    cross = client.get(
+        f"/api/contracts/tenant-playbooks/{pb_a['id']}",
+        headers=_bearer(token_b),
+    )
+    assert cross.status_code == 404
+
+    # B cannot update / add rule to A's playbook
+    cross_rule = client.post(
+        f"/api/contracts/tenant-playbooks/{pb_a['id']}/rules",
+        headers=_bearer(token_b),
+        json={
+            "rule_name": "Sneaky",
+            "clause_type": "indemnity",
+            "expected_position": "Steal.",
+        },
+    )
+    assert cross_rule.status_code == 404
+    _ = pb_b  # tenant B's playbook is unused here; just bound for clarity.
+
+
+def test_tenant_playbook_create_requires_contract_rule_manager(
+    client: TestClient,
+) -> None:
+    session_data = _bootstrap(client)
+    owner_token = str(session_data["access_token"])
+    # Invite a regular user without contracts:manage_rules.
+    invite = client.post(
+        "/api/companies/current/users",
+        headers=_bearer(owner_token),
+        json={
+            "full_name": "Plain user",
+            "email": "plain@adp14.example",
+            "role": "member",
+            "password": "PlainPass123!",
+        },
+    )
+    assert invite.status_code == 200, invite.text
+    login = client.post(
+        "/api/auth/login",
+        json={
+            "company_slug": "contracts-intel",
+            "email": "plain@adp14.example",
+            "password": "PlainPass123!",
+        },
+    )
+    assert login.status_code == 200, login.text
+    plain_token = str(login.json()["access_token"])
+
+    forbidden = client.post(
+        "/api/contracts/tenant-playbooks",
+        headers=_bearer(plain_token),
+        json={"name": "Should fail"},
+    )
+    assert forbidden.status_code == 403
+
+
+def test_tenant_playbook_compare_statuses_matched_missing_deviation(
+    client: TestClient,
+) -> None:
+    session_data = _bootstrap(client)
+    token = session_data["access_token"]
+    contract_id = _create_contract(client, token)
+    pb = _make_playbook(client, token)
+    _make_rule(
+        client, token, pb["id"],
+        rule_name="Liability cap (12 months)",
+        clause_type="limitation_of_liability",
+        keyword_pattern="twelve months",
+    )
+    _make_rule(
+        client, token, pb["id"],
+        rule_name="Indemnity (IP)",
+        clause_type="indemnity",
+        keyword_pattern="IP infringement",
+    )
+    _make_rule(
+        client, token, pb["id"],
+        rule_name="Confidentiality (mutual)",
+        clause_type="confidentiality",
+        keyword_pattern="mutual",
+    )
+
+    # Matched: limitation_of_liability with the keyword present.
+    # Deviation: indemnity present but missing "IP infringement" keyword.
+    # Missing: no confidentiality clause at all.
+    _attach_clauses(contract_id, [
+        (
+            "limitation_of_liability",
+            "Cap",
+            "Aggregate liability shall not exceed fees paid in the prior twelve months.",
+        ),
+        (
+            "indemnity",
+            "Indemnity",
+            "Each party shall indemnify the other against third-party claims.",
+        ),
+    ])
+
+    response = client.post(
+        f"/api/contracts/{contract_id}/tenant-playbook-compare",
+        headers=_bearer(token),
+        json={"playbook_id": pb["id"]},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    by_rule = {f["rule_name"]: f for f in body["findings"]}
+    assert by_rule["Liability cap (12 months)"]["status"] == "matched"
+    assert by_rule["Liability cap (12 months)"]["source"]["clause_id"]
+    assert by_rule["Indemnity (IP)"]["status"] == "deviation"
+    assert by_rule["Indemnity (IP)"]["source"]["clause_id"]
+    assert "IP infringement" in by_rule["Indemnity (IP)"]["note"]
+    assert by_rule["Confidentiality (mutual)"]["status"] == "missing"
+    assert by_rule["Confidentiality (mutual)"]["source"] is None
+
+    assert body["summary"]["matched"] == 1
+    assert body["summary"]["missing"] == 1
+    assert body["summary"]["deviation"] == 1
+    assert body["summary"]["needs_review"] == 0
+    assert body["summary"]["total_rules"] == 3
+
+
+def test_tenant_playbook_compare_returns_needs_review_with_no_clauses(
+    client: TestClient,
+) -> None:
+    session_data = _bootstrap(client)
+    token = session_data["access_token"]
+    contract_id = _create_contract(client, token)
+    pb = _make_playbook(client, token)
+    _make_rule(client, token, pb["id"])
+
+    response = client.post(
+        f"/api/contracts/{contract_id}/tenant-playbook-compare",
+        headers=_bearer(token),
+        json={"playbook_id": pb["id"]},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["summary"]["needs_review"] == 1
+    assert body["summary"]["matched"] == 0
+    assert body["findings"][0]["source"] is None
+
+
+def test_tenant_playbook_compare_missing_finding_carries_no_source(
+    client: TestClient,
+) -> None:
+    """PRD acceptance: missing findings must not fabricate a source."""
+    session_data = _bootstrap(client)
+    token = session_data["access_token"]
+    contract_id = _create_contract(client, token)
+    pb = _make_playbook(client, token)
+    _make_rule(
+        client, token, pb["id"],
+        rule_name="Dispute resolution (arbitration)",
+        clause_type="arbitration",
+        keyword_pattern=None,
+    )
+    _attach_clauses(contract_id, [
+        ("limitation_of_liability", "Cap", "Liability cap is twelve months."),
+    ])
+
+    response = client.post(
+        f"/api/contracts/{contract_id}/tenant-playbook-compare",
+        headers=_bearer(token),
+        json={"playbook_id": pb["id"]},
+    )
+    body = response.json()
+    finding = body["findings"][0]
+    assert finding["status"] == "missing"
+    assert finding["source"] is None
+    assert finding["fallback_text"] is not None
+
+
+def test_tenant_playbook_compare_audit_metadata_is_redacted(
+    client: TestClient,
+) -> None:
+    import json as _json
+
+    from sqlalchemy import select
+
+    from caseops_api.db.models import AuditEvent
+    from caseops_api.db.session import get_session_factory
+
+    session_data = _bootstrap(client)
+    token = session_data["access_token"]
+    company_id = str(session_data["company"]["id"])
+    contract_id = _create_contract(client, token)
+    pb = _make_playbook(client, token, name="Audit-test playbook")
+    _make_rule(client, token, pb["id"])
+    _attach_clauses(contract_id, [
+        ("limitation_of_liability", "Cap", "Liability cap is twelve months of fees."),
+    ])
+
+    response = client.post(
+        f"/api/contracts/{contract_id}/tenant-playbook-compare",
+        headers=_bearer(token),
+        json={"playbook_id": pb["id"]},
+    )
+    assert response.status_code == 200, response.text
+
+    factory = get_session_factory()
+    with factory() as s:
+        event = s.scalar(
+            select(AuditEvent)
+            .where(AuditEvent.company_id == company_id)
+            .where(AuditEvent.action == "contract_playbook.tenant.compare")
+            .order_by(AuditEvent.created_at.desc(), AuditEvent.id.desc())
+        )
+        assert event is not None
+        metadata = _json.loads(event.metadata_json or "{}")
+
+    assert metadata["playbook_id"] == pb["id"]
+    assert metadata["contract_id"] == contract_id
+    assert metadata["total_rules"] == 1
+    assert isinstance(metadata["playbook_name_hash"], str)
+    assert len(metadata["playbook_name_hash"]) == 64
+    redacted = _json.dumps(metadata)
+    for needle in [
+        "Audit-test playbook",
+        "Liability cap is twelve",
+        "limitation_of_liability is matched",  # full LLM summary text
+    ]:
+        assert needle not in redacted, (needle, redacted)
+
+
+def test_existing_per_contract_playbook_compare_endpoint_unchanged(
+    client: TestClient,
+) -> None:
+    """Backward-compat: legacy LLM compare_playbook endpoint still
+    exists and responds (with 200 + empty findings when no rules are
+    seeded — the no-LLM short-circuit path)."""
+    session_data = _bootstrap(client)
+    token = session_data["access_token"]
+    contract_id = _create_contract(client, token)
+    # No rules installed → service short-circuits without calling the LLM.
+    response = client.post(
+        f"/api/ai/contracts/{contract_id}/playbook/compare",
+        headers=_bearer(token),
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["findings"] == []
+    assert response.json()["provider"] == "caseops-no-rules"

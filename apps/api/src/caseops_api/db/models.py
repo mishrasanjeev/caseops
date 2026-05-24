@@ -6662,3 +6662,88 @@ class MatterPortalGrant(Base):
     )
 
     portal_user: Mapped[PortalUser] = relationship(back_populates="grants")
+
+
+# ---------------------------------------------------------------------------
+# ADP-14: tenant-managed contract playbooks (company-scoped) and rules.
+# Distinct from the per-contract ContractPlaybookRule above, which stays
+# in place for backward compatibility with /clauses/extract + the
+# existing LLM-backed compare_playbook flow.
+# ---------------------------------------------------------------------------
+
+
+class TenantContractPlaybook(Base):
+    __tablename__ = "tenant_contract_playbooks"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id", "name", name="uq_tenant_contract_playbook_company_name",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4()),
+    )
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    contract_type_key: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    jurisdiction: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    party_perspective: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False,
+    )
+
+    rules: Mapped[list[TenantContractPlaybookRule]] = relationship(
+        back_populates="playbook",
+        cascade="all, delete-orphan",
+        order_by="TenantContractPlaybookRule.created_at.asc()",
+    )
+
+
+class TenantContractPlaybookRule(Base):
+    __tablename__ = "tenant_contract_playbook_rules"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4()),
+    )
+    playbook_id: Mapped[str] = mapped_column(
+        ForeignKey("tenant_contract_playbooks.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    rule_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    clause_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    expected_position: Mapped[str] = mapped_column(Text, nullable=False)
+    fallback_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    rationale: Mapped[str | None] = mapped_column(Text, nullable=True)
+    keyword_pattern: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    severity: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default=ContractPlaybookSeverity.MEDIUM,
+    )
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False,
+    )
+
+    playbook: Mapped[TenantContractPlaybook] = relationship(back_populates="rules")

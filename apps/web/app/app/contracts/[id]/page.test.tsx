@@ -8,10 +8,14 @@ const {
   fetchWorkspaceMock,
   useCapabilityMock,
   extractByPartyMock,
+  listTenantPlaybooksMock,
+  tenantCompareMock,
 } = vi.hoisted(() => ({
   fetchWorkspaceMock: vi.fn(),
   useCapabilityMock: vi.fn(),
   extractByPartyMock: vi.fn(),
+  listTenantPlaybooksMock: vi.fn(),
+  tenantCompareMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api/endpoints", () => ({
@@ -33,6 +37,8 @@ vi.mock("@/lib/api/endpoints", () => ({
   extractContractObligations: vi.fn(),
   installDefaultPlaybook: vi.fn(),
   comparePlaybook: vi.fn(),
+  listTenantContractPlaybooks: listTenantPlaybooksMock,
+  compareContractAgainstTenantPlaybook: tenantCompareMock,
   fetchContractAttachmentRedline: vi.fn(),
   updateContractMetadata: vi.fn(),
   createContractLegalReference: vi.fn(),
@@ -68,6 +74,9 @@ describe("ContractDetailPage", () => {
     fetchWorkspaceMock.mockReset();
     useCapabilityMock.mockReset();
     extractByPartyMock.mockReset();
+    listTenantPlaybooksMock.mockReset();
+    tenantCompareMock.mockReset();
+    listTenantPlaybooksMock.mockResolvedValue([]);
     useCapabilityMock.mockImplementation(() => false);
     fetchWorkspaceMock.mockResolvedValue({
       contract: {
@@ -330,5 +339,115 @@ describe("ContractDetailPage", () => {
     expect(screen.getByTestId("party-extract-dropped")).toHaveTextContent(
       /2 items dropped/i,
     );
+  });
+
+  it("runs tenant playbook compare and renders matched/missing/deviation findings", async () => {
+    fetchWorkspaceMock.mockResolvedValue({
+      contract: {
+        id: "c1",
+        contract_code: "CT-1",
+        title: "Vendor MSA",
+        contract_type: "Master services agreement",
+        contract_type_key: "master_services_agreement",
+        contract_type_notes: null,
+        counterparty_name: "Acme Corp",
+        status: "draft",
+        effective_on: null,
+        expires_on: null,
+        renewal_on: null,
+        auto_renewal: false,
+        jurisdiction: null,
+        summary: null,
+      },
+      attachments: [],
+      clauses: [],
+      obligations: [],
+      playbook_rules: [],
+      legal_references: [],
+      term_suggestions: [],
+    });
+    useCapabilityMock.mockImplementation(() => true);
+    listTenantPlaybooksMock.mockResolvedValue([
+      {
+        id: "pb1",
+        company_id: "co1",
+        name: "Vendor MSA playbook",
+        description: null,
+        contract_type_key: "master_services_agreement",
+        jurisdiction: "India",
+        party_perspective: "first",
+        is_archived: false,
+        rule_count: 3,
+        active_rule_count: 3,
+        created_at: "2026-05-24T00:00:00Z",
+        updated_at: "2026-05-24T00:00:00Z",
+      },
+    ]);
+    tenantCompareMock.mockResolvedValue({
+      contract_id: "c1",
+      playbook_id: "pb1",
+      playbook_name: "Vendor MSA playbook",
+      findings: [
+        {
+          rule_id: "r1",
+          rule_name: "Liability cap (12 months)",
+          clause_type: "limitation_of_liability",
+          severity: "high",
+          status: "matched",
+          expected_position: "12-month aggregate cap.",
+          fallback_text: null,
+          rationale: null,
+          source: {
+            clause_id: "cl1",
+            clause_type: "limitation_of_liability",
+            snippet: "Aggregate liability shall not exceed fees paid in the prior twelve months.",
+          },
+          note: null,
+        },
+        {
+          rule_id: "r2",
+          rule_name: "Confidentiality (mutual)",
+          clause_type: "confidentiality",
+          severity: "medium",
+          status: "missing",
+          expected_position: "Mutual confidentiality obligations.",
+          fallback_text: "Insert a mutual NDA paragraph.",
+          rationale: null,
+          source: null,
+          note: null,
+        },
+      ],
+      summary: {
+        total_rules: 2,
+        matched: 1,
+        missing: 1,
+        deviation: 0,
+        needs_review: 0,
+      },
+    });
+
+    render(withClient(<ContractDetailPage />));
+    expect(await screen.findByText("Vendor MSA")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("tab", { name: /Clauses/i }));
+    await waitFor(() => expect(listTenantPlaybooksMock).toHaveBeenCalled());
+
+    const select = screen.getByTestId("tenant-playbook-select");
+    await userEvent.selectOptions(select, "pb1");
+    await userEvent.click(screen.getByTestId("tenant-playbook-compare-button"));
+
+    await waitFor(() => expect(tenantCompareMock).toHaveBeenCalledTimes(1));
+    expect(tenantCompareMock.mock.calls[0][0]).toEqual({
+      contractId: "c1",
+      playbookId: "pb1",
+    });
+
+    expect(await screen.findByTestId("tpc-summary-matched")).toHaveTextContent(
+      /matched: 1/i,
+    );
+    expect(screen.getByTestId("tpc-summary-missing")).toHaveTextContent(
+      /missing: 1/i,
+    );
+    expect(screen.getByText(/Liability cap \(12 months\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Insert a mutual NDA paragraph\./i)).toBeInTheDocument();
   });
 });

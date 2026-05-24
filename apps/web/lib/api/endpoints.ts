@@ -3875,6 +3875,82 @@ export type PartyClauseExtractionResult = {
   model: string;
 };
 
+// ADP-14: tenant-managed contract playbooks + deterministic compare.
+export type TenantPlaybookRecord = {
+  id: string;
+  company_id: string;
+  name: string;
+  description: string | null;
+  contract_type_key: string | null;
+  jurisdiction: string | null;
+  party_perspective: "first" | "second" | null;
+  is_archived: boolean;
+  rule_count: number;
+  active_rule_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TenantPlaybookCompareStatus =
+  | "matched"
+  | "missing"
+  | "deviation"
+  | "needs_review";
+
+export type TenantPlaybookCompareFinding = {
+  rule_id: string;
+  rule_name: string;
+  clause_type: string;
+  severity: "low" | "medium" | "high";
+  status: TenantPlaybookCompareStatus;
+  expected_position: string;
+  fallback_text: string | null;
+  rationale: string | null;
+  source: {
+    clause_id: string;
+    clause_type: string;
+    snippet: string;
+  } | null;
+  note: string | null;
+};
+
+export type TenantPlaybookCompareResult = {
+  contract_id: string;
+  playbook_id: string;
+  playbook_name: string;
+  findings: TenantPlaybookCompareFinding[];
+  summary: {
+    total_rules: number;
+    matched: number;
+    missing: number;
+    deviation: number;
+    needs_review: number;
+  };
+};
+
+export async function listTenantContractPlaybooks(): Promise<
+  TenantPlaybookRecord[]
+> {
+  const result = await apiRequest<{ playbooks: TenantPlaybookRecord[] }>(
+    "/api/contracts/tenant-playbooks",
+    { method: "GET" },
+  );
+  return result.playbooks;
+}
+
+export async function compareContractAgainstTenantPlaybook(input: {
+  contractId: string;
+  playbookId: string;
+}): Promise<TenantPlaybookCompareResult> {
+  return apiRequest<TenantPlaybookCompareResult>(
+    `/api/contracts/${input.contractId}/tenant-playbook-compare`,
+    {
+      method: "POST",
+      body: { playbook_id: input.playbookId },
+    },
+  );
+}
+
 export async function extractContractClausesByParty(input: {
   contractId: string;
   firstPartyName: string;
