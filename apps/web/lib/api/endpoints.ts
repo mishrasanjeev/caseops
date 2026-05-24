@@ -2682,6 +2682,174 @@ export async function fetchStatuteSection(
 }
 
 // Slice S4 (MOD-TS-017, 2026-04-25) — matter statute references.
+export type LegalUpdateType =
+  | "amendment"
+  | "notification"
+  | "regulation"
+  | "circular"
+  | "order"
+  | "practice_direction";
+
+export type LegalUpdateWatchlistRecord = {
+  id: string;
+  company_id: string;
+  name: string;
+  practice_area: string | null;
+  statute_id: string | null;
+  jurisdiction: string | null;
+  statute_terms: string[];
+  source_key: string | null;
+  source_category: string | null;
+  update_types: LegalUpdateType[];
+  since_date: string | null;
+  until_date: string | null;
+  matter_id: string | null;
+  contract_id: string | null;
+  is_archived: boolean;
+  created_by_membership_id: string | null;
+  created_at: string;
+  updated_at: string;
+  archived_at: string | null;
+};
+
+export type LegalUpdateWatchlistListResponse = {
+  watchlists: LegalUpdateWatchlistRecord[];
+};
+
+export type LegalUpdateRecord = {
+  id: string;
+  company_id: string;
+  watchlist_id: string;
+  update_type: LegalUpdateType;
+  title: string;
+  statute_id: string | null;
+  statute_section_id: string | null;
+  authority_document_id: string | null;
+  matter_id: string | null;
+  contract_id: string | null;
+  statute_name: string | null;
+  section_number: string | null;
+  jurisdiction: string | null;
+  source_key: string;
+  source_category: string;
+  source_url: string | null;
+  provenance_status: string;
+  relevance_explanation: string;
+  effective_date: string | null;
+  published_date: string | null;
+  decision_date: string | null;
+  snippet: string | null;
+  is_read: boolean;
+  read_at: string | null;
+  dismissed_at: string | null;
+  created_at: string;
+};
+
+export type LegalUpdateListResponse = {
+  updates: LegalUpdateRecord[];
+};
+
+export type LegalUpdateRunResponse = {
+  watchlist_id: string;
+  preview_only: boolean;
+  matched_count: number;
+  created_count: number;
+  matches: LegalUpdateRecord[];
+  delivery_status: "in_app_only";
+};
+
+export type LegalUpdateDigestPreviewResponse = {
+  generated_at: string;
+  unread_count: number;
+  dismissed_count: number;
+  updates: LegalUpdateRecord[];
+  delivery_status: "in_app_only";
+  delivery_note: string;
+};
+
+export type LegalUpdateWatchlistInput = {
+  name: string;
+  practice_area?: string | null;
+  statute_id?: string | null;
+  jurisdiction?: string | null;
+  statute_terms?: string[];
+  source_key?: string | null;
+  source_category?: string | null;
+  update_types?: LegalUpdateType[];
+  since_date?: string | null;
+  until_date?: string | null;
+  matter_id?: string | null;
+  contract_id?: string | null;
+};
+
+export async function listLegalUpdateWatchlists(): Promise<LegalUpdateWatchlistListResponse> {
+  return apiRequest("/api/statutes/legal-updates/watchlists");
+}
+
+export async function createLegalUpdateWatchlist(
+  input: LegalUpdateWatchlistInput,
+): Promise<LegalUpdateWatchlistRecord> {
+  return apiRequest("/api/statutes/legal-updates/watchlists", {
+    method: "POST",
+    body: input,
+  });
+}
+
+export async function updateLegalUpdateWatchlist(
+  watchlistId: string,
+  input: Partial<LegalUpdateWatchlistInput> & { is_archived?: boolean },
+): Promise<LegalUpdateWatchlistRecord> {
+  return apiRequest(
+    `/api/statutes/legal-updates/watchlists/${encodeURIComponent(watchlistId)}`,
+    { method: "PATCH", body: input },
+  );
+}
+
+export async function runLegalUpdateWatchlist(input: {
+  watchlistId: string;
+  previewOnly?: boolean;
+  limit?: number;
+}): Promise<LegalUpdateRunResponse> {
+  return apiRequest(
+    `/api/statutes/legal-updates/watchlists/${encodeURIComponent(input.watchlistId)}/run`,
+    {
+      method: "POST",
+      body: {
+        preview_only: input.previewOnly ?? false,
+        limit: input.limit ?? 20,
+      },
+    },
+  );
+}
+
+export async function listLegalUpdates(input?: {
+  includeDismissed?: boolean;
+  limit?: number;
+}): Promise<LegalUpdateListResponse> {
+  const qs = new URLSearchParams();
+  if (input?.includeDismissed) qs.set("include_dismissed", "true");
+  if (input?.limit) qs.set("limit", String(input.limit));
+  return apiRequest(
+    `/api/statutes/legal-updates${qs.toString() ? `?${qs.toString()}` : ""}`,
+  );
+}
+
+export async function updateLegalUpdate(
+  updateId: string,
+  action: "read" | "dismiss",
+): Promise<LegalUpdateRecord> {
+  return apiRequest(`/api/statutes/legal-updates/${encodeURIComponent(updateId)}`, {
+    method: "PATCH",
+    body: { action },
+  });
+}
+
+export async function fetchLegalUpdateDigestPreview(
+  limit = 10,
+): Promise<LegalUpdateDigestPreviewResponse> {
+  return apiRequest(`/api/statutes/legal-updates/digest-preview?limit=${limit}`);
+}
+
 export type MatterStatuteReferenceRecord = {
   id: string;
   matter_id: string;

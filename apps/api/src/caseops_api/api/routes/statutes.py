@@ -32,7 +32,28 @@ from caseops_api.db.models import (
     Statute,
     StatuteSection,
 )
+from caseops_api.schemas.legal_updates import (
+    LegalUpdateActionRequest,
+    LegalUpdateDigestPreviewResponse,
+    LegalUpdateListResponse,
+    LegalUpdateRecord,
+    LegalUpdateRunRequest,
+    LegalUpdateRunResponse,
+    LegalUpdateWatchlistCreateRequest,
+    LegalUpdateWatchlistListResponse,
+    LegalUpdateWatchlistRecord,
+    LegalUpdateWatchlistUpdateRequest,
+)
 from caseops_api.services.identity import SessionContext
+from caseops_api.services.legal_updates import (
+    create_legal_update_watchlist,
+    list_legal_update_watchlists,
+    list_legal_updates,
+    preview_legal_update_digest,
+    run_legal_update_watchlist,
+    update_legal_update,
+    update_legal_update_watchlist,
+)
 
 router = APIRouter()
 matter_scoped_router = APIRouter()
@@ -43,6 +64,9 @@ CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
 # further restricts which matter the user can touch.
 MatterEditor = Annotated[
     SessionContext, Depends(require_capability("matters:edit"))
+]
+LegalUpdateUser = Annotated[
+    SessionContext, Depends(require_capability("authorities:search"))
 ]
 
 
@@ -169,6 +193,126 @@ def list_statutes(
             )
         )
     return StatuteListResponse(statutes=items, total_section_count=total)
+
+
+@router.get(
+    "/legal-updates/watchlists",
+    response_model=LegalUpdateWatchlistListResponse,
+    summary="List this tenant's legal update watchlists.",
+)
+def get_legal_update_watchlists(
+    context: LegalUpdateUser,
+    session: DbSession,
+) -> LegalUpdateWatchlistListResponse:
+    return list_legal_update_watchlists(session, context=context)
+
+
+@router.post(
+    "/legal-updates/watchlists",
+    response_model=LegalUpdateWatchlistRecord,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a bounded in-app legal update watchlist.",
+)
+def post_legal_update_watchlist(
+    payload: LegalUpdateWatchlistCreateRequest,
+    context: LegalUpdateUser,
+    session: DbSession,
+) -> LegalUpdateWatchlistRecord:
+    return create_legal_update_watchlist(session, context=context, payload=payload)
+
+
+@router.patch(
+    "/legal-updates/watchlists/{watchlist_id}",
+    response_model=LegalUpdateWatchlistRecord,
+    summary="Update or archive a legal update watchlist.",
+)
+def patch_legal_update_watchlist(
+    watchlist_id: str,
+    payload: LegalUpdateWatchlistUpdateRequest,
+    context: LegalUpdateUser,
+    session: DbSession,
+) -> LegalUpdateWatchlistRecord:
+    return update_legal_update_watchlist(
+        session,
+        context=context,
+        watchlist_id=watchlist_id,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/legal-updates/watchlists/{watchlist_id}/run",
+    response_model=LegalUpdateRunResponse,
+    summary=(
+        "Run or preview deterministic in-app legal update matches "
+        "against existing records only."
+    ),
+)
+def post_legal_update_watchlist_run(
+    watchlist_id: str,
+    payload: LegalUpdateRunRequest,
+    context: LegalUpdateUser,
+    session: DbSession,
+) -> LegalUpdateRunResponse:
+    return run_legal_update_watchlist(
+        session,
+        context=context,
+        watchlist_id=watchlist_id,
+        payload=payload,
+    )
+
+
+@router.get(
+    "/legal-updates",
+    response_model=LegalUpdateListResponse,
+    summary="List this tenant's in-app legal update alerts.",
+)
+def get_legal_updates(
+    context: LegalUpdateUser,
+    session: DbSession,
+    include_dismissed: bool = False,
+    limit: int = 50,
+) -> LegalUpdateListResponse:
+    safe_limit = max(1, min(limit, 100))
+    return list_legal_updates(
+        session,
+        context=context,
+        include_dismissed=include_dismissed,
+        limit=safe_limit,
+    )
+
+
+@router.get(
+    "/legal-updates/digest-preview",
+    response_model=LegalUpdateDigestPreviewResponse,
+    summary="Preview an in-app-only legal update digest.",
+)
+def get_legal_update_digest_preview(
+    context: LegalUpdateUser,
+    session: DbSession,
+    limit: int = 10,
+) -> LegalUpdateDigestPreviewResponse:
+    safe_limit = max(1, min(limit, 50))
+    return preview_legal_update_digest(session, context=context, limit=safe_limit)
+
+
+@router.patch(
+    "/legal-updates/{update_id}",
+    response_model=LegalUpdateRecord,
+    summary="Mark an in-app legal update alert read or dismissed.",
+)
+def patch_legal_update(
+    update_id: str,
+    payload: LegalUpdateActionRequest,
+    context: LegalUpdateUser,
+    session: DbSession,
+) -> LegalUpdateRecord:
+    return update_legal_update(
+        session,
+        context=context,
+        update_id=update_id,
+        payload=payload,
+    )
 
 
 @router.get(

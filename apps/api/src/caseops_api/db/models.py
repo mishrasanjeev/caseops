@@ -2112,6 +2112,156 @@ class JudgmentAlert(Base):
     authority_document: Mapped[AuthorityDocument] = relationship()
 
 
+class LegalUpdateWatchlist(Base):
+    __tablename__ = "legal_update_watchlists"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    practice_area: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    statute_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("statutes.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    jurisdiction: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    statute_terms_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    source_key: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    source_category: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    update_types_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    since_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    until_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    matter_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matters.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    contract_id: Mapped[str | None] = mapped_column(
+        ForeignKey("contracts.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    is_archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship()
+    created_by_membership: Mapped[CompanyMembership | None] = relationship()
+    statute: Mapped[Statute | None] = relationship("Statute")
+    matter: Mapped[Matter | None] = relationship("Matter")
+    contract: Mapped[Contract | None] = relationship("Contract")
+    alerts: Mapped[list[LegalUpdateAlert]] = relationship(
+        back_populates="watchlist",
+        cascade="all, delete-orphan",
+    )
+
+
+class LegalUpdateAlert(Base):
+    __tablename__ = "legal_update_alerts"
+    __table_args__ = (
+        UniqueConstraint(
+            "watchlist_id",
+            "source_record_key",
+            name="uq_legal_update_watchlist_source_record",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    watchlist_id: Mapped[str] = mapped_column(
+        ForeignKey("legal_update_watchlists.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    source_record_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    update_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    statute_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("statutes.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    statute_section_id: Mapped[str | None] = mapped_column(
+        ForeignKey("statute_sections.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    authority_document_id: Mapped[str | None] = mapped_column(
+        ForeignKey("authority_documents.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    matter_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matters.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    contract_id: Mapped[str | None] = mapped_column(
+        ForeignKey("contracts.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    statute_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    section_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    jurisdiction: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    source_key: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    source_category: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    source_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    provenance_status: Mapped[str] = mapped_column(String(80), nullable=False)
+    relevance_explanation: Mapped[str] = mapped_column(String(500), nullable=False)
+    snippet: Mapped[str | None] = mapped_column(String(280), nullable=True)
+    effective_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    published_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    decision_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    dismissed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship()
+    watchlist: Mapped[LegalUpdateWatchlist] = relationship(back_populates="alerts")
+    statute: Mapped[Statute | None] = relationship("Statute")
+    statute_section: Mapped[StatuteSection | None] = relationship("StatuteSection")
+    authority_document: Mapped[AuthorityDocument | None] = relationship("AuthorityDocument")
+    matter: Mapped[Matter | None] = relationship("Matter")
+    contract: Mapped[Contract | None] = relationship("Contract")
+
+
 class MatterActivity(Base):
     __tablename__ = "matter_activity"
 

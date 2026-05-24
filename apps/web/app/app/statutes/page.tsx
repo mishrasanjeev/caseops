@@ -10,10 +10,13 @@
  * Cloud Run Job. State acts + amendment history are explicitly
  * out of v1 (see docs/PRD_STATUTE_MODEL_2026-04-25.md §2).
  */
-import { useQuery } from "@tanstack/react-query";
-import { BookOpenCheck, ExternalLink } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Bell, BookOpenCheck, CheckCircle2, ExternalLink, Play, XCircle } from "lucide-react";
 import Link from "next/link";
+import { useState } from "react";
 
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import {
   Card,
   CardContent,
@@ -22,10 +25,23 @@ import {
   CardTitle,
 } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { listStatutes } from "@/lib/api/endpoints";
+import {
+  createLegalUpdateWatchlist,
+  fetchLegalUpdateDigestPreview,
+  listLegalUpdateWatchlists,
+  listLegalUpdates,
+  listStatutes,
+  runLegalUpdateWatchlist,
+  updateLegalUpdate,
+  updateLegalUpdateWatchlist,
+  type LegalUpdateRecord,
+  type LegalUpdateRunResponse,
+  type LegalUpdateWatchlistRecord,
+} from "@/lib/api/endpoints";
 
 export default function StatutesIndexPage() {
   const query = useQuery({
@@ -66,6 +82,8 @@ export default function StatutesIndexPage() {
           `(Government of India, public domain).`
         }
       />
+
+      <LegalUpdatesPanel />
 
       {data.statutes.length === 0 ? (
         <EmptyState
@@ -122,6 +140,323 @@ export default function StatutesIndexPage() {
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+function LegalUpdatesPanel() {
+  const queryClient = useQueryClient();
+  const [name, setName] = useState("");
+  const [terms, setTerms] = useState("");
+  const [lastRun, setLastRun] = useState<LegalUpdateRunResponse | null>(null);
+
+  const watchlists = useQuery({
+    queryKey: ["statutes", "legal-updates", "watchlists"],
+    queryFn: listLegalUpdateWatchlists,
+    staleTime: 60_000,
+  });
+  const updates = useQuery({
+    queryKey: ["statutes", "legal-updates", "records"],
+    queryFn: () => listLegalUpdates({ limit: 8 }),
+    staleTime: 30_000,
+  });
+  const digest = useQuery({
+    queryKey: ["statutes", "legal-updates", "digest"],
+    queryFn: () => fetchLegalUpdateDigestPreview(5),
+    staleTime: 30_000,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: createLegalUpdateWatchlist,
+    onSuccess: () => {
+      setName("");
+      setTerms("");
+      queryClient.invalidateQueries({ queryKey: ["statutes", "legal-updates"] });
+    },
+  });
+  const runMutation = useMutation({
+    mutationFn: runLegalUpdateWatchlist,
+    onSuccess: (response) => {
+      setLastRun(response);
+      queryClient.invalidateQueries({ queryKey: ["statutes", "legal-updates"] });
+    },
+  });
+  const archiveMutation = useMutation({
+    mutationFn: (watchlistId: string) =>
+      updateLegalUpdateWatchlist(watchlistId, { is_archived: true }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["statutes", "legal-updates"] });
+    },
+  });
+  const updateMutation = useMutation({
+    mutationFn: ({ updateId, action }: { updateId: string; action: "read" | "dismiss" }) =>
+      updateLegalUpdate(updateId, action),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["statutes", "legal-updates"] });
+    },
+  });
+
+  const termList = terms
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .slice(0, 8);
+  const canCreate = name.trim().length > 0 && termList.length > 0;
+
+  return (
+    <Card data-testid="legal-update-center">
+      <CardHeader>
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Bell className="h-4 w-4" aria-hidden />
+              Legal updates
+            </CardTitle>
+            <CardDescription>
+              In-app monitoring from existing statute and authority records. External delivery pending WTD-5.3.
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Badge tone="brand">Manual run</Badge>
+            <Badge tone="neutral">In-app only</Badge>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <form
+          className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_auto]"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!canCreate || createMutation.isPending) return;
+            createMutation.mutate({
+              name: name.trim(),
+              statute_terms: termList,
+              update_types: ["amendment", "notification", "order", "practice_direction"],
+            });
+          }}
+        >
+          <Input
+            aria-label="Watchlist name"
+            data-testid="legal-update-name"
+            placeholder="Watchlist name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+          />
+          <Input
+            aria-label="Statute or section terms"
+            data-testid="legal-update-terms"
+            placeholder="Act or section terms"
+            value={terms}
+            onChange={(event) => setTerms(event.target.value)}
+          />
+          <Button
+            type="submit"
+            variant="secondary"
+            disabled={!canCreate || createMutation.isPending}
+            data-testid="legal-update-create"
+          >
+            Create
+          </Button>
+        </form>
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="space-y-2">
+            <h2 className="text-sm font-semibold text-[var(--color-ink)]">
+              Watchlists
+            </h2>
+            {watchlists.isLoading ? (
+              <Skeleton className="h-20 w-full" />
+            ) : watchlists.data?.watchlists.length ? (
+              <div className="divide-y divide-[var(--color-line)] rounded-md border border-[var(--color-line)]">
+                {watchlists.data.watchlists.map((watchlist) => (
+                  <WatchlistRow
+                    key={watchlist.id}
+                    watchlist={watchlist}
+                    onRun={() =>
+                      runMutation.mutate({
+                        watchlistId: watchlist.id,
+                        previewOnly: false,
+                        limit: 20,
+                      })
+                    }
+                    onArchive={() => archiveMutation.mutate(watchlist.id)}
+                    busy={runMutation.isPending || archiveMutation.isPending}
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-[var(--color-mute)]">
+                No watchlists configured.
+              </p>
+            )}
+            {lastRun ? (
+              <p
+                className="text-xs text-[var(--color-mute)]"
+                data-testid="legal-update-run-summary"
+              >
+                Last run matched {lastRun.matched_count}; created {lastRun.created_count} in-app records.
+              </p>
+            ) : null}
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-[var(--color-ink)]">
+                In-app records
+              </h2>
+              {digest.data ? (
+                <span className="text-xs text-[var(--color-mute)]">
+                  {digest.data.unread_count} unread
+                </span>
+              ) : null}
+            </div>
+            {updates.isLoading ? (
+              <Skeleton className="h-24 w-full" />
+            ) : updates.data?.updates.length ? (
+              <div className="divide-y divide-[var(--color-line)] rounded-md border border-[var(--color-line)]">
+                {updates.data.updates.map((update) => (
+                  <UpdateRow
+                    key={update.id}
+                    update={update}
+                    onRead={() =>
+                      updateMutation.mutate({ updateId: update.id, action: "read" })
+                    }
+                    onDismiss={() =>
+                      updateMutation.mutate({ updateId: update.id, action: "dismiss" })
+                    }
+                    busy={updateMutation.isPending}
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-[var(--color-mute)]">
+                No in-app legal updates yet.
+              </p>
+            )}
+            {digest.data ? (
+              <p
+                className="text-xs text-[var(--color-mute)]"
+                data-testid="legal-update-digest-note"
+              >
+                {digest.data.delivery_note}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function WatchlistRow({
+  watchlist,
+  onRun,
+  onArchive,
+  busy,
+}: {
+  watchlist: LegalUpdateWatchlistRecord;
+  onRun: () => void;
+  onArchive: () => void;
+  busy: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-2 p-3 md:flex-row md:items-center md:justify-between">
+      <div className="min-w-0">
+        <p className="truncate text-sm font-medium text-[var(--color-ink)]">
+          {watchlist.name}
+        </p>
+        <p className="text-xs text-[var(--color-mute)]">
+          {watchlist.statute_terms.length
+            ? watchlist.statute_terms.join(", ")
+            : "Bounded filters"}{" "}
+          / {watchlist.update_types.join(", ")}
+        </p>
+      </div>
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={onRun}
+          disabled={busy || watchlist.is_archived}
+          data-testid={`legal-update-run-${watchlist.id}`}
+          title="Run watchlist"
+        >
+          <Play className="h-4 w-4" aria-hidden />
+          Run
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={onArchive}
+          disabled={busy || watchlist.is_archived}
+          title="Archive watchlist"
+        >
+          Archive
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function UpdateRow({
+  update,
+  onRead,
+  onDismiss,
+  busy,
+}: {
+  update: LegalUpdateRecord;
+  onRead: () => void;
+  onDismiss: () => void;
+  busy: boolean;
+}) {
+  return (
+    <div className="space-y-2 p-3">
+      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium text-[var(--color-ink)]">
+            {update.title}
+          </p>
+          <p className="text-xs text-[var(--color-mute)]">
+            {update.update_type} / {update.statute_name ?? update.source_key}
+            {update.section_number ? ` / ${update.section_number}` : ""}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onRead}
+            disabled={busy || update.is_read}
+            title="Mark read"
+          >
+            <CheckCircle2 className="h-4 w-4" aria-hidden />
+            Read
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onDismiss}
+            disabled={busy || Boolean(update.dismissed_at)}
+            title="Dismiss"
+          >
+            <XCircle className="h-4 w-4" aria-hidden />
+            Dismiss
+          </Button>
+        </div>
+      </div>
+      <p className="text-xs text-[var(--color-ink-2)]">
+        {update.relevance_explanation}
+      </p>
+      {update.snippet ? (
+        <p className="text-xs text-[var(--color-mute)]">{update.snippet}</p>
+      ) : null}
+      <p className="text-xs text-[var(--color-mute)]">
+        {update.source_category} / {update.provenance_status}
+      </p>
     </div>
   );
 }
