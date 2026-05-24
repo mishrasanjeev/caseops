@@ -24,6 +24,16 @@ from caseops_api.schemas.authorities import (
     AuthorityTreatmentBucketRecord,
     AuthorityTreatmentSampleRecord,
     AuthorityTreatmentSummaryResponse,
+    JudgmentAlertDigestPreviewResponse,
+    JudgmentAlertListResponse,
+    JudgmentAlertRecord,
+    JudgmentAlertRuleCreateRequest,
+    JudgmentAlertRuleListResponse,
+    JudgmentAlertRuleRecord,
+    JudgmentAlertRuleUpdateRequest,
+    JudgmentAlertRunRequest,
+    JudgmentAlertRunResponse,
+    JudgmentAlertUpdateRequest,
     SavedAnnotationListResponse,
     SavedAuthorityAnnotationRecord,
 )
@@ -45,6 +55,15 @@ from caseops_api.services.authority_treatments import (
     summarize_treatments,
 )
 from caseops_api.services.identity import SessionContext
+from caseops_api.services.judgment_alerts import (
+    create_judgment_alert_rule,
+    list_judgment_alert_rules,
+    list_judgment_alerts,
+    preview_judgment_alert_digest,
+    run_judgment_alert_rule,
+    update_judgment_alert,
+    update_judgment_alert_rule,
+)
 
 router = APIRouter()
 CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
@@ -113,6 +132,125 @@ async def post_authority_search(
     session: DbSession,
 ) -> AuthoritySearchResponse:
     return search_authorities(session, context=context, payload=payload)
+
+
+@router.get(
+    "/alerts/rules",
+    response_model=JudgmentAlertRuleListResponse,
+    summary="List saved judgment alert rules",
+)
+async def get_judgment_alert_rules(
+    context: AuthoritySearcher,
+    session: DbSession,
+) -> JudgmentAlertRuleListResponse:
+    return list_judgment_alert_rules(session, context=context)
+
+
+@router.post(
+    "/alerts/rules",
+    response_model=JudgmentAlertRuleRecord,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a saved judgment alert rule",
+)
+async def post_judgment_alert_rule(
+    payload: JudgmentAlertRuleCreateRequest,
+    context: AuthoritySearcher,
+    session: DbSession,
+) -> JudgmentAlertRuleRecord:
+    return create_judgment_alert_rule(session, context=context, payload=payload)
+
+
+@router.patch(
+    "/alerts/rules/{rule_id}",
+    response_model=JudgmentAlertRuleRecord,
+    summary="Update or archive a saved judgment alert rule",
+)
+async def patch_judgment_alert_rule(
+    rule_id: str,
+    payload: JudgmentAlertRuleUpdateRequest,
+    context: AuthoritySearcher,
+    session: DbSession,
+) -> JudgmentAlertRuleRecord:
+    return update_judgment_alert_rule(
+        session,
+        context=context,
+        rule_id=rule_id,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/alerts/rules/{rule_id}/run",
+    response_model=JudgmentAlertRunResponse,
+    summary="Preview or generate in-app judgment alerts from existing authorities",
+)
+async def post_judgment_alert_rule_run(
+    rule_id: str,
+    payload: JudgmentAlertRunRequest,
+    context: AuthoritySearcher,
+    session: DbSession,
+) -> JudgmentAlertRunResponse:
+    return run_judgment_alert_rule(
+        session,
+        context=context,
+        rule_id=rule_id,
+        payload=payload,
+    )
+
+
+@router.get(
+    "/alerts",
+    response_model=JudgmentAlertListResponse,
+    summary="List in-app judgment alerts",
+)
+async def get_judgment_alerts(
+    context: AuthoritySearcher,
+    session: DbSession,
+    include_dismissed: Annotated[bool, Query()] = False,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> JudgmentAlertListResponse:
+    return list_judgment_alerts(
+        session,
+        context=context,
+        include_dismissed=include_dismissed,
+        limit=limit,
+    )
+
+
+@router.get(
+    "/alerts/digest-preview",
+    response_model=JudgmentAlertDigestPreviewResponse,
+    summary="Preview an in-app-only judgment alert digest",
+)
+async def get_judgment_alert_digest_preview(
+    context: AuthoritySearcher,
+    session: DbSession,
+    limit: Annotated[int, Query(ge=1, le=50)] = 10,
+) -> JudgmentAlertDigestPreviewResponse:
+    return preview_judgment_alert_digest(
+        session,
+        context=context,
+        limit=limit,
+    )
+
+
+@router.patch(
+    "/alerts/{alert_id}",
+    response_model=JudgmentAlertRecord,
+    summary="Mark an in-app judgment alert read or dismissed",
+)
+async def patch_judgment_alert(
+    alert_id: str,
+    payload: JudgmentAlertUpdateRequest,
+    context: AuthoritySearcher,
+    session: DbSession,
+) -> JudgmentAlertRecord:
+    return update_judgment_alert(
+        session,
+        context=context,
+        alert_id=alert_id,
+        payload=payload,
+    )
 
 
 @router.get(

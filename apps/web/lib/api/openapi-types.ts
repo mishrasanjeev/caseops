@@ -577,6 +577,109 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/authorities/alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List in-app judgment alerts */
+        get: operations["get_judgment_alerts_api_authorities_alerts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/authorities/alerts/digest-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Preview an in-app-only judgment alert digest */
+        get: operations["get_judgment_alert_digest_preview_api_authorities_alerts_digest_preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/authorities/alerts/rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List saved judgment alert rules */
+        get: operations["get_judgment_alert_rules_api_authorities_alerts_rules_get"];
+        put?: never;
+        /** Create a saved judgment alert rule */
+        post: operations["post_judgment_alert_rule_api_authorities_alerts_rules_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/authorities/alerts/rules/{rule_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update or archive a saved judgment alert rule */
+        patch: operations["patch_judgment_alert_rule_api_authorities_alerts_rules__rule_id__patch"];
+        trace?: never;
+    };
+    "/api/authorities/alerts/rules/{rule_id}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview or generate in-app judgment alerts from existing authorities */
+        post: operations["post_judgment_alert_rule_run_api_authorities_alerts_rules__rule_id__run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/authorities/alerts/{alert_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Mark an in-app judgment alert read or dismissed */
+        patch: operations["patch_judgment_alert_api_authorities_alerts__alert_id__patch"];
+        trace?: never;
+    };
     "/api/authorities/annotations": {
         parameters: {
             query?: never;
@@ -9909,6 +10012,218 @@ export interface components {
             /** Judges */
             judges: components["schemas"]["JudgeRecord"][];
         };
+        /** JudgmentAlertAuthorityRecord */
+        JudgmentAlertAuthorityRecord: {
+            /** Authority Document Id */
+            authority_document_id: string;
+            /** Citation Reference */
+            citation_reference: string | null;
+            /** Court Name */
+            court_name: string;
+            /** Decision Date */
+            decision_date: string | null;
+            /** Document Type */
+            document_type: string;
+            /** Forum Level */
+            forum_level: string;
+            /** Match Reason */
+            match_reason: string;
+            /** Snippet */
+            snippet?: string | null;
+            /** Source */
+            source: string;
+            /** Source Reference */
+            source_reference: string | null;
+            /** Title */
+            title: string;
+        };
+        /** JudgmentAlertDigestPreviewResponse */
+        JudgmentAlertDigestPreviewResponse: {
+            /** Alerts */
+            alerts: components["schemas"]["JudgmentAlertRecord"][];
+            /**
+             * Delivery Note
+             * @default In-app preview only. External delivery is not configured in this foundation.
+             */
+            delivery_note: string;
+            /**
+             * Delivery Status
+             * @default in_app_only
+             * @constant
+             */
+            delivery_status: "in_app_only";
+            /** Dismissed Count */
+            dismissed_count: number;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Unread Count */
+            unread_count: number;
+        };
+        /** JudgmentAlertListResponse */
+        JudgmentAlertListResponse: {
+            /** Alerts */
+            alerts: components["schemas"]["JudgmentAlertRecord"][];
+        };
+        /** JudgmentAlertRecord */
+        JudgmentAlertRecord: {
+            authority: components["schemas"]["JudgmentAlertAuthorityRecord"];
+            /** Company Id */
+            company_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Dismissed At */
+            dismissed_at: string | null;
+            /** Id */
+            id: string;
+            /** Is Read */
+            is_read: boolean;
+            /** Read At */
+            read_at: string | null;
+            /** Rule Id */
+            rule_id: string;
+        };
+        /** JudgmentAlertRuleCreateRequest */
+        JudgmentAlertRuleCreateRequest: {
+            /** Court Name */
+            court_name?: string | null;
+            /** Document Types */
+            document_types?: ("judgment" | "order")[];
+            /** Forum Level */
+            forum_level?: ("lower_court" | "high_court" | "supreme_court" | "tribunal") | null;
+            /** Judge Name */
+            judge_name?: string | null;
+            /** Name */
+            name: string;
+            /** Practice Area */
+            practice_area?: string | null;
+            /** Query Terms */
+            query_terms?: string[];
+            /** Since Date */
+            since_date?: string | null;
+            /** Statute Terms */
+            statute_terms?: string[];
+            /** Until Date */
+            until_date?: string | null;
+        };
+        /** JudgmentAlertRuleListResponse */
+        JudgmentAlertRuleListResponse: {
+            /** Rules */
+            rules: components["schemas"]["JudgmentAlertRuleRecord"][];
+        };
+        /** JudgmentAlertRuleRecord */
+        JudgmentAlertRuleRecord: {
+            /** Archived At */
+            archived_at: string | null;
+            /** Company Id */
+            company_id: string;
+            /** Court Name */
+            court_name: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Membership Id */
+            created_by_membership_id: string | null;
+            /** Document Types */
+            document_types: ("judgment" | "order")[];
+            /** Forum Level */
+            forum_level: ("lower_court" | "high_court" | "supreme_court" | "tribunal") | null;
+            /** Id */
+            id: string;
+            /** Is Archived */
+            is_archived: boolean;
+            /** Judge Name */
+            judge_name: string | null;
+            /** Name */
+            name: string;
+            /** Practice Area */
+            practice_area: string | null;
+            /** Query Terms */
+            query_terms: string[];
+            /** Since Date */
+            since_date: string | null;
+            /** Statute Terms */
+            statute_terms: string[];
+            /** Until Date */
+            until_date: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** JudgmentAlertRuleUpdateRequest */
+        JudgmentAlertRuleUpdateRequest: {
+            /** Court Name */
+            court_name?: string | null;
+            /** Document Types */
+            document_types?: ("judgment" | "order")[] | null;
+            /** Forum Level */
+            forum_level?: ("lower_court" | "high_court" | "supreme_court" | "tribunal") | null;
+            /** Is Archived */
+            is_archived?: boolean | null;
+            /** Judge Name */
+            judge_name?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Practice Area */
+            practice_area?: string | null;
+            /** Query Terms */
+            query_terms?: string[] | null;
+            /** Since Date */
+            since_date?: string | null;
+            /** Statute Terms */
+            statute_terms?: string[] | null;
+            /** Until Date */
+            until_date?: string | null;
+        };
+        /** JudgmentAlertRunRequest */
+        JudgmentAlertRunRequest: {
+            /**
+             * Limit
+             * @default 20
+             */
+            limit: number;
+            /**
+             * Preview Only
+             * @default false
+             */
+            preview_only: boolean;
+        };
+        /** JudgmentAlertRunResponse */
+        JudgmentAlertRunResponse: {
+            /** Created Count */
+            created_count: number;
+            /**
+             * Delivery Status
+             * @default in_app_only
+             * @constant
+             */
+            delivery_status: "in_app_only";
+            /** Matched Count */
+            matched_count: number;
+            /** Matches */
+            matches: components["schemas"]["JudgmentAlertAuthorityRecord"][];
+            /** Preview Only */
+            preview_only: boolean;
+            /** Rule Id */
+            rule_id: string;
+        };
+        /** JudgmentAlertUpdateRequest */
+        JudgmentAlertUpdateRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "read" | "dismiss";
+        };
         /**
          * KycDocumentRecord
          * @description One tracked verification document.
@@ -16212,6 +16527,227 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuthSessionResponse"];
+                };
+            };
+        };
+    };
+    get_judgment_alerts_api_authorities_alerts_get: {
+        parameters: {
+            query?: {
+                include_dismissed?: boolean;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JudgmentAlertListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_judgment_alert_digest_preview_api_authorities_alerts_digest_preview_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JudgmentAlertDigestPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_judgment_alert_rules_api_authorities_alerts_rules_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JudgmentAlertRuleListResponse"];
+                };
+            };
+        };
+    };
+    post_judgment_alert_rule_api_authorities_alerts_rules_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JudgmentAlertRuleCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JudgmentAlertRuleRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_judgment_alert_rule_api_authorities_alerts_rules__rule_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JudgmentAlertRuleUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JudgmentAlertRuleRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_judgment_alert_rule_run_api_authorities_alerts_rules__rule_id__run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JudgmentAlertRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JudgmentAlertRunResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_judgment_alert_api_authorities_alerts__alert_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alert_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JudgmentAlertUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JudgmentAlertRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

@@ -12,6 +12,9 @@ from caseops_api.db.models import (
     AuthorityDocument,
     AuthorityDocumentChunk,
     AuthorityDocumentType,
+    AuthorityIngestionRun,
+    JudgmentAlert,
+    JudgmentAlertRule,
     MatterForumLevel,
     ModelRun,
 )
@@ -226,6 +229,83 @@ def _seed_contextual_cheque_authority() -> str:
         document_id = document.id
         session.commit()
         return document_id
+
+
+def _seed_judgment_alert_authorities() -> tuple[str, str]:
+    factory = get_session_factory()
+    with factory() as session:
+        match = AuthorityDocument(
+            source="test_judgment_alert_source",
+            adapter_name="caseops-test-judgment-alerts-v1",
+            court_name="High Court of Delhi",
+            forum_level=MatterForumLevel.HIGH_COURT,
+            document_type=AuthorityDocumentType.JUDGMENT,
+            title="Section 138 cheque dishonour notice delay judgment",
+            case_reference="CRL.A. 1717/2026",
+            bench_name="Justice Meera Shah",
+            neutral_citation="2026:DHC:1717",
+            decision_date=date(2026, 5, 17),
+            canonical_key="test-adp17-cheque-dishonour-alert",
+            source_reference="https://official.example.test/adp17-cheque.pdf",
+            summary=(
+                "Source-backed summary about Section 138 cheque dishonour, "
+                "notice delay, and limitation for existing indexed judgments."
+            ),
+            document_text=(
+                "ADP17_BODY_SENTINEL_SHOULD_NEVER_APPEAR_IN_ALERT_RESPONSES. "
+                "The route must use bounded metadata and snippets only."
+            ),
+            sections_cited_json=json.dumps(["Section 138", "Negotiable Instruments Act"]),
+            extracted_char_count=1024,
+        )
+        match.chunks = [
+            AuthorityDocumentChunk(
+                chunk_index=0,
+                content=(
+                    "The cheque dishonour judgment discusses Section 138 and "
+                    "notice delay using existing indexed chunk text only."
+                ),
+                token_count=22,
+            )
+        ]
+        miss = AuthorityDocument(
+            source="test_judgment_alert_source",
+            adapter_name="caseops-test-judgment-alerts-v1",
+            court_name="Supreme Court of India",
+            forum_level=MatterForumLevel.SUPREME_COURT,
+            document_type=AuthorityDocumentType.ORDER,
+            title="Unrelated arbitration interim order",
+            case_reference="SLP(C) 9090/2026",
+            bench_name="Justice A. Rao",
+            neutral_citation=None,
+            decision_date=date(2026, 5, 16),
+            canonical_key="test-adp17-unrelated-order",
+            source_reference="https://official.example.test/adp17-arbitration.pdf",
+            summary="Existing indexed order about arbitration interim protection.",
+            document_text="ADP17_OTHER_BODY_SENTINEL",
+            extracted_char_count=512,
+        )
+        session.add_all([match, miss])
+        session.flush()
+        ids = (match.id, miss.id)
+        session.commit()
+        return ids
+
+
+def _bootstrap_second_company(client: TestClient) -> dict[str, object]:
+    response = client.post(
+        "/api/bootstrap/company",
+        json={
+            "company_name": "Second Legal LLP",
+            "company_slug": "second-legal",
+            "company_type": "law_firm",
+            "owner_full_name": "Second Owner",
+            "owner_email": "owner@secondlegal.in",
+            "owner_password": "SecondPass123!",
+        },
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
 
 
 def test_owner_can_ingest_and_search_authority_corpus(
@@ -843,4 +923,220 @@ def test_contextual_search_returns_limited_coverage_without_model_memory(
     factory = get_session_factory()
     with factory() as session:
         assert session.scalar(select(ModelRun)) is None
+
+
+def test_judgment_alert_rule_run_is_in_app_only_idempotent_and_source_bounded(
+    client: TestClient,
+) -> None:
+    bootstrap_payload = bootstrap_company(client)
+    token = str(bootstrap_payload["access_token"])
+    company_id = str(bootstrap_payload["company"]["id"])
+    authority_id, unrelated_id = _seed_judgment_alert_authorities()
+
+    create_response = client.post(
+        "/api/authorities/alerts/rules",
+        headers=auth_headers(token),
+        json={
+            "name": "Cheque dishonour watch",
+            "query_terms": ["cheque dishonour", "notice delay"],
+            "court_name": "Delhi",
+            "forum_level": "high_court",
+            "judge_name": "Meera Shah",
+            "statute_terms": ["Section 138"],
+            "document_types": ["judgment", "order"],
+            "since_date": "2026-05-01",
+        },
+    )
+    assert create_response.status_code == 201, create_response.text
+    rule = create_response.json()
+    assert rule["company_id"] == company_id
+    assert rule["query_terms"] == ["cheque dishonour", "notice delay"]
+    assert rule["document_types"] == ["judgment", "order"]
+
+    preview_response = client.post(
+        f"/api/authorities/alerts/rules/{rule['id']}/run",
+        headers=auth_headers(token),
+        json={"preview_only": True, "limit": 10},
+    )
+    assert preview_response.status_code == 200, preview_response.text
+    preview = preview_response.json()
+    assert preview["preview_only"] is True
+    assert preview["matched_count"] == 1
+    assert preview["created_count"] == 0
+    assert preview["delivery_status"] == "in_app_only"
+    assert preview["matches"][0]["authority_document_id"] == authority_id
+    assert preview["matches"][0]["citation_reference"] == "2026:DHC:1717"
+    assert preview["matches"][0]["source_reference"].endswith("adp17-cheque.pdf")
+    assert len(preview["matches"][0]["snippet"]) <= 280
+    response_blob = json.dumps(preview)
+    assert unrelated_id not in response_blob
+    assert "ADP17_BODY_SENTINEL" not in response_blob
+    assert "document_text" not in response_blob
+    assert "source_payload" not in response_blob
+
+    run_response = client.post(
+        f"/api/authorities/alerts/rules/{rule['id']}/run",
+        headers=auth_headers(token),
+        json={"preview_only": False, "limit": 10},
+    )
+    assert run_response.status_code == 200, run_response.text
+    assert run_response.json()["created_count"] == 1
+
+    rerun_response = client.post(
+        f"/api/authorities/alerts/rules/{rule['id']}/run",
+        headers=auth_headers(token),
+        json={"preview_only": False, "limit": 10},
+    )
+    assert rerun_response.status_code == 200, rerun_response.text
+    assert rerun_response.json()["created_count"] == 0
+
+    alerts_response = client.get(
+        "/api/authorities/alerts",
+        headers=auth_headers(token),
+    )
+    assert alerts_response.status_code == 200, alerts_response.text
+    alerts = alerts_response.json()["alerts"]
+    assert len(alerts) == 1
+    alert = alerts[0]
+    assert alert["authority"]["authority_document_id"] == authority_id
+    assert alert["authority"]["match_reason"].startswith("Matched")
+    assert "ADP17_BODY_SENTINEL" not in json.dumps(alert)
+
+    read_response = client.patch(
+        f"/api/authorities/alerts/{alert['id']}",
+        headers=auth_headers(token),
+        json={"action": "read"},
+    )
+    assert read_response.status_code == 200, read_response.text
+    assert read_response.json()["is_read"] is True
+
+    digest_response = client.get(
+        "/api/authorities/alerts/digest-preview",
+        headers=auth_headers(token),
+    )
+    assert digest_response.status_code == 200, digest_response.text
+    digest = digest_response.json()
+    assert digest["delivery_status"] == "in_app_only"
+    assert "External delivery is not configured" in digest["delivery_note"]
+
+    factory = get_session_factory()
+    with factory() as session:
+        assert (
+            session.scalar(
+                select(JudgmentAlert).where(
+                    JudgmentAlert.rule_id == rule["id"],
+                    JudgmentAlert.authority_document_id == authority_id,
+                )
+            )
+            is not None
+        )
+        assert session.scalar(select(AuthorityIngestionRun)) is None
+        assert session.scalar(select(ModelRun)) is None
+        audit_events = list(
+            session.scalars(
+                select(AuditEvent).where(
+                    AuditEvent.company_id == company_id,
+                    AuditEvent.action.in_(
+                        [
+                            "judgment_alert.rule_created",
+                            "judgment_alert.rule_run",
+                            "judgment_alert.alert_read",
+                        ]
+                    ),
+                )
+            )
+        )
+        assert len(audit_events) >= 3
+        audit_blob = "\n".join(event.metadata_json or "" for event in audit_events)
+        for forbidden in (
+            "cheque dishonour",
+            "notice delay",
+            "Section 138",
+            "ADP17_BODY_SENTINEL",
+            "snippet",
+            "document_text",
+            "source_payload",
+            "storage_key",
+        ):
+            assert forbidden not in audit_blob
+
+
+def test_judgment_alert_rules_are_tenant_scoped_and_archived_rules_do_not_generate(
+    client: TestClient,
+) -> None:
+    authority_id, _ = _seed_judgment_alert_authorities()
+    first_company = bootstrap_company(client)
+    first_token = str(first_company["access_token"])
+    second_company = _bootstrap_second_company(client)
+    second_token = str(second_company["access_token"])
+
+    create_response = client.post(
+        "/api/authorities/alerts/rules",
+        headers=auth_headers(first_token),
+        json={
+            "name": "Tenant A rule",
+            "query_terms": ["cheque dishonour"],
+            "statute_terms": ["Section 138"],
+            "document_types": ["judgment"],
+        },
+    )
+    assert create_response.status_code == 201, create_response.text
+    rule_id = create_response.json()["id"]
+
+    second_list = client.get(
+        "/api/authorities/alerts/rules",
+        headers=auth_headers(second_token),
+    )
+    assert second_list.status_code == 200, second_list.text
+    assert second_list.json()["rules"] == []
+
+    second_run = client.post(
+        f"/api/authorities/alerts/rules/{rule_id}/run",
+        headers=auth_headers(second_token),
+        json={"preview_only": False},
+    )
+    assert second_run.status_code == 404
+
+    archive_response = client.patch(
+        f"/api/authorities/alerts/rules/{rule_id}",
+        headers=auth_headers(first_token),
+        json={"is_archived": True},
+    )
+    assert archive_response.status_code == 200, archive_response.text
+    assert archive_response.json()["is_archived"] is True
+
+    run_response = client.post(
+        f"/api/authorities/alerts/rules/{rule_id}/run",
+        headers=auth_headers(first_token),
+        json={"preview_only": False, "limit": 10},
+    )
+    assert run_response.status_code == 200, run_response.text
+    assert run_response.json()["matched_count"] == 0
+    assert run_response.json()["created_count"] == 0
+
+    factory = get_session_factory()
+    with factory() as session:
+        assert session.scalar(select(JudgmentAlertRule).where(JudgmentAlertRule.id == rule_id))
+        assert (
+            session.scalar(
+                select(JudgmentAlert).where(
+                    JudgmentAlert.authority_document_id == authority_id,
+                    JudgmentAlert.company_id == first_company["company"]["id"],
+                )
+            )
+            is None
+        )
+
+
+def test_judgment_alert_rule_rejects_unbounded_filters(client: TestClient) -> None:
+    token = str(bootstrap_company(client)["access_token"])
+
+    response = client.post(
+        "/api/authorities/alerts/rules",
+        headers=auth_headers(token),
+        json={"name": "Too broad", "document_types": ["judgment", "order"]},
+    )
+
+    assert response.status_code == 400, response.text
+    assert "bounded filter" in response.json()["detail"]
 

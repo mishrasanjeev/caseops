@@ -1906,6 +1906,11 @@ Tests:
 Type: Backend + Web
 Priority: P3
 Dependencies: Existing corpus data, no new ingest job
+Status: Implemented foundation - deterministic saved rules, manual in-app match
+generation, alert review actions, and digest preview against existing
+AuthorityDocument records only.
+Design: In-app only. No external delivery, scheduling, provider calls, OCR,
+corpus ingest, backfill, or embedding jobs.
 
 Scope:
 

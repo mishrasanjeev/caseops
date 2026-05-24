@@ -3,11 +3,19 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 AuthorityForumLevelLiteral = Literal["high_court", "supreme_court"]
 AuthorityDocumentTypeLiteral = Literal["judgment", "order", "practice_direction", "notice"]
 AuthoritySearchModeLiteral = Literal["keyword", "contextual"]
+JudgmentAlertForumLevelLiteral = Literal[
+    "lower_court",
+    "high_court",
+    "supreme_court",
+    "tribunal",
+]
+JudgmentAlertDocumentTypeLiteral = Literal["judgment", "order"]
+JudgmentAlertActionLiteral = Literal["read", "dismiss"]
 
 
 class AuthoritySourceRecord(BaseModel):
@@ -147,6 +155,166 @@ class AuthoritySearchResponse(BaseModel):
     # echoes back the request so the UI can compute Prev/Next visibility.
     total_after_filter: int = 0
     offset: int = 0
+
+
+class JudgmentAlertRuleBase(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    query_terms: list[str] = Field(default_factory=list, max_length=8)
+    court_name: str | None = Field(default=None, min_length=2, max_length=255)
+    forum_level: JudgmentAlertForumLevelLiteral | None = None
+    judge_name: str | None = Field(default=None, min_length=2, max_length=255)
+    practice_area: str | None = Field(default=None, min_length=2, max_length=120)
+    statute_terms: list[str] = Field(default_factory=list, max_length=8)
+    document_types: list[JudgmentAlertDocumentTypeLiteral] = Field(
+        default_factory=lambda: ["judgment", "order"],
+        max_length=2,
+    )
+    since_date: date | None = None
+    until_date: date | None = None
+
+    @field_validator(
+        "court_name",
+        "judge_name",
+        "practice_area",
+        mode="before",
+    )
+    @classmethod
+    def _strip_optional_text(cls, value: object) -> object:
+        if isinstance(value, str):
+            stripped = value.strip()
+            return stripped or None
+        return value
+
+    @field_validator("query_terms", "statute_terms", mode="before")
+    @classmethod
+    def _split_terms(cls, value: object) -> object:
+        if isinstance(value, str):
+            return [part.strip() for part in value.split(",") if part.strip()]
+        return value
+
+
+class JudgmentAlertRuleCreateRequest(JudgmentAlertRuleBase):
+    pass
+
+
+class JudgmentAlertRuleUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=160)
+    query_terms: list[str] | None = Field(default=None, max_length=8)
+    court_name: str | None = Field(default=None, min_length=2, max_length=255)
+    forum_level: JudgmentAlertForumLevelLiteral | None = None
+    judge_name: str | None = Field(default=None, min_length=2, max_length=255)
+    practice_area: str | None = Field(default=None, min_length=2, max_length=120)
+    statute_terms: list[str] | None = Field(default=None, max_length=8)
+    document_types: list[JudgmentAlertDocumentTypeLiteral] | None = Field(
+        default=None,
+        max_length=2,
+    )
+    since_date: date | None = None
+    until_date: date | None = None
+    is_archived: bool | None = None
+
+    @field_validator(
+        "name",
+        "court_name",
+        "judge_name",
+        "practice_area",
+        mode="before",
+    )
+    @classmethod
+    def _strip_optional_text(cls, value: object) -> object:
+        if isinstance(value, str):
+            stripped = value.strip()
+            return stripped or None
+        return value
+
+    @field_validator("query_terms", "statute_terms", mode="before")
+    @classmethod
+    def _split_terms(cls, value: object) -> object:
+        if isinstance(value, str):
+            return [part.strip() for part in value.split(",") if part.strip()]
+        return value
+
+
+class JudgmentAlertRuleRecord(BaseModel):
+    id: str
+    company_id: str
+    name: str
+    query_terms: list[str]
+    court_name: str | None
+    forum_level: JudgmentAlertForumLevelLiteral | None
+    judge_name: str | None
+    practice_area: str | None
+    statute_terms: list[str]
+    document_types: list[JudgmentAlertDocumentTypeLiteral]
+    since_date: date | None
+    until_date: date | None
+    is_archived: bool
+    created_by_membership_id: str | None
+    created_at: datetime
+    updated_at: datetime
+    archived_at: datetime | None
+
+
+class JudgmentAlertRuleListResponse(BaseModel):
+    rules: list[JudgmentAlertRuleRecord]
+
+
+class JudgmentAlertAuthorityRecord(BaseModel):
+    authority_document_id: str
+    title: str
+    court_name: str
+    forum_level: str
+    document_type: str
+    citation_reference: str | None
+    decision_date: date | None
+    match_reason: str
+    source: str
+    source_reference: str | None
+    snippet: str | None = Field(default=None, max_length=280)
+
+
+class JudgmentAlertRecord(BaseModel):
+    id: str
+    company_id: str
+    rule_id: str
+    is_read: bool
+    read_at: datetime | None
+    dismissed_at: datetime | None
+    created_at: datetime
+    authority: JudgmentAlertAuthorityRecord
+
+
+class JudgmentAlertListResponse(BaseModel):
+    alerts: list[JudgmentAlertRecord]
+
+
+class JudgmentAlertRunRequest(BaseModel):
+    preview_only: bool = False
+    limit: int = Field(default=20, ge=1, le=50)
+
+
+class JudgmentAlertRunResponse(BaseModel):
+    rule_id: str
+    preview_only: bool
+    matched_count: int
+    created_count: int
+    matches: list[JudgmentAlertAuthorityRecord]
+    delivery_status: Literal["in_app_only"] = "in_app_only"
+
+
+class JudgmentAlertUpdateRequest(BaseModel):
+    action: JudgmentAlertActionLiteral
+
+
+class JudgmentAlertDigestPreviewResponse(BaseModel):
+    generated_at: datetime
+    unread_count: int
+    dismissed_count: int
+    alerts: list[JudgmentAlertRecord]
+    delivery_status: Literal["in_app_only"] = "in_app_only"
+    delivery_note: str = (
+        "In-app preview only. External delivery is not configured in this foundation."
+    )
 
 
 class AuthorityCorpusStats(BaseModel):
