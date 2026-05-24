@@ -71,6 +71,7 @@ from caseops_api.schemas.matter_access import (
     MatterAccessPanelResponse,
     MatterRestrictedAccessRequest,
 )
+from caseops_api.schemas.matter_imports import BulkMatterImportDryRunResponse
 from caseops_api.schemas.matter_tags import (
     MatterBulkTagAssignRequest,
     MatterBulkTagAssignResponse,
@@ -186,6 +187,15 @@ from caseops_api.services.matter_audit import (
     list_matter_audit_events,
     matter_audit_event_dict,
 )
+from caseops_api.services.matter_imports import (
+    MATTER_IMPORT_DOCUMENT_ARCHIVE_MAX_BYTES,
+    MATTER_IMPORT_DOCUMENT_MANIFEST_MAX_BYTES,
+    MATTER_IMPORT_MAPPING_MAX_BYTES,
+    dry_run_bulk_matter_import,
+    parse_matter_import_document_archive,
+    parse_matter_import_document_manifest,
+    parse_matter_import_mapping,
+)
 from caseops_api.services.matter_summary import (
     MatterExecutiveSummary,
     generate_matter_summary,
@@ -274,6 +284,9 @@ MatterAccessManager = Annotated[
 MatterAuditExporter = Annotated[
     SessionContext, Depends(require_capability("audit:export"))
 ]
+MatterBulkImporter = Annotated[
+    SessionContext, Depends(require_capability("workspace:admin"))
+]
 
 
 @router.get("/", response_model=MatterListResponse, summary="List matters for the current company")
@@ -312,6 +325,85 @@ async def create_current_company_matter(
     session: DbSession,
 ) -> MatterRecord:
     return create_matter(session, context=context, payload=payload)
+
+
+@router.post(
+    "/imports/dry-run",
+    response_model=BulkMatterImportDryRunResponse,
+    summary="Dry-run a bulk matter import mapping without creating records",
+    description=(
+        "Parses a CSV, JSON, or XLSX matter mapping file and returns a "
+        "tenant-scoped validation plan. Optional document manifests or ZIP "
+        "archives are inspected for filenames only. The endpoint writes no "
+        "matter rows, attachment rows, storage objects, OCR jobs, corpus jobs, "
+        "or embeddings; it records only a redacted audit summary."
+    ),
+)
+async def dry_run_current_company_matter_import(
+    context: MatterBulkImporter,
+    session: DbSession,
+    mapping_file: Annotated[
+        UploadFile,
+        File(
+            description=(
+                "CSV, JSON, or XLSX mapping file. Read in memory for validation "
+                "only and not stored."
+            ),
+        ),
+    ],
+    document_manifest: Annotated[
+        UploadFile | None,
+        File(
+            description=(
+                "Optional JSON, CSV, or text manifest of folder/ZIP filenames. "
+                "Filenames are used only for dry-run reference validation."
+            ),
+        ),
+    ] = None,
+    document_archive: Annotated[
+        UploadFile | None,
+        File(
+            description=(
+                "Optional ZIP archive scanned for entry names only. File payloads "
+                "are not extracted, stored, OCRed, or embedded."
+            ),
+        ),
+    ] = None,
+) -> BulkMatterImportDryRunResponse:
+    mapping_content = await mapping_file.read(MATTER_IMPORT_MAPPING_MAX_BYTES + 1)
+    parsed_import = parse_matter_import_mapping(
+        filename=mapping_file.filename or "matters.csv",
+        content_type=mapping_file.content_type,
+        content=mapping_content,
+    )
+    document_filenames: list[str] = []
+    if document_manifest is not None:
+        manifest_content = await document_manifest.read(
+            MATTER_IMPORT_DOCUMENT_MANIFEST_MAX_BYTES + 1
+        )
+        document_filenames.extend(
+            parse_matter_import_document_manifest(
+                filename=document_manifest.filename or "documents.txt",
+                content=manifest_content,
+            )
+        )
+    if document_archive is not None:
+        archive_content = await document_archive.read(
+            MATTER_IMPORT_DOCUMENT_ARCHIVE_MAX_BYTES + 1
+        )
+        document_filenames.extend(
+            parse_matter_import_document_archive(
+                filename=document_archive.filename or "documents.zip",
+                content_type=document_archive.content_type,
+                content=archive_content,
+            )
+        )
+    return dry_run_bulk_matter_import(
+        session,
+        context=context,
+        parsed_import=parsed_import,
+        available_document_filenames=document_filenames,
+    )
 
 
 @router.get(

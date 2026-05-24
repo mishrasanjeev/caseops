@@ -1705,6 +1705,13 @@ Tests:
 Type: Backend + Web
 Priority: P2
 Dependencies: Matter/document creation, attachment pipeline
+Status: Foundation implemented 2026-05-24; bulk matter import now supports a
+dry-run-only planner for CSV, JSON, and XLSX matter mappings plus optional
+folder/ZIP filename indexes. The planner validates required matter fields,
+detects visible tenant-scoped duplicates, checks document filename references,
+and records redacted audit summary counts only. Commit execution, persistent
+import jobs, attachment storage, OCR, corpus processing, embeddings, and Google
+Drive import remain deferred.
 
 Scope:
 

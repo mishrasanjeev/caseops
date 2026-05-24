@@ -2090,6 +2090,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matters/imports/dry-run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dry-run a bulk matter import mapping without creating records
+         * @description Parses a CSV, JSON, or XLSX matter mapping file and returns a tenant-scoped validation plan. Optional document manifests or ZIP archives are inspected for filenames only. The endpoint writes no matter rows, attachment rows, storage objects, OCR jobs, corpus jobs, or embeddings; it records only a redacted audit summary.
+         */
+        post: operations["dry_run_current_company_matter_import_api_matters_imports_dry_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matters/{matter_id}": {
         parameters: {
             query?: never;
@@ -5522,6 +5542,24 @@ export interface components {
             /** Statute Section Id */
             statute_section_id: string;
         };
+        /** Body_dry_run_current_company_matter_import_api_matters_imports_dry_run_post */
+        Body_dry_run_current_company_matter_import_api_matters_imports_dry_run_post: {
+            /**
+             * Document Archive
+             * @description Optional ZIP archive scanned for entry names only. File payloads are not extracted, stored, OCRed, or embedded.
+             */
+            document_archive?: string | null;
+            /**
+             * Document Manifest
+             * @description Optional JSON, CSV, or text manifest of folder/ZIP filenames. Filenames are used only for dry-run reference validation.
+             */
+            document_manifest?: string | null;
+            /**
+             * Mapping File
+             * @description CSV, JSON, or XLSX mapping file. Read in memory for validation only and not stored.
+             */
+            mapping_file: string;
+        };
         /** Body_post_current_company_contract_attachment_api_contracts__contract_id__attachments_post */
         Body_post_current_company_contract_attachment_api_contracts__contract_id__attachments_post: {
             /** Attachment Role */
@@ -5582,6 +5620,127 @@ export interface components {
             owner_full_name: string;
             /** Owner Password */
             owner_password: string;
+        };
+        /** BulkMatterImportDocumentReference */
+        BulkMatterImportDocumentReference: {
+            /** Category */
+            category?: string | null;
+            /** Filename */
+            filename: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "available" | "missing" | "invalid" | "unchecked";
+        };
+        /** BulkMatterImportDryRunResponse */
+        BulkMatterImportDryRunResponse: {
+            /** Company Id */
+            company_id: string;
+            /** Limitations */
+            limitations?: string[];
+            /** Rows */
+            rows: components["schemas"]["BulkMatterImportRowPlan"][];
+            summary: components["schemas"]["BulkMatterImportDryRunSummary"];
+        };
+        /** BulkMatterImportDryRunSummary */
+        BulkMatterImportDryRunSummary: {
+            /** Available Document Count */
+            available_document_count: number;
+            /**
+             * Commit Supported
+             * @default false
+             */
+            commit_supported: boolean;
+            /**
+             * Corpus Jobs Queued
+             * @default 0
+             */
+            corpus_jobs_queued: number;
+            /** Document Reference Count */
+            document_reference_count: number;
+            /**
+             * Dry Run
+             * @default true
+             */
+            dry_run: boolean;
+            /** Duplicate Candidate Rows */
+            duplicate_candidate_rows: number;
+            /** Invalid Rows */
+            invalid_rows: number;
+            /**
+             * Manifest Format
+             * @enum {string}
+             */
+            manifest_format: "csv" | "json" | "xlsx";
+            /**
+             * Storage Writes
+             * @default 0
+             */
+            storage_writes: number;
+            /** Total Rows */
+            total_rows: number;
+            /** Unsupported Document Reference Count */
+            unsupported_document_reference_count: number;
+            /** Valid Rows */
+            valid_rows: number;
+            /**
+             * Will Create Attachment Count
+             * @default 0
+             */
+            will_create_attachment_count: number;
+            /**
+             * Will Create Matter Count
+             * @default 0
+             */
+            will_create_matter_count: number;
+        };
+        /** BulkMatterImportDuplicateCandidate */
+        BulkMatterImportDuplicateCandidate: {
+            /** Client Name */
+            client_name?: string | null;
+            /** Matter Code */
+            matter_code: string;
+            /** Matter Id */
+            matter_id: string;
+            /** Title */
+            title: string;
+        };
+        /** BulkMatterImportRowPlan */
+        BulkMatterImportRowPlan: {
+            /** Client Name */
+            client_name?: string | null;
+            /** Court Name */
+            court_name?: string | null;
+            /** Document References */
+            document_references?: components["schemas"]["BulkMatterImportDocumentReference"][];
+            /** Duplicate Candidates */
+            duplicate_candidates?: components["schemas"]["BulkMatterImportDuplicateCandidate"][];
+            /** Errors */
+            errors?: string[];
+            /** Forum Level */
+            forum_level?: string | null;
+            /** Matter Code */
+            matter_code?: string | null;
+            /** Matter Status */
+            matter_status?: string | null;
+            /** Matter Type */
+            matter_type?: string | null;
+            /** Owner Email */
+            owner_email?: string | null;
+            /** Practice Area */
+            practice_area?: string | null;
+            /** Row Number */
+            row_number: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "valid" | "invalid";
+            /** Team Slug */
+            team_slug?: string | null;
+            /** Title */
+            title?: string | null;
         };
         /** CalendarConnectionCallbackResponse */
         CalendarConnectionCallbackResponse: {
@@ -18450,6 +18609,39 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dry_run_current_company_matter_import_api_matters_imports_dry_run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_dry_run_current_company_matter_import_api_matters_imports_dry_run_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkMatterImportDryRunResponse"];
                 };
             };
             /** @description Validation Error */
