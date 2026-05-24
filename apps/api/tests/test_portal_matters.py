@@ -15,6 +15,7 @@ Covers:
 """
 from __future__ import annotations
 
+import json
 from datetime import timedelta
 from uuid import uuid4
 
@@ -83,7 +84,7 @@ def _seed_client_and_link(
             # the (company_id, name, client_type) unique constraint.
             name=name or f"Test Client {matter_id[:8]}",
             client_type="individual",
-            kyc_status=ClientKycStatus.NOT_STARTED,
+            kyc_status="not_started",
         )
         session.add(c)
         session.flush()
@@ -370,7 +371,11 @@ def test_portal_kyc_submit_marks_one_client_and_audits(
         json={
             "client_id": client_id,
             "documents": [
-                {"name": "PAN", "note": "scanned"},
+                {
+                    "name": "PAN",
+                    "note": "scanned",
+                    "storage_key": "must-not-persist",
+                },
                 {"name": "Aadhaar", "note": "redacted"},
             ],
         },
@@ -386,9 +391,11 @@ def test_portal_kyc_submit_marks_one_client_and_audits(
     with Session() as session:
         c = session.get(Client, client_id)
         assert c is not None
-        assert c.kyc_status == ClientKycStatus.PENDING
+        assert c.kyc_status == ClientKycStatus.SUBMITTED.value
         assert c.kyc_submitted_at is not None
         assert len(c.kyc_documents_json) == 2
+        assert "storage_key" not in json.dumps(c.kyc_documents_json).lower()
+        assert c.kyc_documents_json[0]["status"] == ClientKycStatus.SUBMITTED.value
         # Audit row written, target_type = client (not matter).
         events = (
             session.query(AuditEvent)

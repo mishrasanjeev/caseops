@@ -34,6 +34,7 @@ from caseops_api.db.models import (
     MatterPortalGrant,
     PortalUser,
 )
+from caseops_api.schemas.clients import KycDocumentRecord
 from caseops_api.services.audit import record_audit
 
 
@@ -330,9 +331,27 @@ def submit_matter_kyc(
             ),
         )
     now = datetime.now(UTC)
-    target.kyc_status = ClientKycStatus.PENDING
+    safe_documents: list[dict] = []
+    for doc in documents or []:
+        if not isinstance(doc, dict):
+            continue
+        try:
+            record = KycDocumentRecord.model_validate(
+                {
+                    "name": doc.get("name"),
+                    "note": doc.get("note"),
+                    "status": ClientKycStatus.SUBMITTED.value,
+                }
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid verification document metadata.",
+            ) from exc
+        safe_documents.append(record.model_dump(mode="json"))
+    target.kyc_status = ClientKycStatus.SUBMITTED.value
     target.kyc_submitted_at = now
-    target.kyc_documents_json = documents or []
+    target.kyc_documents_json = safe_documents
     session.flush()
     record_audit(
         session,

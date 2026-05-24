@@ -72,7 +72,7 @@ def test_client_create_then_list_contains_it(client: TestClient) -> None:
     assert created["name"] == "Acme Industries Pvt Ltd"
     assert created["client_type"] == "corporate"
     assert created["is_active"] is True
-    assert created["kyc_status"] == "not_started"
+    assert created["kyc_status"] == "not_required"
 
     lst = client.get("/api/clients/", headers=auth_headers(token))
     assert lst.status_code == 200
@@ -153,11 +153,32 @@ def test_client_update_changes_fields(client: TestClient) -> None:
     resp = client.patch(
         f"/api/clients/{cid}",
         headers=auth_headers(token),
-        json={"primary_contact_name": "Hari Gupta", "kyc_status": "verified"},
+        json={"primary_contact_name": "Hari Gupta", "kyc_status": "requested"},
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["primary_contact_name"] == "Hari Gupta"
-    assert resp.json()["kyc_status"] == "verified"
+    assert resp.json()["kyc_status"] == "requested"
+
+
+def test_client_generic_update_rejects_review_decision_status(
+    client: TestClient,
+) -> None:
+    token = str(bootstrap_company(client)["access_token"])
+    cid = _mk_client(client, token).json()["id"]
+    submit = client.post(
+        f"/api/clients/{cid}/kyc/submit",
+        headers=auth_headers(token),
+        json={"documents": [{"name": "Address proof"}]},
+    )
+    assert submit.status_code == 200, submit.text
+
+    resp = client.patch(
+        f"/api/clients/{cid}",
+        headers=auth_headers(token),
+        json={"kyc_status": "verified"},
+    )
+    assert resp.status_code == 400
+    assert "verification workflow endpoint" in resp.json()["detail"]
 
 
 def test_client_archive_flips_is_active(client: TestClient) -> None:
@@ -426,7 +447,7 @@ def test_client_crud_emits_audit_events(client: TestClient) -> None:
     client.patch(
         f"/api/clients/{cid}",
         headers=auth_headers(token),
-        json={"kyc_status": "verified"},
+        json={"kyc_status": "requested"},
     )
     client.delete(f"/api/clients/{cid}", headers=auth_headers(token))
 
@@ -486,7 +507,7 @@ def _bootstrap_with_role(client, slug: str, role: str) -> str:
 
 
 def test_kyc_submit_then_verify_round_trip(client: TestClient) -> None:
-    """The headline lifecycle: not_started → pending → verified.
+    """The headline lifecycle: not_required -> submitted -> verified.
     Status, audit columns, and document list all populate."""
     token = str(bootstrap_company(client)["access_token"])
     cid = _mk_client(client, token).json()["id"]
@@ -501,7 +522,7 @@ def test_kyc_submit_then_verify_round_trip(client: TestClient) -> None:
     )
     assert submitted.status_code == 200, submitted.text
     body = submitted.json()
-    assert body["kyc_status"] == "pending"
+    assert body["kyc_status"] == "submitted"
     assert body["kyc_submitted_at"] is not None
     assert len(body["kyc_documents"]) == 2
 
@@ -547,7 +568,7 @@ def test_kyc_reject_records_reason_then_resubmit_clears_it(
     )
     assert resubmitted.status_code == 200
     body = resubmitted.json()
-    assert body["kyc_status"] == "pending"
+    assert body["kyc_status"] == "submitted"
     assert body["kyc_rejection_reason"] is None
     assert len(body["kyc_documents"]) == 2
 
@@ -605,3 +626,278 @@ def test_kyc_does_not_leak_across_tenants(client: TestClient) -> None:
         json={"documents": []},
     )
     assert leak.status_code == 404
+
+
+def _invite_admin_for_verification(
+    client: TestClient, owner_token: str,
+) -> tuple[str, str]:
+    create_user = client.post(
+        "/api/companies/current/users",
+        headers=auth_headers(owner_token),
+        json={
+            "full_name": "Verification Admin",
+            "email": "verification-admin@asterlegal.in",
+            "password": "VerifyAdmin123!",
+            "role": "admin",
+        },
+    )
+    assert create_user.status_code == 200, create_user.text
+    login_response = client.post(
+        "/api/auth/login",
+        json={
+            "email": "verification-admin@asterlegal.in",
+            "password": "VerifyAdmin123!",
+            "company_slug": "aster-legal",
+        },
+    )
+    assert login_response.status_code == 200, login_response.text
+    client.cookies.clear()
+    return str(create_user.json()["membership_id"]), str(
+        login_response.json()["access_token"]
+    )
+
+
+def _seed_verification_attachment(matter_id: str) -> str:
+    from uuid import uuid4
+
+    from caseops_api.db.models import MatterAttachment
+    from caseops_api.db.session import get_session_factory
+
+    attachment = MatterAttachment(
+        matter_id=matter_id,
+        original_filename="client-verification-reference.pdf",
+        storage_key=f"test/client-verification/{uuid4()}.pdf",
+        content_type="application/pdf",
+        size_bytes=1024,
+        sha256_hex="a" * 64,
+        document_type="kyc",
+    )
+    factory = get_session_factory()
+    with factory() as session:
+        session.add(attachment)
+        session.commit()
+        return str(attachment.id)
+
+
+def test_matter_client_verification_workflow_links_attachment_and_audits_redacted(
+    client: TestClient,
+) -> None:
+    import json
+
+    from sqlalchemy import select
+
+    from caseops_api.db.models import AuditEvent
+    from caseops_api.db.session import get_session_factory
+
+    token = str(bootstrap_company(client)["access_token"])
+    matter = _mk_matter(client, token, code="CL-VERIFY-1")
+    cid = _mk_client(client, token).json()["id"]
+    assign = client.post(
+        f"/api/matters/{matter['id']}/clients",
+        headers=auth_headers(token),
+        json={"client_id": cid, "role": "petitioner"},
+    )
+    assert assign.status_code == 200, assign.text
+    attachment_id = _seed_verification_attachment(matter["id"])
+
+    listing = client.get(
+        f"/api/matters/{matter['id']}/client-verification",
+        headers=auth_headers(token),
+    )
+    assert listing.status_code == 200, listing.text
+    assert listing.json()["clients"][0]["status"] == "not_required"
+
+    submitted = client.patch(
+        f"/api/matters/{matter['id']}/client-verification/{cid}",
+        headers=auth_headers(token),
+        json={
+            "status": "submitted",
+            "documents": [
+                {
+                    "name": "Client identity reference",
+                    "document_type": "identity_proof",
+                    "status": "submitted",
+                    "attachment_id": attachment_id,
+                }
+            ],
+        },
+    )
+    assert submitted.status_code == 200, submitted.text
+    body = submitted.json()
+    assert body["status"] == "submitted"
+    assert body["documents"][0]["attachment_id"] == attachment_id
+    assert "storage_key" not in json.dumps(body).lower()
+
+    reviewed = client.patch(
+        f"/api/matters/{matter['id']}/client-verification/{cid}",
+        headers=auth_headers(token),
+        json={"status": "verified"},
+    )
+    assert reviewed.status_code == 200, reviewed.text
+    body = reviewed.json()
+    assert body["status"] == "verified"
+    assert body["reviewed_at"] is not None
+    assert body["reviewer_membership_id"] is not None
+
+    factory = get_session_factory()
+    with factory() as session:
+        events = list(
+            session.scalars(
+                select(AuditEvent)
+                .where(
+                    AuditEvent.action == "client.verification_updated",
+                    AuditEvent.target_id == cid,
+                )
+                .order_by(AuditEvent.created_at)
+            )
+        )
+    assert events
+    audit_payload = json.dumps([e.metadata_json for e in events]).lower()
+    assert "client identity reference" not in audit_payload
+    assert "storage_key" not in audit_payload
+    assert "client-verification-reference.pdf" not in audit_payload
+
+
+def test_client_verification_reject_records_reviewer_and_redacts_reason_audit(
+    client: TestClient,
+) -> None:
+    import json
+
+    from sqlalchemy import select
+
+    from caseops_api.db.models import AuditEvent
+    from caseops_api.db.session import get_session_factory
+
+    token = str(bootstrap_company(client)["access_token"])
+    cid = _mk_client(client, token).json()["id"]
+    submit = client.post(
+        f"/api/clients/{cid}/kyc/submit",
+        headers=auth_headers(token),
+        json={"documents": [{"name": "Address proof"}]},
+    )
+    assert submit.status_code == 200, submit.text
+    rejected = client.post(
+        f"/api/clients/{cid}/kyc/reject",
+        headers=auth_headers(token),
+        json={"reason": "Address proof is expired"},
+    )
+    assert rejected.status_code == 200, rejected.text
+    body = rejected.json()
+    assert body["kyc_status"] == "rejected"
+    assert body["kyc_verified_at"] is not None
+    assert body["kyc_verified_by_membership_id"] is not None
+    assert body["kyc_rejection_reason"] == "Address proof is expired"
+
+    factory = get_session_factory()
+    with factory() as session:
+        event = session.scalar(
+            select(AuditEvent).where(
+                AuditEvent.action == "client.kyc_rejected",
+                AuditEvent.target_id == cid,
+            )
+        )
+    assert event is not None
+    metadata = (
+        json.loads(event.metadata_json)
+        if isinstance(event.metadata_json, str)
+        else event.metadata_json
+    )
+    payload = json.dumps(metadata).lower()
+    assert "expired" not in payload
+    assert metadata["reason_present"] is True
+    assert metadata["reason_length"] == len("Address proof is expired")
+
+
+def test_matter_client_verification_respects_restricted_wall_and_team_access(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    owner_token = str(bootstrap["access_token"])
+    admin_membership_id, admin_token = _invite_admin_for_verification(
+        client, owner_token,
+    )
+    matter = _mk_matter(client, owner_token, code="CL-VERIFY-ACCESS")
+    team_matter = _mk_matter(client, owner_token, code="CL-VERIFY-TEAM")
+    cid = _mk_client(client, owner_token).json()["id"]
+    client.post(
+        f"/api/matters/{matter['id']}/clients",
+        headers=auth_headers(owner_token),
+        json={"client_id": cid},
+    )
+
+    restricted = client.post(
+        f"/api/matters/{matter['id']}/access/restricted",
+        headers=auth_headers(owner_token),
+        json={"restricted": True},
+    )
+    assert restricted.status_code == 200, restricted.text
+    denied_restricted = client.get(
+        f"/api/matters/{matter['id']}/client-verification",
+        headers=auth_headers(admin_token),
+    )
+    assert denied_restricted.status_code == 404
+
+    grant = client.post(
+        f"/api/matters/{matter['id']}/access/grants",
+        headers=auth_headers(owner_token),
+        json={"membership_id": admin_membership_id, "reason": "Review KYC"},
+    )
+    assert grant.status_code == 200, grant.text
+    wall = client.post(
+        f"/api/matters/{matter['id']}/access/walls",
+        headers=auth_headers(owner_token),
+        json={"excluded_membership_id": admin_membership_id, "reason": "Conflict"},
+    )
+    assert wall.status_code == 200, wall.text
+    denied_wall = client.get(
+        f"/api/matters/{matter['id']}/client-verification",
+        headers=auth_headers(admin_token),
+    )
+    assert denied_wall.status_code == 404
+
+    team_client = _mk_client(client, owner_token, name="Team Scoped Client").json()
+    client.post(
+        f"/api/matters/{team_matter['id']}/clients",
+        headers=auth_headers(owner_token),
+        json={"client_id": team_client["id"]},
+    )
+    team = client.post(
+        "/api/teams/",
+        headers=auth_headers(owner_token),
+        json={"name": "Verification Team", "slug": "verification-team"},
+    )
+    assert team.status_code == 201, team.text
+    assign_team = client.patch(
+        f"/api/matters/{team_matter['id']}",
+        headers=auth_headers(owner_token),
+        json={"team_id": team.json()["id"]},
+    )
+    assert assign_team.status_code == 200, assign_team.text
+    scope = client.put(
+        "/api/teams/scoping",
+        headers=auth_headers(owner_token),
+        json={"enabled": True},
+    )
+    assert scope.status_code == 200, scope.text
+    denied_team = client.get(
+        f"/api/matters/{team_matter['id']}/client-verification",
+        headers=auth_headers(admin_token),
+    )
+    assert denied_team.status_code == 404
+
+
+def test_client_verification_surface_has_no_biometric_or_score_fields(
+    client: TestClient,
+) -> None:
+    schema = client.get("/openapi.json").json()
+    paths = schema["paths"]
+    payload = str(
+        {
+            path: body
+            for path, body in paths.items()
+            if "client" in path and "verification" in path
+        }
+    ).lower()
+    assert "biometric" not in payload
+    assert "identity_score" not in payload
+    assert "verification_score" not in payload

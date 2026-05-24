@@ -1,13 +1,34 @@
 """Pydantic schemas for the Clients module (MOD-TS-009)."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 ClientTypeLiteral = Literal["individual", "corporate", "government", "nonprofit"]
-ClientKycStatusLiteral = Literal["not_started", "pending", "verified", "rejected"]
+ClientVerificationStatusLiteral = Literal[
+    "not_required",
+    "required",
+    "requested",
+    "submitted",
+    "under_review",
+    "verified",
+    "rejected",
+    "expired",
+]
+ClientKycStatusLiteral = ClientVerificationStatusLiteral
+ClientKycStatusInputLiteral = ClientVerificationStatusLiteral
+KycDocumentStatusLiteral = Literal[
+    "required",
+    "requested",
+    "submitted",
+    "received",
+    "verified",
+    "rejected",
+    "expired",
+    "pending",
+]
 
 
 class ClientCreateRequest(BaseModel):
@@ -29,7 +50,7 @@ class ClientCreateRequest(BaseModel):
     pan: str | None = Field(default=None, max_length=20)
     gstin: str | None = Field(default=None, max_length=20)
     internal_notes: str | None = Field(default=None, max_length=4000)
-    kyc_status: ClientKycStatusLiteral = "not_started"
+    kyc_status: ClientKycStatusInputLiteral = "not_required"
 
 
 class ClientUpdateRequest(BaseModel):
@@ -47,7 +68,7 @@ class ClientUpdateRequest(BaseModel):
     pan: str | None = Field(default=None, max_length=20)
     gstin: str | None = Field(default=None, max_length=20)
     internal_notes: str | None = Field(default=None, max_length=4000)
-    kyc_status: ClientKycStatusLiteral | None = None
+    kyc_status: ClientKycStatusInputLiteral | None = None
     is_active: bool | None = None
 
 
@@ -62,19 +83,24 @@ class ClientMatterLink(BaseModel):
 
 
 class KycDocumentRecord(BaseModel):
-    """One tracked KYC document. Stored as a JSON array on the
-    client; slice 3 ships with manual entry. A future revision can
-    attach a file URL to each row."""
+    """One tracked verification document.
+
+    Stored as JSON on the client. ``attachment_id`` is an optional
+    reference to an existing matter attachment; services validate it
+    against the matter before accepting it. Payloads, storage keys,
+    hashes, and OCR/document text are intentionally not surfaced here.
+    """
 
     name: str = Field(min_length=1, max_length=120)
-    status: Literal["pending", "received", "verified"] = "pending"
+    document_type: str | None = Field(default=None, max_length=80)
+    status: KycDocumentStatusLiteral = "required"
     note: str | None = Field(default=None, max_length=400)
+    attachment_id: str | None = Field(default=None, min_length=10, max_length=64)
+    expires_on: date | None = None
 
 
 class KycSubmitRequest(BaseModel):
-    """Submit a KYC pack — moves the client into ``pending``.
-    ``documents`` is the list of artefacts the lawyer collected
-    from the client (PAN, address proof, board resolution, …)."""
+    """Submit a KYC pack - moves the client into ``submitted``."""
 
     documents: list[KycDocumentRecord] = Field(default_factory=list)
 
@@ -139,17 +165,47 @@ class MatterClientAssignmentRecord(BaseModel):
     created_at: datetime
 
 
+class ClientVerificationUpdateRequest(BaseModel):
+    status: ClientKycStatusInputLiteral | None = None
+    documents: list[KycDocumentRecord] | None = Field(default=None, max_length=20)
+    rejection_reason: str | None = Field(default=None, max_length=1000)
+
+
+class MatterClientVerificationRecord(BaseModel):
+    client_id: str
+    client_name: str
+    client_type: ClientTypeLiteral
+    role: str | None = None
+    is_primary: bool = False
+    status: ClientVerificationStatusLiteral
+    submitted_at: datetime | None = None
+    reviewed_at: datetime | None = None
+    reviewer_membership_id: str | None = None
+    rejection_reason: str | None = None
+    documents: list[KycDocumentRecord] = Field(default_factory=list)
+
+
+class MatterClientVerificationListResponse(BaseModel):
+    matter_id: str
+    clients: list[MatterClientVerificationRecord] = Field(default_factory=list)
+
+
 __all__ = [
     "ClientCreateRequest",
     "ClientKycStatusLiteral",
+    "ClientKycStatusInputLiteral",
     "ClientListResponse",
     "ClientMatterLink",
     "ClientRecord",
     "ClientTypeLiteral",
+    "ClientVerificationStatusLiteral",
+    "ClientVerificationUpdateRequest",
     "ClientUpdateRequest",
     "KycDocumentRecord",
     "KycRejectRequest",
     "KycSubmitRequest",
     "MatterClientAssignRequest",
     "MatterClientAssignmentRecord",
+    "MatterClientVerificationListResponse",
+    "MatterClientVerificationRecord",
 ]

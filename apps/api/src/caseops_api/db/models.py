@@ -3392,10 +3392,14 @@ class ClientType(StrEnum):
 
 
 class ClientKycStatus(StrEnum):
-    NOT_STARTED = "not_started"
-    PENDING = "pending"
+    NOT_REQUIRED = "not_required"
+    REQUIRED = "required"
+    REQUESTED = "requested"
+    SUBMITTED = "submitted"
+    UNDER_REVIEW = "under_review"
     VERIFIED = "verified"
     REJECTED = "rejected"
+    EXPIRED = "expired"
 
 
 class Client(Base):
@@ -3446,7 +3450,7 @@ class Client(Base):
     kyc_status: Mapped[str] = mapped_column(
         String(24),
         nullable=False,
-        default=ClientKycStatus.NOT_STARTED,
+        default=ClientKycStatus.NOT_REQUIRED,
     )
     # Phase B M11 slice 3 — KYC audit trail. Without these the
     # status badge has no provenance: under a compliance audit the

@@ -50,10 +50,14 @@ const CLIENT_TYPES: { value: ClientType; label: string }[] = [
 type BadgeTone = "neutral" | "brand" | "success" | "warning";
 
 const KYC_LABEL: Record<string, { label: string; tone: BadgeTone }> = {
-  not_started: { label: "KYC not started", tone: "neutral" },
-  pending: { label: "KYC pending", tone: "warning" },
+  not_required: { label: "Verification not required", tone: "neutral" },
+  required: { label: "Verification required", tone: "warning" },
+  requested: { label: "Verification requested", tone: "brand" },
+  submitted: { label: "Verification submitted", tone: "brand" },
+  under_review: { label: "Verification under review", tone: "brand" },
   verified: { label: "KYC verified", tone: "success" },
   rejected: { label: "KYC rejected", tone: "warning" },
+  expired: { label: "KYC expired", tone: "warning" },
 };
 
 
@@ -108,7 +112,7 @@ export default function ClientsIndexPage() {
 
 
 function ClientCard({ client }: { client: ClientRecord }): React.JSX.Element {
-  const kyc = KYC_LABEL[client.kyc_status] ?? KYC_LABEL.not_started;
+  const kyc = KYC_LABEL[client.kyc_status] ?? KYC_LABEL.not_required;
   return (
     <Link
       href={`/app/clients/${client.id}`}

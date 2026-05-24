@@ -76,7 +76,7 @@ describe("PortalMatterDetailPage", () => {
           id: "c-1",
           name: "Test Client",
           client_type: "individual",
-          kyc_status: "not_started",
+          kyc_status: "not_required",
           kyc_submitted_at: null,
         },
       ],

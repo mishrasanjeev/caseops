@@ -15,10 +15,13 @@ from caseops_api.schemas.clients import (
     ClientListResponse,
     ClientRecord,
     ClientUpdateRequest,
+    ClientVerificationUpdateRequest,
     KycRejectRequest,
     KycSubmitRequest,
     MatterClientAssignmentRecord,
     MatterClientAssignRequest,
+    MatterClientVerificationListResponse,
+    MatterClientVerificationRecord,
 )
 from caseops_api.services.clients import (
     archive_client,
@@ -26,11 +29,13 @@ from caseops_api.services.clients import (
     create_client,
     get_client,
     list_clients,
+    list_matter_client_verifications,
     reject_client_kyc,
     remove_client_from_matter,
     submit_client_kyc,
     unarchive_client,
     update_client,
+    update_matter_client_verification,
     verify_client_kyc,
 )
 from caseops_api.services.identity import SessionContext
@@ -131,7 +136,7 @@ KycReviewer = Annotated[
 @router.post(
     "/{client_id}/kyc/submit",
     response_model=ClientRecord,
-    summary="Submit a KYC pack for review (moves status to pending).",
+    summary="Submit a KYC pack for review (moves status to submitted).",
 )
 async def submit_current_company_client_kyc(
     client_id: str,
@@ -214,3 +219,39 @@ async def delete_matter_client_assignment(
         session, context=context, matter_id=matter_id, client_id=client_id,
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@matter_scoped_router.get(
+    "/{matter_id}/client-verification",
+    response_model=MatterClientVerificationListResponse,
+    summary="List client verification status for a matter",
+)
+async def get_matter_client_verification(
+    matter_id: str,
+    context: ClientViewer,
+    session: DbSession,
+) -> MatterClientVerificationListResponse:
+    return list_matter_client_verifications(
+        session, context=context, matter_id=matter_id,
+    )
+
+
+@matter_scoped_router.patch(
+    "/{matter_id}/client-verification/{client_id}",
+    response_model=MatterClientVerificationRecord,
+    summary="Update a matter client's verification workflow",
+)
+async def patch_matter_client_verification(
+    matter_id: str,
+    client_id: str,
+    payload: ClientVerificationUpdateRequest,
+    context: KycReviewer,
+    session: DbSession,
+) -> MatterClientVerificationRecord:
+    return update_matter_client_verification(
+        session,
+        context=context,
+        matter_id=matter_id,
+        client_id=client_id,
+        payload=payload,
+    )

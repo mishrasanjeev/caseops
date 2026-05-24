@@ -4136,10 +4136,14 @@ export async function updateMatter(input: {
 
 export type ClientType = "individual" | "corporate" | "government" | "nonprofit";
 export type ClientKycStatus =
-  | "not_started"
-  | "pending"
+  | "not_required"
+  | "required"
+  | "requested"
+  | "submitted"
+  | "under_review"
   | "verified"
-  | "rejected";
+  | "rejected"
+  | "expired";
 
 export type ClientMatterLink = {
   matter_id: string;
@@ -4176,7 +4180,14 @@ export type ClientRecord = {
   kyc_verified_at: string | null;
   kyc_verified_by_membership_id: string | null;
   kyc_rejection_reason: string | null;
-  kyc_documents: { name: string; status: string; note: string | null }[];
+  kyc_documents: {
+    name: string;
+    document_type?: string | null;
+    status: string;
+    note: string | null;
+    attachment_id?: string | null;
+    expires_on?: string | null;
+  }[];
   is_active: boolean;
   active_matters_count: number;
   total_matters_count: number;
@@ -4291,6 +4302,33 @@ export async function unassignClientFromMatter(input: {
   await apiRequest<void>(
     `/api/matters/${input.matterId}/clients/${input.clientId}`,
     { method: "DELETE" },
+  );
+}
+
+export type MatterClientVerificationRecord = {
+  client_id: string;
+  client_name: string;
+  client_type: ClientType;
+  role: string | null;
+  is_primary: boolean;
+  status: ClientKycStatus;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+  reviewer_membership_id: string | null;
+  rejection_reason: string | null;
+  documents: ClientRecord["kyc_documents"];
+};
+
+export type MatterClientVerificationListResponse = {
+  matter_id: string;
+  clients: MatterClientVerificationRecord[];
+};
+
+export async function fetchMatterClientVerification(
+  matterId: string,
+): Promise<MatterClientVerificationListResponse> {
+  return apiRequest<MatterClientVerificationListResponse>(
+    `/api/matters/${matterId}/client-verification`,
   );
 }
 
@@ -4538,8 +4576,19 @@ export async function sendMatterEmail(input: {
 // Phase B M11 slice 3 — KYC lifecycle.
 export type KycDocumentInput = {
   name: string;
-  status?: "pending" | "received" | "verified";
+  document_type?: string | null;
+  status?:
+    | "required"
+    | "requested"
+    | "submitted"
+    | "received"
+    | "verified"
+    | "rejected"
+    | "expired"
+    | "pending";
   note?: string | null;
+  attachment_id?: string | null;
+  expires_on?: string | null;
 };
 
 export async function submitClientKyc(input: {
