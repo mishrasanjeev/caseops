@@ -2090,6 +2090,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matters/imports/drive/provider-config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Report Google Drive manual-import provider config status
+         * @description Returns whether the Google Drive provider is configured. Reports missing environment variable NAMES only — never client IDs, client secrets, redirect URIs, OAuth tokens, refresh tokens, or Drive payloads. Fails closed when any required setting is unset.
+         */
+        get: operations["get_google_drive_provider_config_status_api_matters_imports_drive_provider_config_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matters/imports/dry-run": {
         parameters: {
             query?: never;
@@ -3091,6 +3111,26 @@ export interface paths {
         put?: never;
         /** Generate a hearing pack for this hearing */
         post: operations["post_current_company_matter_hearing_pack_api_matters__matter_id__hearings__hearing_id__pack_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/{matter_id}/imports/drive/dry-run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dry-run a manual Google Drive folder import for a matter
+         * @description Validates user-supplied Google Drive folder/file metadata against the matter's storage rules and returns a per-file import plan. Does not contact Google. Writes no attachments, storage objects, OCR jobs, corpus jobs, or embeddings. Stores no OAuth tokens or Drive payloads. Records a redacted audit summary only.
+         */
+        post: operations["dry_run_current_company_matter_google_drive_import_api_matters__matter_id__imports_drive_dry_run_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -8648,6 +8688,123 @@ export interface components {
              * @default false
              */
             unverified: boolean;
+        };
+        /** GoogleDriveFileMetadata */
+        GoogleDriveFileMetadata: {
+            /** Mime Type */
+            mime_type: string;
+            /** Modified Time */
+            modified_time?: string | null;
+            /** Name */
+            name: string;
+            /** Parent Folder Id */
+            parent_folder_id?: string | null;
+            /** Parent Folder Name */
+            parent_folder_name?: string | null;
+            /** Provider File Id */
+            provider_file_id: string;
+            /** Size Bytes */
+            size_bytes: number;
+        };
+        /** GoogleDriveImportDryRunRequest */
+        GoogleDriveImportDryRunRequest: {
+            /** Files */
+            files?: components["schemas"]["GoogleDriveFileMetadata"][];
+            /** Folder Id */
+            folder_id?: string | null;
+            /** Folder Name */
+            folder_name?: string | null;
+        };
+        /** GoogleDriveImportDryRunResponse */
+        GoogleDriveImportDryRunResponse: {
+            /** Company Id */
+            company_id: string;
+            /** Files */
+            files: components["schemas"]["GoogleDriveImportFilePlan"][];
+            /** Folder Id */
+            folder_id?: string | null;
+            /** Folder Name */
+            folder_name?: string | null;
+            /** Limitations */
+            limitations?: string[];
+            /** Matter Id */
+            matter_id: string;
+            summary: components["schemas"]["GoogleDriveImportDryRunSummary"];
+        };
+        /** GoogleDriveImportDryRunSummary */
+        GoogleDriveImportDryRunSummary: {
+            /**
+             * Commit Supported
+             * @default false
+             */
+            commit_supported: boolean;
+            /**
+             * Corpus Jobs Queued
+             * @default 0
+             */
+            corpus_jobs_queued: number;
+            /**
+             * Dry Run
+             * @default true
+             */
+            dry_run: boolean;
+            /** Duplicate Files */
+            duplicate_files: number;
+            /** Invalid Files */
+            invalid_files: number;
+            /**
+             * Storage Writes
+             * @default 0
+             */
+            storage_writes: number;
+            /** Total Files */
+            total_files: number;
+            /** Unsupported Mime Files */
+            unsupported_mime_files: number;
+            /** Valid Files */
+            valid_files: number;
+            /**
+             * Will Create Attachment Count
+             * @default 0
+             */
+            will_create_attachment_count: number;
+        };
+        /** GoogleDriveImportFilePlan */
+        GoogleDriveImportFilePlan: {
+            /** Category */
+            category?: string | null;
+            /** Errors */
+            errors?: string[];
+            /** Mime Type */
+            mime_type: string;
+            /** Modified Time */
+            modified_time?: string | null;
+            /** Name */
+            name: string;
+            /** Provider File Id */
+            provider_file_id: string;
+            /** Safe Name */
+            safe_name?: string | null;
+            /** Size Bytes */
+            size_bytes: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "valid" | "invalid" | "skipped_duplicate" | "unsupported_mime";
+        };
+        /** GoogleDriveProviderConfigStatus */
+        GoogleDriveProviderConfigStatus: {
+            /** Configured */
+            configured: boolean;
+            /** Missing Config Names */
+            missing_config_names?: string[];
+            /**
+             * Provider
+             * @default google_drive
+             * @constant
+             */
+            provider: "google_drive";
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -18622,6 +18779,26 @@ export interface operations {
             };
         };
     };
+    get_google_drive_provider_config_status_api_matters_imports_drive_provider_config_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoogleDriveProviderConfigStatus"];
+                };
+            };
+        };
+    };
     dry_run_current_company_matter_import_api_matters_imports_dry_run_post: {
         parameters: {
             query?: never;
@@ -20779,6 +20956,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HearingPackRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dry_run_current_company_matter_google_drive_import_api_matters__matter_id__imports_drive_dry_run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoogleDriveImportDryRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoogleDriveImportDryRunResponse"];
                 };
             };
             /** @description Validation Error */

@@ -147,6 +147,15 @@ class Settings(BaseSettings):
     outlook_tenant_id: str = Field(default="organizations")
     outlook_redirect_uri: str | None = Field(default=None)
 
+    # ADP-12: Google Drive bounded manual import. Provider config
+    # status fails closed (configured=False) when any of these is
+    # unset. No OAuth flow, token storage, or external Google API
+    # calls are wired by this foundation — durable Drive sync is
+    # an ADP-21 follow-up gated on Temporal.
+    google_drive_client_id: str | None = Field(default=None)
+    google_drive_client_secret: str | None = Field(default=None)
+    google_drive_redirect_uri: str | None = Field(default=None)
+
     # WTD-5.1 durable workflow foundation. Disabled by default; these
     # slices only add safe Temporal config/worker plumbing and no-op
     # notification-intent probes. Real notification delivery and reminder

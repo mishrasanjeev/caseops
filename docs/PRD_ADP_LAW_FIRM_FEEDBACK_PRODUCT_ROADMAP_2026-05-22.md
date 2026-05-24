@@ -1733,6 +1733,17 @@ Tests:
 Type: Backend + Web + Provider Integration
 Priority: P2
 Dependencies: Secure OAuth config, attachment pipeline
+Status: Foundation implemented 2026-05-24; Google Drive provider config
+status endpoint reports configured/missing config NAMES only (never values,
+client secrets, or tokens) and fails closed when any env var is unset. A
+matter-scoped manual Drive metadata dry-run endpoint validates user-supplied
+file metadata, deterministically auto-categorizes by filename/MIME, rejects
+unsafe filenames / unsupported MIME / oversize / duplicate provider_file_id,
+and records a redacted audit summary. No external Google API call, OAuth
+flow, token storage, attachment write, storage object, OCR/corpus job,
+embedding, background sync, polling, webhook, or commit path is wired by
+this slice. Durable Drive sync remains deferred to ADP-21.
+
 
 Scope:
 
