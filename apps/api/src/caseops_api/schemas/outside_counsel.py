@@ -14,6 +14,11 @@ OutsideCounselSpendStatusLiteral = Literal[
     "disputed",
     "paid",
 ]
+OutsideCounselPaymentTrackingStatusLiteral = Literal[
+    "unpaid",
+    "partially_paid",
+    "paid",
+]
 
 
 class OutsideCounselCreateRequest(BaseModel):
@@ -67,6 +72,21 @@ class OutsideCounselSpendRecordCreateRequest(BaseModel):
     notes: str | None = Field(default=None, max_length=4000)
 
 
+class OutsideCounselSpendRecordUpdateRequest(BaseModel):
+    assignment_id: str | None = None
+    invoice_reference: str | None = Field(default=None, min_length=2, max_length=120)
+    stage_label: str | None = Field(default=None, min_length=2, max_length=120)
+    description: str | None = Field(default=None, min_length=2, max_length=500)
+    currency: str | None = Field(default=None, min_length=3, max_length=8)
+    amount_minor: int | None = Field(default=None, ge=0)
+    approved_amount_minor: int | None = Field(default=None, ge=0)
+    status: OutsideCounselSpendStatusLiteral | None = None
+    billed_on: date | None = None
+    due_on: date | None = None
+    paid_on: date | None = None
+    notes: str | None = Field(default=None, max_length=4000)
+
+
 class OutsideCounselRecord(BaseModel):
     id: str
     company_id: str
@@ -99,6 +119,7 @@ class OutsideCounselAssignmentRecord(BaseModel):
     assigned_by_name: str | None
     role_summary: str | None
     budget_amount_minor: int | None
+    fee_agreed_minor: int | None
     currency: str
     status: OutsideCounselAssignmentStatusLiteral
     internal_notes: str | None
@@ -123,7 +144,11 @@ class OutsideCounselSpendRecord(BaseModel):
     currency: str
     amount_minor: int
     approved_amount_minor: int
+    paid_amount_minor: int
+    pending_amount_minor: int
     status: OutsideCounselSpendStatusLiteral
+    payment_status: OutsideCounselSpendStatusLiteral
+    payment_tracking_status: OutsideCounselPaymentTrackingStatusLiteral
     billed_on: date | None
     due_on: date | None
     paid_on: date | None
@@ -134,16 +159,47 @@ class OutsideCounselSpendRecord(BaseModel):
 
 class OutsideCounselPortfolioSummary(BaseModel):
     company_id: str
+    currency: str = "INR"
+    currency_codes: list[str]
+    currency_count: int
+    multi_currency: bool
     total_counsel_count: int
+    profile_count: int
     preferred_panel_count: int
     active_assignment_count: int
+    total_agreed_minor: int
     total_budget_minor: int
     total_spend_minor: int
     approved_spend_minor: int
+    total_paid_minor: int
+    total_pending_minor: int
     disputed_spend_minor: int
+    pending_invoice_count: int
+    overdue_invoice_count: int
     collected_invoice_minor: int
     outstanding_invoice_minor: int
     profitability_signal_minor: int
+    payment_status_counts: dict[str, int]
+
+
+class OutsideCounselMatterSpendSummary(BaseModel):
+    matter_id: str
+    matter_title: str
+    matter_code: str
+    currency: str = "INR"
+    currency_codes: list[str]
+    currency_count: int
+    multi_currency: bool
+    assigned_counsel_count: int
+    invoice_count: int
+    pending_invoice_count: int
+    overdue_invoice_count: int
+    total_agreed_minor: int
+    total_spend_minor: int
+    approved_spend_minor: int
+    total_paid_minor: int
+    total_pending_minor: int
+    payment_status_counts: dict[str, int]
 
 
 class OutsideCounselWorkspaceResponse(BaseModel):
@@ -151,6 +207,7 @@ class OutsideCounselWorkspaceResponse(BaseModel):
     profiles: list[OutsideCounselRecord]
     assignments: list[OutsideCounselAssignmentRecord]
     spend_records: list[OutsideCounselSpendRecord]
+    matter_summaries: list[OutsideCounselMatterSpendSummary]
 
 
 class OutsideCounselRecommendationRequest(BaseModel):

@@ -95,6 +95,10 @@ export default function OutsideCounselPage() {
   const summary = data?.summary;
   const totalSpend = summary?.total_spend_minor ?? 0;
   const approved = summary?.approved_spend_minor ?? 0;
+  const paid = summary?.total_paid_minor ?? 0;
+  const pending = summary?.total_pending_minor ?? 0;
+  const currencyCodes = summary?.currency_codes ?? [currency];
+  const hasMultipleCurrencies = summary?.multi_currency ?? false;
   const activeAssignments = summary?.active_assignment_count ?? 0;
   const profileCount = summary?.profile_count ?? profiles.length;
 
@@ -125,10 +129,17 @@ export default function OutsideCounselPage() {
         />
         <KpiCard
           icon={Banknote}
-          label="Total spend"
-          value={formatMoney(totalSpend, currency)}
+          label="Paid / pending"
+          value={`${formatMoney(paid, currency)} / ${formatMoney(pending, currency)}`}
         />
       </section>
+      {hasMultipleCurrencies ? (
+        <p className="rounded-md border border-[var(--color-line)] bg-[var(--color-bg)] px-3 py-2 text-xs text-[var(--color-ink-2)]">
+          Multiple currencies are present ({currencyCodes.join(", ")}). Totals
+          are shown in stored minor units and should be reviewed by currency;
+          this view does not execute payments.
+        </p>
+      ) : null}
 
       {isPending ? (
         <div className="flex flex-col gap-3">

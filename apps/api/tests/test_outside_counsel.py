@@ -1,7 +1,12 @@
 from __future__ import annotations
 
-from fastapi.testclient import TestClient
+import json
 
+from fastapi.testclient import TestClient
+from sqlalchemy import select
+
+from caseops_api.db.models import AuditEvent
+from caseops_api.db.session import get_session_factory
 from tests.test_auth_company import auth_headers, bootstrap_company
 
 
@@ -32,6 +37,32 @@ def _create_matter(
     )
     assert response.status_code == 200
     return response.json()
+
+
+def _invite_admin(client: TestClient, owner_token: str) -> tuple[str, str]:
+    create_user = client.post(
+        "/api/companies/current/users",
+        headers=auth_headers(owner_token),
+        json={
+            "full_name": "Outside Counsel Admin",
+            "email": "oc-admin@asterlegal.in",
+            "password": "AdminPass123!",
+            "role": "admin",
+        },
+    )
+    assert create_user.status_code == 200, create_user.text
+    login_response = client.post(
+        "/api/auth/login",
+        json={
+            "email": "oc-admin@asterlegal.in",
+            "password": "AdminPass123!",
+            "company_slug": "aster-legal",
+        },
+    )
+    assert login_response.status_code == 200, login_response.text
+    return str(create_user.json()["membership_id"]), str(
+        login_response.json()["access_token"]
+    )
 
 
 def test_owner_can_manage_outside_counsel_and_spend_workspace(client: TestClient) -> None:
@@ -101,6 +132,7 @@ def test_owner_can_manage_outside_counsel_and_spend_workspace(client: TestClient
     spend_record = spend_response.json()
     assert spend_record["approved_amount_minor"] == 200000
     assert spend_record["status"] == "partially_approved"
+    assert spend_record["payment_tracking_status"] == "unpaid"
 
     workspace_response = client.get(
         "/api/outside-counsel/workspace",
@@ -111,12 +143,400 @@ def test_owner_can_manage_outside_counsel_and_spend_workspace(client: TestClient
     assert payload["summary"]["total_counsel_count"] == 1
     assert payload["summary"]["active_assignment_count"] == 1
     assert payload["summary"]["total_budget_minor"] == 500000
+    assert payload["summary"]["total_agreed_minor"] == 500000
     assert payload["summary"]["total_spend_minor"] == 250000
     assert payload["summary"]["approved_spend_minor"] == 200000
+    assert payload["summary"]["total_paid_minor"] == 0
+    assert payload["summary"]["total_pending_minor"] == 250000
+    assert payload["summary"]["multi_currency"] is False
+    assert payload["summary"]["currency_codes"] == ["INR"]
+    assert payload["summary"]["payment_status_counts"]["partially_approved"] == 1
     assert payload["profiles"][0]["name"] == "Khanna Advisory Chambers"
     assert payload["profiles"][0]["approved_spend_minor"] == 200000
     assert payload["assignments"][0]["matter_code"] == "COMM-2026-401"
+    assert payload["assignments"][0]["fee_agreed_minor"] == 500000
     assert payload["spend_records"][0]["invoice_reference"] == "KAC/2026/044"
+    assert payload["spend_records"][0]["pending_amount_minor"] == 250000
+    assert payload["matter_summaries"][0]["matter_code"] == "COMM-2026-401"
+    assert payload["matter_summaries"][0]["total_agreed_minor"] == 500000
+
+
+def test_spend_record_update_tracks_paid_pending_and_redacts_audit(
+    client: TestClient,
+) -> None:
+    bootstrap_payload = bootstrap_company(client)
+    token = str(bootstrap_payload["access_token"])
+    matter = _create_matter(
+        client,
+        token,
+        title="Spend update matter",
+        matter_code="OC-SPEND-2026-001",
+    )
+    counsel = client.post(
+        "/api/outside-counsel/profiles",
+        headers=auth_headers(token),
+        json={"name": "Redacted Spend Chambers"},
+    ).json()
+    assignment = client.post(
+        "/api/outside-counsel/assignments",
+        headers=auth_headers(token),
+        json={
+            "matter_id": matter["id"],
+            "counsel_id": counsel["id"],
+            "budget_amount_minor": 900000,
+        },
+    ).json()
+
+    create_response = client.post(
+        "/api/outside-counsel/spend-records",
+        headers=auth_headers(token),
+        json={
+            "matter_id": matter["id"],
+            "counsel_id": counsel["id"],
+            "assignment_id": assignment["id"],
+            "invoice_reference": "RSC-2026-009",
+            "description": "Synthetic invoice narrative",
+            "amount_minor": 300000,
+            "notes": "Reviewer note example",
+        },
+    )
+    assert create_response.status_code == 200, create_response.text
+    created = create_response.json()
+    assert created["paid_amount_minor"] == 0
+    assert created["pending_amount_minor"] == 300000
+    assert created["payment_tracking_status"] == "unpaid"
+
+    update_response = client.patch(
+        f"/api/outside-counsel/spend-records/{created['id']}",
+        headers=auth_headers(token),
+        json={
+            "status": "paid",
+            "paid_on": "2026-05-24",
+        },
+    )
+    assert update_response.status_code == 200, update_response.text
+    updated = update_response.json()
+    assert updated["payment_status"] == "paid"
+    assert updated["payment_tracking_status"] == "paid"
+    assert updated["paid_amount_minor"] == 300000
+    assert updated["pending_amount_minor"] == 0
+
+    workspace = client.get(
+        "/api/outside-counsel/workspace",
+        headers=auth_headers(token),
+    ).json()
+    assert workspace["summary"]["total_paid_minor"] == 300000
+    assert workspace["summary"]["total_pending_minor"] == 0
+    assert workspace["summary"]["payment_status_counts"]["paid"] == 1
+
+    Session = get_session_factory()
+    with Session() as session:
+        rows = list(
+            session.scalars(
+                select(AuditEvent)
+                .where(AuditEvent.target_id == created["id"])
+                .order_by(AuditEvent.created_at.asc())
+            )
+        )
+    assert [row.action for row in rows] == [
+        "outside_counsel.spend_recorded",
+        "outside_counsel.spend_updated",
+    ]
+    for row in rows:
+        metadata = json.loads(row.metadata_json or "{}")
+        assert metadata["invoice_reference_present"] is True
+        assert "description" not in metadata
+        assert "notes" not in metadata
+        assert "invoice_reference" not in metadata
+        assert "Synthetic invoice narrative" not in row.metadata_json
+        assert "RSC-2026-009" not in row.metadata_json
+        assert "Reviewer note example" not in row.metadata_json
+
+
+def test_spend_payment_tracking_and_currency_rollup_are_explicit(
+    client: TestClient,
+) -> None:
+    bootstrap_payload = bootstrap_company(client)
+    token = str(bootstrap_payload["access_token"])
+    matter = _create_matter(
+        client,
+        token,
+        title="Multi currency spend matter",
+        matter_code="OC-MULTI-2026-001",
+    )
+    counsel_inr = client.post(
+        "/api/outside-counsel/profiles",
+        headers=auth_headers(token),
+        json={"name": "INR Counsel"},
+    ).json()
+    counsel_usd = client.post(
+        "/api/outside-counsel/profiles",
+        headers=auth_headers(token),
+        json={"name": "USD Counsel"},
+    ).json()
+    assignment_inr = client.post(
+        "/api/outside-counsel/assignments",
+        headers=auth_headers(token),
+        json={
+            "matter_id": matter["id"],
+            "counsel_id": counsel_inr["id"],
+            "budget_amount_minor": 0,
+            "currency": "INR",
+        },
+    ).json()
+    assignment_usd = client.post(
+        "/api/outside-counsel/assignments",
+        headers=auth_headers(token),
+        json={
+            "matter_id": matter["id"],
+            "counsel_id": counsel_usd["id"],
+            "budget_amount_minor": 50000,
+            "currency": "USD",
+        },
+    ).json()
+
+    zero_paid = client.post(
+        "/api/outside-counsel/spend-records",
+        headers=auth_headers(token),
+        json={
+            "matter_id": matter["id"],
+            "counsel_id": counsel_inr["id"],
+            "assignment_id": assignment_inr["id"],
+            "description": "Zero adjustment",
+            "currency": "INR",
+            "amount_minor": 0,
+            "approved_amount_minor": 0,
+            "status": "paid",
+        },
+    )
+    assert zero_paid.status_code == 200, zero_paid.text
+    assert zero_paid.json()["payment_tracking_status"] == "paid"
+    assert zero_paid.json()["pending_amount_minor"] == 0
+
+    partial_paid = client.post(
+        "/api/outside-counsel/spend-records",
+        headers=auth_headers(token),
+        json={
+            "matter_id": matter["id"],
+            "counsel_id": counsel_usd["id"],
+            "assignment_id": assignment_usd["id"],
+            "description": "Partially settled invoice",
+            "currency": "USD",
+            "amount_minor": 300000,
+            "approved_amount_minor": 100000,
+            "status": "paid",
+        },
+    )
+    assert partial_paid.status_code == 200, partial_paid.text
+    partial_body = partial_paid.json()
+    assert partial_body["payment_tracking_status"] == "partially_paid"
+    assert partial_body["paid_amount_minor"] == 100000
+    assert partial_body["pending_amount_minor"] == 200000
+
+    invalid_overpaid = client.post(
+        "/api/outside-counsel/spend-records",
+        headers=auth_headers(token),
+        json={
+            "matter_id": matter["id"],
+            "counsel_id": counsel_usd["id"],
+            "description": "Invalid overpayment",
+            "currency": "USD",
+            "amount_minor": 1000,
+            "approved_amount_minor": 1001,
+            "status": "paid",
+        },
+    )
+    assert invalid_overpaid.status_code == 400
+
+    workspace = client.get(
+        "/api/outside-counsel/workspace",
+        headers=auth_headers(token),
+    )
+    assert workspace.status_code == 200, workspace.text
+    payload = workspace.json()
+    assert payload["summary"]["multi_currency"] is True
+    assert payload["summary"]["currency_codes"] == ["INR", "USD"]
+    assert payload["matter_summaries"][0]["multi_currency"] is True
+    assert payload["matter_summaries"][0]["currency_codes"] == ["INR", "USD"]
+
+
+def test_spend_update_respects_restricted_wall_and_team_visibility(
+    client: TestClient,
+) -> None:
+    bootstrap_payload = bootstrap_company(client)
+    owner_token = str(bootstrap_payload["access_token"])
+    admin_membership_id, admin_token = _invite_admin(client, owner_token)
+    matter = _create_matter(
+        client,
+        owner_token,
+        title="Spend update access matter",
+        matter_code="OC-ACCESS-2026-001",
+    )
+    counsel = client.post(
+        "/api/outside-counsel/profiles",
+        headers=auth_headers(owner_token),
+        json={"name": "Access Counsel"},
+    ).json()
+    spend = client.post(
+        "/api/outside-counsel/spend-records",
+        headers=auth_headers(owner_token),
+        json={
+            "matter_id": matter["id"],
+            "counsel_id": counsel["id"],
+            "description": "Restricted spend update",
+            "amount_minor": 100000,
+        },
+    )
+    assert spend.status_code == 200, spend.text
+    restricted = client.post(
+        f"/api/matters/{matter['id']}/access/restricted",
+        headers=auth_headers(owner_token),
+        json={"restricted": True},
+    )
+    assert restricted.status_code == 200, restricted.text
+    denied_restricted = client.patch(
+        f"/api/outside-counsel/spend-records/{spend.json()['id']}",
+        headers=auth_headers(admin_token),
+        json={"status": "paid"},
+    )
+    assert denied_restricted.status_code == 404, denied_restricted.text
+
+    grant = client.post(
+        f"/api/matters/{matter['id']}/access/grants",
+        headers=auth_headers(owner_token),
+        json={"membership_id": admin_membership_id, "reason": "Review spend"},
+    )
+    assert grant.status_code == 200, grant.text
+    wall = client.post(
+        f"/api/matters/{matter['id']}/access/walls",
+        headers=auth_headers(owner_token),
+        json={"excluded_membership_id": admin_membership_id, "reason": "Conflict"},
+    )
+    assert wall.status_code == 200, wall.text
+    denied_wall = client.patch(
+        f"/api/outside-counsel/spend-records/{spend.json()['id']}",
+        headers=auth_headers(admin_token),
+        json={"status": "paid"},
+    )
+    assert denied_wall.status_code == 404, denied_wall.text
+
+    team_matter = _create_matter(
+        client,
+        owner_token,
+        title="Team scoped spend matter",
+        matter_code="OC-TEAM-2026-001",
+    )
+    team_spend = client.post(
+        "/api/outside-counsel/spend-records",
+        headers=auth_headers(owner_token),
+        json={
+            "matter_id": team_matter["id"],
+            "counsel_id": counsel["id"],
+            "description": "Team scoped spend update",
+            "amount_minor": 100000,
+        },
+    )
+    assert team_spend.status_code == 200, team_spend.text
+    team = client.post(
+        "/api/teams/",
+        headers=auth_headers(owner_token),
+        json={"name": "Outside Counsel Team", "slug": "oc-spend-team"},
+    )
+    assert team.status_code == 201, team.text
+    assign_team = client.patch(
+        f"/api/matters/{team_matter['id']}",
+        headers=auth_headers(owner_token),
+        json={"team_id": team.json()["id"]},
+    )
+    assert assign_team.status_code == 200, assign_team.text
+    scope = client.put(
+        "/api/teams/scoping",
+        headers=auth_headers(owner_token),
+        json={"enabled": True},
+    )
+    assert scope.status_code == 200, scope.text
+    denied_team = client.patch(
+        f"/api/outside-counsel/spend-records/{team_spend.json()['id']}",
+        headers=auth_headers(admin_token),
+        json={"status": "paid"},
+    )
+    assert denied_team.status_code == 404, denied_team.text
+
+
+def test_workspace_hides_restricted_matter_spend_from_ungranted_member(
+    client: TestClient,
+) -> None:
+    bootstrap_payload = bootstrap_company(client)
+    owner_token = str(bootstrap_payload["access_token"])
+    matter = _create_matter(
+        client,
+        owner_token,
+        title="Restricted spend matter",
+        matter_code="OC-REST-2026-001",
+    )
+    restricted = client.post(
+        f"/api/matters/{matter['id']}/access/restricted",
+        headers=auth_headers(owner_token),
+        json={"restricted": True},
+    )
+    assert restricted.status_code == 200, restricted.text
+    counsel = client.post(
+        "/api/outside-counsel/profiles",
+        headers=auth_headers(owner_token),
+        json={"name": "Restricted Spend Counsel"},
+    ).json()
+    assignment = client.post(
+        "/api/outside-counsel/assignments",
+        headers=auth_headers(owner_token),
+        json={
+            "matter_id": matter["id"],
+            "counsel_id": counsel["id"],
+            "budget_amount_minor": 700000,
+        },
+    )
+    assert assignment.status_code == 200, assignment.text
+    spend = client.post(
+        "/api/outside-counsel/spend-records",
+        headers=auth_headers(owner_token),
+        json={
+            "matter_id": matter["id"],
+            "counsel_id": counsel["id"],
+            "description": "Restricted matter spend",
+            "amount_minor": 150000,
+        },
+    )
+    assert spend.status_code == 200, spend.text
+
+    create_user = client.post(
+        "/api/companies/current/users",
+        headers=auth_headers(owner_token),
+        json={
+            "full_name": "Ungrant Member",
+            "email": "ungrant@asterlegal.in",
+            "password": "MemberPass123!",
+            "role": "member",
+        },
+    )
+    assert create_user.status_code == 200, create_user.text
+    login_response = client.post(
+        "/api/auth/login",
+        json={
+            "email": "ungrant@asterlegal.in",
+            "password": "MemberPass123!",
+            "company_slug": "aster-legal",
+        },
+    )
+    member_token = str(login_response.json()["access_token"])
+
+    member_workspace = client.get(
+        "/api/outside-counsel/workspace",
+        headers=auth_headers(member_token),
+    )
+    assert member_workspace.status_code == 200, member_workspace.text
+    body = member_workspace.json()
+    assert body["assignments"] == []
+    assert body["spend_records"] == []
+    assert body["matter_summaries"] == []
 
 
 def test_recommendations_prefer_matching_counsel_history(client: TestClient) -> None:

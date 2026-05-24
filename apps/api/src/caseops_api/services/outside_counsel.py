@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 
 from caseops_api.db.models import (
     CompanyMembership,
+    InvoiceStatus,
     Matter,
     MatterActivity,
     MatterInvoice,
@@ -25,12 +26,14 @@ from caseops_api.schemas.outside_counsel import (
     OutsideCounselAssignmentCreateRequest,
     OutsideCounselAssignmentRecord,
     OutsideCounselCreateRequest,
+    OutsideCounselMatterSpendSummary,
     OutsideCounselPortfolioSummary,
     OutsideCounselRecommendationRecord,
     OutsideCounselRecommendationRequest,
     OutsideCounselRecommendationResponse,
     OutsideCounselRecord,
     OutsideCounselSpendRecordCreateRequest,
+    OutsideCounselSpendRecordUpdateRequest,
     OutsideCounselUpdateRequest,
     OutsideCounselWorkspaceResponse,
 )
@@ -39,6 +42,7 @@ from caseops_api.schemas.outside_counsel import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.identity import SessionContext
+from caseops_api.services.matter_access import assert_access, visible_matters_filter
 
 
 def _now() -> datetime:
@@ -106,6 +110,7 @@ def _get_company_matter(session: Session, *, context: SessionContext, matter_id:
     )
     if not matter:
         _raise_not_found("Matter was not found in the current company.")
+    assert_access(session, context=context, matter=matter)
     return matter
 
 
@@ -147,6 +152,31 @@ def _get_assignment_model(
     return assignment
 
 
+def _get_spend_record_model(
+    session: Session,
+    *,
+    company_id: str,
+    spend_record_id: str,
+) -> OutsideCounselSpendRecord:
+    spend_record = session.scalar(
+        select(OutsideCounselSpendRecord)
+        .options(
+            joinedload(OutsideCounselSpendRecord.matter),
+            joinedload(OutsideCounselSpendRecord.counsel),
+            joinedload(OutsideCounselSpendRecord.recorded_by_membership).joinedload(
+                CompanyMembership.user
+            ),
+        )
+        .where(
+            OutsideCounselSpendRecord.id == spend_record_id,
+            OutsideCounselSpendRecord.company_id == company_id,
+        )
+    )
+    if not spend_record:
+        _raise_not_found("Outside counsel spend record was not found in the current company.")
+    return spend_record
+
+
 def _append_matter_activity(
     session: Session,
     *,
@@ -165,6 +195,93 @@ def _append_matter_activity(
             detail=detail,
         )
     )
+
+
+def _paid_amount_minor(record: OutsideCounselSpendRecord) -> int:
+    return (
+        record.approved_amount_minor
+        if record.status == OutsideCounselSpendStatus.PAID
+        else 0
+    )
+
+
+def _pending_amount_minor(record: OutsideCounselSpendRecord) -> int:
+    return max(record.amount_minor - _paid_amount_minor(record), 0)
+
+
+def _payment_tracking_status(record: OutsideCounselSpendRecord) -> str:
+    paid_amount = _paid_amount_minor(record)
+    if record.amount_minor == 0:
+        return "paid" if record.status == OutsideCounselSpendStatus.PAID else "unpaid"
+    if paid_amount <= 0:
+        return "unpaid"
+    if paid_amount >= record.amount_minor:
+        return "paid"
+    return "partially_paid"
+
+
+def _spend_status_counts(records: list[OutsideCounselSpendRecord]) -> dict[str, int]:
+    counts = {status.value: 0 for status in OutsideCounselSpendStatus}
+    for record in records:
+        counts[str(record.status)] = counts.get(str(record.status), 0) + 1
+    return counts
+
+
+def _currency_codes(
+    *,
+    assignments: list[MatterOutsideCounselAssignment],
+    spend_records: list[OutsideCounselSpendRecord],
+    invoices: list[MatterInvoice],
+) -> list[str]:
+    codes = {
+        str(item.currency).upper()
+        for item in [*assignments, *spend_records, *invoices]
+        if getattr(item, "currency", None)
+    }
+    return sorted(codes) or ["INR"]
+
+
+def _normalise_approved_amount(
+    *,
+    amount_minor: int,
+    approved_amount_minor: int | None,
+    status_value: str,
+    status_changed: bool = False,
+) -> int:
+    if approved_amount_minor is not None and approved_amount_minor > amount_minor:
+        _raise_bad_request("Approved spend cannot exceed the submitted spend amount.")
+
+    if status_value in {OutsideCounselSpendStatus.APPROVED, OutsideCounselSpendStatus.PAID}:
+        return amount_minor if approved_amount_minor is None else approved_amount_minor
+
+    if status_value == OutsideCounselSpendStatus.PARTIALLY_APPROVED:
+        if approved_amount_minor is None:
+            _raise_bad_request("Provide an approved amount for partially approved spend records.")
+        return approved_amount_minor
+
+    if approved_amount_minor is None or status_changed:
+        return 0
+    return approved_amount_minor
+
+
+def _spend_audit_metadata(record: OutsideCounselSpendRecord) -> dict[str, object]:
+    return {
+        "matter_id": record.matter_id,
+        "counsel_id": record.counsel_id,
+        "assignment_id": record.assignment_id,
+        "invoice_reference_present": bool(record.invoice_reference),
+        "stage_label_present": bool(record.stage_label),
+        "amount_minor": record.amount_minor,
+        "approved_amount_minor": record.approved_amount_minor,
+        "paid_amount_minor": _paid_amount_minor(record),
+        "pending_amount_minor": _pending_amount_minor(record),
+        "currency": record.currency,
+        "status": str(record.status),
+        "billed_on_present": record.billed_on is not None,
+        "due_on_present": record.due_on is not None,
+        "paid_on_present": record.paid_on is not None,
+        "notes_present": bool(record.notes),
+    }
 
 
 def _serialize_counsel_record(
@@ -220,6 +337,7 @@ def _serialize_assignment_record(
         ),
         role_summary=assignment.role_summary,
         budget_amount_minor=assignment.budget_amount_minor,
+        fee_agreed_minor=assignment.budget_amount_minor,
         currency=assignment.currency,
         status=assignment.status,
         internal_notes=assignment.internal_notes,
@@ -252,7 +370,11 @@ def _serialize_spend_record(
         currency=record.currency,
         amount_minor=record.amount_minor,
         approved_amount_minor=record.approved_amount_minor,
+        paid_amount_minor=_paid_amount_minor(record),
+        pending_amount_minor=_pending_amount_minor(record),
         status=record.status,
+        payment_status=record.status,
+        payment_tracking_status=_payment_tracking_status(record),
         billed_on=record.billed_on,
         due_on=record.due_on,
         paid_on=record.paid_on,
@@ -285,26 +407,140 @@ def _build_summary(
     total_budget_minor = sum(assignment.budget_amount_minor or 0 for assignment in assignments)
     total_spend_minor = sum(record.amount_minor for record in spend_records)
     approved_spend_minor = sum(record.approved_amount_minor for record in spend_records)
+    total_paid_minor = sum(_paid_amount_minor(record) for record in spend_records)
+    total_pending_minor = sum(_pending_amount_minor(record) for record in spend_records)
     disputed_spend_minor = sum(
         record.amount_minor
         for record in spend_records
         if record.status == OutsideCounselSpendStatus.DISPUTED
     )
-    collected_invoice_minor = sum(invoice.amount_received_minor for invoice in invoices)
-    outstanding_invoice_minor = sum(invoice.balance_due_minor for invoice in invoices)
+    today = date.today()
+    oc_invoices = [invoice for invoice in invoices if invoice.submitted_by_portal_user_id]
+    collected_invoice_minor = sum(invoice.amount_received_minor for invoice in oc_invoices)
+    outstanding_invoice_minor = sum(invoice.balance_due_minor for invoice in oc_invoices)
+    pending_invoice_count = sum(
+        1
+        for invoice in oc_invoices
+        if invoice.status
+        in {InvoiceStatus.NEEDS_REVIEW, InvoiceStatus.ISSUED, InvoiceStatus.PARTIALLY_PAID}
+    )
+    overdue_invoice_count = sum(
+        1
+        for invoice in oc_invoices
+        if invoice.due_on is not None
+        and invoice.due_on < today
+        and invoice.balance_due_minor > 0
+        and invoice.status not in {InvoiceStatus.PAID, InvoiceStatus.VOID}
+    )
+    currency = assignments[0].currency if assignments else "INR"
+    if not assignments and spend_records:
+        currency = spend_records[0].currency
+    currency_codes = _currency_codes(
+        assignments=assignments,
+        spend_records=spend_records,
+        invoices=oc_invoices,
+    )
     return OutsideCounselPortfolioSummary(
         company_id=company_id,
+        currency=currency,
+        currency_codes=currency_codes,
+        currency_count=len(currency_codes),
+        multi_currency=len(currency_codes) > 1,
         total_counsel_count=len(profiles),
+        profile_count=len(profiles),
         preferred_panel_count=preferred_panel_count,
         active_assignment_count=active_assignment_count,
+        total_agreed_minor=total_budget_minor,
         total_budget_minor=total_budget_minor,
         total_spend_minor=total_spend_minor,
         approved_spend_minor=approved_spend_minor,
+        total_paid_minor=total_paid_minor,
+        total_pending_minor=total_pending_minor,
         disputed_spend_minor=disputed_spend_minor,
+        pending_invoice_count=pending_invoice_count,
+        overdue_invoice_count=overdue_invoice_count,
         collected_invoice_minor=collected_invoice_minor,
         outstanding_invoice_minor=outstanding_invoice_minor,
         profitability_signal_minor=collected_invoice_minor - approved_spend_minor,
+        payment_status_counts=_spend_status_counts(spend_records),
     )
+
+
+def _build_matter_summaries(
+    *,
+    assignments: list[MatterOutsideCounselAssignment],
+    spend_records: list[OutsideCounselSpendRecord],
+    invoices: list[MatterInvoice],
+) -> list[OutsideCounselMatterSpendSummary]:
+    oc_invoices = [item for item in invoices if item.submitted_by_portal_user_id]
+    matter_ids = {
+        item.matter_id for item in assignments
+    } | {item.matter_id for item in spend_records} | {item.matter_id for item in oc_invoices}
+    summaries: list[OutsideCounselMatterSpendSummary] = []
+    today = date.today()
+    for matter_id in sorted(matter_ids):
+        matter_assignments = [item for item in assignments if item.matter_id == matter_id]
+        matter_spend = [item for item in spend_records if item.matter_id == matter_id]
+        matter_invoices = [
+            item
+            for item in oc_invoices
+            if item.matter_id == matter_id
+        ]
+        currency_codes = _currency_codes(
+            assignments=matter_assignments,
+            spend_records=matter_spend,
+            invoices=matter_invoices,
+        )
+        matter = (
+            matter_assignments[0].matter
+            if matter_assignments
+            else (matter_spend[0].matter if matter_spend else matter_invoices[0].matter)
+        )
+        summaries.append(
+            OutsideCounselMatterSpendSummary(
+                matter_id=matter_id,
+                matter_title=matter.title,
+                matter_code=matter.matter_code,
+                currency=(
+                    matter_assignments[0].currency
+                    if matter_assignments
+                    else (matter_spend[0].currency if matter_spend else "INR")
+                ),
+                currency_codes=currency_codes,
+                currency_count=len(currency_codes),
+                multi_currency=len(currency_codes) > 1,
+                assigned_counsel_count=len({item.counsel_id for item in matter_assignments}),
+                invoice_count=len(matter_invoices),
+                pending_invoice_count=sum(
+                    1
+                    for invoice in matter_invoices
+                    if invoice.status
+                    in {
+                        InvoiceStatus.NEEDS_REVIEW,
+                        InvoiceStatus.ISSUED,
+                        InvoiceStatus.PARTIALLY_PAID,
+                    }
+                ),
+                overdue_invoice_count=sum(
+                    1
+                    for invoice in matter_invoices
+                    if invoice.due_on is not None
+                    and invoice.due_on < today
+                    and invoice.balance_due_minor > 0
+                    and invoice.status not in {InvoiceStatus.PAID, InvoiceStatus.VOID}
+                ),
+                total_agreed_minor=sum(
+                    item.budget_amount_minor or 0 for item in matter_assignments
+                ),
+                total_spend_minor=sum(item.amount_minor for item in matter_spend),
+                approved_spend_minor=sum(item.approved_amount_minor for item in matter_spend),
+                total_paid_minor=sum(_paid_amount_minor(item) for item in matter_spend),
+                total_pending_minor=sum(_pending_amount_minor(item) for item in matter_spend),
+                payment_status_counts=_spend_status_counts(matter_spend),
+            )
+        )
+    summaries.sort(key=lambda item: (item.matter_code, item.matter_title))
+    return summaries
 
 
 def get_outside_counsel_workspace(
@@ -322,6 +558,7 @@ def get_outside_counsel_workspace(
     assignments = list(
         session.scalars(
             select(MatterOutsideCounselAssignment)
+            .join(Matter, Matter.id == MatterOutsideCounselAssignment.matter_id)
             .options(
                 joinedload(MatterOutsideCounselAssignment.matter),
                 joinedload(MatterOutsideCounselAssignment.counsel),
@@ -329,7 +566,11 @@ def get_outside_counsel_workspace(
                     CompanyMembership.user
                 ),
             )
-            .where(MatterOutsideCounselAssignment.company_id == context.company.id)
+            .where(
+                MatterOutsideCounselAssignment.company_id == context.company.id,
+                Matter.company_id == context.company.id,
+                visible_matters_filter(session, context=context),
+            )
             .order_by(
                 MatterOutsideCounselAssignment.updated_at.desc(),
                 MatterOutsideCounselAssignment.created_at.desc(),
@@ -339,6 +580,7 @@ def get_outside_counsel_workspace(
     spend_records = list(
         session.scalars(
             select(OutsideCounselSpendRecord)
+            .join(Matter, Matter.id == OutsideCounselSpendRecord.matter_id)
             .options(
                 joinedload(OutsideCounselSpendRecord.matter),
                 joinedload(OutsideCounselSpendRecord.counsel),
@@ -346,7 +588,11 @@ def get_outside_counsel_workspace(
                     CompanyMembership.user
                 ),
             )
-            .where(OutsideCounselSpendRecord.company_id == context.company.id)
+            .where(
+                OutsideCounselSpendRecord.company_id == context.company.id,
+                Matter.company_id == context.company.id,
+                visible_matters_filter(session, context=context),
+            )
             .order_by(
                 OutsideCounselSpendRecord.updated_at.desc(),
                 OutsideCounselSpendRecord.created_at.desc(),
@@ -356,7 +602,13 @@ def get_outside_counsel_workspace(
     invoices = list(
         session.scalars(
             select(MatterInvoice)
-            .where(MatterInvoice.company_id == context.company.id)
+            .join(Matter, Matter.id == MatterInvoice.matter_id)
+            .options(joinedload(MatterInvoice.matter))
+            .where(
+                MatterInvoice.company_id == context.company.id,
+                Matter.company_id == context.company.id,
+                visible_matters_filter(session, context=context),
+            )
             .order_by(MatterInvoice.updated_at.desc())
         )
     )
@@ -389,6 +641,11 @@ def get_outside_counsel_workspace(
         profiles=serialized_profiles,
         assignments=[_serialize_assignment_record(assignment) for assignment in assignments],
         spend_records=[_serialize_spend_record(record) for record in spend_records],
+        matter_summaries=_build_matter_summaries(
+            assignments=assignments,
+            spend_records=spend_records,
+            invoices=invoices,
+        ),
     )
 
 
@@ -549,6 +806,23 @@ def create_outside_counsel_assignment(
         title="Outside counsel linked",
         detail=f"{counsel.name} linked with status {assignment.status}.",
     )
+    record_from_context(
+        session,
+        context,
+        action="outside_counsel.assignment_created",
+        target_type="outside_counsel_assignment",
+        target_id=assignment.id,
+        matter_id=matter.id,
+        metadata={
+            "matter_id": matter.id,
+            "counsel_id": counsel.id,
+            "budget_amount_minor": assignment.budget_amount_minor,
+            "fee_agreed_minor": assignment.budget_amount_minor,
+            "currency": assignment.currency,
+            "status": str(assignment.status),
+            "has_internal_notes": bool(assignment.internal_notes),
+        },
+    )
     session.commit()
     refreshed = session.scalar(
         select(MatterOutsideCounselAssignment)
@@ -597,22 +871,11 @@ def create_outside_counsel_spend_record(
             )
         )
 
-    if (
-        payload.approved_amount_minor is not None
-        and payload.approved_amount_minor > payload.amount_minor
-    ):
-        _raise_bad_request("Approved spend cannot exceed the submitted spend amount.")
-
-    approved_amount_minor = payload.approved_amount_minor
-    if payload.status in {OutsideCounselSpendStatus.APPROVED, OutsideCounselSpendStatus.PAID}:
-        approved_amount_minor = (
-            payload.amount_minor if approved_amount_minor is None else approved_amount_minor
-        )
-    elif payload.status == OutsideCounselSpendStatus.PARTIALLY_APPROVED:
-        if approved_amount_minor is None:
-            _raise_bad_request("Provide an approved amount for partially approved spend records.")
-    else:
-        approved_amount_minor = 0 if approved_amount_minor is None else approved_amount_minor
+    approved_amount_minor = _normalise_approved_amount(
+        amount_minor=payload.amount_minor,
+        approved_amount_minor=payload.approved_amount_minor,
+        status_value=payload.status,
+    )
 
     spend_record = OutsideCounselSpendRecord(
         company_id=context.company.id,
@@ -655,10 +918,8 @@ def create_outside_counsel_spend_record(
         target_id=spend_record.id,
         matter_id=matter.id,
         metadata={
-            "counsel_id": counsel.id,
-            "amount_minor": payload.amount_minor,
-            "currency": spend_record.currency,
-            "description": spend_record.description,
+            **_spend_audit_metadata(spend_record),
+            "change_type": "created",
         },
     )
     session.commit()
@@ -674,6 +935,109 @@ def create_outside_counsel_spend_record(
         .where(OutsideCounselSpendRecord.id == spend_record.id)
     )
     assert refreshed is not None
+    return _serialize_spend_record(refreshed)
+
+
+def update_outside_counsel_spend_record(
+    session: Session,
+    *,
+    context: SessionContext,
+    spend_record_id: str,
+    payload: OutsideCounselSpendRecordUpdateRequest,
+) -> OutsideCounselSpendRecordResponse:
+    spend_record = _get_spend_record_model(
+        session,
+        company_id=context.company.id,
+        spend_record_id=spend_record_id,
+    )
+    assert_access(session, context=context, matter=spend_record.matter)
+    updates = payload.model_dump(exclude_unset=True)
+    if not updates:
+        return _serialize_spend_record(spend_record)
+
+    old_status = str(spend_record.status)
+    old_pending = _pending_amount_minor(spend_record)
+
+    if "assignment_id" in updates:
+        assignment_id = updates["assignment_id"]
+        if assignment_id is None:
+            spend_record.assignment_id = None
+        else:
+            assignment = _get_assignment_model(
+                session,
+                company_id=context.company.id,
+                assignment_id=assignment_id,
+            )
+            if (
+                assignment.matter_id != spend_record.matter_id
+                or assignment.counsel_id != spend_record.counsel_id
+            ):
+                _raise_bad_request(
+                    "The selected assignment does not match the spend record."
+                )
+            spend_record.assignment_id = assignment.id
+
+    for attr in ("invoice_reference", "stage_label", "description", "notes"):
+        if attr in updates:
+            value = updates[attr]
+            setattr(spend_record, attr, value.strip() if isinstance(value, str) else value)
+
+    if "currency" in updates and updates["currency"] is not None:
+        spend_record.currency = updates["currency"].strip().upper()
+    if "amount_minor" in updates and updates["amount_minor"] is not None:
+        spend_record.amount_minor = updates["amount_minor"]
+    if "billed_on" in updates:
+        spend_record.billed_on = updates["billed_on"]
+    if "due_on" in updates:
+        spend_record.due_on = updates["due_on"]
+    if "paid_on" in updates:
+        spend_record.paid_on = updates["paid_on"]
+    if "status" in updates and updates["status"] is not None:
+        spend_record.status = updates["status"]
+
+    approved_supplied = "approved_amount_minor" in updates
+    approved_value = (
+        updates["approved_amount_minor"]
+        if approved_supplied
+        else spend_record.approved_amount_minor
+    )
+    if (
+        not approved_supplied
+        and str(spend_record.status)
+        in {OutsideCounselSpendStatus.APPROVED, OutsideCounselSpendStatus.PAID}
+        and str(spend_record.status) != old_status
+    ):
+        approved_value = None
+    spend_record.approved_amount_minor = _normalise_approved_amount(
+        amount_minor=spend_record.amount_minor,
+        approved_amount_minor=approved_value,
+        status_value=spend_record.status,
+        status_changed=str(spend_record.status) != old_status,
+    )
+
+    session.add(spend_record)
+    session.flush()
+    record_from_context(
+        session,
+        context,
+        action="outside_counsel.spend_updated",
+        target_type="outside_counsel_spend",
+        target_id=spend_record.id,
+        matter_id=spend_record.matter_id,
+        metadata={
+            **_spend_audit_metadata(spend_record),
+            "change_type": "updated",
+            "previous_status": old_status,
+            "status_changed": str(spend_record.status) != old_status,
+            "previous_pending_amount_minor": old_pending,
+        },
+    )
+    session.commit()
+    refreshed = _get_spend_record_model(
+        session,
+        company_id=context.company.id,
+        spend_record_id=spend_record.id,
+    )
     return _serialize_spend_record(refreshed)
 
 

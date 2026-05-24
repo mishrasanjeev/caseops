@@ -18,6 +18,7 @@ from caseops_api.schemas.outside_counsel import (
     OutsideCounselRecord,
     OutsideCounselSpendRecord,
     OutsideCounselSpendRecordCreateRequest,
+    OutsideCounselSpendRecordUpdateRequest,
     OutsideCounselUpdateRequest,
     OutsideCounselWorkspaceResponse,
 )
@@ -29,6 +30,7 @@ from caseops_api.services.outside_counsel import (
     get_outside_counsel_recommendations,
     get_outside_counsel_workspace,
     update_outside_counsel_profile,
+    update_outside_counsel_spend_record,
 )
 
 router = APIRouter()
@@ -107,6 +109,25 @@ async def post_current_company_outside_counsel_spend_record(
     session: DbSession,
 ) -> OutsideCounselSpendRecord:
     return create_outside_counsel_spend_record(session, context=context, payload=payload)
+
+
+@router.patch(
+    "/spend-records/{spend_record_id}",
+    response_model=OutsideCounselSpendRecord,
+    summary="Update outside counsel spend/payment status",
+)
+async def patch_current_company_outside_counsel_spend_record(
+    spend_record_id: str,
+    payload: OutsideCounselSpendRecordUpdateRequest,
+    context: CounselManager,
+    session: DbSession,
+) -> OutsideCounselSpendRecord:
+    return update_outside_counsel_spend_record(
+        session,
+        context=context,
+        spend_record_id=spend_record_id,
+        payload=payload,
+    )
 
 
 @router.post(

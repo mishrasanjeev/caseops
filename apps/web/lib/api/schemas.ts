@@ -1499,12 +1499,23 @@ export const outsideCounsel = z.object({
 
 export const outsideCounselPortfolioSummary = z.object({
   profile_count: z.number().int().optional(),
+  total_counsel_count: z.number().int().optional(),
   active_assignment_count: z.number().int().optional(),
+  total_agreed_minor: z.number().int().optional(),
+  total_budget_minor: z.number().int().optional(),
   total_spend_minor: z.number().int().optional(),
   approved_spend_minor: z.number().int().optional(),
+  total_paid_minor: z.number().int().optional(),
+  total_pending_minor: z.number().int().optional(),
+  pending_invoice_count: z.number().int().optional(),
+  overdue_invoice_count: z.number().int().optional(),
   currency: z.string().default("INR"),
+  currency_codes: z.array(z.string()).default(["INR"]),
+  currency_count: z.number().int().optional(),
+  multi_currency: z.boolean().optional(),
   outstanding_invoice_minor: z.number().int().optional(),
   profitability_signal_minor: z.number().int().optional(),
+  payment_status_counts: z.record(z.string(), z.number().int()).optional(),
 }).passthrough();
 
 // Hari-BUG-018/023 follow-up (2026-04-22): assignment status MUST
@@ -1532,6 +1543,7 @@ export const outsideCounselAssignment = z.object({
   assigned_by_name: z.string().nullable(),
   role_summary: z.string().nullable(),
   budget_amount_minor: z.number().int().nullable(),
+  fee_agreed_minor: z.number().int().nullable().optional(),
   currency: z.string(),
   status: outsideCounselAssignmentStatus,
   internal_notes: z.string().nullable(),
@@ -1566,9 +1578,36 @@ export const outsideCounselSpend = z.object({
   currency: z.string(),
   amount_minor: z.number().int(),
   approved_amount_minor: z.number().int().nullable(),
+  paid_amount_minor: z.number().int().optional(),
+  pending_amount_minor: z.number().int().optional(),
   status: outsideCounselSpendStatus,
+  payment_status: outsideCounselSpendStatus.optional(),
+  payment_tracking_status: z.enum(["unpaid", "partially_paid", "paid"]).optional(),
+  invoice_reference: z.string().nullable().optional(),
+  due_on: z.string().nullable().optional(),
+  paid_on: z.string().nullable().optional(),
   created_at: z.string(),
   updated_at: z.string(),
+}).passthrough();
+
+export const outsideCounselMatterSpendSummary = z.object({
+  matter_id: z.string(),
+  matter_title: z.string(),
+  matter_code: z.string(),
+  currency: z.string().default("INR"),
+  currency_codes: z.array(z.string()).default(["INR"]),
+  currency_count: z.number().int().optional(),
+  multi_currency: z.boolean().optional(),
+  assigned_counsel_count: z.number().int(),
+  invoice_count: z.number().int(),
+  pending_invoice_count: z.number().int(),
+  overdue_invoice_count: z.number().int(),
+  total_agreed_minor: z.number().int(),
+  total_spend_minor: z.number().int(),
+  approved_spend_minor: z.number().int(),
+  total_paid_minor: z.number().int(),
+  total_pending_minor: z.number().int(),
+  payment_status_counts: z.record(z.string(), z.number().int()),
 }).passthrough();
 
 export const outsideCounselWorkspace = z.object({
@@ -1576,6 +1615,7 @@ export const outsideCounselWorkspace = z.object({
   profiles: z.array(outsideCounsel),
   assignments: z.array(outsideCounselAssignment).default([]),
   spend_records: z.array(outsideCounselSpend).default([]),
+  matter_summaries: z.array(outsideCounselMatterSpendSummary).default([]),
 }).passthrough();
 
 export const hearingPackItemKind = z.enum([
