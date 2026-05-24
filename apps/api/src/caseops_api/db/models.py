@@ -2018,6 +2018,100 @@ class InAppNotification(Base):
     matter: Mapped[Matter | None] = relationship()
 
 
+class JudgmentAlertRule(Base):
+    __tablename__ = "judgment_alert_rules"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    query_terms_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    court_name: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    forum_level: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    judge_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    practice_area: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    statute_terms_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    document_types_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    since_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    until_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    is_archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship()
+    created_by_membership: Mapped[CompanyMembership | None] = relationship()
+    alerts: Mapped[list[JudgmentAlert]] = relationship(
+        back_populates="rule",
+        cascade="all, delete-orphan",
+    )
+
+
+class JudgmentAlert(Base):
+    __tablename__ = "judgment_alerts"
+    __table_args__ = (
+        UniqueConstraint(
+            "rule_id",
+            "authority_document_id",
+            name="uq_judgment_alert_rule_authority",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    rule_id: Mapped[str] = mapped_column(
+        ForeignKey("judgment_alert_rules.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    authority_document_id: Mapped[str] = mapped_column(
+        ForeignKey("authority_documents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    match_reason: Mapped[str] = mapped_column(String(500), nullable=False)
+    snippet: Mapped[str | None] = mapped_column(String(280), nullable=True)
+    is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    dismissed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship()
+    rule: Mapped[JudgmentAlertRule] = relationship(back_populates="alerts")
+    authority_document: Mapped[AuthorityDocument] = relationship()
+
+
 class MatterActivity(Base):
     __tablename__ = "matter_activity"
 

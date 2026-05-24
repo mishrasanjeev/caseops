@@ -1,13 +1,18 @@
 "use client";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Bell,
   Bookmark,
+  CheckCircle2,
+  Eye,
   LibraryBig,
   Loader2,
+  Play,
   Scale,
   Search,
   SlidersHorizontal,
+  XCircle,
 } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -39,9 +44,18 @@ import {
   type AuthorityForumLevel,
   type AuthoritySearchMode,
   type AuthoritySearchResult,
+  type JudgmentAlert,
+  type JudgmentAlertRule,
   createAuthorityAnnotation,
+  createJudgmentAlertRule,
+  fetchJudgmentAlertDigestPreview,
   fetchAuthorityCorpusStats,
+  listJudgmentAlertRules,
+  listJudgmentAlerts,
+  runJudgmentAlertRule,
   searchAuthorities,
+  updateJudgmentAlert,
+  updateJudgmentAlertRule,
 } from "@/lib/api/endpoints";
 import { useCapability } from "@/lib/capabilities";
 import { formatLegalDate } from "@/lib/dates";
@@ -50,6 +64,7 @@ type ForumFilter = "any" | AuthorityForumLevel;
 type DocTypeFilter = "any" | AuthorityDocumentType;
 
 export default function ResearchPage() {
+  const queryClient = useQueryClient();
   const canSearch = useCapability("authorities:search");
   const canAnnotate = useCapability("authorities:annotate");
   const searchParams = useSearchParams();
@@ -84,6 +99,14 @@ export default function ResearchPage() {
   const [savedAuthorityIds, setSavedAuthorityIds] = useState<Set<string>>(
     () => new Set(),
   );
+  const [alertRuleName, setAlertRuleName] = useState("");
+  const [alertRuleTerms, setAlertRuleTerms] = useState("");
+  const [lastAlertRun, setLastAlertRun] = useState<{
+    ruleId: string;
+    matchedCount: number;
+    createdCount: number;
+    previewOnly: boolean;
+  } | null>(null);
 
   const statsQuery = useQuery({
     queryKey: ["authorities", "stats"],
@@ -120,6 +143,24 @@ export default function ResearchPage() {
     enabled: canSearch && pendingQuery.trim().length >= 2,
   });
 
+  const alertRulesQuery = useQuery({
+    queryKey: ["authorities", "judgment-alert-rules"],
+    queryFn: () => listJudgmentAlertRules(),
+    enabled: canSearch,
+  });
+
+  const alertsQuery = useQuery({
+    queryKey: ["authorities", "judgment-alerts"],
+    queryFn: () => listJudgmentAlerts({ limit: 20 }),
+    enabled: canSearch,
+  });
+
+  const digestQuery = useQuery({
+    queryKey: ["authorities", "judgment-alert-digest-preview"],
+    queryFn: () => fetchJudgmentAlertDigestPreview({ limit: 5 }),
+    enabled: canSearch,
+  });
+
   const saveMutation = useMutation({
     mutationFn: (input: AuthoritySearchResult) =>
       createAuthorityAnnotation({
@@ -143,6 +184,93 @@ export default function ResearchPage() {
       toast.error(apiErrorMessage(err, "Could not save that authority."));
     },
   });
+
+  const createAlertRuleMutation = useMutation({
+    mutationFn: () =>
+      createJudgmentAlertRule({
+        name: alertRuleName.trim(),
+        query_terms: splitAlertTerms(alertRuleTerms),
+        document_types: ["judgment", "order"],
+      }),
+    onSuccess: () => {
+      setAlertRuleName("");
+      setAlertRuleTerms("");
+      toast.success("Judgment alert rule saved");
+      queryClient.invalidateQueries({
+        queryKey: ["authorities", "judgment-alert-rules"],
+      });
+    },
+    onError: (err) => {
+      toast.error(apiErrorMessage(err, "Could not save the alert rule."));
+    },
+  });
+
+  const runAlertRuleMutation = useMutation({
+    mutationFn: (input: { ruleId: string; previewOnly: boolean }) =>
+      runJudgmentAlertRule({
+        ruleId: input.ruleId,
+        previewOnly: input.previewOnly,
+        limit: 10,
+      }),
+    onSuccess: (result) => {
+      setLastAlertRun({
+        ruleId: result.rule_id,
+        matchedCount: result.matched_count,
+        createdCount: result.created_count,
+        previewOnly: result.preview_only,
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["authorities", "judgment-alerts"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["authorities", "judgment-alert-digest-preview"],
+      });
+    },
+    onError: (err) => {
+      toast.error(apiErrorMessage(err, "Could not run that alert rule."));
+    },
+  });
+
+  const updateAlertMutation = useMutation({
+    mutationFn: (input: { alertId: string; action: "read" | "dismiss" }) =>
+      updateJudgmentAlert(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["authorities", "judgment-alerts"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["authorities", "judgment-alert-digest-preview"],
+      });
+    },
+    onError: (err) => {
+      toast.error(apiErrorMessage(err, "Could not update that alert."));
+    },
+  });
+
+  const archiveAlertRuleMutation = useMutation({
+    mutationFn: (ruleId: string) =>
+      updateJudgmentAlertRule(ruleId, { is_archived: true }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["authorities", "judgment-alert-rules"],
+      });
+    },
+    onError: (err) => {
+      toast.error(apiErrorMessage(err, "Could not archive that alert rule."));
+    },
+  });
+
+  const handleCreateAlertRule = () => {
+    if (alertRuleName.trim().length < 2) {
+      toast.error("Name the alert rule before saving.");
+      return;
+    }
+    if (splitAlertTerms(alertRuleTerms).length === 0) {
+      toast.error("Add at least one bounded query or statute term.");
+      return;
+    }
+    createAlertRuleMutation.mutate();
+  };
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -395,6 +523,42 @@ export default function ResearchPage() {
         </CardContent>
       </Card>
 
+      {canSearch ? (
+        <JudgmentAlertsPanel
+          rules={alertRulesQuery.data?.rules ?? []}
+          alerts={alertsQuery.data?.alerts ?? []}
+          digest={digestQuery.data ?? null}
+          isLoading={
+            alertRulesQuery.isLoading ||
+            alertsQuery.isLoading ||
+            digestQuery.isLoading
+          }
+          ruleName={alertRuleName}
+          ruleTerms={alertRuleTerms}
+          onRuleNameChange={setAlertRuleName}
+          onRuleTermsChange={setAlertRuleTerms}
+          onCreateRule={handleCreateAlertRule}
+          creatingRule={createAlertRuleMutation.isPending}
+          onPreviewRule={(ruleId) =>
+            runAlertRuleMutation.mutate({ ruleId, previewOnly: true })
+          }
+          onRunRule={(ruleId) =>
+            runAlertRuleMutation.mutate({ ruleId, previewOnly: false })
+          }
+          runningRuleId={runAlertRuleMutation.variables?.ruleId ?? null}
+          onArchiveRule={(ruleId) => archiveAlertRuleMutation.mutate(ruleId)}
+          archivingRuleId={archiveAlertRuleMutation.variables ?? null}
+          onMarkRead={(alertId) =>
+            updateAlertMutation.mutate({ alertId, action: "read" })
+          }
+          onDismiss={(alertId) =>
+            updateAlertMutation.mutate({ alertId, action: "dismiss" })
+          }
+          updatingAlertId={updateAlertMutation.variables?.alertId ?? null}
+          lastRun={lastAlertRun}
+        />
+      ) : null}
+
       {!canSearch ? (
         <EmptyState
           icon={LibraryBig}
@@ -592,6 +756,313 @@ export function isGarbledSnippet(text: string | null | undefined): boolean {
     if (dirtyTokens / tokens.length > 0.3) return true;
   }
   return false;
+}
+
+function splitAlertTerms(value: string): string[] {
+  return value
+    .split(",")
+    .map((term) => term.trim())
+    .filter(Boolean)
+    .slice(0, 8);
+}
+
+function JudgmentAlertsPanel({
+  rules,
+  alerts,
+  digest,
+  isLoading,
+  ruleName,
+  ruleTerms,
+  onRuleNameChange,
+  onRuleTermsChange,
+  onCreateRule,
+  creatingRule,
+  onPreviewRule,
+  onRunRule,
+  runningRuleId,
+  onArchiveRule,
+  archivingRuleId,
+  onMarkRead,
+  onDismiss,
+  updatingAlertId,
+  lastRun,
+}: {
+  rules: JudgmentAlertRule[];
+  alerts: JudgmentAlert[];
+  digest: {
+    unread_count: number;
+    alerts: JudgmentAlert[];
+    delivery_status: "in_app_only";
+    delivery_note: string;
+  } | null;
+  isLoading: boolean;
+  ruleName: string;
+  ruleTerms: string;
+  onRuleNameChange: (value: string) => void;
+  onRuleTermsChange: (value: string) => void;
+  onCreateRule: () => void;
+  creatingRule: boolean;
+  onPreviewRule: (ruleId: string) => void;
+  onRunRule: (ruleId: string) => void;
+  runningRuleId: string | null;
+  onArchiveRule: (ruleId: string) => void;
+  archivingRuleId: string | null;
+  onMarkRead: (alertId: string) => void;
+  onDismiss: (alertId: string) => void;
+  updatingAlertId: string | null;
+  lastRun: {
+    ruleId: string;
+    matchedCount: number;
+    createdCount: number;
+    previewOnly: boolean;
+  } | null;
+}) {
+  const activeRules = rules.filter((rule) => !rule.is_archived);
+
+  return (
+    <section
+      className="rounded-lg border border-[var(--color-line)] bg-white"
+      data-testid="judgment-alert-center"
+    >
+      <div className="flex flex-col gap-1 border-b border-[var(--color-line)] px-4 py-3">
+        <div className="flex items-center gap-2">
+          <Bell className="h-4 w-4 text-[var(--color-brand-600)]" aria-hidden />
+          <h2 className="text-base font-semibold text-[var(--color-ink)]">
+            Judgment alerts
+          </h2>
+          <span className="rounded-full border border-[var(--color-line)] bg-[var(--color-bg-2)] px-2 py-0.5 text-[11px] font-medium text-[var(--color-ink-2)]">
+            In-app only
+          </span>
+        </div>
+        <p className="text-xs text-[var(--color-mute)]">
+          Manual matching against existing indexed judgments and orders. External
+          delivery is not configured in this foundation.
+        </p>
+      </div>
+
+      <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+        <div className="flex flex-col gap-3">
+          <div className="grid gap-2 sm:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)_auto]">
+            <Input
+              value={ruleName}
+              onChange={(event) => onRuleNameChange(event.target.value)}
+              placeholder="Alert name"
+              aria-label="Judgment alert rule name"
+              data-testid="judgment-alert-name"
+            />
+            <Input
+              value={ruleTerms}
+              onChange={(event) => onRuleTermsChange(event.target.value)}
+              placeholder="query/statute terms, comma separated"
+              aria-label="Judgment alert query terms"
+              data-testid="judgment-alert-terms"
+            />
+            <Button
+              type="button"
+              size="sm"
+              onClick={onCreateRule}
+              disabled={creatingRule}
+              data-testid="judgment-alert-create"
+            >
+              {creatingRule ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              ) : (
+                <Bell className="h-4 w-4" aria-hidden />
+              )}
+              Save
+            </Button>
+          </div>
+
+          {isLoading ? (
+            <div className="flex items-center gap-2 text-xs text-[var(--color-mute)]">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+              Loading alert center
+            </div>
+          ) : activeRules.length === 0 ? (
+            <p className="rounded-md border border-dashed border-[var(--color-line)] px-3 py-2 text-xs text-[var(--color-mute)]">
+              No active judgment alert rules yet.
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-2" data-testid="judgment-alert-rules">
+              {activeRules.map((rule) => (
+                <li
+                  key={rule.id}
+                  className="rounded-md border border-[var(--color-line)] px-3 py-2"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-[var(--color-ink)]">
+                        {rule.name}
+                      </p>
+                      <p className="mt-1 text-xs text-[var(--color-mute)]">
+                        {[...rule.query_terms, ...rule.statute_terms]
+                          .slice(0, 4)
+                          .join(", ") || "Judgments and orders"}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 flex-wrap justify-end gap-1">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => onPreviewRule(rule.id)}
+                        disabled={runningRuleId === rule.id}
+                        data-testid={`judgment-alert-preview-${rule.id}`}
+                      >
+                        <Eye className="h-3.5 w-3.5" aria-hidden />
+                        Preview
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => onRunRule(rule.id)}
+                        disabled={runningRuleId === rule.id}
+                        data-testid={`judgment-alert-run-${rule.id}`}
+                      >
+                        <Play className="h-3.5 w-3.5" aria-hidden />
+                        Run
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => onArchiveRule(rule.id)}
+                        disabled={archivingRuleId === rule.id}
+                        data-testid={`judgment-alert-archive-${rule.id}`}
+                      >
+                        <XCircle className="h-3.5 w-3.5" aria-hidden />
+                        Archive
+                      </Button>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {lastRun ? (
+            <div
+              className="rounded-md border border-[var(--color-line)] bg-[var(--color-bg-2)] px-3 py-2 text-xs text-[var(--color-ink-2)]"
+              data-testid="judgment-alert-run-summary"
+            >
+              {lastRun.previewOnly ? "Preview found" : "Run created"}{" "}
+              {lastRun.previewOnly
+                ? lastRun.matchedCount
+                : lastRun.createdCount}{" "}
+              in-app alert{(lastRun.previewOnly ? lastRun.matchedCount : lastRun.createdCount) === 1 ? "" : "s"}.
+            </div>
+          ) : null}
+        </div>
+
+        <div className="flex flex-col gap-3">
+          <div
+            className="rounded-md border border-[var(--color-line)] bg-[var(--color-bg-2)] px-3 py-2 text-xs text-[var(--color-ink-2)]"
+            data-testid="judgment-alert-digest"
+          >
+            Digest preview: {digest?.unread_count ?? 0} unread in-app alert
+            {(digest?.unread_count ?? 0) === 1 ? "" : "s"}.{" "}
+            {digest?.delivery_note ??
+              "External delivery is not configured in this foundation."}
+          </div>
+
+          {alerts.length === 0 ? (
+            <p className="rounded-md border border-dashed border-[var(--color-line)] px-3 py-2 text-xs text-[var(--color-mute)]">
+              No judgment alerts have been generated yet.
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-2" data-testid="judgment-alerts">
+              {alerts.map((alert) => (
+                <JudgmentAlertItem
+                  key={alert.id}
+                  alert={alert}
+                  updating={updatingAlertId === alert.id}
+                  onMarkRead={() => onMarkRead(alert.id)}
+                  onDismiss={() => onDismiss(alert.id)}
+                />
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function JudgmentAlertItem({
+  alert,
+  updating,
+  onMarkRead,
+  onDismiss,
+}: {
+  alert: JudgmentAlert;
+  updating: boolean;
+  onMarkRead: () => void;
+  onDismiss: () => void;
+}) {
+  const authority = alert.authority;
+  const dateLabel = formatLegalDate(authority.decision_date, {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+
+  return (
+    <li className="rounded-md border border-[var(--color-line)] px-3 py-2">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-1 text-[11px] text-[var(--color-mute)]">
+            <span>{authority.court_name}</span>
+            <span>Â· {dateLabel}</span>
+            {authority.citation_reference ? (
+              <span className="font-mono">Â· {authority.citation_reference}</span>
+            ) : null}
+            {!alert.is_read ? (
+              <span className="rounded-full bg-[var(--color-brand-50)] px-1.5 py-0.5 font-medium text-[var(--color-brand-700)]">
+                unread
+              </span>
+            ) : null}
+          </div>
+          <h3 className="mt-1 text-sm font-semibold text-[var(--color-ink)]">
+            {authority.title}
+          </h3>
+          <p className="mt-1 text-xs text-[var(--color-ink-2)]">
+            {authority.match_reason}
+          </p>
+          {authority.snippet ? (
+            <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-[var(--color-mute)]">
+              {authority.snippet}
+            </p>
+          ) : null}
+        </div>
+        <div className="flex shrink-0 flex-wrap justify-end gap-1">
+          {!alert.is_read ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={onMarkRead}
+              disabled={updating}
+              data-testid={`judgment-alert-read-${alert.id}`}
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
+              Read
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={onDismiss}
+            disabled={updating}
+            data-testid={`judgment-alert-dismiss-${alert.id}`}
+          >
+            <XCircle className="h-3.5 w-3.5" aria-hidden />
+            Dismiss
+          </Button>
+        </div>
+      </div>
+    </li>
+  );
 }
 
 function AuthorityCard({

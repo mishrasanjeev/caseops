@@ -3611,6 +3611,164 @@ export async function createAuthorityAnnotation(input: {
   );
 }
 
+export type JudgmentAlertDocumentType = "judgment" | "order";
+
+export type JudgmentAlertRule = {
+  id: string;
+  company_id: string;
+  name: string;
+  query_terms: string[];
+  court_name: string | null;
+  forum_level: AuthorityForumLevel | null;
+  judge_name: string | null;
+  practice_area: string | null;
+  statute_terms: string[];
+  document_types: JudgmentAlertDocumentType[];
+  since_date: string | null;
+  until_date: string | null;
+  is_archived: boolean;
+  created_by_membership_id: string | null;
+  created_at: string;
+  updated_at: string;
+  archived_at: string | null;
+};
+
+export type JudgmentAlertAuthority = {
+  authority_document_id: string;
+  title: string;
+  court_name: string;
+  forum_level: string;
+  document_type: string;
+  citation_reference: string | null;
+  decision_date: string | null;
+  match_reason: string;
+  source: string;
+  source_reference: string | null;
+  snippet: string | null;
+};
+
+export type JudgmentAlert = {
+  id: string;
+  company_id: string;
+  rule_id: string;
+  is_read: boolean;
+  read_at: string | null;
+  dismissed_at: string | null;
+  created_at: string;
+  authority: JudgmentAlertAuthority;
+};
+
+export type JudgmentAlertRuleInput = {
+  name: string;
+  query_terms?: string[];
+  court_name?: string | null;
+  forum_level?: AuthorityForumLevel | null;
+  judge_name?: string | null;
+  practice_area?: string | null;
+  statute_terms?: string[];
+  document_types?: JudgmentAlertDocumentType[];
+  since_date?: string | null;
+  until_date?: string | null;
+};
+
+export async function listJudgmentAlertRules(): Promise<{
+  rules: JudgmentAlertRule[];
+}> {
+  return apiRequest("/api/authorities/alerts/rules");
+}
+
+export async function createJudgmentAlertRule(
+  input: JudgmentAlertRuleInput,
+): Promise<JudgmentAlertRule> {
+  return apiRequest("/api/authorities/alerts/rules", {
+    method: "POST",
+    body: {
+      name: input.name,
+      query_terms: input.query_terms ?? [],
+      court_name: input.court_name ?? null,
+      forum_level: input.forum_level ?? null,
+      judge_name: input.judge_name ?? null,
+      practice_area: input.practice_area ?? null,
+      statute_terms: input.statute_terms ?? [],
+      document_types: input.document_types ?? ["judgment", "order"],
+      since_date: input.since_date ?? null,
+      until_date: input.until_date ?? null,
+    },
+  });
+}
+
+export async function updateJudgmentAlertRule(
+  ruleId: string,
+  input: Partial<JudgmentAlertRuleInput> & { is_archived?: boolean },
+): Promise<JudgmentAlertRule> {
+  return apiRequest(`/api/authorities/alerts/rules/${ruleId}`, {
+    method: "PATCH",
+    body: input,
+  });
+}
+
+export async function runJudgmentAlertRule(input: {
+  ruleId: string;
+  previewOnly?: boolean;
+  limit?: number;
+}): Promise<{
+  rule_id: string;
+  preview_only: boolean;
+  matched_count: number;
+  created_count: number;
+  matches: JudgmentAlertAuthority[];
+  delivery_status: "in_app_only";
+}> {
+  return apiRequest(`/api/authorities/alerts/rules/${input.ruleId}/run`, {
+    method: "POST",
+    body: {
+      preview_only: input.previewOnly ?? false,
+      limit: input.limit ?? 20,
+    },
+  });
+}
+
+export async function listJudgmentAlerts(input?: {
+  includeDismissed?: boolean;
+  limit?: number;
+}): Promise<{ alerts: JudgmentAlert[] }> {
+  const params = new URLSearchParams();
+  if (input?.includeDismissed) params.set("include_dismissed", "true");
+  if (input?.limit) params.set("limit", String(input.limit));
+  const path = params.toString()
+    ? `/api/authorities/alerts?${params.toString()}`
+    : "/api/authorities/alerts";
+  return apiRequest(path);
+}
+
+export async function updateJudgmentAlert(input: {
+  alertId: string;
+  action: "read" | "dismiss";
+}): Promise<JudgmentAlert> {
+  return apiRequest(`/api/authorities/alerts/${input.alertId}`, {
+    method: "PATCH",
+    body: { action: input.action },
+  });
+}
+
+export async function fetchJudgmentAlertDigestPreview(input?: {
+  limit?: number;
+}): Promise<{
+  generated_at: string;
+  unread_count: number;
+  dismissed_count: number;
+  alerts: JudgmentAlert[];
+  delivery_status: "in_app_only";
+  delivery_note: string;
+}> {
+  const params = new URLSearchParams();
+  if (input?.limit) params.set("limit", String(input.limit));
+  const path = params.toString()
+    ? `/api/authorities/alerts/digest-preview?${params.toString()}`
+    : "/api/authorities/alerts/digest-preview";
+  return apiRequest(path);
+}
+
 // BUG-030: saved-research history (annotation joined with the
 // authority preview the list view needs to render in one round trip).
 export type SavedAuthorityAnnotation = {
