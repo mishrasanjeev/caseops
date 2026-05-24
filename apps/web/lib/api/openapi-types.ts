@@ -2903,6 +2903,60 @@ export interface paths {
         patch: operations["patch_current_company_matter_deadline_api_matters__matter_id__deadlines__deadline_id__patch"];
         trace?: never;
     };
+    "/api/matters/{matter_id}/drafting-data": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List reviewed drafting data suggestions for a matter */
+        get: operations["get_current_company_matter_drafting_data_api_matters__matter_id__drafting_data_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/{matter_id}/drafting-data/extract": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Extract drafting data suggestions from existing matter documents
+         * @description Deterministic, matter-scoped dry extraction from already-indexed or extracted uploaded document text. This does not read storage objects, run OCR, run embeddings, or call an LLM. Suggested fields require lawyer review before draft generation can use them.
+         */
+        post: operations["post_current_company_matter_drafting_data_extract_api_matters__matter_id__drafting_data_extract_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/{matter_id}/drafting-data/{field_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Confirm, override, or reject a drafting data suggestion */
+        patch: operations["patch_current_company_matter_drafting_data_field_api_matters__matter_id__drafting_data__field_id__patch"];
+        trace?: never;
+    };
     "/api/matters/{matter_id}/drafts": {
         parameters: {
             query?: never;
@@ -8097,6 +8151,114 @@ export interface components {
             summary: string | null;
             /** Verified Citation Count */
             verified_citation_count: number;
+        };
+        /** DraftingDataExtractionResponse */
+        DraftingDataExtractionResponse: {
+            counts: components["schemas"]["DraftingDataStatusCounts"];
+            /**
+             * Created Count
+             * @default 0
+             */
+            created_count: number;
+            /** Fields */
+            fields: components["schemas"]["DraftingDataFieldRecord"][];
+            /** Matter Id */
+            matter_id: string;
+            /**
+             * Source Attachment Count
+             * @default 0
+             */
+            source_attachment_count: number;
+            /**
+             * Updated Count
+             * @default 0
+             */
+            updated_count: number;
+        };
+        /** DraftingDataFieldRecord */
+        DraftingDataFieldRecord: {
+            /**
+             * Confidence Band
+             * @enum {string}
+             */
+            confidence_band: "high" | "medium" | "low";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Effective Value */
+            effective_value: string | null;
+            /** Field Key */
+            field_key: string;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Matter Id */
+            matter_id: string;
+            /** Proposed Value */
+            proposed_value: string;
+            /** Reviewed At */
+            reviewed_at: string | null;
+            /** Reviewed By Membership Id */
+            reviewed_by_membership_id: string | null;
+            /** Reviewed Value */
+            reviewed_value: string | null;
+            /** Source Attachment Id */
+            source_attachment_id: string | null;
+            /** Source Snippet */
+            source_snippet: string | null;
+            /** Source Verified */
+            source_verified: boolean;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "suggested" | "needs_review" | "confirmed" | "overridden" | "rejected";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** DraftingDataReviewRequest */
+        DraftingDataReviewRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "confirm" | "override" | "reject";
+            /** Override Value */
+            override_value?: string | null;
+        };
+        /** DraftingDataStatusCounts */
+        DraftingDataStatusCounts: {
+            /**
+             * Confirmed
+             * @default 0
+             */
+            confirmed: number;
+            /**
+             * Needs Review
+             * @default 0
+             */
+            needs_review: number;
+            /**
+             * Overridden
+             * @default 0
+             */
+            overridden: number;
+            /**
+             * Rejected
+             * @default 0
+             */
+            rejected: number;
+            /**
+             * Suggested
+             * @default 0
+             */
+            suggested: number;
         };
         /**
          * DraftingFieldSpec
@@ -21006,6 +21168,104 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MatterDeadlineRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_current_company_matter_drafting_data_api_matters__matter_id__drafting_data_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftingDataExtractionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_current_company_matter_drafting_data_extract_api_matters__matter_id__drafting_data_extract_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftingDataExtractionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_current_company_matter_drafting_data_field_api_matters__matter_id__drafting_data__field_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+                field_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftingDataReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftingDataFieldRecord"];
                 };
             };
             /** @description Validation Error */

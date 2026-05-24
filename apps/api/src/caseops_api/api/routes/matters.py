@@ -40,6 +40,11 @@ from caseops_api.schemas.billing import (
     TimeEntryCreateRequest,
     TimeEntryRecord,
 )
+from caseops_api.schemas.drafting_data import (
+    DraftingDataExtractionResponse,
+    DraftingDataFieldRecord,
+    DraftingDataReviewRequest,
+)
 from caseops_api.schemas.drafts import (
     DraftCreateRequest,
     DraftEditRequest,
@@ -160,6 +165,11 @@ from caseops_api.services.drafting import (
     load_draft_record,
     render_version_docx,
     transition_draft,
+)
+from caseops_api.services.drafting_data_extraction import (
+    extract_drafting_data,
+    list_drafting_data,
+    review_drafting_data_field,
 )
 from caseops_api.services.filing_bundle import render_filing_bundle
 from caseops_api.services.filing_checklist import build_filing_checklist
@@ -2468,6 +2478,59 @@ async def post_current_company_hearing_pack_review(
         pack_id=pack_id,
     )
     return HearingPackRecord.model_validate(pack)
+
+
+@router.post(
+    "/{matter_id}/drafting-data/extract",
+    response_model=DraftingDataExtractionResponse,
+    summary="Extract drafting data suggestions from existing matter documents",
+    description=(
+        "Deterministic, matter-scoped dry extraction from already-indexed or "
+        "extracted uploaded document text. This does not read storage objects, "
+        "run OCR, run embeddings, or call an LLM. Suggested fields require "
+        "lawyer review before draft generation can use them."
+    ),
+)
+async def post_current_company_matter_drafting_data_extract(
+    matter_id: str,
+    context: DraftEditor,
+    session: DbSession,
+) -> DraftingDataExtractionResponse:
+    return extract_drafting_data(session, context=context, matter_id=matter_id)
+
+
+@router.get(
+    "/{matter_id}/drafting-data",
+    response_model=DraftingDataExtractionResponse,
+    summary="List reviewed drafting data suggestions for a matter",
+)
+async def get_current_company_matter_drafting_data(
+    matter_id: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> DraftingDataExtractionResponse:
+    return list_drafting_data(session, context=context, matter_id=matter_id)
+
+
+@router.patch(
+    "/{matter_id}/drafting-data/{field_id}",
+    response_model=DraftingDataFieldRecord,
+    summary="Confirm, override, or reject a drafting data suggestion",
+)
+async def patch_current_company_matter_drafting_data_field(
+    matter_id: str,
+    field_id: str,
+    payload: DraftingDataReviewRequest,
+    context: DraftEditor,
+    session: DbSession,
+) -> DraftingDataFieldRecord:
+    return review_drafting_data_field(
+        session,
+        context=context,
+        matter_id=matter_id,
+        field_id=field_id,
+        payload=payload,
+    )
 
 
 @router.post(

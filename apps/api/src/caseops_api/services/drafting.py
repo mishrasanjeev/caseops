@@ -67,6 +67,7 @@ from caseops_api.services.draft_validators import (
     check_adverse_treatment,
     run_validators,
 )
+from caseops_api.services.drafting_data_extraction import reviewed_fields_for_prompt
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.llm import (
     PURPOSE_DRAFTING,
@@ -271,6 +272,7 @@ def _build_messages(
     bench_context: object = None,  # BenchStrategyContext | None — late import
     statute_refs: list[dict] | None = None,
     predictive_bench_enabled: bool = False,
+    reviewed_drafting_fields: list[object] | None = None,
 ) -> list[LLMMessage]:
     # BAAD-001 slice 3 (Sprint P5, 2026-04-25). Per-template prompt
     # wiring + bench-strategy-context injection. Two changes vs the
@@ -294,7 +296,8 @@ def _build_messages(
         "No prose, no markdown fences.\n\n"
         "ABSOLUTE RULES — VIOLATING ANY OF THESE FAILS THE DRAFT:\n"
         "1. Do NOT invent facts. The only permissible facts are those "
-        "present in the MATTER RECORD block below and the FOCUS NOTE. "
+        "present in the MATTER RECORD, STEPPER FACTS, REVIEWED DRAFTING "
+        "DATA, and FOCUS NOTE blocks below. "
         "For any fact not explicitly supplied — FIR number, arrest date, "
         "witness identity, address, age, family composition, amounts, "
         "dates — write a square-bracket placeholder such as `[____]`, "
@@ -398,6 +401,7 @@ def _build_messages(
     parts.append(f"Draft type: {draft.draft_type}")
     if draft.template_type:
         parts.append(f"Template: {draft.template_type}")
+    stepper_fact_keys: set[str] = set()
     if draft.facts_json:
         try:
             facts = json.loads(draft.facts_json)
@@ -411,12 +415,28 @@ def _build_messages(
             for key, value in facts.items():
                 if value is None or value == "":
                     continue
+                stepper_fact_keys.add(str(key))
                 parts.append(f"- {key}: {value}")
             parts.append(
                 "(These facts came from the drafting stepper; treat them "
                 "as the lawyer's verified input. Do NOT override with "
                 "bracketed placeholders for any field listed above.)"
             )
+    reviewed_lines = _reviewed_drafting_data_lines(
+        reviewed_drafting_fields or [],
+        stepper_fact_keys=stepper_fact_keys,
+    )
+    if reviewed_lines:
+        parts.append("")
+        parts.append(
+            "=== REVIEWED DRAFTING DATA (confirmed or overridden by lawyer) ==="
+        )
+        parts.extend(reviewed_lines)
+        parts.append(
+            "(Use these reviewed fields only where the STEPPER FACTS block "
+            "does not already provide that field. Stepper facts remain "
+            "authoritative.)"
+        )
     if focus_note:
         parts.append(f"Focus: {focus_note}")
     parts.append("")
@@ -660,6 +680,29 @@ def _build_messages(
         LLMMessage(role="system", content=system),
         LLMMessage(role="user", content="\n".join(parts)),
     ]
+
+
+def _reviewed_drafting_data_lines(
+    fields: list[object],
+    *,
+    stepper_fact_keys: set[str],
+) -> list[str]:
+    lines: list[str] = []
+    for field in fields:
+        field_key = str(getattr(field, "field_key", ""))
+        if not field_key or field_key in stepper_fact_keys:
+            continue
+        status_value = str(getattr(field, "status", ""))
+        if status_value not in {"confirmed", "overridden"}:
+            continue
+        value = getattr(field, "reviewed_value", None)
+        if value is None and status_value == "confirmed":
+            value = getattr(field, "proposed_value", None)
+        if value is None or value == "":
+            continue
+        label = str(getattr(field, "label", field_key))
+        lines.append(f"- {label} ({field_key}): {value}")
+    return lines
 
 
 def _prompt_hash(messages: list[LLMMessage]) -> str:
@@ -998,6 +1041,11 @@ def generate_draft_version(
         bench_context=bench_context,
         statute_refs=statute_refs,
         predictive_bench_enabled=predictive_enabled,
+        reviewed_drafting_fields=reviewed_fields_for_prompt(
+            session,
+            company_id=context.company.id,
+            matter_id=matter.id,
+        ),
     )
     prompt_hash = _prompt_hash(messages)
     # Drafting routes to the per-purpose drafting model (Opus-class

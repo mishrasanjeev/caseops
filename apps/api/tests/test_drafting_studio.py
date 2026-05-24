@@ -1,14 +1,24 @@
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import UTC, date, datetime
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 from caseops_api.db.models import (
+    AuditEvent,
     AuthorityDocument,
     AuthorityDocumentType,
+    Company,
+    DocumentProcessingStatus,
+    Draft,
+    Matter,
+    MatterAttachment,
+    MatterAttachmentChunk,
     MatterForumLevel,
+    Team,
 )
 from caseops_api.db.session import get_session_factory
 from tests.test_auth_company import auth_headers, bootstrap_company
@@ -71,6 +81,92 @@ def _seed_authority(
         return str(doc.id)
     finally:
         session.close()
+
+
+def _seed_attachment(
+    matter_id: str,
+    *,
+    extracted_text: str,
+    original_filename: str = "drafting-source.txt",
+) -> str:
+    factory = get_session_factory()
+    attachment_id = str(uuid.uuid4())
+    session = factory()
+    try:
+        attachment = MatterAttachment(
+            id=attachment_id,
+            matter_id=matter_id,
+            original_filename=original_filename,
+            storage_key=f"test/drafting/{uuid.uuid4().hex}.txt",
+            content_type="text/plain",
+            size_bytes=len(extracted_text),
+            sha256_hex=(uuid.uuid4().hex + uuid.uuid4().hex)[:64],
+            processing_status=DocumentProcessingStatus.INDEXED,
+            extracted_char_count=len(extracted_text),
+            extracted_text=extracted_text,
+            document_type="complaint_petition",
+            lifecycle_stage="pleadings",
+        )
+        session.add(attachment)
+        session.flush()
+        session.add(
+            MatterAttachmentChunk(
+                attachment_id=attachment_id,
+                chunk_index=0,
+                content=extracted_text,
+                token_count=len(extracted_text.split()),
+            )
+        )
+        session.commit()
+        return attachment_id
+    finally:
+        session.close()
+
+
+def _bootstrap_company_with_slug(client: TestClient, slug: str) -> dict:
+    response = client.post(
+        "/api/bootstrap/company",
+        json={
+            "company_name": f"{slug.title()} Legal LLP",
+            "company_slug": slug,
+            "company_type": "law_firm",
+            "owner_full_name": "ADP Fifteen Owner",
+            "owner_email": f"owner@{slug}.in",
+            "owner_password": "FoundersPass123!",
+        },
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def _invite_member(
+    client: TestClient,
+    *,
+    owner_token: str,
+    company_slug: str,
+    email: str,
+) -> tuple[str, str]:
+    response = client.post(
+        "/api/companies/current/users",
+        headers=auth_headers(owner_token),
+        json={
+            "full_name": "Drafting Associate",
+            "email": email,
+            "password": "MemberPass123!",
+            "role": "member",
+        },
+    )
+    assert response.status_code == 200, response.text
+    login = client.post(
+        "/api/auth/login",
+        json={
+            "email": email,
+            "password": "MemberPass123!",
+            "company_slug": company_slug,
+        },
+    )
+    assert login.status_code == 200, login.text
+    return str(response.json()["membership_id"]), str(login.json()["access_token"])
 
 
 def _create_draft(client: TestClient, token: str, matter_id: str) -> dict:
@@ -851,11 +947,6 @@ def test_create_draft_stepper_facts_passthrough(client: TestClient) -> None:
     persisted and surfaced on the response, and the fact values must
     land in the LLM prompt so the generator can ground the body.
     """
-    import json
-
-    from caseops_api.db.models import Draft
-    from caseops_api.db.session import get_session_factory
-
     token = str(bootstrap_company(client)["access_token"])
     matter_id = _create_matter(client, token, "DS-FACTS")
 
@@ -935,6 +1026,274 @@ def test_generate_draft_uses_stepper_facts_in_prompt(client: TestClient) -> None
     assert "applicant_name: Ravi Verma" in user_msg
     assert "fir_number: FIR 9/2026" in user_msg
     assert "Template: bail_application" in user_msg
+
+
+def _field_by_key(fields: list[dict], key: str) -> dict:
+    return next(field for field in fields if field["field_key"] == key)
+
+
+def test_drafting_data_extracts_reviewable_fields_from_existing_document_text(
+    client: TestClient,
+) -> None:
+    token = str(bootstrap_company(client)["access_token"])
+    matter_id = _create_matter(client, token, "DS-DATA-1")
+    attachment_id = _seed_attachment(
+        matter_id,
+        extracted_text=(
+            "FIR No. 42/2026 was registered at Police Station: Indiranagar. "
+            "Complainant Name: Neha Rao. Accused Name: Ravi Verma. "
+            "Incident Date: 12/05/2026. Notice dated 14 May 2026. "
+            "Sections 138 and 142 of NI Act are referenced. CC 88/2026."
+        ),
+    )
+
+    response = client.post(
+        f"/api/matters/{matter_id}/drafting-data/extract",
+        headers=auth_headers(token),
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["created_count"] >= 6
+    fields = body["fields"]
+    assert _field_by_key(fields, "fir_number")["proposed_value"] == "42/2026"
+    assert _field_by_key(fields, "police_station")["source_attachment_id"] == attachment_id
+    assert _field_by_key(fields, "police_station")["status"] == "suggested"
+    assert _field_by_key(fields, "case_number")["status"] == "needs_review"
+    for field in fields:
+        assert field["status"] != "confirmed"
+        if field["source_snippet"] is not None:
+            assert len(field["source_snippet"]) <= 280
+    serialized = response.text
+    assert "storage_key" not in serialized
+    assert "test/drafting/" not in serialized
+
+
+def test_drafting_data_review_actions_and_audit_are_redacted(
+    client: TestClient,
+) -> None:
+    boot = _bootstrap_company_with_slug(client, f"adp15-audit-{uuid.uuid4().hex[:6]}")
+    token = str(boot["access_token"])
+    company_id = str(boot["company"]["id"])
+    matter_id = _create_matter(client, token, "DS-DATA-2")
+    _seed_attachment(
+        matter_id,
+        extracted_text=(
+            "FIR No. 77/2026. Police Station: Koramangala. "
+            "Complainant Name: Secret Complainant Tail. "
+            "Accused Name: Sensitive Accused Tail."
+        ),
+    )
+    extracted = client.post(
+        f"/api/matters/{matter_id}/drafting-data/extract",
+        headers=auth_headers(token),
+    )
+    assert extracted.status_code == 200, extracted.text
+    fields = extracted.json()["fields"]
+    fir = _field_by_key(fields, "fir_number")
+    station = _field_by_key(fields, "police_station")
+    accused = _field_by_key(fields, "accused_name")
+
+    confirm = client.patch(
+        f"/api/matters/{matter_id}/drafting-data/{fir['id']}",
+        headers=auth_headers(token),
+        json={"action": "confirm"},
+    )
+    assert confirm.status_code == 200, confirm.text
+    assert confirm.json()["status"] == "confirmed"
+    assert confirm.json()["effective_value"] == "77/2026"
+
+    override = client.patch(
+        f"/api/matters/{matter_id}/drafting-data/{station['id']}",
+        headers=auth_headers(token),
+        json={"action": "override", "override_value": "Corrected PS"},
+    )
+    assert override.status_code == 200, override.text
+    assert override.json()["status"] == "overridden"
+    assert override.json()["effective_value"] == "Corrected PS"
+    assert override.json()["reviewed_at"] is not None
+
+    rejected = client.patch(
+        f"/api/matters/{matter_id}/drafting-data/{accused['id']}",
+        headers=auth_headers(token),
+        json={"action": "reject"},
+    )
+    assert rejected.status_code == 200, rejected.text
+    assert rejected.json()["status"] == "rejected"
+    assert rejected.json()["effective_value"] is None
+
+    with get_session_factory()() as session:
+        events = list(
+            session.scalars(
+                select(AuditEvent)
+                .where(AuditEvent.company_id == company_id)
+                .where(AuditEvent.action.in_(["drafting_data.extracted", "drafting_data.reviewed"]))
+                .order_by(AuditEvent.created_at.asc())
+            )
+        )
+    audit_blob = json.dumps([event.metadata_json for event in events])
+    assert "Secret Complainant Tail" not in audit_blob
+    assert "Sensitive Accused Tail" not in audit_blob
+    assert "Corrected PS" not in audit_blob
+    assert "storage_key" not in audit_blob
+    assert "test/drafting/" not in audit_blob
+
+
+def test_reviewed_drafting_data_feeds_prompt_without_overriding_stepper_facts(
+    client: TestClient,
+) -> None:
+    from unittest.mock import patch
+
+    from caseops_api.services import drafting as drafting_service
+
+    token = str(bootstrap_company(client)["access_token"])
+    matter_id = _create_matter(client, token, "DS-DATA-3")
+    _seed_authority(neutral_citation="2024 SCC OnLine SC 778")
+    _seed_attachment(
+        matter_id,
+        extracted_text=(
+            "FIR No. 42/2026. Police Station: Indiranagar. "
+            "Complainant Name: Neha Rao. Accused Name: Ravi Verma."
+        ),
+    )
+    extracted = client.post(
+        f"/api/matters/{matter_id}/drafting-data/extract",
+        headers=auth_headers(token),
+    )
+    assert extracted.status_code == 200, extracted.text
+    fields = extracted.json()["fields"]
+    complainant = _field_by_key(fields, "complainant_name")
+    fir = _field_by_key(fields, "fir_number")
+    police_station = _field_by_key(fields, "police_station")
+    accused = _field_by_key(fields, "accused_name")
+    for field in (complainant,):
+        assert client.patch(
+            f"/api/matters/{matter_id}/drafting-data/{field['id']}",
+            headers=auth_headers(token),
+            json={"action": "confirm"},
+        ).status_code == 200
+    assert client.patch(
+        f"/api/matters/{matter_id}/drafting-data/{fir['id']}",
+        headers=auth_headers(token),
+        json={"action": "override", "override_value": "FIR 42/2026"},
+    ).status_code == 200
+    assert client.patch(
+        f"/api/matters/{matter_id}/drafting-data/{accused['id']}",
+        headers=auth_headers(token),
+        json={"action": "reject"},
+    ).status_code == 200
+
+    draft = client.post(
+        f"/api/matters/{matter_id}/drafts",
+        headers=auth_headers(token),
+        json={
+            "title": "Bail with reviewed data",
+            "draft_type": "brief",
+            "template_type": "bail_application",
+            "facts": {"fir_number": "FIR 999/2026"},
+        },
+    )
+    assert draft.status_code == 200, draft.text
+    draft_id = draft.json()["id"]
+
+    original_build = drafting_service._build_messages
+    captured: dict[str, str] = {}
+
+    def _spy(matter, draft, retrieved, focus_note, **kwargs):
+        msgs = original_build(matter, draft, retrieved, focus_note, **kwargs)
+        captured["user"] = next(m.content for m in msgs if m.role == "user")
+        return msgs
+
+    with patch.object(drafting_service, "_build_messages", _spy):
+        _generate(client, token, matter_id, draft_id)
+
+    user_msg = captured["user"]
+    assert "REVIEWED DRAFTING DATA" in user_msg
+    assert "Complainant name (complainant_name): Neha Rao" in user_msg
+    assert "fir_number: FIR 999/2026" in user_msg
+    assert "FIR 42/2026" not in user_msg
+    assert "Police station (police_station)" not in user_msg
+    assert police_station["proposed_value"] not in user_msg
+    assert "Accused name (accused_name)" not in user_msg
+    assert "Ravi Verma" not in user_msg
+
+
+def test_drafting_data_routes_enforce_matter_access_boundaries(
+    client: TestClient,
+) -> None:
+    boot_a = _bootstrap_company_with_slug(client, f"adp15-acl-a-{uuid.uuid4().hex[:6]}")
+    owner_token = str(boot_a["access_token"])
+    company_slug = str(boot_a["company"]["slug"])
+    company_id = str(boot_a["company"]["id"])
+    matter_id = _create_matter(client, owner_token, "DS-DATA-ACL")
+    _seed_attachment(matter_id, extracted_text="FIR No. 11/2026.")
+    member_id, member_token = _invite_member(
+        client,
+        owner_token=owner_token,
+        company_slug=company_slug,
+        email=f"drafting-member-{uuid.uuid4().hex[:6]}@example.in",
+    )
+    boot_b = _bootstrap_company_with_slug(client, f"adp15-acl-b-{uuid.uuid4().hex[:6]}")
+    other_token = str(boot_b["access_token"])
+
+    cross_tenant = client.get(
+        f"/api/matters/{matter_id}/drafting-data",
+        headers=auth_headers(other_token),
+    )
+    assert cross_tenant.status_code == 404, cross_tenant.text
+
+    restricted = client.post(
+        f"/api/matters/{matter_id}/access/restricted",
+        headers=auth_headers(owner_token),
+        json={"restricted": True},
+    )
+    assert restricted.status_code == 200, restricted.text
+    hidden = client.post(
+        f"/api/matters/{matter_id}/drafting-data/extract",
+        headers=auth_headers(member_token),
+    )
+    assert hidden.status_code == 404, hidden.text
+
+    grant = client.post(
+        f"/api/matters/{matter_id}/access/grants",
+        headers=auth_headers(owner_token),
+        json={"membership_id": member_id, "reason": "Drafting review"},
+    )
+    assert grant.status_code == 200, grant.text
+    wall = client.post(
+        f"/api/matters/{matter_id}/access/walls",
+        headers=auth_headers(owner_token),
+        json={"excluded_membership_id": member_id, "reason": "Conflict"},
+    )
+    assert wall.status_code == 200, wall.text
+    walled = client.get(
+        f"/api/matters/{matter_id}/drafting-data",
+        headers=auth_headers(member_token),
+    )
+    assert walled.status_code == 404, walled.text
+
+    team_matter_id = _create_matter(client, owner_token, "DS-DATA-TEAM")
+    with get_session_factory()() as session:
+        team = Team(
+            id=str(uuid.uuid4()),
+            company_id=company_id,
+            name="Drafting Team",
+            slug=f"drafting-team-{uuid.uuid4().hex[:6]}",
+        )
+        session.add(team)
+        session.flush()
+        matter = session.get(Matter, team_matter_id)
+        company = session.get(Company, company_id)
+        assert matter is not None
+        assert company is not None
+        matter.team_id = team.id
+        company.team_scoping_enabled = True
+        session.commit()
+    team_hidden = client.get(
+        f"/api/matters/{team_matter_id}/drafting-data",
+        headers=auth_headers(member_token),
+    )
+    assert team_hidden.status_code == 404, team_hidden.text
 
 
 def test_create_draft_rejects_oversized_facts(client: TestClient) -> None:

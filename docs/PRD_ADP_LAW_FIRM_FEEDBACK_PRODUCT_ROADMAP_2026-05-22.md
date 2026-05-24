@@ -1844,6 +1844,25 @@ Tests:
 Type: Backend + Web
 Priority: P3
 Dependencies: Matter File Q&A/document extraction, drafting
+Status: In progress — deterministic foundation implemented on branch
+`codex/adp15-drafting-data-extraction-review-queue`.
+
+Design:
+
+- Matter-scoped persistent review queue for bounded drafting metadata
+  extracted from existing uploaded matter document text/chunks only.
+- Deterministic regex planner for FIR number, case number, police
+  station, parties, dates, and statute/section references; no LLM,
+  OCR, document-processing, corpus, embedding, background job, or
+  storage-object read path.
+- Each suggestion stores field key, label, proposed value, confidence
+  band, status, source attachment reference, and a source-validated
+  snippet capped at 280 characters.
+- Confirmed/overridden fields feed drafting generation in a reviewed
+  facts block; stepper facts remain authoritative and pending/rejected
+  suggestions are excluded.
+- Review actions record reviewer/timestamp and redacted audit metadata
+  with counts, statuses, keys, hashes, and booleans only.
 
 Scope:
 

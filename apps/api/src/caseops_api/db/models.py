@@ -1264,6 +1264,11 @@ class Matter(Base):
         cascade="all, delete-orphan",
         order_by="desc(OutsideCounselSpendRecord.updated_at)",
     )
+    drafting_data_fields: Mapped[list[DraftingDataExtractionField]] = relationship(
+        back_populates="matter",
+        cascade="all, delete-orphan",
+        order_by="DraftingDataExtractionField.created_at.desc()",
+    )
 
 
 class MatterTag(Base):
@@ -5194,6 +5199,20 @@ class DraftReviewAction(StrEnum):
     FINALIZE = "finalize"
 
 
+class DraftingDataExtractionStatus(StrEnum):
+    SUGGESTED = "suggested"
+    NEEDS_REVIEW = "needs_review"
+    CONFIRMED = "confirmed"
+    OVERRIDDEN = "overridden"
+    REJECTED = "rejected"
+
+
+class DraftingDataConfidenceBand(StrEnum):
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+
 class Draft(Base):
     """A long-lived legal document draft. The matter is the tenant
     boundary; versions roll forward; status advances through a strict
@@ -5243,6 +5262,89 @@ class Draft(Base):
         back_populates="draft",
         cascade="all, delete-orphan",
         order_by="DraftReview.created_at",
+    )
+
+
+class DraftingDataExtractionField(Base):
+    """Matter-scoped, lawyer-reviewable facts proposed from uploaded documents.
+
+    The row stores only bounded drafting metadata and a short source snippet.
+    It never stores raw prompts, LLM answers, OCR payloads, storage keys, or
+    attachment payloads.
+    """
+
+    __tablename__ = "drafting_data_extraction_fields"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    source_attachment_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matter_attachments.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    reviewed_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    field_key: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    label: Mapped[str] = mapped_column(String(120), nullable=False)
+    proposed_value: Mapped[str] = mapped_column(String(500), nullable=False)
+    reviewed_value: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    value_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    confidence_band: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default=DraftingDataConfidenceBand.LOW,
+    )
+    status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=DraftingDataExtractionStatus.NEEDS_REVIEW,
+        index=True,
+    )
+    source_snippet: Mapped[str | None] = mapped_column(String(280), nullable=True)
+    source_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    source_char_start: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source_char_end: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship()
+    matter: Mapped[Matter] = relationship(back_populates="drafting_data_fields")
+    source_attachment: Mapped[MatterAttachment | None] = relationship()
+    created_by_membership: Mapped[CompanyMembership | None] = relationship(
+        foreign_keys=[created_by_membership_id],
+    )
+    reviewed_by_membership: Mapped[CompanyMembership | None] = relationship(
+        foreign_keys=[reviewed_by_membership_id],
     )
 
 

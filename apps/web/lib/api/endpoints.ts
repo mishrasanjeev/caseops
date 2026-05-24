@@ -20,6 +20,8 @@ import {
   type ContractsList,
   type DecisionKind,
   type Draft,
+  type DraftingDataExtractionResponse,
+  type DraftingDataField,
   type DraftList,
   type DraftType,
   type EmailRenderResponse,
@@ -75,6 +77,8 @@ import {
   communicationTimelineResponse,
   contractsList,
   draft,
+  draftingDataExtractionResponse,
+  draftingDataField,
   draftList,
   emailRenderResponse,
   emailTemplateListResponse,
@@ -1639,6 +1643,42 @@ export async function completeHearing(input: {
 export async function listDrafts(matterId: string): Promise<DraftList> {
   const data = await apiRequest<unknown>(`/api/matters/${matterId}/drafts`);
   return draftList.parse(data);
+}
+
+export async function listDraftingData(
+  matterId: string,
+): Promise<DraftingDataExtractionResponse> {
+  const data = await apiRequest<unknown>(`/api/matters/${matterId}/drafting-data`);
+  return draftingDataExtractionResponse.parse(data);
+}
+
+export async function extractDraftingData(
+  matterId: string,
+): Promise<DraftingDataExtractionResponse> {
+  const data = await apiRequest<unknown>(
+    `/api/matters/${matterId}/drafting-data/extract`,
+    { method: "POST" },
+  );
+  return draftingDataExtractionResponse.parse(data);
+}
+
+export async function reviewDraftingDataField(input: {
+  matterId: string;
+  fieldId: string;
+  action: "confirm" | "override" | "reject";
+  overrideValue?: string | null;
+}): Promise<DraftingDataField> {
+  const data = await apiRequest<unknown>(
+    `/api/matters/${input.matterId}/drafting-data/${input.fieldId}`,
+    {
+      method: "PATCH",
+      body: {
+        action: input.action,
+        override_value: input.overrideValue ?? null,
+      },
+    },
+  );
+  return draftingDataField.parse(data);
 }
 
 export async function fetchDraft(input: {

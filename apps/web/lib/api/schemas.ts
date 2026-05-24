@@ -1717,6 +1717,48 @@ export const draftList = z.object({
   next_cursor: z.string().nullable().optional(),
 });
 
+export const draftingDataFieldStatus = z.enum([
+  "suggested",
+  "needs_review",
+  "confirmed",
+  "overridden",
+  "rejected",
+]);
+export const draftingDataConfidenceBand = z.enum(["high", "medium", "low"]);
+export const draftingDataField = z.object({
+  id: z.string(),
+  matter_id: z.string(),
+  source_attachment_id: z.string().nullable(),
+  field_key: z.string(),
+  label: z.string(),
+  proposed_value: z.string(),
+  reviewed_value: z.string().nullable(),
+  effective_value: z.string().nullable(),
+  confidence_band: draftingDataConfidenceBand,
+  status: draftingDataFieldStatus,
+  source_snippet: z.string().nullable(),
+  source_verified: z.boolean(),
+  reviewed_by_membership_id: z.string().nullable(),
+  reviewed_at: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+export const draftingDataStatusCounts = z.object({
+  suggested: z.number().int(),
+  needs_review: z.number().int(),
+  confirmed: z.number().int(),
+  overridden: z.number().int(),
+  rejected: z.number().int(),
+});
+export const draftingDataExtractionResponse = z.object({
+  matter_id: z.string(),
+  fields: z.array(draftingDataField),
+  counts: draftingDataStatusCounts,
+  created_count: z.number().int(),
+  updated_count: z.number().int(),
+  source_attachment_count: z.number().int(),
+});
+
 export type DraftStatus = z.infer<typeof draftStatus>;
 export type DraftType = z.infer<typeof draftType>;
 export type DraftReviewAction = z.infer<typeof draftReviewAction>;
@@ -1724,6 +1766,12 @@ export type DraftVersion = z.infer<typeof draftVersion>;
 export type DraftReview = z.infer<typeof draftReview>;
 export type Draft = z.infer<typeof draft>;
 export type DraftList = z.infer<typeof draftList>;
+export type DraftingDataFieldStatus = z.infer<typeof draftingDataFieldStatus>;
+export type DraftingDataConfidenceBand = z.infer<typeof draftingDataConfidenceBand>;
+export type DraftingDataField = z.infer<typeof draftingDataField>;
+export type DraftingDataExtractionResponse = z.infer<
+  typeof draftingDataExtractionResponse
+>;
 
 export type Contract = z.infer<typeof contract>;
 export type ContractsList = z.infer<typeof contractsList>;
