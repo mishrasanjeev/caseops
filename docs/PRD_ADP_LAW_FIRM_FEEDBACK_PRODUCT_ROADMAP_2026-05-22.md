@@ -1805,6 +1805,25 @@ Tests:
 Type: Backend + Web
 Priority: P3
 Dependencies: ADP-13 preferred
+Status: Foundation implemented 2026-05-24; introduces tenant-scoped
+`tenant_contract_playbooks` + `tenant_contract_playbook_rules` tables
+and CRUD endpoints under `/api/contracts/tenant-playbooks`. Playbook
+admin (create/update/archive) is gated by `contracts:manage_rules`;
+read is gated by tenant membership. Compare endpoint
+`POST /api/contracts/{contract_id}/tenant-playbook-compare` is
+**deterministic** (no LLM) — for each active rule, it scans the
+contract's existing `ContractClause` rows by `clause_type`, applies
+the rule's optional `keyword_pattern` (case-insensitive substring),
+and emits matched / missing / deviation / needs_review. Matched and
+deviation findings link to a `ContractClause.id` and carry a bounded
+280-char snippet. Missing findings carry no source. Needs_review
+fires when the contract has zero extracted clauses (extraction
+hasn't run yet). All write paths emit redacted audit events with
+name-hashes + counts + booleans; no raw clause text, prompt, answer,
+or contract payload. Existing per-contract `ContractPlaybookRule`
+table and LLM-backed `compare_playbook` remain unchanged. Web adds a
+compact "Compare against tenant playbook" panel in the contract
+Clauses tab. No ADP-15 work.
 
 Scope:
 
