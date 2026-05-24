@@ -132,9 +132,13 @@ export default function ClientProfilePage() {
   const kycTone =
     c.kyc_status === "verified"
       ? "success"
-      : c.kyc_status === "rejected"
+      : c.kyc_status === "rejected" || c.kyc_status === "expired"
         ? "warning"
-        : "neutral";
+        : c.kyc_status === "submitted" ||
+            c.kyc_status === "under_review" ||
+            c.kyc_status === "requested"
+          ? "brand"
+          : "neutral";
 
   return (
     <div className="flex flex-col gap-6">
@@ -374,11 +378,26 @@ export default function ClientProfilePage() {
 // actions. The state machine is enforced server-side; the UI just
 // hides actions that don't make sense for the current status.
 type KycPanelClient = {
-  kyc_status: "not_started" | "pending" | "verified" | "rejected";
+  kyc_status:
+    | "not_required"
+    | "required"
+    | "requested"
+    | "submitted"
+    | "under_review"
+    | "verified"
+    | "rejected"
+    | "expired";
   kyc_submitted_at: string | null;
   kyc_verified_at: string | null;
   kyc_rejection_reason: string | null;
-  kyc_documents: { name: string; status: string; note: string | null }[];
+  kyc_documents: {
+    name: string;
+    document_type?: string | null;
+    status: string;
+    note: string | null;
+    attachment_id?: string | null;
+    expires_on?: string | null;
+  }[];
 };
 
 function KycPanel({
@@ -434,9 +453,13 @@ function KycPanel({
               tone={
                 client.kyc_status === "verified"
                   ? "success"
-                  : client.kyc_status === "rejected"
+                  : client.kyc_status === "rejected" ||
+                      client.kyc_status === "expired" ||
+                      client.kyc_status === "required"
                     ? "warning"
-                    : client.kyc_status === "pending"
+                    : client.kyc_status === "submitted" ||
+                        client.kyc_status === "under_review" ||
+                        client.kyc_status === "requested"
                       ? "brand"
                       : "neutral"
               }
@@ -452,8 +475,11 @@ function KycPanel({
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {canSubmit &&
-            (client.kyc_status === "not_started" ||
-              client.kyc_status === "rejected") ? (
+            (client.kyc_status === "not_required" ||
+              client.kyc_status === "required" ||
+              client.kyc_status === "requested" ||
+              client.kyc_status === "rejected" ||
+              client.kyc_status === "expired") ? (
               <Button
                 type="button"
                 size="sm"
@@ -462,11 +488,13 @@ function KycPanel({
               >
                 <Upload className="h-4 w-4" aria-hidden />
                 {client.kyc_status === "rejected"
-                  ? "Re-submit KYC"
+                  ? "Re-submit verification"
                   : "Submit KYC"}
               </Button>
             ) : null}
-            {canReview && client.kyc_status === "pending" ? (
+            {canReview &&
+            (client.kyc_status === "submitted" ||
+              client.kyc_status === "under_review") ? (
               <>
                 <Button
                   type="button"

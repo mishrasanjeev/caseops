@@ -1679,6 +1679,12 @@ Tests:
 Type: Backend + Web + Portal
 Priority: P2
 Dependencies: Portal, attachment storage
+Status: Foundation implemented 2026-05-24; existing client KYC fields now
+support the ADP verification status workflow, matter-scoped verification
+rollups, attachment-reference linking, reviewer decisions, and redacted audit
+events. Secure portal metadata submission remains compatible; full portal
+verification-document upload is deferred until a dedicated client upload path
+can reuse the attachment/virus-scan pipeline.
 
 Scope:
 

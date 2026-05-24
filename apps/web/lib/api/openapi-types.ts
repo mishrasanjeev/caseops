@@ -982,7 +982,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Submit a KYC pack for review (moves status to pending). */
+        /** Submit a KYC pack for review (moves status to submitted). */
         post: operations["submit_current_company_client_kyc_api_clients__client_id__kyc_submit_post"];
         delete?: never;
         options?: never;
@@ -2464,6 +2464,40 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/matters/{matter_id}/client-verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List client verification status for a matter */
+        get: operations["get_matter_client_verification_api_matters__matter_id__client_verification_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/{matter_id}/client-verification/{client_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update a matter client's verification workflow */
+        patch: operations["patch_matter_client_verification_api_matters__matter_id__client_verification__client_id__patch"];
         trace?: never;
     };
     "/api/matters/{matter_id}/clients": {
@@ -5998,10 +6032,10 @@ export interface components {
             internal_notes?: string | null;
             /**
              * Kyc Status
-             * @default not_started
+             * @default not_required
              * @enum {string}
              */
-            kyc_status: "not_started" | "pending" | "verified" | "rejected";
+            kyc_status: "not_required" | "required" | "requested" | "submitted" | "under_review" | "verified" | "rejected" | "expired";
             /** Name */
             name: string;
             /** Pan */
@@ -6085,7 +6119,7 @@ export interface components {
              * Kyc Status
              * @enum {string}
              */
-            kyc_status: "not_started" | "pending" | "verified" | "rejected";
+            kyc_status: "not_required" | "required" | "requested" | "submitted" | "under_review" | "verified" | "rejected" | "expired";
             /** Kyc Submitted At */
             kyc_submitted_at?: string | null;
             /** Kyc Verified At */
@@ -6138,7 +6172,7 @@ export interface components {
             /** Is Active */
             is_active?: boolean | null;
             /** Kyc Status */
-            kyc_status?: ("not_started" | "pending" | "verified" | "rejected") | null;
+            kyc_status?: ("not_required" | "required" | "requested" | "submitted" | "under_review" | "verified" | "rejected" | "expired") | null;
             /** Name */
             name?: string | null;
             /** Pan */
@@ -6153,6 +6187,15 @@ export interface components {
             primary_contact_phone?: string | null;
             /** State */
             state?: string | null;
+        };
+        /** ClientVerificationUpdateRequest */
+        ClientVerificationUpdateRequest: {
+            /** Documents */
+            documents?: components["schemas"]["KycDocumentRecord"][] | null;
+            /** Rejection Reason */
+            rejection_reason?: string | null;
+            /** Status */
+            status?: ("not_required" | "required" | "requested" | "submitted" | "under_review" | "verified" | "rejected" | "expired") | null;
         };
         /**
          * CommunicationCreateRequest
@@ -9223,21 +9266,30 @@ export interface components {
         };
         /**
          * KycDocumentRecord
-         * @description One tracked KYC document. Stored as a JSON array on the
-         *     client; slice 3 ships with manual entry. A future revision can
-         *     attach a file URL to each row.
+         * @description One tracked verification document.
+         *
+         *     Stored as JSON on the client. ``attachment_id`` is an optional
+         *     reference to an existing matter attachment; services validate it
+         *     against the matter before accepting it. Payloads, storage keys,
+         *     hashes, and OCR/document text are intentionally not surfaced here.
          */
         KycDocumentRecord: {
+            /** Attachment Id */
+            attachment_id?: string | null;
+            /** Document Type */
+            document_type?: string | null;
+            /** Expires On */
+            expires_on?: string | null;
             /** Name */
             name: string;
             /** Note */
             note?: string | null;
             /**
              * Status
-             * @default pending
+             * @default required
              * @enum {string}
              */
-            status: "pending" | "received" | "verified";
+            status: "required" | "requested" | "submitted" | "received" | "verified" | "rejected" | "expired" | "pending";
         };
         /** KycRejectRequest */
         KycRejectRequest: {
@@ -9246,9 +9298,7 @@ export interface components {
         };
         /**
          * KycSubmitRequest
-         * @description Submit a KYC pack — moves the client into ``pending``.
-         *     ``documents`` is the list of artefacts the lawyer collected
-         *     from the client (PAN, address proof, board resolution, …).
+         * @description Submit a KYC pack - moves the client into ``submitted``.
          */
         KycSubmitRequest: {
             /** Documents */
@@ -9952,6 +10002,47 @@ export interface components {
             matter_id: string;
             /** Role */
             role: string | null;
+        };
+        /** MatterClientVerificationListResponse */
+        MatterClientVerificationListResponse: {
+            /** Clients */
+            clients?: components["schemas"]["MatterClientVerificationRecord"][];
+            /** Matter Id */
+            matter_id: string;
+        };
+        /** MatterClientVerificationRecord */
+        MatterClientVerificationRecord: {
+            /** Client Id */
+            client_id: string;
+            /** Client Name */
+            client_name: string;
+            /**
+             * Client Type
+             * @enum {string}
+             */
+            client_type: "individual" | "corporate" | "government" | "nonprofit";
+            /** Documents */
+            documents?: components["schemas"]["KycDocumentRecord"][];
+            /**
+             * Is Primary
+             * @default false
+             */
+            is_primary: boolean;
+            /** Rejection Reason */
+            rejection_reason?: string | null;
+            /** Reviewed At */
+            reviewed_at?: string | null;
+            /** Reviewer Membership Id */
+            reviewer_membership_id?: string | null;
+            /** Role */
+            role?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "not_required" | "required" | "requested" | "submitted" | "under_review" | "verified" | "rejected" | "expired";
+            /** Submitted At */
+            submitted_at?: string | null;
         };
         /** MatterCourtOrderCreateRequest */
         MatterCourtOrderCreateRequest: {
@@ -19160,6 +19251,73 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BenchStrategyContextResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_matter_client_verification_api_matters__matter_id__client_verification_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterClientVerificationListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_matter_client_verification_api_matters__matter_id__client_verification__client_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+                client_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClientVerificationUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterClientVerificationRecord"];
                 };
             };
             /** @description Validation Error */

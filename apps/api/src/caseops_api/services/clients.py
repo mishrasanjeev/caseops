@@ -16,6 +16,7 @@ from caseops_api.db.models import (
     ClientKycStatus,
     ClientType,
     Matter,
+    MatterAttachment,
     MatterClientAssignment,
 )
 from caseops_api.schemas.clients import (
@@ -24,11 +25,14 @@ from caseops_api.schemas.clients import (
     ClientMatterLink,
     ClientRecord,
     ClientUpdateRequest,
+    ClientVerificationUpdateRequest,
     KycDocumentRecord,
     KycRejectRequest,
     KycSubmitRequest,
     MatterClientAssignmentRecord,
     MatterClientAssignRequest,
+    MatterClientVerificationListResponse,
+    MatterClientVerificationRecord,
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.identity import SessionContext
@@ -36,6 +40,87 @@ from caseops_api.services.matter_access import assert_access
 
 _ALLOWED_TYPES = {t.value for t in ClientType}
 _ALLOWED_KYC = {s.value for s in ClientKycStatus}
+_ADP10_STATUS_ALIASES = {
+    "not_started": ClientKycStatus.NOT_REQUIRED.value,
+    "pending": ClientKycStatus.SUBMITTED.value,
+}
+_ALLOWED_VERIFICATION_TRANSITIONS = {
+    ClientKycStatus.NOT_REQUIRED.value: {
+        ClientKycStatus.NOT_REQUIRED.value,
+        ClientKycStatus.REQUIRED.value,
+        ClientKycStatus.REQUESTED.value,
+        ClientKycStatus.SUBMITTED.value,
+        ClientKycStatus.EXPIRED.value,
+    },
+    ClientKycStatus.REQUIRED.value: {
+        ClientKycStatus.NOT_REQUIRED.value,
+        ClientKycStatus.REQUIRED.value,
+        ClientKycStatus.REQUESTED.value,
+        ClientKycStatus.SUBMITTED.value,
+        ClientKycStatus.EXPIRED.value,
+    },
+    ClientKycStatus.REQUESTED.value: {
+        ClientKycStatus.NOT_REQUIRED.value,
+        ClientKycStatus.REQUESTED.value,
+        ClientKycStatus.SUBMITTED.value,
+        ClientKycStatus.UNDER_REVIEW.value,
+        ClientKycStatus.EXPIRED.value,
+    },
+    ClientKycStatus.SUBMITTED.value: {
+        ClientKycStatus.REQUESTED.value,
+        ClientKycStatus.SUBMITTED.value,
+        ClientKycStatus.UNDER_REVIEW.value,
+        ClientKycStatus.VERIFIED.value,
+        ClientKycStatus.REJECTED.value,
+        ClientKycStatus.EXPIRED.value,
+    },
+    ClientKycStatus.UNDER_REVIEW.value: {
+        ClientKycStatus.UNDER_REVIEW.value,
+        ClientKycStatus.VERIFIED.value,
+        ClientKycStatus.REJECTED.value,
+        ClientKycStatus.EXPIRED.value,
+    },
+    ClientKycStatus.VERIFIED.value: {
+        ClientKycStatus.VERIFIED.value,
+        ClientKycStatus.REQUIRED.value,
+        ClientKycStatus.REQUESTED.value,
+        ClientKycStatus.EXPIRED.value,
+    },
+    ClientKycStatus.REJECTED.value: {
+        ClientKycStatus.NOT_REQUIRED.value,
+        ClientKycStatus.REQUESTED.value,
+        ClientKycStatus.SUBMITTED.value,
+        ClientKycStatus.UNDER_REVIEW.value,
+        ClientKycStatus.REJECTED.value,
+        ClientKycStatus.EXPIRED.value,
+    },
+    ClientKycStatus.EXPIRED.value: {
+        ClientKycStatus.NOT_REQUIRED.value,
+        ClientKycStatus.REQUIRED.value,
+        ClientKycStatus.REQUESTED.value,
+        ClientKycStatus.SUBMITTED.value,
+        ClientKycStatus.EXPIRED.value,
+    },
+}
+
+
+def _normalize_kyc_status(value: str | ClientKycStatus | None) -> str:
+    raw = str(value or ClientKycStatus.NOT_REQUIRED.value)
+    return _ADP10_STATUS_ALIASES.get(raw, raw)
+
+
+def _ensure_verification_transition(current: str, new_status: str) -> None:
+    current = _normalize_kyc_status(current)
+    new_status = _normalize_kyc_status(new_status)
+    allowed = _ALLOWED_VERIFICATION_TRANSITIONS.get(current, {current})
+    if new_status not in allowed:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Client verification cannot move from {current!r} "
+                f"to {new_status!r}."
+            ),
+        )
 
 
 def _client_record(
@@ -61,7 +146,7 @@ def _client_record(
         pan=client.pan,
         gstin=client.gstin,
         internal_notes=client.internal_notes,
-        kyc_status=client.kyc_status,
+        kyc_status=_normalize_kyc_status(client.kyc_status),
         kyc_submitted_at=client.kyc_submitted_at,
         kyc_verified_at=client.kyc_verified_at,
         kyc_verified_by_membership_id=client.kyc_verified_by_membership_id,
@@ -112,6 +197,7 @@ def create_client(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Unknown client_type {payload.client_type!r}.",
         )
+    normalized_kyc = _normalize_kyc_status(payload.kyc_status)
     if payload.kyc_status not in _ALLOWED_KYC:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -146,7 +232,7 @@ def create_client(
         pan=payload.pan.strip().upper() if payload.pan else None,
         gstin=payload.gstin.strip().upper() if payload.gstin else None,
         internal_notes=payload.internal_notes,
-        kyc_status=payload.kyc_status,
+        kyc_status=normalized_kyc,
         created_by_membership_id=context.membership.id,
     )
     session.add(client)
@@ -232,11 +318,26 @@ def update_client(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Unknown client_type {update_data['client_type']!r}.",
         )
-    if "kyc_status" in update_data and update_data["kyc_status"] not in _ALLOWED_KYC:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unknown kyc_status {update_data['kyc_status']!r}.",
-        )
+    if "kyc_status" in update_data:
+        if update_data["kyc_status"] not in _ALLOWED_KYC:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unknown kyc_status {update_data['kyc_status']!r}.",
+            )
+        update_data["kyc_status"] = _normalize_kyc_status(update_data["kyc_status"])
+        _ensure_verification_transition(client.kyc_status, update_data["kyc_status"])
+        if update_data["kyc_status"] in {
+            ClientKycStatus.UNDER_REVIEW.value,
+            ClientKycStatus.VERIFIED.value,
+            ClientKycStatus.REJECTED.value,
+        }:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Use the verification workflow endpoint for review "
+                    "status changes."
+                ),
+            )
     for field in ("name", "primary_contact_name", "primary_contact_phone",
                   "address_line_1", "address_line_2", "postal_code",
                   "city", "state", "country", "pan", "gstin"):
@@ -247,6 +348,10 @@ def update_client(
             update_data[field] = value
     for key, value in update_data.items():
         setattr(client, key, value)
+    if "kyc_status" in update_data:
+        _apply_verification_status_side_effects(
+            client, context=context, new_status=update_data["kyc_status"],
+        )
     try:
         session.flush()
     except IntegrityError as exc:
@@ -447,6 +552,107 @@ def _kyc_documents(client: Client) -> list[KycDocumentRecord]:
     return out
 
 
+def _document_payloads(
+    documents: list[KycDocumentRecord],
+    *,
+    submitted: bool = False,
+) -> list[dict]:
+    payloads: list[dict] = []
+    for doc in documents:
+        item = doc.model_dump(mode="json")
+        if submitted and item.get("status") in {"required", "requested", "pending"}:
+            item["status"] = ClientKycStatus.SUBMITTED.value
+        payloads.append(item)
+    return payloads
+
+
+def _document_audit_metadata(documents: list[KycDocumentRecord]) -> dict:
+    attachment_count = sum(1 for d in documents if d.attachment_id)
+    return {
+        "document_count": len(documents),
+        "attachment_reference_count": attachment_count,
+        "document_type_count": sum(1 for d in documents if d.document_type),
+    }
+
+
+def _reject_direct_attachment_refs(documents: list[KycDocumentRecord]) -> None:
+    if any(d.attachment_id for d in documents):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Verification attachment references must be submitted through "
+                "the matter-scoped verification endpoint."
+            ),
+        )
+
+
+def _validate_matter_attachment_refs(
+    session: Session,
+    *,
+    matter: Matter,
+    documents: list[KycDocumentRecord],
+) -> None:
+    attachment_ids = sorted({d.attachment_id for d in documents if d.attachment_id})
+    if not attachment_ids:
+        return
+    found = set(
+        session.scalars(
+            select(MatterAttachment.id).where(
+                MatterAttachment.id.in_(attachment_ids),
+                MatterAttachment.matter_id == matter.id,
+            )
+        )
+    )
+    missing = set(attachment_ids) - found
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="One or more verification document references are invalid.",
+        )
+
+
+def _apply_verification_status_side_effects(
+    client: Client,
+    *,
+    context: SessionContext,
+    new_status: str,
+    rejection_reason: str | None = None,
+) -> None:
+    from datetime import UTC
+    from datetime import datetime as _dt
+
+    normalized = _normalize_kyc_status(new_status)
+    client.kyc_status = normalized
+    if normalized == ClientKycStatus.SUBMITTED.value:
+        client.kyc_submitted_at = _dt.now(UTC)
+        client.kyc_verified_at = None
+        client.kyc_verified_by_membership_id = None
+        client.kyc_rejection_reason = None
+    elif normalized == ClientKycStatus.UNDER_REVIEW.value:
+        if client.kyc_submitted_at is None:
+            client.kyc_submitted_at = _dt.now(UTC)
+        client.kyc_verified_at = None
+        client.kyc_verified_by_membership_id = None
+    elif normalized == ClientKycStatus.VERIFIED.value:
+        client.kyc_verified_at = _dt.now(UTC)
+        client.kyc_verified_by_membership_id = context.membership.id
+        client.kyc_rejection_reason = None
+    elif normalized == ClientKycStatus.REJECTED.value:
+        client.kyc_verified_at = _dt.now(UTC)
+        client.kyc_verified_by_membership_id = context.membership.id
+        client.kyc_rejection_reason = (rejection_reason or "").strip()
+    elif normalized in {
+        ClientKycStatus.NOT_REQUIRED.value,
+        ClientKycStatus.REQUIRED.value,
+        ClientKycStatus.REQUESTED.value,
+        ClientKycStatus.EXPIRED.value,
+    }:
+        client.kyc_verified_at = None
+        client.kyc_verified_by_membership_id = None
+        if normalized != ClientKycStatus.REJECTED.value:
+            client.kyc_rejection_reason = None
+
+
 def submit_client_kyc(
     session: Session,
     *,
@@ -462,9 +668,13 @@ def submit_client_kyc(
     from datetime import datetime as _dt
 
     client = _get_client_model(session, context=context, client_id=client_id)
-    client.kyc_status = ClientKycStatus.PENDING
+    _ensure_verification_transition(client.kyc_status, ClientKycStatus.SUBMITTED.value)
+    _reject_direct_attachment_refs(payload.documents)
+    client.kyc_status = ClientKycStatus.SUBMITTED.value
     client.kyc_submitted_at = _dt.now(UTC)
-    client.kyc_documents_json = [d.model_dump() for d in payload.documents]
+    client.kyc_documents_json = _document_payloads(
+        payload.documents, submitted=True,
+    )
     # Clear any stale rejection / verification — this is a fresh cycle.
     client.kyc_rejection_reason = None
     client.kyc_verified_at = None
@@ -474,7 +684,10 @@ def submit_client_kyc(
         action="client.kyc_submitted",
         target_type="client",
         target_id=client.id,
-        metadata={"document_count": len(payload.documents)},
+        metadata={
+            "status": ClientKycStatus.SUBMITTED.value,
+            **_document_audit_metadata(payload.documents),
+        },
     )
     session.commit()
     session.refresh(client)
@@ -497,17 +710,18 @@ def verify_client_kyc(
     from datetime import datetime as _dt
 
     client = _get_client_model(session, context=context, client_id=client_id)
-    if client.kyc_status not in (
-        ClientKycStatus.PENDING.value, ClientKycStatus.REJECTED.value,
+    current_status = _normalize_kyc_status(client.kyc_status)
+    if current_status not in (
+        ClientKycStatus.SUBMITTED.value, ClientKycStatus.UNDER_REVIEW.value,
     ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                f"KYC cannot be verified from status {client.kyc_status!r}. "
+                f"KYC cannot be verified from status {current_status!r}. "
                 "Submit a KYC pack first."
             ),
         )
-    client.kyc_status = ClientKycStatus.VERIFIED
+    client.kyc_status = ClientKycStatus.VERIFIED.value
     client.kyc_verified_at = _dt.now(UTC)
     client.kyc_verified_by_membership_id = context.membership.id
     client.kyc_rejection_reason = None
@@ -516,6 +730,10 @@ def verify_client_kyc(
         action="client.kyc_verified",
         target_type="client",
         target_id=client.id,
+        metadata={
+            "status": ClientKycStatus.VERIFIED.value,
+            "document_count": len(_kyc_documents(client)),
+        },
     )
     session.commit()
     session.refresh(client)
@@ -535,27 +753,196 @@ def reject_client_kyc(
     reason MUST be present (schema enforces min_length=4) so the
     lawyer who has to re-collect docs knows what to fix."""
     client = _get_client_model(session, context=context, client_id=client_id)
-    if client.kyc_status != ClientKycStatus.PENDING.value:
+    current_status = _normalize_kyc_status(client.kyc_status)
+    if current_status not in (
+        ClientKycStatus.SUBMITTED.value, ClientKycStatus.UNDER_REVIEW.value,
+    ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                f"KYC cannot be rejected from status {client.kyc_status!r}. "
-                "Only a pending submission can be rejected."
+                f"KYC cannot be rejected from status {current_status!r}. "
+                "Only a submitted or under-review pack can be rejected."
             ),
         )
-    client.kyc_status = ClientKycStatus.REJECTED
+    client.kyc_status = ClientKycStatus.REJECTED.value
     client.kyc_rejection_reason = payload.reason
-    client.kyc_verified_at = None
-    client.kyc_verified_by_membership_id = None
+    from datetime import UTC
+    from datetime import datetime as _dt
+
+    client.kyc_verified_at = _dt.now(UTC)
+    client.kyc_verified_by_membership_id = context.membership.id
     record_from_context(
         session, context,
         action="client.kyc_rejected",
         target_type="client",
         target_id=client.id,
-        metadata={"reason": payload.reason[:200]},
+        metadata={
+            "status": ClientKycStatus.REJECTED.value,
+            "document_count": len(_kyc_documents(client)),
+            "reason_present": True,
+            "reason_length": len(payload.reason.strip()),
+        },
     )
     session.commit()
     session.refresh(client)
     return _client_record(
         client, matters=_matter_links_for(session, client),
     )
+
+
+def _matter_client_verification_record(
+    assignment: MatterClientAssignment,
+    client: Client,
+) -> MatterClientVerificationRecord:
+    return MatterClientVerificationRecord(
+        client_id=client.id,
+        client_name=client.name,
+        client_type=client.client_type,
+        role=assignment.role,
+        is_primary=assignment.is_primary,
+        status=_normalize_kyc_status(client.kyc_status),
+        submitted_at=client.kyc_submitted_at,
+        reviewed_at=client.kyc_verified_at,
+        reviewer_membership_id=client.kyc_verified_by_membership_id,
+        rejection_reason=client.kyc_rejection_reason,
+        documents=_kyc_documents(client),
+    )
+
+
+def _load_matter_for_client_verification(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+) -> Matter:
+    matter = session.scalar(
+        select(Matter).where(
+            Matter.id == matter_id,
+            Matter.company_id == context.company.id,
+        )
+    )
+    if matter is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Matter not found.",
+        )
+    assert_access(session, context=context, matter=matter)
+    return matter
+
+
+def _load_matter_client_assignment(
+    session: Session,
+    *,
+    matter: Matter,
+    client_id: str,
+) -> tuple[MatterClientAssignment, Client]:
+    row = session.execute(
+        select(MatterClientAssignment, Client)
+        .join(Client, Client.id == MatterClientAssignment.client_id)
+        .where(
+            MatterClientAssignment.matter_id == matter.id,
+            MatterClientAssignment.client_id == client_id,
+            Client.company_id == matter.company_id,
+        )
+    ).first()
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Client not found for this matter.",
+        )
+    assignment, client = row
+    return assignment, client
+
+
+def list_matter_client_verifications(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+) -> MatterClientVerificationListResponse:
+    matter = _load_matter_for_client_verification(
+        session, context=context, matter_id=matter_id,
+    )
+    rows = session.execute(
+        select(MatterClientAssignment, Client)
+        .join(Client, Client.id == MatterClientAssignment.client_id)
+        .where(
+            MatterClientAssignment.matter_id == matter.id,
+            Client.company_id == context.company.id,
+        )
+        .order_by(MatterClientAssignment.is_primary.desc(), Client.name.asc())
+    ).all()
+    return MatterClientVerificationListResponse(
+        matter_id=matter.id,
+        clients=[
+            _matter_client_verification_record(assignment, client)
+            for assignment, client in rows
+        ],
+    )
+
+
+def update_matter_client_verification(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+    client_id: str,
+    payload: ClientVerificationUpdateRequest,
+) -> MatterClientVerificationRecord:
+    matter = _load_matter_for_client_verification(
+        session, context=context, matter_id=matter_id,
+    )
+    assignment, client = _load_matter_client_assignment(
+        session, matter=matter, client_id=client_id,
+    )
+    documents = payload.documents
+    if documents is not None:
+        _validate_matter_attachment_refs(session, matter=matter, documents=documents)
+        client.kyc_documents_json = _document_payloads(documents)
+
+    previous_status = _normalize_kyc_status(client.kyc_status)
+    new_status = (
+        _normalize_kyc_status(payload.status)
+        if payload.status is not None
+        else previous_status
+    )
+    if payload.status is not None:
+        if payload.status not in _ALLOWED_KYC:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unknown verification status {payload.status!r}.",
+            )
+        _ensure_verification_transition(client.kyc_status, new_status)
+        if new_status == ClientKycStatus.REJECTED.value and not (
+            payload.rejection_reason and payload.rejection_reason.strip()
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A rejection reason is required when rejecting verification.",
+            )
+        _apply_verification_status_side_effects(
+            client,
+            context=context,
+            new_status=new_status,
+            rejection_reason=payload.rejection_reason,
+        )
+
+    audit_documents = documents if documents is not None else _kyc_documents(client)
+    record_from_context(
+        session,
+        context,
+        action="client.verification_updated",
+        target_type="client",
+        target_id=client.id,
+        matter_id=matter.id,
+        metadata={
+            "status": _normalize_kyc_status(client.kyc_status),
+            "previous_status": previous_status,
+            "reason_present": bool(payload.rejection_reason),
+            "reason_length": len(payload.rejection_reason.strip())
+            if payload.rejection_reason else 0,
+            **_document_audit_metadata(audit_documents),
+        },
+    )
+    session.commit()
+    session.refresh(client)
+    return _matter_client_verification_record(assignment, client)
