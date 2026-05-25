@@ -1859,8 +1859,8 @@ export const calendarSyncCapabilityStatus = z.object({
   durable_automation: z.literal("blocked_pending_temporal").default("blocked_pending_temporal"),
   notification_delivery: z.literal("pending_wtd_5_3").default("pending_wtd_5_3"),
   email_invitation_candidates: z
-    .literal("deferred_pending_review_queue")
-    .default("deferred_pending_review_queue"),
+    .enum(["deferred_pending_review_queue", "review_queue_available"])
+    .default("review_queue_available"),
 });
 
 export const calendarSyncConflictCandidate = z.object({

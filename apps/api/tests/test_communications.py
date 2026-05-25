@@ -96,6 +96,28 @@ def _email_payload(message_id: str = "msg-001") -> dict:
     }
 
 
+def _calendar_invite_payload(
+    message_id: str,
+    *,
+    subject: str = "Invitation: Strategy conference",
+    body_preview: str = (
+        "Calendar invitation for 2026-06-15 at 10:30 AM. "
+        "Venue: Courtroom 4. Please attend with the case file."
+    ),
+) -> dict:
+    return {
+        "provider": "manual",
+        "provider_message_id": message_id,
+        "sender_email": "client@example.in",
+        "sender_name": "Client Sender",
+        "to_recipients": ["lawyer@asterlegal.in"],
+        "subject": subject,
+        "received_at": "2026-05-15T10:30:00Z",
+        "body_preview": body_preview,
+        "attachments": [],
+    }
+
+
 def test_create_then_list_communication(client: TestClient) -> None:
     """Round-trip — POST a manual log, GET the list, see it back."""
     bootstrap = bootstrap_company(client)
@@ -935,6 +957,268 @@ def test_inbound_email_import_respects_restricted_wall_and_team_scoping(
         json=_email_payload("team-denied"),
     )
     assert team_denied.status_code == 404
+
+
+def test_email_invitation_candidate_review_creates_internal_calendar_event(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    headers = auth_headers(str(bootstrap["access_token"]))
+    matter_id = _create_matter(client, headers, "ADP19-001")
+
+    imported = client.post(
+        f"/api/matters/{matter_id}/communications/import-email",
+        headers=headers,
+        json=_calendar_invite_payload("invite-001"),
+    )
+    assert imported.status_code == 200, imported.text
+    communication_id = imported.json()["communication"]["id"]
+
+    extracted = client.post(
+        "/api/calendar/email-invitation-candidates/extract",
+        headers=headers,
+        json={"matter_id": matter_id},
+    )
+    assert extracted.status_code == 200, extracted.text
+    body = extracted.json()
+    assert body["examined_count"] == 1
+    assert body["created_count"] == 1
+    assert body["duplicate_count"] == 0
+    candidate = body["candidates"][0]
+    assert candidate["communication_id"] == communication_id
+    assert candidate["status"] == "needs_review"
+    assert candidate["detected_title"] == "Strategy conference"
+    assert candidate["detected_start_at"].startswith("2026-06-15T10:30:00")
+    assert candidate["detected_location"] == "Courtroom 4"
+    assert candidate["confidence_band"] == "high"
+    assert len(candidate["source_preview"]) <= 280
+    assert "body_text" not in extracted.text
+    assert "storage_key" not in extracted.text
+
+    approved = client.patch(
+        f"/api/calendar/email-invitation-candidates/{candidate['id']}",
+        headers=headers,
+        json={"action": "approve"},
+    )
+    assert approved.status_code == 200, approved.text
+    reviewed = approved.json()
+    assert reviewed["status"] == "approved_created"
+    assert reviewed["created_deadline_id"] is not None
+    assert reviewed["reviewed_by_membership_id"] is not None
+    assert reviewed["reviewed_at"] is not None
+
+    event_resp = client.get(
+        "/api/calendar/events",
+        headers=headers,
+        params={"from": "2026-06-01", "to": "2026-06-30", "kinds": ["deadline"]},
+    )
+    assert event_resp.status_code == 200, event_resp.text
+    events = event_resp.json()["events"]
+    assert any(
+        event["title"] == "Strategy conference"
+        and event["id"] == f"deadline:{reviewed['created_deadline_id']}"
+        for event in events
+    )
+
+    from caseops_api.db.models import AuditEvent, MatterDeadline
+    from caseops_api.db.session import get_session_factory
+
+    with get_session_factory()() as session:
+        deadline = session.get(MatterDeadline, reviewed["created_deadline_id"])
+        assert deadline is not None
+        assert deadline.source == "email_invitation"
+        assert deadline.source_ref_type == "communication"
+        assert deadline.source_ref_id == communication_id
+        audits = list(
+            session.scalars(
+                select(AuditEvent).where(
+                    AuditEvent.action.in_(
+                        [
+                            "calendar.email_candidate.extracted",
+                            "calendar.email_candidate.approved",
+                        ]
+                    )
+                )
+            )
+        )
+        assert len(audits) == 2
+        audit_blob = "\n".join(str(row.metadata_json or "") for row in audits)
+        assert "Strategy conference" not in audit_blob
+        assert "Courtroom 4" not in audit_blob
+        assert "client@example.in" not in audit_blob
+
+
+def test_email_invitation_candidate_duplicates_are_idempotent(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    headers = auth_headers(str(bootstrap["access_token"]))
+    matter_id = _create_matter(client, headers, "ADP19-DUP")
+
+    for suffix in ("a", "b"):
+        imported = client.post(
+            f"/api/matters/{matter_id}/communications/import-email",
+            headers=headers,
+            json=_calendar_invite_payload(f"invite-dup-{suffix}"),
+        )
+        assert imported.status_code == 200, imported.text
+
+    first = client.post(
+        "/api/calendar/email-invitation-candidates/extract",
+        headers=headers,
+        json={"matter_id": matter_id},
+    )
+    assert first.status_code == 200, first.text
+    candidates = sorted(first.json()["candidates"], key=lambda item: item["status"])
+    statuses = {item["status"] for item in candidates}
+    assert statuses == {"duplicate_skipped", "needs_review"}
+    duplicate = next(
+        item for item in first.json()["candidates"] if item["status"] == "duplicate_skipped"
+    )
+    assert duplicate["duplicate_of_candidate_id"] is not None
+
+    second = client.post(
+        "/api/calendar/email-invitation-candidates/extract",
+        headers=headers,
+        json={"matter_id": matter_id},
+    )
+    assert second.status_code == 200, second.text
+    assert second.json()["created_count"] == 0
+    assert len(second.json()["candidates"]) == 2
+
+    duplicate_approval = client.patch(
+        f"/api/calendar/email-invitation-candidates/{duplicate['id']}",
+        headers=headers,
+        json={"action": "approve"},
+    )
+    assert duplicate_approval.status_code == 409
+
+    from caseops_api.db.models import EmailCalendarCandidate, MatterDeadline
+    from caseops_api.db.session import get_session_factory
+
+    with get_session_factory()() as session:
+        assert (
+            session.scalar(
+                select(func.count()).select_from(EmailCalendarCandidate)
+            )
+            == 2
+        )
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(MatterDeadline)
+                .where(MatterDeadline.source == "email_invitation")
+            )
+            == 0
+        )
+
+
+def test_email_invitation_candidate_rejection_does_not_create_event(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    headers = auth_headers(str(bootstrap["access_token"]))
+    matter_id = _create_matter(client, headers, "ADP19-REJ")
+    imported = client.post(
+        f"/api/matters/{matter_id}/communications/import-email",
+        headers=headers,
+        json=_calendar_invite_payload("invite-reject"),
+    )
+    assert imported.status_code == 200, imported.text
+
+    extracted = client.post(
+        "/api/calendar/email-invitation-candidates/extract",
+        headers=headers,
+        json={"matter_id": matter_id},
+    )
+    assert extracted.status_code == 200, extracted.text
+    candidate_id = extracted.json()["candidates"][0]["id"]
+    rejected = client.patch(
+        f"/api/calendar/email-invitation-candidates/{candidate_id}",
+        headers=headers,
+        json={"action": "reject"},
+    )
+    assert rejected.status_code == 200, rejected.text
+    assert rejected.json()["status"] == "rejected"
+    assert rejected.json()["created_deadline_id"] is None
+
+    from caseops_api.db.models import MatterDeadline
+    from caseops_api.db.session import get_session_factory
+
+    with get_session_factory()() as session:
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(MatterDeadline)
+                .where(MatterDeadline.source == "email_invitation")
+            )
+            == 0
+        )
+
+
+def test_email_invitation_candidates_respect_matter_access_boundaries(
+    client: TestClient,
+) -> None:
+    slug = "adp19-access"
+    bootstrap = client.post(
+        "/api/bootstrap/company",
+        json={
+            "company_name": "ADP19 Access LLP",
+            "company_slug": slug,
+            "company_type": "law_firm",
+            "owner_full_name": "Access Owner",
+            "owner_email": "owner@adp19-access.example",
+            "owner_password": "OwnerStrong!234",
+        },
+    ).json()
+    owner_headers = auth_headers(str(bootstrap["access_token"]))
+    member = _invite_member(
+        client,
+        owner_headers,
+        email="member@adp19-access.example",
+    )
+    member_headers = auth_headers(
+        _login(client, "member@adp19-access.example", "MemberPass123!", slug)
+    )
+    matter_id = _create_matter(client, owner_headers, "ADP19-WALL")
+    imported = client.post(
+        f"/api/matters/{matter_id}/communications/import-email",
+        headers=owner_headers,
+        json=_calendar_invite_payload("invite-walled"),
+    )
+    assert imported.status_code == 200, imported.text
+    extracted = client.post(
+        "/api/calendar/email-invitation-candidates/extract",
+        headers=owner_headers,
+        json={"matter_id": matter_id},
+    )
+    assert extracted.status_code == 200, extracted.text
+    candidate_id = extracted.json()["candidates"][0]["id"]
+
+    wall = client.post(
+        f"/api/matters/{matter_id}/access/walls",
+        headers=owner_headers,
+        json={"excluded_membership_id": member["membership_id"]},
+    )
+    assert wall.status_code == 200, wall.text
+    denied_extract = client.post(
+        "/api/calendar/email-invitation-candidates/extract",
+        headers=member_headers,
+        json={"matter_id": matter_id},
+    )
+    assert denied_extract.status_code == 404
+    hidden_list = client.get(
+        "/api/calendar/email-invitation-candidates",
+        headers=member_headers,
+    )
+    assert hidden_list.status_code == 200, hidden_list.text
+    assert hidden_list.json()["candidates"] == []
+    denied_review = client.patch(
+        f"/api/calendar/email-invitation-candidates/{candidate_id}",
+        headers=member_headers,
+        json={"action": "approve"},
+    )
+    assert denied_review.status_code == 404
 
 
 def test_inbound_email_import_has_no_autonomous_sweep_surface() -> None:

@@ -22,6 +22,11 @@ from caseops_api.schemas.calendar import (
     CalendarEventListResponse,
     CalendarEventSyncResponse,
     CalendarSyncStatusResponse,
+    EmailInvitationCandidateExtractRequest,
+    EmailInvitationCandidateExtractResponse,
+    EmailInvitationCandidateListResponse,
+    EmailInvitationCandidateRecord,
+    EmailInvitationCandidateReviewRequest,
     OutlookBulkSyncRequest,
     OutlookBulkSyncResponse,
 )
@@ -37,6 +42,11 @@ from caseops_api.services.calendar_sync import (
     sync_hearing_to_outlook,
     sync_outlook_bulk,
     sync_status,
+)
+from caseops_api.services.email_calendar_candidates import (
+    extract_email_invitation_candidates,
+    list_email_invitation_candidates,
+    review_email_invitation_candidate,
 )
 from caseops_api.services.identity import SessionContext
 
@@ -286,3 +296,63 @@ async def get_calendar_sync_status(
     session: DbSession,
 ) -> CalendarSyncStatusResponse:
     return sync_status(session, context=context)
+
+
+@router.get(
+    "/email-invitation-candidates",
+    response_model=EmailInvitationCandidateListResponse,
+    summary="List reviewable email invitation calendar candidates.",
+)
+async def get_email_invitation_candidates(
+    context: CalendarViewer,
+    session: DbSession,
+    matter_id: str | None = None,
+    status_filter: str | None = Query(default=None, alias="status"),
+    limit: int = Query(default=50, ge=1, le=100),
+) -> EmailInvitationCandidateListResponse:
+    return list_email_invitation_candidates(
+        session,
+        context=context,
+        matter_id=matter_id,
+        status_filter=status_filter,
+        limit=limit,
+    )
+
+
+@router.post(
+    "/email-invitation-candidates/extract",
+    response_model=EmailInvitationCandidateExtractResponse,
+    summary=(
+        "Deterministically extract reviewable calendar candidates from "
+        "already imported email metadata."
+    ),
+)
+async def post_email_invitation_candidate_extract(
+    context: CalendarSyncer,
+    session: DbSession,
+    payload: EmailInvitationCandidateExtractRequest,
+) -> EmailInvitationCandidateExtractResponse:
+    return extract_email_invitation_candidates(
+        session,
+        context=context,
+        payload=payload,
+    )
+
+
+@router.patch(
+    "/email-invitation-candidates/{candidate_id}",
+    response_model=EmailInvitationCandidateRecord,
+    summary="Approve or reject one email invitation calendar candidate.",
+)
+async def patch_email_invitation_candidate(
+    candidate_id: str,
+    payload: EmailInvitationCandidateReviewRequest,
+    context: CalendarSyncer,
+    session: DbSession,
+) -> EmailInvitationCandidateRecord:
+    return review_email_invitation_candidate(
+        session,
+        context=context,
+        candidate_id=candidate_id,
+        payload=payload,
+    )

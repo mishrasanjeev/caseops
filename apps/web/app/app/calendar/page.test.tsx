@@ -18,23 +18,32 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const {
   fetchCalendarEventsMock,
   fetchCalendarSyncStatusMock,
+  extractEmailInvitationCandidatesMock,
   listCalendarConnectionsMock,
+  listEmailInvitationCandidatesMock,
+  reviewEmailInvitationCandidateMock,
   startOutlookCalendarConnectionMock,
   syncOutlookVisibleRangeMock,
   useCapabilityMock,
 } = vi.hoisted(() => ({
   fetchCalendarEventsMock: vi.fn(),
   fetchCalendarSyncStatusMock: vi.fn(),
+  extractEmailInvitationCandidatesMock: vi.fn(),
   listCalendarConnectionsMock: vi.fn(),
+  listEmailInvitationCandidatesMock: vi.fn(),
+  reviewEmailInvitationCandidateMock: vi.fn(),
   startOutlookCalendarConnectionMock: vi.fn(),
   syncOutlookVisibleRangeMock: vi.fn(),
   useCapabilityMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api/endpoints", () => ({
+  extractEmailInvitationCandidates: extractEmailInvitationCandidatesMock,
   fetchCalendarEvents: fetchCalendarEventsMock,
   fetchCalendarSyncStatus: fetchCalendarSyncStatusMock,
   listCalendarConnections: listCalendarConnectionsMock,
+  listEmailInvitationCandidates: listEmailInvitationCandidatesMock,
+  reviewEmailInvitationCandidate: reviewEmailInvitationCandidateMock,
   revokeCalendarConnection: vi.fn(),
   startOutlookCalendarConnection: startOutlookCalendarConnectionMock,
   syncOutlookVisibleRange: syncOutlookVisibleRangeMock,
@@ -62,7 +71,10 @@ describe("CalendarPage", () => {
   beforeEach(() => {
     fetchCalendarEventsMock.mockReset();
     fetchCalendarSyncStatusMock.mockReset();
+    extractEmailInvitationCandidatesMock.mockReset();
     listCalendarConnectionsMock.mockReset();
+    listEmailInvitationCandidatesMock.mockReset();
+    reviewEmailInvitationCandidateMock.mockReset();
     startOutlookCalendarConnectionMock.mockReset();
     syncOutlookVisibleRangeMock.mockReset();
     useCapabilityMock.mockReset();
@@ -83,7 +95,7 @@ describe("CalendarPage", () => {
         manual_sync_available: true,
         durable_automation: "blocked_pending_temporal",
         notification_delivery: "pending_wtd_5_3",
-        email_invitation_candidates: "deferred_pending_review_queue",
+        email_invitation_candidates: "review_queue_available",
       },
       provider_config: [
         {
@@ -103,6 +115,18 @@ describe("CalendarPage", () => {
       connections: [],
       syncs: [],
     });
+    listEmailInvitationCandidatesMock.mockResolvedValue({
+      candidates: [],
+      pending_count: 0,
+      duplicate_count: 0,
+    });
+    extractEmailInvitationCandidatesMock.mockResolvedValue({
+      examined_count: 0,
+      created_count: 0,
+      duplicate_count: 0,
+      candidates: [],
+    });
+    reviewEmailInvitationCandidateMock.mockResolvedValue({});
   });
 
   it("renders the current month label and a Today affordance", async () => {
@@ -144,7 +168,7 @@ describe("CalendarPage", () => {
   });
 
   it("renders bounded sync status without claiming durable automation", async () => {
-    fetchCalendarEventsMock.mockResolvedValueOnce({
+    fetchCalendarEventsMock.mockResolvedValue({
       range_from: "2026-04-01",
       range_to: "2026-05-31",
       events: [],
@@ -154,7 +178,65 @@ describe("CalendarPage", () => {
     expect(within(panel).getByText("Manual visible-range sync")).toBeInTheDocument();
     expect(within(panel).getByText("Pending Temporal proof")).toBeInTheDocument();
     expect(within(panel).getByText("Pending WTD-5.3")).toBeInTheDocument();
-    expect(within(panel).getByText("Review queue pending")).toBeInTheDocument();
+    expect(within(panel).getByText("Review queue available")).toBeInTheDocument();
+  });
+
+  it("shows email invitation candidates and review actions without provider sync claims", async () => {
+    fetchCalendarEventsMock.mockResolvedValueOnce({
+      range_from: "2026-04-01",
+      range_to: "2026-05-31",
+      events: [],
+    });
+    listEmailInvitationCandidatesMock.mockResolvedValueOnce({
+      pending_count: 1,
+      duplicate_count: 0,
+      candidates: [
+        {
+          id: "candidate-1",
+          company_id: "company-1",
+          matter_id: "matter-1",
+          matter_title: "State v Accused",
+          matter_code: "CR-001",
+          communication_id: "comm-1",
+          thread_key: null,
+          status: "needs_review",
+          detected_title: "Strategy conference",
+          detected_start_at: "2026-06-15T10:30:00Z",
+          detected_end_at: "2026-06-15T11:30:00Z",
+          detected_location: "Courtroom 4",
+          source_preview: "Calendar invitation for 2026-06-15 at 10:30 AM.",
+          confidence_band: "high",
+          duplicate_of_candidate_id: null,
+          created_deadline_id: null,
+          reviewed_by_membership_id: null,
+          reviewed_at: null,
+          created_at: "2026-05-24T00:00:00Z",
+          updated_at: "2026-05-24T00:00:00Z",
+        },
+      ],
+    });
+    render(withClient(<CalendarPage />));
+
+    expect(await screen.findByText("Strategy conference")).toBeInTheDocument();
+    const panel = screen.getByTestId("calendar-email-candidates-panel");
+    expect(within(panel).getByText(/CR-001/)).toBeInTheDocument();
+    expect(within(panel).getByText(/1 needs review/)).toBeInTheDocument();
+    expect(within(panel).getByText(/External provider sync is not used/)).toBeInTheDocument();
+    expect(panel.textContent).not.toMatch(/storage_key|access_token|raw invite/i);
+
+    const user = userEvent.setup();
+    await user.click(
+      within(panel).getByTestId("calendar-email-candidate-approve-candidate-1"),
+    );
+    await waitFor(() =>
+      expect(reviewEmailInvitationCandidateMock).toHaveBeenCalledWith(
+        {
+          candidateId: "candidate-1",
+          action: "approve",
+        },
+        expect.anything(),
+      ),
+    );
   });
 
   it("shows sync conflict candidates from safe metadata only", async () => {
@@ -172,7 +254,7 @@ describe("CalendarPage", () => {
         manual_sync_available: true,
         durable_automation: "blocked_pending_temporal",
         notification_delivery: "pending_wtd_5_3",
-        email_invitation_candidates: "deferred_pending_review_queue",
+        email_invitation_candidates: "review_queue_available",
       },
       provider_config: [
         {

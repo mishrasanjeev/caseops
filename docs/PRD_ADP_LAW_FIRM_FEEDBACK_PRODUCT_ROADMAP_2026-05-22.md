@@ -1964,6 +1964,12 @@ Tests:
 Type: Backend + Web
 Priority: P3
 Dependencies: Unified communication timeline, email import
+Status: Implemented foundation - deterministic imported-email candidate
+extraction, review queue, duplicate handling, and approval-created internal
+CaseOps calendar events.
+Design: In-app review only. Uses existing imported communication metadata and
+bounded previews; no mailbox polling, provider API, webhook, scheduler,
+external delivery, OCR, corpus job, embedding job, or provider calendar event.
 
 Scope:
 

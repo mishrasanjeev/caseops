@@ -4952,6 +4952,81 @@ export async function syncOutlookVisibleRange(input: {
   return outlookBulkSyncResponse.parse(data);
 }
 
+export type EmailInvitationCandidateStatus =
+  | "needs_review"
+  | "approved_created"
+  | "rejected"
+  | "duplicate_skipped";
+
+export type EmailInvitationCandidateRecord = {
+  id: string;
+  company_id: string;
+  matter_id: string;
+  matter_title: string;
+  matter_code: string;
+  communication_id: string;
+  thread_key: string | null;
+  status: EmailInvitationCandidateStatus;
+  detected_title: string;
+  detected_start_at: string;
+  detected_end_at: string | null;
+  detected_location: string | null;
+  source_preview: string | null;
+  confidence_band: "high" | "medium" | "low";
+  duplicate_of_candidate_id: string | null;
+  created_deadline_id: string | null;
+  reviewed_by_membership_id: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type EmailInvitationCandidateListResponse = {
+  candidates: EmailInvitationCandidateRecord[];
+  pending_count: number;
+  duplicate_count: number;
+};
+
+export type EmailInvitationCandidateExtractResponse = {
+  examined_count: number;
+  created_count: number;
+  duplicate_count: number;
+  candidates: EmailInvitationCandidateRecord[];
+};
+
+export async function listEmailInvitationCandidates(input?: {
+  status?: EmailInvitationCandidateStatus;
+  limit?: number;
+}): Promise<EmailInvitationCandidateListResponse> {
+  const qs = new URLSearchParams();
+  if (input?.status) qs.set("status", input.status);
+  if (typeof input?.limit === "number") qs.set("limit", String(input.limit));
+  return apiRequest(
+    `/api/calendar/email-invitation-candidates${qs.toString() ? `?${qs.toString()}` : ""}`,
+  );
+}
+
+export async function extractEmailInvitationCandidates(input?: {
+  limit?: number;
+}): Promise<EmailInvitationCandidateExtractResponse> {
+  const body: Record<string, unknown> = {};
+  if (typeof input?.limit === "number") body.limit = input.limit;
+  return apiRequest("/api/calendar/email-invitation-candidates/extract", {
+    method: "POST",
+    body,
+  });
+}
+
+export async function reviewEmailInvitationCandidate(input: {
+  candidateId: string;
+  action: "approve" | "reject";
+}): Promise<EmailInvitationCandidateRecord> {
+  return apiRequest(
+    `/api/calendar/email-invitation-candidates/${encodeURIComponent(input.candidateId)}`,
+    { method: "PATCH", body: { action: input.action } },
+  );
+}
+
 export type NotificationRuleInput = {
   scope_type: "company" | "matter" | "user";
   scope_id?: string | null;
