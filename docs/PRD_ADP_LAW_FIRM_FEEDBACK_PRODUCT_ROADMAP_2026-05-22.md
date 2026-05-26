@@ -1997,6 +1997,11 @@ Tests:
 Type: Backend Worker + Provider Integration
 Priority: P4
 Dependencies: WTD-5.1c, WTD-5.3, ADP-07
+Provider readiness gate: **NO-GO** as of 2026-05-26; see
+`docs/runbooks/adp20-outlook-provider-readiness.md`. Do not implement until
+Outlook provider approval, credential wiring, consent model, scopes, durable
+operation runbook, rollback/disable procedure, and provider-error redaction
+rules are approved.
 
 Scope:
 
