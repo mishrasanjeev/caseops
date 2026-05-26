@@ -1,11 +1,14 @@
 # ADP-20 Outlook Provider Readiness Gate
 
-Status: **NO-GO** as of 2026-05-26.
+Status: **ADMIN-CONFIGURABLE / IMPLEMENTATION-UNBLOCKED** as of 2026-05-26.
 
-This is a provider-readiness checklist for ADP-20 durable Outlook sync. It does
-not approve provider use, does not authorize implementation, and must not carry
-credential values, tenant identifiers, OAuth tokens, redirect URI values,
-Temporal endpoint values, DB URLs, private keys, or local env values.
+This is the provider-readiness runbook for ADP-20 durable Outlook sync. The
+law firm workspace admin now owns the Outlook setup path through
+`/app/admin/outlook`: they can enter approved Microsoft Graph OAuth config,
+record the approval checklist, connect an admin Outlook account, and run the
+end-to-end readiness probe. This document must not carry credential values,
+tenant identifiers, OAuth tokens, redirect URI values, Temporal endpoint values,
+DB URLs, private keys, or local env values.
 
 ## Baseline
 
@@ -14,6 +17,8 @@ Temporal endpoint values, DB URLs, private keys, or local env values.
   `6c892171bf4df6d0aa67306941d0380d38a62b1b`.
 - ADP-20 durable Outlook sync: not started.
 - Current safe sync behavior: bounded manual Outlook sync only.
+- Admin readiness UI/API: implemented for tenant-scoped Outlook configuration,
+  approval capture, encrypted client-secret storage, and Graph connection probe.
 
 ## Explicit Non-Goals For This Gate
 
@@ -22,21 +27,22 @@ Temporal endpoint values, DB URLs, private keys, or local env values.
   sync, corpus jobs, OCR/document-processing jobs, or feature workers.
 - Do not change external notification delivery behavior.
 
-## Config Names And Current Status
+## Config Names And Admin Setup Status
 
-The active inspected configuration reported names/status only:
+The admin page reports names/status only. Credential values are accepted by the
+API but are never echoed back.
 
 | Requirement | Status |
 | --- | --- |
-| `OUTLOOK_CLIENT_ID` | Missing in active inspected config |
-| `OUTLOOK_CLIENT_SECRET` | Missing in active inspected config |
-| `OUTLOOK_REDIRECT_URI` | Missing in active inspected config |
-| `OUTLOOK_TENANT_ID` or approved tenant mode | Tenant mode exists in code, approval evidence missing |
-| Approved OAuth consent model | Missing |
-| Approved scopes | Missing approval evidence |
-| Operator runbook for durable sync/retry/dead-letter/replay | Missing |
-| Rollback/disable procedure | Missing |
-| Provider error redaction rules for ADP-20 | Missing approval evidence |
+| `OUTLOOK_CLIENT_ID` | Configured by law firm admin in `/app/admin/outlook` |
+| `OUTLOOK_CLIENT_SECRET` | Configured by law firm admin; stored encrypted, never displayed |
+| `OUTLOOK_REDIRECT_URI` | Configured by law firm admin in `/app/admin/outlook` |
+| `OUTLOOK_TENANT_ID` or approved tenant mode | Configured by law firm admin in `/app/admin/outlook` |
+| Approved OAuth consent model | Captured by law firm admin checklist |
+| Approved scopes | Captured by law firm admin checklist |
+| Durable sync/retry/dead-letter/replay runbook | Captured by law firm admin checklist |
+| Rollback/disable procedure | Captured by law firm admin checklist |
+| Provider error redaction rules for ADP-20 | Captured by law firm admin checklist |
 
 The bounded manual Outlook flow currently requests these scope names:
 
@@ -44,27 +50,45 @@ The bounded manual Outlook flow currently requests these scope names:
 - `User.Read`
 - `Calendars.ReadWrite`
 
-These scope names are not approval evidence. Security/compliance approval must
-explicitly accept the consent model and scope set before ADP-20 can begin.
+These scope names are not approval evidence by themselves. The law firm admin
+must explicitly approve the consent model and scope set on the Outlook
+configuration page before a tenant reports `ready_for_adp20_implementation`.
 
 ## Required Approval Evidence Before GO
 
-ADP-20 remains blocked until all items below have an approved evidence record:
+ADP-20 implementation is unblocked by the admin-controlled readiness path. A
+specific tenant remains blocked until all items below are approved in
+`/app/admin/outlook` and the end-to-end test passes:
 
 | Item | Required evidence | Current status |
 | --- | --- | --- |
-| Outlook app registration | Operator-owned registration recorded outside the repo | Missing |
-| Consent model | Tenant-admin consent or per-user OAuth explicitly selected | Missing |
-| OAuth scopes | Approved scope list and justification | Missing |
-| Runtime config | Approved secret/config wiring for required names | Missing |
-| Token storage policy | Encryption, retention, revocation, and audit policy approved | Missing |
-| Durable workflow operation | Retry, dead-letter, replay, and monitoring runbook approved | Missing |
-| Disable/rollback | Operator procedure for stopping durable sync safely | Missing |
-| Provider error redaction | Redaction rules for Graph/OAuth errors approved | Missing |
+| Outlook app registration | Law firm admin supplies approved Entra app values | Admin page available |
+| Consent model | Tenant-admin consent or per-user OAuth explicitly selected | Admin checklist available |
+| OAuth scopes | Approved scope list and justification | Admin checklist available |
+| Runtime config | Approved secret/config wiring for required names | Admin page available |
+| Token storage policy | Encryption, retention, revocation, and audit policy approved | Admin checklist available |
+| Durable workflow operation | Retry, dead-letter, replay, and monitoring runbook approved | Admin checklist available |
+| Disable/rollback | Operator procedure for stopping durable sync safely | Admin checklist available |
+| Provider error redaction | Redaction rules for Graph/OAuth errors approved | Admin checklist available |
 
-## Runbook Draft Requirements
+## Admin Setup Flow
 
-The final ADP-20 runbook must include:
+1. Open `/app/admin/outlook` as a workspace owner or admin.
+2. Enter the approved Entra application client ID, client secret, tenant mode
+   or tenant ID, and redirect URI.
+3. Confirm the approved scope list: `offline_access`, `User.Read`,
+   `Calendars.ReadWrite`.
+4. Mark the OAuth consent, scope, durable operation, rollback/disable, and
+   redaction approvals.
+5. Save the configuration. The response shows names/status only.
+6. Connect an admin Outlook account through the OAuth flow.
+7. Run the end-to-end readiness test. It must report
+   `ready_for_adp20_implementation` before durable sync work is enabled for the
+   tenant.
+
+## ADP-20 Implementation Runbook Requirements
+
+The ADP-20 implementation runbook must still include:
 
 1. Preflight command sequence that reports config names/status only.
 2. Temporal worker readiness check using redacted status output only.
@@ -77,17 +101,18 @@ The final ADP-20 runbook must include:
 9. Disable and rollback procedure that leaves bounded manual sync available.
 10. Post-deploy verification and incident escalation owner.
 
-## GO Criteria
+## GO Criteria For A Tenant
 
-The ADP-20 implementation prompt may be used only after:
+The ADP-20 implementation prompt may be used for tenants whose admin readiness
+page shows:
 
-- every row in the approval evidence table is marked approved;
-- required config names are present in the target operator environment;
-- scope and consent decisions are approved;
-- the durable sync/retry/dead-letter/replay runbook is approved;
-- rollback/disable steps are rehearsed or explicitly accepted by operations;
+- required config names present;
+- every approval checklist item approved;
+- an admin Outlook account connected;
+- the end-to-end Graph readiness probe passed;
+- `adp20_readiness=ready_for_adp20_implementation`;
 - no credential values are committed or exposed in logs, docs, PR bodies, tests,
   or audit metadata.
 
-Until then, the readiness verdict is **NO-GO** and bounded manual Outlook sync
-remains the only Outlook sync path.
+Until durable Outlook sync is separately implemented, bounded manual Outlook
+sync remains the only Outlook sync path.

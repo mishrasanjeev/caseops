@@ -13,6 +13,7 @@ from caseops_api.db.models import (
     MatterCourtOrder,
     NotificationDeliveryIntent,
     NotificationDeliveryStatus,
+    TenantOutlookConfiguration,
     UserCalendarConnection,
 )
 from caseops_api.db.session import get_session_factory
@@ -68,6 +69,13 @@ class StubOutlookProvider:
         )
         return existing_provider_event_id or "remote-event-1"
 
+    def validate_connection(self, *, token_payload: dict[str, object]) -> dict[str, object]:
+        assert token_payload["access_token"] == "raw-access-token"
+        return {
+            "provider_account_id": "outlook-user-1",
+            "display_email": "lawyer@example.test",
+        }
+
 
 class MissingOutlookProvider:
     @property
@@ -86,6 +94,9 @@ class MissingOutlookProvider:
 
     def upsert_hearing_event(self, **kwargs) -> str:  # pragma: no cover
         raise AssertionError("unavailable provider should not sync")
+
+    def validate_connection(self, **kwargs) -> dict[str, object]:  # pragma: no cover
+        raise AssertionError("unavailable provider should not validate")
 
 
 def _auth(token: str) -> dict[str, str]:
@@ -283,6 +294,110 @@ def test_sync_status_reports_bounded_manual_state_and_missing_config_names(
         assert body["conflict_candidates"] == []
         assert "raw-access-token" not in response.text
         assert "raw-refresh-token" not in response.text
+    finally:
+        set_outlook_provider_for_tests(None)
+
+
+def test_admin_outlook_configuration_stores_secret_encrypted_and_names_only(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    response = client.patch(
+        "/api/admin/outlook-configuration",
+        headers=_auth(token),
+        json={
+            "client_id": "client-id-value",
+            "client_secret": "fixture-credential-value",
+            "tenant_id": "organizations",
+            "redirect_uri": "https://api.example.test/api/calendar/connections/outlook/callback",
+            "scopes": ["offline_access", "User.Read", "Calendars.ReadWrite"],
+            "oauth_consent_model_approved": True,
+            "scopes_approved": True,
+            "durable_runbook_approved": True,
+            "rollback_approved": True,
+            "redaction_rules_approved": True,
+            "enabled": True,
+        },
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["configured"] is True
+    assert body["config_source"] == "tenant_admin"
+    assert body["missing_config_names"] == []
+    assert body["missing_approval_keys"] == []
+    assert "fixture-credential-value" not in response.text
+    assert "client-id-value" not in response.text
+
+    factory = get_session_factory()
+    with factory() as session:
+        row = session.scalar(select(TenantOutlookConfiguration))
+        assert row is not None
+        assert row.client_id == "client-id-value"
+        assert row.encrypted_client_secret_ref is not None
+        assert row.encrypted_client_secret_ref.startswith("fernet:")
+        assert "fixture-credential-value" not in row.encrypted_client_secret_ref
+
+
+def test_admin_outlook_readiness_test_requires_connection_then_unblocks(
+    client: TestClient,
+) -> None:
+    provider = StubOutlookProvider()
+    try:
+        set_outlook_provider_for_tests(provider)
+        bootstrap = bootstrap_company(client)
+        token = str(bootstrap["access_token"])
+        saved = client.patch(
+            "/api/admin/outlook-configuration",
+            headers=_auth(token),
+            json={
+                "client_id": "client-id-value",
+                "client_secret": "fixture-credential-value",
+                "tenant_id": "organizations",
+                "redirect_uri": "https://api.example.test/api/calendar/connections/outlook/callback",
+                "scopes": ["offline_access", "User.Read", "Calendars.ReadWrite"],
+                "oauth_consent_model_approved": True,
+                "scopes_approved": True,
+                "durable_runbook_approved": True,
+                "rollback_approved": True,
+                "redaction_rules_approved": True,
+                "enabled": True,
+            },
+        )
+        assert saved.status_code == 200, saved.text
+
+        blocked = client.post(
+            "/api/admin/outlook-configuration/test",
+            headers=_auth(token),
+        )
+        assert blocked.status_code == 200, blocked.text
+        assert blocked.json()["status"] == "blocked"
+        assert blocked.json()["adp20_readiness"] == (
+            "blocked_pending_admin_configuration"
+        )
+        assert "fixture-credential-value" not in blocked.text
+
+        _connect_outlook(client, token, provider)
+        passed = client.post(
+            "/api/admin/outlook-configuration/test",
+            headers=_auth(token),
+        )
+        assert passed.status_code == 200, passed.text
+        body = passed.json()
+        assert body["status"] == "passed"
+        assert body["adp20_readiness"] == "ready_for_adp20_implementation"
+        assert {check["key"] for check in body["checks"]} >= {
+            "OUTLOOK_CLIENT_ID",
+            "OUTLOOK_CLIENT_SECRET",
+            "OUTLOOK_REDIRECT_URI",
+            "OUTLOOK_TENANT_ID_OR_APPROVED_TENANT_MODE",
+            "MICROSOFT_GRAPH_ME",
+        }
+        status = client.get("/api/admin/outlook-configuration", headers=_auth(token))
+        assert status.status_code == 200, status.text
+        assert status.json()["adp20_readiness"] == "ready_for_adp20_implementation"
+        assert "raw-access-token" not in passed.text
+        assert "fixture-credential-value" not in passed.text
     finally:
         set_outlook_provider_for_tests(None)
 
