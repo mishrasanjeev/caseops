@@ -9,8 +9,9 @@ from sqlalchemy.orm import Session, joinedload
 from caseops_api.db.models import (
     Company,
     CompanyMembership,
-    InAppNotification,
     Matter,
+    NotificationDeliveryChannel,
+    NotificationDeliveryStatus,
     NotificationRule,
     NotificationRuleEventType,
     NotificationRuleScopeType,
@@ -25,6 +26,10 @@ from caseops_api.schemas.calendar import (
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import assert_access, can_access
+from caseops_api.services.notification_delivery import (
+    enqueue_notification_delivery_intent,
+    process_notification_delivery_intent,
+)
 
 _CHANNELS = {"in_app", "email", "sms", "whatsapp"}
 
@@ -354,11 +359,12 @@ def create_new_order_uploaded_notifications(
     attachment_id: str,
     linked_court_order_id: str,
 ) -> int:
-    """Create transactional in-app notifications for LW-S10.
+    """Create durable notification delivery intents for LW-S10.
 
-    External email/SMS/WhatsApp automation is intentionally not sent here;
-    without Temporal the durable retry contract is not present, so v1 keeps
-    delivery to audited in-app rows only.
+    In-app intents are processed transactionally into existing
+    ``InAppNotification`` rows. External email/SMS/WhatsApp channels are
+    fail-closed into durable blocked intents until provider policy,
+    credentials, and runbooks are approved separately.
     """
 
     rules = list(
@@ -371,25 +377,11 @@ def create_new_order_uploaded_notifications(
         )
     )
     created = 0
-    seen: set[tuple[str, str]] = set()
+    seen: set[tuple[str, str, str]] = set()
     for rule in rules:
         if rule.scope_type == NotificationRuleScopeType.MATTER and rule.scope_id != matter.id:
             continue
         channels = _channels(rule.channels_json)
-        if "in_app" not in channels:
-            record_from_context(
-                session,
-                context,
-                action="notification_rule.external_delivery_blocked",
-                target_type="notification_rule",
-                target_id=rule.id,
-                matter_id=matter.id,
-                metadata={
-                    "channels": channels,
-                    "reason": "durable_delivery_blocked_pending_temporal",
-                },
-            )
-            continue
         recipients = _eligible_recipients(
             session,
             actor_context=context,
@@ -397,54 +389,48 @@ def create_new_order_uploaded_notifications(
             matter=matter,
         )
         for membership in recipients:
-            key = (membership.id, rule.event_type)
-            if key in seen:
-                continue
-            seen.add(key)
-            exists = session.scalar(
-                select(InAppNotification.id).where(
-                    InAppNotification.company_id == context.company.id,
-                    InAppNotification.recipient_membership_id == membership.id,
-                    InAppNotification.event_type == rule.event_type,
-                    InAppNotification.source_type == "matter_attachment",
-                    InAppNotification.source_id == attachment_id,
+            for channel in channels:
+                key = (membership.id, rule.event_type, channel)
+                if key in seen:
+                    continue
+                seen.add(key)
+                intent = enqueue_notification_delivery_intent(
+                    session,
+                    context=context,
+                    recipient_membership=membership,
+                    channel=channel,
+                    event_type=rule.event_type,
+                    source_type="matter_attachment",
+                    source_id=attachment_id,
+                    matter=matter,
+                    notification_rule_id=rule.id,
+                    title=(
+                        "New order uploaded"
+                        if channel == NotificationDeliveryChannel.IN_APP
+                        else None
+                    ),
+                    body=(
+                        f"{matter.matter_code}: a linked court order document was uploaded."
+                        if channel == NotificationDeliveryChannel.IN_APP
+                        else None
+                    ),
+                    linked_court_order_id=linked_court_order_id,
                 )
-            )
-            if exists:
-                continue
-            notification = InAppNotification(
-                company_id=context.company.id,
-                recipient_membership_id=membership.id,
-                event_type=rule.event_type,
-                source_type="matter_attachment",
-                source_id=attachment_id,
-                matter_id=matter.id,
-                title="New order uploaded",
-                body=f"{matter.matter_code}: a linked court order document was uploaded.",
-                metadata_json={
-                    "notification_rule_id": rule.id,
-                    "linked_court_order_id": linked_court_order_id,
-                    "triggered_by_membership_id": context.membership.id,
-                },
-            )
-            session.add(notification)
-            session.flush()
-            created += 1
-            record_from_context(
-                session,
-                context,
-                action="notification.in_app.created",
-                target_type="in_app_notification",
-                target_id=notification.id,
-                matter_id=matter.id,
-                metadata={
-                    "notification_rule_id": rule.id,
-                    "recipient_membership_id": membership.id,
-                    "event_type": rule.event_type,
-                    "source_type": "matter_attachment",
-                    "source_id": attachment_id,
-                },
-            )
+                if intent is None or channel != NotificationDeliveryChannel.IN_APP:
+                    continue
+                before_status = intent.status
+                before_attempts = intent.attempts
+                result = process_notification_delivery_intent(
+                    session,
+                    intent_id=intent.id,
+                    context=context,
+                )
+                if (
+                    result.delivered
+                    and before_status != NotificationDeliveryStatus.DELIVERED
+                    and before_attempts == 0
+                ):
+                    created += 1
     return created
 
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -17,6 +18,9 @@ from caseops_api.db.models import (
     CompanyMembership,
     HearingReminder,
     InAppNotification,
+    Matter,
+    NotificationDeliveryIntent,
+    NotificationDeliveryStatus,
     User,
 )
 from caseops_api.db.session import get_session_factory
@@ -30,6 +34,12 @@ from caseops_api.services.durable_workflows import (
     temporal_runtime_defaults,
 )
 from caseops_api.services.identity import SessionContext
+from caseops_api.services.notification_delivery import (
+    enqueue_notification_delivery_intent,
+    process_notification_delivery_intent,
+    record_notification_delivery_failure,
+    redact_provider_error,
+)
 from caseops_api.workers import notification_workflows
 from caseops_api.workflows.notification_intent_contracts import (
     DEFAULT_WORKFLOW_EXECUTION_TIMEOUT,
@@ -37,11 +47,13 @@ from caseops_api.workflows.notification_intent_contracts import (
     DEFAULT_WORKFLOW_TASK_TIMEOUT,
 )
 from caseops_api.workflows.notification_intents import (
+    NotificationDeliveryIntentWorkflow,
     NotificationIntentRuntimeProbeWorkflow,
     notification_activity_retry_policy,
+    notification_delivery_intent_activity,
     notification_intent_noop_activity,
 )
-from tests.test_auth_company import bootstrap_company
+from tests.test_auth_company import auth_headers, bootstrap_company
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -53,6 +65,23 @@ def _context(session) -> SessionContext:
     )
     user = session.get(User, membership.user_id)
     return SessionContext(company=company, user=user, membership=membership)
+
+
+def _create_matter(client: TestClient, token: str, code: str) -> dict[str, object]:
+    response = client.post(
+        "/api/matters/",
+        headers=auth_headers(token),
+        json={
+            "matter_code": code,
+            "title": f"WTD-5.3 matter {code}",
+            "practice_area": "Commercial",
+            "forum_level": "high_court",
+            "court_name": "Delhi High Court",
+            "status": "intake",
+        },
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
 
 
 def test_durable_workflows_default_disabled_fail_closed(monkeypatch) -> None:
@@ -241,6 +270,157 @@ def test_notification_runtime_probe_activity_is_deterministic_noop() -> None:
     assert redact_identifier(raw_task_id) in serialized
 
 
+def test_notification_delivery_foundation_processes_in_app_idempotently(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    matter_payload = _create_matter(
+        client,
+        str(bootstrap["access_token"]),
+        "WTD53-IDEMP",
+    )
+    source_id = str(uuid4())
+
+    session_factory = get_session_factory()
+    with session_factory() as session:
+        context = _context(session)
+        matter = session.get(Matter, matter_payload["id"])
+        assert matter is not None
+        intent = enqueue_notification_delivery_intent(
+            session,
+            context=context,
+            recipient_membership=context.membership,
+            channel="in_app",
+            event_type="new_order_uploaded",
+            source_type="matter_attachment",
+            source_id=source_id,
+            matter=matter,
+            notification_rule_id=str(uuid4()),
+            title="New order uploaded",
+            body="A linked court order document was uploaded.",
+        )
+        assert intent is not None
+        with pytest.raises(ValueError, match="company scope"):
+            process_notification_delivery_intent(session, intent_id=intent.id)
+        with pytest.raises(ValueError, match="not found"):
+            process_notification_delivery_intent(
+                session,
+                intent_id=intent.id,
+                company_id=str(uuid4()),
+            )
+        result = process_notification_delivery_intent(
+            session,
+            intent_id=intent.id,
+            context=context,
+        )
+        duplicate = enqueue_notification_delivery_intent(
+            session,
+            context=context,
+            recipient_membership=context.membership,
+            channel="in_app",
+            event_type="new_order_uploaded",
+            source_type="matter_attachment",
+            source_id=source_id,
+            matter=matter,
+            notification_rule_id=str(uuid4()),
+            title="New order uploaded",
+            body="A linked court order document was uploaded.",
+        )
+        assert duplicate is not None
+        duplicate_result = process_notification_delivery_intent(
+            session,
+            intent_id=duplicate.id,
+            context=context,
+        )
+        session.commit()
+
+        assert duplicate.id == intent.id
+        assert result.delivered is True
+        assert duplicate_result.delivered is True
+        assert result.external_calls == 0
+        assert session.scalar(
+            select(func.count()).select_from(NotificationDeliveryIntent)
+        ) == 1
+        assert session.scalar(select(func.count()).select_from(InAppNotification)) == 1
+        stored = session.scalar(select(NotificationDeliveryIntent))
+        assert stored is not None
+        assert stored.status == NotificationDeliveryStatus.DELIVERED
+        assert stored.attempts == 1
+        assert stored.in_app_notification_id is not None
+
+
+def test_notification_delivery_retry_and_dead_letter_are_bounded_redacted(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    matter_payload = _create_matter(
+        client,
+        str(bootstrap["access_token"]),
+        "WTD53-RETRY",
+    )
+    raw_error = (
+        "authorization example-token-value-that-is-redacted for "
+        "lawyer@example.test at https://provider.example.test/messages/"
+        f"{uuid4()}"
+    )
+
+    session_factory = get_session_factory()
+    with session_factory() as session:
+        context = _context(session)
+        matter = session.get(Matter, matter_payload["id"])
+        assert matter is not None
+        intent = enqueue_notification_delivery_intent(
+            session,
+            context=context,
+            recipient_membership=context.membership,
+            channel="in_app",
+            event_type="new_order_uploaded",
+            source_type="matter_attachment",
+            source_id=str(uuid4()),
+            matter=matter,
+            notification_rule_id=str(uuid4()),
+            title="New order uploaded",
+            body="A linked court order document was uploaded.",
+        )
+        assert intent is not None
+        first = record_notification_delivery_failure(
+            session,
+            intent=intent,
+            raw_error=raw_error,
+            now=datetime(2026, 5, 26, tzinfo=UTC),
+        )
+        assert first.retry_scheduled is True
+        assert intent.status == NotificationDeliveryStatus.RETRY_SCHEDULED
+        assert intent.attempts == 1
+        assert intent.next_attempt_at is not None
+        persisted_error = intent.last_error_redacted or ""
+        assert persisted_error == redact_provider_error(raw_error)
+        assert "lawyer@example.test" not in persisted_error
+        assert "provider.example.test" not in persisted_error
+        assert "example-token-value" not in persisted_error
+
+        record_notification_delivery_failure(
+            session,
+            intent=intent,
+            raw_error=raw_error,
+            now=datetime(2026, 5, 26, 0, 0, 2, tzinfo=UTC),
+        )
+        final = record_notification_delivery_failure(
+            session,
+            intent=intent,
+            raw_error=raw_error,
+            now=datetime(2026, 5, 26, 0, 0, 4, tzinfo=UTC),
+        )
+        session.commit()
+
+        assert final.dead_lettered is True
+        assert intent.status == NotificationDeliveryStatus.DEAD_LETTER
+        assert intent.attempts == intent.max_attempts == 3
+        assert intent.next_attempt_at is None
+        assert intent.dead_letter_reason == "retry_limit_exhausted"
+        assert "lawyer@example.test" not in (intent.last_error_redacted or "")
+
+
 @pytest.mark.asyncio
 async def test_notification_runtime_probe_workflow_runs_in_temporal_test_environment() -> None:
     raw_company_id = str(uuid4())
@@ -327,6 +507,16 @@ def test_notification_intent_probe_is_noop_redacted_and_audited(
         assert '"background_scan": false' in metadata
 
 
+def test_notification_worker_registers_wtd53_delivery_foundation() -> None:
+    workflows = notification_workflows._registered_workflows()
+    activities = notification_workflows._registered_activities()
+
+    assert NotificationIntentRuntimeProbeWorkflow in workflows
+    assert NotificationDeliveryIntentWorkflow in workflows
+    assert notification_intent_noop_activity in activities
+    assert notification_delivery_intent_activity in activities
+
+
 def test_notification_workflow_worker_check_config_never_sends(
     monkeypatch,
     capsys,
@@ -340,6 +530,9 @@ def test_notification_workflow_worker_check_config_never_sends(
     assert payload["delivery_enabled"] is False
     assert payload["reminder_scheduling_enabled"] is False
     assert payload["external_provider_calls_enabled"] is False
+    assert payload["durable_delivery_foundation_registered"] is True
+    assert payload["in_app_delivery_foundation_enabled"] is True
+    assert payload["external_delivery_provider_enabled"] is False
     assert payload["runtime_defaults"]["foundation_version"] == "wtd_5_1b_v1"
     assert payload["status"]["available"] is False
     assert "api_key_configured" not in payload["status"]
@@ -349,7 +542,7 @@ def test_notification_workflow_worker_check_config_never_sends(
     assert notification_workflows.main(["--run"]) == 2
 
 
-def test_wtd51b_docs_mark_foundation_without_wtd53_delivery_closure() -> None:
+def test_wtd53_docs_mark_delivery_foundation_without_adp20_closure() -> None:
     future = (REPO_ROOT / "docs/FUTURE_WORKPLAN_2026-05-14.md").read_text(
         encoding="utf-8"
     )
@@ -362,13 +555,15 @@ def test_wtd51b_docs_mark_foundation_without_wtd53_delivery_closure() -> None:
 
     assert "`WTD-5.1a` durable workflow foundation" in future
     assert "`WTD-5.1b` Temporal runtime foundation" in future
-    assert "notification delivery/retry remains pending" in future
+    assert "`WTD-5.1c` operator runtime proof is complete" in future
+    assert "`WTD-5.3` durable notification delivery/retry foundation" in future
     assert "`WTD-5.1` `Partially implemented`" in strict
     assert "`WTD-5.1b` adds the real Temporal SDK dependency" in strict
-    assert "no notification delivery" in strict
-    assert "reminder scheduling" in strict
-    assert "`WTD-5.3` `Missing`" in strict
+    assert "`WTD-5.1c` operator runtime proof is complete" in strict
+    assert "`WTD-5.3` `Partially implemented`" in strict
+    assert "blocks email/SMS/WhatsApp without provider calls" in strict
     assert "WTD-5.1a durable workflow foundation landed" in work_to_be_done
     assert "WTD-5.1b Temporal runtime foundation landed" in work_to_be_done
-    assert "Notification delivery remains under" in work_to_be_done
-    assert "WTD-5.3" in work_to_be_done
+    assert "WTD-5.1c operator runtime proof is complete" in work_to_be_done
+    assert "WTD-5.3 durable notification delivery/retry foundation" in work_to_be_done
+    assert "ADP-20+ implementation" in work_to_be_done

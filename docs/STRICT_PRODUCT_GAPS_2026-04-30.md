@@ -71,9 +71,9 @@ Do not re-classify these here. Burn-down lives under the linked ID.
 |---|---|---|---|
 | Hotspot decomposition (large pages/services) | `EG-008` | `Partially implemented` | STRICT_ENTERPRISE_GAP_TASKLIST |
 | Exception-handling discipline | `EG-009` | `Partially implemented` | STRICT_ENTERPRISE_GAP_TASKLIST |
-| Temporal durable workflows | `WTD-5.1` | `Missing` | STRICT_ENTERPRISE_GAP_TASKLIST |
+| Temporal durable workflows | `WTD-5.1` | `Partially implemented` | STRICT_ENTERPRISE_GAP_TASKLIST |
 | Agent identity / Grantex | `WTD-5.2` | `Missing` | STRICT_ENTERPRISE_GAP_TASKLIST |
-| Notification service durable delivery | `WTD-5.3` | `Missing` | STRICT_ENTERPRISE_GAP_TASKLIST |
+| Notification service durable delivery | `WTD-5.3` | `Partially implemented` | STRICT_ENTERPRISE_GAP_TASKLIST |
 | OpenAPI / generated client rollout | `WTD-6.5` | `Partially implemented` | STRICT_ENTERPRISE_GAP_TASKLIST |
 | Matter cockpit Tasks/Deadlines tabs + admin task templates | `WTD-7.2` | `Partially implemented` | STRICT_ENTERPRISE_GAP_TASKLIST |
 | Model-evaluation admin gate + cost rollup | `WTD-7.3` | `Partially implemented` | STRICT_ENTERPRISE_GAP_TASKLIST |
@@ -435,7 +435,9 @@ The next implementation sequence is:
 1. Staging proof: configure staging Workload Identity / secrets, run the staging deploy path, and capture runtime proof.
 2. `G-116` inbound email ingest: close `WTD-12.3b` / `PG-106`.
 3. `WTD-7.2` tasks/deadlines: matter-cockpit Tasks + Deadlines tabs and admin task templates.
-4. Durable notifications / Temporal: land `WTD-5.1`, then durable-delivery `WTD-5.3`.
+4. Durable notifications / Temporal: `WTD-5.1c` and the `WTD-5.3` foundation
+   are landed; remaining work is provider-approved external delivery adapters
+   and downstream ADP automation.
 5. AI eval harness: complete `WTD-11.4` / per-workflow golden evaluation gating.
 
 ## Claude Discipline

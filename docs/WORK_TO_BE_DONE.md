@@ -79,7 +79,7 @@ This document enumerates the work needed to close these gaps, in priority order,
 | Phase 18 | `08d8c8e` | Sprint J wrap: `services/file_security.verify_upload` with extension whitelist + declared-content-type coherence + magic-byte signature check, wired into matter and contract attachment services, fixtures tightened to carry real PDF/PNG magic; OpenAPI completeness lint that walks `application.openapi()` and fails CI on any /api route without summary / tag / response | §6.3, §6.5 |
 | Phase 19 | *this session* | Thread A (bail draft quality): `caseops-extract-authority-metadata` CLI backfilled `neutral_citation` / `case_reference` / `bench_name` across 2 408 of 2 436 corpus rows; `services/drafting._build_messages` hardened with ABSOLUTE RULES (no invented facts → `[____]` placeholders; BNS vs BNSS statute guidance; authorities emitted by `neutral_citation` or `case_reference`, never UUID); `services/draft_validators` with `check_statute_confusion` / `check_uuid_leakage` / `check_citation_coverage`, findings appended to `DraftVersion.summary`; multi-query retrieval via `_retrieve_for_draft` with bail / anticipatory-bail / quashing seed packs; `_verify_version_citations` now matches `case_reference` too; `GET /api/admin/audit/export?format=csv` toggle; Alembic migration-order lint in `tests/test_migration_order.py`; `tests/conftest.py` forces `CASEOPS_LLM_PROVIDER=mock` so the suite never hits live Haiku | §4.2 (metadata), §4.3 (quality), §7.3 (model-run depth), §8.4 (lint), §10.4 (CSV) |
 
-**All P0 items closed. Sprints H and J complete (Phases 15–18).** Phase 19 extended the draft-quality loop and closed doc drift between the ladder and §2–§7. Remaining P1 spine: §5.1 Temporal, §5.2 Grantex, §5.3 notifications, §5.7 teams, §6.5 OpenAPI TS-client gen (lint already live), §7.2 generic Task/Deadline, §7.3 EvaluationRun harness (table still pending), §7.4 Statute/Section, §8.1 OTEL, §8.2 structured logs, §8.3 backups, §8.4 CI/CD image push + deploy, §8.5 secret management, §9.1 broader parsers, §9.2 structural extraction, §9.3 virus scanning. §4.2 remaining: cross-encoder reranker, per-tenant annotation overlay, matter-attachment embeddings, live-PG integration tests. P2: §10 admin console, §11 test coverage expansion, §12 court integrations.
+**All P0 items closed. Sprints H and J complete (Phases 15–18).** Phase 19 extended the draft-quality loop and closed doc drift between the ladder and §2–§7. Remaining P1 spine: §5.1 non-notification workflow porting, §5.2 Grantex, §5.3 external-provider notification channels, §5.7 teams, §6.5 OpenAPI TS-client gen (lint already live), §7.2 generic Task/Deadline, §7.3 EvaluationRun harness (table still pending), §7.4 Statute/Section, §8.1 OTEL, §8.2 structured logs, §8.3 backups, §8.4 CI/CD image push + deploy, §8.5 secret management, §9.1 broader parsers, §9.2 structural extraction, §9.3 virus scanning. §4.2 remaining: cross-encoder reranker, per-tenant annotation overlay, matter-attachment embeddings, live-PG integration tests. P2: §10 admin console, §11 test coverage expansion, §12 court integrations.
 
 ### 1.2 Authority corpus — vector embedding status
 
@@ -455,16 +455,20 @@ Without this, the PRD's central promise does not exist.
   provides the runtime-proof shape with explicit retry policy, timeouts, task
   queue, and version metadata. It still does not send email/SMS/WhatsApp/push,
   create calendar invites, schedule reminders, scan for due work, run corpus
-  jobs, modify staging/prod deploy paths, or call external providers.
-- **Proof attempt:** WTD-5.1c operator runtime proof was attempted against the
-  local/operator environment and recorded as `NO-GO`: required Temporal
-  activation and connection config was absent, so the foundation failed closed
-  and no live no-op workflow was run. No notification delivery, reminder
-  scheduling, external provider calls, corpus jobs, staging/prod deploy path
-  changes, or new workflows were added.
+  jobs, modify staging/prod deploy paths, or call external providers; external
+  provider delivery remains a provider-approval follow-up to the WTD-5.3
+  foundation.
+- **Landed:** WTD-5.1c operator runtime proof is complete against the
+  operator-owned Mumbai Temporal backend. The no-op notification worker proof
+  ran with redacted config/status output and preserved the fail-closed
+  no-external-delivery contract.
+- **Landed:** WTD-5.3 durable notification delivery/retry foundation is
+  implemented for notification rules. In-app delivery now uses durable
+  delivery intents with idempotency, bounded retry, redacted failure state, and
+  dead-letter metadata. External email/SMS/WhatsApp channels persist blocked
+  fail-closed intents and do not call providers until provider-specific
+  approvals are complete.
 - **Done when:**
-  - Temporal deployed in an operator-owned environment and live worker runtime
-    proof captured against that service.
   - Workflows ported: `DocumentIngestionWorkflow`, `CourtSyncWorkflow`, `DraftingWorkflow`, `HearingPackWorkflow`, `RecommendationWorkflow`.
   - Each non-notification workflow has explicit retry policy, timeouts, and a versioning strategy.
   - Old custom-polling worker retired.
@@ -481,6 +485,13 @@ Without this, the PRD's central promise does not exist.
   - Tests cover unauthorized tool call, forged grant, expired grant, budget overrun, revoked grant.
 
 ### 5.3 Notification service
+
+> WTD-5.3 foundation note: durable tenant-scoped delivery intents, in-app
+> delivery idempotency, bounded retry/dead-letter state, redacted provider-error
+> persistence, Temporal worker registration, and fail-closed blocked intents for
+> external channels are implemented. Remaining scope is provider-specific
+> policy, credential, and runbook approval plus transactional email/SMS/WhatsApp
+> adapters and sender-domain/template governance.
 
 - **Traces to:** PRD §9.10 fee-collection, PRD §9.2 invitations; today `payments.py` generates a link but never emails it
 - **Done when:**
@@ -842,7 +853,9 @@ Sprints A–F (security, frontend spine, AI core, drafting v1) all **shipped** �
 2. `G-116` inbound email ingest: close `WTD-12.3b` / `PG-106` without touching calendar sync.
 3. `PG-001` conflict check: finish the remaining intake-gate scope.
 4. `WTD-7.2` tasks/deadlines: matter-cockpit foundation implemented; admin task templates remain.
-5. Durable notifications / Temporal: land `WTD-5.1` and then the durable-delivery parts of `WTD-5.3`.
+5. Durable notifications / Temporal: `WTD-5.1c` and `WTD-5.3` are landed for
+   the notification foundation; next work remains provider-specific approval
+   and ADP-20+ implementation, not Outlook sync in this slice.
 6. AI eval harness: expand the `WTD-11.4` offline foundation into
    per-workflow goldens and CI-gated evaluation for model or prompt changes.
 

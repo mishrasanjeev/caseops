@@ -1660,6 +1660,21 @@ class InAppNotificationStatus(StrEnum):
     READ = "read"
 
 
+class NotificationDeliveryChannel(StrEnum):
+    IN_APP = "in_app"
+    EMAIL = "email"
+    SMS = "sms"
+    WHATSAPP = "whatsapp"
+
+
+class NotificationDeliveryStatus(StrEnum):
+    QUEUED = "queued"
+    DELIVERED = "delivered"
+    RETRY_SCHEDULED = "retry_scheduled"
+    BLOCKED = "blocked"
+    DEAD_LETTER = "dead_letter"
+
+
 class HearingReminder(Base):
     """Durable record of one reminder we intend to send for a hearing.
 
@@ -2016,6 +2031,86 @@ class InAppNotification(Base):
     company: Mapped[Company] = relationship()
     recipient_membership: Mapped[CompanyMembership] = relationship()
     matter: Mapped[Matter | None] = relationship()
+
+
+class NotificationDeliveryIntent(Base):
+    __tablename__ = "notification_delivery_intents"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            "idempotency_key",
+            name="uq_notification_delivery_intent_idempotency",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    recipient_membership_id: Mapped[str] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    notification_rule_id: Mapped[str | None] = mapped_column(
+        ForeignKey("notification_rules.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    in_app_notification_id: Mapped[str | None] = mapped_column(
+        ForeignKey("in_app_notifications.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    channel: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
+    event_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    source_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    source_id: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=NotificationDeliveryStatus.QUEUED,
+        index=True,
+    )
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+    )
+    last_error_redacted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    dead_letter_reason: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    body: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship()
+    recipient_membership: Mapped[CompanyMembership] = relationship()
+    matter: Mapped[Matter | None] = relationship()
+    notification_rule: Mapped[NotificationRule | None] = relationship()
+    in_app_notification: Mapped[InAppNotification | None] = relationship()
 
 
 class JudgmentAlertRule(Base):

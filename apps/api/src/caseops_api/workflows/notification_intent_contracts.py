@@ -4,8 +4,11 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 
 FOUNDATION_VERSION = "wtd_5_1b_v1"
+DELIVERY_FOUNDATION_VERSION = "wtd_5_3_v1"
 WORKFLOW_TYPE = "NotificationIntentRuntimeProbeWorkflow"
 ACTIVITY_TYPE = "notification_intent_noop_activity"
+DELIVERY_WORKFLOW_TYPE = "NotificationDeliveryIntentWorkflow"
+DELIVERY_ACTIVITY_TYPE = "notification_delivery_intent_activity"
 DEFAULT_TASK_QUEUE = "caseops-notification-workflows"
 DEFAULT_WORKER_BUILD_ID = "caseops-wtd51b-notification-worker-v1"
 DEFAULT_WORKFLOW_EXECUTION_TIMEOUT = timedelta(minutes=1)
@@ -36,5 +39,29 @@ class NotificationIntentRuntimeProbeResult:
     delivered: bool
     scheduled: bool
     external_calls: int
+    foundation_version: str
+    metadata: dict[str, JsonScalar]
+
+
+@dataclass(frozen=True, slots=True)
+class NotificationDeliveryWorkflowInput:
+    intent_id: str
+    company_id: str
+    foundation_version: str = DELIVERY_FOUNDATION_VERSION
+    metadata: dict[str, JsonScalar] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class NotificationDeliveryWorkflowResult:
+    workflow_type: str
+    activity_type: str
+    intent_id: str
+    status: str
+    attempts: int
+    delivered: bool
+    external_calls: int
+    retry_scheduled: bool
+    dead_lettered: bool
+    blocked: bool
     foundation_version: str
     metadata: dict[str, JsonScalar]

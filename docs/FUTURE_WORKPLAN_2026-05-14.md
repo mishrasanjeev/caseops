@@ -46,16 +46,13 @@ product, or enterprise evidence from the strict ledgers.
      the real Python Temporal SDK dependency is declared, client and worker
      construction is redacted, a no-op runtime-proof workflow/activity exists,
      and retry policy, timeouts, task queue, and version metadata are explicit.
-   - Remaining before full `WTD-5.1` closure: configure the real Temporal
-     service in an operator-owned environment, capture live worker runtime
-     proof against that service, and retire/port existing polling workers where
-     applicable.
-   - `WTD-5.1c` operator runtime proof was attempted and failed closed:
-     the local/operator environment did not provide the required Temporal
-     activation and connection config, so no live no-op workflow was run.
-   - `WTD-5.3` notification delivery/retry remains pending; this foundation
-     sends no email/SMS/WhatsApp, schedules no real reminders, and performs no
-     external provider calls.
+   - `WTD-5.1c` operator runtime proof is complete against the
+     operator-owned Mumbai Temporal backend.
+   - `WTD-5.3` durable notification delivery/retry foundation is implemented:
+     in-app delivery uses durable intents with idempotency, retry, and
+     dead-letter metadata; email/SMS/WhatsApp remain fail-closed with no
+     provider calls. ADP-20 remains blocked until provider-specific policy,
+     credential, and runbook approval is complete.
 
 5. **AI eval harness**
    - `WTD-11.4` now has a deterministic offline fixture foundation for

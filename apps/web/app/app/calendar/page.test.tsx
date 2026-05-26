@@ -83,18 +83,18 @@ describe("CalendarPage", () => {
       provider: "outlook",
       provider_available: true,
       unavailable_reason: null,
-      durable_automation: "blocked_pending_temporal",
+      durable_automation: "blocked_pending_provider_approval",
       connections: [],
     });
     fetchCalendarSyncStatusMock.mockResolvedValue({
       provider_available: true,
-      durable_automation: "blocked_pending_temporal",
-      notification_delivery: "pending_wtd_5_3",
+      durable_automation: "blocked_pending_provider_approval",
+      notification_delivery: "wtd_5_3_foundation_available",
       capabilities: {
         sync_mode: "manual_bounded",
         manual_sync_available: true,
-        durable_automation: "blocked_pending_temporal",
-        notification_delivery: "pending_wtd_5_3",
+        durable_automation: "blocked_pending_provider_approval",
+        notification_delivery: "wtd_5_3_foundation_available",
         email_invitation_candidates: "review_queue_available",
       },
       provider_config: [
@@ -157,7 +157,7 @@ describe("CalendarPage", () => {
       provider: "outlook",
       provider_available: false,
       unavailable_reason: "Microsoft Graph OAuth is not configured.",
-      durable_automation: "blocked_pending_temporal",
+      durable_automation: "blocked_pending_provider_approval",
       connections: [],
     });
     render(withClient(<CalendarPage />));
@@ -176,8 +176,8 @@ describe("CalendarPage", () => {
     render(withClient(<CalendarPage />));
     const panel = await screen.findByTestId("calendar-sync-status-panel");
     expect(within(panel).getByText("Manual visible-range sync")).toBeInTheDocument();
-    expect(within(panel).getByText("Pending Temporal proof")).toBeInTheDocument();
-    expect(within(panel).getByText("Pending WTD-5.3")).toBeInTheDocument();
+    expect(within(panel).getByText("Pending provider approval")).toBeInTheDocument();
+    expect(within(panel).getByText("Durable foundation available")).toBeInTheDocument();
     expect(within(panel).getByText("Review queue available")).toBeInTheDocument();
   });
 
@@ -247,13 +247,13 @@ describe("CalendarPage", () => {
     });
     fetchCalendarSyncStatusMock.mockResolvedValueOnce({
       provider_available: true,
-      durable_automation: "blocked_pending_temporal",
-      notification_delivery: "pending_wtd_5_3",
+      durable_automation: "blocked_pending_provider_approval",
+      notification_delivery: "wtd_5_3_foundation_available",
       capabilities: {
         sync_mode: "manual_bounded",
         manual_sync_available: true,
-        durable_automation: "blocked_pending_temporal",
-        notification_delivery: "pending_wtd_5_3",
+        durable_automation: "blocked_pending_provider_approval",
+        notification_delivery: "wtd_5_3_foundation_available",
         email_invitation_candidates: "review_queue_available",
       },
       provider_config: [
@@ -427,7 +427,7 @@ describe("CalendarPage", () => {
       provider: "outlook",
       provider_available: true,
       unavailable_reason: null,
-      durable_automation: "blocked_pending_temporal",
+      durable_automation: "blocked_pending_provider_approval",
       connections: [
         {
           id: "conn-1",
@@ -452,7 +452,7 @@ describe("CalendarPage", () => {
       failed: 0,
       skipped: 0,
       items: [],
-      durable_automation: "blocked_pending_temporal",
+      durable_automation: "blocked_pending_provider_approval",
     });
 
     const user = userEvent.setup();

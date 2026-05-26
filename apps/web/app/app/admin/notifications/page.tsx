@@ -148,11 +148,11 @@ export default function AdminNotificationsPage() {
                 Notification rules
               </h2>
               <p className="mt-1 text-xs text-[var(--color-mute)]">
-                In-app rules are transactional. External automated delivery is
-                blocked pending Temporal-backed retry.
+                In-app rules use the durable delivery foundation. External
+                automated delivery is blocked pending provider approval.
               </p>
             </div>
-            <Badge tone="warning">Durable delivery blocked</Badge>
+            <Badge tone="success">Durable foundation available</Badge>
           </div>
 
           <div
@@ -250,7 +250,7 @@ export default function AdminNotificationsPage() {
             </div>
             <div className="text-xs text-[var(--color-mute)] md:col-span-6">
               Channel: in-app. Email, SMS, and WhatsApp automation remain unavailable
-              until durable delivery infrastructure is present.
+              until provider policy, credentials, and runbooks are approved.
             </div>
           </div>
 

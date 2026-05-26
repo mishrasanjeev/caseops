@@ -93,7 +93,8 @@ describe("StatutesIndexPage", () => {
       dismissed_count: 0,
       updates: [],
       delivery_status: "in_app_only",
-      delivery_note: "In-app preview only. External legal update delivery is pending WTD-5.3.",
+      delivery_note:
+        "In-app preview only. External legal update delivery requires provider-specific approval.",
     });
   });
 
@@ -223,7 +224,8 @@ describe("StatutesIndexPage", () => {
       dismissed_count: 0,
       updates: [],
       delivery_status: "in_app_only",
-      delivery_note: "In-app preview only. External legal update delivery is pending WTD-5.3.",
+      delivery_note:
+        "In-app preview only. External legal update delivery requires provider-specific approval.",
     });
 
     render(withClient(<StatutesIndexPage />));
@@ -253,7 +255,7 @@ describe("StatutesIndexPage", () => {
     expect(updateLegalUpdateMock.mock.calls[0][0]).toBe("upd-1");
     expect(updateLegalUpdateMock.mock.calls[0][1]).toBe("read");
     expect(screen.getByTestId("legal-update-digest-note")).toHaveTextContent(
-      /External legal update delivery is pending WTD-5.3/i,
+      /External legal update delivery requires provider-specific approval/i,
     );
   });
 });

@@ -247,7 +247,7 @@ describe("MatterHearingsPage", () => {
     });
     fetchCalendarSyncStatusMock.mockResolvedValue({
       provider_available: true,
-      durable_automation: "blocked_pending_temporal",
+      durable_automation: "blocked_pending_provider_approval",
       connections: [],
       syncs: [],
     });
@@ -284,7 +284,7 @@ describe("MatterHearingsPage", () => {
     } as unknown;
     fetchCalendarSyncStatusMock.mockResolvedValue({
       provider_available: true,
-      durable_automation: "blocked_pending_temporal",
+      durable_automation: "blocked_pending_provider_approval",
       // BUG-044 (Hari 2026-05-11): the page now suppresses the Sync
       // button when connections is empty (it's pre-empting a 409).
       // For the connected path we need at least one connection.
@@ -343,7 +343,7 @@ describe("MatterHearingsPage", () => {
     // No connections + no syncs — the broken state Hari hit.
     fetchCalendarSyncStatusMock.mockResolvedValue({
       provider_available: true,
-      durable_automation: "blocked_pending_temporal",
+      durable_automation: "blocked_pending_provider_approval",
       connections: [],
       syncs: [],
     });

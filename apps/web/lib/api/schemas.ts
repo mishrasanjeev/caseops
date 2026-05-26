@@ -1818,7 +1818,7 @@ export const calendarConnectionListResponse = z.object({
   provider: z.literal("outlook").default("outlook"),
   provider_available: z.boolean(),
   unavailable_reason: z.string().nullable().optional(),
-  durable_automation: z.literal("blocked_pending_temporal"),
+  durable_automation: z.literal("blocked_pending_provider_approval"),
   connections: z.array(calendarConnectionRecord),
 });
 
@@ -1856,8 +1856,12 @@ export const calendarProviderConfigStatus = z.object({
 export const calendarSyncCapabilityStatus = z.object({
   sync_mode: z.literal("manual_bounded").default("manual_bounded"),
   manual_sync_available: z.boolean(),
-  durable_automation: z.literal("blocked_pending_temporal").default("blocked_pending_temporal"),
-  notification_delivery: z.literal("pending_wtd_5_3").default("pending_wtd_5_3"),
+  durable_automation: z
+    .literal("blocked_pending_provider_approval")
+    .default("blocked_pending_provider_approval"),
+  notification_delivery: z
+    .literal("wtd_5_3_foundation_available")
+    .default("wtd_5_3_foundation_available"),
   email_invitation_candidates: z
     .enum(["deferred_pending_review_queue", "review_queue_available"])
     .default("review_queue_available"),
@@ -1889,8 +1893,10 @@ export const calendarSyncConflictSummary = z.object({
 
 export const calendarSyncStatusResponse = z.object({
   provider_available: z.boolean(),
-  durable_automation: z.literal("blocked_pending_temporal"),
-  notification_delivery: z.literal("pending_wtd_5_3").default("pending_wtd_5_3"),
+  durable_automation: z.literal("blocked_pending_provider_approval"),
+  notification_delivery: z
+    .literal("wtd_5_3_foundation_available")
+    .default("wtd_5_3_foundation_available"),
   capabilities: calendarSyncCapabilityStatus,
   provider_config: z.array(calendarProviderConfigStatus).default([]),
   conflict_summary: calendarSyncConflictSummary,
@@ -1924,7 +1930,7 @@ export const outlookBulkSyncResponse = z.object({
   failed: z.number().int(),
   skipped: z.number().int(),
   items: z.array(outlookBulkSyncItem),
-  durable_automation: z.literal("blocked_pending_temporal"),
+  durable_automation: z.literal("blocked_pending_provider_approval"),
 });
 
 export const notificationRuleRecord = z.object({
@@ -1941,13 +1947,13 @@ export const notificationRuleRecord = z.object({
   offset_minutes: z.number().int().nullable(),
   enabled: z.boolean(),
   created_by_membership_id: z.string().nullable(),
-  durable_delivery: z.literal("blocked_pending_temporal"),
+  durable_delivery: z.literal("wtd_5_3_foundation_available"),
   created_at: z.string(),
   updated_at: z.string(),
 });
 
 export const notificationRuleListResponse = z.object({
-  durable_delivery: z.literal("blocked_pending_temporal"),
+  durable_delivery: z.literal("wtd_5_3_foundation_available"),
   rules: z.array(notificationRuleRecord),
 });
 

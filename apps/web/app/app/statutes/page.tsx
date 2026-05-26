@@ -213,7 +213,7 @@ function LegalUpdatesPanel() {
               Legal updates
             </CardTitle>
             <CardDescription>
-              In-app monitoring from existing statute and authority records. External delivery pending WTD-5.3.
+              In-app monitoring from existing statute and authority records. External delivery requires provider approval.
             </CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">

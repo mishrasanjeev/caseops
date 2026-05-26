@@ -11,7 +11,11 @@ from caseops_api.workflows.notification_intent_contracts import (
     DEFAULT_RETRY_INITIAL_INTERVAL,
     DEFAULT_RETRY_MAXIMUM_ATTEMPTS,
     DEFAULT_RETRY_MAXIMUM_INTERVAL,
+    DELIVERY_ACTIVITY_TYPE,
+    DELIVERY_WORKFLOW_TYPE,
     WORKFLOW_TYPE,
+    NotificationDeliveryWorkflowInput,
+    NotificationDeliveryWorkflowResult,
     NotificationIntentRuntimeProbeInput,
     NotificationIntentRuntimeProbeResult,
 )
@@ -59,6 +63,55 @@ class NotificationIntentRuntimeProbeWorkflow:
     ) -> NotificationIntentRuntimeProbeResult:
         return await workflow.execute_activity(
             notification_intent_noop_activity,
+            payload,
+            schedule_to_close_timeout=DEFAULT_ACTIVITY_SCHEDULE_TO_CLOSE_TIMEOUT,
+            start_to_close_timeout=DEFAULT_ACTIVITY_START_TO_CLOSE_TIMEOUT,
+            retry_policy=notification_activity_retry_policy(),
+        )
+
+
+@activity.defn(name=DELIVERY_ACTIVITY_TYPE)
+async def notification_delivery_intent_activity(
+    payload: NotificationDeliveryWorkflowInput,
+) -> NotificationDeliveryWorkflowResult:
+    from caseops_api.services.notification_delivery import (
+        process_notification_delivery_intent_by_id,
+    )
+
+    result = process_notification_delivery_intent_by_id(
+        payload.intent_id,
+        company_id=payload.company_id,
+    )
+    metadata = {
+        **payload.metadata,
+        "workflow_foundation": payload.foundation_version,
+        "external_provider_calls": 0,
+    }
+    return NotificationDeliveryWorkflowResult(
+        workflow_type=DELIVERY_WORKFLOW_TYPE,
+        activity_type=DELIVERY_ACTIVITY_TYPE,
+        intent_id=result.intent_id,
+        status=result.status,
+        attempts=result.attempts,
+        delivered=result.delivered,
+        external_calls=result.external_calls,
+        retry_scheduled=result.retry_scheduled,
+        dead_lettered=result.dead_lettered,
+        blocked=result.blocked,
+        foundation_version=payload.foundation_version,
+        metadata=metadata,
+    )
+
+
+@workflow.defn(name=DELIVERY_WORKFLOW_TYPE)
+class NotificationDeliveryIntentWorkflow:
+    @workflow.run
+    async def run(
+        self,
+        payload: NotificationDeliveryWorkflowInput,
+    ) -> NotificationDeliveryWorkflowResult:
+        return await workflow.execute_activity(
+            notification_delivery_intent_activity,
             payload,
             schedule_to_close_timeout=DEFAULT_ACTIVITY_SCHEDULE_TO_CLOSE_TIMEOUT,
             start_to_close_timeout=DEFAULT_ACTIVITY_START_TO_CLOSE_TIMEOUT,

@@ -633,7 +633,7 @@ The audit ran alongside the bug fixes:
 - **Bounded sync vs durable automation.** Outlook sync-all (PR #23)
   and SendGrid event ingestion (PR #22) both intentionally avoid
   durable background loops — the `durable_automation:
-  blocked_pending_temporal` literal in the response is the explicit
+  blocked_pending_provider_approval` literal in the response is the explicit
   declaration so callers cannot mistake bounded manual sync for
   continuous automation.
 

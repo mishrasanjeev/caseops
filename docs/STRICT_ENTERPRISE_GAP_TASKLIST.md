@@ -422,21 +422,25 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
   `apps/api/src/caseops_api/workers/notification_workflows.py`,
   `apps/api/src/caseops_api/workflows/notification_intents.py`,
   `apps/api/tests/test_durable_workflows.py`.
-  `WTD-5.1c` operator runtime proof was attempted and recorded as NO-GO
-  because the local/operator environment did not provide the required Temporal
-  activation and connection config. The proof remained fail-closed and did not
-  run notification delivery, reminder scheduling, external provider calls, or
-  new workflows.
-  Remaining: operator-owned Temporal service configuration, live runtime worker
-  proof against that service, and porting/retiring the existing polling workers
-  where applicable.
+  `WTD-5.1c` operator runtime proof is complete against the operator-owned
+  Mumbai Temporal backend. The proof preserved redacted config/status output
+  and did not run notification delivery, reminder scheduling, external provider
+  calls, or feature workflows.
+  Remaining: porting/retiring non-notification polling workers where applicable.
 
 - `WTD-5.2` `Missing` Agent identity, scoped grants, approval gates, and
   budgets.
   Evidence: `docs/WORK_TO_BE_DONE.md:417-426`.
 
-- `WTD-5.3` `Missing` Notification service with durable delivery and retry.
-  Evidence: `docs/WORK_TO_BE_DONE.md:428-435`.
+- `WTD-5.3` `Partially implemented` Notification service with durable delivery
+  and retry. The foundation persists tenant-scoped delivery intents, processes
+  in-app notifications idempotently, records bounded retry/dead-letter state,
+  and blocks email/SMS/WhatsApp without provider calls. Remaining scope:
+  provider-specific policy, credential, and runbook approval before external
+  delivery or ADP-20 automation.
+  Evidence: `apps/api/src/caseops_api/services/notification_delivery.py`,
+  `apps/api/src/caseops_api/services/notification_rules.py`,
+  `apps/api/tests/test_durable_workflows.py`.
 
 - `WTD-6.5` `Partially implemented` OpenAPI maturity and generated web client
   rollout.
@@ -755,14 +759,15 @@ re-discovering them as new findings.
 - **Code (in `fix/outlook-sync-all`):**
   - `apps/api/src/caseops_api/api/routes/calendar.py::sync_all_outlook` —
     bounded endpoint that returns
-    `durable_automation: "blocked_pending_temporal"` literal so
+    `durable_automation: "blocked_pending_provider_approval"` literal so
     callers cannot mistake it for continuous sync.
   - `apps/web/components/matters/MatterCalendarSyncCard.tsx` — UI
     button with disabled state + connection-required messaging.
 - **Why tracked here:** any future "always-on Outlook sync" claim
   is a roadmap item gated on Temporal landing, NOT on this PR.
-  The literal `blocked_pending_temporal` is the enterprise-readable
-  source of truth.
+  The literal `blocked_pending_provider_approval` is the enterprise-readable
+  source of truth now that Temporal operator proof and WTD-5.3 foundation are
+  complete.
 
 ### Closure pre-conditions
 
