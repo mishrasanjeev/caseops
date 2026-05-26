@@ -24,7 +24,8 @@ CalendarConnectionStatusLiteral = Literal["connected", "revoked", "error"]
 CalendarSyncSourceTypeLiteral = Literal["matter_hearing", "matter_deadline", "matter_task"]
 CalendarEventSyncStatusLiteral = Literal["pending", "synced", "failed", "deleted"]
 CalendarSyncModeLiteral = Literal["manual_bounded"]
-CalendarNotificationDeliveryLiteral = Literal["pending_wtd_5_3"]
+CalendarDurableAutomationLiteral = Literal["blocked_pending_provider_approval"]
+CalendarNotificationDeliveryLiteral = Literal["wtd_5_3_foundation_available"]
 CalendarEmailInvitationCandidateLiteral = Literal[
     "deferred_pending_review_queue",
     "review_queue_available",
@@ -46,6 +47,7 @@ NotificationRuleEventTypeLiteral = Literal[
     "stay_status_changed",
 ]
 NotificationChannelLiteral = Literal["in_app", "email", "sms", "whatsapp"]
+NotificationRuleDurableDeliveryLiteral = Literal["wtd_5_3_foundation_available"]
 
 
 class CalendarEventRecord(BaseModel):
@@ -93,7 +95,9 @@ class CalendarConnectionListResponse(BaseModel):
     provider: CalendarProviderLiteral = "outlook"
     provider_available: bool
     unavailable_reason: str | None = None
-    durable_automation: Literal["blocked_pending_temporal"] = "blocked_pending_temporal"
+    durable_automation: CalendarDurableAutomationLiteral = (
+        "blocked_pending_provider_approval"
+    )
     connections: list[CalendarConnectionRecord]
 
 
@@ -137,8 +141,12 @@ class CalendarProviderConfigStatus(BaseModel):
 class CalendarSyncCapabilityStatus(BaseModel):
     sync_mode: CalendarSyncModeLiteral = "manual_bounded"
     manual_sync_available: bool
-    durable_automation: Literal["blocked_pending_temporal"] = "blocked_pending_temporal"
-    notification_delivery: CalendarNotificationDeliveryLiteral = "pending_wtd_5_3"
+    durable_automation: CalendarDurableAutomationLiteral = (
+        "blocked_pending_provider_approval"
+    )
+    notification_delivery: CalendarNotificationDeliveryLiteral = (
+        "wtd_5_3_foundation_available"
+    )
     email_invitation_candidates: CalendarEmailInvitationCandidateLiteral = (
         "review_queue_available"
     )
@@ -215,8 +223,12 @@ class CalendarSyncConflictSummary(BaseModel):
 
 class CalendarSyncStatusResponse(BaseModel):
     provider_available: bool
-    durable_automation: Literal["blocked_pending_temporal"] = "blocked_pending_temporal"
-    notification_delivery: CalendarNotificationDeliveryLiteral = "pending_wtd_5_3"
+    durable_automation: CalendarDurableAutomationLiteral = (
+        "blocked_pending_provider_approval"
+    )
+    notification_delivery: CalendarNotificationDeliveryLiteral = (
+        "wtd_5_3_foundation_available"
+    )
     capabilities: CalendarSyncCapabilityStatus
     provider_config: list[CalendarProviderConfigStatus]
     conflict_summary: CalendarSyncConflictSummary
@@ -286,8 +298,8 @@ class OutlookBulkSyncResponse(BaseModel):
     failed: int
     skipped: int
     items: list[OutlookBulkSyncItem]
-    durable_automation: Literal["blocked_pending_temporal"] = (
-        "blocked_pending_temporal"
+    durable_automation: CalendarDurableAutomationLiteral = (
+        "blocked_pending_provider_approval"
     )
 
 
@@ -349,11 +361,15 @@ class NotificationRuleRecord(BaseModel):
     offset_minutes: int | None
     enabled: bool
     created_by_membership_id: str | None
-    durable_delivery: Literal["blocked_pending_temporal"] = "blocked_pending_temporal"
+    durable_delivery: NotificationRuleDurableDeliveryLiteral = (
+        "wtd_5_3_foundation_available"
+    )
     created_at: datetime
     updated_at: datetime
 
 
 class NotificationRuleListResponse(BaseModel):
-    durable_delivery: Literal["blocked_pending_temporal"] = "blocked_pending_temporal"
+    durable_delivery: NotificationRuleDurableDeliveryLiteral = (
+        "wtd_5_3_foundation_available"
+    )
     rules: list[NotificationRuleRecord]

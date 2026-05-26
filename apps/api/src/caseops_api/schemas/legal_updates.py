@@ -188,5 +188,6 @@ class LegalUpdateDigestPreviewResponse(BaseModel):
     updates: list[LegalUpdateRecord]
     delivery_status: Literal["in_app_only"] = "in_app_only"
     delivery_note: str = (
-        "In-app preview only. External legal update delivery is pending WTD-5.3."
+        "In-app preview only. External legal update delivery requires "
+        "provider-specific approval."
     )

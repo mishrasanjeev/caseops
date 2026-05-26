@@ -11,6 +11,8 @@ from caseops_api.db.models import (
     CalendarEventSync,
     InAppNotification,
     MatterCourtOrder,
+    NotificationDeliveryIntent,
+    NotificationDeliveryStatus,
     UserCalendarConnection,
 )
 from caseops_api.db.session import get_session_factory
@@ -251,13 +253,13 @@ def test_sync_status_reports_bounded_manual_state_and_missing_config_names(
         body = response.json()
 
         assert body["provider_available"] is False
-        assert body["durable_automation"] == "blocked_pending_temporal"
-        assert body["notification_delivery"] == "pending_wtd_5_3"
+        assert body["durable_automation"] == "blocked_pending_provider_approval"
+        assert body["notification_delivery"] == "wtd_5_3_foundation_available"
         assert body["capabilities"] == {
             "sync_mode": "manual_bounded",
             "manual_sync_available": False,
-            "durable_automation": "blocked_pending_temporal",
-            "notification_delivery": "pending_wtd_5_3",
+            "durable_automation": "blocked_pending_provider_approval",
+            "notification_delivery": "wtd_5_3_foundation_available",
             "email_invitation_candidates": "review_queue_available",
         }
         assert body["provider_config"] == [
@@ -496,7 +498,7 @@ def test_notification_rule_crud_is_permission_and_tenant_scoped(
 
     listed = client.get("/api/notification-rules", headers=_auth(owner_token))
     assert listed.status_code == 200, listed.text
-    assert listed.json()["durable_delivery"] == "blocked_pending_temporal"
+    assert listed.json()["durable_delivery"] == "wtd_5_3_foundation_available"
     assert [row["id"] for row in listed.json()["rules"]] == [rule_id]
 
     member = client.post(
@@ -626,12 +628,128 @@ def test_new_order_upload_creates_in_app_notification_when_rule_enabled(
         assert notification.company_id == str(bootstrap["company"]["id"])
         assert notification.matter_id == str(matter["id"])
         assert notification.source_id == upload.json()["id"]
+        intents = list(session.scalars(select(NotificationDeliveryIntent)))
+        assert len(intents) == 1
+        assert intents[0].status == NotificationDeliveryStatus.DELIVERED
+        assert intents[0].in_app_notification_id == notification.id
         audits = list(
             session.scalars(
                 select(AuditEvent).where(AuditEvent.action == "notification.in_app.created")
             )
         )
         assert len(audits) == 1
+
+
+def test_external_only_new_order_rule_creates_blocked_delivery_intent(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    matter = _create_matter(client, token, "LW-S10-EXT-BLOCK")
+    order_id = _seed_order(str(matter["id"]))
+    rule = client.post(
+        "/api/notification-rules",
+        headers=_auth(token),
+        json={
+            "scope_type": "company",
+            "event_type": "new_order_uploaded",
+            "channels": ["email"],
+            "enabled": True,
+        },
+    )
+    assert rule.status_code == 200, rule.text
+
+    upload = client.post(
+        f"/api/matters/{matter['id']}/attachments",
+        headers=_auth(token),
+        data={"document_type": "order_judgment", "linked_court_order_id": order_id},
+        files={"file": ("order.pdf", b"%PDF-1.4\norder\n%%EOF", "application/pdf")},
+    )
+    assert upload.status_code == 200, upload.text
+
+    factory = get_session_factory()
+    with factory() as session:
+        assert list(session.scalars(select(InAppNotification))) == []
+        intents = list(session.scalars(select(NotificationDeliveryIntent)))
+        assert len(intents) == 1
+        intent = intents[0]
+        assert intent.channel == "email"
+        assert intent.status == NotificationDeliveryStatus.BLOCKED
+        assert intent.attempts == 0
+        assert intent.dead_letter_reason == "provider_disabled"
+        assert intent.last_error_redacted == "external provider disabled"
+        assert intent.title is None
+        assert intent.body is None
+        audits = list(
+            session.scalars(
+                select(AuditEvent).where(
+                    AuditEvent.action == "notification_delivery.external.blocked"
+                )
+            )
+        )
+        assert len(audits) == 1
+        assert upload.json()["id"] not in (audits[0].metadata_json or "")
+
+
+def test_new_order_notifications_respect_ethically_walled_recipient(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    matter = _create_matter(client, token, "LW-S10-WALL-NOTIFY")
+    order_id = _seed_order(str(matter["id"]))
+    member = client.post(
+        "/api/companies/current/users",
+        headers=_auth(token),
+        json={
+            "full_name": "Walled Notifications",
+            "email": "walled-notify@caseops-test.in",
+            "role": "member",
+            "password": "MemberPass123!",
+        },
+    )
+    assert member.status_code == 200, member.text
+    wall = client.post(
+        f"/api/matters/{matter['id']}/access/walls",
+        headers=_auth(token),
+        json={
+            "excluded_membership_id": member.json()["membership_id"],
+            "reason": "Conflict",
+        },
+    )
+    assert wall.status_code == 200, wall.text
+    rule = client.post(
+        "/api/notification-rules",
+        headers=_auth(token),
+        json={
+            "scope_type": "company",
+            "event_type": "new_order_uploaded",
+            "channels": ["in_app", "email"],
+            "enabled": True,
+        },
+    )
+    assert rule.status_code == 200, rule.text
+
+    upload = client.post(
+        f"/api/matters/{matter['id']}/attachments",
+        headers=_auth(token),
+        data={"document_type": "order_judgment", "linked_court_order_id": order_id},
+        files={"file": ("order.pdf", b"%PDF-1.4\norder\n%%EOF", "application/pdf")},
+    )
+    assert upload.status_code == 200, upload.text
+
+    factory = get_session_factory()
+    with factory() as session:
+        intents = list(session.scalars(select(NotificationDeliveryIntent)))
+        notifications = list(session.scalars(select(InAppNotification)))
+        blocked_membership_id = member.json()["membership_id"]
+        assert intents
+        assert notifications
+        assert all(row.recipient_membership_id != blocked_membership_id for row in intents)
+        assert all(
+            row.recipient_membership_id != blocked_membership_id
+            for row in notifications
+        )
 
 
 def test_disabled_new_order_rule_does_not_notify(client: TestClient) -> None:
@@ -662,3 +780,4 @@ def test_disabled_new_order_rule_does_not_notify(client: TestClient) -> None:
     factory = get_session_factory()
     with factory() as session:
         assert list(session.scalars(select(InAppNotification))) == []
+        assert list(session.scalars(select(NotificationDeliveryIntent))) == []

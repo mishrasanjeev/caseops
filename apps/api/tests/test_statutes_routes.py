@@ -281,7 +281,7 @@ def test_adp18_legal_update_watchlist_run_is_in_app_idempotent_and_bounded(
     )
     assert digest.status_code == 200, digest.text
     assert digest.json()["delivery_status"] == "in_app_only"
-    assert "pending WTD-5.3" in digest.json()["delivery_note"]
+    assert "provider-specific approval" in digest.json()["delivery_note"]
 
     with get_session_factory()() as session:
         assert session.scalar(select(AuthorityIngestionRun)) is None

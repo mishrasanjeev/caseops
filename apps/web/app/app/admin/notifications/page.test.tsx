@@ -49,7 +49,7 @@ describe("AdminNotificationsPage", () => {
     updateNotificationRuleMock.mockReset();
     useCapabilityMock.mockReset();
     listNotificationRulesMock.mockResolvedValue({
-      durable_delivery: "blocked_pending_temporal",
+      durable_delivery: "wtd_5_3_foundation_available",
       rules: [],
     });
   });
@@ -62,7 +62,7 @@ describe("AdminNotificationsPage", () => {
     expect(listNotificationRulesMock).not.toHaveBeenCalled();
   });
 
-  it("renders KPI tiles, rule controls, and durable delivery blocked state", async () => {
+  it("renders KPI tiles, rule controls, and durable delivery foundation state", async () => {
     useCapabilityMock.mockReturnValue(true);
     listAdminNotificationsMock.mockResolvedValue({
       total_queued: 4,
@@ -72,7 +72,7 @@ describe("AdminNotificationsPage", () => {
       reminders: [],
     });
     listNotificationRulesMock.mockResolvedValue({
-      durable_delivery: "blocked_pending_temporal",
+      durable_delivery: "wtd_5_3_foundation_available",
       rules: [
         {
           id: "rule-1",
@@ -84,7 +84,7 @@ describe("AdminNotificationsPage", () => {
           offset_minutes: null,
           enabled: true,
           created_by_membership_id: "m1",
-          durable_delivery: "blocked_pending_temporal",
+          durable_delivery: "wtd_5_3_foundation_available",
           created_at: "2026-05-07T00:00:00Z",
           updated_at: "2026-05-07T00:00:00Z",
         },
@@ -93,7 +93,7 @@ describe("AdminNotificationsPage", () => {
     render(withClient(<AdminNotificationsPage />));
     expect(await screen.findByText("Hearing reminders")).toBeInTheDocument();
     expect(await screen.findByText("Notification rules")).toBeInTheDocument();
-    expect(screen.getByText(/Durable delivery blocked/i)).toBeInTheDocument();
+    expect(screen.getByText(/Durable foundation available/i)).toBeInTheDocument();
     expect(screen.getByTestId("notification-rule-create")).toBeInTheDocument();
     expect(screen.getByTestId("notification-rule-rule-1")).toBeInTheDocument();
     expect(screen.getByText("Queued")).toBeInTheDocument();

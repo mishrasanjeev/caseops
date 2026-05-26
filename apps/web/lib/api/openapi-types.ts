@@ -6222,10 +6222,10 @@ export interface components {
             connections: components["schemas"]["CalendarConnectionRecord"][];
             /**
              * Durable Automation
-             * @default blocked_pending_temporal
+             * @default blocked_pending_provider_approval
              * @constant
              */
-            durable_automation: "blocked_pending_temporal";
+            durable_automation: "blocked_pending_provider_approval";
             /**
              * Provider
              * @default outlook
@@ -6398,10 +6398,10 @@ export interface components {
         CalendarSyncCapabilityStatus: {
             /**
              * Durable Automation
-             * @default blocked_pending_temporal
+             * @default blocked_pending_provider_approval
              * @constant
              */
-            durable_automation: "blocked_pending_temporal";
+            durable_automation: "blocked_pending_provider_approval";
             /**
              * Email Invitation Candidates
              * @default review_queue_available
@@ -6412,10 +6412,10 @@ export interface components {
             manual_sync_available: boolean;
             /**
              * Notification Delivery
-             * @default pending_wtd_5_3
+             * @default wtd_5_3_foundation_available
              * @constant
              */
-            notification_delivery: "pending_wtd_5_3";
+            notification_delivery: "wtd_5_3_foundation_available";
             /**
              * Sync Mode
              * @default manual_bounded
@@ -6489,16 +6489,16 @@ export interface components {
             connections: components["schemas"]["CalendarConnectionRecord"][];
             /**
              * Durable Automation
-             * @default blocked_pending_temporal
+             * @default blocked_pending_provider_approval
              * @constant
              */
-            durable_automation: "blocked_pending_temporal";
+            durable_automation: "blocked_pending_provider_approval";
             /**
              * Notification Delivery
-             * @default pending_wtd_5_3
+             * @default wtd_5_3_foundation_available
              * @constant
              */
-            notification_delivery: "pending_wtd_5_3";
+            notification_delivery: "wtd_5_3_foundation_available";
             /** Provider Available */
             provider_available: boolean;
             /** Provider Config */
@@ -10638,7 +10638,7 @@ export interface components {
         LegalUpdateDigestPreviewResponse: {
             /**
              * Delivery Note
-             * @default In-app preview only. External legal update delivery is pending WTD-5.3.
+             * @default In-app preview only. External legal update delivery requires provider-specific approval.
              */
             delivery_note: string;
             /**
@@ -13263,10 +13263,10 @@ export interface components {
         NotificationRuleListResponse: {
             /**
              * Durable Delivery
-             * @default blocked_pending_temporal
+             * @default wtd_5_3_foundation_available
              * @constant
              */
-            durable_delivery: "blocked_pending_temporal";
+            durable_delivery: "wtd_5_3_foundation_available";
             /** Rules */
             rules: components["schemas"]["NotificationRuleRecord"][];
         };
@@ -13285,10 +13285,10 @@ export interface components {
             created_by_membership_id: string | null;
             /**
              * Durable Delivery
-             * @default blocked_pending_temporal
+             * @default wtd_5_3_foundation_available
              * @constant
              */
-            durable_delivery: "blocked_pending_temporal";
+            durable_delivery: "wtd_5_3_foundation_available";
             /** Enabled */
             enabled: boolean;
             /**
@@ -13428,10 +13428,10 @@ export interface components {
             created: number;
             /**
              * Durable Automation
-             * @default blocked_pending_temporal
+             * @default blocked_pending_provider_approval
              * @constant
              */
-            durable_automation: "blocked_pending_temporal";
+            durable_automation: "blocked_pending_provider_approval";
             /** Examined */
             examined: number;
             /** Failed */

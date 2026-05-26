@@ -104,8 +104,10 @@ The following repo truth was used while shaping this PRD:
 - WTD-5.1a and WTD-5.1b durable workflow/Temporal foundations exist.
 - WTD-5.1c live operator proof is complete against the operator-owned Mumbai
   Temporal backend.
-- WTD-5.3 durable notification delivery and retry remain pending; ADP-20
-  remains blocked until WTD-5.3 is complete.
+- WTD-5.3 durable notification delivery and retry foundation is complete for
+  internal in-app delivery and bounded retry/dead-letter state. External
+  email/SMS/WhatsApp delivery remains fail-closed until provider-specific
+  policy, credential, and runbook approval; ADP-20 remains blocked.
 - WTD-11.4 offline AI safety evaluation harness foundation exists. Broader
   per-workflow goldens and CI gating remain pending.
 - AI token budgets, firm/user quotas, plan entitlements, and storage governance
@@ -729,8 +731,9 @@ Requirements:
 - Preserve bounded manual Outlook sync.
 - Add clear status labels:
   - manual sync available
-  - durable always-on sync pending Temporal/operator proof
-  - notification delivery pending WTD-5.3
+  - durable always-on sync pending provider-specific approval
+  - notification delivery foundation available with external channels
+    fail-closed
 - Outlook to CaseOps imports:
   - meetings
   - hearings
@@ -981,7 +984,8 @@ Requirements:
 - In-app alert center for matches.
 - Digest preview.
 - Matter-specific recommendation candidate list.
-- Delivery channels are pending WTD-5.3 unless explicitly implemented later.
+- In-app delivery can use the WTD-5.3 durable notification foundation;
+  external delivery remains fail-closed until provider-specific approval.
 - The feature must not trigger corpus ingest/backfill/embedding jobs.
 
 Acceptance criteria:
@@ -1017,7 +1021,7 @@ Requirements:
   - affected Act/section
   - possible matter/contract relevance where source-backed
 - In-app alert center first.
-- External delivery waits for notification delivery foundation.
+- External delivery waits for provider-specific notification approval.
 
 Acceptance criteria:
 
@@ -1351,9 +1355,8 @@ Objective:
 Prerequisites:
 
 - WTD-5.1c live Temporal operator proof complete.
-- WTD-5.3 notification delivery and retry complete; until then, ADP-20 remains
-  blocked.
-- Provider-specific credentials and runbooks approved.
+- WTD-5.3 notification delivery and retry foundation complete.
+- Provider-specific credentials, policy approvals, and runbooks complete.
 
 Tasks:
 
@@ -1953,7 +1956,7 @@ Scope:
 
 Out of scope:
 
-- External digests until WTD-5.3.
+- External digests until provider-specific delivery approval.
 
 Tests:
 

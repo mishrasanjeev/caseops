@@ -63,7 +63,7 @@ def test_outlook_bulk_sync_creates_then_updates_idempotently(
         assert body["updated"] == 0
         assert body["failed"] == 0
         assert body["skipped"] == 0
-        assert body["durable_automation"] == "blocked_pending_temporal"
+        assert body["durable_automation"] == "blocked_pending_provider_approval"
         assert len(body["items"]) == 1
         item = body["items"][0]
         assert item["source_type"] == "matter_hearing"

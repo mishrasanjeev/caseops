@@ -115,6 +115,7 @@ notification delivery, retries, schedulers, provider sync, or ADP-20.
 operator-owned Mumbai backend using the existing no-op notification worker
 configuration path.
 
-WTD-5.3 durable notification delivery/retry remains pending. ADP-20 durable
-Outlook sync remains blocked until WTD-5.3 and its provider-specific policy,
-credential, and runbook prerequisites are complete.
+WTD-5.3 durable notification delivery/retry foundation is now complete for
+internal in-app delivery, bounded retry/dead-letter state, and fail-closed
+external channel intents. ADP-20 durable Outlook sync remains blocked until
+provider-specific policy, credential, and runbook prerequisites are complete.

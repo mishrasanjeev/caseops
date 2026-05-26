@@ -683,8 +683,8 @@ def sync_outlook_bulk(
     task / deadline upsert against Microsoft Graph is a future
     extension that needs a separate provider method.
 
-    Durable background sync remains blocked pending Temporal — see
-    the response's ``durable_automation`` field.
+    Durable background provider sync remains blocked pending provider
+    approval — see the response's ``durable_automation`` field.
     """
 
     # 409 if no Outlook connection — checked first so a user without a
@@ -864,11 +864,11 @@ def sync_status(
     conflict_candidates = _duplicate_conflict_candidates(syncs)
     return CalendarSyncStatusResponse(
         provider_available=provider.configured,
-        notification_delivery="pending_wtd_5_3",
+        notification_delivery="wtd_5_3_foundation_available",
         capabilities=CalendarSyncCapabilityStatus(
             manual_sync_available=provider.configured,
-            durable_automation="blocked_pending_temporal",
-            notification_delivery="pending_wtd_5_3",
+            durable_automation="blocked_pending_provider_approval",
+            notification_delivery="wtd_5_3_foundation_available",
             email_invitation_candidates="review_queue_available",
         ),
         provider_config=[_provider_config_status(provider)],

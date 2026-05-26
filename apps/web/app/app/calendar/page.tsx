@@ -231,7 +231,7 @@ export default function CalendarPage() {
   // 92-day guard + tenant + visibility filters. The button is only
   // rendered for users with `calendar:sync` AND a connected Outlook
   // account (see button branch below); it is not the durable
-  // automation track — that remains blocked pending Temporal.
+  // automation track — that remains blocked pending provider approval.
   const syncRangeMutation = useMutation({
     mutationFn: () =>
       syncOutlookVisibleRange({
@@ -413,7 +413,7 @@ export default function CalendarPage() {
               )}
             </div>
             <div className="mt-1 text-xs text-[var(--color-mute)]">
-              Durable automated delivery and retry are blocked pending Temporal.
+              Durable provider automation remains blocked pending provider approval.
               {syncStatusQuery.data?.syncs.find((s) => s.sync_status === "failed")?.last_error
                 ? ` Latest error: ${
                     syncStatusQuery.data.syncs.find((s) => s.sync_status === "failed")
@@ -437,13 +437,13 @@ export default function CalendarPage() {
                 </div>
                 <div>
                   <div className="font-medium text-[var(--color-ink)]">Durable sync</div>
-                  <div>Pending Temporal proof</div>
+                  <div>Pending provider approval</div>
                 </div>
                 <div>
                   <div className="font-medium text-[var(--color-ink)]">Reminder delivery</div>
                   <div>
-                    {syncStatus.notification_delivery === "pending_wtd_5_3"
-                      ? "Pending WTD-5.3"
+                    {syncStatus.notification_delivery === "wtd_5_3_foundation_available"
+                      ? "Durable foundation available"
                       : syncStatus.notification_delivery}
                   </div>
                 </div>

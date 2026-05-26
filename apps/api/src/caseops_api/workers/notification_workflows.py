@@ -38,10 +38,35 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help=(
             "Start the Temporal worker when the backend is fully configured. "
-            "This worker only registers the WTD-5.1b no-op runtime probe."
+            "This worker registers the WTD-5.1b no-op runtime probe and "
+            "WTD-5.3 durable notification delivery foundation."
         ),
     )
     return parser
+
+
+def _registered_workflows() -> list[type[object]]:
+    from caseops_api.workflows.notification_intents import (
+        NotificationDeliveryIntentWorkflow,
+        NotificationIntentRuntimeProbeWorkflow,
+    )
+
+    return [
+        NotificationIntentRuntimeProbeWorkflow,
+        NotificationDeliveryIntentWorkflow,
+    ]
+
+
+def _registered_activities() -> list[object]:
+    from caseops_api.workflows.notification_intents import (
+        notification_delivery_intent_activity,
+        notification_intent_noop_activity,
+    )
+
+    return [
+        notification_intent_noop_activity,
+        notification_delivery_intent_activity,
+    ]
 
 
 async def run_temporal_worker() -> None:
@@ -54,16 +79,11 @@ async def run_temporal_worker() -> None:
 
     from temporalio.worker import Worker
 
-    from caseops_api.workflows.notification_intents import (
-        NotificationIntentRuntimeProbeWorkflow,
-        notification_intent_noop_activity,
-    )
-
     worker = Worker(
         client,
         task_queue=worker_config.task_queue,
-        workflows=[NotificationIntentRuntimeProbeWorkflow],
-        activities=[notification_intent_noop_activity],
+        workflows=_registered_workflows(),
+        activities=_registered_activities(),
         graceful_shutdown_timeout=timedelta(
             seconds=worker_config.graceful_shutdown_seconds,
         ),
@@ -81,6 +101,9 @@ def main(argv: Iterable[str] | None = None) -> int:
         "delivery_enabled": False,
         "reminder_scheduling_enabled": False,
         "external_provider_calls_enabled": False,
+        "durable_delivery_foundation_registered": True,
+        "in_app_delivery_foundation_enabled": True,
+        "external_delivery_provider_enabled": False,
         "runtime_defaults": temporal_runtime_defaults().public_dict(),
         "status": status.worker_check_dict(),
     }

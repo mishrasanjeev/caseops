@@ -156,10 +156,11 @@ class Settings(BaseSettings):
     google_drive_client_secret: str | None = Field(default=None)
     google_drive_redirect_uri: str | None = Field(default=None)
 
-    # WTD-5.1 durable workflow foundation. Disabled by default; these
-    # slices only add safe Temporal config/worker plumbing and no-op
-    # notification-intent probes. Real notification delivery and reminder
-    # scheduling remain blocked until WTD-5.3 explicitly lands.
+    # WTD-5.1/WTD-5.3 durable workflow foundation. Disabled by
+    # default; these slices only add safe Temporal config/worker
+    # plumbing, no-op notification-intent probes, and the in-app
+    # delivery foundation. Reminder scheduling and external provider
+    # delivery remain blocked until separately approved.
     durable_workflows_enabled: bool = Field(default=False)
     durable_workflows_backend: str = Field(default="disabled")
     temporal_address: str | None = Field(default=None)
