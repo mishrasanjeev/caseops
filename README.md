@@ -100,6 +100,37 @@ Starts `web` (port 3000), `api` (port 8000), `worker`, `postgres` (5432), `valke
 CaseOps local runtime is Postgres-first. SQLite is only a test fallback and should not be
 used for seeded corpora or normal development.
 
+Optional local Temporal dev server for developer runtime checks:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.temporal.yml up -d temporal
+```
+
+This starts a local-only Temporal development server with gRPC on
+`localhost:7233` and Temporal Web UI on `http://localhost:8233`. This is not
+the operator-owned WTD-5.1c proof and does not mark durable automation ready.
+Host-run no-op worker config checks can use:
+
+```bash
+CASEOPS_DURABLE_WORKFLOWS_ENABLED=true \
+CASEOPS_DURABLE_WORKFLOWS_BACKEND=temporal \
+CASEOPS_TEMPORAL_ADDRESS=localhost:7233 \
+CASEOPS_TEMPORAL_NAMESPACE=default \
+CASEOPS_TEMPORAL_TASK_QUEUE_NOTIFICATIONS=caseops-notification-workflows \
+uv --directory apps/api run python -m caseops_api.workers.notification_workflows --check-config --require-available
+```
+
+To run the no-op notification workflow worker against the local Temporal dev
+server inside Docker:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.temporal.yml up notification-workflow-worker
+```
+
+The local Temporal setup only registers the existing no-op notification runtime
+probe. It does not send notifications, schedule reminders, call external
+providers, or unblock ADP-20.
+
 Option B — run pieces directly:
 
 ```bash

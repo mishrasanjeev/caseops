@@ -1,0 +1,39 @@
+services:
+  temporal:
+    image: temporalio/temporal:latest
+    command: ["server", "start-dev", "--ip", "0.0.0.0"]
+    ports:
+      - "7233:7233"
+      - "8233:8233"
+
+  api:
+    environment:
+      CASEOPS_DURABLE_WORKFLOWS_ENABLED: "true"
+      CASEOPS_DURABLE_WORKFLOWS_BACKEND: temporal
+      CASEOPS_TEMPORAL_ADDRESS: temporal:7233
+      CASEOPS_TEMPORAL_NAMESPACE: default
+      CASEOPS_TEMPORAL_TASK_QUEUE_NOTIFICATIONS: caseops-notification-workflows
+    depends_on:
+      - temporal
+
+  notification-workflow-worker:
+    build:
+      context: ./apps/api
+    command:
+      [
+        "uv",
+        "run",
+        "python",
+        "-m",
+        "caseops_api.workers.notification_workflows",
+        "--run",
+      ]
+    environment:
+      CASEOPS_ENV: local
+      CASEOPS_DURABLE_WORKFLOWS_ENABLED: "true"
+      CASEOPS_DURABLE_WORKFLOWS_BACKEND: temporal
+      CASEOPS_TEMPORAL_ADDRESS: temporal:7233
+      CASEOPS_TEMPORAL_NAMESPACE: default
+      CASEOPS_TEMPORAL_TASK_QUEUE_NOTIFICATIONS: caseops-notification-workflows
+    depends_on:
+      - temporal
