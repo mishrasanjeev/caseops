@@ -10,7 +10,9 @@ import {
   type CalendarEventListResponse,
   type CalendarEventSyncResponse,
   type CalendarSyncStatusResponse,
+  type OutlookReadinessTestResponse,
   type OutlookBulkSyncResponse,
+  type OutlookTenantConfigurationResponse,
   type CommunicationChannel,
   type CommunicationDirection,
   type CommunicationListResponse,
@@ -71,7 +73,9 @@ import {
   calendarEventListResponse,
   calendarEventSyncResponse,
   calendarSyncStatusResponse,
+  outlookReadinessTestResponse,
   outlookBulkSyncResponse,
+  outlookTenantConfigurationResponse,
   communicationListResponse,
   communicationRecord,
   communicationTimelineResponse,
@@ -4931,6 +4935,55 @@ export async function fetchCalendarSyncStatus(): Promise<CalendarSyncStatusRespo
 // Posts the currently-rendered date window from `/app/calendar`.
 // Tasks/deadlines fall through as `skipped` items today; future
 // versions extend the provider adapter to upsert them.
+export type OutlookTenantConfigurationInput = {
+  clientId?: string | null;
+  clientSecret?: string | null;
+  tenantId?: string | null;
+  redirectUri?: string | null;
+  scopes?: string[] | null;
+  oauthConsentModelApproved: boolean;
+  scopesApproved: boolean;
+  durableRunbookApproved: boolean;
+  rollbackApproved: boolean;
+  redactionRulesApproved: boolean;
+  enabled: boolean;
+};
+
+export async function fetchOutlookTenantConfiguration(): Promise<OutlookTenantConfigurationResponse> {
+  const data = await apiRequest<unknown>("/api/admin/outlook-configuration");
+  return outlookTenantConfigurationResponse.parse(data);
+}
+
+export async function updateOutlookTenantConfiguration(
+  input: OutlookTenantConfigurationInput,
+): Promise<OutlookTenantConfigurationResponse> {
+  const data = await apiRequest<unknown>("/api/admin/outlook-configuration", {
+    method: "PATCH",
+    body: {
+      client_id: input.clientId || null,
+      client_secret: input.clientSecret || null,
+      tenant_id: input.tenantId || null,
+      redirect_uri: input.redirectUri || null,
+      scopes: input.scopes,
+      oauth_consent_model_approved: input.oauthConsentModelApproved,
+      scopes_approved: input.scopesApproved,
+      durable_runbook_approved: input.durableRunbookApproved,
+      rollback_approved: input.rollbackApproved,
+      redaction_rules_approved: input.redactionRulesApproved,
+      enabled: input.enabled,
+    },
+  });
+  return outlookTenantConfigurationResponse.parse(data);
+}
+
+export async function testOutlookTenantConfiguration(): Promise<OutlookReadinessTestResponse> {
+  const data = await apiRequest<unknown>("/api/admin/outlook-configuration/test", {
+    method: "POST",
+    body: {},
+  });
+  return outlookReadinessTestResponse.parse(data);
+}
+
 export async function syncOutlookVisibleRange(input: {
   from: string;
   to: string;

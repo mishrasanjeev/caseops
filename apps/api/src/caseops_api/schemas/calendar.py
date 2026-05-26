@@ -26,6 +26,12 @@ CalendarEventSyncStatusLiteral = Literal["pending", "synced", "failed", "deleted
 CalendarSyncModeLiteral = Literal["manual_bounded"]
 CalendarDurableAutomationLiteral = Literal["blocked_pending_provider_approval"]
 CalendarNotificationDeliveryLiteral = Literal["wtd_5_3_foundation_available"]
+OutlookConfigurationSourceLiteral = Literal["tenant_admin", "environment", "missing"]
+OutlookReadinessItemStatusLiteral = Literal["passed", "failed", "blocked", "not_run"]
+OutlookADP20ReadinessLiteral = Literal[
+    "blocked_pending_admin_configuration",
+    "ready_for_adp20_implementation",
+]
 CalendarEmailInvitationCandidateLiteral = Literal[
     "deferred_pending_review_queue",
     "review_queue_available",
@@ -235,6 +241,78 @@ class CalendarSyncStatusResponse(BaseModel):
     conflict_candidates: list[CalendarSyncConflictCandidate]
     connections: list[CalendarConnectionRecord]
     syncs: list[CalendarEventSyncRecord]
+
+
+class OutlookConfigurationItemStatus(BaseModel):
+    name: str
+    configured: bool
+
+
+class OutlookApprovalItemStatus(BaseModel):
+    key: str
+    label: str
+    approved: bool
+
+
+class OutlookTenantConfigurationResponse(BaseModel):
+    provider: CalendarProviderLiteral = "outlook"
+    configured: bool
+    config_source: OutlookConfigurationSourceLiteral
+    enabled: bool
+    required_config: list[OutlookConfigurationItemStatus]
+    required_approvals: list[OutlookApprovalItemStatus]
+    approved_scopes: list[str] = Field(default_factory=list)
+    missing_config_names: list[str] = Field(default_factory=list)
+    missing_approval_keys: list[str] = Field(default_factory=list)
+    connection_count: int = Field(ge=0)
+    connected_account_count: int = Field(ge=0)
+    last_test_status: OutlookReadinessItemStatusLiteral = "not_run"
+    last_tested_at: datetime | None = None
+    last_error_redacted: str | None = None
+    adp20_readiness: OutlookADP20ReadinessLiteral
+
+
+class OutlookTenantConfigurationUpdateRequest(BaseModel):
+    client_id: str | None = Field(default=None, max_length=255)
+    client_secret: str | None = Field(default=None, max_length=4096)
+    tenant_id: str | None = Field(default=None, max_length=255)
+    redirect_uri: str | None = Field(default=None, max_length=500)
+    scopes: list[str] | None = None
+    oauth_consent_model_approved: bool = False
+    scopes_approved: bool = False
+    durable_runbook_approved: bool = False
+    rollback_approved: bool = False
+    redaction_rules_approved: bool = False
+    enabled: bool = True
+
+    @field_validator(
+        "client_id",
+        "client_secret",
+        "tenant_id",
+        "redirect_uri",
+        mode="before",
+    )
+    @classmethod
+    def blank_string_to_none(cls, value: object) -> object:
+        if isinstance(value, str):
+            cleaned = value.strip()
+            return cleaned or None
+        return value
+
+
+class OutlookReadinessCheckResult(BaseModel):
+    key: str
+    label: str
+    status: OutlookReadinessItemStatusLiteral
+    detail: str | None = None
+
+
+class OutlookReadinessTestResponse(BaseModel):
+    provider: CalendarProviderLiteral = "outlook"
+    status: OutlookReadinessItemStatusLiteral
+    checks: list[OutlookReadinessCheckResult]
+    adp20_readiness: OutlookADP20ReadinessLiteral
+    tested_at: datetime
 
 
 # BUG-039 (Hari 2026-05-09) — bounded manual bulk sync of the

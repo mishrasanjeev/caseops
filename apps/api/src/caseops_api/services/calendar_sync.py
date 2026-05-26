@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
 from urllib.parse import urlencode
@@ -23,6 +24,7 @@ from caseops_api.db.models import (
     CalendarSyncSourceType,
     Matter,
     MatterHearing,
+    TenantOutlookConfiguration,
     UserCalendarConnection,
 )
 from caseops_api.schemas.calendar import (
@@ -36,9 +38,15 @@ from caseops_api.schemas.calendar import (
     CalendarSyncConflictCandidate,
     CalendarSyncConflictSummary,
     CalendarSyncStatusResponse,
+    OutlookApprovalItemStatus,
     OutlookBulkSyncItem,
     OutlookBulkSyncRequest,
     OutlookBulkSyncResponse,
+    OutlookConfigurationItemStatus,
+    OutlookReadinessCheckResult,
+    OutlookReadinessTestResponse,
+    OutlookTenantConfigurationResponse,
+    OutlookTenantConfigurationUpdateRequest,
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.identity import SessionContext
@@ -54,6 +62,19 @@ _STATE_TTL_MINUTES = 10
 
 class CalendarProviderError(RuntimeError):
     """Provider failures safe to persist/display as sync errors."""
+
+
+@dataclass(frozen=True)
+class OutlookRuntimeConfig:
+    client_id: str | None
+    client_secret: str | None
+    tenant_id: str
+    redirect_uri: str | None
+    source: str
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.client_id and self.client_secret and self.redirect_uri)
 
 
 class OutlookProvider(Protocol):
@@ -76,6 +97,8 @@ class OutlookProvider(Protocol):
         existing_provider_event_id: str | None,
     ) -> str: ...
 
+    def validate_connection(self, *, token_payload: dict[str, Any]) -> dict[str, Any]: ...
+
 
 class MicrosoftGraphOutlookProvider:
     """Small Microsoft Graph adapter.
@@ -84,14 +107,24 @@ class MicrosoftGraphOutlookProvider:
     the API never needs live Graph credentials in CI.
     """
 
+    def __init__(self, config: OutlookRuntimeConfig | None = None) -> None:
+        self._config = config
+
+    def _runtime_config(self) -> OutlookRuntimeConfig:
+        if self._config is not None:
+            return self._config
+        settings = get_settings()
+        return OutlookRuntimeConfig(
+            client_id=settings.outlook_client_id,
+            client_secret=settings.outlook_client_secret,
+            tenant_id=settings.outlook_tenant_id.strip("/") or "organizations",
+            redirect_uri=settings.outlook_redirect_uri,
+            source="environment",
+        )
+
     @property
     def configured(self) -> bool:
-        settings = get_settings()
-        return bool(
-            settings.outlook_client_id
-            and settings.outlook_client_secret
-            and settings.outlook_redirect_uri
-        )
+        return self._runtime_config().configured
 
     @property
     def unavailable_reason(self) -> str | None:
@@ -100,15 +133,15 @@ class MicrosoftGraphOutlookProvider:
         return "Microsoft Graph OAuth is not configured."
 
     def authorization_url(self, *, state: str) -> str:
-        settings = get_settings()
+        config = self._runtime_config()
         if not self.configured:
             raise CalendarProviderError(self.unavailable_reason or "Outlook unavailable.")
-        tenant = settings.outlook_tenant_id.strip("/") or "organizations"
+        tenant = config.tenant_id.strip("/") or "organizations"
         qs = urlencode(
             {
-                "client_id": settings.outlook_client_id,
+                "client_id": config.client_id,
                 "response_type": "code",
-                "redirect_uri": settings.outlook_redirect_uri,
+                "redirect_uri": config.redirect_uri,
                 "response_mode": "query",
                 "scope": " ".join(OUTLOOK_SCOPES),
                 "state": state,
@@ -118,7 +151,7 @@ class MicrosoftGraphOutlookProvider:
         return f"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize?{qs}"
 
     def exchange_code(self, *, code: str) -> dict[str, Any]:
-        settings = get_settings()
+        config = self._runtime_config()
         if not self.configured:
             raise CalendarProviderError(self.unavailable_reason or "Outlook unavailable.")
         try:
@@ -126,17 +159,17 @@ class MicrosoftGraphOutlookProvider:
         except ImportError as exc:  # pragma: no cover - dependency is present in app envs
             raise CalendarProviderError("Microsoft Graph HTTP client is unavailable.") from exc
 
-        tenant = settings.outlook_tenant_id.strip("/") or "organizations"
+        tenant = config.tenant_id.strip("/") or "organizations"
         token_url = f"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token"
         try:
             token_response = httpx.post(
                 token_url,
                 data={
-                    "client_id": settings.outlook_client_id,
-                    "client_secret": settings.outlook_client_secret,
+                    "client_id": config.client_id,
+                    "client_secret": config.client_secret,
                     "grant_type": "authorization_code",
                     "code": code,
-                    "redirect_uri": settings.outlook_redirect_uri,
+                    "redirect_uri": config.redirect_uri,
                     "scope": " ".join(OUTLOOK_SCOPES),
                 },
                 timeout=15,
@@ -164,6 +197,31 @@ class MicrosoftGraphOutlookProvider:
                 me.get("mail") or me.get("userPrincipalName") or ""
             ) or None,
             "scopes": scopes,
+        }
+
+    def validate_connection(self, *, token_payload: dict[str, Any]) -> dict[str, Any]:
+        try:
+            import httpx
+        except ImportError as exc:  # pragma: no cover - dependency is present in app envs
+            raise CalendarProviderError("Microsoft Graph HTTP client is unavailable.") from exc
+        access_token = str(token_payload.get("access_token") or "")
+        if not access_token:
+            raise CalendarProviderError("Stored Outlook token is unavailable.")
+        try:
+            me_response = httpx.get(
+                "https://graph.microsoft.com/v1.0/me",
+                headers={"Authorization": f"Bearer {access_token}"},
+                timeout=15,
+            )
+            me_response.raise_for_status()
+            me = me_response.json()
+        except httpx.HTTPError as exc:
+            raise CalendarProviderError("Microsoft Graph connection test failed.") from exc
+        return {
+            "provider_account_id": str(me.get("id") or ""),
+            "display_email": str(
+                me.get("mail") or me.get("userPrincipalName") or ""
+            ) or None,
         }
 
     def upsert_hearing_event(
@@ -239,8 +297,14 @@ def set_outlook_provider_for_tests(provider: OutlookProvider | None) -> None:
     _outlook_provider_override = provider
 
 
-def _provider() -> OutlookProvider:
-    return _outlook_provider_override or MicrosoftGraphOutlookProvider()
+def _provider(
+    session: Session | None = None,
+    *,
+    context: SessionContext | None = None,
+) -> OutlookProvider:
+    return _outlook_provider_override or MicrosoftGraphOutlookProvider(
+        _outlook_runtime_config(session, context=context)
+    )
 
 
 def _fernet() -> Fernet:
@@ -251,6 +315,23 @@ def _fernet() -> Fernet:
 def _encrypt_token_payload(payload: dict[str, Any]) -> str:
     raw = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
     return "fernet:" + _fernet().encrypt(raw).decode("ascii")
+
+
+def _encrypt_secret(value: str) -> str:
+    raw = value.encode("utf-8")
+    return "fernet:" + _fernet().encrypt(raw).decode("ascii")
+
+
+def _decrypt_secret(value: str | None) -> str | None:
+    if not value:
+        return None
+    if not value.startswith("fernet:"):
+        raise CalendarProviderError("Stored Outlook credential is unavailable.")
+    try:
+        raw = _fernet().decrypt(value.removeprefix("fernet:").encode("ascii"))
+    except (InvalidToken, ValueError) as exc:
+        raise CalendarProviderError("Stored Outlook credential cannot be decrypted.") from exc
+    return raw.decode("utf-8")
 
 
 def _decrypt_token_payload(value: str | None) -> dict[str, Any]:
@@ -264,6 +345,49 @@ def _decrypt_token_payload(value: str | None) -> dict[str, Any]:
     if not isinstance(decoded, dict):
         raise CalendarProviderError("Stored Outlook token payload is malformed.")
     return decoded
+
+
+def _environment_runtime_config() -> OutlookRuntimeConfig:
+    settings = get_settings()
+    return OutlookRuntimeConfig(
+        client_id=settings.outlook_client_id,
+        client_secret=settings.outlook_client_secret,
+        tenant_id=settings.outlook_tenant_id.strip("/") or "organizations",
+        redirect_uri=settings.outlook_redirect_uri,
+        source="environment",
+    )
+
+
+def _tenant_outlook_configuration(
+    session: Session,
+    *,
+    company_id: str,
+) -> TenantOutlookConfiguration | None:
+    return session.scalar(
+        select(TenantOutlookConfiguration).where(
+            TenantOutlookConfiguration.company_id == company_id,
+            TenantOutlookConfiguration.provider == CalendarProvider.OUTLOOK,
+        )
+    )
+
+
+def _outlook_runtime_config(
+    session: Session | None = None,
+    *,
+    context: SessionContext | None = None,
+) -> OutlookRuntimeConfig:
+    if session is not None and context is not None:
+        row = _tenant_outlook_configuration(session, company_id=context.company.id)
+        if row is not None and row.enabled:
+            return OutlookRuntimeConfig(
+                client_id=row.client_id,
+                client_secret=_decrypt_secret(row.encrypted_client_secret_ref),
+                tenant_id=(row.tenant_id or "organizations").strip("/")
+                or "organizations",
+                redirect_uri=row.redirect_uri,
+                source="tenant_admin",
+            )
+    return _environment_runtime_config()
 
 
 def _sign_state(context: SessionContext) -> str:
@@ -330,25 +454,368 @@ def _sync_record(sync: CalendarEventSync) -> CalendarEventSyncRecord:
     )
 
 
-def _missing_outlook_config_names(provider: OutlookProvider) -> list[str]:
+def _missing_outlook_config_names(
+    provider: OutlookProvider,
+    runtime_config: OutlookRuntimeConfig | None = None,
+) -> list[str]:
     """Return config names only; never expose configured values."""
     if provider.configured:
         return []
-    settings = get_settings()
+    config = runtime_config or _environment_runtime_config()
     missing: list[str] = []
-    if not settings.outlook_client_id:
+    if not config.client_id:
         missing.append("OUTLOOK_CLIENT_ID")
-    if not settings.outlook_client_secret:
+    if not config.client_secret:
         missing.append("OUTLOOK_CLIENT_SECRET")
-    if not settings.outlook_redirect_uri:
+    if not config.redirect_uri:
         missing.append("OUTLOOK_REDIRECT_URI")
     return missing
 
 
-def _provider_config_status(provider: OutlookProvider) -> CalendarProviderConfigStatus:
+def _provider_config_status(
+    provider: OutlookProvider,
+    runtime_config: OutlookRuntimeConfig | None = None,
+) -> CalendarProviderConfigStatus:
     return CalendarProviderConfigStatus(
         configured=provider.configured,
-        missing_config_names=_missing_outlook_config_names(provider),
+        missing_config_names=_missing_outlook_config_names(provider, runtime_config),
+    )
+
+
+_APPROVAL_LABELS = {
+    "oauth_consent_model_approved": "OAuth consent model approved",
+    "scopes_approved": "Microsoft Graph scopes approved",
+    "durable_runbook_approved": "Durable sync retry/dead-letter/replay runbook approved",
+    "rollback_approved": "Rollback and disable procedure approved",
+    "redaction_rules_approved": "Provider error redaction rules approved",
+}
+
+
+def _config_items(runtime_config: OutlookRuntimeConfig) -> list[OutlookConfigurationItemStatus]:
+    return [
+        OutlookConfigurationItemStatus(
+            name="OUTLOOK_CLIENT_ID",
+            configured=bool(runtime_config.client_id),
+        ),
+        OutlookConfigurationItemStatus(
+            name="OUTLOOK_CLIENT_SECRET",
+            configured=bool(runtime_config.client_secret),
+        ),
+        OutlookConfigurationItemStatus(
+            name="OUTLOOK_REDIRECT_URI",
+            configured=bool(runtime_config.redirect_uri),
+        ),
+        OutlookConfigurationItemStatus(
+            name="OUTLOOK_TENANT_ID_OR_APPROVED_TENANT_MODE",
+            configured=bool(runtime_config.tenant_id),
+        ),
+    ]
+
+
+def _approval_items(
+    row: TenantOutlookConfiguration | None,
+) -> list[OutlookApprovalItemStatus]:
+    return [
+        OutlookApprovalItemStatus(
+            key=key,
+            label=label,
+            approved=bool(getattr(row, key, False)) if row is not None else False,
+        )
+        for key, label in _APPROVAL_LABELS.items()
+    ]
+
+
+def _readiness_value(
+    *,
+    configured: bool,
+    approvals_ready: bool,
+    last_test_status: str | None,
+) -> str:
+    if configured and approvals_ready and last_test_status == "passed":
+        return "ready_for_adp20_implementation"
+    return "blocked_pending_admin_configuration"
+
+
+def _connection_counts(
+    session: Session,
+    *,
+    context: SessionContext,
+) -> tuple[int, int]:
+    connections = list(
+        session.scalars(
+            select(UserCalendarConnection).where(
+                UserCalendarConnection.company_id == context.company.id,
+                UserCalendarConnection.provider == CalendarProvider.OUTLOOK,
+            )
+        )
+    )
+    connected = [
+        row
+        for row in connections
+        if row.status == CalendarConnectionStatus.CONNECTED
+    ]
+    return len(connections), len(connected)
+
+
+def outlook_tenant_configuration_status(
+    session: Session,
+    *,
+    context: SessionContext,
+) -> OutlookTenantConfigurationResponse:
+    row = _tenant_outlook_configuration(session, company_id=context.company.id)
+    runtime_config = _outlook_runtime_config(session, context=context)
+    provider = _provider(session, context=context)
+    config_items = _config_items(runtime_config)
+    approvals = _approval_items(row)
+    missing_config = [
+        item.name for item in config_items if not item.configured
+    ]
+    missing_approvals = [
+        item.key for item in approvals if not item.approved
+    ]
+    connection_count, connected_account_count = _connection_counts(
+        session,
+        context=context,
+    )
+    if row is not None and row.enabled:
+        config_source = "tenant_admin"
+    elif provider.configured:
+        config_source = runtime_config.source
+    else:
+        config_source = "missing"
+    last_status = row.last_test_status if row is not None else "not_run"
+    approvals_ready = not missing_approvals
+    return OutlookTenantConfigurationResponse(
+        configured=provider.configured,
+        config_source=config_source,  # type: ignore[arg-type]
+        enabled=bool(row.enabled) if row is not None else provider.configured,
+        required_config=config_items,
+        required_approvals=approvals,
+        approved_scopes=list(row.scopes_json or OUTLOOK_SCOPES)
+        if row is not None
+        else OUTLOOK_SCOPES,
+        missing_config_names=missing_config,
+        missing_approval_keys=missing_approvals,
+        connection_count=connection_count,
+        connected_account_count=connected_account_count,
+        last_test_status=last_status,  # type: ignore[arg-type]
+        last_tested_at=row.last_tested_at if row is not None else None,
+        last_error_redacted=row.last_error_redacted if row is not None else None,
+        adp20_readiness=_readiness_value(
+            configured=provider.configured,
+            approvals_ready=approvals_ready,
+            last_test_status=last_status,
+        ),  # type: ignore[arg-type]
+    )
+
+
+def _ensure_tenant_outlook_configuration(
+    session: Session,
+    *,
+    context: SessionContext,
+) -> TenantOutlookConfiguration:
+    row = _tenant_outlook_configuration(session, company_id=context.company.id)
+    if row is None:
+        row = TenantOutlookConfiguration(
+            company_id=context.company.id,
+            provider=CalendarProvider.OUTLOOK,
+            created_by_membership_id=context.membership.id,
+        )
+        session.add(row)
+        session.flush()
+    return row
+
+
+def update_outlook_tenant_configuration(
+    session: Session,
+    *,
+    context: SessionContext,
+    payload: OutlookTenantConfigurationUpdateRequest,
+) -> OutlookTenantConfigurationResponse:
+    row = _ensure_tenant_outlook_configuration(session, context=context)
+    if payload.client_id is not None:
+        row.client_id = payload.client_id
+    if payload.client_secret is not None:
+        row.encrypted_client_secret_ref = _encrypt_secret(payload.client_secret)
+    if payload.tenant_id is not None:
+        row.tenant_id = payload.tenant_id.strip("/") or "organizations"
+    elif not row.tenant_id:
+        row.tenant_id = "organizations"
+    if payload.redirect_uri is not None:
+        row.redirect_uri = payload.redirect_uri
+    row.scopes_json = list(payload.scopes or OUTLOOK_SCOPES)
+    row.oauth_consent_model_approved = payload.oauth_consent_model_approved
+    row.scopes_approved = payload.scopes_approved
+    row.durable_runbook_approved = payload.durable_runbook_approved
+    row.rollback_approved = payload.rollback_approved
+    row.redaction_rules_approved = payload.redaction_rules_approved
+    row.enabled = payload.enabled
+    row.updated_by_membership_id = context.membership.id
+    row.last_test_status = "not_run"
+    row.last_tested_at = None
+    row.last_error_redacted = None
+    session.add(row)
+    record_from_context(
+        session,
+        context,
+        action="outlook.configuration.updated",
+        target_type="tenant_outlook_configuration",
+        target_id=row.id,
+        metadata={
+            "provider": CalendarProvider.OUTLOOK,
+            "configured_names": [
+                item.name
+                for item in _config_items(_outlook_runtime_config(session, context=context))
+                if item.configured
+            ],
+            "approved_keys": [
+                item.key for item in _approval_items(row) if item.approved
+            ],
+            "enabled": row.enabled,
+        },
+    )
+    session.commit()
+    return outlook_tenant_configuration_status(session, context=context)
+
+
+def _current_admin_connection(
+    session: Session,
+    *,
+    context: SessionContext,
+) -> UserCalendarConnection | None:
+    return session.scalar(
+        select(UserCalendarConnection).where(
+            UserCalendarConnection.company_id == context.company.id,
+            UserCalendarConnection.membership_id == context.membership.id,
+            UserCalendarConnection.provider == CalendarProvider.OUTLOOK,
+            UserCalendarConnection.status == CalendarConnectionStatus.CONNECTED,
+        )
+    )
+
+
+def test_outlook_tenant_configuration(
+    session: Session,
+    *,
+    context: SessionContext,
+) -> OutlookReadinessTestResponse:
+    row = _ensure_tenant_outlook_configuration(session, context=context)
+    tested_at = datetime.now(UTC)
+    status_summary = outlook_tenant_configuration_status(session, context=context)
+    checks: list[OutlookReadinessCheckResult] = []
+    for item in status_summary.required_config:
+        checks.append(
+            OutlookReadinessCheckResult(
+                key=item.name,
+                label=item.name,
+                status="passed" if item.configured else "blocked",
+            )
+        )
+    for approval in status_summary.required_approvals:
+        checks.append(
+            OutlookReadinessCheckResult(
+                key=approval.key,
+                label=approval.label,
+                status="passed" if approval.approved else "blocked",
+            )
+        )
+
+    if status_summary.missing_config_names or status_summary.missing_approval_keys:
+        row.last_test_status = "blocked"
+        row.last_tested_at = tested_at
+        row.last_error_redacted = "Outlook provider readiness prerequisites are incomplete."
+        session.add(row)
+        session.commit()
+        return OutlookReadinessTestResponse(
+            status="blocked",
+            checks=checks,
+            adp20_readiness="blocked_pending_admin_configuration",
+            tested_at=tested_at,
+        )
+
+    connection = _current_admin_connection(session, context=context)
+    if connection is None:
+        checks.append(
+            OutlookReadinessCheckResult(
+                key="OUTLOOK_USER_CONNECTION",
+                label="Admin Outlook OAuth connection",
+                status="blocked",
+                detail="Connect an Outlook account before running the end-to-end test.",
+            )
+        )
+        row.last_test_status = "blocked"
+        row.last_tested_at = tested_at
+        row.last_error_redacted = "Outlook OAuth connection is required."
+        session.add(row)
+        session.commit()
+        return OutlookReadinessTestResponse(
+            status="blocked",
+            checks=checks,
+            adp20_readiness="blocked_pending_admin_configuration",
+            tested_at=tested_at,
+        )
+
+    try:
+        token_payload = _decrypt_token_payload(connection.encrypted_token_ref)
+        _provider(session, context=context).validate_connection(
+            token_payload=token_payload,
+        )
+    except Exception as exc:
+        error = _safe_error(exc)
+        checks.append(
+            OutlookReadinessCheckResult(
+                key="MICROSOFT_GRAPH_ME",
+                label="Microsoft Graph /me probe",
+                status="failed",
+                detail=error,
+            )
+        )
+        row.last_test_status = "failed"
+        row.last_tested_at = tested_at
+        row.last_error_redacted = error
+        record_from_context(
+            session,
+            context,
+            action="outlook.configuration.test_failed",
+            target_type="tenant_outlook_configuration",
+            target_id=row.id,
+            result="failed",
+            metadata={"provider": CalendarProvider.OUTLOOK, "error": error},
+        )
+        session.commit()
+        return OutlookReadinessTestResponse(
+            status="failed",
+            checks=checks,
+            adp20_readiness="blocked_pending_admin_configuration",
+            tested_at=tested_at,
+        )
+
+    checks.append(
+        OutlookReadinessCheckResult(
+            key="MICROSOFT_GRAPH_ME",
+            label="Microsoft Graph /me probe",
+            status="passed",
+        )
+    )
+    row.last_test_status = "passed"
+    row.last_tested_at = tested_at
+    row.last_error_redacted = None
+    record_from_context(
+        session,
+        context,
+        action="outlook.configuration.test_passed",
+        target_type="tenant_outlook_configuration",
+        target_id=row.id,
+        metadata={
+            "provider": CalendarProvider.OUTLOOK,
+            "check_count": len(checks),
+        },
+    )
+    session.commit()
+    return OutlookReadinessTestResponse(
+        status="passed",
+        checks=checks,
+        adp20_readiness="ready_for_adp20_implementation",
+        tested_at=tested_at,
     )
 
 
@@ -401,7 +868,7 @@ def list_connections(
     *,
     context: SessionContext,
 ) -> CalendarConnectionListResponse:
-    provider = _provider()
+    provider = _provider(session, context=context)
     rows = list(
         session.scalars(
             select(UserCalendarConnection)
@@ -425,8 +892,7 @@ def start_outlook_connection(
     *,
     context: SessionContext,
 ) -> CalendarConnectionStartResponse:
-    del session
-    provider = _provider()
+    provider = _provider(session, context=context)
     if not provider.configured:
         return CalendarConnectionStartResponse(
             provider_available=False,
@@ -445,7 +911,7 @@ def complete_outlook_connection(
     code: str,
     state: str,
 ) -> CalendarConnectionRecord:
-    provider = _provider()
+    provider = _provider(session, context=context)
     if not provider.configured:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -596,7 +1062,7 @@ def sync_hearing_to_outlook(
         session.flush()
     try:
         token_payload = _decrypt_token_payload(connection.encrypted_token_ref)
-        provider_event_id = _provider().upsert_hearing_event(
+        provider_event_id = _provider(session, context=context).upsert_hearing_event(
             token_payload=token_payload,
             hearing=hearing,
             matter=matter,
@@ -838,7 +1304,8 @@ def sync_status(
     *,
     context: SessionContext,
 ) -> CalendarSyncStatusResponse:
-    provider = _provider()
+    runtime_config = _outlook_runtime_config(session, context=context)
+    provider = _provider(session, context=context)
     connections = list(
         session.scalars(
             select(UserCalendarConnection).where(
@@ -871,7 +1338,7 @@ def sync_status(
             notification_delivery="wtd_5_3_foundation_available",
             email_invitation_candidates="review_queue_available",
         ),
-        provider_config=[_provider_config_status(provider)],
+        provider_config=[_provider_config_status(provider, runtime_config)],
         conflict_summary=CalendarSyncConflictSummary(
             has_conflicts=bool(conflict_candidates),
             candidate_count=len(conflict_candidates),
@@ -888,9 +1355,12 @@ def sync_status(
 __all__ = [
     "complete_outlook_connection",
     "list_connections",
+    "outlook_tenant_configuration_status",
     "revoke_connection",
     "set_outlook_provider_for_tests",
     "start_outlook_connection",
     "sync_hearing_to_outlook",
     "sync_status",
+    "test_outlook_tenant_configuration",
+    "update_outlook_tenant_configuration",
 ]

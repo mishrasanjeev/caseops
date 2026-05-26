@@ -29,6 +29,11 @@ from caseops_api.schemas.audit import (
     AuditExportJobListResponse,
     AuditExportJobRecord,
 )
+from caseops_api.schemas.calendar import (
+    OutlookReadinessTestResponse,
+    OutlookTenantConfigurationResponse,
+    OutlookTenantConfigurationUpdateRequest,
+)
 from caseops_api.schemas.storage_governance import (
     FirmStorageQuotaPatchRequest,
     FirmStorageUsageSummary,
@@ -44,6 +49,11 @@ from caseops_api.services.audit_exports import (
     list_export_jobs,
     read_export_bytes,
     run_export_job,
+)
+from caseops_api.services.calendar_sync import (
+    outlook_tenant_configuration_status,
+    test_outlook_tenant_configuration,
+    update_outlook_tenant_configuration,
 )
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.storage_governance import (
@@ -335,6 +345,56 @@ from caseops_api.db.models import TenantAIPolicy  # noqa: E402
 WorkspaceAdmin = Annotated[
     SessionContext, Depends(require_capability("workspace:admin"))
 ]
+
+
+@router.get(
+    "/outlook-configuration",
+    response_model=OutlookTenantConfigurationResponse,
+    summary=(
+        "Read the tenant Outlook provider readiness gate without exposing "
+        "credential values."
+    ),
+)
+def get_outlook_configuration(
+    context: WorkspaceAdmin,
+    session: DbSession,
+) -> OutlookTenantConfigurationResponse:
+    return outlook_tenant_configuration_status(session, context=context)
+
+
+@router.patch(
+    "/outlook-configuration",
+    response_model=OutlookTenantConfigurationResponse,
+    summary=(
+        "Configure tenant Outlook OAuth readiness. Values are accepted from "
+        "workspace admins but never echoed back."
+    ),
+)
+def patch_outlook_configuration(
+    payload: OutlookTenantConfigurationUpdateRequest,
+    context: WorkspaceAdmin,
+    session: DbSession,
+) -> OutlookTenantConfigurationResponse:
+    return update_outlook_tenant_configuration(
+        session,
+        context=context,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/outlook-configuration/test",
+    response_model=OutlookReadinessTestResponse,
+    summary=(
+        "Run a safe Outlook provider readiness probe for the current "
+        "workspace admin."
+    ),
+)
+def post_outlook_configuration_test(
+    context: WorkspaceAdmin,
+    session: DbSession,
+) -> OutlookReadinessTestResponse:
+    return test_outlook_tenant_configuration(session, context=context)
 
 
 @router.get(

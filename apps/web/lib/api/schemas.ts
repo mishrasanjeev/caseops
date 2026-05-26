@@ -1906,6 +1906,58 @@ export const calendarSyncStatusResponse = z.object({
 });
 
 // BUG-039 (Hari 2026-05-09) — bounded manual bulk Outlook sync.
+export const outlookConfigurationItemStatus = z.object({
+  name: z.string(),
+  configured: z.boolean(),
+});
+
+export const outlookApprovalItemStatus = z.object({
+  key: z.string(),
+  label: z.string(),
+  approved: z.boolean(),
+});
+
+export const outlookTenantConfigurationResponse = z.object({
+  provider: z.literal("outlook").default("outlook"),
+  configured: z.boolean(),
+  config_source: z.enum(["tenant_admin", "environment", "missing"]),
+  enabled: z.boolean(),
+  required_config: z.array(outlookConfigurationItemStatus),
+  required_approvals: z.array(outlookApprovalItemStatus),
+  approved_scopes: z.array(z.string()).default([]),
+  missing_config_names: z.array(z.string()).default([]),
+  missing_approval_keys: z.array(z.string()).default([]),
+  connection_count: z.number().int().min(0),
+  connected_account_count: z.number().int().min(0),
+  last_test_status: z
+    .enum(["passed", "failed", "blocked", "not_run"])
+    .default("not_run"),
+  last_tested_at: z.string().nullable(),
+  last_error_redacted: z.string().nullable(),
+  adp20_readiness: z.enum([
+    "blocked_pending_admin_configuration",
+    "ready_for_adp20_implementation",
+  ]),
+});
+
+export const outlookReadinessCheckResult = z.object({
+  key: z.string(),
+  label: z.string(),
+  status: z.enum(["passed", "failed", "blocked", "not_run"]),
+  detail: z.string().nullable().optional(),
+});
+
+export const outlookReadinessTestResponse = z.object({
+  provider: z.literal("outlook").default("outlook"),
+  status: z.enum(["passed", "failed", "blocked", "not_run"]),
+  checks: z.array(outlookReadinessCheckResult),
+  adp20_readiness: z.enum([
+    "blocked_pending_admin_configuration",
+    "ready_for_adp20_implementation",
+  ]),
+  tested_at: z.string(),
+});
+
 export const outlookBulkSyncItem = z.object({
   source_type: z.enum(["matter_hearing", "matter_deadline", "matter_task"]),
   source_id: z.string(),
@@ -1970,6 +2022,12 @@ export type CalendarSyncCapabilityStatus = z.infer<typeof calendarSyncCapability
 export type CalendarSyncConflictCandidate = z.infer<typeof calendarSyncConflictCandidate>;
 export type CalendarSyncConflictSummary = z.infer<typeof calendarSyncConflictSummary>;
 export type CalendarSyncStatusResponse = z.infer<typeof calendarSyncStatusResponse>;
+export type OutlookTenantConfigurationResponse = z.infer<
+  typeof outlookTenantConfigurationResponse
+>;
+export type OutlookReadinessTestResponse = z.infer<
+  typeof outlookReadinessTestResponse
+>;
 export type OutlookBulkSyncItem = z.infer<typeof outlookBulkSyncItem>;
 export type OutlookBulkSyncResponse = z.infer<typeof outlookBulkSyncResponse>;
 export type NotificationRuleRecord = z.infer<typeof notificationRuleRecord>;

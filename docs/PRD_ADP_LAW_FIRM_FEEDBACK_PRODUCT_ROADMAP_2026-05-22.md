@@ -107,7 +107,10 @@ The following repo truth was used while shaping this PRD:
 - WTD-5.3 durable notification delivery and retry foundation is complete for
   internal in-app delivery and bounded retry/dead-letter state. External
   email/SMS/WhatsApp delivery remains fail-closed until provider-specific
-  policy, credential, and runbook approval; ADP-20 remains blocked.
+  policy, credential, and runbook approval.
+- ADP-20 Outlook provider readiness is now law-firm-admin configurable via
+  `/app/admin/outlook`; durable Outlook sync implementation may start for a
+  tenant only after the page reports `ready_for_adp20_implementation`.
 - WTD-11.4 offline AI safety evaluation harness foundation exists. Broader
   per-workflow goldens and CI gating remain pending.
 - AI token budgets, firm/user quotas, plan entitlements, and storage governance
@@ -1997,6 +2000,13 @@ Tests:
 Type: Backend Worker + Provider Integration
 Priority: P4
 Dependencies: WTD-5.1c, WTD-5.3, ADP-07
+Provider readiness gate: **ADMIN-CONFIGURABLE / IMPLEMENTATION-UNBLOCKED** as
+of 2026-05-26; see
+`docs/runbooks/adp20-outlook-provider-readiness.md`. Law firm admins can now
+configure Outlook OAuth values, record approvals, connect Outlook, and run the
+end-to-end readiness probe from `/app/admin/outlook`. Durable sync remains
+unimplemented until this ADP-20 slice is started; for a tenant, enable work only
+when readiness reports `ready_for_adp20_implementation`.
 
 Scope:
 

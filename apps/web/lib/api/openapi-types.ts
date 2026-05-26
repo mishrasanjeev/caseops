@@ -181,6 +181,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/outlook-configuration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the tenant Outlook provider readiness gate without exposing credential values. */
+        get: operations["get_outlook_configuration_api_admin_outlook_configuration_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Configure tenant Outlook OAuth readiness. Values are accepted from workspace admins but never echoed back. */
+        patch: operations["patch_outlook_configuration_api_admin_outlook_configuration_patch"];
+        trace?: never;
+    };
+    "/api/admin/outlook-configuration/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run a safe Outlook provider readiness probe for the current workspace admin. */
+        post: operations["post_outlook_configuration_test_api_admin_outlook_configuration_test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/portal/invitations": {
         parameters: {
             query?: never;
@@ -13360,6 +13395,15 @@ export interface components {
             /** Year Start */
             year_start?: number | null;
         };
+        /** OutlookApprovalItemStatus */
+        OutlookApprovalItemStatus: {
+            /** Approved */
+            approved: boolean;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+        };
         /**
          * OutlookBulkSyncItem
          * @description One row of the bulk-sync summary. ``sync_status="synced"``
@@ -13442,6 +13486,143 @@ export interface components {
             skipped: number;
             /** Updated */
             updated: number;
+        };
+        /** OutlookConfigurationItemStatus */
+        OutlookConfigurationItemStatus: {
+            /** Configured */
+            configured: boolean;
+            /** Name */
+            name: string;
+        };
+        /** OutlookReadinessCheckResult */
+        OutlookReadinessCheckResult: {
+            /** Detail */
+            detail?: string | null;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "passed" | "failed" | "blocked" | "not_run";
+        };
+        /** OutlookReadinessTestResponse */
+        OutlookReadinessTestResponse: {
+            /**
+             * Adp20 Readiness
+             * @enum {string}
+             */
+            adp20_readiness: "blocked_pending_admin_configuration" | "ready_for_adp20_implementation";
+            /** Checks */
+            checks: components["schemas"]["OutlookReadinessCheckResult"][];
+            /**
+             * Provider
+             * @default outlook
+             * @constant
+             */
+            provider: "outlook";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "passed" | "failed" | "blocked" | "not_run";
+            /**
+             * Tested At
+             * Format: date-time
+             */
+            tested_at: string;
+        };
+        /** OutlookTenantConfigurationResponse */
+        OutlookTenantConfigurationResponse: {
+            /**
+             * Adp20 Readiness
+             * @enum {string}
+             */
+            adp20_readiness: "blocked_pending_admin_configuration" | "ready_for_adp20_implementation";
+            /** Approved Scopes */
+            approved_scopes?: string[];
+            /**
+             * Config Source
+             * @enum {string}
+             */
+            config_source: "tenant_admin" | "environment" | "missing";
+            /** Configured */
+            configured: boolean;
+            /** Connected Account Count */
+            connected_account_count: number;
+            /** Connection Count */
+            connection_count: number;
+            /** Enabled */
+            enabled: boolean;
+            /** Last Error Redacted */
+            last_error_redacted?: string | null;
+            /**
+             * Last Test Status
+             * @default not_run
+             * @enum {string}
+             */
+            last_test_status: "passed" | "failed" | "blocked" | "not_run";
+            /** Last Tested At */
+            last_tested_at?: string | null;
+            /** Missing Approval Keys */
+            missing_approval_keys?: string[];
+            /** Missing Config Names */
+            missing_config_names?: string[];
+            /**
+             * Provider
+             * @default outlook
+             * @constant
+             */
+            provider: "outlook";
+            /** Required Approvals */
+            required_approvals: components["schemas"]["OutlookApprovalItemStatus"][];
+            /** Required Config */
+            required_config: components["schemas"]["OutlookConfigurationItemStatus"][];
+        };
+        /** OutlookTenantConfigurationUpdateRequest */
+        OutlookTenantConfigurationUpdateRequest: {
+            /** Client Id */
+            client_id?: string | null;
+            /** Client Secret */
+            client_secret?: string | null;
+            /**
+             * Durable Runbook Approved
+             * @default false
+             */
+            durable_runbook_approved: boolean;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Oauth Consent Model Approved
+             * @default false
+             */
+            oauth_consent_model_approved: boolean;
+            /**
+             * Redaction Rules Approved
+             * @default false
+             */
+            redaction_rules_approved: boolean;
+            /** Redirect Uri */
+            redirect_uri?: string | null;
+            /**
+             * Rollback Approved
+             * @default false
+             */
+            rollback_approved: boolean;
+            /** Scopes */
+            scopes?: string[] | null;
+            /**
+             * Scopes Approved
+             * @default false
+             */
+            scopes_approved: boolean;
+            /** Tenant Id */
+            tenant_id?: string | null;
         };
         /** OutsideCounselAssignmentCreateRequest */
         OutsideCounselAssignmentCreateRequest: {
@@ -16290,6 +16471,79 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_outlook_configuration_api_admin_outlook_configuration_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OutlookTenantConfigurationResponse"];
+                };
+            };
+        };
+    };
+    patch_outlook_configuration_api_admin_outlook_configuration_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OutlookTenantConfigurationUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OutlookTenantConfigurationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_outlook_configuration_test_api_admin_outlook_configuration_test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OutlookReadinessTestResponse"];
                 };
             };
         };
