@@ -1818,7 +1818,10 @@ export const calendarConnectionListResponse = z.object({
   provider: z.literal("outlook").default("outlook"),
   provider_available: z.boolean(),
   unavailable_reason: z.string().nullable().optional(),
-  durable_automation: z.literal("blocked_pending_provider_approval"),
+  durable_automation: z.enum([
+    "blocked_pending_provider_approval",
+    "caseops_to_outlook_hearings_ready",
+  ]),
   connections: z.array(calendarConnectionRecord),
 });
 
@@ -1836,9 +1839,20 @@ export const calendarEventSyncRecord = z.object({
   source_type: z.enum(["matter_hearing", "matter_deadline", "matter_task"]),
   source_id: z.string(),
   provider_event_id: z.string().nullable(),
-  sync_status: z.enum(["pending", "synced", "failed", "deleted"]),
+  sync_status: z.enum([
+    "pending",
+    "synced",
+    "failed",
+    "retry_scheduled",
+    "dead_letter",
+    "deleted",
+  ]),
   last_error: z.string().nullable(),
   last_synced_at: z.string().nullable(),
+  attempts: z.number().int().min(0).default(0),
+  max_attempts: z.number().int().min(1).default(3),
+  next_attempt_at: z.string().nullable().optional(),
+  dead_letter_reason: z.string().nullable().optional(),
   created_at: z.string(),
   updated_at: z.string(),
 });
@@ -1857,7 +1871,10 @@ export const calendarSyncCapabilityStatus = z.object({
   sync_mode: z.literal("manual_bounded").default("manual_bounded"),
   manual_sync_available: z.boolean(),
   durable_automation: z
-    .literal("blocked_pending_provider_approval")
+    .enum([
+      "blocked_pending_provider_approval",
+      "caseops_to_outlook_hearings_ready",
+    ])
     .default("blocked_pending_provider_approval"),
   notification_delivery: z
     .literal("wtd_5_3_foundation_available")
@@ -1893,7 +1910,10 @@ export const calendarSyncConflictSummary = z.object({
 
 export const calendarSyncStatusResponse = z.object({
   provider_available: z.boolean(),
-  durable_automation: z.literal("blocked_pending_provider_approval"),
+  durable_automation: z.enum([
+    "blocked_pending_provider_approval",
+    "caseops_to_outlook_hearings_ready",
+  ]),
   notification_delivery: z
     .literal("wtd_5_3_foundation_available")
     .default("wtd_5_3_foundation_available"),
@@ -1965,6 +1985,8 @@ export const outlookBulkSyncItem = z.object({
     "pending",
     "synced",
     "failed",
+    "retry_scheduled",
+    "dead_letter",
     "deleted",
     "skipped",
   ]),
@@ -1982,7 +2004,10 @@ export const outlookBulkSyncResponse = z.object({
   failed: z.number().int(),
   skipped: z.number().int(),
   items: z.array(outlookBulkSyncItem),
-  durable_automation: z.literal("blocked_pending_provider_approval"),
+  durable_automation: z.enum([
+    "blocked_pending_provider_approval",
+    "caseops_to_outlook_hearings_ready",
+  ]),
 });
 
 export const notificationRuleRecord = z.object({

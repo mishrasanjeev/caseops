@@ -216,6 +216,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/outlook-sync/replay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Replay this tenant's failed/dead-letter Outlook hearing sync rows without exposing provider payloads. */
+        post: operations["post_outlook_sync_replay_api_admin_outlook_sync_replay_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/portal/invitations": {
         parameters: {
             query?: never;
@@ -6258,9 +6275,9 @@ export interface components {
             /**
              * Durable Automation
              * @default blocked_pending_provider_approval
-             * @constant
+             * @enum {string}
              */
-            durable_automation: "blocked_pending_provider_approval";
+            durable_automation: "blocked_pending_provider_approval" | "caseops_to_outlook_hearings_ready";
             /**
              * Provider
              * @default outlook
@@ -6377,6 +6394,11 @@ export interface components {
         };
         /** CalendarEventSyncRecord */
         CalendarEventSyncRecord: {
+            /**
+             * Attempts
+             * @default 0
+             */
+            attempts: number;
             /** Calendar Connection Id */
             calendar_connection_id: string;
             /** Company Id */
@@ -6386,12 +6408,21 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Dead Letter Reason */
+            dead_letter_reason?: string | null;
             /** Id */
             id: string;
             /** Last Error */
             last_error: string | null;
             /** Last Synced At */
             last_synced_at: string | null;
+            /**
+             * Max Attempts
+             * @default 3
+             */
+            max_attempts: number;
+            /** Next Attempt At */
+            next_attempt_at?: string | null;
             /** Provider Event Id */
             provider_event_id: string | null;
             /** Source Id */
@@ -6405,7 +6436,7 @@ export interface components {
              * Sync Status
              * @enum {string}
              */
-            sync_status: "pending" | "synced" | "failed" | "deleted";
+            sync_status: "pending" | "synced" | "failed" | "retry_scheduled" | "dead_letter" | "deleted";
             /**
              * Updated At
              * Format: date-time
@@ -6434,9 +6465,9 @@ export interface components {
             /**
              * Durable Automation
              * @default blocked_pending_provider_approval
-             * @constant
+             * @enum {string}
              */
-            durable_automation: "blocked_pending_provider_approval";
+            durable_automation: "blocked_pending_provider_approval" | "caseops_to_outlook_hearings_ready";
             /**
              * Email Invitation Candidates
              * @default review_queue_available
@@ -6525,9 +6556,9 @@ export interface components {
             /**
              * Durable Automation
              * @default blocked_pending_provider_approval
-             * @constant
+             * @enum {string}
              */
-            durable_automation: "blocked_pending_provider_approval";
+            durable_automation: "blocked_pending_provider_approval" | "caseops_to_outlook_hearings_ready";
             /**
              * Notification Delivery
              * @default wtd_5_3_foundation_available
@@ -13430,7 +13461,7 @@ export interface components {
              */
             source_type: "matter_hearing" | "matter_deadline" | "matter_task";
             /** Sync Status */
-            sync_status: ("pending" | "synced" | "failed" | "deleted") | "skipped";
+            sync_status: ("pending" | "synced" | "failed" | "retry_scheduled" | "dead_letter" | "deleted") | "skipped";
         };
         /** OutlookBulkSyncRequest */
         OutlookBulkSyncRequest: {
@@ -13473,9 +13504,9 @@ export interface components {
             /**
              * Durable Automation
              * @default blocked_pending_provider_approval
-             * @constant
+             * @enum {string}
              */
-            durable_automation: "blocked_pending_provider_approval";
+            durable_automation: "blocked_pending_provider_approval" | "caseops_to_outlook_hearings_ready";
             /** Examined */
             examined: number;
             /** Failed */
@@ -13493,6 +13524,51 @@ export interface components {
             configured: boolean;
             /** Name */
             name: string;
+        };
+        /** OutlookDurableSyncReplayRequest */
+        OutlookDurableSyncReplayRequest: {
+            /**
+             * Limit
+             * @default 50
+             */
+            limit: number;
+        };
+        /** OutlookDurableSyncReplayResponse */
+        OutlookDurableSyncReplayResponse: {
+            /**
+             * Adp20 Readiness
+             * @enum {string}
+             */
+            adp20_readiness: "blocked_pending_admin_configuration" | "ready_for_adp20_implementation";
+            /** Dead Lettered */
+            dead_lettered: number;
+            /** Examined */
+            examined: number;
+            /** Failed */
+            failed: number;
+            /** Missing Approval Keys */
+            missing_approval_keys?: string[];
+            /** Missing Config Names */
+            missing_config_names?: string[];
+            /**
+             * Provider
+             * @default outlook
+             * @constant
+             */
+            provider: "outlook";
+            /** Replayed */
+            replayed: number;
+            /** Retry Scheduled */
+            retry_scheduled: number;
+            /** Skipped */
+            skipped: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "processed" | "blocked";
+            /** Synced */
+            synced: number;
         };
         /** OutlookReadinessCheckResult */
         OutlookReadinessCheckResult: {
@@ -16544,6 +16620,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OutlookReadinessTestResponse"];
+                };
+            };
+        };
+    };
+    post_outlook_sync_replay_api_admin_outlook_sync_replay_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OutlookDurableSyncReplayRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OutlookDurableSyncReplayResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

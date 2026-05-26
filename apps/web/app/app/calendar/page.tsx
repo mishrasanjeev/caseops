@@ -259,6 +259,11 @@ export default function CalendarPage() {
   const today = new Date();
   const todayKey = isoDate(today);
   const syncStatus = syncStatusQuery.data;
+  const durableAutomation = syncStatus?.capabilities.durable_automation;
+  const durableAutomationLabel =
+    durableAutomation === "caseops_to_outlook_hearings_ready"
+      ? "CaseOps-to-Outlook hearing sync ready"
+      : "Pending provider approval";
   const providerConfig = syncStatus?.provider_config?.[0] ?? null;
   const missingConfigNames = providerConfig?.missing_config_names ?? [];
   const conflictSummary = syncStatus?.conflict_summary ?? null;
@@ -413,7 +418,7 @@ export default function CalendarPage() {
               )}
             </div>
             <div className="mt-1 text-xs text-[var(--color-mute)]">
-              Durable provider automation remains blocked pending provider approval.
+              Durable provider automation: {durableAutomationLabel}.
               {syncStatusQuery.data?.syncs.find((s) => s.sync_status === "failed")?.last_error
                 ? ` Latest error: ${
                     syncStatusQuery.data.syncs.find((s) => s.sync_status === "failed")
@@ -437,7 +442,7 @@ export default function CalendarPage() {
                 </div>
                 <div>
                   <div className="font-medium text-[var(--color-ink)]">Durable sync</div>
-                  <div>Pending provider approval</div>
+                  <div>{durableAutomationLabel}</div>
                 </div>
                 <div>
                   <div className="font-medium text-[var(--color-ink)]">Reminder delivery</div>

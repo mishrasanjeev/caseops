@@ -39,7 +39,8 @@ def _build_parser() -> argparse.ArgumentParser:
         help=(
             "Start the Temporal worker when the backend is fully configured. "
             "This worker registers the WTD-5.1b no-op runtime probe and "
-            "WTD-5.3 durable notification delivery foundation."
+            "WTD-5.3 durable notification delivery foundation plus the "
+            "ADP-20 readiness-gated Outlook hearing sync foundation."
         ),
     )
     return parser
@@ -49,11 +50,13 @@ def _registered_workflows() -> list[type[object]]:
     from caseops_api.workflows.notification_intents import (
         NotificationDeliveryIntentWorkflow,
         NotificationIntentRuntimeProbeWorkflow,
+        OutlookDurableSyncWorkflow,
     )
 
     return [
         NotificationIntentRuntimeProbeWorkflow,
         NotificationDeliveryIntentWorkflow,
+        OutlookDurableSyncWorkflow,
     ]
 
 
@@ -61,11 +64,13 @@ def _registered_activities() -> list[object]:
     from caseops_api.workflows.notification_intents import (
         notification_delivery_intent_activity,
         notification_intent_noop_activity,
+        outlook_durable_sync_activity,
     )
 
     return [
         notification_intent_noop_activity,
         notification_delivery_intent_activity,
+        outlook_durable_sync_activity,
     ]
 
 
@@ -104,6 +109,8 @@ def main(argv: Iterable[str] | None = None) -> int:
         "durable_delivery_foundation_registered": True,
         "in_app_delivery_foundation_enabled": True,
         "external_delivery_provider_enabled": False,
+        "durable_outlook_sync_foundation_registered": True,
+        "outlook_provider_calls_require_tenant_readiness": True,
         "runtime_defaults": temporal_runtime_defaults().public_dict(),
         "status": status.worker_check_dict(),
     }

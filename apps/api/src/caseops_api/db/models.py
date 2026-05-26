@@ -1640,6 +1640,8 @@ class CalendarEventSyncStatus(StrEnum):
     PENDING = "pending"
     SYNCED = "synced"
     FAILED = "failed"
+    RETRY_SCHEDULED = "retry_scheduled"
+    DEAD_LETTER = "dead_letter"
     DELETED = "deleted"
 
 
@@ -2019,6 +2021,17 @@ class CalendarEventSync(Base):
     )
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    dead_letter_reason: Mapped[str | None] = mapped_column(
+        String(120), nullable=True
+    )
+    durable_last_attempt_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,

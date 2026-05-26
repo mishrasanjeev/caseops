@@ -49,9 +49,11 @@ from caseops_api.workflows.notification_intent_contracts import (
 from caseops_api.workflows.notification_intents import (
     NotificationDeliveryIntentWorkflow,
     NotificationIntentRuntimeProbeWorkflow,
+    OutlookDurableSyncWorkflow,
     notification_activity_retry_policy,
     notification_delivery_intent_activity,
     notification_intent_noop_activity,
+    outlook_durable_sync_activity,
 )
 from tests.test_auth_company import auth_headers, bootstrap_company
 
@@ -513,8 +515,10 @@ def test_notification_worker_registers_wtd53_delivery_foundation() -> None:
 
     assert NotificationIntentRuntimeProbeWorkflow in workflows
     assert NotificationDeliveryIntentWorkflow in workflows
+    assert OutlookDurableSyncWorkflow in workflows
     assert notification_intent_noop_activity in activities
     assert notification_delivery_intent_activity in activities
+    assert outlook_durable_sync_activity in activities
 
 
 def test_notification_workflow_worker_check_config_never_sends(
@@ -533,6 +537,8 @@ def test_notification_workflow_worker_check_config_never_sends(
     assert payload["durable_delivery_foundation_registered"] is True
     assert payload["in_app_delivery_foundation_enabled"] is True
     assert payload["external_delivery_provider_enabled"] is False
+    assert payload["durable_outlook_sync_foundation_registered"] is True
+    assert payload["outlook_provider_calls_require_tenant_readiness"] is True
     assert payload["runtime_defaults"]["foundation_version"] == "wtd_5_1b_v1"
     assert payload["status"]["available"] is False
     assert "api_key_configured" not in payload["status"]

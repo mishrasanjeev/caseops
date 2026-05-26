@@ -4,7 +4,7 @@ import base64
 import hashlib
 import json
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any, Protocol
 from urllib.parse import urlencode
 
@@ -13,7 +13,7 @@ from cryptography.fernet import Fernet, InvalidToken
 from fastapi import HTTPException, status
 from jwt import InvalidTokenError
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
@@ -22,6 +22,8 @@ from caseops_api.db.models import (
     CalendarEventSyncStatus,
     CalendarProvider,
     CalendarSyncSourceType,
+    Company,
+    CompanyMembership,
     Matter,
     MatterHearing,
     TenantOutlookConfiguration,
@@ -49,10 +51,15 @@ from caseops_api.schemas.calendar import (
     OutlookTenantConfigurationUpdateRequest,
 )
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.durable_workflows import redact_identifier
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import (
     assert_access,
     visible_matters_filter,
+)
+from caseops_api.services.notification_delivery import (
+    redact_provider_error,
+    retry_delay_for_attempt,
 )
 
 OUTLOOK_SCOPES = ["offline_access", "User.Read", "Calendars.ReadWrite"]
@@ -75,6 +82,22 @@ class OutlookRuntimeConfig:
     @property
     def configured(self) -> bool:
         return bool(self.client_id and self.client_secret and self.redirect_uri)
+
+
+@dataclass(frozen=True, slots=True)
+class DurableOutlookSyncProcessResult:
+    status: str
+    adp20_readiness: str
+    missing_config_names: tuple[str, ...]
+    missing_approval_keys: tuple[str, ...]
+    examined: int
+    synced: int
+    failed: int
+    retry_scheduled: int
+    dead_lettered: int
+    skipped: int
+    replayed: int
+    provider_calls: int
 
 
 class OutlookProvider(Protocol):
@@ -449,6 +472,10 @@ def _sync_record(sync: CalendarEventSync) -> CalendarEventSyncRecord:
         sync_status=sync.sync_status,  # type: ignore[arg-type]
         last_error=sync.last_error,
         last_synced_at=sync.last_synced_at,
+        attempts=sync.attempts,
+        max_attempts=sync.max_attempts,
+        next_attempt_at=sync.next_attempt_at,
+        dead_letter_reason=sync.dead_letter_reason,
         created_at=sync.created_at,
         updated_at=sync.updated_at,
     )
@@ -534,6 +561,17 @@ def _readiness_value(
     if configured and approvals_ready and last_test_status == "passed":
         return "ready_for_adp20_implementation"
     return "blocked_pending_admin_configuration"
+
+
+def _durable_automation_value(
+    session: Session,
+    *,
+    context: SessionContext,
+) -> str:
+    status_summary = outlook_tenant_configuration_status(session, context=context)
+    if status_summary.adp20_readiness == "ready_for_adp20_implementation":
+        return "caseops_to_outlook_hearings_ready"
+    return "blocked_pending_provider_approval"
 
 
 def _connection_counts(
@@ -819,6 +857,486 @@ def test_outlook_tenant_configuration(
     )
 
 
+_DURABLE_OUTLOOK_SYNC_WINDOW_DAYS = 92
+
+
+def _current_time() -> datetime:
+    return datetime.now(UTC)
+
+
+def _aware(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value
+
+
+def _membership_context(
+    *,
+    company: Company,
+    membership: CompanyMembership,
+) -> SessionContext:
+    return SessionContext(
+        company=company,
+        user=membership.user,
+        membership=membership,
+    )
+
+
+def _default_durable_range() -> tuple[date, date]:
+    start = date.today()
+    return start, start + timedelta(days=_DURABLE_OUTLOOK_SYNC_WINDOW_DAYS)
+
+
+def _record_calendar_sync_retry_failure(
+    session: Session,
+    *,
+    sync: CalendarEventSync,
+    context: SessionContext,
+    raw_error: object,
+    now: datetime | None = None,
+) -> str:
+    current_time = now or _current_time()
+    sync.attempts = min(sync.attempts + 1, sync.max_attempts)
+    sync.last_error = redact_provider_error(raw_error)
+    sync.durable_last_attempt_at = current_time
+    if sync.attempts >= sync.max_attempts:
+        sync.sync_status = CalendarEventSyncStatus.DEAD_LETTER
+        sync.next_attempt_at = None
+        sync.dead_letter_reason = "retry_limit_exhausted"
+    else:
+        sync.sync_status = CalendarEventSyncStatus.RETRY_SCHEDULED
+        sync.next_attempt_at = current_time + retry_delay_for_attempt(sync.attempts)
+        sync.dead_letter_reason = None
+    session.add(sync)
+    record_from_context(
+        session,
+        context,
+        action="calendar.durable_outlook_sync.failed",
+        target_type="calendar_event_sync",
+        target_id=sync.id,
+        result="failed",
+        metadata={
+            "provider": CalendarProvider.OUTLOOK,
+            "source_type": sync.source_type,
+            "source_ref": redact_identifier(sync.source_id),
+            "sync_status": sync.sync_status,
+            "attempts": sync.attempts,
+            "max_attempts": sync.max_attempts,
+            "retry_scheduled": (
+                sync.sync_status == CalendarEventSyncStatus.RETRY_SCHEDULED
+            ),
+            "dead_lettered": sync.sync_status == CalendarEventSyncStatus.DEAD_LETTER,
+            "error": sync.last_error,
+        },
+    )
+    session.commit()
+    return str(sync.sync_status)
+
+
+def _durable_sync_blocked_result(
+    *,
+    missing_config_names: list[str],
+    missing_approval_keys: list[str],
+) -> DurableOutlookSyncProcessResult:
+    return DurableOutlookSyncProcessResult(
+        status="blocked",
+        adp20_readiness="blocked_pending_admin_configuration",
+        missing_config_names=tuple(missing_config_names),
+        missing_approval_keys=tuple(missing_approval_keys),
+        examined=0,
+        synced=0,
+        failed=0,
+        retry_scheduled=0,
+        dead_lettered=0,
+        skipped=0,
+        replayed=0,
+        provider_calls=0,
+    )
+
+
+def _process_durable_hearing_sync(
+    session: Session,
+    *,
+    context: SessionContext,
+    hearing: MatterHearing,
+    connection: UserCalendarConnection,
+    replay: bool,
+) -> str:
+    sync = session.scalar(
+        select(CalendarEventSync).where(
+            CalendarEventSync.company_id == context.company.id,
+            CalendarEventSync.calendar_connection_id == connection.id,
+            CalendarEventSync.source_type == CalendarSyncSourceType.MATTER_HEARING,
+            CalendarEventSync.source_id == hearing.id,
+        )
+    )
+    if sync is not None and not replay:
+        if sync.sync_status == CalendarEventSyncStatus.DEAD_LETTER:
+            return "skipped"
+        if (
+            sync.sync_status == CalendarEventSyncStatus.RETRY_SCHEDULED
+            and sync.next_attempt_at is not None
+            and _aware(sync.next_attempt_at) > _current_time()
+        ):
+            return "skipped"
+
+    response = sync_hearing_to_outlook(
+        session,
+        context=context,
+        hearing_id=hearing.id,
+    )
+    stored = session.get(CalendarEventSync, response.sync.id)
+    if stored is None:
+        return "failed"
+    if response.sync.sync_status == CalendarEventSyncStatus.SYNCED:
+        return "synced"
+    return _record_calendar_sync_retry_failure(
+        session,
+        sync=stored,
+        context=context,
+        raw_error=response.sync.last_error or "Outlook calendar sync failed.",
+    )
+
+
+def _replay_durable_outlook_sync_rows(
+    session: Session,
+    *,
+    context: SessionContext,
+    limit: int,
+) -> DurableOutlookSyncProcessResult:
+    status_summary = outlook_tenant_configuration_status(session, context=context)
+    if status_summary.adp20_readiness != "ready_for_adp20_implementation":
+        record_from_context(
+            session,
+            context,
+            action="calendar.durable_outlook_sync.skipped",
+            target_type="tenant_outlook_configuration",
+            target_id=context.company.id,
+            result="denied",
+            metadata={
+                "provider": CalendarProvider.OUTLOOK,
+                "reason": "blocked_pending_admin_configuration",
+                "missing_config_names": status_summary.missing_config_names,
+                "missing_approval_keys": status_summary.missing_approval_keys,
+            },
+        )
+        session.commit()
+        return _durable_sync_blocked_result(
+            missing_config_names=status_summary.missing_config_names,
+            missing_approval_keys=status_summary.missing_approval_keys,
+        )
+
+    counters = {
+        "examined": 0,
+        "synced": 0,
+        "failed": 0,
+        "retry_scheduled": 0,
+        "dead_lettered": 0,
+        "skipped": 0,
+        "replayed": 0,
+        "provider_calls": 0,
+    }
+    rows = list(
+        session.scalars(
+            select(CalendarEventSync)
+            .join(
+                UserCalendarConnection,
+                UserCalendarConnection.id == CalendarEventSync.calendar_connection_id,
+            )
+            .options(
+                joinedload(CalendarEventSync.connection)
+                .joinedload(UserCalendarConnection.membership)
+                .joinedload(CompanyMembership.user),
+                joinedload(CalendarEventSync.connection).joinedload(
+                    UserCalendarConnection.company
+                ),
+            )
+            .where(
+                CalendarEventSync.company_id == context.company.id,
+                UserCalendarConnection.provider == CalendarProvider.OUTLOOK,
+                UserCalendarConnection.status == CalendarConnectionStatus.CONNECTED,
+                CalendarEventSync.sync_status.in_(
+                    (
+                        CalendarEventSyncStatus.FAILED,
+                        CalendarEventSyncStatus.RETRY_SCHEDULED,
+                        CalendarEventSyncStatus.DEAD_LETTER,
+                    )
+                ),
+            )
+            .order_by(CalendarEventSync.updated_at.asc())
+            .limit(limit)
+        )
+    )
+    for sync in rows:
+        counters["examined"] += 1
+        if sync.source_type != CalendarSyncSourceType.MATTER_HEARING:
+            counters["skipped"] += 1
+            continue
+        row = session.execute(
+            select(MatterHearing, Matter)
+            .join(Matter, Matter.id == MatterHearing.matter_id)
+            .where(
+                MatterHearing.id == sync.source_id,
+                Matter.company_id == context.company.id,
+            )
+        ).first()
+        if row is None:
+            counters["skipped"] += 1
+            continue
+        hearing, matter = row
+        connection_context = _membership_context(
+            company=sync.connection.company,
+            membership=sync.connection.membership,
+        )
+        try:
+            assert_access(session, context=connection_context, matter=matter)
+        except HTTPException:
+            counters["skipped"] += 1
+            continue
+        counters["provider_calls"] += 1
+        counters["replayed"] += 1
+        outcome = _process_durable_hearing_sync(
+            session,
+            context=connection_context,
+            hearing=hearing,
+            connection=sync.connection,
+            replay=True,
+        )
+        if outcome == "synced":
+            counters["synced"] += 1
+        elif outcome == CalendarEventSyncStatus.RETRY_SCHEDULED:
+            counters["retry_scheduled"] += 1
+        elif outcome == CalendarEventSyncStatus.DEAD_LETTER:
+            counters["dead_lettered"] += 1
+        elif outcome == "skipped":
+            counters["skipped"] += 1
+        else:
+            counters["failed"] += 1
+
+    record_from_context(
+        session,
+        context,
+        action="calendar.durable_outlook_sync.replayed",
+        target_type="calendar_event_sync",
+        target_id=context.company.id,
+        metadata={
+            "provider": CalendarProvider.OUTLOOK,
+            "examined": counters["examined"],
+            "replayed": counters["replayed"],
+            "synced": counters["synced"],
+            "retry_scheduled": counters["retry_scheduled"],
+            "dead_lettered": counters["dead_lettered"],
+            "skipped": counters["skipped"],
+        },
+    )
+    session.commit()
+    return DurableOutlookSyncProcessResult(
+        status="processed",
+        adp20_readiness="ready_for_adp20_implementation",
+        missing_config_names=(),
+        missing_approval_keys=(),
+        **counters,
+    )
+
+
+def process_durable_outlook_sync(
+    session: Session,
+    *,
+    context: SessionContext,
+    range_from: date | None = None,
+    range_to: date | None = None,
+    replay_failed_only: bool = False,
+    limit: int = 200,
+) -> DurableOutlookSyncProcessResult:
+    if replay_failed_only:
+        return _replay_durable_outlook_sync_rows(
+            session,
+            context=context,
+            limit=limit,
+        )
+
+    status_summary = outlook_tenant_configuration_status(session, context=context)
+    if status_summary.adp20_readiness != "ready_for_adp20_implementation":
+        record_from_context(
+            session,
+            context,
+            action="calendar.durable_outlook_sync.skipped",
+            target_type="tenant_outlook_configuration",
+            target_id=context.company.id,
+            result="denied",
+            metadata={
+                "provider": CalendarProvider.OUTLOOK,
+                "reason": "blocked_pending_admin_configuration",
+                "missing_config_names": status_summary.missing_config_names,
+                "missing_approval_keys": status_summary.missing_approval_keys,
+            },
+        )
+        session.commit()
+        return _durable_sync_blocked_result(
+            missing_config_names=status_summary.missing_config_names,
+            missing_approval_keys=status_summary.missing_approval_keys,
+        )
+
+    if range_from is None or range_to is None:
+        default_from, default_to = _default_durable_range()
+        range_from = range_from or default_from
+        range_to = range_to or default_to
+    if range_to < range_from:
+        raise ValueError("Durable Outlook sync range is invalid.")
+    if (range_to - range_from).days > _DURABLE_OUTLOOK_SYNC_WINDOW_DAYS:
+        raise ValueError("Durable Outlook sync range exceeds the bounded window.")
+
+    counters = {
+        "examined": 0,
+        "synced": 0,
+        "failed": 0,
+        "retry_scheduled": 0,
+        "dead_lettered": 0,
+        "skipped": 0,
+        "replayed": 0,
+        "provider_calls": 0,
+    }
+    connections = list(
+        session.scalars(
+            select(UserCalendarConnection)
+            .options(
+                joinedload(UserCalendarConnection.company),
+                joinedload(UserCalendarConnection.membership).joinedload(
+                    CompanyMembership.user
+                ),
+            )
+            .where(
+                UserCalendarConnection.company_id == context.company.id,
+                UserCalendarConnection.provider == CalendarProvider.OUTLOOK,
+                UserCalendarConnection.status == CalendarConnectionStatus.CONNECTED,
+            )
+            .order_by(UserCalendarConnection.created_at.asc())
+        )
+    )
+    remaining = limit
+    for connection in connections:
+        if remaining <= 0:
+            break
+        connection_context = _membership_context(
+            company=connection.company,
+            membership=connection.membership,
+        )
+        rows = list(
+            session.execute(
+                select(MatterHearing, Matter)
+                .join(Matter, Matter.id == MatterHearing.matter_id)
+                .where(
+                    Matter.company_id == context.company.id,
+                    visible_matters_filter(session, context=connection_context),
+                    MatterHearing.hearing_on >= range_from,
+                    MatterHearing.hearing_on <= range_to,
+                )
+                .order_by(MatterHearing.hearing_on, MatterHearing.id)
+                .limit(remaining)
+            ).all()
+        )
+        for hearing, _matter in rows:
+            counters["examined"] += 1
+            remaining -= 1
+            outcome = _process_durable_hearing_sync(
+                session,
+                context=connection_context,
+                hearing=hearing,
+                connection=connection,
+                replay=False,
+            )
+            if outcome == "skipped":
+                counters["skipped"] += 1
+                continue
+            counters["provider_calls"] += 1
+            if outcome == "synced":
+                counters["synced"] += 1
+            elif outcome == CalendarEventSyncStatus.RETRY_SCHEDULED:
+                counters["retry_scheduled"] += 1
+            elif outcome == CalendarEventSyncStatus.DEAD_LETTER:
+                counters["dead_lettered"] += 1
+            else:
+                counters["failed"] += 1
+
+    record_from_context(
+        session,
+        context,
+        action="calendar.durable_outlook_sync.processed",
+        target_type="tenant_outlook_configuration",
+        target_id=context.company.id,
+        metadata={
+            "provider": CalendarProvider.OUTLOOK,
+            "source_types": [CalendarSyncSourceType.MATTER_HEARING],
+            "unsupported_source_types": [
+                CalendarSyncSourceType.MATTER_DEADLINE,
+                CalendarSyncSourceType.MATTER_TASK,
+            ],
+            "examined": counters["examined"],
+            "synced": counters["synced"],
+            "retry_scheduled": counters["retry_scheduled"],
+            "dead_lettered": counters["dead_lettered"],
+            "skipped": counters["skipped"],
+        },
+    )
+    session.commit()
+    return DurableOutlookSyncProcessResult(
+        status="processed",
+        adp20_readiness="ready_for_adp20_implementation",
+        missing_config_names=(),
+        missing_approval_keys=(),
+        **counters,
+    )
+
+
+def process_durable_outlook_sync_by_company(
+    company_id: str,
+    *,
+    initiated_by_membership_id: str | None = None,
+    range_from: date | None = None,
+    range_to: date | None = None,
+    replay_failed_only: bool = False,
+    limit: int = 200,
+) -> DurableOutlookSyncProcessResult:
+    from caseops_api.db.session import get_session_factory
+
+    session_factory = get_session_factory()
+    with session_factory() as session:
+        company = session.get(Company, company_id)
+        if company is None:
+            return _durable_sync_blocked_result(
+                missing_config_names=[],
+                missing_approval_keys=["company_not_found"],
+            )
+        membership_stmt = (
+            select(CompanyMembership)
+            .options(joinedload(CompanyMembership.user))
+            .where(
+                CompanyMembership.company_id == company_id,
+                CompanyMembership.is_active.is_(True),
+            )
+            .order_by(CompanyMembership.created_at.asc())
+        )
+        if initiated_by_membership_id is not None:
+            membership_stmt = membership_stmt.where(
+                CompanyMembership.id == initiated_by_membership_id,
+            )
+        membership = session.scalar(membership_stmt)
+        if membership is None:
+            return _durable_sync_blocked_result(
+                missing_config_names=[],
+                missing_approval_keys=["active_membership_not_found"],
+            )
+        context = _membership_context(company=company, membership=membership)
+        return process_durable_outlook_sync(
+            session,
+            context=context,
+            range_from=range_from,
+            range_to=range_to,
+            replay_failed_only=replay_failed_only,
+            limit=limit,
+        )
+
+
 def _duplicate_conflict_candidates(
     syncs: list[CalendarEventSync],
 ) -> list[CalendarSyncConflictCandidate]:
@@ -857,10 +1375,7 @@ def _duplicate_conflict_candidates(
 
 
 def _safe_error(exc: BaseException) -> str:
-    text = str(exc) or exc.__class__.__name__
-    for token_word in ("access_token", "refresh_token", "client_secret", "Authorization"):
-        text = text.replace(token_word, "[redacted]")
-    return text[:500]
+    return redact_provider_error(str(exc) or exc.__class__.__name__)[:500]
 
 
 def list_connections(
@@ -883,6 +1398,7 @@ def list_connections(
     return CalendarConnectionListResponse(
         provider_available=provider.configured,
         unavailable_reason=provider.unavailable_reason,
+        durable_automation=_durable_automation_value(session, context=context),  # type: ignore[arg-type]
         connections=[_connection_record(row) for row in rows],
     )
 
@@ -1095,6 +1611,8 @@ def sync_hearing_to_outlook(
     sync.sync_status = CalendarEventSyncStatus.SYNCED
     sync.last_error = None
     sync.last_synced_at = now
+    sync.next_attempt_at = None
+    sync.dead_letter_reason = None
     connection.last_sync_at = now
     session.add_all([sync, connection])
     record_from_context(
@@ -1296,6 +1814,7 @@ def sync_outlook_bulk(
         failed=counters["failed"],
         skipped=counters["skipped"],
         items=items,
+        durable_automation=_durable_automation_value(session, context=context),  # type: ignore[arg-type]
     )
 
 
@@ -1329,12 +1848,14 @@ def sync_status(
         )
     )
     conflict_candidates = _duplicate_conflict_candidates(syncs)
+    durable_automation = _durable_automation_value(session, context=context)
     return CalendarSyncStatusResponse(
         provider_available=provider.configured,
+        durable_automation=durable_automation,  # type: ignore[arg-type]
         notification_delivery="wtd_5_3_foundation_available",
         capabilities=CalendarSyncCapabilityStatus(
             manual_sync_available=provider.configured,
-            durable_automation="blocked_pending_provider_approval",
+            durable_automation=durable_automation,  # type: ignore[arg-type]
             notification_delivery="wtd_5_3_foundation_available",
             email_invitation_candidates="review_queue_available",
         ),
@@ -1354,8 +1875,11 @@ def sync_status(
 
 __all__ = [
     "complete_outlook_connection",
+    "DurableOutlookSyncProcessResult",
     "list_connections",
     "outlook_tenant_configuration_status",
+    "process_durable_outlook_sync",
+    "process_durable_outlook_sync_by_company",
     "revoke_connection",
     "set_outlook_provider_for_tests",
     "start_outlook_connection",
