@@ -102,9 +102,10 @@ The following repo truth was used while shaping this PRD:
 - WTD-7.2 matter Tasks/Deadlines Cockpit foundation exists. Admin task
   templates per practice area remain pending.
 - WTD-5.1a and WTD-5.1b durable workflow/Temporal foundations exist.
-- WTD-5.1c live operator proof is NO-GO because required operator Temporal
-  config is missing.
-- WTD-5.3 durable notification delivery and retry remain pending.
+- WTD-5.1c live operator proof is complete against the operator-owned Mumbai
+  Temporal backend.
+- WTD-5.3 durable notification delivery and retry remain pending; ADP-20
+  remains blocked until WTD-5.3 is complete.
 - WTD-11.4 offline AI safety evaluation harness foundation exists. Broader
   per-workflow goldens and CI gating remain pending.
 - AI token budgets, firm/user quotas, plan entitlements, and storage governance
@@ -1350,7 +1351,8 @@ Objective:
 Prerequisites:
 
 - WTD-5.1c live Temporal operator proof complete.
-- WTD-5.3 notification delivery and retry complete.
+- WTD-5.3 notification delivery and retry complete; until then, ADP-20 remains
+  blocked.
 - Provider-specific credentials and runbooks approved.
 
 Tasks:
