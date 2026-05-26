@@ -13,11 +13,15 @@ from caseops_api.workflows.notification_intent_contracts import (
     DEFAULT_RETRY_MAXIMUM_INTERVAL,
     DELIVERY_ACTIVITY_TYPE,
     DELIVERY_WORKFLOW_TYPE,
+    OUTLOOK_DURABLE_SYNC_ACTIVITY_TYPE,
+    OUTLOOK_DURABLE_SYNC_WORKFLOW_TYPE,
     WORKFLOW_TYPE,
     NotificationDeliveryWorkflowInput,
     NotificationDeliveryWorkflowResult,
     NotificationIntentRuntimeProbeInput,
     NotificationIntentRuntimeProbeResult,
+    OutlookDurableSyncWorkflowInput,
+    OutlookDurableSyncWorkflowResult,
 )
 
 
@@ -112,6 +116,71 @@ class NotificationDeliveryIntentWorkflow:
     ) -> NotificationDeliveryWorkflowResult:
         return await workflow.execute_activity(
             notification_delivery_intent_activity,
+            payload,
+            schedule_to_close_timeout=DEFAULT_ACTIVITY_SCHEDULE_TO_CLOSE_TIMEOUT,
+            start_to_close_timeout=DEFAULT_ACTIVITY_START_TO_CLOSE_TIMEOUT,
+            retry_policy=notification_activity_retry_policy(),
+        )
+
+
+@activity.defn(name=OUTLOOK_DURABLE_SYNC_ACTIVITY_TYPE)
+async def outlook_durable_sync_activity(
+    payload: OutlookDurableSyncWorkflowInput,
+) -> OutlookDurableSyncWorkflowResult:
+    from datetime import date
+
+    from caseops_api.services.calendar_sync import (
+        process_durable_outlook_sync_by_company,
+    )
+    from caseops_api.services.durable_workflows import redact_identifier
+
+    range_from = date.fromisoformat(payload.range_from) if payload.range_from else None
+    range_to = date.fromisoformat(payload.range_to) if payload.range_to else None
+    result = process_durable_outlook_sync_by_company(
+        payload.company_id,
+        initiated_by_membership_id=payload.initiated_by_membership_id,
+        range_from=range_from,
+        range_to=range_to,
+        replay_failed_only=payload.replay_failed_only,
+        limit=payload.limit,
+    )
+    metadata = {
+        **payload.metadata,
+        "workflow_foundation": payload.foundation_version,
+        "source_types": ["matter_hearing"],
+        "unsupported_source_types": ["matter_deadline", "matter_task"],
+        "missing_config_names": list(result.missing_config_names),
+        "missing_approval_keys": list(result.missing_approval_keys),
+        "provider_calls": result.provider_calls,
+    }
+    return OutlookDurableSyncWorkflowResult(
+        workflow_type=OUTLOOK_DURABLE_SYNC_WORKFLOW_TYPE,
+        activity_type=OUTLOOK_DURABLE_SYNC_ACTIVITY_TYPE,
+        status=result.status,
+        adp20_readiness=result.adp20_readiness,
+        company_ref=redact_identifier(payload.company_id) or "id:unavailable",
+        examined=result.examined,
+        synced=result.synced,
+        failed=result.failed,
+        retry_scheduled=result.retry_scheduled,
+        dead_lettered=result.dead_lettered,
+        skipped=result.skipped,
+        replayed=result.replayed,
+        provider_calls=result.provider_calls,
+        foundation_version=payload.foundation_version,
+        metadata=metadata,
+    )
+
+
+@workflow.defn(name=OUTLOOK_DURABLE_SYNC_WORKFLOW_TYPE)
+class OutlookDurableSyncWorkflow:
+    @workflow.run
+    async def run(
+        self,
+        payload: OutlookDurableSyncWorkflowInput,
+    ) -> OutlookDurableSyncWorkflowResult:
+        return await workflow.execute_activity(
+            outlook_durable_sync_activity,
             payload,
             schedule_to_close_timeout=DEFAULT_ACTIVITY_SCHEDULE_TO_CLOSE_TIMEOUT,
             start_to_close_timeout=DEFAULT_ACTIVITY_START_TO_CLOSE_TIMEOUT,

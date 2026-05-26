@@ -51,9 +51,10 @@ product, or enterprise evidence from the strict ledgers.
    - `WTD-5.3` durable notification delivery/retry foundation is implemented:
      in-app delivery uses durable intents with idempotency, retry, and
      dead-letter metadata; email/SMS/WhatsApp remain fail-closed with no
-     provider calls. ADP-20 provider readiness is now law-firm-admin
-     configurable from `/app/admin/outlook`; durable Outlook sync may start
-     only after a tenant readiness probe reports ready.
+     provider calls. ADP-20 durable Outlook sync foundation is implemented for
+     readiness-gated CaseOps-to-Outlook hearing sync only, with retry,
+     dead-letter, and tenant-scoped admin replay. Task/deadline, mailbox,
+     webhook, Outlook-to-CaseOps, and Google Drive sync remain future work.
 
 5. **AI eval harness**
    - `WTD-11.4` now has a deterministic offline fixture foundation for

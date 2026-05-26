@@ -181,6 +181,49 @@ describe("CalendarPage", () => {
     expect(within(panel).getByText("Review queue available")).toBeInTheDocument();
   });
 
+  it("renders durable hearing sync as one-way when tenant readiness is passed", async () => {
+    fetchCalendarEventsMock.mockResolvedValue({
+      range_from: "2026-04-01",
+      range_to: "2026-05-31",
+      events: [],
+    });
+    fetchCalendarSyncStatusMock.mockResolvedValueOnce({
+      provider_available: true,
+      durable_automation: "caseops_to_outlook_hearings_ready",
+      notification_delivery: "wtd_5_3_foundation_available",
+      capabilities: {
+        sync_mode: "manual_bounded",
+        manual_sync_available: true,
+        durable_automation: "caseops_to_outlook_hearings_ready",
+        notification_delivery: "wtd_5_3_foundation_available",
+        email_invitation_candidates: "review_queue_available",
+      },
+      provider_config: [
+        {
+          provider: "outlook",
+          configured: true,
+          missing_config_names: [],
+        },
+      ],
+      conflict_summary: {
+        has_conflicts: false,
+        candidate_count: 0,
+        duplicate_provider_event_count: 0,
+        changed_event_candidate_count: 0,
+        changed_event_detection: "unsupported_no_provider_snapshot",
+      },
+      conflict_candidates: [],
+      connections: [],
+      syncs: [],
+    });
+    render(withClient(<CalendarPage />));
+    const panel = await screen.findByTestId("calendar-sync-status-panel");
+    expect(
+      within(panel).getByText("CaseOps-to-Outlook hearing sync ready"),
+    ).toBeInTheDocument();
+    expect(panel.textContent).not.toMatch(/two-way|mailbox|Google Drive/i);
+  });
+
   it("shows email invitation candidates and review actions without provider sync claims", async () => {
     fetchCalendarEventsMock.mockResolvedValueOnce({
       range_from: "2026-04-01",

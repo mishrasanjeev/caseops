@@ -108,9 +108,12 @@ The following repo truth was used while shaping this PRD:
   internal in-app delivery and bounded retry/dead-letter state. External
   email/SMS/WhatsApp delivery remains fail-closed until provider-specific
   policy, credential, and runbook approval.
-- ADP-20 Outlook provider readiness is now law-firm-admin configurable via
-  `/app/admin/outlook`; durable Outlook sync implementation may start for a
-  tenant only after the page reports `ready_for_adp20_implementation`.
+- ADP-20 durable Outlook sync foundation is implemented for readiness-gated
+  tenants: Temporal registers a CaseOps-to-Outlook hearing sync workflow and
+  activity, calendar sync rows track bounded retry/dead-letter state, and
+  workspace admins can replay failed/dead-letter hearing sync rows. Task,
+  deadline, mailbox, webhook, Outlook-to-CaseOps, and Google Drive sync remain
+  out of scope.
 - WTD-11.4 offline AI safety evaluation harness foundation exists. Broader
   per-workflow goldens and CI gating remain pending.
 - AI token budgets, firm/user quotas, plan entitlements, and storage governance
@@ -734,7 +737,8 @@ Requirements:
 - Preserve bounded manual Outlook sync.
 - Add clear status labels:
   - manual sync available
-  - durable always-on sync pending provider-specific approval
+  - durable CaseOps-to-Outlook hearing sync ready only after tenant readiness
+    reports `ready_for_adp20_implementation`
   - notification delivery foundation available with external channels
     fail-closed
 - Outlook to CaseOps imports:
@@ -1359,11 +1363,13 @@ Prerequisites:
 
 - WTD-5.1c live Temporal operator proof complete.
 - WTD-5.3 notification delivery and retry foundation complete.
-- Provider-specific credentials, policy approvals, and runbooks complete.
+- Provider-specific credentials, policy approvals, and runbooks are
+  law-firm-admin configurable; ADP-20 durable hearing sync still fails closed
+  for tenants that do not report `ready_for_adp20_implementation`.
 
 Tasks:
 
-- ADP-20 Durable Outlook sync.
+- ADP-20 Durable Outlook sync foundation for CaseOps-to-Outlook hearings.
 - ADP-21 Durable Google Drive sync.
 - ADP-22 Durable email ingestion connector.
 - ADP-23 Judgment/legal update external digests.
@@ -2000,19 +2006,23 @@ Tests:
 Type: Backend Worker + Provider Integration
 Priority: P4
 Dependencies: WTD-5.1c, WTD-5.3, ADP-07
-Provider readiness gate: **ADMIN-CONFIGURABLE / IMPLEMENTATION-UNBLOCKED** as
-of 2026-05-26; see
-`docs/runbooks/adp20-outlook-provider-readiness.md`. Law firm admins can now
-configure Outlook OAuth values, record approvals, connect Outlook, and run the
-end-to-end readiness probe from `/app/admin/outlook`. Durable sync remains
-unimplemented until this ADP-20 slice is started; for a tenant, enable work only
-when readiness reports `ready_for_adp20_implementation`.
+Status: **FOUNDATION IMPLEMENTED** as of 2026-05-26 for
+CaseOps-to-Outlook hearing sync only; see
+`docs/runbooks/adp20-outlook-provider-readiness.md`. Durable sync runs only for
+tenants whose `/app/admin/outlook` readiness status reports
+`ready_for_adp20_implementation`; tenants not ready are skipped fail-closed with
+names/status-only diagnostics. Bounded manual Outlook sync remains supported.
 
 Scope:
 
-- Durable scheduled sync.
-- Retry/dead-letter.
-- Admin replay.
+- Temporal workflow/activity for readiness-gated CaseOps-to-Outlook hearing
+  sync.
+- Retry/dead-letter fields on `CalendarEventSync`.
+- Admin replay for tenant-scoped failed/dead-letter hearing sync rows.
+- Unsupported task/deadline sources remain skipped/fail-closed until a
+  separate provider method and policy approval exist.
+- No mailbox read, Outlook-to-CaseOps import, provider webhook, Google Drive
+  sync, ADP-21/22/23/24 work, or two-way conflict automation is included.
 
 Tests:
 

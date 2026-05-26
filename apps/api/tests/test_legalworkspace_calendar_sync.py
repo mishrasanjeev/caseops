@@ -9,21 +9,30 @@ from sqlalchemy import select
 from caseops_api.db.models import (
     AuditEvent,
     CalendarEventSync,
+    CalendarEventSyncStatus,
+    Company,
+    CompanyMembership,
     InAppNotification,
     MatterCourtOrder,
     NotificationDeliveryIntent,
     NotificationDeliveryStatus,
     TenantOutlookConfiguration,
+    User,
     UserCalendarConnection,
 )
 from caseops_api.db.session import get_session_factory
-from caseops_api.services.calendar_sync import set_outlook_provider_for_tests
+from caseops_api.services.calendar_sync import (
+    process_durable_outlook_sync,
+    set_outlook_provider_for_tests,
+)
+from caseops_api.services.identity import SessionContext
 from tests.test_auth_company import auth_headers, bootstrap_company
 
 
 class StubOutlookProvider:
-    def __init__(self, *, fail: bool = False) -> None:
+    def __init__(self, *, fail: bool = False, fail_message: str = "provider unavailable") -> None:
         self.fail = fail
+        self.fail_message = fail_message
         self.calls: list[dict[str, object]] = []
 
     @property
@@ -41,8 +50,8 @@ class StubOutlookProvider:
         assert code == "oauth-code"
         return {
             "token_payload": {
-                "access_token": "raw-access-token",
-                "refresh_token": "raw-refresh-token",
+                "access_token": "fixture-access-credential",
+                "refresh_token": "fixture-refresh-credential",
             },
             "provider_account_id": "outlook-user-1",
             "display_email": "lawyer@example.test",
@@ -58,8 +67,8 @@ class StubOutlookProvider:
         existing_provider_event_id: str | None,
     ) -> str:
         if self.fail:
-            raise RuntimeError("provider unavailable")
-        assert token_payload["access_token"] == "raw-access-token"
+            raise RuntimeError(self.fail_message)
+        assert token_payload["access_token"] == "fixture-access-credential"
         self.calls.append(
             {
                 "hearing_id": hearing.id,
@@ -70,7 +79,7 @@ class StubOutlookProvider:
         return existing_provider_event_id or "remote-event-1"
 
     def validate_connection(self, *, token_payload: dict[str, object]) -> dict[str, object]:
-        assert token_payload["access_token"] == "raw-access-token"
+        assert token_payload["access_token"] == "fixture-access-credential"
         return {
             "provider_account_id": "outlook-user-1",
             "display_email": "lawyer@example.test",
@@ -171,7 +180,7 @@ def _connect_outlook(client: TestClient, token: str, provider: StubOutlookProvid
     assert start.status_code == 200, start.text
     body = start.json()
     assert body["provider_available"] is True
-    assert "raw-access-token" not in start.text
+    assert "fixture-access-credential" not in start.text
     state = parse_qs(urlparse(body["auth_url"]).query)["state"][0]
     callback = client.get(
         "/api/calendar/connections/outlook/callback",
@@ -179,8 +188,56 @@ def _connect_outlook(client: TestClient, token: str, provider: StubOutlookProvid
         params={"code": "oauth-code", "state": state},
     )
     assert callback.status_code == 200, callback.text
-    assert "raw-access-token" not in callback.text
+    assert "fixture-access-credential" not in callback.text
     return callback.json()["connection"]["id"]
+
+
+def _configure_ready_outlook(
+    client: TestClient,
+    token: str,
+    provider: StubOutlookProvider,
+) -> str:
+    set_outlook_provider_for_tests(provider)
+    saved = client.patch(
+        "/api/admin/outlook-configuration",
+        headers=_auth(token),
+        json={
+            "client_id": "client-id-value",
+            "client_secret": "fixture-credential-value",
+            "tenant_id": "organizations",
+            "redirect_uri": (
+                "https://api.example.test/api/calendar/connections/outlook/callback"
+            ),
+            "scopes": ["offline_access", "User.Read", "Calendars.ReadWrite"],
+            "oauth_consent_model_approved": True,
+            "scopes_approved": True,
+            "durable_runbook_approved": True,
+            "rollback_approved": True,
+            "redaction_rules_approved": True,
+            "enabled": True,
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    connection_id = _connect_outlook(client, token, provider)
+    tested = client.post(
+        "/api/admin/outlook-configuration/test",
+        headers=_auth(token),
+    )
+    assert tested.status_code == 200, tested.text
+    assert tested.json()["adp20_readiness"] == "ready_for_adp20_implementation"
+    return connection_id
+
+
+def _session_context(session, company_id: str) -> SessionContext:
+    company = session.get(Company, company_id)
+    assert company is not None
+    membership = session.scalar(
+        select(CompanyMembership).where(CompanyMembership.company_id == company_id)
+    )
+    assert membership is not None
+    user = session.get(User, membership.user_id)
+    assert user is not None
+    return SessionContext(company=company, user=user, membership=membership)
 
 
 def _seed_order(matter_id: str) -> str:
@@ -215,13 +272,13 @@ def test_outlook_connection_start_callback_revoke_store_no_raw_tokens(
             assert connection.status == "connected"
             assert connection.encrypted_token_ref is not None
             assert connection.encrypted_token_ref.startswith("fernet:")
-            assert "raw-access-token" not in connection.encrypted_token_ref
-            assert "raw-refresh-token" not in connection.encrypted_token_ref
+            assert "fixture-access-credential" not in connection.encrypted_token_ref
+            assert "fixture-refresh-credential" not in connection.encrypted_token_ref
 
         listed = client.get("/api/calendar/connections", headers=_auth(token))
         assert listed.status_code == 200, listed.text
         assert listed.json()["connections"][0]["display_email"] == "lawyer@example.test"
-        assert "raw-access-token" not in listed.text
+        assert "fixture-access-credential" not in listed.text
 
         revoked = client.delete(
             f"/api/calendar/connections/{connection_id}",
@@ -292,8 +349,8 @@ def test_sync_status_reports_bounded_manual_state_and_missing_config_names(
             "changed_event_detection": "unsupported_no_provider_snapshot",
         }
         assert body["conflict_candidates"] == []
-        assert "raw-access-token" not in response.text
-        assert "raw-refresh-token" not in response.text
+        assert "fixture-access-credential" not in response.text
+        assert "fixture-refresh-credential" not in response.text
     finally:
         set_outlook_provider_for_tests(None)
 
@@ -396,8 +453,207 @@ def test_admin_outlook_readiness_test_requires_connection_then_unblocks(
         status = client.get("/api/admin/outlook-configuration", headers=_auth(token))
         assert status.status_code == 200, status.text
         assert status.json()["adp20_readiness"] == "ready_for_adp20_implementation"
-        assert "raw-access-token" not in passed.text
+        assert "fixture-access-credential" not in passed.text
         assert "fixture-credential-value" not in passed.text
+    finally:
+        set_outlook_provider_for_tests(None)
+
+
+def test_durable_outlook_sync_skips_tenants_not_ready_names_only(
+    client: TestClient,
+) -> None:
+    try:
+        set_outlook_provider_for_tests(MissingOutlookProvider())
+        bootstrap = bootstrap_company(client)
+        company_id = str(bootstrap["company"]["id"])
+
+        factory = get_session_factory()
+        with factory() as session:
+            context = _session_context(session, company_id)
+            result = process_durable_outlook_sync(session, context=context)
+
+        assert result.status == "blocked"
+        assert result.adp20_readiness == "blocked_pending_admin_configuration"
+        assert "OUTLOOK_CLIENT_ID" in result.missing_config_names
+        assert result.provider_calls == 0
+        assert result.examined == 0
+        serialized = str(result)
+        assert "fixture-access-credential" not in serialized
+        assert "fixture-credential-value" not in serialized
+    finally:
+        set_outlook_provider_for_tests(None)
+
+
+def test_durable_outlook_sync_is_idempotent_for_hearings(
+    client: TestClient,
+) -> None:
+    provider = StubOutlookProvider()
+    try:
+        bootstrap = bootstrap_company(client)
+        token = str(bootstrap["access_token"])
+        _configure_ready_outlook(client, token, provider)
+        matter = _create_matter(client, token, "ADP20-IDEMP")
+        hearing = _schedule_hearing(client, token, str(matter["id"]))
+        company_id = str(bootstrap["company"]["id"])
+
+        factory = get_session_factory()
+        with factory() as session:
+            context = _session_context(session, company_id)
+            result = process_durable_outlook_sync(
+                session,
+                context=context,
+                range_from=date.today(),
+                range_to=date.today() + timedelta(days=14),
+            )
+            second = process_durable_outlook_sync(
+                session,
+                context=context,
+                range_from=date.today(),
+                range_to=date.today() + timedelta(days=14),
+            )
+            rows = list(session.scalars(select(CalendarEventSync)))
+
+        assert result.status == "processed"
+        assert result.synced == 1
+        assert second.synced == 1
+        assert len(rows) == 1
+        assert rows[0].source_id == hearing["id"]
+        assert rows[0].sync_status == CalendarEventSyncStatus.SYNCED
+        assert provider.calls[1]["existing"] == "remote-event-1"
+    finally:
+        set_outlook_provider_for_tests(None)
+
+
+def test_durable_outlook_sync_retry_and_dead_letter_are_redacted(
+    client: TestClient,
+) -> None:
+    raw_error = (
+        "authorization samplecredentialvalueforredaction for lawyer@example.test "
+        "https://graph.example.test/events"
+    )
+    provider = StubOutlookProvider(fail=True, fail_message=raw_error)
+    try:
+        bootstrap = bootstrap_company(client)
+        token = str(bootstrap["access_token"])
+        _configure_ready_outlook(client, token, provider)
+        matter = _create_matter(client, token, "ADP20-RETRY")
+        _schedule_hearing(client, token, str(matter["id"]))
+        company_id = str(bootstrap["company"]["id"])
+
+        factory = get_session_factory()
+        with factory() as session:
+            context = _session_context(session, company_id)
+            first = process_durable_outlook_sync(
+                session,
+                context=context,
+                range_from=date.today(),
+                range_to=date.today() + timedelta(days=14),
+            )
+            second = process_durable_outlook_sync(
+                session,
+                context=context,
+                replay_failed_only=True,
+            )
+            third = process_durable_outlook_sync(
+                session,
+                context=context,
+                replay_failed_only=True,
+            )
+            fourth = process_durable_outlook_sync(
+                session,
+                context=context,
+                replay_failed_only=True,
+            )
+            sync = session.scalar(select(CalendarEventSync))
+            assert sync is not None
+
+        assert first.retry_scheduled == 1
+        assert second.retry_scheduled == 1
+        assert third.dead_lettered == 1
+        assert fourth.dead_lettered == 1
+        assert sync.sync_status == CalendarEventSyncStatus.DEAD_LETTER
+        assert sync.attempts == sync.max_attempts == 3
+        assert sync.dead_letter_reason == "retry_limit_exhausted"
+        redacted = sync.last_error or ""
+        assert "lawyer@example.test" not in redacted
+        assert "samplecredentialvalueforredaction" not in redacted
+        assert "graph.example.test" not in redacted
+    finally:
+        set_outlook_provider_for_tests(None)
+
+
+def test_admin_outlook_replay_is_tenant_scoped(
+    client: TestClient,
+) -> None:
+    provider = StubOutlookProvider(fail=True)
+    try:
+        first = bootstrap_company(client)
+        first_token = str(first["access_token"])
+        _configure_ready_outlook(client, first_token, provider)
+        first_matter = _create_matter(client, first_token, "ADP20-REPLAY-A")
+        _schedule_hearing(client, first_token, str(first_matter["id"]))
+
+        second = _bootstrap_company(
+            client,
+            slug="adp20-replay-b",
+            email="owner@adp20-replay-b.example",
+        )
+        second_token = str(second["access_token"])
+        _configure_ready_outlook(client, second_token, provider)
+        second_matter = _create_matter(client, second_token, "ADP20-REPLAY-B")
+        _schedule_hearing(client, second_token, str(second_matter["id"]))
+
+        factory = get_session_factory()
+        with factory() as session:
+            first_context = _session_context(session, str(first["company"]["id"]))
+            second_context = _session_context(session, str(second["company"]["id"]))
+            process_durable_outlook_sync(
+                session,
+                context=first_context,
+                range_from=date.today(),
+                range_to=date.today() + timedelta(days=14),
+            )
+            process_durable_outlook_sync(
+                session,
+                context=second_context,
+                range_from=date.today(),
+                range_to=date.today() + timedelta(days=14),
+            )
+
+        provider.fail = False
+        replay = client.post(
+            "/api/admin/outlook-sync/replay",
+            headers=_auth(first_token),
+            json={"limit": 10},
+        )
+        assert replay.status_code == 200, replay.text
+        body = replay.json()
+        assert body["status"] == "processed"
+        assert body["replayed"] == 1
+        assert body["synced"] == 1
+
+        with factory() as session:
+            first_rows = list(
+                session.scalars(
+                    select(CalendarEventSync).where(
+                        CalendarEventSync.company_id == str(first["company"]["id"])
+                    )
+                )
+            )
+            second_rows = list(
+                session.scalars(
+                    select(CalendarEventSync).where(
+                        CalendarEventSync.company_id == str(second["company"]["id"])
+                    )
+                )
+            )
+        assert [row.sync_status for row in first_rows] == [
+            CalendarEventSyncStatus.SYNCED
+        ]
+        assert [row.sync_status for row in second_rows] == [
+            CalendarEventSyncStatus.RETRY_SCHEDULED
+        ]
+        assert "fixture-access-credential" not in replay.text
     finally:
         set_outlook_provider_for_tests(None)
 
@@ -502,8 +758,8 @@ def test_sync_status_reports_duplicate_provider_event_conflict_candidate(
         assert sorted(candidate["source_ids"]) == sorted(
             [first_hearing["id"], second_hearing["id"]]
         )
-        assert "raw-access-token" not in response.text
-        assert "raw-refresh-token" not in response.text
+        assert "fixture-access-credential" not in response.text
+        assert "fixture-refresh-credential" not in response.text
     finally:
         set_outlook_provider_for_tests(None)
 
@@ -527,7 +783,7 @@ def test_manual_hearing_sync_failure_persists_safe_status(
         body = response.json()["sync"]
         assert body["sync_status"] == "failed"
         assert body["last_error"] == "provider unavailable"
-        assert "raw-access-token" not in response.text
+        assert "fixture-access-credential" not in response.text
     finally:
         set_outlook_provider_for_tests(None)
 

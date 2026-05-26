@@ -352,7 +352,8 @@ export default function AdminOutlookConfigurationPage() {
                 <CardTitle as="h2">Readiness test</CardTitle>
                 <CardDescription>
                   Connect an admin Outlook account, then run the provider probe.
-                  Passing this gate makes ADP-20 ready for implementation work.
+                  Passing this gate enables ADP-20 durable CaseOps-to-Outlook
+                  hearing sync for this tenant.
                 </CardDescription>
               </div>
               <PlugZap className="h-5 w-5 text-[var(--color-brand-700)]" aria-hidden />

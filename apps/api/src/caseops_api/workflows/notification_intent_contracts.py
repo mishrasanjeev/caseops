@@ -5,10 +5,13 @@ from datetime import timedelta
 
 FOUNDATION_VERSION = "wtd_5_1b_v1"
 DELIVERY_FOUNDATION_VERSION = "wtd_5_3_v1"
+OUTLOOK_DURABLE_SYNC_FOUNDATION_VERSION = "adp_20_v1"
 WORKFLOW_TYPE = "NotificationIntentRuntimeProbeWorkflow"
 ACTIVITY_TYPE = "notification_intent_noop_activity"
 DELIVERY_WORKFLOW_TYPE = "NotificationDeliveryIntentWorkflow"
 DELIVERY_ACTIVITY_TYPE = "notification_delivery_intent_activity"
+OUTLOOK_DURABLE_SYNC_WORKFLOW_TYPE = "OutlookDurableSyncWorkflow"
+OUTLOOK_DURABLE_SYNC_ACTIVITY_TYPE = "outlook_durable_sync_activity"
 DEFAULT_TASK_QUEUE = "caseops-notification-workflows"
 DEFAULT_WORKER_BUILD_ID = "caseops-wtd51b-notification-worker-v1"
 DEFAULT_WORKFLOW_EXECUTION_TIMEOUT = timedelta(minutes=1)
@@ -63,5 +66,36 @@ class NotificationDeliveryWorkflowResult:
     retry_scheduled: bool
     dead_lettered: bool
     blocked: bool
+    foundation_version: str
+    metadata: dict[str, JsonScalar]
+
+
+@dataclass(frozen=True, slots=True)
+class OutlookDurableSyncWorkflowInput:
+    company_id: str
+    initiated_by_membership_id: str | None = None
+    range_from: str | None = None
+    range_to: str | None = None
+    replay_failed_only: bool = False
+    limit: int = 200
+    foundation_version: str = OUTLOOK_DURABLE_SYNC_FOUNDATION_VERSION
+    metadata: dict[str, JsonScalar] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class OutlookDurableSyncWorkflowResult:
+    workflow_type: str
+    activity_type: str
+    status: str
+    adp20_readiness: str
+    company_ref: str
+    examined: int
+    synced: int
+    failed: int
+    retry_scheduled: int
+    dead_lettered: int
+    skipped: int
+    replayed: int
+    provider_calls: int
     foundation_version: str
     metadata: dict[str, JsonScalar]

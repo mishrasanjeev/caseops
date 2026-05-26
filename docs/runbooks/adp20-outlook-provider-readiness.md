@@ -1,30 +1,35 @@
 # ADP-20 Outlook Provider Readiness Gate
 
-Status: **ADMIN-CONFIGURABLE / IMPLEMENTATION-UNBLOCKED** as of 2026-05-26.
+Status: **READY-GATED FOUNDATION IMPLEMENTED** as of 2026-05-26.
 
-This is the provider-readiness runbook for ADP-20 durable Outlook sync. The
-law firm workspace admin now owns the Outlook setup path through
+This is the provider-readiness and operations runbook for ADP-20 durable Outlook
+sync. The law firm workspace admin owns the Outlook setup path through
 `/app/admin/outlook`: they can enter approved Microsoft Graph OAuth config,
 record the approval checklist, connect an admin Outlook account, and run the
-end-to-end readiness probe. This document must not carry credential values,
-tenant identifiers, OAuth tokens, redirect URI values, Temporal endpoint values,
-DB URLs, private keys, or local env values.
+end-to-end readiness probe. Durable sync then runs only for tenants whose
+readiness reports `ready_for_adp20_implementation`. This document must not
+carry credential values, tenant identifiers, OAuth tokens, redirect URI values,
+Temporal endpoint values, DB URLs, private keys, or local env values.
 
 ## Baseline
 
 - WTD-5.1c live Temporal operator proof: complete.
 - WTD-5.3 durable notification delivery/retry foundation: merged in
   `6c892171bf4df6d0aa67306941d0380d38a62b1b`.
-- ADP-20 durable Outlook sync: not started.
-- Current safe sync behavior: bounded manual Outlook sync only.
+- ADP-20 durable Outlook sync: implemented for CaseOps-to-Outlook hearing sync
+  only, behind the tenant readiness gate.
+- Current safe sync behavior: bounded manual Outlook sync remains available.
 - Admin readiness UI/API: implemented for tenant-scoped Outlook configuration,
   approval capture, encrypted client-secret storage, and Graph connection probe.
+- Unsupported durable sources: task/deadline sync, mailbox read, provider
+  webhooks, Outlook-to-CaseOps import, Google Drive sync, and two-way conflict
+  automation remain out of scope.
 
-## Explicit Non-Goals For This Gate
+## Explicit Non-Goals For This Foundation
 
-- Do not implement durable Outlook sync.
 - Do not add schedulers, polling, mailbox sync, provider webhooks, Google Drive
-  sync, corpus jobs, OCR/document-processing jobs, or feature workers.
+  sync, corpus jobs, OCR/document-processing jobs, or unrelated feature workers.
+- Do not claim task/deadline sync or Outlook-to-CaseOps import support.
 - Do not change external notification delivery behavior.
 
 ## Config Names And Admin Setup Status
@@ -56,7 +61,7 @@ configuration page before a tenant reports `ready_for_adp20_implementation`.
 
 ## Required Approval Evidence Before GO
 
-ADP-20 implementation is unblocked by the admin-controlled readiness path. A
+ADP-20 durable hearing sync is enabled by the admin-controlled readiness path. A
 specific tenant remains blocked until all items below are approved in
 `/app/admin/outlook` and the end-to-end test passes:
 
@@ -83,28 +88,29 @@ specific tenant remains blocked until all items below are approved in
 5. Save the configuration. The response shows names/status only.
 6. Connect an admin Outlook account through the OAuth flow.
 7. Run the end-to-end readiness test. It must report
-   `ready_for_adp20_implementation` before durable sync work is enabled for the
-   tenant.
+   `ready_for_adp20_implementation` before durable CaseOps-to-Outlook hearing
+   sync runs for the tenant.
 
-## ADP-20 Implementation Runbook Requirements
+## ADP-20 Durable Sync Operations
 
-The ADP-20 implementation runbook must still include:
+The implemented foundation includes:
 
-1. Preflight command sequence that reports config names/status only.
-2. Temporal worker readiness check using redacted status output only.
-3. Approved OAuth consent model and scope names.
-4. Secret/config wiring inventory by config name only.
-5. Token storage and revocation procedure.
-6. Bounded retry and dead-letter policy.
-7. Admin replay rules and audit fields.
-8. Provider error redaction rules before DB/API/audit/UI persistence.
-9. Disable and rollback procedure that leaves bounded manual sync available.
-10. Post-deploy verification and incident escalation owner.
+1. Preflight status that reports config names/status only.
+2. Temporal worker registration for `OutlookDurableSyncWorkflow` and
+   `outlook_durable_sync_activity`.
+3. Tenant readiness gate before provider calls.
+4. CaseOps-to-Outlook hearing upsert using the existing Outlook provider and
+   encrypted token/config patterns.
+5. `CalendarEventSync` retry/dead-letter fields with bounded attempts.
+6. Workspace-admin replay for tenant-scoped failed/dead-letter hearing sync
+   rows.
+7. Provider error redaction before DB/API/audit/UI persistence.
+8. Disable/rollback path that leaves bounded manual sync available.
 
 ## GO Criteria For A Tenant
 
-The ADP-20 implementation prompt may be used for tenants whose admin readiness
-page shows:
+Durable CaseOps-to-Outlook hearing sync may run for tenants whose admin
+readiness page shows:
 
 - required config names present;
 - every approval checklist item approved;
@@ -114,5 +120,7 @@ page shows:
 - no credential values are committed or exposed in logs, docs, PR bodies, tests,
   or audit metadata.
 
-Until durable Outlook sync is separately implemented, bounded manual Outlook
-sync remains the only Outlook sync path.
+Unsupported sources/channels remain skipped or fail-closed: task/deadline sync,
+Outlook mailbox read, provider webhooks, Outlook-to-CaseOps import, external
+notification delivery, Google Drive sync, and ADP-21/22/23/24 work are not part
+of this foundation.

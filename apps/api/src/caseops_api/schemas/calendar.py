@@ -22,9 +22,19 @@ CalendarEventKind = Literal["hearing", "task", "deadline"]
 CalendarProviderLiteral = Literal["outlook"]
 CalendarConnectionStatusLiteral = Literal["connected", "revoked", "error"]
 CalendarSyncSourceTypeLiteral = Literal["matter_hearing", "matter_deadline", "matter_task"]
-CalendarEventSyncStatusLiteral = Literal["pending", "synced", "failed", "deleted"]
+CalendarEventSyncStatusLiteral = Literal[
+    "pending",
+    "synced",
+    "failed",
+    "retry_scheduled",
+    "dead_letter",
+    "deleted",
+]
 CalendarSyncModeLiteral = Literal["manual_bounded"]
-CalendarDurableAutomationLiteral = Literal["blocked_pending_provider_approval"]
+CalendarDurableAutomationLiteral = Literal[
+    "blocked_pending_provider_approval",
+    "caseops_to_outlook_hearings_ready",
+]
 CalendarNotificationDeliveryLiteral = Literal["wtd_5_3_foundation_available"]
 OutlookConfigurationSourceLiteral = Literal["tenant_admin", "environment", "missing"]
 OutlookReadinessItemStatusLiteral = Literal["passed", "failed", "blocked", "not_run"]
@@ -130,6 +140,10 @@ class CalendarEventSyncRecord(BaseModel):
     sync_status: CalendarEventSyncStatusLiteral
     last_error: str | None
     last_synced_at: datetime | None
+    attempts: int = Field(default=0, ge=0)
+    max_attempts: int = Field(default=3, ge=1)
+    next_attempt_at: datetime | None = None
+    dead_letter_reason: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -313,6 +327,25 @@ class OutlookReadinessTestResponse(BaseModel):
     checks: list[OutlookReadinessCheckResult]
     adp20_readiness: OutlookADP20ReadinessLiteral
     tested_at: datetime
+
+
+class OutlookDurableSyncReplayRequest(BaseModel):
+    limit: int = Field(default=50, ge=1, le=200)
+
+
+class OutlookDurableSyncReplayResponse(BaseModel):
+    provider: CalendarProviderLiteral = "outlook"
+    status: Literal["processed", "blocked"]
+    adp20_readiness: OutlookADP20ReadinessLiteral
+    missing_config_names: list[str] = Field(default_factory=list)
+    missing_approval_keys: list[str] = Field(default_factory=list)
+    examined: int = Field(ge=0)
+    synced: int = Field(ge=0)
+    failed: int = Field(ge=0)
+    retry_scheduled: int = Field(ge=0)
+    dead_lettered: int = Field(ge=0)
+    skipped: int = Field(ge=0)
+    replayed: int = Field(ge=0)
 
 
 # BUG-039 (Hari 2026-05-09) — bounded manual bulk sync of the

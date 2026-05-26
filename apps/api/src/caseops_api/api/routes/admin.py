@@ -30,6 +30,8 @@ from caseops_api.schemas.audit import (
     AuditExportJobRecord,
 )
 from caseops_api.schemas.calendar import (
+    OutlookDurableSyncReplayRequest,
+    OutlookDurableSyncReplayResponse,
     OutlookReadinessTestResponse,
     OutlookTenantConfigurationResponse,
     OutlookTenantConfigurationUpdateRequest,
@@ -52,6 +54,7 @@ from caseops_api.services.audit_exports import (
 )
 from caseops_api.services.calendar_sync import (
     outlook_tenant_configuration_status,
+    process_durable_outlook_sync,
     test_outlook_tenant_configuration,
     update_outlook_tenant_configuration,
 )
@@ -395,6 +398,40 @@ def post_outlook_configuration_test(
     session: DbSession,
 ) -> OutlookReadinessTestResponse:
     return test_outlook_tenant_configuration(session, context=context)
+
+
+@router.post(
+    "/outlook-sync/replay",
+    response_model=OutlookDurableSyncReplayResponse,
+    summary=(
+        "Replay this tenant's failed/dead-letter Outlook hearing sync rows "
+        "without exposing provider payloads."
+    ),
+)
+def post_outlook_sync_replay(
+    payload: OutlookDurableSyncReplayRequest,
+    context: WorkspaceAdmin,
+    session: DbSession,
+) -> OutlookDurableSyncReplayResponse:
+    result = process_durable_outlook_sync(
+        session,
+        context=context,
+        replay_failed_only=True,
+        limit=payload.limit,
+    )
+    return OutlookDurableSyncReplayResponse(
+        status=result.status,  # type: ignore[arg-type]
+        adp20_readiness=result.adp20_readiness,  # type: ignore[arg-type]
+        missing_config_names=list(result.missing_config_names),
+        missing_approval_keys=list(result.missing_approval_keys),
+        examined=result.examined,
+        synced=result.synced,
+        failed=result.failed,
+        retry_scheduled=result.retry_scheduled,
+        dead_lettered=result.dead_lettered,
+        skipped=result.skipped,
+        replayed=result.replayed,
+    )
 
 
 @router.get(
