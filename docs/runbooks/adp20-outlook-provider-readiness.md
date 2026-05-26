@@ -107,6 +107,23 @@ The implemented foundation includes:
 7. Provider error redaction before DB/API/audit/UI persistence.
 8. Disable/rollback path that leaves bounded manual sync available.
 
+## Production Rollout Verification
+
+Before promoting ADP-20 durable hearing sync to production, operators must:
+
+1. Confirm the target main commit has passing `CI`, `Security`, `CodeQL
+   Advanced`, and `Prod verification (Playwright)` checks.
+2. Deploy from that exact commit with `scripts/deploy-prod.sh <main-sha>`.
+3. Confirm the migration job completes before service traffic is shifted.
+4. Confirm `caseops-api` and `caseops-web` are both serving the target commit at
+   100% traffic.
+5. Confirm `/api/health` reports `{"status":"ok"}` after the rollout.
+6. Confirm the ClamAV sidecar guard remains present.
+
+These checks do not bypass tenant readiness: durable CaseOps-to-Outlook hearing
+sync still runs only for tenants whose admin readiness status reports
+`ready_for_adp20_implementation`.
+
 ## GO Criteria For A Tenant
 
 Durable CaseOps-to-Outlook hearing sync may run for tenants whose admin
