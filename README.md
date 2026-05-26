@@ -120,6 +120,13 @@ CASEOPS_TEMPORAL_TASK_QUEUE_NOTIFICATIONS=caseops-notification-workflows \
 uv --directory apps/api run python -m caseops_api.workers.notification_workflows --check-config --require-available
 ```
 
+Keep these Temporal proof values out of `apps/api/.env`: the API settings
+loader reads that file during `uv --directory apps/api ...` test runs, so
+leaving local Temporal values there changes fail-closed test assumptions. Use
+inline shell env as above, or keep a gitignored non-auto-loaded snippet such as
+`apps/api/.env.temporal.local` and load it explicitly only for this proof
+command.
+
 To run the no-op notification workflow worker against the local Temporal dev
 server inside Docker:
 
