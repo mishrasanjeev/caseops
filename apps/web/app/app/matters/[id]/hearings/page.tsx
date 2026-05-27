@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BarChart3,
+  Bookmark,
   Calendar,
   CalendarCheck,
   CheckCircle2,
@@ -393,6 +394,26 @@ export default function MatterHearingsPage() {
           ) : null}
         </Card>
       ) : null}
+
+      <Card className="lg:col-span-2" data-testid="matter-case-tracking-panel">
+        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+          <div>
+            <CardTitle>Track this court case</CardTitle>
+            <CardDescription>
+              Search by CNR or case number and bookmark updates for in-app notifications.
+            </CardDescription>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            href={`/app/case-tracking?matterId=${encodeURIComponent(matterId)}`}
+          >
+            <Bookmark className="h-4 w-4" aria-hidden />
+            Track case
+          </Button>
+        </CardHeader>
+      </Card>
 
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">

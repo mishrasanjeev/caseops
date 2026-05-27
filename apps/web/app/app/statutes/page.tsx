@@ -11,7 +11,15 @@
  * out of v1 (see docs/PRD_STATUTE_MODEL_2026-04-25.md §2).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, BookOpenCheck, CheckCircle2, ExternalLink, Play, XCircle } from "lucide-react";
+import {
+  Bell,
+  BookOpenCheck,
+  CheckCircle2,
+  ExternalLink,
+  Play,
+  RefreshCw,
+  XCircle,
+} from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -34,14 +42,19 @@ import {
   fetchLegalUpdateDigestPreview,
   listLegalUpdateWatchlists,
   listLegalUpdates,
+  listLegalUpdateSourceRecords,
   listStatutes,
+  runLegalUpdateSourceSync,
   runLegalUpdateWatchlist,
   updateLegalUpdate,
   updateLegalUpdateWatchlist,
   type LegalUpdateRecord,
   type LegalUpdateRunResponse,
+  type LegalUpdateSourceRecord,
+  type LegalUpdateSourceRunRecord,
   type LegalUpdateWatchlistRecord,
 } from "@/lib/api/endpoints";
+import { useCapability } from "@/lib/capabilities";
 
 export default function StatutesIndexPage() {
   const query = useQuery({
@@ -146,9 +159,12 @@ export default function StatutesIndexPage() {
 
 function LegalUpdatesPanel() {
   const queryClient = useQueryClient();
+  const canRunSourceSync = useCapability("notifications:manage");
   const [name, setName] = useState("");
   const [terms, setTerms] = useState("");
   const [lastRun, setLastRun] = useState<LegalUpdateRunResponse | null>(null);
+  const [lastSourceRun, setLastSourceRun] =
+    useState<LegalUpdateSourceRunRecord | null>(null);
 
   const watchlists = useQuery({
     queryKey: ["statutes", "legal-updates", "watchlists"],
@@ -164,6 +180,11 @@ function LegalUpdatesPanel() {
     queryKey: ["statutes", "legal-updates", "digest"],
     queryFn: () => fetchLegalUpdateDigestPreview(5),
     staleTime: 30_000,
+  });
+  const sourceRecords = useQuery({
+    queryKey: ["statutes", "legal-updates", "source-records"],
+    queryFn: () => listLegalUpdateSourceRecords({ limit: 6 }),
+    staleTime: 60_000,
   });
 
   const createMutation = useMutation({
@@ -195,6 +216,13 @@ function LegalUpdatesPanel() {
       queryClient.invalidateQueries({ queryKey: ["statutes", "legal-updates"] });
     },
   });
+  const sourceSyncMutation = useMutation({
+    mutationFn: runLegalUpdateSourceSync,
+    onSuccess: (response) => {
+      setLastSourceRun(response);
+      queryClient.invalidateQueries({ queryKey: ["statutes", "legal-updates"] });
+    },
+  });
 
   const termList = terms
     .split(",")
@@ -213,11 +241,11 @@ function LegalUpdatesPanel() {
               Legal updates
             </CardTitle>
             <CardDescription>
-              In-app monitoring from existing statute and authority records. External delivery requires provider approval.
+              Source-backed statutory monitoring with durable in-app delivery. External channels remain disabled.
             </CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Badge tone="brand">Manual run</Badge>
+            <Badge tone="brand">PRS source</Badge>
             <Badge tone="neutral">In-app only</Badge>
           </div>
         </div>
@@ -231,7 +259,17 @@ function LegalUpdatesPanel() {
             createMutation.mutate({
               name: name.trim(),
               statute_terms: termList,
-              update_types: ["amendment", "notification", "order", "practice_direction"],
+              update_types: [
+                "act",
+                "amendment",
+                "ordinance",
+                "notification",
+                "repeal",
+                "regulation",
+                "circular",
+                "order",
+                "practice_direction",
+              ],
             });
           }}
         >
@@ -258,6 +296,62 @@ function LegalUpdatesPanel() {
             Create
           </Button>
         </form>
+
+        <div className="space-y-2">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-[var(--color-ink)]">
+                Latest legal updates
+              </h2>
+              <p className="text-xs text-[var(--color-mute)]">
+                Source-backed summaries for lawyer review. Delivery: In-app only.
+              </p>
+            </div>
+            {canRunSourceSync ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  sourceSyncMutation.mutate({
+                    sourceKey: "prs_acts_parliament",
+                    limit: 50,
+                  })
+                }
+                disabled={sourceSyncMutation.isPending}
+                data-testid="legal-update-source-sync"
+                title="Run source sync"
+              >
+                <RefreshCw className="h-4 w-4" aria-hidden />
+                Run source sync
+              </Button>
+            ) : null}
+          </div>
+          {sourceRecords.isLoading ? (
+            <Skeleton className="h-24 w-full" />
+          ) : sourceRecords.data?.records.length ? (
+            <div
+              className="divide-y divide-[var(--color-line)] rounded-md border border-[var(--color-line)]"
+              data-testid="legal-update-source-records"
+            >
+              {sourceRecords.data.records.map((record) => (
+                <SourceRecordRow key={record.id} record={record} />
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-[var(--color-mute)]">
+              No source-backed legal updates synced yet.
+            </p>
+          )}
+          {lastSourceRun ? (
+            <p
+              className="text-xs text-[var(--color-mute)]"
+              data-testid="legal-update-source-run-summary"
+            >
+              Source sync {lastSourceRun.status}: fetched {lastSourceRun.fetched_count}; created {lastSourceRun.created_count}; changed {lastSourceRun.changed_count}.
+            </p>
+          ) : null}
+        </div>
 
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="space-y-2">
@@ -348,6 +442,65 @@ function LegalUpdatesPanel() {
   );
 }
 
+function SourceRecordRow({ record }: { record: LegalUpdateSourceRecord }) {
+  return (
+    <div className="space-y-2 p-3">
+      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium text-[var(--color-ink)]">
+            {record.title}
+          </p>
+          <div className="mt-1 flex flex-wrap gap-1.5">
+            <Badge tone="brand">{record.update_type}</Badge>
+            <Badge tone="neutral">{record.source_category ?? record.source_key}</Badge>
+            <Badge tone="neutral">{record.provenance_status}</Badge>
+            <Badge tone="neutral">In-app only</Badge>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {record.statute_id ? (
+            <Link
+              href={`/app/statutes/${record.statute_id}`}
+              className="inline-flex items-center gap-1 rounded-md border border-[var(--color-line)] px-2 py-1 text-xs font-medium text-[var(--color-ink-2)] hover:bg-[var(--color-bg-2)]"
+            >
+              Amendment history
+            </Link>
+          ) : null}
+          <a
+            href={record.source_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 rounded-md border border-[var(--color-line)] px-2 py-1 text-xs font-medium text-[var(--color-ink-2)] hover:bg-[var(--color-bg-2)]"
+          >
+            Source
+            <ExternalLink className="h-3 w-3" aria-hidden />
+          </a>
+        </div>
+      </div>
+      {record.summary ? (
+        <div className="space-y-1 text-xs">
+          <p className="font-medium text-[var(--color-ink)]">
+            {record.summary.review_framing}
+          </p>
+          <p className="text-[var(--color-ink-2)]">
+            {record.summary.plain_english_summary}
+          </p>
+          <p className="text-[var(--color-mute)]">
+            Practical impact: {record.summary.practical_legal_impact}
+          </p>
+          <p className="text-[var(--color-mute)]">
+            Confidence: {record.summary.confidence}
+          </p>
+        </div>
+      ) : (
+        <p className="text-xs text-[var(--color-mute)]">
+          Summary {record.summary_status}; open the source record for review.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function WatchlistRow({
   watchlist,
   onRun,
@@ -424,6 +577,25 @@ function UpdateRow({
           </p>
         </div>
         <div className="flex gap-2">
+          {update.statute_id ? (
+            <Link
+              href={`/app/statutes/${update.statute_id}`}
+              className="inline-flex items-center gap-1 rounded-md border border-[var(--color-line)] px-2 py-1 text-xs font-medium text-[var(--color-ink-2)] hover:bg-[var(--color-bg-2)]"
+            >
+              Act
+            </Link>
+          ) : null}
+          {update.source_url ? (
+            <a
+              href={update.source_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 rounded-md border border-[var(--color-line)] px-2 py-1 text-xs font-medium text-[var(--color-ink-2)] hover:bg-[var(--color-bg-2)]"
+            >
+              Source
+              <ExternalLink className="h-3 w-3" aria-hidden />
+            </a>
+          ) : null}
           <Button
             type="button"
             variant="ghost"
@@ -453,6 +625,11 @@ function UpdateRow({
       </p>
       {update.snippet ? (
         <p className="text-xs text-[var(--color-mute)]">{update.snippet}</p>
+      ) : null}
+      {update.summary ? (
+        <p className="text-xs text-[var(--color-ink-2)]">
+          {update.summary.review_framing}: {update.summary.plain_english_summary}
+        </p>
       ) : null}
       <p className="text-xs text-[var(--color-mute)]">
         {update.source_category} / {update.provenance_status}

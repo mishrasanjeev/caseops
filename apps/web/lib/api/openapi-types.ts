@@ -1145,6 +1145,109 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/case-tracking/bookmarks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List active case tracking bookmarks for the current user. */
+        get: operations["get_case_tracking_bookmarks_api_case_tracking_bookmarks_get"];
+        put?: never;
+        /** Create a tracked-case bookmark from a provider result. */
+        post: operations["post_case_tracking_bookmark_api_case_tracking_bookmarks_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/case-tracking/bookmarks/{bookmark_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Rename, toggle notifications, or archive a case tracking bookmark. */
+        patch: operations["patch_case_tracking_bookmark_api_case_tracking_bookmarks__bookmark_id__patch"];
+        trace?: never;
+    };
+    "/api/case-tracking/bookmarks/{bookmark_id}/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Refresh one bookmarked case against the configured provider. */
+        post: operations["post_case_tracking_bookmark_refresh_api_case_tracking_bookmarks__bookmark_id__refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/case-tracking/bookmarks/{bookmark_id}/updates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List detected updates for a bookmarked case. */
+        get: operations["get_case_tracking_bookmark_updates_api_case_tracking_bookmarks__bookmark_id__updates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/case-tracking/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Search configured provider by CNR or case number. */
+        post: operations["post_case_tracking_search_api_case_tracking_search_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/case-tracking/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Return case tracking provider availability without exposing credentials. */
+        get: operations["get_case_tracking_status_api_case_tracking_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/clients/": {
         parameters: {
             query?: never;
@@ -4673,6 +4776,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/statutes/legal-updates/source-records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List normalized source-backed legal update records. */
+        get: operations["get_legal_update_source_records_api_statutes_legal_updates_source_records_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/statutes/legal-updates/sources/{source_key}/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Manually sync a configured legal update source. */
+        post: operations["post_legal_update_source_sync_api_statutes_legal_updates_sources__source_key__sync_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/statutes/legal-updates/watchlists": {
         parameters: {
             query?: never;
@@ -4751,6 +4888,23 @@ export interface paths {
         };
         /** One Act's metadata (without the full section list). */
         get: operations["get_statute_api_statutes__statute_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/statutes/{statute_id}/amendment-history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List source-backed amendment and change events for an Act. */
+        get: operations["get_statute_amendment_history_api_statutes__statute_id__amendment_history_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -6680,6 +6834,213 @@ export interface components {
             owner_only: boolean;
             /** Protected Reason */
             protected_reason?: string | null;
+        };
+        /** CaseTrackingBookmarkCreateRequest */
+        CaseTrackingBookmarkCreateRequest: {
+            /** Case Number */
+            case_number?: string | null;
+            /** Case Title */
+            case_title: string;
+            /** Cnr Number */
+            cnr_number?: string | null;
+            /** Court Code */
+            court_code?: string | null;
+            /** Court Name */
+            court_name?: string | null;
+            /** Current Stage */
+            current_stage?: string | null;
+            /** Current Status */
+            current_status?: string | null;
+            /** Matter Id */
+            matter_id?: string | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Name */
+            name?: string | null;
+            /** Next Hearing On */
+            next_hearing_on?: string | null;
+            /**
+             * Notification Enabled
+             * @default true
+             */
+            notification_enabled: boolean;
+            /** Party Names */
+            party_names?: string[];
+            /**
+             * Provider
+             * @default ecourtsindia
+             */
+            provider: string;
+        };
+        /** CaseTrackingBookmarkListResponse */
+        CaseTrackingBookmarkListResponse: {
+            /** Bookmarks */
+            bookmarks: components["schemas"]["CaseTrackingBookmarkRecord"][];
+        };
+        /** CaseTrackingBookmarkRecord */
+        CaseTrackingBookmarkRecord: {
+            /** Archived At */
+            archived_at: string | null;
+            /** Company Id */
+            company_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Membership Id */
+            created_by_membership_id: string;
+            /** Id */
+            id: string;
+            /** Is Archived */
+            is_archived: boolean;
+            /** Matter Id */
+            matter_id: string | null;
+            /** Name */
+            name: string | null;
+            /** Notification Enabled */
+            notification_enabled: boolean;
+            tracked_case: components["schemas"]["TrackedCaseRecord"];
+            /** Tracked Case Id */
+            tracked_case_id: string;
+            /**
+             * Update Count
+             * @default 0
+             */
+            update_count: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** CaseTrackingBookmarkUpdateRequest */
+        CaseTrackingBookmarkUpdateRequest: {
+            /** Is Archived */
+            is_archived?: boolean | null;
+            /** Name */
+            name?: string | null;
+            /** Notification Enabled */
+            notification_enabled?: boolean | null;
+        };
+        /** CaseTrackingProviderStatusResponse */
+        CaseTrackingProviderStatusResponse: {
+            /** Configured */
+            configured: boolean;
+            /** Enabled */
+            enabled: boolean;
+            /** Provider */
+            provider: string;
+            /** Reason */
+            reason?: string | null;
+        };
+        /** CaseTrackingRefreshResponse */
+        CaseTrackingRefreshResponse: {
+            bookmark: components["schemas"]["CaseTrackingBookmarkRecord"];
+            /** Created Updates */
+            created_updates: components["schemas"]["CaseTrackingUpdateRecord"][];
+            /**
+             * Delivery Status
+             * @default in_app_only
+             * @constant
+             */
+            delivery_status: "in_app_only";
+        };
+        /** CaseTrackingSearchRequest */
+        CaseTrackingSearchRequest: {
+            /** Case Number */
+            case_number?: string | null;
+            /** Cnr Number */
+            cnr_number?: string | null;
+            /** Court Code */
+            court_code?: string | null;
+            /** Court Name */
+            court_name?: string | null;
+            /** State */
+            state?: string | null;
+        };
+        /** CaseTrackingSearchResponse */
+        CaseTrackingSearchResponse: {
+            /** Provider */
+            provider: string;
+            /** Results */
+            results: components["schemas"]["CaseTrackingSearchResultRecord"][];
+        };
+        /** CaseTrackingSearchResultRecord */
+        CaseTrackingSearchResultRecord: {
+            /** Case Number */
+            case_number: string | null;
+            /** Case Title */
+            case_title: string;
+            /** Cnr Number */
+            cnr_number: string | null;
+            /** Court Code */
+            court_code: string | null;
+            /** Court Name */
+            court_name: string | null;
+            /** Current Stage */
+            current_stage: string | null;
+            /** Current Status */
+            current_status: string | null;
+            /** Next Hearing On */
+            next_hearing_on: string | null;
+            /** Party Names */
+            party_names?: string[];
+            /**
+             * Provenance Label
+             * @default Provider-normalized case status
+             */
+            provenance_label: string;
+            /** Provider */
+            provider: string;
+            /** Source Url */
+            source_url?: string | null;
+        };
+        /** CaseTrackingUpdateListResponse */
+        CaseTrackingUpdateListResponse: {
+            /** Updates */
+            updates: components["schemas"]["CaseTrackingUpdateRecord"][];
+        };
+        /** CaseTrackingUpdateRecord */
+        CaseTrackingUpdateRecord: {
+            /** Ai Summary */
+            ai_summary?: {
+                [key: string]: unknown;
+            } | null;
+            /** Company Id */
+            company_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Hearing Date */
+            hearing_date: string | null;
+            /** Id */
+            id: string;
+            /** Order Date */
+            order_date: string | null;
+            /** Provider Metadata */
+            provider_metadata?: {
+                [key: string]: unknown;
+            };
+            /** Source Record Key */
+            source_record_key: string;
+            /** Source Url */
+            source_url: string | null;
+            /** Summary */
+            summary: string | null;
+            /** Title */
+            title: string;
+            /** Tracked Case Id */
+            tracked_case_id: string;
+            /**
+             * Update Type
+             * @enum {string}
+             */
+            update_type: "new_order" | "new_judgment" | "hearing_update" | "status_change" | "case_metadata_change";
         };
         /** ClauseExtractionResponse */
         ClauseExtractionResponse: {
@@ -10773,6 +11134,8 @@ export interface components {
             source_category: string;
             /** Source Key */
             source_key: string;
+            /** Source Record Id */
+            source_record_id?: string | null;
             /** Source Url */
             source_url: string | null;
             /** Statute Id */
@@ -10781,13 +11144,14 @@ export interface components {
             statute_name: string | null;
             /** Statute Section Id */
             statute_section_id: string | null;
+            summary?: components["schemas"]["LegalUpdateSummaryRecord"] | null;
             /** Title */
             title: string;
             /**
              * Update Type
              * @enum {string}
              */
-            update_type: "amendment" | "notification" | "regulation" | "circular" | "order" | "practice_direction";
+            update_type: "act" | "amendment" | "ordinance" | "notification" | "repeal" | "regulation" | "circular" | "order" | "practice_direction";
             /** Watchlist Id */
             watchlist_id: string;
         };
@@ -10823,6 +11187,136 @@ export interface components {
             /** Watchlist Id */
             watchlist_id: string;
         };
+        /** LegalUpdateSourceRecordListResponse */
+        LegalUpdateSourceRecordListResponse: {
+            /** Records */
+            records: components["schemas"]["LegalUpdateSourceRecordRecord"][];
+        };
+        /** LegalUpdateSourceRecordRecord */
+        LegalUpdateSourceRecordRecord: {
+            /** Act Year */
+            act_year: number | null;
+            /** Content Hash */
+            content_hash: string;
+            /** Effective Date */
+            effective_date: string | null;
+            /**
+             * First Seen At
+             * Format: date-time
+             */
+            first_seen_at: string;
+            /** Id */
+            id: string;
+            /**
+             * Last Seen At
+             * Format: date-time
+             */
+            last_seen_at: string;
+            /** Normalized Title */
+            normalized_title: string;
+            /** Provenance Status */
+            provenance_status: string;
+            /** Published Date */
+            published_date: string | null;
+            /** Sections Changed */
+            sections_changed?: string[];
+            /** Source Category */
+            source_category: string | null;
+            /** Source Document Url */
+            source_document_url: string | null;
+            /** Source Key */
+            source_key: string;
+            /** Source Record Key */
+            source_record_key: string;
+            /** Source Url */
+            source_url: string;
+            /** Statute Id */
+            statute_id: string | null;
+            /** Statute Section Ids */
+            statute_section_ids?: string[];
+            summary: components["schemas"]["LegalUpdateSummaryRecord"] | null;
+            /**
+             * Summary Status
+             * @enum {string}
+             */
+            summary_status: "pending" | "completed" | "failed" | "not_required";
+            /** Title */
+            title: string;
+            /**
+             * Update Type
+             * @enum {string}
+             */
+            update_type: "act" | "amendment" | "ordinance" | "notification" | "repeal" | "regulation" | "circular" | "order" | "practice_direction";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** LegalUpdateSourceRunRecord */
+        LegalUpdateSourceRunRecord: {
+            /** Changed Count */
+            changed_count: number;
+            /** Completed At */
+            completed_at: string | null;
+            /** Created Count */
+            created_count: number;
+            /** Error Message */
+            error_message: string | null;
+            /** Fetched Count */
+            fetched_count: number;
+            /** Id */
+            id: string;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Source Key */
+            source_key: string;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "completed" | "failed" | "partial";
+        };
+        /** LegalUpdateSummaryRecord */
+        LegalUpdateSummaryRecord: {
+            /** Affected Acts */
+            affected_acts?: string[];
+            /** Affected Sections */
+            affected_sections?: string[];
+            /**
+             * Change Kind
+             * @default unknown
+             */
+            change_kind: string;
+            /**
+             * Confidence
+             * @default low
+             * @enum {string}
+             */
+            confidence: "low" | "medium" | "high";
+            /** Plain English Summary */
+            plain_english_summary: string;
+            /** Practical Legal Impact */
+            practical_legal_impact: string;
+            /** Provenance Status */
+            provenance_status: string;
+            /**
+             * Review Framing
+             * @default Source-backed summary for lawyer review.
+             */
+            review_framing: string;
+            /** Source Url */
+            source_url: string;
+            /** Suggested Lawyer Review Actions */
+            suggested_lawyer_review_actions?: string[];
+        };
         /** LegalUpdateWatchlistCreateRequest */
         LegalUpdateWatchlistCreateRequest: {
             /** Contract Id */
@@ -10848,7 +11342,7 @@ export interface components {
             /** Until Date */
             until_date?: string | null;
             /** Update Types */
-            update_types?: ("amendment" | "notification" | "regulation" | "circular" | "order" | "practice_direction")[];
+            update_types?: ("act" | "amendment" | "ordinance" | "notification" | "repeal" | "regulation" | "circular" | "order" | "practice_direction")[];
         };
         /** LegalUpdateWatchlistListResponse */
         LegalUpdateWatchlistListResponse: {
@@ -10895,7 +11389,7 @@ export interface components {
             /** Until Date */
             until_date: string | null;
             /** Update Types */
-            update_types: ("amendment" | "notification" | "regulation" | "circular" | "order" | "practice_direction")[];
+            update_types: ("act" | "amendment" | "ordinance" | "notification" | "repeal" | "regulation" | "circular" | "order" | "practice_direction")[];
             /**
              * Updated At
              * Format: date-time
@@ -10929,7 +11423,7 @@ export interface components {
             /** Until Date */
             until_date?: string | null;
             /** Update Types */
-            update_types?: ("amendment" | "notification" | "regulation" | "circular" | "order" | "practice_direction")[] | null;
+            update_types?: ("act" | "amendment" | "ordinance" | "notification" | "repeal" | "regulation" | "circular" | "order" | "practice_direction")[] | null;
         };
         /**
          * LimitationFlag
@@ -14957,6 +15451,24 @@ export interface components {
              */
             updated_at: string;
         };
+        /** RecommendationAnalysisRecord */
+        RecommendationAnalysisRecord: {
+            /** Confidence Explanation */
+            confidence_explanation: string;
+            /**
+             * Confidence Score
+             * @enum {string}
+             */
+            confidence_score: "low" | "medium" | "high";
+            /** Legal Impact */
+            legal_impact?: string[];
+            /** Recommendation */
+            recommendation: string;
+            /** Risk Analysis */
+            risk_analysis?: string[];
+            /** Suggested Actions */
+            suggested_actions?: string[];
+        };
         /** RecommendationDecisionRecord */
         RecommendationDecisionRecord: {
             /** Actor Membership Id */
@@ -14994,6 +15506,8 @@ export interface components {
         RecommendationGenerateRequest: {
             /** Custom Goal */
             custom_goal?: string | null;
+            /** Lawyer Thinking */
+            lawyer_thinking?: string | null;
             /** Recommendation Context */
             recommendation_context?: ("litigation_strategy" | "settlement_strategy" | "compliance_risk" | "contract_risk" | "case_preparation" | "appeal_strategy" | "custom_goal") | null;
             /**
@@ -15032,6 +15546,7 @@ export interface components {
         };
         /** RecommendationRecord */
         RecommendationRecord: {
+            analysis?: components["schemas"]["RecommendationAnalysisRecord"] | null;
             /** Assumptions */
             assumptions: string[];
             /**
@@ -15217,6 +15732,48 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /** StatuteAmendmentHistoryResponse */
+        StatuteAmendmentHistoryResponse: {
+            /** Events */
+            events: components["schemas"]["StatuteChangeEventRecord"][];
+            /** Statute Id */
+            statute_id: string;
+        };
+        /** StatuteChangeEventRecord */
+        StatuteChangeEventRecord: {
+            /**
+             * Change Type
+             * @enum {string}
+             */
+            change_type: "new_act" | "amendment" | "repeal" | "notification" | "unknown";
+            /** Comparison */
+            comparison?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Effective Date */
+            effective_date: string | null;
+            /** Id */
+            id: string;
+            /** Published Date */
+            published_date: string | null;
+            /** Sections Changed */
+            sections_changed?: string[];
+            /** Source Record Id */
+            source_record_id: string;
+            /** Source Url */
+            source_url: string;
+            /** Statute Id */
+            statute_id: string;
+            /** Summary */
+            summary: string | null;
+            /** Title */
+            title: string;
         };
         /**
          * StatuteListItem
@@ -15958,6 +16515,39 @@ export interface components {
              * Format: date
              */
             today: string;
+        };
+        /** TrackedCaseRecord */
+        TrackedCaseRecord: {
+            /** Case Number */
+            case_number: string | null;
+            /** Case Title */
+            case_title: string;
+            /** Cnr Number */
+            cnr_number: string | null;
+            /** Court Code */
+            court_code: string | null;
+            /** Court Name */
+            court_name: string | null;
+            /** Current Stage */
+            current_stage: string | null;
+            /** Current Status */
+            current_status: string | null;
+            /** Id */
+            id: string;
+            /** Last Error */
+            last_error: string | null;
+            /** Last Provider Checked At */
+            last_provider_checked_at: string | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Next Hearing On */
+            next_hearing_on: string | null;
+            /** Party Names */
+            party_names: string[];
+            /** Provider */
+            provider: string;
         };
         /** UserSummary */
         UserSummary: {
@@ -18322,6 +18912,209 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_case_tracking_bookmarks_api_case_tracking_bookmarks_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseTrackingBookmarkListResponse"];
+                };
+            };
+        };
+    };
+    post_case_tracking_bookmark_api_case_tracking_bookmarks_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CaseTrackingBookmarkCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseTrackingBookmarkRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_case_tracking_bookmark_api_case_tracking_bookmarks__bookmark_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bookmark_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CaseTrackingBookmarkUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseTrackingBookmarkRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_case_tracking_bookmark_refresh_api_case_tracking_bookmarks__bookmark_id__refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bookmark_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseTrackingRefreshResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_case_tracking_bookmark_updates_api_case_tracking_bookmarks__bookmark_id__updates_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bookmark_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseTrackingUpdateListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_case_tracking_search_api_case_tracking_search_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CaseTrackingSearchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseTrackingSearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_case_tracking_status_api_case_tracking_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseTrackingProviderStatusResponse"];
                 };
             };
         };
@@ -26015,6 +26808,76 @@ export interface operations {
             };
         };
     };
+    get_legal_update_source_records_api_statutes_legal_updates_source_records_get: {
+        parameters: {
+            query?: {
+                source_key?: string | null;
+                update_type?: string | null;
+                statute_id?: string | null;
+                summary_status?: string | null;
+                since_date?: string | null;
+                until_date?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalUpdateSourceRecordListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_legal_update_source_sync_api_statutes_legal_updates_sources__source_key__sync_post: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                source_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalUpdateSourceRunRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_legal_update_watchlists_api_statutes_legal_updates_watchlists_get: {
         parameters: {
             query?: never;
@@ -26191,6 +27054,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StatuteRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_statute_amendment_history_api_statutes__statute_id__amendment_history_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                statute_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatuteAmendmentHistoryResponse"];
                 };
             };
             /** @description Validation Error */

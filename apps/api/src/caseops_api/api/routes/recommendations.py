@@ -21,6 +21,7 @@ from caseops_api.schemas.recommendations import (
     MatterStrategyEntryListResponse,
     MatterStrategyEntryRecord,
     MatterStrategyEntryUpdateRequest,
+    RecommendationAnalysisRecord,
     RecommendationDecisionRecord,
     RecommendationDecisionRequest,
     RecommendationGenerateRequest,
@@ -104,6 +105,23 @@ def _decision_record(decision) -> RecommendationDecisionRecord:
     )
 
 
+def _analysis_record(recommendation: Recommendation) -> RecommendationAnalysisRecord | None:
+    raw = recommendation.analysis_json
+    if not raw:
+        return None
+    import json as _json
+    import logging as _logging
+
+    try:
+        return RecommendationAnalysisRecord.model_validate(_json.loads(raw))
+    except Exception:  # noqa: BLE001
+        _logging.getLogger(__name__).warning(
+            "recommendation %s analysis_json failed to validate; returning None",
+            recommendation.id,
+        )
+        return None
+
+
 def _recommendation_record(recommendation: Recommendation) -> RecommendationRecord:
     # MOD-LSE-1 (2026-05-03): hydrate the strategy payload from the
     # opaque JSON column when present. Pydantic validation rejects any
@@ -152,6 +170,7 @@ def _recommendation_record(recommendation: Recommendation) -> RecommendationReco
             recommendation.retrieved_authorities_json,
         ),
         strategy_payload=strategy_payload,
+        analysis=_analysis_record(recommendation),
     )
 
 
@@ -276,6 +295,7 @@ async def create_recommendation(
         rec_type=payload.type,
         recommendation_context=payload.recommendation_context,
         custom_goal=payload.custom_goal,
+        lawyer_thinking=payload.lawyer_thinking,
     )
     return _recommendation_record(recommendation)
 

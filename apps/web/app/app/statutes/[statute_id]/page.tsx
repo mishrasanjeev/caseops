@@ -12,6 +12,7 @@ import { ArrowLeft, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
+import { Badge } from "@/components/ui/Badge";
 import {
   Card,
   CardContent,
@@ -23,7 +24,10 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { listStatuteSections } from "@/lib/api/endpoints";
+import {
+  fetchStatuteAmendmentHistory,
+  listStatuteSections,
+} from "@/lib/api/endpoints";
 
 export default function StatuteDetailPage() {
   const params = useParams<{ statute_id: string }>();
@@ -33,6 +37,12 @@ export default function StatuteDetailPage() {
     queryFn: () => listStatuteSections(statuteId),
     enabled: Boolean(statuteId),
     staleTime: 30 * 60_000,
+  });
+  const history = useQuery({
+    queryKey: ["statutes", statuteId, "amendment-history"],
+    queryFn: () => fetchStatuteAmendmentHistory(statuteId),
+    enabled: Boolean(statuteId),
+    staleTime: 5 * 60_000,
   });
 
   if (query.isPending) {
@@ -88,6 +98,66 @@ export default function StatuteDetailPage() {
           ) : undefined
         }
       />
+
+      <Card data-testid="statute-amendment-history">
+        <CardHeader>
+          <CardTitle>Amendment history</CardTitle>
+          <CardDescription>
+            Source-backed legal update events and summaries for lawyer review.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {history.isLoading ? (
+            <Skeleton className="h-20 w-full" />
+          ) : history.isError ? (
+            <p className="text-sm text-[var(--color-mute)]">
+              Amendment history could not be loaded.
+            </p>
+          ) : history.data?.events.length ? (
+            <ul className="divide-y divide-[var(--color-line-2)]">
+              {history.data.events.map((event) => (
+                <li key={event.id} className="space-y-2 py-3">
+                  <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-[var(--color-ink)]">
+                        {event.title}
+                      </p>
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        <Badge tone="brand">{event.change_type}</Badge>
+                        <Badge tone="neutral">Source-backed</Badge>
+                      </div>
+                    </div>
+                    <a
+                      href={event.source_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs font-medium text-[var(--color-brand-600)] hover:underline"
+                    >
+                      Source
+                      <ExternalLink className="h-3 w-3" aria-hidden />
+                    </a>
+                  </div>
+                  {event.summary ? (
+                    <p className="text-xs text-[var(--color-ink-2)]">
+                      {event.summary}
+                    </p>
+                  ) : null}
+                  {event.sections_changed.length ? (
+                    <p className="text-xs text-[var(--color-mute)]">
+                      Sections: {event.sections_changed.join(", ")}
+                    </p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <EmptyState
+              title="No amendment history yet"
+              description="Run a legal update source sync to populate Act change events."
+            />
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

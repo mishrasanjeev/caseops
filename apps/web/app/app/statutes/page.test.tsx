@@ -13,6 +13,9 @@ const {
   listLegalUpdatesMock,
   updateLegalUpdateMock,
   fetchLegalUpdateDigestPreviewMock,
+  listLegalUpdateSourceRecordsMock,
+  runLegalUpdateSourceSyncMock,
+  useCapabilityMock,
 } = vi.hoisted(() => ({
   listStatutesMock: vi.fn(),
   listLegalUpdateWatchlistsMock: vi.fn(),
@@ -22,6 +25,9 @@ const {
   listLegalUpdatesMock: vi.fn(),
   updateLegalUpdateMock: vi.fn(),
   fetchLegalUpdateDigestPreviewMock: vi.fn(),
+  listLegalUpdateSourceRecordsMock: vi.fn(),
+  runLegalUpdateSourceSyncMock: vi.fn(),
+  useCapabilityMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api/endpoints", () => ({
@@ -33,6 +39,12 @@ vi.mock("@/lib/api/endpoints", () => ({
   listLegalUpdates: listLegalUpdatesMock,
   updateLegalUpdate: updateLegalUpdateMock,
   fetchLegalUpdateDigestPreview: fetchLegalUpdateDigestPreviewMock,
+  listLegalUpdateSourceRecords: listLegalUpdateSourceRecordsMock,
+  runLegalUpdateSourceSync: runLegalUpdateSourceSyncMock,
+}));
+
+vi.mock("@/lib/capabilities", () => ({
+  useCapability: (capability: string) => useCapabilityMock(capability),
 }));
 
 import StatutesIndexPage from "@/app/app/statutes/page";
@@ -54,6 +66,10 @@ describe("StatutesIndexPage", () => {
     listLegalUpdatesMock.mockReset();
     updateLegalUpdateMock.mockReset();
     fetchLegalUpdateDigestPreviewMock.mockReset();
+    listLegalUpdateSourceRecordsMock.mockReset();
+    runLegalUpdateSourceSyncMock.mockReset();
+    useCapabilityMock.mockReset();
+    useCapabilityMock.mockImplementation(() => true);
     listLegalUpdateWatchlistsMock.mockResolvedValue({ watchlists: [] });
     createLegalUpdateWatchlistMock.mockResolvedValue({
       id: "wl-new",
@@ -95,6 +111,19 @@ describe("StatutesIndexPage", () => {
       delivery_status: "in_app_only",
       delivery_note:
         "In-app preview only. External legal update delivery requires provider-specific approval.",
+    });
+    listLegalUpdateSourceRecordsMock.mockResolvedValue({ records: [] });
+    runLegalUpdateSourceSyncMock.mockResolvedValue({
+      id: "run-1",
+      source_key: "prs_acts_parliament",
+      status: "completed",
+      started_at: "2026-05-26T00:00:00Z",
+      completed_at: "2026-05-26T00:00:01Z",
+      fetched_count: 1,
+      created_count: 1,
+      changed_count: 0,
+      error_message: null,
+      metadata: {},
     });
   });
 
@@ -192,6 +221,7 @@ describe("StatutesIndexPage", () => {
           id: "upd-1",
           company_id: "company-1",
           watchlist_id: "wl-1",
+          source_record_id: "src-1",
           update_type: "notification",
           title: "Registry notification",
           statute_id: null,
@@ -211,6 +241,7 @@ describe("StatutesIndexPage", () => {
           published_date: null,
           decision_date: "2026-05-20",
           snippet: "Bounded registry notification preview.",
+          summary: null,
           is_read: false,
           read_at: null,
           dismissed_at: null,
@@ -257,5 +288,73 @@ describe("StatutesIndexPage", () => {
     expect(screen.getByTestId("legal-update-digest-note")).toHaveTextContent(
       /External legal update delivery requires provider-specific approval/i,
     );
+  });
+
+  it("shows source-backed updates and gates source sync by capability", async () => {
+    const user = userEvent.setup();
+    listStatutesMock.mockResolvedValue({
+      statutes: [],
+      total_section_count: 0,
+    });
+    listLegalUpdateSourceRecordsMock.mockResolvedValue({
+      records: [
+        {
+          id: "src-1",
+          source_key: "prs_acts_parliament",
+          source_record_key: "key-1",
+          update_type: "act",
+          title: "The Example Act, 2026",
+          normalized_title: "the example act 2026",
+          source_url: "https://prsindia.org/acts/parliament/example-act",
+          source_document_url: null,
+          published_date: null,
+          effective_date: null,
+          act_year: 2026,
+          statute_id: "example-act-2026",
+          statute_section_ids: [],
+          sections_changed: [],
+          source_category: "prs_india",
+          provenance_status: "source_metadata_available",
+          content_hash: "hash",
+          summary: {
+            plain_english_summary:
+              "PRS lists a new Act for source-backed lawyer review.",
+            affected_acts: ["The Example Act, 2026"],
+            affected_sections: [],
+            change_kind: "act",
+            practical_legal_impact:
+              "Review the source before using the change in advice.",
+            suggested_lawyer_review_actions: ["Open the source link."],
+            confidence: "medium",
+            source_url: "https://prsindia.org/acts/parliament/example-act",
+            provenance_status: "source_metadata_available",
+            review_framing: "Source-backed summary for lawyer review.",
+          },
+          summary_status: "completed",
+          first_seen_at: "2026-05-26T00:00:00Z",
+          last_seen_at: "2026-05-26T00:00:00Z",
+          updated_at: "2026-05-26T00:00:00Z",
+        },
+      ],
+    });
+
+    const rendered = render(withClient(<StatutesIndexPage />));
+
+    expect(await screen.findByText("The Example Act, 2026")).toBeInTheDocument();
+    expect(screen.getByText(/Source-backed summary for lawyer review/i)).toBeInTheDocument();
+    await user.click(screen.getByTestId("legal-update-source-sync"));
+    expect(runLegalUpdateSourceSyncMock.mock.calls[0][0]).toEqual({
+      sourceKey: "prs_acts_parliament",
+      limit: 50,
+    });
+    expect(await screen.findByTestId("legal-update-source-run-summary")).toHaveTextContent(
+      /created 1/i,
+    );
+
+    rendered.unmount();
+    useCapabilityMock.mockImplementation(() => false);
+    render(withClient(<StatutesIndexPage />));
+    expect(await screen.findByText("The Example Act, 2026")).toBeInTheDocument();
+    expect(screen.queryByTestId("legal-update-source-sync")).not.toBeInTheDocument();
   });
 });

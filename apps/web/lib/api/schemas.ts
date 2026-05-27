@@ -752,6 +752,15 @@ export const recommendationDecision = z.object({
   created_at: z.string(),
 });
 
+export const recommendationAnalysis = z.object({
+  recommendation: z.string(),
+  risk_analysis: z.array(z.string()).default([]),
+  legal_impact: z.array(z.string()).default([]),
+  suggested_actions: z.array(z.string()).default([]),
+  confidence_score: confidence,
+  confidence_explanation: z.string(),
+});
+
 // MOD-LSE-1 (2026-05-03) — strategy payload. Set only when
 // ``recommendation.type === 'litigation_strategy'``. Mirrors the
 // backend ``LitigationStrategyPayload`` Pydantic model.
@@ -863,6 +872,7 @@ export const recommendation = z.object({
   // MOD-LSE-1 (2026-05-03) — populated only for
   // ``type === 'litigation_strategy'`` rows.
   strategy_payload: litigationStrategyPayload.nullable().optional(),
+  analysis: recommendationAnalysis.nullable().optional(),
 });
 
 export const recommendationList = z.object({
@@ -1373,6 +1383,7 @@ export const legalKnowledgeGraphResponse = z
 export type Recommendation = z.infer<typeof recommendation>;
 export type RecommendationOption = z.infer<typeof recommendationOption>;
 export type RecommendationDecision = z.infer<typeof recommendationDecision>;
+export type RecommendationAnalysis = z.infer<typeof recommendationAnalysis>;
 export type RecommendationList = z.infer<typeof recommendationList>;
 export type RecommendationType = z.infer<typeof recommendationType>;
 export type RecommendationObjectiveContext = z.infer<

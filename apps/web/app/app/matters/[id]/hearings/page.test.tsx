@@ -358,6 +358,13 @@ describe("MatterHearingsPage", () => {
 
   it("renders the Scheduled hearings card and the Schedule hearing trigger", () => {
     render(withClient(<MatterHearingsPage />));
+    expect(screen.getByTestId("matter-case-tracking-panel")).toHaveTextContent(
+      "Track this court case",
+    );
+    expect(screen.getByRole("link", { name: /Track case/i })).toHaveAttribute(
+      "href",
+      "/app/case-tracking?matterId=m1",
+    );
     expect(screen.getByText(/Upcoming hearings/i)).toBeInTheDocument();
     expect(screen.getByTestId("schedule-hearing-open")).toBeInTheDocument();
   });

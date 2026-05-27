@@ -1,0 +1,1132 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+from datetime import UTC, datetime
+
+from fastapi import HTTPException, status
+from pydantic import BaseModel, Field
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session, joinedload, selectinload
+
+from caseops_api.core.settings import get_settings
+from caseops_api.db.models import (
+    Company,
+    CompanyMembership,
+    Matter,
+    ModelRun,
+    NotificationDeliveryChannel,
+    TrackedCase,
+    TrackedCaseBookmark,
+    TrackedCasePollRun,
+    TrackedCaseUpdate,
+    User,
+)
+from caseops_api.schemas.case_tracking import (
+    CaseTrackingBookmarkCreateRequest,
+    CaseTrackingBookmarkListResponse,
+    CaseTrackingBookmarkRecord,
+    CaseTrackingBookmarkUpdateRequest,
+    CaseTrackingPollRunRecord,
+    CaseTrackingProviderStatusResponse,
+    CaseTrackingRefreshResponse,
+    CaseTrackingSearchRequest,
+    CaseTrackingSearchResponse,
+    CaseTrackingSearchResultRecord,
+    CaseTrackingUpdateListResponse,
+    CaseTrackingUpdateRecord,
+    TrackedCaseRecord,
+)
+from caseops_api.services.audit import record_from_context
+from caseops_api.services.case_tracking_providers import (
+    CaseSearchQuery,
+    CaseTrackingProvider,
+    CaseTrackingProviderError,
+    CaseTrackingProviderUnavailable,
+    ProviderCaseEvent,
+    ProviderCaseSnapshot,
+    get_case_tracking_provider,
+    provider_status,
+)
+from caseops_api.services.identity import SessionContext
+from caseops_api.services.llm import (
+    LLMCallContext,
+    LLMMessage,
+    LLMProvider,
+    LLMProviderError,
+    build_provider,
+    generate_structured,
+)
+from caseops_api.services.matter_access import assert_access
+from caseops_api.services.notification_delivery import (
+    enqueue_notification_delivery_intent,
+    redact_provider_error,
+)
+
+_MAX_BODY_LENGTH = 500
+
+
+class CaseUpdateSummaryPayload(BaseModel):
+    concise_summary: str = Field(min_length=1, max_length=1200)
+    procedural_impact: str = Field(min_length=1, max_length=1200)
+    next_hearing_or_action_signals: list[str] = Field(default_factory=list, max_length=8)
+    risks_or_unknowns: list[str] = Field(default_factory=list, max_length=8)
+    source_reference: str | None = None
+    confidence: str = "low"
+    summary_source: str = Field(default="caseops", max_length=40)
+    review_framing: str = "Source-backed case update summary for lawyer review."
+
+
+def _now() -> datetime:
+    return datetime.now(UTC)
+
+
+def _hash_value(value: object) -> str:
+    blob = json.dumps(value, default=str, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def normalize_cnr(value: str | None) -> str | None:
+    if not value:
+        return None
+    normalized = re.sub(r"[^A-Za-z0-9]", "", value).upper()
+    return normalized or None
+
+
+def normalize_case_number(value: str | None) -> str | None:
+    if not value:
+        return None
+    normalized = re.sub(r"\s+", " ", value).strip().upper()
+    return normalized or None
+
+
+def _normalize_court_code(value: str | None) -> str | None:
+    if not value:
+        return None
+    normalized = re.sub(r"\s+", "", value).strip().upper()
+    return normalized or None
+
+
+def _tracked_case_identity_key(
+    *,
+    cnr_number: str | None,
+    case_number: str | None,
+    court_code: str | None,
+) -> str:
+    normalized_cnr = normalize_cnr(cnr_number)
+    if normalized_cnr:
+        return f"cnr:{normalized_cnr}"
+    normalized_case = normalize_case_number(case_number) or "UNKNOWN"
+    normalized_court = _normalize_court_code(court_code) or "UNKNOWN"
+    return f"case:{normalized_case}|court:{normalized_court}"
+
+
+def _bookmark_scope_key(matter: Matter | None) -> str:
+    return matter.id if matter else "company"
+
+
+def provider_status_response() -> CaseTrackingProviderStatusResponse:
+    enabled, provider, configured, reason = provider_status()
+    return CaseTrackingProviderStatusResponse(
+        enabled=enabled,
+        provider=provider,
+        configured=configured,
+        reason=reason,
+    )
+
+
+def _safe_provider_error(exc: BaseException) -> HTTPException:
+    if isinstance(exc, CaseTrackingProviderUnavailable):
+        return HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        )
+    return HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        detail=redact_provider_error(exc),
+    )
+
+
+def _snapshot_hash(snapshot: ProviderCaseSnapshot) -> str:
+    return _hash_value(
+        {
+            "cnr_number": normalize_cnr(snapshot.cnr_number),
+            "case_number": normalize_case_number(snapshot.case_number),
+            "court_code": snapshot.court_code,
+            "status": snapshot.current_status,
+            "stage": snapshot.current_stage,
+            "next_hearing_on": snapshot.next_hearing_on,
+            "orders": [event.source_record_key for event in snapshot.orders],
+            "judgments": [event.source_record_key for event in snapshot.judgments],
+        }
+    )
+
+
+def _event_hash(event: ProviderCaseEvent) -> str:
+    return _hash_value(
+        {
+            "key": event.source_record_key,
+            "title": event.title,
+            "event_date": event.event_date,
+            "source_url": event.source_url,
+            "summary": event.provider_summary,
+        }
+    )
+
+
+def _search_record(snapshot: ProviderCaseSnapshot) -> CaseTrackingSearchResultRecord:
+    return CaseTrackingSearchResultRecord(
+        provider=snapshot.provider,
+        cnr_number=normalize_cnr(snapshot.cnr_number),
+        case_number=snapshot.case_number,
+        court_code=snapshot.court_code,
+        court_name=snapshot.court_name,
+        case_title=snapshot.case_title,
+        party_names=snapshot.party_names,
+        current_status=snapshot.current_status,
+        current_stage=snapshot.current_stage,
+        next_hearing_on=snapshot.next_hearing_on,
+        source_url=snapshot.source_url,
+    )
+
+
+def search_cases(
+    session: Session,
+    *,
+    context: SessionContext,
+    payload: CaseTrackingSearchRequest,
+    provider: CaseTrackingProvider | None = None,
+) -> CaseTrackingSearchResponse:
+    query = CaseSearchQuery(
+        cnr_number=normalize_cnr(payload.cnr_number),
+        case_number=payload.case_number,
+        court_code=payload.court_code,
+        state=payload.state,
+        court_name=payload.court_name,
+    )
+    try:
+        active_provider = provider or get_case_tracking_provider()
+        snapshots = active_provider.search_cases(query=query)
+    except (CaseTrackingProviderUnavailable, CaseTrackingProviderError) as exc:
+        raise _safe_provider_error(exc) from exc
+    record_from_context(
+        session,
+        context,
+        action="case_tracking.search",
+        target_type="case_tracking_provider",
+        target_id=active_provider.provider_key,
+        metadata={
+            "provider": active_provider.provider_key,
+            "has_cnr": bool(query.cnr_number),
+            "has_case_number": bool(query.case_number),
+            "has_court_filter": bool(query.court_code or query.state or query.court_name),
+            "result_count": len(snapshots),
+        },
+    )
+    session.commit()
+    return CaseTrackingSearchResponse(
+        provider=active_provider.provider_key,
+        results=[_search_record(snapshot) for snapshot in snapshots],
+    )
+
+
+def _matter_or_none(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str | None,
+) -> Matter | None:
+    if matter_id is None:
+        return None
+    matter = session.scalar(
+        select(Matter).where(
+            Matter.id == matter_id,
+            Matter.company_id == context.company.id,
+        )
+    )
+    if matter is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Matter not found.")
+    assert_access(session, context=context, matter=matter)
+    return matter
+
+
+def _tracked_case_record(case: TrackedCase) -> TrackedCaseRecord:
+    return TrackedCaseRecord(
+        id=case.id,
+        provider=case.provider,
+        cnr_number=case.cnr_number,
+        case_number=case.case_number,
+        court_code=case.court_code,
+        court_name=case.court_name,
+        case_title=case.case_title,
+        party_names=list(case.party_names_json or []),
+        current_status=case.current_status,
+        current_stage=case.current_stage,
+        next_hearing_on=case.next_hearing_on,
+        last_provider_checked_at=case.last_provider_checked_at,
+        last_error=case.last_error,
+        metadata=dict(case.metadata_json or {}),
+    )
+
+
+def _bookmark_record(session: Session, bookmark: TrackedCaseBookmark) -> CaseTrackingBookmarkRecord:
+    update_count = session.scalar(
+        select(func.count()).where(
+            TrackedCaseUpdate.company_id == bookmark.company_id,
+            TrackedCaseUpdate.tracked_case_id == bookmark.tracked_case_id,
+        )
+    )
+    return CaseTrackingBookmarkRecord(
+        id=bookmark.id,
+        company_id=bookmark.company_id,
+        tracked_case_id=bookmark.tracked_case_id,
+        created_by_membership_id=bookmark.created_by_membership_id,
+        matter_id=bookmark.matter_id,
+        name=bookmark.name,
+        notification_enabled=bookmark.notification_enabled,
+        is_archived=bookmark.is_archived,
+        created_at=bookmark.created_at,
+        updated_at=bookmark.updated_at,
+        archived_at=bookmark.archived_at,
+        tracked_case=_tracked_case_record(bookmark.tracked_case),
+        update_count=int(update_count or 0),
+    )
+
+
+def _find_tracked_case(
+    session: Session,
+    *,
+    company_id: str,
+    provider: str,
+    cnr_number: str | None,
+    case_number: str | None,
+    court_code: str | None,
+) -> TrackedCase | None:
+    statement = select(TrackedCase).where(
+        TrackedCase.company_id == company_id,
+        TrackedCase.provider == provider,
+        TrackedCase.identity_key
+        == _tracked_case_identity_key(
+            cnr_number=cnr_number,
+            case_number=case_number,
+            court_code=court_code,
+        ),
+    )
+    return session.scalar(statement)
+
+
+def create_bookmark(
+    session: Session,
+    *,
+    context: SessionContext,
+    payload: CaseTrackingBookmarkCreateRequest,
+) -> CaseTrackingBookmarkRecord:
+    matter = _matter_or_none(session, context=context, matter_id=payload.matter_id)
+    normalized_cnr = normalize_cnr(payload.cnr_number)
+    normalized_case = normalize_case_number(payload.case_number)
+    normalized_court = _normalize_court_code(payload.court_code)
+    identity_key = _tracked_case_identity_key(
+        cnr_number=payload.cnr_number,
+        case_number=payload.case_number,
+        court_code=payload.court_code,
+    )
+    tracked_case = _find_tracked_case(
+        session,
+        company_id=context.company.id,
+        provider=payload.provider,
+        cnr_number=payload.cnr_number,
+        case_number=payload.case_number,
+        court_code=payload.court_code,
+    )
+    if tracked_case is None:
+        tracked_case = TrackedCase(
+            company_id=context.company.id,
+            provider=payload.provider,
+            identity_key=identity_key,
+            cnr_number=normalized_cnr,
+            normalized_cnr_number=normalized_cnr,
+            case_number=payload.case_number,
+            normalized_case_number=normalized_case,
+            court_code=normalized_court,
+            court_name=payload.court_name,
+            case_title=payload.case_title,
+            party_names_json=payload.party_names,
+            current_status=payload.current_status,
+            current_stage=payload.current_stage,
+            next_hearing_on=payload.next_hearing_on,
+            last_snapshot_hash=_hash_value(
+                {
+                    "status": payload.current_status,
+                    "stage": payload.current_stage,
+                    "next_hearing_on": payload.next_hearing_on,
+                }
+            ),
+            metadata_json=payload.metadata,
+        )
+        session.add(tracked_case)
+        session.flush()
+    scope_key = _bookmark_scope_key(matter)
+    existing = session.scalar(
+        select(TrackedCaseBookmark).where(
+            TrackedCaseBookmark.company_id == context.company.id,
+            TrackedCaseBookmark.tracked_case_id == tracked_case.id,
+            TrackedCaseBookmark.created_by_membership_id == context.membership.id,
+            TrackedCaseBookmark.active_scope_key == scope_key,
+        )
+    )
+    if existing is not None:
+        return _bookmark_record(session, existing)
+    bookmark = TrackedCaseBookmark(
+        company_id=context.company.id,
+        tracked_case_id=tracked_case.id,
+        created_by_membership_id=context.membership.id,
+        matter_id=matter.id if matter else None,
+        scope_key=scope_key,
+        active_scope_key=scope_key,
+        name=payload.name,
+        notification_enabled=payload.notification_enabled,
+    )
+    session.add(bookmark)
+    session.flush()
+    record_from_context(
+        session,
+        context,
+        action="case_tracking.bookmark_created",
+        target_type="tracked_case_bookmark",
+        target_id=bookmark.id,
+        matter_id=bookmark.matter_id,
+        metadata={
+            "tracked_case_id_sha256": _hash_value(tracked_case.id),
+            "provider": tracked_case.provider,
+            "has_cnr": bool(tracked_case.cnr_number),
+            "has_case_number": bool(tracked_case.case_number),
+            "notification_enabled": bookmark.notification_enabled,
+        },
+    )
+    session.commit()
+    session.refresh(bookmark)
+    return _bookmark_record(session, bookmark)
+
+
+def _get_bookmark(
+    session: Session,
+    *,
+    context: SessionContext,
+    bookmark_id: str,
+) -> TrackedCaseBookmark:
+    bookmark = session.scalar(
+        select(TrackedCaseBookmark)
+        .options(joinedload(TrackedCaseBookmark.tracked_case))
+        .where(
+            TrackedCaseBookmark.id == bookmark_id,
+            TrackedCaseBookmark.company_id == context.company.id,
+            TrackedCaseBookmark.created_by_membership_id == context.membership.id,
+        )
+    )
+    if bookmark is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Case tracking bookmark not found.",
+        )
+    if bookmark.matter_id:
+        _matter_or_none(session, context=context, matter_id=bookmark.matter_id)
+    return bookmark
+
+
+def list_bookmarks(
+    session: Session,
+    *,
+    context: SessionContext,
+) -> CaseTrackingBookmarkListResponse:
+    rows = list(
+        session.scalars(
+            select(TrackedCaseBookmark)
+            .options(joinedload(TrackedCaseBookmark.tracked_case))
+            .where(
+                TrackedCaseBookmark.company_id == context.company.id,
+                TrackedCaseBookmark.created_by_membership_id == context.membership.id,
+                TrackedCaseBookmark.is_archived.is_(False),
+            )
+            .order_by(TrackedCaseBookmark.updated_at.desc())
+        )
+    )
+    return CaseTrackingBookmarkListResponse(
+        bookmarks=[_bookmark_record(session, row) for row in rows]
+    )
+
+
+def update_bookmark(
+    session: Session,
+    *,
+    context: SessionContext,
+    bookmark_id: str,
+    payload: CaseTrackingBookmarkUpdateRequest,
+) -> CaseTrackingBookmarkRecord:
+    bookmark = _get_bookmark(session, context=context, bookmark_id=bookmark_id)
+    fields = payload.model_fields_set
+    if "name" in fields:
+        bookmark.name = payload.name
+    if "notification_enabled" in fields and payload.notification_enabled is not None:
+        bookmark.notification_enabled = payload.notification_enabled
+    if "is_archived" in fields and payload.is_archived is not None:
+        if payload.is_archived:
+            bookmark.is_archived = True
+            bookmark.active_scope_key = None
+            bookmark.archived_at = _now()
+        else:
+            existing = session.scalar(
+                select(TrackedCaseBookmark).where(
+                    TrackedCaseBookmark.company_id == context.company.id,
+                    TrackedCaseBookmark.tracked_case_id == bookmark.tracked_case_id,
+                    TrackedCaseBookmark.created_by_membership_id
+                    == bookmark.created_by_membership_id,
+                    TrackedCaseBookmark.active_scope_key == bookmark.scope_key,
+                    TrackedCaseBookmark.id != bookmark.id,
+                )
+            )
+            if existing is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="An active bookmark already exists for this case scope.",
+                )
+            bookmark.is_archived = False
+            bookmark.active_scope_key = bookmark.scope_key
+            bookmark.archived_at = None
+    session.add(bookmark)
+    record_from_context(
+        session,
+        context,
+        action="case_tracking.bookmark_updated",
+        target_type="tracked_case_bookmark",
+        target_id=bookmark.id,
+        matter_id=bookmark.matter_id,
+        metadata={
+            "updated_field_count": len(fields),
+            "is_archived": bookmark.is_archived,
+            "notification_enabled": bookmark.notification_enabled,
+        },
+    )
+    session.commit()
+    return _bookmark_record(session, bookmark)
+
+
+def _summary_for_update(
+    session: Session,
+    *,
+    tracked_case: TrackedCase,
+    update_type: str,
+    event: ProviderCaseEvent | None,
+    title: str,
+    provider: LLMProvider | None = None,
+) -> tuple[str | None, dict[str, object] | None, str | None]:
+    source_text = event.text if event else None
+    provider_summary_terms_permitted = bool(
+        event
+        and event.provider_summary
+        and event.metadata.get("summary_terms_permitted") is True
+    )
+    provider_summary = (
+        event.provider_summary if event and provider_summary_terms_permitted else None
+    )
+    source_url = event.source_url if event else None
+    fallback = {
+        "concise_summary": provider_summary
+        or f"Source-backed case update detected for {tracked_case.case_title}: {title}.",
+        "procedural_impact": "Review the provider source before relying on this update.",
+        "next_hearing_or_action_signals": [],
+        "risks_or_unknowns": ["Provider data may be incomplete or delayed."],
+        "source_reference": source_url,
+        "confidence": "medium" if provider_summary or source_text else "low",
+        "summary_source": "provider" if provider_summary and not source_text else "caseops",
+        "review_framing": "Source-backed case update summary for lawyer review.",
+    }
+    if not source_text and not provider_summary:
+        return str(fallback["concise_summary"]), fallback, None
+    messages = [
+        LLMMessage(
+            role="system",
+            content=(
+                "Produce a source-backed case update summary for lawyer review. "
+                "Do not infer outcomes beyond the order or judgment text."
+            ),
+        ),
+        LLMMessage(
+            role="user",
+            content=(
+                "Respond with json matching this schema: "
+                "{\"concise_summary\": str, \"procedural_impact\": str, "
+                "\"next_hearing_or_action_signals\": [str], "
+                "\"risks_or_unknowns\": [str], \"source_reference\": str|null, "
+                "\"confidence\": \"low|medium|high\", \"summary_source\": str, "
+                "\"review_framing\": str}.\n"
+                f"CASE_TITLE: {tracked_case.case_title}\n"
+                f"UPDATE_TYPE: {update_type}\n"
+                f"TITLE: {title}\n"
+                f"SOURCE_URL: {source_url}\n"
+                f"PROVIDER_SUMMARY: {provider_summary}\n"
+                f"TEXT: {(source_text or '')[:4000]}"
+            ),
+        ),
+    ]
+    llm = provider or build_provider(purpose="case_tracking:update_summary")
+    prompt_hash = hashlib.sha256(
+        "\n".join(f"{message.role}:{message.content}" for message in messages).encode("utf-8")
+    ).hexdigest()
+    try:
+        payload, completion = generate_structured(
+            llm,
+            session=session,
+            schema=CaseUpdateSummaryPayload,
+            messages=messages,
+            context=LLMCallContext(purpose="case_tracking:update_summary"),
+            temperature=get_settings().llm_temperature,
+            max_tokens=1200,
+        )
+    except LLMProviderError:
+        return str(fallback["concise_summary"]), fallback, None
+    model_run = ModelRun(
+        company_id=tracked_case.company_id,
+        matter_id=None,
+        actor_membership_id=None,
+        purpose="case_tracking:update_summary",
+        provider=completion.provider,
+        model=completion.model,
+        prompt_hash=prompt_hash,
+        prompt_tokens=completion.prompt_tokens,
+        completion_tokens=completion.completion_tokens,
+        latency_ms=completion.latency_ms,
+        status="ok",
+    )
+    session.add(model_run)
+    session.flush()
+    summary = payload.model_dump()
+    return summary["concise_summary"], summary, model_run.id
+
+
+def _update_record(update: TrackedCaseUpdate) -> CaseTrackingUpdateRecord:
+    return CaseTrackingUpdateRecord(
+        id=update.id,
+        company_id=update.company_id,
+        tracked_case_id=update.tracked_case_id,
+        update_type=update.update_type,  # type: ignore[arg-type]
+        source_record_key=update.source_record_key,
+        title=update.title,
+        summary=update.summary,
+        ai_summary=dict(update.ai_summary_json) if update.ai_summary_json else None,
+        source_url=update.source_url,
+        order_date=update.order_date,
+        hearing_date=update.hearing_date,
+        provider_metadata=dict(update.provider_metadata_json or {}),
+        created_at=update.created_at,
+    )
+
+
+def _notification_event_type(update_type: str) -> str:
+    return {
+        "new_order": "case_tracking.new_order",
+        "new_judgment": "case_tracking.new_judgment",
+        "hearing_update": "case_tracking.hearing_updated",
+        "status_change": "case_tracking.status_changed",
+        "case_metadata_change": "case_tracking.status_changed",
+    }.get(update_type, "case_tracking.status_changed")
+
+
+def _notification_title(update: TrackedCaseUpdate, tracked_case: TrackedCase) -> str:
+    if update.update_type == "new_order":
+        return f"New order detected for {tracked_case.case_title}"[:255]
+    if update.update_type == "new_judgment":
+        return f"New judgment detected for {tracked_case.case_title}"[:255]
+    if update.update_type == "hearing_update":
+        return f"Next hearing changed for {tracked_case.case_title}"[:255]
+    return f"Case status updated for {tracked_case.case_title}"[:255]
+
+
+def _notification_body(update: TrackedCaseUpdate, tracked_case: TrackedCase) -> str:
+    parts = [
+        update.summary or update.title,
+        tracked_case.court_name,
+        update.source_url,
+        "Provider-normalized source. In-app only.",
+    ]
+    text = " ".join(part for part in parts if part)
+    return text[: _MAX_BODY_LENGTH - 3].rstrip() + "..." if len(text) > _MAX_BODY_LENGTH else text
+
+
+def _notify_bookmark_users(
+    session: Session,
+    *,
+    context: SessionContext,
+    tracked_case: TrackedCase,
+    update: TrackedCaseUpdate,
+) -> int:
+    bookmarks = list(
+        session.scalars(
+            select(TrackedCaseBookmark)
+            .options(
+                joinedload(TrackedCaseBookmark.created_by_membership),
+                joinedload(TrackedCaseBookmark.matter),
+            )
+            .where(
+                TrackedCaseBookmark.company_id == tracked_case.company_id,
+                TrackedCaseBookmark.tracked_case_id == tracked_case.id,
+                TrackedCaseBookmark.is_archived.is_(False),
+                TrackedCaseBookmark.notification_enabled.is_(True),
+            )
+        )
+    )
+    count = 0
+    for bookmark in bookmarks:
+        intent = enqueue_notification_delivery_intent(
+            session,
+            context=context,
+            recipient_membership=bookmark.created_by_membership,
+            channel=NotificationDeliveryChannel.IN_APP,
+            event_type=_notification_event_type(update.update_type),
+            source_type="tracked_case_update",
+            source_id=update.id,
+            matter=bookmark.matter,
+            title=_notification_title(update, tracked_case),
+            body=_notification_body(update, tracked_case),
+        )
+        if intent is not None:
+            count += 1
+            record_from_context(
+                session,
+                context,
+                action="case_tracking.notification_enqueued",
+                target_type="notification_delivery_intent",
+                target_id=intent.id,
+                matter_id=bookmark.matter_id,
+                metadata={
+                    "tracked_case_id_sha256": _hash_value(tracked_case.id),
+                    "tracked_case_update_id_sha256": _hash_value(update.id),
+                    "recipient_membership_id_sha256": _hash_value(
+                        bookmark.created_by_membership_id
+                    ),
+                    "event_type": _notification_event_type(update.update_type),
+                },
+            )
+    return count
+
+
+def _create_update(
+    session: Session,
+    *,
+    context: SessionContext,
+    tracked_case: TrackedCase,
+    update_type: str,
+    source_record_key: str,
+    title: str,
+    current_hash: str,
+    previous_hash: str | None = None,
+    event: ProviderCaseEvent | None = None,
+    order_date=None,
+    hearing_date=None,
+    provider: LLMProvider | None = None,
+) -> TrackedCaseUpdate | None:
+    existing = session.scalar(
+        select(TrackedCaseUpdate).where(
+            TrackedCaseUpdate.tracked_case_id == tracked_case.id,
+            TrackedCaseUpdate.source_record_key == source_record_key,
+            TrackedCaseUpdate.update_type == update_type,
+        )
+    )
+    if existing is not None:
+        return None
+    summary, ai_summary, model_run_id = _summary_for_update(
+        session,
+        tracked_case=tracked_case,
+        update_type=update_type,
+        event=event,
+        title=title,
+        provider=provider,
+    )
+    update = TrackedCaseUpdate(
+        company_id=tracked_case.company_id,
+        tracked_case_id=tracked_case.id,
+        update_type=update_type,
+        source_record_key=source_record_key,
+        title=title,
+        summary=summary,
+        ai_summary_json=ai_summary,
+        source_url=event.source_url if event else None,
+        order_date=order_date,
+        hearing_date=hearing_date,
+        previous_hash=previous_hash,
+        current_hash=current_hash,
+        provider_metadata_json=event.metadata if event else {},
+        model_run_id=model_run_id,
+    )
+    session.add(update)
+    session.flush()
+    record_from_context(
+        session,
+        context,
+        action="case_tracking.update_detected",
+        target_type="tracked_case_update",
+        target_id=update.id,
+        metadata={
+            "tracked_case_id_sha256": _hash_value(tracked_case.id),
+            "update_type": update_type,
+            "source_record_key_sha256": _hash_value(source_record_key),
+        },
+    )
+    _notify_bookmark_users(session, context=context, tracked_case=tracked_case, update=update)
+    return update
+
+
+def apply_snapshot(
+    session: Session,
+    *,
+    context: SessionContext,
+    tracked_case: TrackedCase,
+    snapshot: ProviderCaseSnapshot,
+    provider: LLMProvider | None = None,
+) -> list[TrackedCaseUpdate]:
+    created: list[TrackedCaseUpdate] = []
+    for event in snapshot.orders:
+        update = _create_update(
+            session,
+            context=context,
+            tracked_case=tracked_case,
+            update_type="new_order",
+            source_record_key=event.source_record_key,
+            title=event.title,
+            current_hash=_event_hash(event),
+            event=event,
+            order_date=event.event_date,
+            provider=provider,
+        )
+        if update:
+            created.append(update)
+    for event in snapshot.judgments:
+        update = _create_update(
+            session,
+            context=context,
+            tracked_case=tracked_case,
+            update_type="new_judgment",
+            source_record_key=event.source_record_key,
+            title=event.title,
+            current_hash=_event_hash(event),
+            event=event,
+            order_date=event.event_date,
+            provider=provider,
+        )
+        if update:
+            created.append(update)
+    previous_status_hash = _hash_value(
+        {
+            "status": tracked_case.current_status,
+            "stage": tracked_case.current_stage,
+        }
+    )
+    current_status_hash = _hash_value(
+        {
+            "status": snapshot.current_status,
+            "stage": snapshot.current_stage,
+        }
+    )
+    if tracked_case.last_provider_checked_at and previous_status_hash != current_status_hash:
+        update = _create_update(
+            session,
+            context=context,
+            tracked_case=tracked_case,
+            update_type="status_change",
+            source_record_key=f"status:{current_status_hash}",
+            title=f"Case status changed to {snapshot.current_status or snapshot.current_stage}",
+            current_hash=current_status_hash,
+            previous_hash=previous_status_hash,
+            event=None,
+        )
+        if update:
+            created.append(update)
+    if (
+        tracked_case.last_provider_checked_at
+        and tracked_case.next_hearing_on != snapshot.next_hearing_on
+    ):
+        hearing_hash = _hash_value({"next_hearing_on": snapshot.next_hearing_on})
+        update = _create_update(
+            session,
+            context=context,
+            tracked_case=tracked_case,
+            update_type="hearing_update",
+            source_record_key=f"hearing:{hearing_hash}",
+            title=f"Next hearing changed to {snapshot.next_hearing_on}",
+            current_hash=hearing_hash,
+            previous_hash=_hash_value({"next_hearing_on": tracked_case.next_hearing_on}),
+            event=None,
+            hearing_date=snapshot.next_hearing_on,
+        )
+        if update:
+            created.append(update)
+    tracked_case.cnr_number = normalize_cnr(snapshot.cnr_number) or tracked_case.cnr_number
+    tracked_case.normalized_cnr_number = normalize_cnr(tracked_case.cnr_number)
+    tracked_case.case_number = snapshot.case_number or tracked_case.case_number
+    tracked_case.normalized_case_number = normalize_case_number(tracked_case.case_number)
+    tracked_case.court_code = _normalize_court_code(snapshot.court_code) or tracked_case.court_code
+    tracked_case.identity_key = _tracked_case_identity_key(
+        cnr_number=tracked_case.cnr_number,
+        case_number=tracked_case.case_number,
+        court_code=tracked_case.court_code,
+    )
+    tracked_case.court_name = snapshot.court_name or tracked_case.court_name
+    tracked_case.case_title = snapshot.case_title or tracked_case.case_title
+    tracked_case.party_names_json = snapshot.party_names or tracked_case.party_names_json
+    tracked_case.current_status = snapshot.current_status
+    tracked_case.current_stage = snapshot.current_stage
+    tracked_case.next_hearing_on = snapshot.next_hearing_on
+    tracked_case.last_snapshot_hash = _snapshot_hash(snapshot)
+    tracked_case.last_provider_checked_at = _now()
+    tracked_case.last_error = None
+    tracked_case.metadata_json = {
+        **(tracked_case.metadata_json or {}),
+        **snapshot.metadata,
+        "source_url": snapshot.source_url,
+    }
+    session.add(tracked_case)
+    session.flush()
+    return created
+
+
+def refresh_bookmark(
+    session: Session,
+    *,
+    context: SessionContext,
+    bookmark_id: str,
+    provider: CaseTrackingProvider | None = None,
+) -> CaseTrackingRefreshResponse:
+    bookmark = _get_bookmark(session, context=context, bookmark_id=bookmark_id)
+    tracked_case = bookmark.tracked_case
+    tracked_case.last_provider_refresh_requested_at = _now()
+    try:
+        active_provider = provider or get_case_tracking_provider()
+        if tracked_case.cnr_number:
+            snapshot = active_provider.get_case_by_cnr(cnr=tracked_case.cnr_number)
+        else:
+            results = active_provider.search_cases(
+                query=CaseSearchQuery(
+                    case_number=tracked_case.case_number,
+                    court_code=tracked_case.court_code,
+                    court_name=tracked_case.court_name,
+                )
+            )
+            if not results:
+                raise CaseTrackingProviderError("Case tracking provider returned no cases.")
+            snapshot = results[0]
+    except (CaseTrackingProviderUnavailable, CaseTrackingProviderError) as exc:
+        tracked_case.last_error = redact_provider_error(exc)
+        session.add(tracked_case)
+        session.commit()
+        raise _safe_provider_error(exc) from exc
+    created = apply_snapshot(
+        session,
+        context=context,
+        tracked_case=tracked_case,
+        snapshot=snapshot,
+    )
+    record_from_context(
+        session,
+        context,
+        action="case_tracking.refresh",
+        target_type="tracked_case_bookmark",
+        target_id=bookmark.id,
+        matter_id=bookmark.matter_id,
+        metadata={
+            "tracked_case_id_sha256": _hash_value(tracked_case.id),
+            "created_update_count": len(created),
+            "provider": active_provider.provider_key,
+        },
+    )
+    session.commit()
+    return CaseTrackingRefreshResponse(
+        bookmark=_bookmark_record(session, bookmark),
+        created_updates=[_update_record(update) for update in created],
+    )
+
+
+def list_updates(
+    session: Session,
+    *,
+    context: SessionContext,
+    bookmark_id: str,
+) -> CaseTrackingUpdateListResponse:
+    bookmark = _get_bookmark(session, context=context, bookmark_id=bookmark_id)
+    rows = list(
+        session.scalars(
+            select(TrackedCaseUpdate)
+            .where(
+                TrackedCaseUpdate.company_id == context.company.id,
+                TrackedCaseUpdate.tracked_case_id == bookmark.tracked_case_id,
+            )
+            .order_by(TrackedCaseUpdate.created_at.desc())
+        )
+    )
+    return CaseTrackingUpdateListResponse(updates=[_update_record(row) for row in rows])
+
+
+def _system_contexts(session: Session) -> list[SessionContext]:
+    memberships = list(
+        session.scalars(
+            select(CompanyMembership)
+            .options(
+                joinedload(CompanyMembership.company),
+                joinedload(CompanyMembership.user),
+            )
+            .join(User, User.id == CompanyMembership.user_id)
+            .join(Company, Company.id == CompanyMembership.company_id)
+            .where(
+                CompanyMembership.is_active.is_(True),
+                User.is_active.is_(True),
+                Company.is_active.is_(True),
+            )
+            .order_by(CompanyMembership.company_id, CompanyMembership.created_at.asc())
+        )
+    )
+    contexts: list[SessionContext] = []
+    seen: set[str] = set()
+    for membership in memberships:
+        if membership.company_id in seen:
+            continue
+        contexts.append(
+            SessionContext(
+                company=membership.company,
+                user=membership.user,
+                membership=membership,
+            )
+        )
+        seen.add(membership.company_id)
+    return contexts
+
+
+def poll_tracked_cases(
+    session: Session,
+    *,
+    provider: CaseTrackingProvider | None = None,
+) -> list[CaseTrackingPollRunRecord]:
+    settings = get_settings()
+    if not settings.case_tracking_enabled:
+        return []
+    active_provider = provider or get_case_tracking_provider()
+    runs: list[CaseTrackingPollRunRecord] = []
+    for context in _system_contexts(session):
+        run = TrackedCasePollRun(
+            company_id=context.company.id,
+            status="completed",
+            started_at=_now(),
+            metadata_json={"provider": active_provider.provider_key},
+        )
+        session.add(run)
+        session.flush()
+        cases = list(
+            session.scalars(
+                select(TrackedCase)
+                .distinct()
+                .options(selectinload(TrackedCase.bookmarks))
+                .join(TrackedCaseBookmark)
+                .where(
+                    TrackedCase.company_id == context.company.id,
+                    TrackedCaseBookmark.is_archived.is_(False),
+                )
+                .order_by(
+                    TrackedCase.last_provider_checked_at.asc().nullsfirst(),
+                    TrackedCase.created_at.asc(),
+                )
+                .limit(settings.case_tracking_poll_limit)
+            )
+        )
+        bulk_snapshots: dict[str, ProviderCaseSnapshot] = {}
+        bulk_errors: dict[str, str] = {}
+        cnrs = list(
+            dict.fromkeys(
+                normalized
+                for tracked_case in cases
+                if (normalized := normalize_cnr(tracked_case.cnr_number))
+            )
+        )
+        if cnrs:
+            try:
+                bulk_result = active_provider.refresh_cases(cnrs=cnrs)
+                bulk_snapshots = {
+                    normalized: snapshot
+                    for snapshot in bulk_result.snapshots
+                    if (normalized := normalize_cnr(snapshot.cnr_number))
+                }
+                bulk_errors = {
+                    normalized: message
+                    for raw_cnr, message in bulk_result.errors.items()
+                    if (normalized := normalize_cnr(raw_cnr))
+                }
+            except Exception as exc:
+                bulk_errors = {cnr: redact_provider_error(exc) for cnr in cnrs}
+        for tracked_case in cases:
+            try:
+                if tracked_case.cnr_number:
+                    normalized_cnr = normalize_cnr(tracked_case.cnr_number)
+                    if normalized_cnr and normalized_cnr in bulk_errors:
+                        raise CaseTrackingProviderError(bulk_errors[normalized_cnr])
+                    snapshot = (
+                        bulk_snapshots.get(normalized_cnr or "")
+                        if normalized_cnr
+                        else None
+                    )
+                    if snapshot is None:
+                        snapshot = active_provider.get_case_by_cnr(
+                            cnr=tracked_case.cnr_number
+                        )
+                else:
+                    results = active_provider.search_cases(
+                        query=CaseSearchQuery(
+                            case_number=tracked_case.case_number,
+                            court_code=tracked_case.court_code,
+                            court_name=tracked_case.court_name,
+                        )
+                    )
+                    if not results:
+                        raise CaseTrackingProviderError("No provider result for tracked case.")
+                    snapshot = results[0]
+                created = apply_snapshot(
+                    session,
+                    context=context,
+                    tracked_case=tracked_case,
+                    snapshot=snapshot,
+                )
+                run.checked_count += 1
+                run.update_count += len(created)
+            except Exception as exc:
+                tracked_case.last_error = redact_provider_error(exc)
+                session.add(tracked_case)
+                run.error_count += 1
+                continue
+        run.completed_at = _now()
+        run.status = "partial" if run.error_count else "completed"
+        session.add(run)
+        record_from_context(
+            session,
+            context,
+            action="case_tracking.poll_run",
+            target_type="tracked_case_poll_run",
+            target_id=run.id,
+            metadata={
+                "provider": active_provider.provider_key,
+                "checked_count": run.checked_count,
+                "update_count": run.update_count,
+                "error_count": run.error_count,
+                "bulk_cnr_count": len(cnrs),
+            },
+        )
+        session.commit()
+        runs.append(
+            CaseTrackingPollRunRecord(
+                id=run.id,
+                company_id=run.company_id,
+                status=run.status,
+                started_at=run.started_at,
+                completed_at=run.completed_at,
+                checked_count=run.checked_count,
+                update_count=run.update_count,
+                error_count=run.error_count,
+                metadata=dict(run.metadata_json or {}),
+            )
+        )
+    return runs
