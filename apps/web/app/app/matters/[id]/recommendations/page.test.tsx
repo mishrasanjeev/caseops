@@ -55,6 +55,7 @@ describe("RecommendationsPage", () => {
       ).toBeInTheDocument(),
     );
     expect(screen.getByTestId("recommendation-objective-select")).toBeInTheDocument();
+    expect(screen.getByTestId("recommendation-lawyer-thinking")).toBeInTheDocument();
     // BUG-016: the persistent error Card must NOT render when no
     // generation has failed.
     expect(
@@ -62,7 +63,7 @@ describe("RecommendationsPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("sends the selected objective context and bounded custom goal", async () => {
+  it("sends lawyer thinking when filled", async () => {
     listRecommendationsMock.mockResolvedValue({
       matter_id: "m-1",
       recommendations: [],
@@ -85,14 +86,13 @@ describe("RecommendationsPage", () => {
       decisions: [],
       retrieved_authorities: [],
       strategy_payload: null,
+      analysis: null,
     });
 
     render(withClient(<RecommendationsPage />));
-    const objective = await screen.findByTestId("recommendation-objective-select");
-    fireEvent.change(objective, { target: { value: "custom_goal" } });
-    const goal = await screen.findByTestId("recommendation-custom-goal");
-    fireEvent.change(goal, {
-      target: { value: "Prepare evidence gaps for cross-examination" },
+    const thinking = await screen.findByTestId("recommendation-lawyer-thinking");
+    fireEvent.change(thinking, {
+      target: { value: "I am considering skipping the next reply filing." },
     });
     fireEvent.click(screen.getByTestId("generate-authority-recommendation"));
 
@@ -100,8 +100,30 @@ describe("RecommendationsPage", () => {
       expect(generateRecommendationMock).toHaveBeenCalledWith({
         matterId: "m-1",
         type: "authority",
-        recommendationContext: "custom_goal",
-        customGoal: "Prepare evidence gaps for cross-examination",
+        recommendationContext: null,
+        customGoal: null,
+        lawyerThinking: "I am considering skipping the next reply filing.",
+      }),
+    );
+  });
+
+  it("omits lawyer thinking when blank", async () => {
+    listRecommendationsMock.mockResolvedValue({
+      matter_id: "m-1",
+      recommendations: [],
+    });
+    generateRecommendationMock.mockResolvedValue({});
+
+    render(withClient(<RecommendationsPage />));
+    fireEvent.click(await screen.findByTestId("generate-authority-recommendation"));
+
+    await waitFor(() =>
+      expect(generateRecommendationMock).toHaveBeenCalledWith({
+        matterId: "m-1",
+        type: "authority",
+        recommendationContext: null,
+        customGoal: null,
+        lawyerThinking: null,
       }),
     );
   });
@@ -138,6 +160,14 @@ describe("RecommendationsPage", () => {
           decisions: [],
           retrieved_authorities: ["A v B"],
           strategy_payload: null,
+          analysis: {
+            recommendation: "Use cited authority for lawyer review.",
+            risk_analysis: ["Record gaps may affect reliance."],
+            legal_impact: ["Supports the procedural posture."],
+            suggested_actions: ["Verify facts against the record."],
+            confidence_score: "medium",
+            confidence_explanation: "One verified citation supports the recommendation.",
+          },
         },
         {
           id: "rec-2",
@@ -157,6 +187,7 @@ describe("RecommendationsPage", () => {
           decisions: [],
           retrieved_authorities: [],
           strategy_payload: null,
+          analysis: null,
         },
       ],
     });
@@ -167,6 +198,10 @@ describe("RecommendationsPage", () => {
     expect(screen.getByText("AI Recommendations")).toBeInTheDocument();
     expect(screen.getByText(/not lawyer-owned strategy/i)).toBeInTheDocument();
     expect(screen.queryByText("Legacy AI strategy row")).not.toBeInTheDocument();
+    expect(screen.getByText("Risk analysis")).toBeInTheDocument();
+    expect(screen.getByText("Legal impact")).toBeInTheDocument();
+    expect(screen.getByText("Suggested actions")).toBeInTheDocument();
+    expect(screen.getByText("Confidence score")).toBeInTheDocument();
     expect(screen.getByTestId("ai-recommendations-disclaimer")).toHaveTextContent(
       /does not create or approve a lawyer-owned strategy entry/i,
     );

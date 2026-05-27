@@ -13,14 +13,19 @@ from sqlalchemy.orm import Session, selectinload
 
 from caseops_api.db.models import (
     AuthorityDocument,
+    CompanyMembership,
     Contract,
     ContractLegalReference,
     LegalUpdateAlert,
+    LegalUpdateSourceRecord,
     LegalUpdateWatchlist,
     Matter,
     MatterStatuteReference,
+    MembershipRole,
+    NotificationDeliveryChannel,
     Statute,
     StatuteSection,
+    User,
 )
 from caseops_api.schemas.legal_updates import (
     LegalUpdateActionRequest,
@@ -43,21 +48,40 @@ from caseops_api.services.authority_sources import (
 )
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import assert_access
+from caseops_api.services.notification_delivery import (
+    enqueue_notification_delivery_intent,
+)
 
 _ALLOWED_UPDATE_TYPES = {
+    "act",
     "amendment",
+    "ordinance",
     "notification",
+    "repeal",
     "regulation",
     "circular",
     "order",
     "practice_direction",
 }
+_DEFAULT_UPDATE_TYPES = [
+    "act",
+    "amendment",
+    "ordinance",
+    "notification",
+    "repeal",
+    "regulation",
+    "circular",
+    "order",
+    "practice_direction",
+]
 _AUTHORITY_UPDATE_TYPES = {
     "notice": "notification",
     "order": "order",
     "practice_direction": "practice_direction",
 }
 _STATUTE_SOURCE_KEY = "india_code_bare_acts"
+_PRS_SOURCE_KEY = "prs_acts_parliament"
+_PRS_SOURCE_CATEGORY = "prs_india"
 _SOURCE_METADATA_AVAILABLE = "source_metadata_available"
 _MAX_TERM_LENGTH = 80
 _MAX_TERMS = 8
@@ -70,6 +94,7 @@ class _LegalUpdateMatch:
     source_record_key: str
     update_type: str
     title: str
+    source_record_id: str | None = None
     statute_id: str | None = None
     statute_section_id: str | None = None
     authority_document_id: str | None = None
@@ -82,6 +107,7 @@ class _LegalUpdateMatch:
     provenance_status: str = _SOURCE_METADATA_AVAILABLE
     relevance_explanation: str = "Matched bounded watchlist filters against existing records."
     snippet: str | None = None
+    summary_json: dict | None = None
     effective_date: date | None = None
     published_date: date | None = None
     decision_date: date | None = None
@@ -124,16 +150,16 @@ def _normalize_terms(value: Iterable[str] | None) -> list[str]:
 
 def _normalize_update_types(value: Iterable[str] | None) -> list[str]:
     cleaned: list[str] = []
-    for raw in value or ["amendment", "notification", "order", "practice_direction"]:
+    for raw in value or _DEFAULT_UPDATE_TYPES:
         update_type = str(raw).strip()
         if update_type not in _ALLOWED_UPDATE_TYPES:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Unsupported legal update type.",
-            )
+        )
         if update_type not in cleaned:
             cleaned.append(update_type)
-    return cleaned or ["amendment", "notification", "order", "practice_direction"]
+    return cleaned or list(_DEFAULT_UPDATE_TYPES)
 
 
 def _require_valid_dates(
@@ -169,11 +195,18 @@ def _require_bounded_filters(rule: LegalUpdateWatchlist) -> None:
 
 
 def _known_source_categories() -> set[str]:
-    return {entry.source_category for entry in list_legal_source_registry_entries()}
+    return {
+        *{entry.source_category for entry in list_legal_source_registry_entries()},
+        _PRS_SOURCE_CATEGORY,
+    }
 
 
 def _validate_source_filters(source_key: str | None, source_category: str | None) -> None:
-    if source_key and get_legal_source_registry_entry(source_key) is None:
+    if (
+        source_key
+        and source_key != _PRS_SOURCE_KEY
+        and get_legal_source_registry_entry(source_key) is None
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Unknown legal source registry key.",
@@ -559,6 +592,90 @@ def _snippet(*values: str | None) -> str | None:
     return None
 
 
+def _summary_payload(value: object) -> dict | None:
+    if not isinstance(value, dict):
+        return None
+    required = {
+        "plain_english_summary",
+        "practical_legal_impact",
+        "source_url",
+        "provenance_status",
+    }
+    if not required <= set(value):
+        return None
+    return dict(value)
+
+
+def _source_record_search_text(record: LegalUpdateSourceRecord) -> str:
+    raw_metadata = record.raw_metadata_json
+    if isinstance(raw_metadata, dict):
+        metadata_text = json.dumps(raw_metadata, default=str, sort_keys=True)
+    else:
+        metadata_text = str(raw_metadata or "")
+    summary = _summary_payload(record.summary_json)
+    summary_text = json.dumps(summary, default=str, sort_keys=True) if summary else ""
+    statute_text = ""
+    if record.statute:
+        statute_text = " ".join(
+            part
+            for part in (
+                record.statute.short_name,
+                record.statute.long_name,
+                record.statute.jurisdiction,
+            )
+            if part
+        )
+    parts = [
+        record.title,
+        record.normalized_title,
+        record.update_type,
+        record.source_key,
+        record.source_category,
+        record.provenance_status,
+        str(record.act_year or ""),
+        metadata_text,
+        summary_text,
+        statute_text,
+        " ".join(str(item) for item in (record.sections_changed_json or [])),
+    ]
+    return " ".join(part for part in parts if part).casefold()
+
+
+def _source_record_date(record: LegalUpdateSourceRecord) -> date | None:
+    return record.published_date or record.effective_date
+
+
+def _source_record_candidate_query(rule: LegalUpdateWatchlist):
+    statement = select(LegalUpdateSourceRecord).options(
+        selectinload(LegalUpdateSourceRecord.statute)
+    )
+    if rule.source_key:
+        statement = statement.where(LegalUpdateSourceRecord.source_key == rule.source_key)
+    if rule.source_category:
+        statement = statement.where(
+            LegalUpdateSourceRecord.source_category == rule.source_category
+        )
+    if rule.statute_id:
+        statement = statement.where(
+            (LegalUpdateSourceRecord.statute_id == rule.statute_id)
+            | (LegalUpdateSourceRecord.statute_id.is_(None))
+        )
+    if rule.since_date:
+        statement = statement.where(
+            (LegalUpdateSourceRecord.published_date >= rule.since_date)
+            | (LegalUpdateSourceRecord.published_date.is_(None))
+        )
+    if rule.until_date:
+        statement = statement.where(
+            (LegalUpdateSourceRecord.published_date <= rule.until_date)
+            | (LegalUpdateSourceRecord.published_date.is_(None))
+        )
+    return statement.order_by(
+        LegalUpdateSourceRecord.published_date.desc().nullslast(),
+        LegalUpdateSourceRecord.last_seen_at.desc(),
+    ).limit(_CANDIDATE_SCAN_LIMIT)
+
+
 def _statute_candidate_query(rule: LegalUpdateWatchlist):
     statement = (
         select(StatuteSection, Statute)
@@ -719,6 +836,85 @@ def _relevance_explanation(
     return f"Matched {joined} against existing {source_kind} metadata."[:500]
 
 
+def _source_record_matches(
+    session: Session,
+    *,
+    rule: LegalUpdateWatchlist,
+) -> list[_LegalUpdateMatch]:
+    allowed_types = set(_normalize_update_types(rule.update_types_json))
+    matches: list[_LegalUpdateMatch] = []
+    for record in session.scalars(_source_record_candidate_query(rule)):
+        if record.update_type not in allowed_types:
+            continue
+        row_date = _source_record_date(record)
+        if not _date_in_range(
+            row_date,
+            since_date=rule.since_date,
+            until_date=rule.until_date,
+        ):
+            continue
+        search_text = _source_record_search_text(record)
+        if rule.practice_area and rule.practice_area.casefold() not in search_text:
+            continue
+        if rule.jurisdiction:
+            jurisdiction = "india"
+            if record.statute and record.statute.jurisdiction:
+                jurisdiction = record.statute.jurisdiction
+            if rule.jurisdiction.casefold() not in jurisdiction.casefold():
+                continue
+        if rule.statute_id:
+            statute = session.get(Statute, rule.statute_id)
+            statute_terms = [
+                part
+                for part in (
+                    statute.short_name if statute else None,
+                    statute.long_name if statute else None,
+                )
+                if part
+            ]
+            if record.statute_id != rule.statute_id and not any(
+                term.casefold() in search_text for term in statute_terms
+            ):
+                continue
+        if not _terms_match(search_text, rule.statute_terms_json):
+            continue
+
+        summary = _summary_payload(record.summary_json)
+        statute_name = record.statute.short_name if record.statute else None
+        match = _LegalUpdateMatch(
+            source_record_key=record.source_record_key,
+            source_record_id=record.id,
+            update_type=record.update_type,
+            title=_compact_text(record.title, max_length=255) or "Legal update",
+            statute_id=record.statute_id,
+            statute_section_id=None,
+            statute_name=statute_name,
+            section_number=None,
+            jurisdiction=record.statute.jurisdiction if record.statute else "india",
+            source_key=record.source_key,
+            source_category=record.source_category or _PRS_SOURCE_CATEGORY,
+            source_url=record.source_url,
+            provenance_status=record.provenance_status,
+            relevance_explanation=_relevance_explanation(
+                session,
+                rule=rule,
+                source_kind="source record",
+                statute_id=record.statute_id,
+                section_id=None,
+                search_text=search_text,
+            ),
+            snippet=_snippet(
+                summary.get("plain_english_summary") if summary else None,
+                record.title,
+            ),
+            summary_json=summary,
+            effective_date=record.effective_date,
+            published_date=record.published_date,
+        )
+        matches.append(match)
+    return matches
+
+
 def _section_matches(
     session: Session,
     *,
@@ -845,6 +1041,7 @@ def _match_record(
         id=f"preview:{_hash_value([watchlist_id, match.source_record_key])[:24]}",
         company_id=company_id,
         watchlist_id=watchlist_id,
+        source_record_id=match.source_record_id,
         update_type=match.update_type,  # type: ignore[arg-type]
         title=match.title,
         statute_id=match.statute_id,
@@ -864,6 +1061,7 @@ def _match_record(
         published_date=match.published_date,
         decision_date=match.decision_date,
         snippet=_compact_text(match.snippet, max_length=_MAX_SNIPPET_LENGTH),
+        summary=match.summary_json,  # type: ignore[arg-type]
         is_read=False,
         read_at=None,
         dismissed_at=None,
@@ -876,6 +1074,7 @@ def _alert_record(alert: LegalUpdateAlert) -> LegalUpdateRecord:
         id=alert.id,
         company_id=alert.company_id,
         watchlist_id=alert.watchlist_id,
+        source_record_id=alert.source_record_id,
         update_type=alert.update_type,  # type: ignore[arg-type]
         title=alert.title,
         statute_id=alert.statute_id,
@@ -895,6 +1094,7 @@ def _alert_record(alert: LegalUpdateAlert) -> LegalUpdateRecord:
         published_date=alert.published_date,
         decision_date=alert.decision_date,
         snippet=_compact_text(alert.snippet, max_length=_MAX_SNIPPET_LENGTH),
+        summary=_summary_payload(alert.summary_json),  # type: ignore[arg-type]
         is_read=alert.is_read,
         read_at=alert.read_at,
         dismissed_at=alert.dismissed_at,
@@ -907,11 +1107,93 @@ def _matches_for_watchlist(
     *,
     rule: LegalUpdateWatchlist,
 ) -> list[_LegalUpdateMatch]:
-    matches = [*_section_matches(session, rule=rule), *_authority_matches(session, rule=rule)]
+    matches = [
+        *_source_record_matches(session, rule=rule),
+        *_section_matches(session, rule=rule),
+        *_authority_matches(session, rule=rule),
+    ]
     deduped: dict[str, _LegalUpdateMatch] = {}
     for match in matches:
         deduped.setdefault(match.source_record_key, match)
     return list(deduped.values())
+
+
+def _active_internal_memberships(
+    session: Session,
+    *,
+    company_id: str,
+) -> list[CompanyMembership]:
+    internal_roles = tuple(role.value for role in MembershipRole)
+    return list(
+        session.scalars(
+            select(CompanyMembership)
+            .join(User, User.id == CompanyMembership.user_id)
+            .where(
+                CompanyMembership.company_id == company_id,
+                CompanyMembership.is_active.is_(True),
+                CompanyMembership.role.in_(internal_roles),
+                User.is_active.is_(True),
+            )
+            .order_by(CompanyMembership.created_at.asc())
+        )
+    )
+
+
+def _notification_body(match: _LegalUpdateMatch) -> str:
+    summary = _summary_payload(match.summary_json)
+    if summary:
+        text = str(summary.get("plain_english_summary") or "")
+    else:
+        text = match.snippet or match.relevance_explanation
+    parts = [
+        text,
+        f"Source: {match.source_key}",
+        f"Provenance: {match.provenance_status}",
+    ]
+    return " ".join(part for part in parts if part)
+
+
+def _enqueue_legal_update_notifications(
+    session: Session,
+    *,
+    context: SessionContext,
+    watchlist: LegalUpdateWatchlist,
+    alert: LegalUpdateAlert,
+    match: _LegalUpdateMatch,
+) -> int:
+    matter = session.get(Matter, watchlist.matter_id) if watchlist.matter_id else None
+    created_or_existing = 0
+    for membership in _active_internal_memberships(session, company_id=context.company.id):
+        intent = enqueue_notification_delivery_intent(
+            session,
+            context=context,
+            recipient_membership=membership,
+            channel=NotificationDeliveryChannel.IN_APP,
+            event_type="legal_update.watchlist_matched",
+            source_type="legal_update_alert",
+            source_id=alert.id,
+            matter=matter,
+            title=f"Legal update matched: {match.title}"[:255],
+            body=_notification_body(match),
+        )
+        if intent is not None:
+            created_or_existing += 1
+            record_from_context(
+                session,
+                context,
+                action="legal_update.notification_enqueued",
+                target_type="notification_delivery_intent",
+                target_id=intent.id,
+                matter_id=watchlist.matter_id,
+                metadata={
+                    "watchlist_id_sha256": _hash_value(watchlist.id),
+                    "alert_id_sha256": _hash_value(alert.id),
+                    "recipient_membership_id_sha256": _hash_value(membership.id),
+                    "channel": NotificationDeliveryChannel.IN_APP,
+                    "event_type": "legal_update.watchlist_matched",
+                },
+            )
+    return created_or_existing
 
 
 def run_legal_update_watchlist(
@@ -951,6 +1233,7 @@ def run_legal_update_watchlist(
 
     matches = _matches_for_watchlist(session, rule=watchlist)[: payload.limit]
     created_count = 0
+    notification_intent_count = 0
     if not payload.preview_only:
         for match in matches:
             existing = session.scalar(
@@ -962,31 +1245,56 @@ def run_legal_update_watchlist(
             )
             if existing is not None:
                 continue
-            session.add(
-                LegalUpdateAlert(
-                    company_id=context.company.id,
-                    watchlist_id=watchlist.id,
-                    source_record_key=match.source_record_key,
-                    update_type=match.update_type,
-                    title=match.title,
-                    statute_id=match.statute_id,
-                    statute_section_id=match.statute_section_id,
-                    authority_document_id=match.authority_document_id,
-                    matter_id=watchlist.matter_id,
-                    contract_id=watchlist.contract_id,
-                    statute_name=match.statute_name,
-                    section_number=match.section_number,
-                    jurisdiction=match.jurisdiction,
-                    source_key=match.source_key,
-                    source_category=match.source_category,
-                    source_url=match.source_url,
-                    provenance_status=match.provenance_status,
-                    relevance_explanation=match.relevance_explanation,
-                    snippet=match.snippet,
-                    effective_date=match.effective_date,
-                    published_date=match.published_date,
-                    decision_date=match.decision_date,
-                )
+            alert = LegalUpdateAlert(
+                company_id=context.company.id,
+                watchlist_id=watchlist.id,
+                source_record_key=match.source_record_key,
+                source_record_id=match.source_record_id,
+                update_type=match.update_type,
+                title=match.title,
+                statute_id=match.statute_id,
+                statute_section_id=match.statute_section_id,
+                authority_document_id=match.authority_document_id,
+                matter_id=watchlist.matter_id,
+                contract_id=watchlist.contract_id,
+                statute_name=match.statute_name,
+                section_number=match.section_number,
+                jurisdiction=match.jurisdiction,
+                source_key=match.source_key,
+                source_category=match.source_category,
+                source_url=match.source_url,
+                provenance_status=match.provenance_status,
+                relevance_explanation=match.relevance_explanation,
+                snippet=match.snippet,
+                summary_json=match.summary_json,
+                effective_date=match.effective_date,
+                published_date=match.published_date,
+                decision_date=match.decision_date,
+            )
+            session.add(alert)
+            session.flush()
+            record_from_context(
+                session,
+                context,
+                action="legal_update.watchlist_matched",
+                target_type="legal_update_alert",
+                target_id=alert.id,
+                matter_id=watchlist.matter_id,
+                metadata={
+                    "watchlist_id_sha256": _hash_value(watchlist.id),
+                    "source_record_key_sha256": _hash_value(match.source_record_key),
+                    "source_record_id_sha256": _hash_value(match.source_record_id),
+                    "update_type": match.update_type,
+                    "source_key": match.source_key,
+                    "has_summary": bool(match.summary_json),
+                },
+            )
+            notification_intent_count += _enqueue_legal_update_notifications(
+                session,
+                context=context,
+                watchlist=watchlist,
+                alert=alert,
+                match=match,
             )
             created_count += 1
         session.flush()
@@ -1010,6 +1318,7 @@ def run_legal_update_watchlist(
                 "source_record_keys_sha256": _hash_value(
                     [match.source_record_key for match in matches]
                 ),
+                "notification_intent_count": notification_intent_count,
             },
         ),
     )

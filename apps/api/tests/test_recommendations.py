@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable
+from datetime import date
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -12,9 +13,13 @@ from caseops_api.db.models import (
     AuthorityDocumentChunk,
     AuthorityDocumentType,
     Matter,
+    MatterCourtOrder,
+    MatterStatuteReference,
     MatterStrategyEntry,
     ModelRun,
     Recommendation,
+    Statute,
+    StatuteSection,
     TenantAIPolicy,
 )
 from caseops_api.db.session import get_session_factory
@@ -1056,7 +1061,216 @@ def test_custom_goal_audit_metadata_is_redacted(
     assert raw_goal not in redacted
     assert "prompt" not in redacted.lower()
     assert "answer" not in redacted.lower()
-    assert "source" not in redacted.lower()
+    assert metadata["custom_goal"]["source"] == "custom_goal"
+
+
+def test_lawyer_thinking_is_preferred_redacted_and_analysis_is_serialized(
+    client: TestClient, monkeypatch,
+) -> None:
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    token, _, matter_id = _setup_matter(client)
+    _seed_relevant_authority()
+    lawyer_thinking = "I am planning to skip filing a reply on the next hearing date."
+    prompts: list[str] = []
+
+    class _LawyerThinkingProvider:
+        name = "mock"
+        model = "mock-lawyer-thinking"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            prompts.append("\n".join(message.content for message in messages))
+            payload = {
+                "title": "Reply filing posture",
+                "options": [
+                    {
+                        "label": "Review reply-filing risk",
+                        "rationale": "The cited authority supports procedural caution.",
+                        "confidence": "medium",
+                        "supporting_citations": ["[1] Ssangyong Engg v. NHAI (2019)"],
+                        "risk_notes": "Skipping the reply may narrow the record.",
+                    }
+                ],
+                "primary_recommendation_label": "Review reply-filing risk",
+                "rationale": "Source-backed observations for lawyer review.",
+                "assumptions": [],
+                "missing_facts": ["Current court direction on reply filing"],
+                "confidence": "medium",
+                "next_action": "Review the last order before deciding.",
+                "analysis": {
+                    "recommendation": "Review whether a reply is required before the hearing.",
+                    "risk_analysis": ["Skipping may leave allegations unanswered."],
+                    "legal_impact": ["The record may be weaker on the next date."],
+                    "suggested_actions": ["Check the last order and deadline."],
+                    "confidence_score": "medium",
+                    "confidence_explanation": "One verified authority and missing facts.",
+                },
+            }
+            return LLMCompletion(
+                text=json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=11,
+                completion_tokens=21,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _LawyerThinkingProvider(),
+    )
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "authority", "lawyer_thinking": lawyer_thinking},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["analysis"]["recommendation"].startswith("Review whether")
+    assert body["analysis"]["risk_analysis"] == [
+        "Skipping may leave allegations unanswered."
+    ]
+    assert prompts and "LAWYER_THINKING: I am planning" in prompts[0]
+    assert "MATTER_INTELLIGENCE_CONTEXT" in prompts[0]
+
+    factory = get_session_factory()
+    with factory() as session:
+        event = session.scalar(
+            select(AuditEvent)
+            .where(
+                AuditEvent.action == "recommendation.generated",
+                AuditEvent.matter_id == matter_id,
+            )
+            .order_by(AuditEvent.created_at.desc())
+        )
+        rec = session.scalar(select(Recommendation).where(Recommendation.matter_id == matter_id))
+    assert event is not None
+    assert rec is not None and rec.analysis_json
+    metadata = json.loads(event.metadata_json or "{}")
+    assert metadata["custom_goal"] == {"present": False}
+    assert metadata["lawyer_thinking"]["present"] is True
+    assert metadata["lawyer_thinking"]["source"] == "lawyer_thinking"
+    assert metadata["lawyer_thinking"]["length"] == len(lawyer_thinking)
+    assert lawyer_thinking not in json.dumps(metadata)
+
+
+def test_matter_intelligence_prompt_includes_orders_statutes_and_excludes_other_tenant(
+    client: TestClient, monkeypatch,
+) -> None:
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    token, company_slug, matter_id = _setup_matter(client)
+    _seed_relevant_authority()
+    other_membership_id, other_token = _create_company_user(
+        client,
+        token,
+        company_slug=company_slug,
+        email="other-member@example.com",
+    )
+    _ = other_membership_id, other_token
+    other_matter_id = _create_matter(client, token, code="ARB-2026-OTHER")
+
+    with get_session_factory()() as session:
+        statute = Statute(
+            id="context-act-2026",
+            short_name="Context Act",
+            long_name="Context Act, 2026",
+            enacted_year=2026,
+            jurisdiction="india",
+            source_url="https://example.test/context-act",
+        )
+        session.add(statute)
+        session.flush()
+        section = StatuteSection(
+            statute_id=statute.id,
+            section_number="Section 99",
+            section_label="Reply filing procedure",
+            section_text="A bounded section excerpt for reply filing context.",
+            ordinal=1,
+        )
+        session.add(section)
+        session.flush()
+        session.add(
+            MatterStatuteReference(
+                matter_id=matter_id,
+                section_id=section.id,
+                relevance="cited",
+                notes="Reply filing reference",
+            )
+        )
+        session.add(
+            MatterCourtOrder(
+                matter_id=matter_id,
+                order_date=date(2026, 5, 20),
+                title="Order directing reply",
+                summary="Court directed parties to complete reply filing.",
+                order_text="The respondent may file reply before the next date.",
+                source="manual",
+            )
+        )
+        session.add(
+            MatterCourtOrder(
+                matter_id=other_matter_id,
+                order_date=date(2026, 5, 21),
+                title="UNRELATED_TENANT_SENTINEL",
+                summary="This order must not appear in the prompt.",
+                source="manual",
+            )
+        )
+        session.commit()
+
+    prompts: list[str] = []
+
+    class _ContextProvider:
+        name = "mock"
+        model = "mock-context"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            prompts.append("\n".join(message.content for message in messages))
+            payload = {
+                "title": "Context recommendation",
+                "options": [
+                    {
+                        "label": "Review the order",
+                        "rationale": "The cited authority supports review.",
+                        "confidence": "medium",
+                        "supporting_citations": ["[1] Ssangyong Engg v. NHAI (2019)"],
+                        "risk_notes": None,
+                    }
+                ],
+                "primary_recommendation_label": "Review the order",
+                "rationale": "Source-backed observations for lawyer review.",
+                "assumptions": [],
+                "missing_facts": [],
+                "confidence": "medium",
+                "next_action": None,
+            }
+            return LLMCompletion(
+                text=json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=11,
+                completion_tokens=21,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _ContextProvider(),
+    )
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "authority", "lawyer_thinking": "   "},
+    )
+    assert response.status_code == 200, response.text
+    prompt = prompts[0]
+    assert "LAWYER_THINKING:" not in prompt
+    assert "Recent court orders" in prompt
+    assert "Order directing reply" in prompt
+    assert "Context Act" in prompt
+    assert "Section 99" in prompt
+    assert "UNRELATED_TENANT_SENTINEL" not in prompt
 
 
 def test_custom_goal_is_ignored_for_non_custom_objective_context(
@@ -1204,6 +1418,61 @@ def test_unsafe_custom_goal_is_blocked_before_provider_call_and_redacted(
     assert unsafe_goal not in redacted
     assert "success probability" not in redacted.lower()
     assert "best judge" not in redacted.lower()
+
+
+def test_unsafe_lawyer_thinking_is_blocked_with_existing_422_pattern(
+    client: TestClient, monkeypatch,
+) -> None:
+    from caseops_api.services.llm import LLMCompletion
+
+    token, _, matter_id = _setup_matter(client)
+    unsafe_text = "I want to fabricate evidence before the next hearing."
+
+    class _Provider:
+        name = "mock"
+        model = "mock-should-not-run"
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def generate(self, **_kwargs):  # noqa: ANN003
+            self.calls += 1
+            return LLMCompletion(
+                text="{}",
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=1,
+                completion_tokens=1,
+                latency_ms=1,
+            )
+
+    provider = _Provider()
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: provider,
+    )
+
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "authority", "lawyer_thinking": unsafe_text},
+    )
+
+    assert response.status_code == 422, response.text
+    assert provider.calls == 0
+    assert "unsupported" in response.json()["detail"].lower()
+    with get_session_factory()() as session:
+        event = session.scalar(
+            select(AuditEvent).where(
+                AuditEvent.action == "recommendation.objective_blocked",
+                AuditEvent.matter_id == matter_id,
+            )
+        )
+    assert event is not None
+    metadata = json.loads(event.metadata_json or "{}")
+    assert metadata["lawyer_thinking"]["present"] is True
+    assert metadata["lawyer_thinking"]["source"] == "lawyer_thinking"
+    assert unsafe_text not in json.dumps(metadata)
 
 
 def test_unsafe_recommendation_output_is_refused_without_persisting_row(

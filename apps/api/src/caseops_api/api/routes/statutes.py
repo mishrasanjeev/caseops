@@ -15,6 +15,7 @@ scoping). 404 on unknown id / section_number.
 """
 from __future__ import annotations
 
+from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -39,12 +40,21 @@ from caseops_api.schemas.legal_updates import (
     LegalUpdateRecord,
     LegalUpdateRunRequest,
     LegalUpdateRunResponse,
+    LegalUpdateSourceRecordListResponse,
+    LegalUpdateSourceRunRecord,
     LegalUpdateWatchlistCreateRequest,
     LegalUpdateWatchlistListResponse,
     LegalUpdateWatchlistRecord,
     LegalUpdateWatchlistUpdateRequest,
+    StatuteAmendmentHistoryResponse,
 )
 from caseops_api.services.identity import SessionContext
+from caseops_api.services.legal_update_sources import (
+    list_source_records,
+    list_statute_amendment_history,
+    source_run_record,
+    sync_source,
+)
 from caseops_api.services.legal_updates import (
     create_legal_update_watchlist,
     list_legal_update_watchlists,
@@ -67,6 +77,9 @@ MatterEditor = Annotated[
 ]
 LegalUpdateUser = Annotated[
     SessionContext, Depends(require_capability("authorities:search"))
+]
+LegalUpdateAdmin = Annotated[
+    SessionContext, Depends(require_capability("notifications:manage"))
 ]
 
 
@@ -312,6 +325,82 @@ def patch_legal_update(
         context=context,
         update_id=update_id,
         payload=payload,
+    )
+
+
+@router.post(
+    "/legal-updates/sources/{source_key}/sync",
+    response_model=LegalUpdateSourceRunRecord,
+    summary="Manually sync a configured legal update source.",
+)
+def post_legal_update_source_sync(
+    source_key: str,
+    context: LegalUpdateAdmin,
+    session: DbSession,
+    limit: int = 100,
+) -> LegalUpdateSourceRunRecord:
+    run = sync_source(
+        session,
+        source_key=source_key,
+        limit=max(1, min(limit, 500)),
+        context=context,
+        run_watchlists=True,
+    )
+    session.commit()
+    return source_run_record(run)
+
+
+@router.get(
+    "/legal-updates/source-records",
+    response_model=LegalUpdateSourceRecordListResponse,
+    summary="List normalized source-backed legal update records.",
+)
+def get_legal_update_source_records(
+    context: LegalUpdateUser,
+    session: DbSession,
+    source_key: str | None = None,
+    update_type: str | None = None,
+    statute_id: str | None = None,
+    summary_status: str | None = None,
+    since_date: date | None = None,
+    until_date: date | None = None,
+    limit: int = 50,
+) -> LegalUpdateSourceRecordListResponse:
+    _ = context
+    return list_source_records(
+        session,
+        source_key=source_key,
+        update_type=update_type,
+        statute_id=statute_id,
+        summary_status=summary_status,
+        since_date=since_date,
+        until_date=until_date,
+        limit=limit,
+    )
+
+
+@router.get(
+    "/{statute_id}/amendment-history",
+    response_model=StatuteAmendmentHistoryResponse,
+    summary="List source-backed amendment and change events for an Act.",
+)
+def get_statute_amendment_history(
+    statute_id: str,
+    context: CurrentContext,
+    session: DbSession,
+    limit: int = 50,
+) -> StatuteAmendmentHistoryResponse:
+    _ = context
+    statute = session.scalar(select(Statute).where(Statute.id == statute_id))
+    if statute is None or not statute.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Statute {statute_id!r} not found.",
+        )
+    return list_statute_amendment_history(
+        session,
+        statute_id=statute_id,
+        limit=limit,
     )
 
 

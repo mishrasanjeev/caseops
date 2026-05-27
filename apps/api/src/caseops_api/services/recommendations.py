@@ -44,12 +44,19 @@ from caseops_api.db.models import (
     AuthorityDocument,
     Judge,
     Matter,
+    MatterActivity,
+    MatterAttachment,
+    MatterAttachmentChunk,
     MatterCauseListEntry,
+    MatterCourtOrder,
     MatterHearing,
+    MatterStatuteReference,
     ModelRun,
     Recommendation,
     RecommendationDecision,
     RecommendationOption,
+    Statute,
+    StatuteSection,
 )
 from caseops_api.services.authorities import search_authority_catalog
 from caseops_api.services.citations import (
@@ -102,6 +109,7 @@ SUPPORTED_OBJECTIVE_CONTEXTS = {
 class RecommendationObjective:
     context: str | None = None
     custom_goal: str | None = None
+    custom_goal_source: str | None = None
 
     @property
     def audit_context(self) -> str:
@@ -114,7 +122,7 @@ class RecommendationObjective:
             "present": True,
             "sha256": hashlib.sha256(self.custom_goal.encode("utf-8")).hexdigest(),
             "length": len(self.custom_goal),
-            "category": "safe_custom_goal",
+            "source": self.custom_goal_source or "custom_goal",
         }
 
 
@@ -234,6 +242,15 @@ class _LLMOption(BaseModel):
     risk_notes: str | None = None
 
 
+class _LLMAnalysis(BaseModel):
+    recommendation: str = Field(min_length=1, max_length=5000)
+    risk_analysis: list[str] = Field(default_factory=list, max_length=12)
+    legal_impact: list[str] = Field(default_factory=list, max_length=12)
+    suggested_actions: list[str] = Field(default_factory=list, max_length=12)
+    confidence_score: str = "low"
+    confidence_explanation: str = Field(default="", max_length=2000)
+
+
 class _LLMResponse(BaseModel):
     title: str = Field(min_length=2, max_length=600)
     options: list[_LLMOption] = Field(min_length=1, max_length=10)
@@ -243,6 +260,7 @@ class _LLMResponse(BaseModel):
     missing_facts: list[str] = Field(default_factory=list, max_length=50)
     confidence: str = "low"
     next_action: str | None = None
+    analysis: _LLMAnalysis | None = None
 
 
 @dataclass
@@ -779,7 +797,12 @@ def _record_blocked_objective(
             "type": rec_type,
             "recommendation_context": objective.audit_context,
             "reason_category": reason_category,
-            "custom_goal": objective.custom_goal_metadata(),
+            "custom_goal": objective.custom_goal_metadata()
+            if objective.custom_goal_source == "custom_goal"
+            else {"present": False},
+            "lawyer_thinking": objective.custom_goal_metadata()
+            if objective.custom_goal_source == "lawyer_thinking"
+            else {"present": False},
         },
     )
     session.commit()
@@ -793,8 +816,18 @@ def _resolve_objective(
     rec_type: str,
     recommendation_context: str | None,
     custom_goal: str | None,
+    lawyer_thinking: str | None = None,
 ) -> RecommendationObjective:
-    normalized_goal = _normalize_custom_goal(custom_goal)
+    normalized_lawyer_thinking = _normalize_custom_goal(lawyer_thinking)
+    normalized_custom_goal = _normalize_custom_goal(custom_goal)
+    normalized_goal = normalized_lawyer_thinking or normalized_custom_goal
+    goal_source = (
+        "lawyer_thinking"
+        if normalized_lawyer_thinking
+        else "custom_goal"
+        if normalized_custom_goal
+        else None
+    )
     objective_context = recommendation_context
     if objective_context is None and normalized_goal:
         objective_context = "custom_goal"
@@ -806,12 +839,14 @@ def _resolve_objective(
                 f"Supported contexts: {sorted(SUPPORTED_OBJECTIVE_CONTEXTS)}"
             ),
         )
-    if objective_context != "custom_goal":
+    if objective_context != "custom_goal" and goal_source != "lawyer_thinking":
         normalized_goal = None
+        goal_source = None
 
     objective = RecommendationObjective(
         context=objective_context,
         custom_goal=normalized_goal,
+        custom_goal_source=goal_source,
     )
     if objective_context == "custom_goal" and not normalized_goal:
         _record_blocked_objective(
@@ -859,6 +894,16 @@ def _response_text_parts(parsed: _LLMResponse) -> list[str]:
     ]
     parts.extend(parsed.assumptions)
     parts.extend(parsed.missing_facts)
+    if parsed.analysis is not None:
+        parts.extend(
+            [
+                parsed.analysis.recommendation,
+                parsed.analysis.confidence_explanation,
+                *parsed.analysis.risk_analysis,
+                *parsed.analysis.legal_impact,
+                *parsed.analysis.suggested_actions,
+            ]
+        )
     for option in parsed.options:
         parts.extend(
             [
@@ -875,6 +920,249 @@ def _classify_unsafe_response(parsed: _LLMResponse) -> str | None:
         "\n".join(_response_text_parts(parsed)),
         patterns=_UNSAFE_OUTPUT_PATTERNS,
     )
+
+
+def _bounded_context_text(value: object, *, max_length: int) -> str | None:
+    if value is None:
+        return None
+    text = re.sub(r"\s+", " ", str(value)).strip()
+    if not text:
+        return None
+    return text[:max_length]
+
+
+def _append_context_line(lines: list[str], label: str, value: object, *, limit: int) -> None:
+    text = _bounded_context_text(value, max_length=limit)
+    if text:
+        lines.append(f"- {label}: {text}")
+
+
+def _build_matter_intelligence_context(session: Session, matter: Matter) -> str:
+    """Bounded matter context for recommendation prompts.
+
+    The matter has already been loaded through tenant-scoped access checks. Every
+    query below is constrained to that matter id and uses deterministic limits so
+    prompt growth is predictable.
+    """
+    lines: list[str] = ["Matter metadata:"]
+    _append_context_line(lines, "title", matter.title, limit=240)
+    _append_context_line(lines, "client", matter.client_name, limit=160)
+    _append_context_line(lines, "opposing party", matter.opposing_party, limit=160)
+    _append_context_line(lines, "practice area", matter.practice_area, limit=120)
+    _append_context_line(lines, "forum", matter.forum_level, limit=80)
+    _append_context_line(lines, "court", matter.court_name, limit=160)
+    _append_context_line(lines, "judge", matter.judge_name, limit=160)
+    _append_context_line(lines, "status", matter.status, limit=80)
+    _append_context_line(
+        lines,
+        "next hearing",
+        matter.next_hearing_on.isoformat() if matter.next_hearing_on else None,
+        limit=40,
+    )
+    _append_context_line(lines, "description", matter.description, limit=800)
+
+    hearings = list(
+        session.scalars(
+            select(MatterHearing)
+            .where(MatterHearing.matter_id == matter.id)
+            .order_by(MatterHearing.hearing_on.desc(), MatterHearing.created_at.desc())
+            .limit(5)
+        )
+    )
+    if hearings:
+        lines.append("Recent hearings:")
+        for hearing in hearings:
+            _append_context_line(
+                lines,
+                hearing.hearing_on.isoformat(),
+                " | ".join(
+                    part
+                    for part in (
+                        hearing.forum_name,
+                        hearing.judge_name or "",
+                        hearing.purpose,
+                        hearing.status,
+                        hearing.outcome_note or "",
+                    )
+                    if part
+                ),
+                limit=420,
+            )
+
+    orders = list(
+        session.scalars(
+            select(MatterCourtOrder)
+            .where(MatterCourtOrder.matter_id == matter.id)
+            .order_by(MatterCourtOrder.order_date.desc(), MatterCourtOrder.created_at.desc())
+            .limit(5)
+        )
+    )
+    if orders:
+        lines.append("Recent court orders:")
+        for order in orders:
+            excerpt = order.summary
+            if order.order_text:
+                excerpt = f"{order.summary} | excerpt: {order.order_text[:900]}"
+            _append_context_line(
+                lines,
+                f"{order.order_date.isoformat()} {order.title}",
+                excerpt,
+                limit=900,
+            )
+
+    statute_rows = list(
+        session.execute(
+            select(MatterStatuteReference, StatuteSection, Statute)
+            .join(StatuteSection, StatuteSection.id == MatterStatuteReference.section_id)
+            .join(Statute, Statute.id == StatuteSection.statute_id)
+            .where(MatterStatuteReference.matter_id == matter.id)
+            .order_by(
+                Statute.short_name,
+                StatuteSection.ordinal,
+                StatuteSection.section_number,
+            )
+            .limit(8)
+        )
+    )
+    if statute_rows:
+        lines.append("Linked statute references:")
+        for ref, section, statute in statute_rows:
+            section_summary = " | ".join(
+                part
+                for part in (
+                    statute.short_name,
+                    section.section_number,
+                    section.section_label or "",
+                    f"relevance={ref.relevance}",
+                    ref.notes or "",
+                    section.section_text or "",
+                )
+                if part
+            )
+            _append_context_line(lines, "statute", section_summary, limit=700)
+
+    attachments = list(
+        session.scalars(
+            select(MatterAttachment)
+            .where(MatterAttachment.matter_id == matter.id)
+            .order_by(MatterAttachment.created_at.desc())
+            .limit(4)
+        )
+    )
+    if attachments:
+        lines.append("Processed matter attachments:")
+        for attachment in attachments:
+            text = _bounded_context_text(attachment.extracted_text, max_length=700)
+            if not text:
+                chunks = list(
+                    session.scalars(
+                        select(MatterAttachmentChunk)
+                        .where(MatterAttachmentChunk.attachment_id == attachment.id)
+                        .order_by(MatterAttachmentChunk.chunk_index.asc())
+                        .limit(2)
+                    )
+                )
+                text = _bounded_context_text(
+                    " ".join(chunk.content for chunk in chunks),
+                    max_length=700,
+                )
+            descriptor = " | ".join(
+                part
+                for part in (
+                    attachment.original_filename,
+                    attachment.document_type or "",
+                    attachment.processing_status,
+                    text or "",
+                )
+                if part
+            )
+            _append_context_line(lines, "attachment", descriptor, limit=900)
+
+    activities = list(
+        session.scalars(
+            select(MatterActivity)
+            .where(MatterActivity.matter_id == matter.id)
+            .order_by(MatterActivity.created_at.desc())
+            .limit(6)
+        )
+    )
+    if activities:
+        lines.append("Recent matter activity:")
+        for item in activities:
+            _append_context_line(
+                lines,
+                item.created_at.isoformat(),
+                " | ".join(
+                    part
+                    for part in (item.event_type, item.title, item.detail or "")
+                    if part
+                ),
+                limit=420,
+            )
+
+    return "\n".join(lines)
+
+
+def _analysis_json(parsed: _LLMResponse, *, confidence: str) -> str:
+    analysis = parsed.analysis
+    if analysis is None:
+        primary = parsed.options[0] if parsed.options else None
+        analysis = _LLMAnalysis(
+            recommendation=(
+                parsed.primary_recommendation_label
+                or (primary.label if primary else parsed.title)
+            ),
+            risk_analysis=[
+                text
+                for text in [primary.risk_notes if primary else None, *parsed.missing_facts[:3]]
+                if text
+            ],
+            legal_impact=[parsed.rationale[:1200]],
+            suggested_actions=[item for item in [parsed.next_action] if item],
+            confidence_score=confidence,
+            confidence_explanation=(
+                "Confidence reflects verified citation coverage and missing facts."
+            ),
+        )
+    payload = {
+        "recommendation": _bounded_context_text(analysis.recommendation, max_length=5000)
+        or parsed.title,
+        "risk_analysis": [
+            item
+            for item in (
+                _bounded_context_text(value, max_length=1000)
+                for value in analysis.risk_analysis
+            )
+            if item
+        ][:12],
+        "legal_impact": [
+            item
+            for item in (
+                _bounded_context_text(value, max_length=1000)
+                for value in analysis.legal_impact
+            )
+            if item
+        ][:12],
+        "suggested_actions": [
+            item
+            for item in (
+                _bounded_context_text(value, max_length=1000)
+                for value in analysis.suggested_actions
+            )
+            if item
+        ][:12],
+        "confidence_score": (
+            analysis.confidence_score
+            if analysis.confidence_score in CONFIDENCE_LEVELS
+            else confidence
+        ),
+        "confidence_explanation": _bounded_context_text(
+            analysis.confidence_explanation,
+            max_length=2000,
+        )
+        or "Confidence reflects verified citations and missing facts.",
+    }
+    return json.dumps(payload)
 
 
 _TYPE_FRAMING: dict[str, str] = {
@@ -910,6 +1198,7 @@ def _build_prompt(
     matter: Matter,
     authorities: list[RetrievedAuthority],
     objective: RecommendationObjective | None = None,
+    matter_intelligence_context: str | None = None,
 ) -> list[LLMMessage]:
     framing = _TYPE_FRAMING.get(rec_type, _TYPE_FRAMING["authority"])
     objective = objective or RecommendationObjective()
@@ -918,7 +1207,27 @@ def _build_prompt(
         _OBJECTIVE_FRAMING.get(objective.context or "", "")
         or "Frame the recommendation from matter status, posture, and retrieved sources."
     )
-    custom_goal_line = objective.custom_goal or "none"
+    custom_goal_line = (
+        objective.custom_goal
+        if objective.custom_goal and objective.custom_goal_source == "custom_goal"
+        else "none"
+    )
+    lawyer_thinking_line = (
+        objective.custom_goal
+        if objective.custom_goal and objective.custom_goal_source == "lawyer_thinking"
+        else None
+    )
+    matter_context = matter_intelligence_context or "\n".join(
+        [
+            "Matter metadata:",
+            f"- title: {matter.title}",
+            f"- practice area: {matter.practice_area or 'unknown'}",
+            f"- forum: {matter.forum_level or 'unknown'}",
+            f"- court: {matter.court_name or 'unknown'}",
+            f"- status: {matter.status or 'unknown'}",
+            f"- description: {(matter.description or '').strip() or 'none'}",
+        ]
+    )
     # BUG-024 / BUG-033 / BUG-034 (Ram + Hari 2026-04-27): explicit
     # constraint to use the EXACT citation text from the numbered list.
     # Prior wording ("do not invent citations") was too loose — the
@@ -951,10 +1260,19 @@ def _build_prompt(
         "3. Do not tell the lawyer or client exactly what to do. Use possible "
         "actions for lawyer review, source-backed observations, missing information, "
         "and risks or uncertainties.\n\n"
+        "LAWYER-THINKING ANALYSIS RULES:\n"
+        "1. If LAWYER_THINKING is present, analyze that planned action, assumption, "
+        "concern, or strategy against the matter context and retrieved sources.\n"
+        "2. If the planned action is risky, identify safer alternatives for lawyer "
+        "review instead of instructing the lawyer to take one path.\n"
+        "3. If evidence is insufficient, lower confidence and name missing facts.\n\n"
         "OUTPUT ORGANIZATION:\n"
         "- Put `Source-backed observations`, `Possible next actions for lawyer "
         "review`, `Missing information`, and `Risks/uncertainties` sections in "
         "`rationale` where the evidence supports them.\n"
+        "- Populate `analysis` with dedicated Recommendation, Risk analysis, "
+        "Legal impact, Suggested actions, Confidence score, and confidence "
+        "explanation fields.\n"
         "- Keep every option review-required and source-grounded.\n\n"
         f"TASK: {framing}"
     )
@@ -975,6 +1293,16 @@ def _build_prompt(
         f"RECOMMENDATION_CONTEXT: {objective_context}\n"
         f"OBJECTIVE_FRAMING: {objective_framing}\n"
         f"CUSTOM_GOAL: {custom_goal_line}\n"
+        + (
+            f"LAWYER_THINKING: {lawyer_thinking_line}\n"
+            if lawyer_thinking_line
+            else ""
+        )
+        + (
+            "MATTER_INTELLIGENCE_CONTEXT:\n"
+            f"{matter_context}\n\n"
+        )
+        +
         f"MATTER_TITLE: {matter.title}\n"
         f"FORUM: {matter.forum_level or 'unknown'}\n"
         f"COURT: {matter.court_name or 'unknown'}\n"
@@ -989,7 +1317,11 @@ def _build_prompt(
         "\"low|medium|high\", \"supporting_citations\": [str], "
         "\"risk_notes\": str | null}], \"primary_recommendation_label\": str, "
         "\"rationale\": str, \"assumptions\": [str], \"missing_facts\": [str], "
-        "\"confidence\": \"low|medium|high\", \"next_action\": str | null}"
+        "\"confidence\": \"low|medium|high\", \"next_action\": str | null, "
+        "\"analysis\": {\"recommendation\": str, \"risk_analysis\": [str], "
+        "\"legal_impact\": [str], \"suggested_actions\": [str], "
+        "\"confidence_score\": \"low|medium|high\", "
+        "\"confidence_explanation\": str}}"
     )
     return [
         LLMMessage(role="system", content=system),
@@ -1138,6 +1470,7 @@ def generate_recommendation(
     rec_type: str,
     recommendation_context: str | None = None,
     custom_goal: str | None = None,
+    lawyer_thinking: str | None = None,
     provider: LLMProvider | None = None,
 ) -> Recommendation:
     # BUG-015 (Ram 2026-04-26 Critical reopen) deep dive: prior fix
@@ -1184,6 +1517,7 @@ def generate_recommendation(
         rec_type=rec_type,
         recommendation_context=recommendation_context,
         custom_goal=custom_goal,
+        lawyer_thinking=lawyer_thinking,
     )
     _stage("resolve_objective")
     # BUG-015 deep dive: prior reproductions showed _gather_authorities
@@ -1218,12 +1552,15 @@ def generate_recommendation(
         session.commit()
         _stage("record_bench_rerank")
 
+    matter_intelligence_context = _build_matter_intelligence_context(session, matter)
+    _stage("build_matter_intelligence_context")
     llm = provider or build_provider(purpose=PURPOSE_RECOMMENDATIONS)
     messages = _build_prompt(
         rec_type=rec_type,
         matter=matter,
         authorities=retrieved,
         objective=objective,
+        matter_intelligence_context=matter_intelligence_context,
     )
     prompt_hash = _prompt_hash(messages)
     _stage("build_prompt")
@@ -1397,6 +1734,7 @@ def generate_recommendation(
         next_action=parsed.next_action,
         model_run_id=run.id,
         retrieved_authorities_json=json.dumps(retrieved_identifiers),
+        analysis_json=_analysis_json(parsed, confidence=confidence),
     )
     for rank, option in enumerate(cleaned_options):
         recommendation.options.append(
@@ -1425,7 +1763,12 @@ def generate_recommendation(
         metadata={
             "type": rec_type,
             "recommendation_context": objective.audit_context,
-            "custom_goal": objective.custom_goal_metadata(),
+            "custom_goal": objective.custom_goal_metadata()
+            if objective.custom_goal_source == "custom_goal"
+            else {"present": False},
+            "lawyer_thinking": objective.custom_goal_metadata()
+            if objective.custom_goal_source == "lawyer_thinking"
+            else {"present": False},
             "option_count": len(cleaned_options),
             "verified_citations": total_verified_citations,
             "confidence": confidence,

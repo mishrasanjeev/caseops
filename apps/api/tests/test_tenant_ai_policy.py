@@ -84,6 +84,32 @@ def test_is_model_allowed_honours_allowlist(client) -> None:  # noqa: ARG001
     ) is True
 
 
+def test_recommendation_subpurpose_honours_recommendations_allowlist(client) -> None:  # noqa: ARG001
+    bootstrap_company(client)
+    Session = get_session_factory()
+    with Session() as session:
+        company = session.scalar(select(Company))
+        row = TenantAIPolicy(
+            company_id=company.id,
+            allowed_models_drafting_json=json.dumps([]),
+            allowed_models_recommendations_json=json.dumps(["caseops-approved-rec"]),
+            allowed_models_hearing_pack_json=json.dumps([]),
+            max_tokens_per_session=16384,
+            external_share_requires_approval=True,
+            training_opt_in=False,
+        )
+        session.add(row)
+        session.commit()
+        policy = resolve_tenant_policy(session, company_id=company.id)
+
+    assert is_model_allowed(
+        policy, purpose="recommendation:authority", model="caseops-approved-rec"
+    ) is True
+    assert is_model_allowed(
+        policy, purpose="recommendation:authority", model="caseops-other-rec"
+    ) is False
+
+
 def test_garbage_json_is_treated_as_empty_allowlist(client) -> None:  # noqa: ARG001
     bootstrap_company(client)
     Session = get_session_factory()

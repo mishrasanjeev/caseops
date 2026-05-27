@@ -125,12 +125,13 @@ def is_model_allowed(
     """Return True if the caller's purpose-specific model is allowed
     under the tenant's policy. An empty allowlist means no restriction.
     """
+    normalized_purpose = "recommendations" if purpose.startswith("recommendation:") else purpose
     mapping: dict[str, Iterable[str]] = {
         "drafting": policy.allowed_drafting,
         "recommendations": policy.allowed_recommendations,
         "hearing_pack": policy.allowed_hearing_pack,
     }
-    allowed = mapping.get(purpose, ())
+    allowed = mapping.get(normalized_purpose, ())
     if not allowed:
         return True
     return model in allowed

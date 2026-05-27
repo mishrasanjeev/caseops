@@ -68,13 +68,14 @@ const OBJECTIVE_OPTIONS: { value: ObjectiveSelection; label: string }[] = [
   { value: "contract_risk", label: "Contract risk" },
   { value: "case_preparation", label: "Case preparation" },
   { value: "appeal_strategy", label: "Appeal strategy" },
-  { value: "custom_goal", label: "Custom goal" },
+  { value: "custom_goal", label: "Lawyer thinking" },
 ];
 
 type GenerateInput = {
   type: RecommendationType;
   recommendationContext?: RecommendationObjectiveContext | null;
   customGoal?: string | null;
+  lawyerThinking?: string | null;
 };
 
 function formatDateTime(value: string): string {
@@ -98,7 +99,7 @@ export default function MatterRecommendationsPage() {
   const [pendingType, setPendingType] = useState<RecommendationType | null>(null);
   const [selectedObjective, setSelectedObjective] =
     useState<ObjectiveSelection>("default");
-  const [customGoal, setCustomGoal] = useState("");
+  const [lawyerThinking, setLawyerThinking] = useState("");
   // BUG-016 (Ram 2026-04-26): the backend returns actionable 422 detail
   // when citation grounding fails ("Add more detail to the matter
   // description ... or check corpus coverage before retrying.") but
@@ -151,18 +152,19 @@ export default function MatterRecommendationsPage() {
   });
 
   const buildGenerateInput = (type: RecommendationType): GenerateInput => {
-    const trimmedGoal = customGoal.trim();
+    const trimmedThinking = lawyerThinking.trim();
     return {
       type,
       recommendationContext:
         selectedObjective === "default" ? null : selectedObjective,
-      customGoal: selectedObjective === "custom_goal" ? trimmedGoal : null,
+      customGoal: null,
+      lawyerThinking: trimmedThinking.length > 0 ? trimmedThinking : null,
     };
   };
 
   const handleGenerate = (type: RecommendationType) => {
-    if (selectedObjective === "custom_goal" && customGoal.trim().length === 0) {
-      toast.error("Add a custom goal before generating.");
+    if (selectedObjective === "custom_goal" && lawyerThinking.trim().length === 0) {
+      toast.error("Add lawyer thinking before generating.");
       return;
     }
     generateMutation.mutate(buildGenerateInput(type));
@@ -236,7 +238,18 @@ export default function MatterRecommendationsPage() {
             </CardDescription>
           </div>
           <div className="flex w-full flex-col gap-3 md:max-w-3xl">
-            <div className="grid gap-3 md:grid-cols-[minmax(14rem,18rem),1fr]">
+            <label className="flex flex-col gap-1 text-xs font-medium text-[var(--color-mute)]">
+              What are you thinking or planning for this matter?
+              <Textarea
+                value={lawyerThinking}
+                maxLength={1200}
+                onChange={(event) => setLawyerThinking(event.target.value)}
+                data-testid="recommendation-lawyer-thinking"
+                placeholder="Example: I am planning to skip filing a reply on the next hearing date."
+                className="min-h-24"
+              />
+            </label>
+            <div className="flex max-w-72 flex-col gap-3">
               <label className="flex flex-col gap-1 text-xs font-medium text-[var(--color-mute)]">
                 Objective
                 <select
@@ -254,18 +267,6 @@ export default function MatterRecommendationsPage() {
                   ))}
                 </select>
               </label>
-              {selectedObjective === "custom_goal" ? (
-                <label className="flex flex-col gap-1 text-xs font-medium text-[var(--color-mute)]">
-                  Custom goal
-                  <Textarea
-                    value={customGoal}
-                    maxLength={600}
-                    onChange={(event) => setCustomGoal(event.target.value)}
-                    data-testid="recommendation-custom-goal"
-                    className="min-h-10"
-                  />
-                </label>
-              ) : null}
             </div>
             <div className="flex flex-wrap gap-2">
             <GenerateButton
@@ -390,6 +391,8 @@ function RecommendationCard({
         <p className="text-prose-wide whitespace-pre-line text-sm leading-relaxed text-[var(--color-ink-2)]">
           {rec.rationale}
         </p>
+
+        {rec.analysis ? <AnalysisBlock analysis={rec.analysis} /> : null}
 
         <ol className="flex flex-col gap-3">
           {rec.options.map((option, idx) => (
@@ -517,6 +520,42 @@ function RecommendationCard({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function AnalysisBlock({
+  analysis,
+}: {
+  analysis: NonNullable<Recommendation["analysis"]>;
+}) {
+  return (
+    <div
+      className="grid gap-3 rounded-lg border border-[var(--color-line)] bg-[var(--color-bg-2)] p-4 md:grid-cols-2"
+      data-testid="recommendation-analysis"
+    >
+      <div className="md:col-span-2">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-mute-2)]">
+          Recommendation
+        </div>
+        <p className="mt-1 text-sm leading-relaxed text-[var(--color-ink-2)]">
+          {analysis.recommendation}
+        </p>
+      </div>
+      <Detail title="Risk analysis" items={analysis.risk_analysis} />
+      <Detail title="Legal impact" items={analysis.legal_impact} />
+      <Detail title="Suggested actions" items={analysis.suggested_actions} />
+      <div>
+        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-mute-2)]">
+          Confidence score
+        </div>
+        <p className="mt-2 text-sm capitalize text-[var(--color-ink-2)]">
+          {analysis.confidence_score}
+        </p>
+        <p className="mt-1 text-xs leading-relaxed text-[var(--color-mute)]">
+          {analysis.confidence_explanation}
+        </p>
+      </div>
+    </div>
   );
 }
 

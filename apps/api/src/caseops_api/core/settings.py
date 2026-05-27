@@ -156,6 +156,22 @@ class Settings(BaseSettings):
     google_drive_client_secret: str | None = Field(default=None)
     google_drive_redirect_uri: str | None = Field(default=None)
 
+    # Legal update source ingestion. Deployment-scheduled jobs no-op
+    # until explicitly enabled; admin-triggered syncs remain explicit.
+    legal_update_sync_enabled: bool = Field(default=False)
+    legal_update_prs_base_url: str = Field(default="https://prsindia.org")
+    legal_update_sync_default_limit: int = Field(default=100, ge=1, le=500)
+    legal_update_sync_frequency: str = Field(default="daily", pattern="^(daily|weekly)$")
+    legal_update_summary_enabled: bool = Field(default=True)
+
+    # CNR/case-number tracking. Provider-gated and disabled by default.
+    case_tracking_enabled: bool = Field(default=False)
+    case_tracking_provider: str = Field(default="disabled")
+    ecourtsindia_api_base_url: str | None = Field(default=None)
+    ecourtsindia_api_token: str | None = Field(default=None)
+    case_tracking_poll_limit: int = Field(default=50, ge=1, le=500)
+    case_tracking_default_poll_interval_hours: int = Field(default=24, ge=1, le=168)
+
     # WTD-5.1/WTD-5.3 durable workflow foundation. Disabled by
     # default; these slices only add safe Temporal config/worker
     # plumbing, no-op notification-intent probes, and the in-app

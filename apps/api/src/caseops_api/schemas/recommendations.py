@@ -60,6 +60,15 @@ class RecommendationDecisionRecord(BaseModel):
     created_at: datetime
 
 
+class RecommendationAnalysisRecord(BaseModel):
+    recommendation: str
+    risk_analysis: list[str] = Field(default_factory=list)
+    legal_impact: list[str] = Field(default_factory=list)
+    suggested_actions: list[str] = Field(default_factory=list)
+    confidence_score: ConfidenceLiteral
+    confidence_explanation: str
+
+
 class RecommendationRecord(BaseModel):
     id: str
     matter_id: str
@@ -87,6 +96,7 @@ class RecommendationRecord(BaseModel):
     # ``LitigationStrategyPayload`` by the strategy service. ``None``
     # on every non-strategy recommendation row.
     strategy_payload: LitigationStrategyPayload | None = None
+    analysis: RecommendationAnalysisRecord | None = None
 
 
 class RecommendationListResponse(BaseModel):
@@ -98,10 +108,19 @@ class RecommendationGenerateRequest(BaseModel):
     type: RecommendationTypeLiteral = "authority"
     recommendation_context: RecommendationObjectiveContextLiteral | None = None
     custom_goal: str | None = Field(default=None, max_length=600)
+    lawyer_thinking: str | None = Field(default=None, max_length=1200)
 
     @field_validator("custom_goal", mode="before")
     @classmethod
     def _normalize_custom_goal(cls, value: object) -> str | None:
+        if value is None:
+            return None
+        text = " ".join(str(value).split())
+        return text or None
+
+    @field_validator("lawyer_thinking", mode="before")
+    @classmethod
+    def _normalize_lawyer_thinking(cls, value: object) -> str | None:
         if value is None:
             return None
         text = " ".join(str(value).split())

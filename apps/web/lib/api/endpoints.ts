@@ -1090,6 +1090,7 @@ export async function generateRecommendation(input: {
   type: RecommendationType;
   recommendationContext?: RecommendationObjectiveContext | null;
   customGoal?: string | null;
+  lawyerThinking?: string | null;
 }): Promise<Recommendation> {
   const data = await apiRequest<unknown>(
     `/api/matters/${input.matterId}/recommendations`,
@@ -1099,6 +1100,7 @@ export async function generateRecommendation(input: {
         type: input.type,
         recommendation_context: input.recommendationContext ?? null,
         custom_goal: input.customGoal ?? null,
+        lawyer_thinking: input.lawyerThinking ?? null,
       },
     },
   );
@@ -2687,12 +2689,28 @@ export async function fetchStatuteSection(
 
 // Slice S4 (MOD-TS-017, 2026-04-25) — matter statute references.
 export type LegalUpdateType =
+  | "act"
   | "amendment"
+  | "ordinance"
   | "notification"
+  | "repeal"
   | "regulation"
   | "circular"
   | "order"
   | "practice_direction";
+
+export type LegalUpdateSummaryRecord = {
+  plain_english_summary: string;
+  affected_acts: string[];
+  affected_sections: string[];
+  change_kind: string;
+  practical_legal_impact: string;
+  suggested_lawyer_review_actions: string[];
+  confidence: "low" | "medium" | "high";
+  source_url: string;
+  provenance_status: string;
+  review_framing: string;
+};
 
 export type LegalUpdateWatchlistRecord = {
   id: string;
@@ -2724,6 +2742,7 @@ export type LegalUpdateRecord = {
   id: string;
   company_id: string;
   watchlist_id: string;
+  source_record_id: string | null;
   update_type: LegalUpdateType;
   title: string;
   statute_id: string | null;
@@ -2743,6 +2762,7 @@ export type LegalUpdateRecord = {
   published_date: string | null;
   decision_date: string | null;
   snippet: string | null;
+  summary: LegalUpdateSummaryRecord | null;
   is_read: boolean;
   read_at: string | null;
   dismissed_at: string | null;
@@ -2769,6 +2789,68 @@ export type LegalUpdateDigestPreviewResponse = {
   updates: LegalUpdateRecord[];
   delivery_status: "in_app_only";
   delivery_note: string;
+};
+
+export type LegalUpdateSourceRunRecord = {
+  id: string;
+  source_key: string;
+  status: "completed" | "failed" | "partial";
+  started_at: string;
+  completed_at: string | null;
+  fetched_count: number;
+  created_count: number;
+  changed_count: number;
+  error_message: string | null;
+  metadata: Record<string, unknown>;
+};
+
+export type LegalUpdateSourceRecord = {
+  id: string;
+  source_key: string;
+  source_record_key: string;
+  update_type: LegalUpdateType;
+  title: string;
+  normalized_title: string;
+  source_url: string;
+  source_document_url: string | null;
+  published_date: string | null;
+  effective_date: string | null;
+  act_year: number | null;
+  statute_id: string | null;
+  statute_section_ids: string[];
+  sections_changed: string[];
+  source_category: string | null;
+  provenance_status: string;
+  content_hash: string;
+  summary: LegalUpdateSummaryRecord | null;
+  summary_status: "pending" | "completed" | "failed" | "not_required";
+  first_seen_at: string;
+  last_seen_at: string;
+  updated_at: string;
+};
+
+export type LegalUpdateSourceRecordListResponse = {
+  records: LegalUpdateSourceRecord[];
+};
+
+export type StatuteChangeEventRecord = {
+  id: string;
+  statute_id: string;
+  source_record_id: string;
+  change_type: "new_act" | "amendment" | "repeal" | "notification" | "unknown";
+  title: string;
+  sections_changed: string[];
+  summary: string | null;
+  comparison: Record<string, unknown>;
+  published_date: string | null;
+  effective_date: string | null;
+  source_url: string;
+  created_at: string;
+};
+
+export type StatuteAmendmentHistoryResponse = {
+  statute_id: string;
+  events: StatuteChangeEventRecord[];
 };
 
 export type LegalUpdateWatchlistInput = {
@@ -2852,6 +2934,226 @@ export async function fetchLegalUpdateDigestPreview(
   limit = 10,
 ): Promise<LegalUpdateDigestPreviewResponse> {
   return apiRequest(`/api/statutes/legal-updates/digest-preview?limit=${limit}`);
+}
+
+export async function listLegalUpdateSourceRecords(input?: {
+  sourceKey?: string;
+  updateType?: LegalUpdateType;
+  statuteId?: string;
+  summaryStatus?: LegalUpdateSourceRecord["summary_status"];
+  sinceDate?: string;
+  untilDate?: string;
+  limit?: number;
+}): Promise<LegalUpdateSourceRecordListResponse> {
+  const qs = new URLSearchParams();
+  if (input?.sourceKey) qs.set("source_key", input.sourceKey);
+  if (input?.updateType) qs.set("update_type", input.updateType);
+  if (input?.statuteId) qs.set("statute_id", input.statuteId);
+  if (input?.summaryStatus) qs.set("summary_status", input.summaryStatus);
+  if (input?.sinceDate) qs.set("since_date", input.sinceDate);
+  if (input?.untilDate) qs.set("until_date", input.untilDate);
+  if (input?.limit) qs.set("limit", String(input.limit));
+  return apiRequest(
+    `/api/statutes/legal-updates/source-records${qs.toString() ? `?${qs.toString()}` : ""}`,
+  );
+}
+
+export async function runLegalUpdateSourceSync(input?: {
+  sourceKey?: string;
+  limit?: number;
+}): Promise<LegalUpdateSourceRunRecord> {
+  const sourceKey = input?.sourceKey ?? "prs_acts_parliament";
+  const qs = new URLSearchParams();
+  if (input?.limit) qs.set("limit", String(input.limit));
+  return apiRequest(
+    `/api/statutes/legal-updates/sources/${encodeURIComponent(sourceKey)}/sync${
+      qs.toString() ? `?${qs.toString()}` : ""
+    }`,
+    { method: "POST" },
+  );
+}
+
+export async function fetchStatuteAmendmentHistory(
+  statuteId: string,
+): Promise<StatuteAmendmentHistoryResponse> {
+  return apiRequest(
+    `/api/statutes/${encodeURIComponent(statuteId)}/amendment-history`,
+  );
+}
+
+export type CaseTrackingProviderStatus = {
+  enabled: boolean;
+  provider: string;
+  configured: boolean;
+  reason: string | null;
+};
+
+export type CaseTrackingSearchInput = {
+  cnr_number?: string | null;
+  case_number?: string | null;
+  court_code?: string | null;
+  state?: string | null;
+  court_name?: string | null;
+};
+
+export type CaseTrackingSearchResult = {
+  provider: string;
+  cnr_number: string | null;
+  case_number: string | null;
+  court_code: string | null;
+  court_name: string | null;
+  case_title: string;
+  party_names: string[];
+  current_status: string | null;
+  current_stage: string | null;
+  next_hearing_on: string | null;
+  source_url: string | null;
+  provenance_label: string;
+};
+
+export type CaseTrackingSearchResponse = {
+  provider: string;
+  results: CaseTrackingSearchResult[];
+};
+
+export type TrackedCaseRecord = {
+  id: string;
+  provider: string;
+  cnr_number: string | null;
+  case_number: string | null;
+  court_code: string | null;
+  court_name: string | null;
+  case_title: string;
+  party_names: string[];
+  current_status: string | null;
+  current_stage: string | null;
+  next_hearing_on: string | null;
+  last_provider_checked_at: string | null;
+  last_error: string | null;
+  metadata: Record<string, unknown>;
+};
+
+export type CaseTrackingBookmarkRecord = {
+  id: string;
+  company_id: string;
+  tracked_case_id: string;
+  created_by_membership_id: string;
+  matter_id: string | null;
+  name: string | null;
+  notification_enabled: boolean;
+  is_archived: boolean;
+  created_at: string;
+  updated_at: string;
+  archived_at: string | null;
+  tracked_case: TrackedCaseRecord;
+  update_count: number;
+};
+
+export type CaseTrackingBookmarkListResponse = {
+  bookmarks: CaseTrackingBookmarkRecord[];
+};
+
+export type CaseTrackingBookmarkInput = {
+  provider?: string;
+  cnr_number?: string | null;
+  case_number?: string | null;
+  court_code?: string | null;
+  court_name?: string | null;
+  case_title: string;
+  party_names?: string[];
+  current_status?: string | null;
+  current_stage?: string | null;
+  next_hearing_on?: string | null;
+  matter_id?: string | null;
+  name?: string | null;
+  notification_enabled?: boolean;
+  metadata?: Record<string, unknown>;
+};
+
+export type CaseTrackingUpdateType =
+  | "new_order"
+  | "new_judgment"
+  | "hearing_update"
+  | "status_change"
+  | "case_metadata_change";
+
+export type CaseTrackingUpdateRecord = {
+  id: string;
+  company_id: string;
+  tracked_case_id: string;
+  update_type: CaseTrackingUpdateType;
+  source_record_key: string;
+  title: string;
+  summary: string | null;
+  ai_summary: Record<string, unknown> | null;
+  source_url: string | null;
+  order_date: string | null;
+  hearing_date: string | null;
+  provider_metadata: Record<string, unknown>;
+  created_at: string;
+};
+
+export type CaseTrackingUpdateListResponse = {
+  updates: CaseTrackingUpdateRecord[];
+};
+
+export type CaseTrackingRefreshResponse = {
+  bookmark: CaseTrackingBookmarkRecord;
+  created_updates: CaseTrackingUpdateRecord[];
+  delivery_status: "in_app_only";
+};
+
+export async function fetchCaseTrackingStatus(): Promise<CaseTrackingProviderStatus> {
+  return apiRequest("/api/case-tracking/status");
+}
+
+export async function searchTrackedCases(
+  input: CaseTrackingSearchInput,
+): Promise<CaseTrackingSearchResponse> {
+  return apiRequest("/api/case-tracking/search", {
+    method: "POST",
+    body: input,
+  });
+}
+
+export async function createCaseTrackingBookmark(
+  input: CaseTrackingBookmarkInput,
+): Promise<CaseTrackingBookmarkRecord> {
+  return apiRequest("/api/case-tracking/bookmarks", {
+    method: "POST",
+    body: input,
+  });
+}
+
+export async function listCaseTrackingBookmarks(): Promise<CaseTrackingBookmarkListResponse> {
+  return apiRequest("/api/case-tracking/bookmarks");
+}
+
+export async function updateCaseTrackingBookmark(
+  bookmarkId: string,
+  input: { name?: string | null; notification_enabled?: boolean; is_archived?: boolean },
+): Promise<CaseTrackingBookmarkRecord> {
+  return apiRequest(`/api/case-tracking/bookmarks/${encodeURIComponent(bookmarkId)}`, {
+    method: "PATCH",
+    body: input,
+  });
+}
+
+export async function refreshCaseTrackingBookmark(
+  bookmarkId: string,
+): Promise<CaseTrackingRefreshResponse> {
+  return apiRequest(
+    `/api/case-tracking/bookmarks/${encodeURIComponent(bookmarkId)}/refresh`,
+    { method: "POST" },
+  );
+}
+
+export async function listCaseTrackingUpdates(
+  bookmarkId: string,
+): Promise<CaseTrackingUpdateListResponse> {
+  return apiRequest(
+    `/api/case-tracking/bookmarks/${encodeURIComponent(bookmarkId)}/updates`,
+  );
 }
 
 export type MatterStatuteReferenceRecord = {

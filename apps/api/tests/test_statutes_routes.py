@@ -6,8 +6,10 @@ Maps to FT-S2-1 .. FT-S2-7 in
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import date
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
@@ -20,15 +22,33 @@ from caseops_api.db.models import (
     ContractLegalReference,
     DocumentProcessingJob,
     LegalUpdateAlert,
+    LegalUpdateSourceRecord,
     MatterStatuteReference,
     ModelRun,
+    NotificationDeliveryIntent,
+    StatuteChangeEvent,
     StatuteSection,
 )
 from caseops_api.db.session import get_session_factory
 from caseops_api.scripts.seed_statutes import _seed
+from caseops_api.services.legal_update_sources import (
+    PrsActsParliamentAdapter,
+    sync_source,
+    upsert_source_records,
+)
 from tests.test_auth_company import auth_headers, bootstrap_company
 
 ADP18_AUTHORITY_RECORD_ID = "adp18-supreme-court-notification"
+PRS_FIXTURE_HTML = """
+<html>
+  <body>
+    <a href="/acts/parliament/negotiable-instruments-act-1881">
+      The Negotiable Instruments Act, 1881
+    </a>
+    <a href="mailto:test@example.com">Contact</a>
+  </body>
+</html>
+"""
 
 
 def _bootstrap_with_seed(client: TestClient) -> str:
@@ -398,6 +418,219 @@ def test_adp18_watchlist_rejects_unbounded_and_unknown_source_filters(
     )
     assert unknown_source.status_code == 400
     assert "source registry" in unknown_source.json()["detail"]
+
+
+def test_ai_enhancement_prs_parser_and_sync_are_idempotent(
+    client: TestClient,
+) -> None:
+    token = _bootstrap_with_seed(client)
+    adapter = PrsActsParliamentAdapter(
+        base_url="https://prsindia.org",
+        html=PRS_FIXTURE_HTML,
+    )
+    parsed = adapter.fetch_records(limit=10)
+    assert len(parsed) == 1
+    assert parsed[0].source_key == "prs_acts_parliament"
+    assert parsed[0].source_category == "prs_india"
+    assert parsed[0].update_type == "act"
+    assert parsed[0].act_year == 1881
+
+    with get_session_factory()() as session:
+        run = sync_source(session, html=PRS_FIXTURE_HTML)
+        session.commit()
+        assert run.status == "completed"
+        assert run.fetched_count == 1
+        assert run.created_count == 1
+        assert run.changed_count == 0
+
+        rerun = sync_source(session, html=PRS_FIXTURE_HTML)
+        session.commit()
+        assert rerun.status == "completed"
+        assert rerun.created_count == 0
+        assert rerun.changed_count == 0
+
+        changed = replace(
+            parsed[0],
+            content_hash="0" * 64,
+            raw_metadata={**parsed[0].raw_metadata, "test_revision": "changed"},
+        )
+        created_count, changed_count, _, changed_ids = upsert_source_records(
+            session,
+            [changed],
+        )
+        session.commit()
+        assert created_count == 0
+        assert changed_count == 1
+        assert changed_ids
+
+        dated_record = replace(
+            parsed[0],
+            source_record_key="dated-prs-record",
+            title="The Dated Example Act, 2026",
+            normalized_title="the dated example act 2026",
+            source_url="https://prsindia.org/acts/parliament/dated-example-act",
+            source_document_url=(
+                "https://prsindia.org/acts/parliament/dated-example-act"
+            ),
+            published_date=date(2026, 5, 26),
+            act_year=2026,
+            content_hash="1" * 64,
+            raw_metadata={
+                **parsed[0].raw_metadata,
+                "title": "The Dated Example Act, 2026",
+            },
+        )
+        dated_created_count, _, dated_ids, _ = upsert_source_records(
+            session,
+            [dated_record],
+        )
+        session.commit()
+        assert dated_created_count == 1
+        assert dated_ids
+
+    source_records = client.get(
+        "/api/statutes/legal-updates/source-records",
+        headers=auth_headers(token),
+    )
+    assert source_records.status_code == 200, source_records.text
+    records = [
+        record
+        for record in source_records.json()["records"]
+        if record["source_key"] == "prs_acts_parliament"
+        and "Negotiable Instruments" in record["title"]
+    ]
+    assert records
+    assert records[0]["source_key"] == "prs_acts_parliament"
+    assert records[0]["summary_status"] in {"failed", "completed", "not_required"}
+    assert records[0]["summary"]["review_framing"] == (
+        "Source-backed summary for lawyer review."
+    )
+
+    filtered_records = client.get(
+        (
+            "/api/statutes/legal-updates/source-records"
+            "?since_date=2026-05-01&until_date=2026-12-31"
+        ),
+        headers=auth_headers(token),
+    )
+    assert filtered_records.status_code == 200, filtered_records.text
+    filtered_titles = {record["title"] for record in filtered_records.json()["records"]}
+    assert "The Dated Example Act, 2026" in filtered_titles
+    assert "The Negotiable Instruments Act, 1881" not in filtered_titles
+
+    history = client.get(
+        "/api/statutes/ni-act-1881/amendment-history",
+        headers=auth_headers(token),
+    )
+    assert history.status_code == 200, history.text
+    assert history.json()["events"]
+    assert history.json()["events"][0]["source_url"].startswith("https://prsindia.org")
+
+    with get_session_factory()() as session:
+        assert session.scalar(select(LegalUpdateSourceRecord)) is not None
+        assert session.scalar(select(StatuteChangeEvent)) is not None
+
+
+def test_ai_enhancement_source_sync_route_uses_configured_source(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    token = _bootstrap_with_seed(client)
+
+    def fixture_sync_source(session, **kwargs):
+        return sync_source(session, html=PRS_FIXTURE_HTML, **kwargs)
+
+    monkeypatch.setattr(
+        "caseops_api.api.routes.statutes.sync_source",
+        fixture_sync_source,
+    )
+
+    response = client.post(
+        "/api/statutes/legal-updates/sources/prs_acts_parliament/sync?limit=1",
+        headers=auth_headers(token),
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["source_key"] == "prs_acts_parliament"
+    assert body["status"] == "completed"
+    assert body["fetched_count"] == 1
+    assert body["created_count"] == 1
+
+
+def test_ai_enhancement_source_records_match_watchlists_and_enqueue_in_app_intents(
+    client: TestClient,
+) -> None:
+    token = _bootstrap_with_seed(client)
+    with get_session_factory()() as session:
+        run = sync_source(session, html=PRS_FIXTURE_HTML)
+        session.commit()
+        assert run.created_count == 1
+
+    create = client.post(
+        "/api/statutes/legal-updates/watchlists",
+        headers=auth_headers(token),
+        json={
+            "name": "PRS NI Act updates",
+            "source_key": "prs_acts_parliament",
+            "source_category": "prs_india",
+            "statute_terms": ["Negotiable Instruments"],
+            "update_types": ["act"],
+        },
+    )
+    assert create.status_code == 201, create.text
+    watchlist = create.json()
+
+    run_watchlist = client.post(
+        f"/api/statutes/legal-updates/watchlists/{watchlist['id']}/run",
+        headers=auth_headers(token),
+        json={"preview_only": False, "limit": 10},
+    )
+    assert run_watchlist.status_code == 200, run_watchlist.text
+    body = run_watchlist.json()
+    assert body["matched_count"] == 1
+    assert body["created_count"] == 1
+    assert body["matches"][0]["source_record_id"]
+    assert body["matches"][0]["summary"]["review_framing"] == (
+        "Source-backed summary for lawyer review."
+    )
+
+    rerun = client.post(
+        f"/api/statutes/legal-updates/watchlists/{watchlist['id']}/run",
+        headers=auth_headers(token),
+        json={"preview_only": False, "limit": 10},
+    )
+    assert rerun.status_code == 200, rerun.text
+    assert rerun.json()["created_count"] == 0
+
+    listed = client.get(
+        "/api/statutes/legal-updates",
+        headers=auth_headers(token),
+    )
+    assert listed.status_code == 200, listed.text
+    assert listed.json()["updates"][0]["source_record_id"]
+    assert listed.json()["updates"][0]["summary"]["review_framing"] == (
+        "Source-backed summary for lawyer review."
+    )
+
+    with get_session_factory()() as session:
+        alert_count = session.scalar(
+            select(func.count()).select_from(LegalUpdateAlert).where(
+                LegalUpdateAlert.watchlist_id == watchlist["id"]
+            )
+        )
+        assert alert_count == 1
+        intents = list(
+            session.scalars(
+                select(NotificationDeliveryIntent).where(
+                    NotificationDeliveryIntent.company_id == watchlist["company_id"],
+                    NotificationDeliveryIntent.event_type
+                    == "legal_update.watchlist_matched",
+                )
+            )
+        )
+        assert len(intents) == 1
+        assert intents[0].channel == "in_app"
+        assert intents[0].status == "queued"
 
 
 def test_adp18_matter_and_contract_relevance_explanations_are_bounded(

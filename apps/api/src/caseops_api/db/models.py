@@ -2396,6 +2396,11 @@ class LegalUpdateAlert(Base):
         index=True,
     )
     source_record_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    source_record_id: Mapped[str | None] = mapped_column(
+        ForeignKey("legal_update_source_records.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     update_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     statute_id: Mapped[str | None] = mapped_column(
@@ -2433,6 +2438,7 @@ class LegalUpdateAlert(Base):
     provenance_status: Mapped[str] = mapped_column(String(80), nullable=False)
     relevance_explanation: Mapped[str] = mapped_column(String(500), nullable=False)
     snippet: Mapped[str | None] = mapped_column(String(280), nullable=True)
+    summary_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     effective_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     published_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     decision_date: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -2453,11 +2459,346 @@ class LegalUpdateAlert(Base):
 
     company: Mapped[Company] = relationship()
     watchlist: Mapped[LegalUpdateWatchlist] = relationship(back_populates="alerts")
+    source_record: Mapped[LegalUpdateSourceRecord | None] = relationship(
+        "LegalUpdateSourceRecord"
+    )
     statute: Mapped[Statute | None] = relationship("Statute")
     statute_section: Mapped[StatuteSection | None] = relationship("StatuteSection")
     authority_document: Mapped[AuthorityDocument | None] = relationship("AuthorityDocument")
     matter: Mapped[Matter | None] = relationship("Matter")
     contract: Mapped[Contract | None] = relationship("Contract")
+
+
+class LegalUpdateSourceRun(Base):
+    __tablename__ = "legal_update_source_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    source_key: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    fetched_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    changed_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+
+class LegalUpdateSourceRecord(Base):
+    __tablename__ = "legal_update_source_records"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_key",
+            "source_record_key",
+            name="uq_legal_update_source_records_source_record",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    source_key: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    source_record_key: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    update_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    normalized_title: Mapped[str] = mapped_column(String(500), nullable=False, index=True)
+    source_url: Mapped[str] = mapped_column(String(800), nullable=False)
+    source_document_url: Mapped[str | None] = mapped_column(String(800), nullable=True)
+    published_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    effective_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    act_year: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    statute_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("statutes.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    statute_section_ids_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    sections_changed_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    source_category: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    provenance_status: Mapped[str] = mapped_column(String(80), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    raw_metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    summary_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    summary_status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default="pending",
+        index=True,
+    )
+    model_run_id: Mapped[str | None] = mapped_column(
+        ForeignKey("model_runs.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    first_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    statute: Mapped[Statute | None] = relationship("Statute")
+    model_run: Mapped[ModelRun | None] = relationship("ModelRun")
+
+
+class StatuteChangeEvent(Base):
+    __tablename__ = "statute_change_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "statute_id",
+            "source_record_id",
+            "change_type",
+            name="uq_statute_change_events_source_change",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    statute_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("statutes.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    source_record_id: Mapped[str] = mapped_column(
+        ForeignKey("legal_update_source_records.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    change_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    sections_changed_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    comparison_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    published_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    effective_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    source_url: Mapped[str] = mapped_column(String(800), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+
+    statute: Mapped[Statute] = relationship("Statute")
+    source_record: Mapped[LegalUpdateSourceRecord] = relationship(
+        "LegalUpdateSourceRecord"
+    )
+
+
+class TrackedCase(Base):
+    __tablename__ = "tracked_cases"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            "provider",
+            "identity_key",
+            name="uq_tracked_cases_provider_identity",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    provider: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    identity_key: Mapped[str] = mapped_column(String(260), nullable=False, index=True)
+    cnr_number: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    normalized_cnr_number: Mapped[str | None] = mapped_column(
+        String(32),
+        nullable=True,
+        index=True,
+    )
+    case_number: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    normalized_case_number: Mapped[str | None] = mapped_column(
+        String(120),
+        nullable=True,
+        index=True,
+    )
+    court_code: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    court_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    case_title: Mapped[str] = mapped_column(String(500), nullable=False)
+    party_names_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    current_status: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    current_stage: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    next_hearing_on: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    last_snapshot_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    last_provider_checked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+    )
+    last_provider_refresh_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship()
+    bookmarks: Mapped[list[TrackedCaseBookmark]] = relationship(
+        back_populates="tracked_case",
+        cascade="all, delete-orphan",
+    )
+    updates: Mapped[list[TrackedCaseUpdate]] = relationship(
+        back_populates="tracked_case",
+        cascade="all, delete-orphan",
+    )
+
+
+class TrackedCaseBookmark(Base):
+    __tablename__ = "tracked_case_bookmarks"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            "tracked_case_id",
+            "created_by_membership_id",
+            "active_scope_key",
+            name="uq_tracked_case_bookmarks_active_scope",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    tracked_case_id: Mapped[str] = mapped_column(
+        ForeignKey("tracked_cases.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    created_by_membership_id: Mapped[str] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matters.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    scope_key: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    active_scope_key: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    notification_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    is_archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    company: Mapped[Company] = relationship()
+    tracked_case: Mapped[TrackedCase] = relationship(back_populates="bookmarks")
+    created_by_membership: Mapped[CompanyMembership] = relationship()
+    matter: Mapped[Matter | None] = relationship("Matter")
+
+
+class TrackedCaseUpdate(Base):
+    __tablename__ = "tracked_case_updates"
+    __table_args__ = (
+        UniqueConstraint(
+            "tracked_case_id",
+            "source_record_key",
+            "update_type",
+            name="uq_tracked_case_updates_source",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    tracked_case_id: Mapped[str] = mapped_column(
+        ForeignKey("tracked_cases.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    update_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    source_record_key: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ai_summary_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    source_url: Mapped[str | None] = mapped_column(String(800), nullable=True)
+    order_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    hearing_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    previous_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    current_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    provider_metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    model_run_id: Mapped[str | None] = mapped_column(
+        ForeignKey("model_runs.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship()
+    tracked_case: Mapped[TrackedCase] = relationship(back_populates="updates")
+    model_run: Mapped[ModelRun | None] = relationship("ModelRun")
+
+
+class TrackedCasePollRun(Base):
+    __tablename__ = "tracked_case_poll_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str | None] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    checked_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    update_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+    company: Mapped[Company | None] = relationship()
 
 
 class MatterActivity(Base):
@@ -5401,6 +5742,7 @@ class Recommendation(Base):
     strategy_payload_json: Mapped[str | None] = mapped_column(
         Text, nullable=True
     )
+    analysis_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,

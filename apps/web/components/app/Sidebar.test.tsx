@@ -44,4 +44,17 @@ describe("SidebarBody resolved capability navigation", () => {
       "/app/admin",
     );
   });
+
+  it("shows case tracking when authority search is available", () => {
+    roleMock.mockReturnValue("viewer");
+    resolvedMock.mockReturnValue(["authorities:search"]);
+    canMock.mockReturnValue(false);
+
+    render(<SidebarBody pathname="/app/case-tracking" />);
+
+    expect(screen.getByRole("link", { name: "Case tracking" })).toHaveAttribute(
+      "href",
+      "/app/case-tracking",
+    );
+  });
 });
