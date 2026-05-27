@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from datetime import date
+from urllib.parse import urlparse
 
 import pytest
 from fastapi.testclient import TestClient
@@ -524,7 +525,9 @@ def test_ai_enhancement_prs_parser_and_sync_are_idempotent(
     )
     assert history.status_code == 200, history.text
     assert history.json()["events"]
-    assert history.json()["events"][0]["source_url"].startswith("https://prsindia.org")
+    parsed_source_url = urlparse(history.json()["events"][0]["source_url"])
+    assert parsed_source_url.scheme == "https"
+    assert parsed_source_url.netloc == "prsindia.org"
 
     with get_session_factory()() as session:
         assert session.scalar(select(LegalUpdateSourceRecord)) is not None
