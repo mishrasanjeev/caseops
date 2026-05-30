@@ -35,10 +35,13 @@ import pytest
 from pydantic import ValidationError
 
 from caseops_api.core.settings import get_settings
+from caseops_api.db.base import Base
+from caseops_api.db.models import Company, CompanyType
 from caseops_api.db.session import (
     _ENGINE_CACHE,
     clear_engine_cache,
     get_engine,
+    get_session_factory,
 )
 
 
@@ -200,7 +203,63 @@ def test_sqlite_engine_uses_check_same_thread_false(
     with patch("caseops_api.db.session.create_engine", _fake_create_engine):
         get_engine()
 
-    assert captured["connect_args"] == {"check_same_thread": False}
+    assert captured["connect_args"] == {
+        "check_same_thread": False,
+        "timeout": 30,
+    }
+
+
+def test_sqlite_engine_enables_wal_and_busy_timeout(tmp_path) -> None:
+    """Playwright CI runs the API and web app against one SQLite file.
+
+    WAL keeps long-lived read requests from blocking a following bootstrap
+    write; busy_timeout gives genuine write/write contention a bounded wait.
+    """
+    db_path = tmp_path / "caseops-e2e.db"
+
+    engine = get_engine(f"sqlite:///{db_path.as_posix()}")
+
+    with engine.connect() as connection:
+        assert connection.exec_driver_sql("PRAGMA busy_timeout").scalar() >= 30_000
+        assert connection.exec_driver_sql("PRAGMA journal_mode").scalar().lower() == "wal"
+
+
+def test_sqlite_session_serializes_write_until_commit(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db_path = tmp_path / "caseops-e2e.db"
+    database_url = f"sqlite:///{db_path.as_posix()}"
+    engine = get_engine(database_url)
+    Base.metadata.create_all(bind=engine)
+    events: list[str] = []
+
+    class _FakeLock:
+        def acquire(self) -> None:
+            events.append("acquire")
+
+        def release(self) -> None:
+            events.append("release")
+
+    monkeypatch.setattr("caseops_api.db.session._SQLITE_WRITE_LOCK", _FakeLock())
+
+    session = get_session_factory(database_url)()
+    try:
+        session.add(
+            Company(
+                name="E2E Lock Test",
+                slug="e2e-lock-test",
+                company_type=CompanyType.LAW_FIRM,
+                tenant_key="e2e-lock-test",
+            )
+        )
+        session.flush()
+        assert events == ["acquire"]
+
+        session.commit()
+        assert events == ["acquire", "release"]
+    finally:
+        session.close()
 
 
 # ---------- engine cache invalidation on pool-setting change ------

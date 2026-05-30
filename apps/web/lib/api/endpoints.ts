@@ -2989,6 +2989,7 @@ export type CaseTrackingProviderStatus = {
 };
 
 export type CaseTrackingSearchInput = {
+  query?: string | null;
   cnr_number?: string | null;
   case_number?: string | null;
   court_code?: string | null;

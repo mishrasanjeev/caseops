@@ -6958,6 +6958,8 @@ export interface components {
             court_code?: string | null;
             /** Court Name */
             court_name?: string | null;
+            /** Query */
+            query?: string | null;
             /** State */
             state?: string | null;
         };

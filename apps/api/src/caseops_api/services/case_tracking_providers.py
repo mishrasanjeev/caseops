@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Protocol
+from urllib.parse import quote
 
 import httpx
 
@@ -22,6 +23,7 @@ class CaseTrackingProviderError(RuntimeError):
 
 @dataclass(frozen=True)
 class CaseSearchQuery:
+    query: str | None = None
     cnr_number: str | None = None
     case_number: str | None = None
     court_code: str | None = None
@@ -83,9 +85,15 @@ def _compact(value: object, *, limit: int = 500) -> str | None:
 def _parse_date(value: object) -> date | None:
     if value in (None, ""):
         return None
+    if isinstance(value, datetime):
+        return value.date()
     if isinstance(value, date) and not isinstance(value, datetime):
         return value
     text = str(value).strip()
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).date()
+    except ValueError:
+        pass
     for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y"):
         try:
             return datetime.strptime(text, fmt).date()
@@ -150,41 +158,220 @@ def _events(raw: object, *, prefix: str) -> list[ProviderCaseEvent]:
     return events
 
 
-def _snapshot_from_payload(payload: dict[str, object], *, provider: str) -> ProviderCaseSnapshot:
-    case = payload.get("case")
-    if isinstance(case, dict):
-        payload = case
-    party_names = payload.get("party_names") or payload.get("parties") or []
-    if not isinstance(party_names, list):
-        party_names = []
+def _data_payload(payload: object) -> object:
+    if isinstance(payload, dict) and "data" in payload:
+        return payload["data"]
+    return payload
+
+
+def _first_dict(*values: object) -> dict[str, object] | None:
+    for value in values:
+        if isinstance(value, dict):
+            return value
+    return None
+
+
+def _first_list(*values: object) -> list[object]:
+    for value in values:
+        if isinstance(value, list):
+            return value
+    return []
+
+
+def _string_list(value: object, *, limit: int = 20) -> list[str]:
+    if isinstance(value, list):
+        return [
+            compacted
+            for item in value[:limit]
+            if (compacted := _compact(item, limit=160))
+        ]
+    if text := _compact(value, limit=160):
+        return [text]
+    return []
+
+
+def _display_title(payload: dict[str, object]) -> str:
+    title = _compact(payload.get("case_title") or payload.get("title"), limit=500)
+    if title:
+        return title
+    petitioners = _string_list(payload.get("petitioners"))
+    respondents = _string_list(payload.get("respondents"))
+    if petitioners and respondents:
+        return f"{petitioners[0]} v {respondents[0]}"
+    if petitioners:
+        return petitioners[0]
+    if respondents:
+        return respondents[0]
+    return "Tracked case"
+
+
+def _court_name(payload: dict[str, object], descriptions: dict[str, object] | None) -> str | None:
+    court_name = _compact(payload.get("court_name") or payload.get("courtName"), limit=255)
+    if court_name:
+        return court_name
+    court_code = _compact(
+        payload.get("court_code")
+        or payload.get("courtCode")
+        or payload.get("cnrCourtCode"),
+        limit=80,
+    )
+    enum_lookup = descriptions.get("enumLookup") if descriptions else None
+    if isinstance(enum_lookup, dict):
+        court_lookup = enum_lookup.get("courtCode")
+        if isinstance(court_lookup, dict) and court_code in court_lookup:
+            return _compact(court_lookup[court_code], limit=255)
+    return None
+
+
+def _case_status(payload: dict[str, object], descriptions: dict[str, object] | None) -> str | None:
+    raw = _compact(payload.get("current_status") or payload.get("caseStatus"), limit=160)
+    enum_lookup = descriptions.get("enumLookup") if descriptions else None
+    if isinstance(enum_lookup, dict):
+        status_lookup = enum_lookup.get("caseStatus")
+        if isinstance(status_lookup, dict) and raw in status_lookup:
+            return _compact(status_lookup[raw], limit=160)
+    return raw
+
+
+def _case_order_events(
+    raw: object,
+    *,
+    prefix: str,
+    cnr: str | None,
+    order_download_base_url: str | None = None,
+) -> list[ProviderCaseEvent]:
+    if not isinstance(raw, list):
+        return []
+    events: list[ProviderCaseEvent] = []
+    for item in raw[:50]:
+        if not isinstance(item, dict):
+            continue
+        order_url = _compact(item.get("orderUrl") or item.get("pdfFile"), limit=800)
+        title = _compact(
+            item.get("description")
+            or item.get("orderType")
+            or item.get("title")
+            or "Case order",
+            limit=500,
+        )
+        if not title:
+            continue
+        event_date = _parse_date(item.get("orderDate") or item.get("date"))
+        source_key = order_url or _stable_key(prefix, item)
+        source_url = None
+        if cnr and order_url:
+            if re.match(r"^https?://", order_url, flags=re.IGNORECASE):
+                source_url = order_url
+            elif order_download_base_url:
+                source_url = (
+                    f"{order_download_base_url.rstrip('/')}/case/{quote(cnr)}/order/"
+                    f"{quote(order_url, safe='')}"
+                )
+            else:
+                source_url = f"/api/partner/case/{quote(cnr)}/order/{quote(order_url, safe='')}"
+        events.append(
+            ProviderCaseEvent(
+                source_record_key=f"{prefix}:{source_key}",
+                title=(
+                    f"{title} dated {event_date.isoformat()}"
+                    if event_date and "dated" not in title.lower()
+                    else title
+                ),
+                event_date=event_date,
+                source_url=source_url,
+                text=_compact(item.get("markdownContent") or item.get("text"), limit=4000),
+                provider_summary=_compact(item.get("summary") or item.get("aiSummary"), limit=2000),
+                metadata={
+                    key: str(value)[:500]
+                    for key, value in item.items()
+                    if key not in {"markdownContent", "text", "summary", "aiSummary"}
+                },
+            )
+        )
+    return events
+
+
+def _snapshot_from_payload(
+    payload: dict[str, object],
+    *,
+    provider: str,
+    order_download_base_url: str | None = None,
+) -> ProviderCaseSnapshot:
+    data = _data_payload(payload)
+    descriptions = None
+    if isinstance(data, dict):
+        descriptions = data.get("descriptions")
+        case = _first_dict(data.get("courtCaseData"), data.get("case"), data)
+    else:
+        case = payload
+    if case is None:
+        case = payload
+    entity = data.get("entityInfo") if isinstance(data, dict) else None
+    entity_info = entity if isinstance(entity, dict) else {}
+    descriptions_dict = descriptions if isinstance(descriptions, dict) else None
+    cnr = _compact(case.get("cnr_number") or case.get("cnr") or entity_info.get("cnr"), limit=32)
+    parties = (
+        _string_list(case.get("party_names") or case.get("parties"))
+        or _string_list(case.get("petitioners"))
+        + _string_list(case.get("respondents"))
+    )
+    orders = _case_order_events(
+        _first_list(case.get("orders"), case.get("daily_orders"), case.get("interimOrders")),
+        prefix="order",
+        cnr=cnr,
+        order_download_base_url=order_download_base_url,
+    )
+    judgments = _case_order_events(
+        _first_list(case.get("judgments"), case.get("final_judgments"), case.get("judgmentOrders")),
+        prefix="judgment",
+        cnr=cnr,
+        order_download_base_url=order_download_base_url,
+    )
+    if not orders:
+        orders = _events(case.get("orders") or case.get("daily_orders"), prefix="order")
+    if not judgments:
+        judgments = _events(case.get("judgments") or case.get("final_judgments"), prefix="judgment")
     return ProviderCaseSnapshot(
         provider=provider,
-        cnr_number=_compact(payload.get("cnr_number") or payload.get("cnr"), limit=32),
-        case_number=_compact(payload.get("case_number"), limit=120),
-        court_code=_compact(payload.get("court_code"), limit=80),
-        court_name=_compact(payload.get("court_name") or payload.get("court"), limit=255),
-        case_title=_compact(payload.get("case_title") or payload.get("title"), limit=500)
-        or "Tracked case",
-        party_names=[_compact(item, limit=160) or "" for item in party_names[:20]],
-        current_status=_compact(payload.get("current_status") or payload.get("status"), limit=160),
-        current_stage=_compact(payload.get("current_stage") or payload.get("stage"), limit=160),
+        cnr_number=cnr,
+        case_number=_compact(
+            case.get("case_number")
+            or case.get("caseNumber")
+            or case.get("registrationNumber"),
+            limit=120,
+        ),
+        court_code=_compact(
+            case.get("court_code") or case.get("courtCode") or case.get("cnrCourtCode"),
+            limit=80,
+        ),
+        court_name=_court_name(case, descriptions_dict),
+        case_title=_display_title(case),
+        party_names=parties,
+        current_status=_case_status(case, descriptions_dict),
+        current_stage=_compact(
+            case.get("current_stage") or case.get("stage") or case.get("purpose"),
+            limit=160,
+        ),
         next_hearing_on=_parse_date(
-            payload.get("next_hearing_on") or payload.get("next_hearing_date")
+            case.get("next_hearing_on")
+            or case.get("next_hearing_date")
+            or case.get("nextHearingDate")
+            or entity_info.get("nextDateOfHearing")
         ),
-        orders=_events(payload.get("orders") or payload.get("daily_orders"), prefix="order"),
-        judgments=_events(
-            payload.get("judgments") or payload.get("final_judgments"),
-            prefix="judgment",
-        ),
+        orders=orders,
+        judgments=judgments,
         hearings=_events(
-            payload.get("hearings") or payload.get("hearing_history"),
+            case.get("hearings")
+            or case.get("hearing_history")
+            or case.get("historyOfCaseHearings")
+            or case.get("businessOnDateEntries"),
             prefix="hearing",
         ),
-        source_url=_compact(payload.get("source_url") or payload.get("case_url"), limit=800),
+        source_url=_compact(case.get("source_url") or case.get("case_url"), limit=800),
         metadata={
             "provenance": "provider_normalized",
-            "has_orders": bool(payload.get("orders") or payload.get("daily_orders")),
-            "has_judgments": bool(payload.get("judgments") or payload.get("final_judgments")),
+            "has_orders": bool(orders),
+            "has_judgments": bool(judgments),
         },
     )
 
@@ -192,24 +379,47 @@ def _snapshot_from_payload(payload: dict[str, object], *, provider: str) -> Prov
 class EcourtsIndiaApiProvider:
     provider_key = "ecourtsindia"
 
-    def __init__(self, *, base_url: str, token: str) -> None:
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        token: str,
+        transport: httpx.BaseTransport | None = None,
+    ) -> None:
         self.base_url = base_url.rstrip("/")
         self.token = token
+        self.transport = transport
 
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self.token}", "Accept": "application/json"}
 
+    def _url(self, path: str) -> str:
+        base = self.base_url.rstrip("/")
+        partner_base = base if base.endswith("/api/partner") else f"{base}/api/partner"
+        return f"{partner_base}{path}"
+
+    def _client(self) -> httpx.Client:
+        return httpx.Client(
+            timeout=30,
+            follow_redirects=True,
+            transport=self.transport,
+        )
+
     def search_cases(self, *, query: CaseSearchQuery) -> list[ProviderCaseSnapshot]:
+        if query.cnr_number:
+            return [self.get_case_by_cnr(cnr=query.cnr_number)]
+        search_text = query.query or query.case_number
         try:
-            with httpx.Client(timeout=30, follow_redirects=True) as client:
+            with self._client() as client:
                 response = client.get(
-                    f"{self.base_url}/cases/search",
+                    self._url("/search"),
                     params={
-                        "cnr": query.cnr_number,
-                        "case_number": query.case_number,
-                        "court_code": query.court_code,
+                        "query": search_text,
+                        "litigants": query.query,
+                        "courtCodes": query.court_code,
                         "state": query.state,
-                        "court_name": query.court_name,
+                        "courtName": query.court_name,
+                        "pageSize": 20,
                     },
                     headers=self._headers(),
                 )
@@ -217,20 +427,37 @@ class EcourtsIndiaApiProvider:
         except httpx.HTTPError as exc:
             raise CaseTrackingProviderError("Case tracking provider search failed.") from exc
         payload = response.json()
-        rows = payload.get("results") if isinstance(payload, dict) else payload
+        data = _data_payload(payload)
+        rows = data.get("results") if isinstance(data, dict) else data
         if not isinstance(rows, list):
-            rows = [payload] if isinstance(payload, dict) else []
-        return [
-            _snapshot_from_payload(row, provider=self.provider_key)
-            for row in rows
-            if isinstance(row, dict)
-        ]
+            rows = [data] if isinstance(data, dict) else []
+        descriptions = data.get("descriptions") if isinstance(data, dict) else None
+        snapshots: list[ProviderCaseSnapshot] = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            row_payload: dict[str, object] = row
+            if isinstance(descriptions, dict) and "descriptions" not in row:
+                row_payload = {
+                    "data": {
+                        "courtCaseData": row,
+                        "descriptions": descriptions,
+                    }
+                }
+            snapshots.append(
+                _snapshot_from_payload(
+                    row_payload,
+                    provider=self.provider_key,
+                    order_download_base_url=self._url(""),
+                )
+            )
+        return snapshots
 
     def get_case_by_cnr(self, *, cnr: str) -> ProviderCaseSnapshot:
         try:
-            with httpx.Client(timeout=30, follow_redirects=True) as client:
+            with self._client() as client:
                 response = client.get(
-                    f"{self.base_url}/cases/{cnr}",
+                    self._url(f"/case/{quote(cnr)}"),
                     headers=self._headers(),
                 )
                 response.raise_for_status()
@@ -239,12 +466,30 @@ class EcourtsIndiaApiProvider:
         payload = response.json()
         if not isinstance(payload, dict):
             raise CaseTrackingProviderError("Case tracking provider returned invalid data.")
-        return _snapshot_from_payload(payload, provider=self.provider_key)
+        return _snapshot_from_payload(
+            payload,
+            provider=self.provider_key,
+            order_download_base_url=self._url(""),
+        )
 
     def refresh_cases(self, *, cnrs: list[str]) -> ProviderBulkRefreshResult:
         snapshots: list[ProviderCaseSnapshot] = []
         errors: dict[str, str] = {}
-        for cnr in cnrs:
+        unique_cnrs = list(dict.fromkeys(cnrs))
+        if unique_cnrs:
+            try:
+                with self._client() as client:
+                    response = client.post(
+                        self._url("/case/bulk-refresh"),
+                        json={"cnrs": unique_cnrs},
+                        headers={**self._headers(), "Content-Type": "application/json"},
+                    )
+                    response.raise_for_status()
+            except httpx.HTTPError:
+                for cnr in unique_cnrs:
+                    errors[cnr] = "Case tracking provider bulk refresh failed."
+                return ProviderBulkRefreshResult(snapshots=snapshots, errors=errors)
+        for cnr in unique_cnrs:
             try:
                 snapshots.append(self.get_case_by_cnr(cnr=cnr))
             except CaseTrackingProviderError as exc:

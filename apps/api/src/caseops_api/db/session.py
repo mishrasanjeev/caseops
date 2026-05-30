@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Generator
+from threading import Lock
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -18,6 +19,63 @@ from caseops_api.db.base import Base
 # a fresh engine without needing ``clear_engine_cache()``.
 _EngineCacheKey = tuple[str, int, int, int]
 _ENGINE_CACHE: dict[_EngineCacheKey, Engine] = {}
+_SQLITE_WRITE_LOCK = Lock()
+_SQLITE_WRITE_LOCK_HELD_KEY = "caseops_sqlite_write_lock_held"
+
+
+class CaseOpsSession(Session):
+    def _uses_sqlite_bind(self) -> bool:
+        bind = self.get_bind()
+        engine = getattr(bind, "engine", bind)
+        return isinstance(engine, Engine) and engine.url.get_backend_name() == "sqlite"
+
+    def _acquire_sqlite_write_lock(self) -> None:
+        if self.info.get(_SQLITE_WRITE_LOCK_HELD_KEY) or not self._uses_sqlite_bind():
+            return
+        _SQLITE_WRITE_LOCK.acquire()
+        self.info[_SQLITE_WRITE_LOCK_HELD_KEY] = True
+
+    def _release_sqlite_write_lock(self) -> None:
+        if not self.info.pop(_SQLITE_WRITE_LOCK_HELD_KEY, False):
+            return
+        _SQLITE_WRITE_LOCK.release()
+
+    def flush(self, objects: object | None = None) -> None:
+        if self.new or self.dirty or self.deleted:
+            self._acquire_sqlite_write_lock()
+        super().flush(objects)
+
+    def commit(self) -> None:
+        try:
+            super().commit()
+        finally:
+            self._release_sqlite_write_lock()
+
+    def rollback(self) -> None:
+        try:
+            super().rollback()
+        finally:
+            self._release_sqlite_write_lock()
+
+    def close(self) -> None:
+        try:
+            super().close()
+        finally:
+            self._release_sqlite_write_lock()
+
+
+def _configure_sqlite_connection(dbapi_connection: object, _connection_record: object) -> None:
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute("PRAGMA busy_timeout=30000")
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+    finally:
+        cursor.close()
+
+
+def _install_sqlite_pragmas(engine: Engine) -> None:
+    event.listen(engine, "connect", _configure_sqlite_connection)
 
 
 def get_engine(database_url: str | None = None) -> Engine:
@@ -31,7 +89,13 @@ def get_engine(database_url: str | None = None) -> Engine:
     )
     if cache_key not in _ENGINE_CACHE:
         if resolved_url.startswith("sqlite"):
-            connect_args: dict[str, object] = {"check_same_thread": False}
+            connect_args: dict[str, object] = {
+                "check_same_thread": False,
+                # CI Playwright uses one SQLite file behind the API server.
+                # Give legitimate writes time to finish; connection PRAGMAs
+                # below also enable WAL so readers don't block those writes.
+                "timeout": 30,
+            }
             # SQLite uses StaticPool / SingletonThreadPool depending on
             # url; explicit pool_size/max_overflow/pool_timeout don't
             # apply (and SQLAlchemy will raise if passed). Keep SQLite
@@ -89,14 +153,22 @@ def get_engine(database_url: str | None = None) -> Engine:
                 "max_overflow": settings.db_max_overflow,
                 "pool_timeout": settings.db_pool_timeout,
             }
-        _ENGINE_CACHE[cache_key] = create_engine(
+        engine = create_engine(
             resolved_url, connect_args=connect_args, **engine_kwargs
         )
+        if resolved_url.startswith("sqlite") and isinstance(engine, Engine):
+            _install_sqlite_pragmas(engine)
+        _ENGINE_CACHE[cache_key] = engine
     return _ENGINE_CACHE[cache_key]
 
 
 def get_session_factory(database_url: str | None = None) -> sessionmaker[Session]:
-    return sessionmaker(bind=get_engine(database_url), autoflush=False, expire_on_commit=False)
+    return sessionmaker(
+        bind=get_engine(database_url),
+        class_=CaseOpsSession,
+        autoflush=False,
+        expire_on_commit=False,
+    )
 
 
 def get_db_session() -> Generator[Session]:

@@ -1,0 +1,61 @@
+apiVersion: run.googleapis.com/v1
+kind: Job
+metadata:
+  name: caseops-case-tracking-poll
+spec:
+  template:
+    metadata:
+      annotations:
+        run.googleapis.com/cloudsql-instances: "__PROJECT_ID__:__REGION__:__CLOUD_SQL_INSTANCE__"
+        run.googleapis.com/execution-environment: gen2
+        run.googleapis.com/secrets: "caseops-auth-secret=projects/__PROJECT_NUMBER__/secrets/caseops-auth-secret,caseops-database-url=projects/__PROJECT_NUMBER__/secrets/caseops-database-url,caseops-openai-api-key=projects/__PROJECT_NUMBER__/secrets/caseops-openai-api-key,caseops-ecourtsindia-api-token=projects/__PROJECT_NUMBER__/secrets/caseops-ecourtsindia-api-token"
+    spec:
+      template:
+        spec:
+          taskCount: 1
+          maxRetries: 1
+          timeoutSeconds: 1800
+          serviceAccountName: "__SERVICE_ACCOUNT__"
+          containers:
+            - image: "__API_IMAGE__"
+              command:
+                - "uv"
+                - "run"
+                - "caseops-poll-tracked-cases"
+              env:
+                - name: CASEOPS_ENV
+                  value: "cloud"
+                - name: CASEOPS_AUTO_MIGRATE
+                  value: "false"
+                - name: CASEOPS_DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: "caseops-database-url"
+                      key: "latest"
+                - name: CASEOPS_AUTH_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: "caseops-auth-secret"
+                      key: "__AUTH_SECRET_VERSION__"
+                - name: CASEOPS_OPENAI_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: "caseops-openai-api-key"
+                      key: "latest"
+                - name: CASEOPS_CASE_TRACKING_ENABLED
+                  value: "true"
+                - name: CASEOPS_CASE_TRACKING_PROVIDER
+                  value: "ecourtsindia"
+                - name: CASEOPS_ECOURTSINDIA_API_BASE_URL
+                  value: "https://webapi.ecourtsindia.com"
+                - name: CASEOPS_ECOURTSINDIA_API_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: "caseops-ecourtsindia-api-token"
+                      key: "latest"
+                - name: CASEOPS_CASE_TRACKING_POLL_LIMIT
+                  value: "50"
+              resources:
+                limits:
+                  cpu: "1"
+                  memory: "1Gi"

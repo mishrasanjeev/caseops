@@ -199,6 +199,7 @@ def search_cases(
     provider: CaseTrackingProvider | None = None,
 ) -> CaseTrackingSearchResponse:
     query = CaseSearchQuery(
+        query=payload.query,
         cnr_number=normalize_cnr(payload.cnr_number),
         case_number=payload.case_number,
         court_code=payload.court_code,
@@ -218,6 +219,7 @@ def search_cases(
         target_id=active_provider.provider_key,
         metadata={
             "provider": active_provider.provider_key,
+            "has_general_query": bool(query.query),
             "has_cnr": bool(query.cnr_number),
             "has_case_number": bool(query.case_number),
             "has_court_filter": bool(query.court_code or query.state or query.court_name),

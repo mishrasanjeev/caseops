@@ -15,7 +15,7 @@ spec:
         # through Secret Manager, never as a raw env value in the
         # manifest. Auth secret + DB URL + future SendGrid /
         # Anthropic / Pine Labs keys all use secretKeyRef.
-        run.googleapis.com/secrets: "caseops-auth-secret=projects/__PROJECT_NUMBER__/secrets/caseops-auth-secret,caseops-database-url=projects/__PROJECT_NUMBER__/secrets/caseops-database-url,caseops-openai-api-key=projects/__PROJECT_NUMBER__/secrets/caseops-openai-api-key,caseops-sendgrid-webhook-public-key=projects/__PROJECT_NUMBER__/secrets/caseops-sendgrid-webhook-public-key"
+        run.googleapis.com/secrets: "caseops-auth-secret=projects/__PROJECT_NUMBER__/secrets/caseops-auth-secret,caseops-database-url=projects/__PROJECT_NUMBER__/secrets/caseops-database-url,caseops-openai-api-key=projects/__PROJECT_NUMBER__/secrets/caseops-openai-api-key,caseops-sendgrid-webhook-public-key=projects/__PROJECT_NUMBER__/secrets/caseops-sendgrid-webhook-public-key,caseops-ecourtsindia-api-token=projects/__PROJECT_NUMBER__/secrets/caseops-ecourtsindia-api-token"
     spec:
       containerConcurrency: 40
       timeoutSeconds: 300
@@ -112,6 +112,22 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: "caseops-sendgrid-webhook-public-key"
+                  key: "latest"
+            # Hari BUG-042/043 (2026-05-30): production case
+            # search/bookmarking must use the documented eCourtsIndia
+            # partner API, with the bearer token held only in Secret
+            # Manager. Provider status remains configured=false if the
+            # secret is not present.
+            - name: CASEOPS_CASE_TRACKING_ENABLED
+              value: "true"
+            - name: CASEOPS_CASE_TRACKING_PROVIDER
+              value: "ecourtsindia"
+            - name: CASEOPS_ECOURTSINDIA_API_BASE_URL
+              value: "https://webapi.ecourtsindia.com"
+            - name: CASEOPS_ECOURTSINDIA_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: "caseops-ecourtsindia-api-token"
                   key: "latest"
           resources:
             limits:

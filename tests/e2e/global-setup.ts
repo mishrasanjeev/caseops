@@ -40,7 +40,10 @@ function apiVenvPython(): { cmd: string; prefixArgs: string[] } {
 
 export default async function globalSetup(): Promise<void> {
   fs.rmSync(runtimeRoot, { force: true, recursive: true });
-  fs.rmSync(path.join(repoRoot, "caseops-e2e.db"), { force: true });
+  const e2eDatabasePath = path.join(repoRoot, "caseops-e2e.db");
+  for (const suffix of ["", "-shm", "-wal"]) {
+    fs.rmSync(`${e2eDatabasePath}${suffix}`, { force: true });
+  }
   fs.mkdirSync(runtimeRoot, { recursive: true });
   fs.mkdirSync(documentStoragePath, { recursive: true });
   fs.mkdirSync(documentCachePath, { recursive: true });

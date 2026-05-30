@@ -33,6 +33,10 @@ param(
     [string]$SchedulerLocation,
     [string]$SchedulerJobName = "caseops-document-worker-trigger",
     [string]$SchedulerSchedule = "*/2 * * * *",
+    [string]$LegalUpdateSchedulerJobName = "caseops-legal-update-sync-midnight",
+    [string]$LegalUpdateSchedulerSchedule = "0 0 * * *",
+    [string]$CaseTrackingSchedulerJobName = "caseops-case-tracking-poll-midnight",
+    [string]$CaseTrackingSchedulerSchedule = "0 0 * * *",
     [string]$SchedulerTimeZone = "Asia/Kolkata",
     [switch]$SkipScheduler
 )
@@ -78,13 +82,14 @@ function Ensure-SchedulerJob {
         [string]$ProjectId,
         [string]$Location,
         [string]$JobName,
+        [string]$RunJobName,
         [string]$Region,
         [string]$SchedulerServiceAccount,
         [string]$Schedule,
         [string]$TimeZone
     )
 
-    $uri = "https://run.googleapis.com/v2/projects/$ProjectId/locations/$Region/jobs/caseops-document-worker:run"
+    $uri = "https://run.googleapis.com/v2/projects/$ProjectId/locations/$Region/jobs/${RunJobName}:run"
     $scope = "https://www.googleapis.com/auth/cloud-platform"
     $describeArgs = @(
         "scheduler", "jobs", "describe", $JobName,
@@ -135,6 +140,8 @@ $replacements = @{
 
 $apiManifest = Join-Path $renderRoot "api-service.yaml"
 $workerManifest = Join-Path $renderRoot "document-worker-job.yaml"
+$legalUpdateManifest = Join-Path $renderRoot "legal-update-sync-job.yaml"
+$caseTrackingManifest = Join-Path $renderRoot "case-tracking-poll-job.yaml"
 
 Render-Template `
     -TemplatePath (Join-Path $scriptRoot "api-service.yaml") `
@@ -146,19 +153,52 @@ Render-Template `
     -OutputPath $workerManifest `
     -Replacements $replacements
 
+Render-Template `
+    -TemplatePath (Join-Path $scriptRoot "legal-update-sync-job.yaml") `
+    -OutputPath $legalUpdateManifest `
+    -Replacements $replacements
+
+Render-Template `
+    -TemplatePath (Join-Path $scriptRoot "case-tracking-poll-job.yaml") `
+    -OutputPath $caseTrackingManifest `
+    -Replacements $replacements
+
 & gcloud run services replace $apiManifest --region $Region --project $ProjectId
 & gcloud run jobs replace $workerManifest --region $Region --project $ProjectId
+& gcloud run jobs replace $legalUpdateManifest --region $Region --project $ProjectId
+& gcloud run jobs replace $caseTrackingManifest --region $Region --project $ProjectId
 
 if (-not $SkipScheduler) {
     Ensure-SchedulerJob `
         -ProjectId $ProjectId `
         -Location $SchedulerLocation `
         -JobName $SchedulerJobName `
+        -RunJobName "caseops-document-worker" `
         -Region $Region `
         -SchedulerServiceAccount $SchedulerServiceAccount `
         -Schedule $SchedulerSchedule `
         -TimeZone $SchedulerTimeZone
+
+    Ensure-SchedulerJob `
+        -ProjectId $ProjectId `
+        -Location $SchedulerLocation `
+        -JobName $LegalUpdateSchedulerJobName `
+        -RunJobName "caseops-legal-update-sync" `
+        -Region $Region `
+        -SchedulerServiceAccount $SchedulerServiceAccount `
+        -Schedule $LegalUpdateSchedulerSchedule `
+        -TimeZone $SchedulerTimeZone
+
+    Ensure-SchedulerJob `
+        -ProjectId $ProjectId `
+        -Location $SchedulerLocation `
+        -JobName $CaseTrackingSchedulerJobName `
+        -RunJobName "caseops-case-tracking-poll" `
+        -Region $Region `
+        -SchedulerServiceAccount $SchedulerServiceAccount `
+        -Schedule $CaseTrackingSchedulerSchedule `
+        -TimeZone $SchedulerTimeZone
 }
 
-Write-Host "Cloud Run API deployed, document worker job deployed, and scheduler configured."
+Write-Host "Cloud Run API deployed; document worker, legal update sync, and case tracking poll jobs deployed; schedulers configured."
 Write-Host "Rendered manifests: $renderRoot"
