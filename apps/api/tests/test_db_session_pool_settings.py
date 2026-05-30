@@ -35,10 +35,13 @@ import pytest
 from pydantic import ValidationError
 
 from caseops_api.core.settings import get_settings
+from caseops_api.db.base import Base
+from caseops_api.db.models import Company, CompanyType
 from caseops_api.db.session import (
     _ENGINE_CACHE,
     clear_engine_cache,
     get_engine,
+    get_session_factory,
 )
 
 
@@ -219,6 +222,44 @@ def test_sqlite_engine_enables_wal_and_busy_timeout(tmp_path) -> None:
     with engine.connect() as connection:
         assert connection.exec_driver_sql("PRAGMA busy_timeout").scalar() >= 30_000
         assert connection.exec_driver_sql("PRAGMA journal_mode").scalar().lower() == "wal"
+
+
+def test_sqlite_session_serializes_write_until_commit(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db_path = tmp_path / "caseops-e2e.db"
+    database_url = f"sqlite:///{db_path.as_posix()}"
+    engine = get_engine(database_url)
+    Base.metadata.create_all(bind=engine)
+    events: list[str] = []
+
+    class _FakeLock:
+        def acquire(self) -> None:
+            events.append("acquire")
+
+        def release(self) -> None:
+            events.append("release")
+
+    monkeypatch.setattr("caseops_api.db.session._SQLITE_WRITE_LOCK", _FakeLock())
+
+    session = get_session_factory(database_url)()
+    try:
+        session.add(
+            Company(
+                name="E2E Lock Test",
+                slug="e2e-lock-test",
+                company_type=CompanyType.LAW_FIRM,
+                tenant_key="e2e-lock-test",
+            )
+        )
+        session.flush()
+        assert events == ["acquire"]
+
+        session.commit()
+        assert events == ["acquire", "release"]
+    finally:
+        session.close()
 
 
 # ---------- engine cache invalidation on pool-setting change ------
