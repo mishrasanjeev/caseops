@@ -30,13 +30,14 @@ def _normalized_cnr(value: str | None) -> str | None:
 
 
 class CaseTrackingSearchRequest(BaseModel):
+    query: str | None = Field(default=None, max_length=160)
     cnr_number: str | None = Field(default=None, max_length=32)
     case_number: str | None = Field(default=None, max_length=120)
     court_code: str | None = Field(default=None, max_length=80)
     state: str | None = Field(default=None, max_length=80)
     court_name: str | None = Field(default=None, max_length=255)
 
-    @field_validator("cnr_number", "case_number", "court_code", "state", "court_name")
+    @field_validator("query", "cnr_number", "case_number", "court_code", "state", "court_name")
     @classmethod
     def _strip_optional(cls, value: str | None) -> str | None:
         if value is None:
@@ -54,8 +55,8 @@ class CaseTrackingSearchRequest(BaseModel):
 
     @model_validator(mode="after")
     def _require_identity(self) -> CaseTrackingSearchRequest:
-        if not self.cnr_number and not self.case_number:
-            raise ValueError("Provide a CNR number or case number.")
+        if not self.query and not self.cnr_number and not self.case_number:
+            raise ValueError("Provide a search query, CNR number, or case number.")
         return self
 
 

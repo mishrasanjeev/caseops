@@ -44,6 +44,7 @@ export default function CaseTrackingPage() {
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const matterId = searchParams.get("matterId");
+  const [query, setQuery] = useState("");
   const [cnr, setCnr] = useState("");
   const [caseNumber, setCaseNumber] = useState("");
   const [courtCode, setCourtCode] = useState("");
@@ -97,7 +98,8 @@ export default function CaseTrackingPage() {
   });
 
   const configured = Boolean(status.data?.enabled && status.data.configured);
-  const canSearch = configured && Boolean(cnr.trim() || caseNumber.trim());
+  const hasSearchInput = Boolean(query.trim() || cnr.trim() || caseNumber.trim());
+  const canSearch = configured && hasSearchInput;
 
   if (status.isPending || bookmarks.isPending) {
     return (
@@ -152,11 +154,12 @@ export default function CaseTrackingPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <form
-            className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,.8fr)_auto]"
+            className="grid gap-2 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,.8fr)_auto]"
             onSubmit={(event) => {
               event.preventDefault();
               if (!canSearch || searchMutation.isPending) return;
               searchMutation.mutate({
+                query: query.trim() || null,
                 cnr_number: cnr.trim() || null,
                 case_number: caseNumber.trim() || null,
                 court_code: courtCode.trim() || null,
@@ -164,12 +167,18 @@ export default function CaseTrackingPage() {
             }}
           >
             <Input
+              aria-label="Case name or party search"
+              data-testid="case-tracking-query"
+              placeholder="Case name, party, advocate, or keyword"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+            <Input
               aria-label="CNR number"
               data-testid="case-tracking-cnr"
               placeholder="CNR number"
               value={cnr}
               onChange={(event) => setCnr(event.target.value)}
-              disabled={!configured}
             />
             <Input
               aria-label="Case number"
@@ -177,7 +186,6 @@ export default function CaseTrackingPage() {
               placeholder="Case number"
               value={caseNumber}
               onChange={(event) => setCaseNumber(event.target.value)}
-              disabled={!configured}
             />
             <Input
               aria-label="Court code"
@@ -185,7 +193,6 @@ export default function CaseTrackingPage() {
               placeholder="Court code"
               value={courtCode}
               onChange={(event) => setCourtCode(event.target.value)}
-              disabled={!configured}
             />
             <Button
               type="submit"

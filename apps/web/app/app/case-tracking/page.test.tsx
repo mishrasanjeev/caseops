@@ -114,7 +114,10 @@ describe("CaseTrackingPage", () => {
 
     expect(await screen.findByTestId("case-tracking-disabled")).toBeInTheDocument();
     expect(screen.getByText(/No provider calls made/i)).toBeInTheDocument();
+    await user.type(screen.getByTestId("case-tracking-query"), "Example Petitioner");
     await user.type(screen.getByTestId("case-tracking-cnr"), "DLHC010012342026");
+    expect(screen.getByTestId("case-tracking-query")).toHaveValue("Example Petitioner");
+    expect(screen.getByTestId("case-tracking-cnr")).toHaveValue("DLHC010012342026");
     await user.click(screen.getByTestId("case-tracking-search-submit"));
     expect(searchTrackedCasesMock).not.toHaveBeenCalled();
   });
@@ -163,9 +166,11 @@ describe("CaseTrackingPage", () => {
 
     render(withClient(<CaseTrackingPage />));
 
-    await user.type(await screen.findByTestId("case-tracking-cnr"), "DLHC010012342026");
+    await user.type(await screen.findByTestId("case-tracking-query"), "Example Petitioner");
+    await user.type(screen.getByTestId("case-tracking-cnr"), "DLHC010012342026");
     await user.click(screen.getByTestId("case-tracking-search-submit"));
     expect(searchTrackedCasesMock.mock.calls[0][0]).toEqual({
+      query: "Example Petitioner",
       cnr_number: "DLHC010012342026",
       case_number: null,
       court_code: null,

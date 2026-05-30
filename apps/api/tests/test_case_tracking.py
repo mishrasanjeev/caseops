@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 from datetime import date
 
+import httpx
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
@@ -12,6 +14,7 @@ from caseops_api.services.case_tracking import normalize_cnr, poll_tracked_cases
 from caseops_api.services.case_tracking_providers import (
     CaseSearchQuery,
     CaseTrackingProviderError,
+    EcourtsIndiaApiProvider,
     ProviderBulkRefreshResult,
     ProviderCaseEvent,
     ProviderCaseSnapshot,
@@ -102,6 +105,140 @@ def test_case_tracking_provider_disabled_state_is_safe(client: TestClient) -> No
     )
     assert search.status_code == 503
     assert "disabled" in search.json()["detail"].lower()
+
+
+def test_case_tracking_search_accepts_general_party_query(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    token = _bootstrap(client)
+    provider = FakeCaseTrackingProvider()
+    monkeypatch.setattr(
+        "caseops_api.services.case_tracking.get_case_tracking_provider",
+        lambda: provider,
+    )
+
+    search = client.post(
+        "/api/case-tracking/search",
+        headers=auth_headers(token),
+        json={"query": "Example Petitioner", "court_code": "DLHC"},
+    )
+
+    assert search.status_code == 200, search.text
+    assert search.json()["results"][0]["case_title"] == (
+        "Example Petitioner v Example Respondent"
+    )
+    assert provider.search_calls[0].query == "Example Petitioner"
+    assert provider.search_calls[0].court_code == "DLHC"
+
+
+def test_ecourts_provider_uses_partner_paths_and_normalizes_payloads() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.method == "GET" and request.url.path == "/api/partner/search":
+            return httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "results": [
+                            {
+                                "cnr": "DLHC010012342026",
+                                "caseNumber": "WP(C) 1/2026",
+                                "cnrCourtCode": "DLHC",
+                                "petitioners": ["Example Petitioner"],
+                                "respondents": ["Example Respondent"],
+                                "caseStatus": "PENDING",
+                                "nextHearingDate": "2026-06-15T00:00:00Z",
+                            }
+                        ],
+                        "descriptions": {
+                            "enumLookup": {
+                                "caseStatus": {"PENDING": "Pending"},
+                                "courtCode": {"DLHC": "Delhi High Court"},
+                            }
+                        },
+                    }
+                },
+            )
+        if (
+            request.method == "GET"
+            and request.url.path == "/api/partner/case/DLHC010012342026"
+        ):
+            return httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "courtCaseData": {
+                            "cnr": "DLHC010012342026",
+                            "caseNumber": "WP(C) 1/2026",
+                            "cnrCourtCode": "DLHC",
+                            "petitioners": ["Example Petitioner"],
+                            "respondents": ["Example Respondent"],
+                            "caseStatus": "PENDING",
+                            "nextHearingDate": "2026-06-15T00:00:00Z",
+                            "interimOrders": [
+                                {
+                                    "orderUrl": "order-1.pdf",
+                                    "description": "Interim order",
+                                    "orderDate": "2026-05-26",
+                                }
+                            ],
+                            "judgmentOrders": [
+                                {
+                                    "orderUrl": "judgment-1.pdf",
+                                    "description": "Final judgment",
+                                    "orderDate": "2026-05-27",
+                                }
+                            ],
+                        },
+                        "descriptions": {
+                            "enumLookup": {
+                                "caseStatus": {"PENDING": "Pending"},
+                                "courtCode": {"DLHC": "Delhi High Court"},
+                            }
+                        },
+                    }
+                },
+            )
+        if request.method == "POST" and request.url.path == "/api/partner/case/bulk-refresh":
+            assert json.loads(request.content) == {"cnrs": ["DLHC010012342026"]}
+            return httpx.Response(200, json={"ok": True})
+        return httpx.Response(404, json={"detail": request.url.path})
+
+    provider = EcourtsIndiaApiProvider(
+        base_url="https://webapi.ecourtsindia.com",
+        token="test-token",
+        transport=httpx.MockTransport(handler),
+    )
+
+    results = provider.search_cases(
+        query=CaseSearchQuery(query="Example Petitioner", court_code="DLHC")
+    )
+    assert len(results) == 1
+    assert results[0].case_title == "Example Petitioner v Example Respondent"
+    assert results[0].court_name == "Delhi High Court"
+    assert results[0].current_status == "Pending"
+    assert results[0].next_hearing_on == date(2026, 6, 15)
+    assert requests[0].url.path == "/api/partner/search"
+    assert requests[0].url.params["query"] == "Example Petitioner"
+    assert requests[0].url.params["courtCodes"] == "DLHC"
+
+    snapshot = provider.get_case_by_cnr(cnr="DLHC010012342026")
+    assert snapshot.orders[0].title == "Interim order dated 2026-05-26"
+    assert snapshot.orders[0].source_url == (
+        "https://webapi.ecourtsindia.com/api/partner/case/"
+        "DLHC010012342026/order/order-1.pdf"
+    )
+    assert snapshot.judgments[0].title == "Final judgment dated 2026-05-27"
+    assert requests[1].url.path == "/api/partner/case/DLHC010012342026"
+
+    refresh = provider.refresh_cases(cnrs=["DLHC010012342026", "DLHC010012342026"])
+    assert refresh.errors == {}
+    assert len(refresh.snapshots) == 1
+    assert requests[2].method == "POST"
+    assert requests[2].url.path == "/api/partner/case/bulk-refresh"
 
 
 def test_case_tracking_search_bookmark_update_and_archive(

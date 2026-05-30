@@ -4,7 +4,9 @@ These manifests keep the current founder-stage `CaseOps` API and document worker
 
 - `api-service.yaml`: HTTP API on Cloud Run with `Cloud SQL` and `GCS`
 - `document-worker-job.yaml`: non-HTTP document processor job for OCR, retries, and reindexing
-- `deploy.ps1`: idempotent deployment helper for the API, the worker job, and the scheduler trigger
+- `legal-update-sync-job.yaml`: nightly legal update/watchlist sync job
+- `case-tracking-poll-job.yaml`: nightly bookmarked case polling job
+- `deploy.ps1`: idempotent deployment helper for the API, worker jobs, and scheduler triggers
 
 ## Assumptions
 
@@ -12,7 +14,8 @@ These manifests keep the current founder-stage `CaseOps` API and document worker
 - A dedicated runtime service account exists
 - `Cloud SQL for PostgreSQL` is the primary database
 - `GCS` is the document storage backend in cloud
-- A `Cloud Scheduler` trigger or CI/CD step runs the document worker job on a cadence
+- `Secret Manager` contains `caseops-ecourtsindia-api-token` before case tracking is enabled in cloud
+- `Cloud Scheduler` triggers run the document worker frequently and legal/case polling nightly
 
 ## Required Replacements
 
@@ -33,7 +36,7 @@ Before deploying, replace these placeholders:
 
 1. Build and publish the API image.
 2. Run `deploy.ps1` with your project, image, database, bucket, and identity values.
-3. Validate the API service, the worker job, and the scheduler trigger in the GCP console.
+3. Validate the API service, worker jobs, and scheduler triggers in the GCP console.
 
 ## Example
 
@@ -54,12 +57,14 @@ Before deploying, replace these placeholders:
 ## IAM Notes
 
 - the runtime service account should have access to `Cloud SQL`, `GCS`, and any secrets the API needs
-- the scheduler service account must be able to execute the worker job
+- the scheduler service account must be able to execute all Cloud Run jobs
   - Google’s current Cloud Run IAM docs list `roles/run.invoker` and `roles/run.jobsExecutor` as roles that grant `run.jobs.run`
 - the principal deploying these assets needs permission to update Cloud Run services, Cloud Run jobs, and Cloud Scheduler jobs
 
 ## Notes
 
 - The worker job runs `caseops-document-worker --once`, which lets Cloud Run Jobs act as the queue drainer without needing a permanently running non-HTTP process.
+- The legal update sync job runs `caseops-sync-legal-updates` at midnight IST by default.
+- The case tracking poll job runs `caseops-poll-tracked-cases` at midnight IST by default.
 - OCR support expects `tesseract` to be present in the API image. The current Dockerfile installs it directly.
 - Document cache is ephemeral in Cloud Run and intentionally stored under `/tmp`.
