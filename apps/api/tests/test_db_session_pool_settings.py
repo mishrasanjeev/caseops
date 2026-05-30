@@ -200,7 +200,10 @@ def test_sqlite_engine_uses_check_same_thread_false(
     with patch("caseops_api.db.session.create_engine", _fake_create_engine):
         get_engine()
 
-    assert captured["connect_args"] == {"check_same_thread": False}
+    assert captured["connect_args"] == {
+        "check_same_thread": False,
+        "timeout": 30,
+    }
 
 
 # ---------- engine cache invalidation on pool-setting change ------

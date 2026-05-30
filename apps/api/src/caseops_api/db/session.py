@@ -31,7 +31,16 @@ def get_engine(database_url: str | None = None) -> Engine:
     )
     if cache_key not in _ENGINE_CACHE:
         if resolved_url.startswith("sqlite"):
-            connect_args: dict[str, object] = {"check_same_thread": False}
+            connect_args: dict[str, object] = {
+                "check_same_thread": False,
+                # CI Playwright uses one SQLite file behind the API server.
+                # Short default busy timeouts make independent bootstrap
+                # requests fail with "database is locked" while another
+                # request is committing seed data. Wait long enough for
+                # legitimate test writes to finish instead of surfacing a
+                # transient 500.
+                "timeout": 30,
+            }
             # SQLite uses StaticPool / SingletonThreadPool depending on
             # url; explicit pool_size/max_overflow/pool_timeout don't
             # apply (and SQLAlchemy will raise if passed). Keep SQLite
