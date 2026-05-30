@@ -206,6 +206,21 @@ def test_sqlite_engine_uses_check_same_thread_false(
     }
 
 
+def test_sqlite_engine_enables_wal_and_busy_timeout(tmp_path) -> None:
+    """Playwright CI runs the API and web app against one SQLite file.
+
+    WAL keeps long-lived read requests from blocking a following bootstrap
+    write; busy_timeout gives genuine write/write contention a bounded wait.
+    """
+    db_path = tmp_path / "caseops-e2e.db"
+
+    engine = get_engine(f"sqlite:///{db_path.as_posix()}")
+
+    with engine.connect() as connection:
+        assert connection.exec_driver_sql("PRAGMA busy_timeout").scalar() >= 30_000
+        assert connection.exec_driver_sql("PRAGMA journal_mode").scalar().lower() == "wal"
+
+
 # ---------- engine cache invalidation on pool-setting change ------
 
 

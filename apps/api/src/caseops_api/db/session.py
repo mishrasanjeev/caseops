@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -20,6 +20,20 @@ _EngineCacheKey = tuple[str, int, int, int]
 _ENGINE_CACHE: dict[_EngineCacheKey, Engine] = {}
 
 
+def _configure_sqlite_connection(dbapi_connection: object, _connection_record: object) -> None:
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute("PRAGMA busy_timeout=30000")
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+    finally:
+        cursor.close()
+
+
+def _install_sqlite_pragmas(engine: Engine) -> None:
+    event.listen(engine, "connect", _configure_sqlite_connection)
+
+
 def get_engine(database_url: str | None = None) -> Engine:
     settings = get_settings()
     resolved_url = database_url or settings.database_url
@@ -34,11 +48,8 @@ def get_engine(database_url: str | None = None) -> Engine:
             connect_args: dict[str, object] = {
                 "check_same_thread": False,
                 # CI Playwright uses one SQLite file behind the API server.
-                # Short default busy timeouts make independent bootstrap
-                # requests fail with "database is locked" while another
-                # request is committing seed data. Wait long enough for
-                # legitimate test writes to finish instead of surfacing a
-                # transient 500.
+                # Give legitimate writes time to finish; connection PRAGMAs
+                # below also enable WAL so readers don't block those writes.
                 "timeout": 30,
             }
             # SQLite uses StaticPool / SingletonThreadPool depending on
@@ -98,9 +109,12 @@ def get_engine(database_url: str | None = None) -> Engine:
                 "max_overflow": settings.db_max_overflow,
                 "pool_timeout": settings.db_pool_timeout,
             }
-        _ENGINE_CACHE[cache_key] = create_engine(
+        engine = create_engine(
             resolved_url, connect_args=connect_args, **engine_kwargs
         )
+        if resolved_url.startswith("sqlite") and isinstance(engine, Engine):
+            _install_sqlite_pragmas(engine)
+        _ENGINE_CACHE[cache_key] = engine
     return _ENGINE_CACHE[cache_key]
 
 
