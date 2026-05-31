@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { defineConfig, devices } from "@playwright/test";
 
-import { apiBaseUrl, e2eEnv, repoRoot } from "./tests/e2e/support/env";
+import { apiBaseUrl, apiPort, e2eEnv, repoRoot } from "./tests/e2e/support/env";
 
 const browserExecutableCandidates = [
   "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
@@ -43,6 +43,7 @@ export default defineConfig({
     /hari-2026-05-09-bug-032\.spec\.ts/,
     /hari-2026-05-11-bugs\.spec\.ts/,
     /hari-2026-05-30-bugs\.spec\.ts/,
+    /hari-2026-05-31-bugs\.spec\.ts/,
     /matter-outside-counsel\.spec\.ts/,
     /mobile-responsive\.spec\.ts/,
   ],
@@ -103,8 +104,8 @@ export default defineConfig({
       // bucket scripts) holds a lock on a .venv/Scripts/*.exe.
       command:
         process.platform === "win32"
-          ? "apps\\api\\.venv\\Scripts\\uvicorn.exe caseops_api.main:app --host 127.0.0.1 --port 8000 --app-dir apps/api/src"
-          : "apps/api/.venv/bin/uvicorn caseops_api.main:app --host 127.0.0.1 --port 8000 --app-dir apps/api/src",
+          ? `apps\\api\\.venv\\Scripts\\uvicorn.exe caseops_api.main:app --host 127.0.0.1 --port ${apiPort} --app-dir apps/api/src`
+          : `apps/api/.venv/bin/uvicorn caseops_api.main:app --host 127.0.0.1 --port ${apiPort} --app-dir apps/api/src`,
       cwd: repoRoot,
       env: { ...process.env, ...e2eEnv },
       url: `${apiBaseUrl}/api/health`,

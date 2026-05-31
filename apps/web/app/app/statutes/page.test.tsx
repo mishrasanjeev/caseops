@@ -48,6 +48,7 @@ vi.mock("@/lib/capabilities", () => ({
 }));
 
 import StatutesIndexPage from "@/app/app/statutes/page";
+import { ApiError } from "@/lib/api/config";
 
 function withClient(children: ReactNode) {
   const client = new QueryClient({
@@ -287,6 +288,24 @@ describe("StatutesIndexPage", () => {
     expect(updateLegalUpdateMock.mock.calls[0][1]).toBe("read");
     expect(screen.getByTestId("legal-update-digest-note")).toHaveTextContent(
       /External legal update delivery requires provider-specific approval/i,
+    );
+  });
+
+  it("BUG-049: surfaces the backend error verbatim when watchlist creation fails", async () => {
+    const user = userEvent.setup();
+    listStatutesMock.mockResolvedValue({ statutes: [], total_section_count: 0 });
+    createLegalUpdateWatchlistMock.mockRejectedValue(
+      new ApiError(400, "Watchlist must include at least one bounded filter.", null, null),
+    );
+
+    render(withClient(<StatutesIndexPage />));
+
+    await user.type(await screen.findByTestId("legal-update-name"), "NI Act updates");
+    await user.type(screen.getByTestId("legal-update-terms"), "Section 138");
+    await user.click(screen.getByTestId("legal-update-create"));
+
+    expect(await screen.findByTestId("legal-update-create-error")).toHaveTextContent(
+      "Watchlist must include at least one bounded filter.",
     );
   });
 
