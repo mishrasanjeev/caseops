@@ -37,6 +37,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 import CaseTrackingPage from "@/app/app/case-tracking/page";
+import { ApiError } from "@/lib/api/config";
 
 function withClient(children: ReactNode) {
   const client = new QueryClient({
@@ -196,5 +197,33 @@ describe("CaseTrackingPage", () => {
     expect(updateCaseTrackingBookmarkMock.mock.calls[0][1]).toEqual({
       notification_enabled: false,
     });
+  });
+
+  it("BUG-042: shows an explicit empty-results message instead of nothing", async () => {
+    const user = userEvent.setup();
+    searchTrackedCasesMock.mockResolvedValue({ provider: "ecourtsindia", results: [] });
+    render(withClient(<CaseTrackingPage />));
+
+    await user.type(await screen.findByTestId("case-tracking-query"), "No Such Party");
+    await user.click(screen.getByTestId("case-tracking-search-submit"));
+
+    expect(await screen.findByTestId("case-tracking-search-empty")).toHaveTextContent(
+      /No cases matched your search/i,
+    );
+  });
+
+  it("BUG-042: renders the backend error detail verbatim when search fails", async () => {
+    const user = userEvent.setup();
+    searchTrackedCasesMock.mockRejectedValue(
+      new ApiError(502, "eCourtsIndia provider returned an error.", null, null),
+    );
+    render(withClient(<CaseTrackingPage />));
+
+    await user.type(await screen.findByTestId("case-tracking-query"), "Example Petitioner");
+    await user.click(screen.getByTestId("case-tracking-search-submit"));
+
+    expect(await screen.findByTestId("case-tracking-search-error")).toHaveTextContent(
+      "eCourtsIndia provider returned an error.",
+    );
   });
 });

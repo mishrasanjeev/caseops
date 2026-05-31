@@ -37,6 +37,7 @@ import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { apiErrorMessage } from "@/lib/api/config";
 import {
   createLegalUpdateWatchlist,
   fetchLegalUpdateDigestPreview,
@@ -296,6 +297,37 @@ function LegalUpdatesPanel() {
             Create
           </Button>
         </form>
+
+        {createMutation.isError ? (
+          <p
+            className="text-sm text-[var(--color-danger)]"
+            data-testid="legal-update-create-error"
+          >
+            {apiErrorMessage(
+              createMutation.error,
+              "Could not create the watchlist. Enter a name and at least one term, then try again.",
+            )}
+          </p>
+        ) : null}
+        {runMutation.isError ? (
+          <p
+            className="text-sm text-[var(--color-danger)]"
+            data-testid="legal-update-run-error"
+          >
+            {apiErrorMessage(runMutation.error, "Could not run the watchlist. Try again.")}
+          </p>
+        ) : null}
+        {sourceSyncMutation.isError ? (
+          <p
+            className="text-sm text-[var(--color-danger)]"
+            data-testid="legal-update-source-sync-error"
+          >
+            {apiErrorMessage(
+              sourceSyncMutation.error,
+              "Source sync could not be completed. Try again.",
+            )}
+          </p>
+        ) : null}
 
         <div className="space-y-2">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">

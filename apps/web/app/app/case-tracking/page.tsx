@@ -27,6 +27,7 @@ import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { apiErrorMessage } from "@/lib/api/config";
 import {
   createCaseTrackingBookmark,
   fetchCaseTrackingStatus,
@@ -205,37 +206,64 @@ export default function CaseTrackingPage() {
           </form>
 
           {searchMutation.isError ? (
-            <p className="text-sm text-[var(--color-danger)]">
-              Search failed. Check provider configuration.
+            <p
+              className="text-sm text-[var(--color-danger)]"
+              data-testid="case-tracking-search-error"
+            >
+              {apiErrorMessage(
+                searchMutation.error,
+                "Search could not be completed. Check your connection and try again.",
+              )}
             </p>
           ) : null}
-          {searchMutation.data?.results.length ? (
-            <div className="divide-y divide-[var(--color-line)] rounded-md border border-[var(--color-line)]">
-              {searchMutation.data.results.map((result) => (
-                <SearchResultRow
-                  key={`${result.provider}:${result.cnr_number ?? result.case_number}`}
-                  result={result}
-                  busy={bookmarkMutation.isPending}
-                  onBookmark={() =>
-                    bookmarkMutation.mutate({
-                      provider: result.provider,
-                      cnr_number: result.cnr_number,
-                      case_number: result.case_number,
-                      court_code: result.court_code,
-                      court_name: result.court_name,
-                      case_title: result.case_title,
-                      party_names: result.party_names,
-                      current_status: result.current_status,
-                      current_stage: result.current_stage,
-                      next_hearing_on: result.next_hearing_on,
-                      matter_id: matterId,
-                      notification_enabled: true,
-                      metadata: { source_url: result.source_url },
-                    })
-                  }
-                />
-              ))}
-            </div>
+          {bookmarkMutation.isError ? (
+            <p
+              className="text-sm text-[var(--color-danger)]"
+              data-testid="case-tracking-bookmark-error"
+            >
+              {apiErrorMessage(
+                bookmarkMutation.error,
+                "Could not bookmark this case. Try again.",
+              )}
+            </p>
+          ) : null}
+          {searchMutation.isSuccess ? (
+            searchMutation.data.results.length ? (
+              <div className="divide-y divide-[var(--color-line)] rounded-md border border-[var(--color-line)]">
+                {searchMutation.data.results.map((result) => (
+                  <SearchResultRow
+                    key={`${result.provider}:${result.cnr_number ?? result.case_number}`}
+                    result={result}
+                    busy={bookmarkMutation.isPending}
+                    onBookmark={() =>
+                      bookmarkMutation.mutate({
+                        provider: result.provider,
+                        cnr_number: result.cnr_number,
+                        case_number: result.case_number,
+                        court_code: result.court_code,
+                        court_name: result.court_name,
+                        case_title: result.case_title,
+                        party_names: result.party_names,
+                        current_status: result.current_status,
+                        current_stage: result.current_stage,
+                        next_hearing_on: result.next_hearing_on,
+                        matter_id: matterId,
+                        notification_enabled: true,
+                        metadata: { source_url: result.source_url },
+                      })
+                    }
+                  />
+                ))}
+              </div>
+            ) : (
+              <p
+                className="text-sm text-[var(--color-mute)]"
+                data-testid="case-tracking-search-empty"
+              >
+                No cases matched your search. Check the CNR, case number, court
+                code, or party name and try again.
+              </p>
+            )
           ) : null}
         </CardContent>
       </Card>
