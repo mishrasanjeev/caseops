@@ -15,7 +15,7 @@ spec:
         # through Secret Manager, never as a raw env value in the
         # manifest. Auth secret + DB URL + future SendGrid /
         # Anthropic / Pine Labs keys all use secretKeyRef.
-        run.googleapis.com/secrets: "caseops-auth-secret=projects/__PROJECT_NUMBER__/secrets/caseops-auth-secret,caseops-database-url=projects/__PROJECT_NUMBER__/secrets/caseops-database-url,caseops-openai-api-key=projects/__PROJECT_NUMBER__/secrets/caseops-openai-api-key,caseops-sendgrid-webhook-public-key=projects/__PROJECT_NUMBER__/secrets/caseops-sendgrid-webhook-public-key,caseops-ecourtsindia-api-token=projects/__PROJECT_NUMBER__/secrets/caseops-ecourtsindia-api-token"
+        run.googleapis.com/secrets: "caseops-auth-secret:projects/__PROJECT_NUMBER__/secrets/caseops-auth-secret,caseops-database-url:projects/__PROJECT_NUMBER__/secrets/caseops-database-url,caseops-openai-api-key:projects/__PROJECT_NUMBER__/secrets/caseops-openai-api-key,caseops-sendgrid-webhook-public-key:projects/__PROJECT_NUMBER__/secrets/caseops-sendgrid-webhook-public-key,caseops-ecourtsindia-api-token:projects/__PROJECT_NUMBER__/secrets/caseops-ecourtsindia-api-token"
     spec:
       containerConcurrency: 40
       timeoutSeconds: 300
