@@ -1106,7 +1106,8 @@ def _seed_grandfathered_subscriptions() -> None:
                 "created_at, updated_at) "
                 "VALUES (:id, :company_id, :account_id, :plan_version_id, "
                 "'manual_active', :segment, 'custom', :period_start, :period_end, "
-                "0, 'manual', 'migration', 0, :created_at, :updated_at)"
+                ":cancel_at_period_end, 'manual', 'migration', :externally_billable, "
+                ":created_at, :updated_at)"
             ),
             {
                 "id": subscription_id,
@@ -1116,6 +1117,8 @@ def _seed_grandfathered_subscriptions() -> None:
                 "segment": company["company_type"] or "internal",
                 "period_start": now,
                 "period_end": period_end,
+                "cancel_at_period_end": False,
+                "externally_billable": False,
                 "created_at": now,
                 "updated_at": now,
             },
@@ -1179,13 +1182,14 @@ def _seed_configured_founder() -> None:
             "INSERT INTO platform_admin_memberships "
             "(id, user_id, role, capabilities_json, status, mfa_required, "
             "created_at, updated_at) "
-            "VALUES (:id, :user_id, 'super_admin', :capabilities, 'active', 0, "
+            "VALUES (:id, :user_id, 'super_admin', :capabilities, 'active', :mfa_required, "
             ":created_at, :updated_at)"
         ),
         {
             "id": str(uuid4()),
             "user_id": user.id,
             "capabilities": json.dumps(PLATFORM_CAPABILITIES),
+            "mfa_required": False,
             "created_at": now,
             "updated_at": now,
         },
