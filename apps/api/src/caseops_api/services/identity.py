@@ -128,6 +128,10 @@ def register_company_owner(
     session.refresh(company)
     session.refresh(user)
     session.refresh(membership)
+    from caseops_api.services.platform_admin import ensure_configured_platform_super_admin
+
+    ensure_configured_platform_super_admin(session)
+    session.commit()
 
     return _build_auth_response(
         session,
@@ -181,7 +185,11 @@ def authenticate_user(
     # written here (synchronous INSERT + UPDATE + commit on the login
     # critical path). It is now deferred to a FastAPI BackgroundTask in
     # the /auth/login route (record_employee_login_async, fresh session).
-    # authenticate_user no longer mutates the DB.
+    # Only the optional configured-founder platform-admin seed may mutate here.
+    from caseops_api.services.platform_admin import ensure_configured_platform_super_admin
+
+    ensure_configured_platform_super_admin(session)
+    session.commit()
     return _build_auth_response(
         session,
         SessionContext(company=membership.company, user=membership.user, membership=membership)
@@ -324,6 +332,9 @@ def create_company_user(
         _raise_forbidden("Admins can only create members.")
 
     _require_policy_compliant_password(payload.password)
+    from caseops_api.services.saas_billing import assert_user_limit
+
+    assert_user_limit(session, context=context, role=MembershipRole(payload.role))
 
     existing_user = session.scalar(select(User).where(User.email == payload.email.lower()))
     if existing_user:

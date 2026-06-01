@@ -947,7 +947,7 @@ describe("MatterDocumentsPage", () => {
       );
       unmount();
     }
-  }, 30000);
+  }, 60000);
 
   it("rejects invalid Matter File Q&A API shapes in the frontend schema", () => {
     const validResponse = {

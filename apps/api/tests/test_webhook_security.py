@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from caseops_api.services.pine_labs import (
     PineLabsCreatePaymentLinkResult,
     PineLabsPaymentStatusResult,
+    redact_provider_payload,
 )
 from tests.test_auth_company import auth_headers, bootstrap_company
 
@@ -265,3 +266,27 @@ def test_webhook_redacts_sensitive_fields_before_persistence(
         if attempt.provider_payload_json:
             assert "leak@example.com" not in attempt.provider_payload_json
             assert "9000000000" not in attempt.provider_payload_json
+
+
+def test_provider_payload_redaction_covers_plural_customer_and_secret_fields() -> None:
+    redacted = redact_provider_payload(
+        {
+            "customer": {
+                "email": "finance@example.in",
+                "phone_number": "+91-9000000000",
+            },
+            "access_token": "bearer-token",
+            "client_secret": "plural-secret",
+            "payment": {
+                "upi_vpa": "tenant@upi",
+                "card_number": "4111111111111111",
+            },
+        }
+    )
+
+    assert redacted["customer"]["email"] == "[redacted]"
+    assert redacted["customer"]["phone_number"] == "[redacted]"
+    assert redacted["access_token"] == "[redacted]"
+    assert redacted["client_secret"] == "[redacted]"
+    assert redacted["payment"]["upi_vpa"] == "[redacted]"
+    assert redacted["payment"]["card_number"] == "[redacted]"

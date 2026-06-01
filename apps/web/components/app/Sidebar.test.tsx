@@ -43,6 +43,24 @@ describe("SidebarBody resolved capability navigation", () => {
       "href",
       "/app/admin",
     );
+    expect(screen.getByRole("link", { name: "Billing" })).toHaveAttribute(
+      "href",
+      "/app/admin/billing",
+    );
+    expect(screen.queryByRole("link", { name: "Platform admin" })).not.toBeInTheDocument();
+  });
+
+  it("shows platform admin navigation only when the server returns platform capability", () => {
+    roleMock.mockReturnValue("owner");
+    resolvedMock.mockReturnValue(["workspace:admin", "platform:admin"]);
+    canMock.mockReturnValue(true);
+
+    render(<SidebarBody pathname="/app/platform-admin" />);
+
+    expect(screen.getByRole("link", { name: "Platform admin" })).toHaveAttribute(
+      "href",
+      "/app/platform-admin",
+    );
   });
 
   it("shows case tracking when authority search is available", () => {

@@ -54,6 +54,8 @@ _EXEMPT_PATHS = frozenset({
     "/api/auth/password-reset/start",
     "/api/auth/password-reset/complete",
     "/api/bootstrap/company",
+    "/api/billing/trials",
+    "/api/billing/enrollments/demo-request",
 })
 _EXEMPT_PREFIXES = (
     # Catches any path under /api/webhooks/* if added in the future.

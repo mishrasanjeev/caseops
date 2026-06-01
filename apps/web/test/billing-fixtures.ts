@@ -1,0 +1,406 @@
+import { vi } from "vitest";
+
+export function jsonResponse(data: unknown, status = 200): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+export function downloadResponse(name: string, body = "row\n"): Response {
+  return new Response(body, {
+    status: 200,
+    headers: {
+      "content-type": "text/csv",
+      "content-disposition": `attachment; filename="${name}"`,
+    },
+  });
+}
+
+const price = (
+  id: string,
+  amount: number | null,
+  interval: string,
+  taxBehavior = "exclusive",
+) => ({
+  id,
+  amount_minor: amount,
+  currency: "INR",
+  interval,
+  tax_behavior: taxBehavior,
+  tax_rate_bps: 1800,
+});
+
+export const planCatalog = {
+  version: "2026.05.v1",
+  plans: [
+    {
+      id: "plan-solo-core",
+      plan_code: "solo_core",
+      version: "2026.05.v1",
+      segment: "solo",
+      display_name: "Solo Core",
+      description: "Entry plan for solo lawyers.",
+      publicly_visible: true,
+      trial_eligible: true,
+      prices: [
+        price("price-solo-core-m", 99900, "month", "inclusive"),
+        price("price-solo-core-y", 999000, "year", "inclusive"),
+      ],
+      entitlements: {
+        users_internal_limit: 2,
+        matters_active_limit: 50,
+        tracked_cases_limit: 50,
+        ai_credits_monthly: 100,
+        storage_bytes_limit: 2147483648,
+        case_refresh_cadence: "weekday_daily",
+      },
+    },
+    {
+      id: "plan-solo-pro",
+      plan_code: "solo_pro",
+      version: "2026.05.v1",
+      segment: "solo",
+      display_name: "Solo Pro",
+      description: "Hero solo plan.",
+      publicly_visible: true,
+      trial_eligible: true,
+      prices: [
+        price("price-solo-pro-m", 199900, "month", "inclusive"),
+        price("price-solo-pro-y", 1999000, "year", "inclusive"),
+      ],
+      entitlements: {
+        users_internal_limit: 4,
+        matters_active_limit: 250,
+        tracked_cases_limit: 200,
+        ai_credits_monthly: 300,
+        storage_bytes_limit: 10737418240,
+        case_refresh_cadence: "daily",
+      },
+    },
+    {
+      id: "plan-firm-growth",
+      plan_code: "firm_growth",
+      version: "2026.05.v1",
+      segment: "firm",
+      display_name: "Firm Growth",
+      description: "Hero firm plan.",
+      publicly_visible: true,
+      trial_eligible: true,
+      prices: [
+        price("price-firm-growth-m", 1999900, "month"),
+        price("price-firm-growth-y", 20999000, "year"),
+      ],
+      entitlements: {
+        users_internal_limit: 15,
+        matters_active_limit: 1500,
+        tracked_cases_limit: 1000,
+        ai_credits_monthly: 1200,
+        storage_bytes_limit: 161061273600,
+        case_refresh_cadence: "smart_daily",
+      },
+    },
+    {
+      id: "plan-gc-professional",
+      plan_code: "gc_professional",
+      version: "2026.05.v1",
+      segment: "gc",
+      display_name: "GC Professional",
+      description: "Corporate GC plan.",
+      publicly_visible: true,
+      trial_eligible: false,
+      prices: [price("price-gc-prof-y", 80000000, "year")],
+      entitlements: {
+        users_internal_limit: 15,
+        matters_active_limit: 10000,
+        tracked_cases_limit: 25000,
+        ai_credits_monthly: 30000,
+        storage_bytes_limit: 1099511627776,
+        case_refresh_cadence: "priority_daily",
+      },
+    },
+  ],
+  add_ons: [
+    {
+      id: "addon-ai-250",
+      plan_code: "addon_ai_250",
+      version: "2026.05.v1",
+      segment: "addon",
+      display_name: "AI credit pack 250",
+      description: "250 credits, expires in 12 months.",
+      publicly_visible: true,
+      trial_eligible: false,
+      prices: [price("price-ai-250", 119900, "one_time", "exclusive")],
+      entitlements: { ai_credits_topup: 250 },
+    },
+    {
+      id: "addon-cases-500",
+      plan_code: "addon_cases_500",
+      version: "2026.05.v1",
+      segment: "addon",
+      display_name: "Tracked case pack 500",
+      description: "500 additional tracked cases.",
+      publicly_visible: true,
+      trial_eligible: false,
+      prices: [price("price-cases-500", 249900, "month", "exclusive")],
+      entitlements: { tracked_cases_limit: 500 },
+    },
+  ],
+};
+
+export const currentBilling = {
+  billing_account: {
+    id: "acct-1",
+    company_id: "company-1",
+    billing_email: "owner@example.com",
+    billing_name: "Owner One",
+    billing_phone: null,
+    gstin: null,
+    billing_address: null,
+    tax_treatment: "gst_unregistered",
+  },
+  subscription: {
+    id: "sub-1",
+    plan_code: "solo_pro",
+    plan_name: "Solo Pro",
+    status: "active",
+    segment: "solo",
+    billing_interval: "month",
+    current_period_start: "2026-05-01T00:00:00Z",
+    current_period_end: "2026-06-01T00:00:00Z",
+    trial_end: null,
+    cancel_at_period_end: false,
+    externally_billable: true,
+    source: "self_service",
+  },
+  entitlements: {},
+  usage: {
+    ai_credits_included: 300,
+    ai_credits_used: 75,
+    ai_credits_remaining: 225,
+    topup_credits_available: 250,
+    tracked_cases_used: 40,
+    tracked_cases_limit: 200,
+    manual_refreshes_used_today: 2,
+    manual_refreshes_limit_daily: 10,
+    storage_used_bytes: 2147483648,
+    storage_limit_bytes: 10737418240,
+    users_internal_used: 2,
+    users_internal_limit: 4,
+    users_viewer_used: 0,
+    users_viewer_limit: 0,
+    matters_active_used: 12,
+    matters_active_limit: 250,
+  },
+  payment_provider: {
+    mode: "disabled",
+    ready: false,
+  },
+};
+
+export const checkoutResponse = {
+  id: "chk-1",
+  checkout_type: "new_subscription",
+  status: "provider_disabled",
+  amount_minor: 199900,
+  tax_amount_minor: 0,
+  total_amount_minor: 199900,
+  currency: "INR",
+  provider: "pine_labs_plural",
+  provider_checkout_url: null,
+  provider_order_id: "mock-order-1",
+  provider_disabled: true,
+  next_action: "provider_disabled",
+  created_at: "2026-05-31T00:00:00Z",
+  expires_at: "2026-05-31T01:00:00Z",
+};
+
+export const invoices = {
+  invoices: [
+    {
+      id: "inv-1",
+      invoice_number: "SAAS-001",
+      invoice_type: "manual",
+      amount_minor: 100000,
+      tax_amount_minor: 18000,
+      total_amount_minor: 118000,
+      amount_received_minor: 118000,
+      currency: "INR",
+      status: "paid",
+      issued_on: "2026-05-31",
+      due_on: "2026-06-07",
+      paid_on: "2026-05-31",
+    },
+  ],
+};
+
+export const creditLedger = {
+  rows: [
+    {
+      id: "ledger-1",
+      credit_bucket: "included",
+      event_type: "grant",
+      delta: 300,
+      balance_after: 300,
+      reason: "Monthly plan grant",
+      source_object_type: "subscription",
+      source_object_id: "sub-1",
+      expires_at: null,
+      created_at: "2026-05-31T00:00:00Z",
+    },
+  ],
+};
+
+export const usageReport = {
+  period_start: "2026-05-01T00:00:00Z",
+  period_end: "2026-06-01T00:00:00Z",
+  snapshot: currentBilling.usage,
+  by_feature: [{ key: "matter_recommendation", label: "Matter recommendation", quantity: 3, credits: 3 }],
+  by_user: [{ key: "user-1", label: "Owner One", quantity: 3, credits: 3 }],
+  by_matter: [{ key: "matter-1", label: "EXT-001", quantity: 2, credits: 2 }],
+  by_tracked_case: [{ key: "cnr-1", label: "CNR123", quantity: 1, credits: 0 }],
+  daily: [{ key: "2026-05-31", label: "2026-05-31", quantity: 3, credits: 3 }],
+  blocked_events: [{ key: "ai_credit_exhausted", label: "AI credit exhausted", quantity: 1, credits: 0 }],
+};
+
+export const platformOverview = {
+  mrr_minor: 5000000,
+  arr_minor: 60000000,
+  active_subscriptions: 12,
+  trial_count: 3,
+  failed_payments: 1,
+  gross_revenue_minor: 12000000,
+  recognized_revenue_minor: 10000000,
+  total_variable_cost_minor: 2000000,
+  gross_profit_minor: 8000000,
+  gross_margin_bps: 8000,
+  margin_alerts: [
+    {
+      company_id: "company-1",
+      company_name: "Acme Law",
+      message: "Stress-case margin below guardrail.",
+    },
+  ],
+};
+
+export const enrollments = {
+  enrollments: [
+    {
+      id: "enroll-1",
+      company_id: "company-1",
+      contact_name: "Owner One",
+      contact_email: "owner@example.com",
+      company_name: "Acme Law",
+      segment: "firm",
+      selected_plan: "firm_growth",
+      status: "trial_started",
+      created_at: "2026-05-31T00:00:00Z",
+    },
+  ],
+};
+
+export const profitRows = {
+  rows: [
+    {
+      company_id: "company-1",
+      company_name: "Acme Law",
+      period_start: "2026-05-01T00:00:00Z",
+      period_end: "2026-06-01T00:00:00Z",
+      gross_revenue_minor: 12000000,
+      recognized_revenue_minor: 10000000,
+      tax_minor: 1800000,
+      discounts_minor: 0,
+      payment_provider_cost_minor: 120000,
+      llm_cost_minor: 400000,
+      storage_cost_minor: 25000,
+      case_refresh_cost_minor: 75000,
+      total_variable_cost_minor: 620000,
+      gross_profit_minor: 9380000,
+      gross_margin_bps: 9380,
+      status: "ok",
+    },
+  ],
+};
+
+export const companyProfitability = {
+  companies: profitRows.rows,
+};
+
+export const providerEvents = {
+  events: [
+    {
+      id: "evt-1",
+      provider: "pine_labs_plural",
+      provider_event_id: "pl_evt_1",
+      event_type: "ORDER_PROCESSED",
+      processing_status: "processed",
+      provider_order_id: "order-1",
+      company_id: "company-1",
+      received_at: "2026-05-31T00:00:00Z",
+      processed_at: "2026-05-31T00:00:01Z",
+      error_message: null,
+    },
+  ],
+};
+
+export function mockBillingFetch(fetchMock: ReturnType<typeof vi.fn>) {
+  fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url.includes("/api/billing/plans")) return jsonResponse(planCatalog);
+    if (url.includes("/api/billing/current")) return jsonResponse(currentBilling);
+    if (url.includes("/api/billing/invoices") && url.includes("/download")) {
+      return downloadResponse(
+        url.includes("format=json") ? "caseops-invoice-inv-1.json" : "caseops-invoice-inv-1.pdf",
+        url.includes("format=json") ? "{\"invoice_number\":\"SAAS-001\"}" : "%PDF-1.4",
+      );
+    }
+    if (url.includes("/api/billing/invoices")) return jsonResponse(invoices);
+    if (url.includes("/api/billing/credit-ledger/export")) {
+      return downloadResponse("caseops-credit-ledger.csv");
+    }
+    if (url.includes("/api/billing/credit-ledger")) return jsonResponse(creditLedger);
+    if (url.includes("/api/billing/reports/spend/export")) {
+      return downloadResponse("caseops-spend-report.csv");
+    }
+    if (url.includes("/api/billing/reports/spend")) return jsonResponse(usageReport);
+    if (url.includes("/api/billing/usage")) return jsonResponse(usageReport);
+    if (url.includes("/api/billing/statement")) {
+      return downloadResponse(
+        url.includes("format=pdf") ? "caseops-billing-statement.pdf" : "caseops-billing-statement.csv",
+      );
+    }
+    if (url.includes("/api/billing/payments/export")) {
+      return downloadResponse("caseops-payments.csv");
+    }
+    if (url.includes("/api/billing/add-ons/checkout")) return jsonResponse(checkoutResponse);
+    if (url.includes("/api/billing/add-ons")) {
+      return jsonResponse({ version: planCatalog.version, plans: [], add_ons: planCatalog.add_ons });
+    }
+    if (url.includes("/api/billing/checkout") && init?.method === "POST") {
+      return jsonResponse(checkoutResponse);
+    }
+    if (url.includes("/api/billing/enrollments/demo-request")) {
+      return jsonResponse({ id: "demo-1", status: "new" });
+    }
+    if (url.includes("/api/platform-admin/overview")) return jsonResponse(platformOverview);
+    if (url.includes("/api/platform-admin/enrollments")) return jsonResponse(enrollments);
+    if (url.includes("/api/platform-admin/margin-alerts")) {
+      return jsonResponse({ alerts: platformOverview.margin_alerts });
+    }
+    if (url.includes("/api/platform-admin/profit-report")) return jsonResponse(profitRows);
+    if (url.includes("/api/platform-admin/companies/profitability")) {
+      return jsonResponse(companyProfitability);
+    }
+    if (url.includes("/api/platform-admin/provider-events") && url.includes("/reprocess")) {
+      return jsonResponse({ status: "queued_for_manual_reprocess" });
+    }
+    if (url.includes("/api/platform-admin/provider-events")) return jsonResponse(providerEvents);
+    if (url.includes("/api/platform-admin/profit/export")) {
+      return downloadResponse("caseops-platform-profit.csv");
+    }
+    if (url.includes("/api/platform-admin/revenue/export")) {
+      return downloadResponse("caseops-platform-revenue.csv");
+    }
+    return jsonResponse({});
+  });
+}

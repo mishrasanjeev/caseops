@@ -187,6 +187,14 @@ def resolve_membership_capabilities(
         return set()
 
     static = static_capabilities_for_role(role)
+    try:
+        from caseops_api.services.platform_admin import platform_capabilities_for_user
+
+        static = static | platform_capabilities_for_user(session, membership.user_id)
+    except Exception:
+        # Platform-admin capability resolution must never make ordinary tenant
+        # sessions unusable. The platform routes still enforce their own DB gate.
+        static = set(static)
     if role == MembershipRole.OWNER:
         return static
 

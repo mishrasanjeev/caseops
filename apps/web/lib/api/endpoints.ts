@@ -1,9 +1,15 @@
 import { apiRequest } from "./client";
-import { API_BASE_URL } from "./config";
+import { API_BASE_URL, ApiError } from "./config";
 import {
   type AuthContext,
   type AuthSession,
   type AffidavitIntelligenceResponse,
+  type BillingCheckoutResponse,
+  type BillingCreditLedgerResponse,
+  type BillingCurrentResponse,
+  type BillingInvoiceListResponse,
+  type BillingPlansResponse,
+  type BillingUsageReportResponse,
   type CalendarConnectionListResponse,
   type CalendarConnectionRecord,
   type CalendarEventKind,
@@ -64,9 +70,22 @@ import {
   type RecommendationList,
   type RecommendationObjectiveContext,
   type RecommendationType,
+  type DemoRequestResponse,
+  type PlatformCompanyProfitabilityResponse,
+  type PlatformEnrollmentsResponse,
+  type PlatformMarginAlertsResponse,
+  type PlatformOverviewResponse,
+  type PlatformProfitReportResponse,
+  type PlatformProviderEventsResponse,
   authContext,
   authSession,
   affidavitIntelligenceResponse,
+  billingCheckoutResponse,
+  billingCreditLedgerResponse,
+  billingCurrentResponse,
+  billingInvoiceListResponse,
+  billingPlansResponse,
+  billingUsageReportResponse,
   calendarConnectionRecord,
   calendarConnectionListResponse,
   calendarConnectionStartResponse,
@@ -80,6 +99,7 @@ import {
   communicationRecord,
   communicationTimelineResponse,
   contractsList,
+  demoRequestResponse,
   draft,
   draftingDataExtractionResponse,
   draftingDataField,
@@ -109,6 +129,12 @@ import {
   notificationRuleListResponse,
   notificationRuleRecord,
   outsideCounselWorkspace,
+  platformCompanyProfitabilityResponse,
+  platformEnrollmentsResponse,
+  platformMarginAlertsResponse,
+  platformOverviewResponse,
+  platformProfitReportResponse,
+  platformProviderEventsResponse,
   predictiveIntelligenceResponse,
   proceedingIntelligenceResponse,
   recommendation,
@@ -5581,5 +5607,278 @@ export async function rejectClientKyc(input: {
   return apiRequest<unknown>(
     `/api/clients/${input.clientId}/kyc/reject`,
     { method: "POST", body: { reason: input.reason } },
+  );
+}
+
+// SaaS billing, checkout, tenant usage, and founder-only platform admin.
+export type BillingInterval = "month" | "year" | "one_time" | "custom";
+export type BillingCheckoutType =
+  | "new_subscription"
+  | "renewal"
+  | "upgrade"
+  | "topup"
+  | "addon"
+  | "manual_invoice";
+
+export async function fetchBillingPlans(): Promise<BillingPlansResponse> {
+  const data = await apiRequest<unknown>("/api/billing/plans");
+  return billingPlansResponse.parse(data);
+}
+
+export async function fetchCurrentBilling(): Promise<BillingCurrentResponse> {
+  const data = await apiRequest<unknown>("/api/billing/current");
+  return billingCurrentResponse.parse(data);
+}
+
+export async function createBillingCheckout(input: {
+  planCode: string;
+  interval?: BillingInterval;
+  checkoutType?: BillingCheckoutType;
+  quantity?: number;
+  successUrl?: string | null;
+  cancelUrl?: string | null;
+  couponCode?: string | null;
+}): Promise<BillingCheckoutResponse> {
+  const data = await apiRequest<unknown>("/api/billing/checkout", {
+    method: "POST",
+    body: {
+      plan_code: input.planCode,
+      interval: input.interval ?? "month",
+      checkout_type: input.checkoutType ?? "new_subscription",
+      quantity: input.quantity ?? 1,
+      success_url: input.successUrl ?? null,
+      cancel_url: input.cancelUrl ?? null,
+      coupon_code: input.couponCode ?? null,
+    },
+  });
+  return billingCheckoutResponse.parse(data);
+}
+
+export async function fetchBillingCheckout(
+  sessionId: string,
+): Promise<BillingCheckoutResponse> {
+  const data = await apiRequest<unknown>(
+    `/api/billing/checkout/${encodeURIComponent(sessionId)}`,
+  );
+  return billingCheckoutResponse.parse(data);
+}
+
+export async function syncBillingCheckout(
+  sessionId: string,
+): Promise<BillingCheckoutResponse> {
+  const data = await apiRequest<unknown>(
+    `/api/billing/checkout/${encodeURIComponent(sessionId)}/sync`,
+    { method: "POST", body: {} },
+  );
+  return billingCheckoutResponse.parse(data);
+}
+
+export async function cancelBillingSubscription(): Promise<BillingCurrentResponse> {
+  await apiRequest<unknown>("/api/billing/subscription/cancel", {
+    method: "POST",
+    body: {},
+  });
+  return fetchCurrentBilling();
+}
+
+export async function reactivateBillingSubscription(): Promise<BillingCurrentResponse> {
+  await apiRequest<unknown>("/api/billing/subscription/reactivate", {
+    method: "POST",
+    body: {},
+  });
+  return fetchCurrentBilling();
+}
+
+export async function fetchBillingUsage(): Promise<BillingUsageReportResponse> {
+  const data = await apiRequest<unknown>("/api/billing/usage");
+  return billingUsageReportResponse.parse(data);
+}
+
+export async function fetchBillingSpendReport(): Promise<BillingUsageReportResponse> {
+  const data = await apiRequest<unknown>("/api/billing/reports/spend");
+  return billingUsageReportResponse.parse(data);
+}
+
+export async function fetchBillingCreditLedger(): Promise<BillingCreditLedgerResponse> {
+  const data = await apiRequest<unknown>("/api/billing/credit-ledger");
+  return billingCreditLedgerResponse.parse(data);
+}
+
+export async function fetchBillingInvoices(): Promise<BillingInvoiceListResponse> {
+  const data = await apiRequest<unknown>("/api/billing/invoices");
+  return billingInvoiceListResponse.parse(data);
+}
+
+export async function fetchBillingAddOns(): Promise<BillingPlansResponse> {
+  const data = await apiRequest<unknown>("/api/billing/add-ons");
+  return billingPlansResponse.parse(data);
+}
+
+export async function createBillingAddOnCheckout(input: {
+  addOnCode: string;
+  quantity?: number;
+  successUrl?: string | null;
+  cancelUrl?: string | null;
+}): Promise<BillingCheckoutResponse> {
+  const data = await apiRequest<unknown>("/api/billing/add-ons/checkout", {
+    method: "POST",
+    body: {
+      add_on_code: input.addOnCode,
+      quantity: input.quantity ?? 1,
+      success_url: input.successUrl ?? null,
+      cancel_url: input.cancelUrl ?? null,
+    },
+  });
+  return billingCheckoutResponse.parse(data);
+}
+
+export async function createBillingDemoRequest(input: {
+  contactName: string;
+  contactEmail: string;
+  contactMobile?: string | null;
+  companyName?: string | null;
+  segment: "solo" | "firm" | "gc";
+  selectedPlan?: string | null;
+  notes?: string | null;
+  source?: string;
+}): Promise<DemoRequestResponse> {
+  const data = await apiRequest<unknown>("/api/billing/enrollments/demo-request", {
+    method: "POST",
+    body: {
+      contact_name: input.contactName,
+      contact_email: input.contactEmail,
+      contact_mobile: input.contactMobile ?? null,
+      company_name: input.companyName ?? null,
+      segment: input.segment,
+      selected_plan: input.selectedPlan ?? null,
+      notes: input.notes ?? null,
+      source: input.source ?? "pricing_page",
+    },
+  });
+  return demoRequestResponse.parse(data);
+}
+
+export async function startBillingTrial(input: {
+  companyName: string;
+  companySlug: string;
+  companyType: "law_firm" | "corporate_legal" | "solo";
+  ownerFullName: string;
+  ownerEmail: string;
+  ownerPassword: string;
+  mobile?: string | null;
+  gstin?: string | null;
+  selectedPlan?: string | null;
+  source?: string;
+  couponCode?: string | null;
+}): Promise<unknown> {
+  return apiRequest<unknown>("/api/billing/trials", {
+    method: "POST",
+    body: {
+      company_name: input.companyName,
+      company_slug: input.companySlug,
+      company_type: input.companyType,
+      owner_full_name: input.ownerFullName,
+      owner_email: input.ownerEmail,
+      owner_password: input.ownerPassword,
+      mobile: input.mobile ?? null,
+      gstin: input.gstin ?? null,
+      selected_plan: input.selectedPlan ?? null,
+      source: input.source ?? "pricing_page",
+      coupon_code: input.couponCode ?? null,
+    },
+  });
+}
+
+function downloadNameFromDisposition(
+  disposition: string | null,
+  fallback: string,
+): string {
+  const match = disposition?.match(/filename="([^"]+)"/i);
+  return match?.[1] ?? fallback;
+}
+
+export async function downloadApiFile(path: string, fallbackName: string): Promise<void> {
+  const url = path.startsWith("http")
+    ? path
+    : `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
+  const response = await fetch(url, {
+    credentials: "include",
+    headers: { Accept: "*/*" },
+  });
+  if (!response.ok) {
+    let detail = `Download failed (${response.status}).`;
+    let parsed: unknown = null;
+    try {
+      parsed = await response.json();
+      if (
+        parsed &&
+        typeof parsed === "object" &&
+        typeof (parsed as Record<string, unknown>).detail === "string"
+      ) {
+        detail = (parsed as Record<string, string>).detail;
+      }
+    } catch {
+      /* ignore non-JSON download errors */
+    }
+    throw new ApiError(response.status, detail, parsed, null);
+  }
+  const blob = await response.blob();
+  const href = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = href;
+  a.download = downloadNameFromDisposition(
+    response.headers.get("content-disposition"),
+    fallbackName,
+  );
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(href);
+}
+
+export async function fetchPlatformOverview(): Promise<PlatformOverviewResponse> {
+  const data = await apiRequest<unknown>("/api/platform-admin/overview");
+  return platformOverviewResponse.parse(data);
+}
+
+export async function fetchPlatformEnrollments(): Promise<PlatformEnrollmentsResponse> {
+  const data = await apiRequest<unknown>("/api/platform-admin/enrollments");
+  return platformEnrollmentsResponse.parse(data);
+}
+
+export async function fetchPlatformProfitReport(): Promise<PlatformProfitReportResponse> {
+  const data = await apiRequest<unknown>("/api/platform-admin/profit-report");
+  return platformProfitReportResponse.parse(data);
+}
+
+export async function fetchPlatformCompanyProfitability(): Promise<PlatformCompanyProfitabilityResponse> {
+  const data = await apiRequest<unknown>(
+    "/api/platform-admin/companies/profitability",
+  );
+  return platformCompanyProfitabilityResponse.parse(data);
+}
+
+export async function fetchPlatformProviderEvents(input?: {
+  q?: string;
+}): Promise<PlatformProviderEventsResponse> {
+  const params = new URLSearchParams();
+  if (input?.q) params.set("q", input.q);
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  const data = await apiRequest<unknown>(`/api/platform-admin/provider-events${suffix}`);
+  return platformProviderEventsResponse.parse(data);
+}
+
+export async function fetchPlatformMarginAlerts(): Promise<PlatformMarginAlertsResponse> {
+  const data = await apiRequest<unknown>("/api/platform-admin/margin-alerts");
+  return platformMarginAlertsResponse.parse(data);
+}
+
+export async function reprocessPlatformProviderEvent(eventId: string): Promise<unknown> {
+  return apiRequest<unknown>(
+    `/api/platform-admin/provider-events/${encodeURIComponent(eventId)}/reprocess`,
+    {
+      method: "POST",
+      body: { reason: "Manual provider event reprocess requested from platform console." },
+    },
   );
 }

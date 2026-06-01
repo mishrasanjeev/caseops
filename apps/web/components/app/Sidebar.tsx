@@ -7,6 +7,7 @@ import {
   CalendarDays,
   ChevronsRight,
   Contact,
+  CreditCard,
   FileSignature,
   Gavel,
   Inbox,
@@ -16,6 +17,7 @@ import {
   type LucideIcon,
   PanelsTopLeft,
   Scale,
+  ShieldCheck,
   Sparkles,
   Sun,
   Users,
@@ -99,6 +101,20 @@ const NAV: NavItem[] = [
     icon: Wrench,
     section: "admin",
     requiresCapability: "workspace:admin",
+  },
+  {
+    href: "/app/admin/billing",
+    label: "Billing",
+    icon: CreditCard,
+    section: "admin",
+    requiresCapability: "workspace:admin",
+  },
+  {
+    href: "/app/platform-admin",
+    label: "Platform admin",
+    icon: ShieldCheck,
+    section: "admin",
+    requiresCapability: "platform:admin",
   },
 ];
 
