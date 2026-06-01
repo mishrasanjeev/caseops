@@ -668,3 +668,26 @@ tickets to be filed):
 - **Backend exists, no admin UI (BUG-048 class).** `services/custom_roles.py`,
   `services/notification_rules.py`, `services/conflict_checks.py` all ship
   REST routes but have no admin page; admins must run SQL to use them.
+
+## Hari 2026-05-31 batch (BUG-042 reopen, BUG-043, BUG-049)
+
+Full writeup + runbook: `docs/BUG_FIX_HARI_2026-05-31.md`.
+
+- **BUG-042 (P1, reopened) — Partially fixed.** Root cause is a deploy/credential
+  seam, not missing code: Secret Manager has no `caseops-ecourtsindia-api-token`
+  (api-service.yaml references it → deploy would fail), and the search UI failed
+  silently on 0-results / provider errors. Fixed UI legibility (verbatim error +
+  empty-state) and locked the adapter contract. LIVE search = Inconclusive pending
+  token (Runbook A) + automation deploy (Runbook B).
+- **BUG-043 (P2) — Partially fixed.** Bookmark + poll→in-app-notification already
+  exist and are tested; the nightly poll Cloud Run job + scheduler were committed
+  as YAML but never deployed. Automation = Inconclusive pending Runbook B (and the
+  eCourts token).
+- **BUG-049 (P2) — Partially fixed.** "Inputs unreliable" = silent-failing
+  create/run/source-sync mutations (now render verbatim errors); create→persist
+  verified. Nightly PRS sync job + scheduler committed but never deployed
+  (token-free) → Inconclusive pending Runbook B.
+- **Adjacent class confirmed:** only `caseops-ecourtsindia-api-token` is missing of
+  all cloudrun secretKeyRefs; no app/app page-level mutation lacks an error surface
+  after this batch. Proof: vitest (3 new), Playwright `hari-2026-05-31-bugs.spec.ts`
+  (4, PASSED), backend test_case_tracking.py + test_statutes_routes.py (42 PASSED).

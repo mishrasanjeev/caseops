@@ -163,7 +163,12 @@ Render-Template `
     -OutputPath $caseTrackingManifest `
     -Replacements $replacements
 
-& gcloud run services replace $apiManifest --region $Region --project $ProjectId
+# NOTE: the API *service* is deployed by scripts/deploy-prod.sh, which uses
+# `gcloud run deploy --image` and preserves the multi-container shape
+# (the EG-003 clamav sidecar). Do NOT `gcloud run services replace`
+# api-service.yaml here — a full-spec replace drops the clamav sidecar and
+# resets tuned scaling. This script only manages the jobs + schedulers.
+# ($apiManifest is still rendered above for reference / manual inspection.)
 & gcloud run jobs replace $workerManifest --region $Region --project $ProjectId
 & gcloud run jobs replace $legalUpdateManifest --region $Region --project $ProjectId
 & gcloud run jobs replace $caseTrackingManifest --region $Region --project $ProjectId

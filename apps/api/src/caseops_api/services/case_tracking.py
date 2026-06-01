@@ -1037,15 +1037,24 @@ def poll_tracked_cases(
         )
         session.add(run)
         session.flush()
+        # Select tracked cases that have at least one active bookmark via an
+        # EXISTS subquery (``.any()``) rather than a JOIN + SELECT DISTINCT.
+        # DISTINCT over a row that includes ``json`` columns
+        # (party_names_json, metadata_json) fails on PostgreSQL —
+        # ``could not identify an equality operator for type json`` — because
+        # the json type has no equality operator. The JOIN was also only there
+        # to filter; ``.any()`` filters without duplicating rows, so no DISTINCT
+        # is needed. (SQLite tolerated the old form, which is why this only
+        # surfaced against Cloud SQL Postgres.)
         cases = list(
             session.scalars(
                 select(TrackedCase)
-                .distinct()
                 .options(selectinload(TrackedCase.bookmarks))
-                .join(TrackedCaseBookmark)
                 .where(
                     TrackedCase.company_id == context.company.id,
-                    TrackedCaseBookmark.is_archived.is_(False),
+                    TrackedCase.bookmarks.any(
+                        TrackedCaseBookmark.is_archived.is_(False)
+                    ),
                 )
                 .order_by(
                     TrackedCase.last_provider_checked_at.asc().nullsfirst(),
