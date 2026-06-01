@@ -901,6 +901,346 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/billing/add-ons": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Billing Add Ons */
+        get: operations["get_billing_add_ons_api_billing_add_ons_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/billing/add-ons/checkout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Add On Checkout */
+        post: operations["create_add_on_checkout_api_billing_add_ons_checkout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/billing/checkout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Billing Checkout */
+        post: operations["create_billing_checkout_api_billing_checkout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/billing/checkout/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Billing Checkout */
+        get: operations["get_billing_checkout_api_billing_checkout__session_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/billing/checkout/{session_id}/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sync Billing Checkout */
+        post: operations["sync_billing_checkout_api_billing_checkout__session_id__sync_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/billing/credit-ledger": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Credit Ledger */
+        get: operations["get_credit_ledger_api_billing_credit_ledger_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/billing/credit-ledger/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Credit Ledger */
+        get: operations["export_credit_ledger_api_billing_credit_ledger_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/billing/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Current Billing */
+        get: operations["get_current_billing_api_billing_current_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/billing/enrollments/demo-request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Enrollment Demo Request */
+        post: operations["create_enrollment_demo_request_api_billing_enrollments_demo_request_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/billing/invoices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Billing Invoices */
+        get: operations["get_billing_invoices_api_billing_invoices_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/billing/invoices/{invoice_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Billing Invoice */
+        get: operations["download_billing_invoice_api_billing_invoices__invoice_id__download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/billing/payments/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Payments */
+        get: operations["export_payments_api_billing_payments_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/billing/plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Billing Plans */
+        get: operations["get_billing_plans_api_billing_plans_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/billing/reports/spend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Spend Report */
+        get: operations["get_spend_report_api_billing_reports_spend_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/billing/reports/spend/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Spend Report */
+        get: operations["export_spend_report_api_billing_reports_spend_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/billing/statement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Billing Statement */
+        get: operations["download_billing_statement_api_billing_statement_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/billing/subscription/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Current Subscription */
+        post: operations["cancel_current_subscription_api_billing_subscription_cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/billing/subscription/reactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reactivate Current Subscription */
+        post: operations["reactivate_current_subscription_api_billing_subscription_reactivate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/billing/trials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Trial */
+        post: operations["start_trial_api_billing_trials_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/billing/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Billing Usage */
+        get: operations["get_billing_usage_api_billing_usage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/bootstrap/company": {
         parameters: {
             query?: never;
@@ -4446,6 +4786,330 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/platform-admin/companies/profitability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Company Profitability */
+        get: operations["get_company_profitability_api_platform_admin_companies_profitability_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/companies/{company_id}/billing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Company Billing Detail */
+        get: operations["get_company_billing_detail_api_platform_admin_companies__company_id__billing_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/companies/{company_id}/credits/grant": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Grant Company Credits */
+        post: operations["grant_company_credits_api_platform_admin_companies__company_id__credits_grant_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/companies/{company_id}/overage-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set Overage Policy */
+        put: operations["set_overage_policy_api_platform_admin_companies__company_id__overage_policy_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/companies/{company_id}/subscription": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mutate Company Subscription */
+        post: operations["mutate_company_subscription_api_platform_admin_companies__company_id__subscription_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/companies/{company_id}/subscription/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume Company Subscription */
+        post: operations["resume_company_subscription_api_platform_admin_companies__company_id__subscription_resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/companies/{company_id}/subscription/suspend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Suspend Company Subscription */
+        post: operations["suspend_company_subscription_api_platform_admin_companies__company_id__subscription_suspend_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/coupons": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Coupons */
+        get: operations["list_coupons_api_platform_admin_coupons_get"];
+        put?: never;
+        /** Create Coupon */
+        post: operations["create_coupon_api_platform_admin_coupons_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/enrollments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Platform Enrollments */
+        get: operations["list_platform_enrollments_api_platform_admin_enrollments_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/manual-invoices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Manual Invoice */
+        post: operations["create_manual_invoice_api_platform_admin_manual_invoices_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/manual-invoices/{invoice_id}/mark-paid": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark Manual Invoice Paid */
+        post: operations["mark_manual_invoice_paid_api_platform_admin_manual_invoices__invoice_id__mark_paid_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/margin-alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Margin Alerts */
+        get: operations["get_margin_alerts_api_platform_admin_margin_alerts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Platform Overview */
+        get: operations["get_platform_overview_api_platform_admin_overview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/profit-report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Platform Profit Report */
+        get: operations["get_platform_profit_report_api_platform_admin_profit_report_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/profit/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Platform Profit */
+        get: operations["export_platform_profit_api_platform_admin_profit_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/provider-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search Provider Events */
+        get: operations["search_provider_events_api_platform_admin_provider_events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/provider-events/{event_id}/reprocess": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reprocess Provider Event */
+        post: operations["reprocess_provider_event_api_platform_admin_provider_events__event_id__reprocess_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/revenue/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Platform Revenue */
+        get: operations["export_platform_revenue_api_platform_admin_revenue_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/usage-report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Platform Usage Report */
+        get: operations["get_platform_usage_report_api_platform_admin_usage_report_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/portal/auth/logout": {
         parameters: {
             query?: never;
@@ -5150,6 +5814,20 @@ export interface components {
             password: string;
             /** Token */
             token: string;
+        };
+        /** AddOnCheckoutRequest */
+        AddOnCheckoutRequest: {
+            /** Add On Code */
+            add_on_code: string;
+            /** Cancel Url */
+            cancel_url?: string | null;
+            /**
+             * Quantity
+             * @default 1
+             */
+            quantity: number;
+            /** Success Url */
+            success_url?: string | null;
         };
         /** AffidavitIntelligenceResponse */
         AffidavitIntelligenceResponse: {
@@ -6209,6 +6887,339 @@ export interface components {
             statute_id: string;
             /** Statute Section Id */
             statute_section_id: string;
+        };
+        /** BillingAccountRecord */
+        BillingAccountRecord: {
+            /** Billing Address */
+            billing_address: {
+                [key: string]: unknown;
+            } | null;
+            /** Billing Email */
+            billing_email: string | null;
+            /** Billing Name */
+            billing_name: string | null;
+            /** Billing Phone */
+            billing_phone: string | null;
+            /** Company Id */
+            company_id: string;
+            /** Gstin */
+            gstin: string | null;
+            /** Id */
+            id: string;
+            /** Tax Treatment */
+            tax_treatment: string | null;
+        };
+        /** BillingCheckoutRequest */
+        BillingCheckoutRequest: {
+            /** Cancel Url */
+            cancel_url?: string | null;
+            /**
+             * Checkout Type
+             * @default new_subscription
+             * @enum {string}
+             */
+            checkout_type: "new_subscription" | "renewal" | "upgrade" | "topup" | "addon" | "manual_invoice";
+            /** Coupon Code */
+            coupon_code?: string | null;
+            /**
+             * Interval
+             * @default month
+             * @enum {string}
+             */
+            interval: "month" | "year" | "one_time" | "custom";
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Plan Code */
+            plan_code?: string | null;
+            /**
+             * Quantity
+             * @default 1
+             */
+            quantity: number;
+            /** Success Url */
+            success_url?: string | null;
+        };
+        /** BillingCheckoutResponse */
+        BillingCheckoutResponse: {
+            /** Amount Minor */
+            amount_minor: number;
+            /** Checkout Type */
+            checkout_type: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Currency */
+            currency: string;
+            /** Expires At */
+            expires_at: string | null;
+            /** Id */
+            id: string;
+            /** Next Action */
+            next_action: string;
+            /** Provider */
+            provider: string | null;
+            /** Provider Checkout Url */
+            provider_checkout_url: string | null;
+            /** Provider Disabled */
+            provider_disabled: boolean;
+            /** Provider Order Id */
+            provider_order_id: string | null;
+            /** Status */
+            status: string;
+            /** Tax Amount Minor */
+            tax_amount_minor: number;
+            /** Total Amount Minor */
+            total_amount_minor: number;
+        };
+        /** BillingCreditLedgerRecord */
+        BillingCreditLedgerRecord: {
+            /** Balance After */
+            balance_after: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Credit Bucket */
+            credit_bucket: string;
+            /** Delta */
+            delta: number;
+            /** Event Type */
+            event_type: string;
+            /** Expires At */
+            expires_at: string | null;
+            /** Id */
+            id: string;
+            /** Reason */
+            reason: string | null;
+            /** Source Object Id */
+            source_object_id: string | null;
+            /** Source Object Type */
+            source_object_type: string | null;
+        };
+        /** BillingCreditLedgerResponse */
+        BillingCreditLedgerResponse: {
+            /** Rows */
+            rows: components["schemas"]["BillingCreditLedgerRecord"][];
+        };
+        /** BillingCurrentResponse */
+        BillingCurrentResponse: {
+            billing_account: components["schemas"]["BillingAccountRecord"] | null;
+            /** Entitlements */
+            entitlements: {
+                [key: string]: unknown;
+            };
+            /** Payment Provider */
+            payment_provider: {
+                [key: string]: unknown;
+            };
+            subscription: components["schemas"]["BillingSubscriptionRecord"] | null;
+            usage: components["schemas"]["BillingUsageSnapshot"];
+        };
+        /** BillingInvoiceListResponse */
+        BillingInvoiceListResponse: {
+            /** Invoices */
+            invoices: components["schemas"]["BillingInvoiceRecord"][];
+        };
+        /** BillingInvoiceRecord */
+        BillingInvoiceRecord: {
+            /** Amount Minor */
+            amount_minor: number;
+            /** Amount Received Minor */
+            amount_received_minor: number;
+            /** Currency */
+            currency: string;
+            /** Due On */
+            due_on: string | null;
+            /** Id */
+            id: string;
+            /** Invoice Number */
+            invoice_number: string;
+            /** Invoice Type */
+            invoice_type: string;
+            /** Issued On */
+            issued_on: string | null;
+            /** Paid On */
+            paid_on: string | null;
+            /** Status */
+            status: string;
+            /** Tax Amount Minor */
+            tax_amount_minor: number;
+            /** Total Amount Minor */
+            total_amount_minor: number;
+        };
+        /** BillingPlanRecord */
+        BillingPlanRecord: {
+            /** Description */
+            description: string | null;
+            /** Display Name */
+            display_name: string;
+            /** Entitlements */
+            entitlements: {
+                [key: string]: unknown;
+            };
+            /** Id */
+            id: string;
+            /** Plan Code */
+            plan_code: string;
+            /** Prices */
+            prices: components["schemas"]["BillingPriceRecord"][];
+            /** Publicly Visible */
+            publicly_visible: boolean;
+            /** Segment */
+            segment: string;
+            /** Trial Eligible */
+            trial_eligible: boolean;
+            /** Version */
+            version: string;
+        };
+        /** BillingPlansResponse */
+        BillingPlansResponse: {
+            /** Add Ons */
+            add_ons: components["schemas"]["BillingPlanRecord"][];
+            /** Plans */
+            plans: components["schemas"]["BillingPlanRecord"][];
+            /** Version */
+            version: string;
+        };
+        /** BillingPriceRecord */
+        BillingPriceRecord: {
+            /** Amount Minor */
+            amount_minor: number | null;
+            /** Currency */
+            currency: string;
+            /** Id */
+            id: string;
+            /** Interval */
+            interval: string;
+            /** Tax Behavior */
+            tax_behavior: string;
+            /** Tax Rate Bps */
+            tax_rate_bps: number;
+        };
+        /** BillingSubscriptionRecord */
+        BillingSubscriptionRecord: {
+            /** Billing Interval */
+            billing_interval: string;
+            /** Cancel At Period End */
+            cancel_at_period_end: boolean;
+            /** Current Period End */
+            current_period_end: string | null;
+            /** Current Period Start */
+            current_period_start: string | null;
+            /** Externally Billable */
+            externally_billable: boolean;
+            /** Id */
+            id: string;
+            /** Plan Code */
+            plan_code: string | null;
+            /** Plan Name */
+            plan_name: string | null;
+            /** Segment */
+            segment: string;
+            /** Source */
+            source: string;
+            /** Status */
+            status: string;
+            /** Trial End */
+            trial_end: string | null;
+        };
+        /** BillingUsageBreakdownRow */
+        BillingUsageBreakdownRow: {
+            /** Credits */
+            credits: number;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Quantity */
+            quantity: number;
+        };
+        /** BillingUsageReportResponse */
+        BillingUsageReportResponse: {
+            /**
+             * Blocked Events
+             * @default []
+             */
+            blocked_events: components["schemas"]["BillingUsageBreakdownRow"][];
+            /** By Feature */
+            by_feature: components["schemas"]["BillingUsageBreakdownRow"][];
+            /** By Matter */
+            by_matter: components["schemas"]["BillingUsageBreakdownRow"][];
+            /** By Tracked Case */
+            by_tracked_case: components["schemas"]["BillingUsageBreakdownRow"][];
+            /** By User */
+            by_user: components["schemas"]["BillingUsageBreakdownRow"][];
+            /** Daily */
+            daily: components["schemas"]["BillingUsageBreakdownRow"][];
+            /** Period End */
+            period_end: string | null;
+            /** Period Start */
+            period_start: string | null;
+            snapshot: components["schemas"]["BillingUsageSnapshot"];
+        };
+        /** BillingUsageSnapshot */
+        BillingUsageSnapshot: {
+            /** Ai Credits Included */
+            ai_credits_included?: number | null;
+            /** Ai Credits Remaining */
+            ai_credits_remaining?: number | null;
+            /**
+             * Ai Credits Used
+             * @default 0
+             */
+            ai_credits_used: number;
+            /** Manual Refreshes Limit Daily */
+            manual_refreshes_limit_daily?: number | null;
+            /**
+             * Manual Refreshes Used Today
+             * @default 0
+             */
+            manual_refreshes_used_today: number;
+            /** Matters Active Limit */
+            matters_active_limit?: number | null;
+            /**
+             * Matters Active Used
+             * @default 0
+             */
+            matters_active_used: number;
+            /** Storage Limit Bytes */
+            storage_limit_bytes?: number | null;
+            /**
+             * Storage Used Bytes
+             * @default 0
+             */
+            storage_used_bytes: number;
+            /**
+             * Topup Credits Available
+             * @default 0
+             */
+            topup_credits_available: number;
+            /** Tracked Cases Limit */
+            tracked_cases_limit?: number | null;
+            /**
+             * Tracked Cases Used
+             * @default 0
+             */
+            tracked_cases_used: number;
+            /** Users Internal Limit */
+            users_internal_limit?: number | null;
+            /**
+             * Users Internal Used
+             * @default 0
+             */
+            users_internal_used: number;
+            /** Users Viewer Limit */
+            users_viewer_limit?: number | null;
+            /**
+             * Users Viewer Used
+             * @default 0
+             */
+            users_viewer_used: number;
         };
         /** Body_dry_run_current_company_matter_import_api_matters_imports_dry_run_post */
         Body_dry_run_current_company_matter_import_api_matters_imports_dry_run_post: {
@@ -8536,6 +9547,41 @@ export interface components {
             count: number;
             /** Year */
             year: number;
+        };
+        /** DemoRequest */
+        DemoRequest: {
+            /** Company Name */
+            company_name?: string | null;
+            /**
+             * Contact Email
+             * Format: email
+             */
+            contact_email: string;
+            /** Contact Mobile */
+            contact_mobile?: string | null;
+            /** Contact Name */
+            contact_name: string;
+            /** Notes */
+            notes?: string | null;
+            /**
+             * Segment
+             * @enum {string}
+             */
+            segment: "solo" | "firm" | "gc";
+            /** Selected Plan */
+            selected_plan?: string | null;
+            /**
+             * Source
+             * @default demo
+             */
+            source: string;
+        };
+        /** DemoRequestResponse */
+        DemoRequestResponse: {
+            /** Id */
+            id: string;
+            /** Status */
+            status: string;
         };
         /** DescriptiveAnalytics */
         DescriptiveAnalytics: {
@@ -14792,6 +15838,148 @@ export interface components {
             /** Provider Order Id */
             provider_order_id: string | null;
         };
+        /** PlatformCouponCreateRequest */
+        PlatformCouponCreateRequest: {
+            /** Code */
+            code: string;
+            /**
+             * Currency
+             * @default INR
+             */
+            currency: string | null;
+            /** Description */
+            description?: string | null;
+            /**
+             * Discount Type
+             * @enum {string}
+             */
+            discount_type: "percent" | "fixed_amount";
+            /** Discount Value */
+            discount_value: number;
+            /**
+             * Duration
+             * @default once
+             * @enum {string}
+             */
+            duration: "once" | "first_period" | "repeating" | "forever";
+            /** Duration Periods */
+            duration_periods?: number | null;
+            /** Max Redemptions */
+            max_redemptions?: number | null;
+            /** Reason */
+            reason: string;
+            /** Valid Until */
+            valid_until?: string | null;
+        };
+        /** PlatformGrantCreditsRequest */
+        PlatformGrantCreditsRequest: {
+            /** Credits */
+            credits: number;
+            /** Reason */
+            reason: string;
+        };
+        /** PlatformManualInvoiceCreateRequest */
+        PlatformManualInvoiceCreateRequest: {
+            /** Amount Minor */
+            amount_minor: number;
+            /** Company Id */
+            company_id: string;
+            /** Due On */
+            due_on?: string | null;
+            /** Invoice Number */
+            invoice_number: string;
+            /** Po Number */
+            po_number?: string | null;
+            /** Reason */
+            reason: string;
+            /** Subscription Id */
+            subscription_id?: string | null;
+            /**
+             * Tax Amount Minor
+             * @default 0
+             */
+            tax_amount_minor: number;
+        };
+        /** PlatformManualInvoicePaidRequest */
+        PlatformManualInvoicePaidRequest: {
+            /** Amount Received Minor */
+            amount_received_minor: number;
+            /** Paid On */
+            paid_on?: string | null;
+            /** Payment Reference */
+            payment_reference: string;
+            /** Reason */
+            reason: string;
+            /**
+             * Tds Deducted Minor
+             * @default 0
+             */
+            tds_deducted_minor: number;
+        };
+        /** PlatformOveragePolicyRequest */
+        PlatformOveragePolicyRequest: {
+            /** Cap Amount Minor */
+            cap_amount_minor?: number | null;
+            /** Ends At */
+            ends_at?: string | null;
+            /** Overage Allowed */
+            overage_allowed: boolean;
+            /** Reason */
+            reason: string;
+            /** Unit Prices */
+            unit_prices?: {
+                [key: string]: number;
+            };
+        };
+        /** PlatformOverviewResponse */
+        PlatformOverviewResponse: {
+            /** Active Subscriptions */
+            active_subscriptions: number;
+            /** Arr Minor */
+            arr_minor: number;
+            /** Failed Payments */
+            failed_payments: number;
+            /** Gross Margin Bps */
+            gross_margin_bps: number | null;
+            /** Gross Profit Minor */
+            gross_profit_minor: number;
+            /** Gross Revenue Minor */
+            gross_revenue_minor: number;
+            /** Margin Alerts */
+            margin_alerts: {
+                [key: string]: unknown;
+            }[];
+            /** Mrr Minor */
+            mrr_minor: number;
+            /** Recognized Revenue Minor */
+            recognized_revenue_minor: number;
+            /** Total Variable Cost Minor */
+            total_variable_cost_minor: number;
+            /** Trial Count */
+            trial_count: number;
+        };
+        /** PlatformReasonRequest */
+        PlatformReasonRequest: {
+            /** Reason */
+            reason: string;
+        };
+        /** PlatformSubscriptionMutation */
+        PlatformSubscriptionMutation: {
+            /**
+             * Billing Interval
+             * @default month
+             */
+            billing_interval: string;
+            /** Plan Code */
+            plan_code?: string | null;
+            /** Reason */
+            reason: string;
+            /**
+             * Status
+             * @default manual_active
+             */
+            status: string;
+        };
         /** PlaybookComparisonFindingRecord */
         PlaybookComparisonFindingRecord: {
             /** Clause Type */
@@ -16027,6 +17215,10 @@ export interface components {
             /** Supporting Citations */
             supporting_citations?: string[];
         };
+        /** SubscriptionActionResponse */
+        SubscriptionActionResponse: {
+            subscription: components["schemas"]["BillingSubscriptionRecord"];
+        };
         /** TeamCreateRequest */
         TeamCreateRequest: {
             /** Description */
@@ -16550,6 +17742,40 @@ export interface components {
             party_names: string[];
             /** Provider */
             provider: string;
+        };
+        /** TrialStartRequest */
+        TrialStartRequest: {
+            /** Company Name */
+            company_name: string;
+            /** Company Slug */
+            company_slug: string;
+            /**
+             * Company Type
+             * @enum {string}
+             */
+            company_type: "law_firm" | "corporate_legal" | "solo";
+            /** Coupon Code */
+            coupon_code?: string | null;
+            /** Gstin */
+            gstin?: string | null;
+            /** Mobile */
+            mobile?: string | null;
+            /**
+             * Owner Email
+             * Format: email
+             */
+            owner_email: string;
+            /** Owner Full Name */
+            owner_full_name: string;
+            /** Owner Password */
+            owner_password: string;
+            /** Selected Plan */
+            selected_plan?: string | null;
+            /**
+             * Source
+             * @default pricing_page
+             */
+            source: string;
         };
         /** UserSummary */
         UserSummary: {
@@ -18524,6 +19750,506 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_billing_add_ons_api_billing_add_ons_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingPlansResponse"];
+                };
+            };
+        };
+    };
+    create_add_on_checkout_api_billing_add_ons_checkout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddOnCheckoutRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingCheckoutResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_billing_checkout_api_billing_checkout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BillingCheckoutRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingCheckoutResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_billing_checkout_api_billing_checkout__session_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingCheckoutResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sync_billing_checkout_api_billing_checkout__session_id__sync_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingCheckoutResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_credit_ledger_api_billing_credit_ledger_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingCreditLedgerResponse"];
+                };
+            };
+        };
+    };
+    export_credit_ledger_api_billing_credit_ledger_export_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_current_billing_api_billing_current_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingCurrentResponse"];
+                };
+            };
+        };
+    };
+    create_enrollment_demo_request_api_billing_enrollments_demo_request_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DemoRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DemoRequestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_billing_invoices_api_billing_invoices_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingInvoiceListResponse"];
+                };
+            };
+        };
+    };
+    download_billing_invoice_api_billing_invoices__invoice_id__download_get: {
+        parameters: {
+            query?: {
+                format?: "pdf" | "json";
+            };
+            header?: never;
+            path: {
+                invoice_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_payments_api_billing_payments_export_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_billing_plans_api_billing_plans_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingPlansResponse"];
+                };
+            };
+        };
+    };
+    get_spend_report_api_billing_reports_spend_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingUsageReportResponse"];
+                };
+            };
+        };
+    };
+    export_spend_report_api_billing_reports_spend_export_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    download_billing_statement_api_billing_statement_get: {
+        parameters: {
+            query?: {
+                format?: "csv" | "pdf";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_current_subscription_api_billing_subscription_cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionActionResponse"];
+                };
+            };
+        };
+    };
+    reactivate_current_subscription_api_billing_subscription_reactivate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionActionResponse"];
+                };
+            };
+        };
+    };
+    start_trial_api_billing_trials_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrialStartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_billing_usage_api_billing_usage_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingUsageReportResponse"];
                 };
             };
         };
@@ -26121,6 +27847,593 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PaymentWebhookAckResponse"];
+                };
+            };
+        };
+    };
+    get_company_profitability_api_platform_admin_companies_profitability_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    get_company_billing_detail_api_platform_admin_companies__company_id__billing_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    grant_company_credits_api_platform_admin_companies__company_id__credits_grant_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlatformGrantCreditsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_overage_policy_api_platform_admin_companies__company_id__overage_policy_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlatformOveragePolicyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mutate_company_subscription_api_platform_admin_companies__company_id__subscription_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlatformSubscriptionMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resume_company_subscription_api_platform_admin_companies__company_id__subscription_resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlatformReasonRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    suspend_company_subscription_api_platform_admin_companies__company_id__subscription_suspend_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlatformReasonRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_coupons_api_platform_admin_coupons_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    create_coupon_api_platform_admin_coupons_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlatformCouponCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_platform_enrollments_api_platform_admin_enrollments_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    create_manual_invoice_api_platform_admin_manual_invoices_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlatformManualInvoiceCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_manual_invoice_paid_api_platform_admin_manual_invoices__invoice_id__mark_paid_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invoice_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlatformManualInvoicePaidRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_margin_alerts_api_platform_admin_margin_alerts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    get_platform_overview_api_platform_admin_overview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformOverviewResponse"];
+                };
+            };
+        };
+    };
+    get_platform_profit_report_api_platform_admin_profit_report_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    export_platform_profit_api_platform_admin_profit_export_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    search_provider_events_api_platform_admin_provider_events_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reprocess_provider_event_api_platform_admin_provider_events__event_id__reprocess_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlatformReasonRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_platform_revenue_api_platform_admin_revenue_export_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_platform_usage_report_api_platform_admin_usage_report_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };

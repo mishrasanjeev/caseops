@@ -8,6 +8,7 @@ Create Date: 2026-05-31 10:00:00
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from collections.abc import Sequence
@@ -29,8 +30,13 @@ GIB = 1024**3
 MIB = 1024**2
 
 
-def _id(prefix: str, code: str) -> str:
-    return f"{prefix}-{code.replace('_', '-')}"
+def _id(prefix: str, code: str, *, max_length: int = 36) -> str:
+    raw = f"{prefix}-{code.replace('_', '-')}"
+    if len(raw) <= max_length:
+        return raw
+    digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:8]
+    head_length = max_length - len(digest) - 1
+    return f"{raw[:head_length].rstrip('-')}-{digest}"
 
 
 PLAN_ROWS = [
