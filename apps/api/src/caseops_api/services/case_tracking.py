@@ -379,6 +379,9 @@ def create_bookmark(
     )
     if existing is not None:
         return _bookmark_record(session, existing)
+    from caseops_api.services.saas_billing import assert_tracked_case_limit
+
+    assert_tracked_case_limit(session, context=context)
     bookmark = TrackedCaseBookmark(
         company_id=context.company.id,
         tracked_case_id=tracked_case.id,
@@ -900,6 +903,13 @@ def refresh_bookmark(
 ) -> CaseTrackingRefreshResponse:
     bookmark = _get_bookmark(session, context=context, bookmark_id=bookmark_id)
     tracked_case = bookmark.tracked_case
+    from caseops_api.services.saas_billing import assert_manual_refresh_limit
+
+    assert_manual_refresh_limit(
+        session,
+        context=context,
+        tracked_case_id=tracked_case.id,
+    )
     tracked_case.last_provider_refresh_requested_at = _now()
     try:
         active_provider = provider or get_case_tracking_provider()
@@ -939,6 +949,13 @@ def refresh_bookmark(
             "created_update_count": len(created),
             "provider": active_provider.provider_key,
         },
+    )
+    from caseops_api.services.saas_billing import record_manual_refresh_usage
+
+    record_manual_refresh_usage(
+        session,
+        context=context,
+        tracked_case_id=tracked_case.id,
     )
     session.commit()
     return CaseTrackingRefreshResponse(

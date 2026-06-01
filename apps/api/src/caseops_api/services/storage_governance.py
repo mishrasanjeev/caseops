@@ -105,7 +105,11 @@ def _used_bytes(session: Session, *, company_id: str) -> int:
 
 def _base_policy(session: Session, *, company: Company) -> StorageUploadPolicy:
     used_bytes = _used_bytes(session, company_id=company.id)
-    quota_bytes = company.storage_quota_bytes
+    from caseops_api.services.saas_billing import effective_storage_quota
+
+    quota_bytes = effective_storage_quota(session, company=company)
+    if quota_bytes is None:
+        quota_bytes = company.storage_quota_bytes
     return StorageUploadPolicy(
         company_id=company.id,
         used_bytes=used_bytes,
@@ -216,7 +220,11 @@ def assert_storage_quota_allows_upload(
     # Serialize firm quota checks per company so concurrent uploads cannot both
     # pass against the same pre-upload usage snapshot.
     company = _company_or_404(session, company_id, for_update=True)
-    quota_bytes = company.storage_quota_bytes
+    from caseops_api.services.saas_billing import effective_storage_quota
+
+    quota_bytes = effective_storage_quota(session, company=company)
+    if quota_bytes is None:
+        quota_bytes = company.storage_quota_bytes
     if quota_bytes is None:
         return
     used_bytes = _used_bytes(session, company_id=company.id)

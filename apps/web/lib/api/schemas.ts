@@ -2184,6 +2184,268 @@ export type CommunicationTimelineAttachmentReference = z.infer<
 export type CommunicationTimelineItem = z.infer<typeof communicationTimelineItem>;
 export type CommunicationTimelineResponse = z.infer<typeof communicationTimelineResponse>;
 
+// SaaS billing, plan catalog, tenant reports, and founder-only platform admin.
+export const billingPriceRecord = z.object({
+  id: z.string(),
+  amount_minor: z.number().int().nullable(),
+  currency: z.string(),
+  interval: z.string(),
+  tax_behavior: z.string(),
+  tax_rate_bps: z.number().int(),
+});
+
+export const billingPlanRecord = z.object({
+  id: z.string(),
+  plan_code: z.string(),
+  version: z.string(),
+  segment: z.string(),
+  display_name: z.string(),
+  description: z.string().nullable(),
+  publicly_visible: z.boolean(),
+  trial_eligible: z.boolean(),
+  prices: z.array(billingPriceRecord),
+  entitlements: z.record(z.string(), z.unknown()),
+});
+
+export const billingPlansResponse = z.object({
+  version: z.string(),
+  plans: z.array(billingPlanRecord),
+  add_ons: z.array(billingPlanRecord),
+});
+
+export const billingAccountRecord = z.object({
+  id: z.string(),
+  company_id: z.string(),
+  billing_email: z.string().nullable(),
+  billing_name: z.string().nullable(),
+  billing_phone: z.string().nullable(),
+  gstin: z.string().nullable(),
+  billing_address: z.record(z.string(), z.unknown()).nullable(),
+  tax_treatment: z.string().nullable(),
+});
+
+export const billingSubscriptionRecord = z.object({
+  id: z.string(),
+  plan_code: z.string().nullable(),
+  plan_name: z.string().nullable(),
+  status: z.string(),
+  segment: z.string(),
+  billing_interval: z.string(),
+  current_period_start: z.string().nullable(),
+  current_period_end: z.string().nullable(),
+  trial_end: z.string().nullable(),
+  cancel_at_period_end: z.boolean(),
+  externally_billable: z.boolean(),
+  source: z.string(),
+});
+
+export const billingUsageSnapshot = z.object({
+  ai_credits_included: z.number().int().nullable().optional(),
+  ai_credits_used: z.number().int(),
+  ai_credits_remaining: z.number().int().nullable().optional(),
+  topup_credits_available: z.number().int(),
+  tracked_cases_used: z.number().int(),
+  tracked_cases_limit: z.number().int().nullable().optional(),
+  manual_refreshes_used_today: z.number().int(),
+  manual_refreshes_limit_daily: z.number().int().nullable().optional(),
+  storage_used_bytes: z.number().int(),
+  storage_limit_bytes: z.number().int().nullable().optional(),
+  users_internal_used: z.number().int(),
+  users_internal_limit: z.number().int().nullable().optional(),
+  users_viewer_used: z.number().int(),
+  users_viewer_limit: z.number().int().nullable().optional(),
+  matters_active_used: z.number().int(),
+  matters_active_limit: z.number().int().nullable().optional(),
+});
+
+export const billingCurrentResponse = z.object({
+  billing_account: billingAccountRecord.nullable(),
+  subscription: billingSubscriptionRecord.nullable(),
+  entitlements: z.record(z.string(), z.unknown()),
+  usage: billingUsageSnapshot,
+  payment_provider: z.record(z.string(), z.unknown()),
+});
+
+export const billingCheckoutResponse = z.object({
+  id: z.string(),
+  checkout_type: z.string(),
+  status: z.string(),
+  amount_minor: z.number().int(),
+  tax_amount_minor: z.number().int(),
+  total_amount_minor: z.number().int(),
+  currency: z.string(),
+  provider: z.string().nullable(),
+  provider_checkout_url: z.string().nullable(),
+  provider_order_id: z.string().nullable(),
+  provider_disabled: z.boolean(),
+  next_action: z.string(),
+  created_at: z.string(),
+  expires_at: z.string().nullable(),
+});
+
+export const billingCreditLedgerRecord = z.object({
+  id: z.string(),
+  credit_bucket: z.string(),
+  event_type: z.string(),
+  delta: z.number().int(),
+  balance_after: z.number().int(),
+  reason: z.string().nullable(),
+  source_object_type: z.string().nullable(),
+  source_object_id: z.string().nullable(),
+  expires_at: z.string().nullable(),
+  created_at: z.string(),
+});
+
+export const billingCreditLedgerResponse = z.object({
+  rows: z.array(billingCreditLedgerRecord),
+});
+
+export const billingUsageBreakdownRow = z.object({
+  key: z.string(),
+  label: z.string(),
+  quantity: z.number().int(),
+  credits: z.number().int(),
+});
+
+export const billingUsageReportResponse = z.object({
+  period_start: z.string().nullable(),
+  period_end: z.string().nullable(),
+  snapshot: billingUsageSnapshot,
+  by_feature: z.array(billingUsageBreakdownRow),
+  by_user: z.array(billingUsageBreakdownRow),
+  by_matter: z.array(billingUsageBreakdownRow),
+  by_tracked_case: z.array(billingUsageBreakdownRow),
+  daily: z.array(billingUsageBreakdownRow),
+  blocked_events: z.array(billingUsageBreakdownRow).default([]),
+});
+
+export const billingInvoiceRecord = z.object({
+  id: z.string(),
+  invoice_number: z.string(),
+  invoice_type: z.string(),
+  amount_minor: z.number().int(),
+  tax_amount_minor: z.number().int(),
+  total_amount_minor: z.number().int(),
+  amount_received_minor: z.number().int(),
+  currency: z.string(),
+  status: z.string(),
+  issued_on: z.string().nullable(),
+  due_on: z.string().nullable(),
+  paid_on: z.string().nullable(),
+});
+
+export const billingInvoiceListResponse = z.object({
+  invoices: z.array(billingInvoiceRecord),
+});
+
+export const demoRequestResponse = z.object({
+  id: z.string(),
+  status: z.string(),
+});
+
+export const platformOverviewResponse = z.object({
+  mrr_minor: z.number().int(),
+  arr_minor: z.number().int(),
+  active_subscriptions: z.number().int(),
+  trial_count: z.number().int(),
+  failed_payments: z.number().int(),
+  gross_revenue_minor: z.number().int(),
+  recognized_revenue_minor: z.number().int(),
+  total_variable_cost_minor: z.number().int(),
+  gross_profit_minor: z.number().int(),
+  gross_margin_bps: z.number().int().nullable(),
+  margin_alerts: z.array(z.record(z.string(), z.unknown())),
+});
+
+export const platformEnrollmentRecord = z.object({
+  id: z.string(),
+  company_id: z.string().nullable(),
+  contact_name: z.string(),
+  contact_email: z.string(),
+  company_name: z.string().nullable(),
+  segment: z.string(),
+  selected_plan: z.string().nullable(),
+  status: z.string(),
+  created_at: z.string(),
+});
+
+export const platformEnrollmentsResponse = z.object({
+  enrollments: z.array(platformEnrollmentRecord),
+});
+
+export const platformProfitRow = z.object({
+  company_id: z.string().nullable().optional(),
+  company_name: z.string().nullable().optional(),
+  period_start: z.string().nullable().optional(),
+  period_end: z.string().nullable().optional(),
+  gross_revenue_minor: z.number().int().optional().default(0),
+  recognized_revenue_minor: z.number().int().optional().default(0),
+  tax_minor: z.number().int().optional().default(0),
+  discounts_minor: z.number().int().optional().default(0),
+  payment_provider_cost_minor: z.number().int().optional().default(0),
+  llm_cost_minor: z.number().int().optional().default(0),
+  storage_cost_minor: z.number().int().optional().default(0),
+  case_refresh_cost_minor: z.number().int().optional().default(0),
+  total_variable_cost_minor: z.number().int().optional().default(0),
+  gross_profit_minor: z.number().int().optional().default(0),
+  gross_margin_bps: z.number().int().nullable().optional(),
+  status: z.string().optional(),
+});
+
+export const platformProfitReportResponse = z.object({
+  rows: z.array(platformProfitRow),
+});
+
+export const platformCompanyProfitabilityResponse = z.object({
+  companies: z.array(platformProfitRow),
+});
+
+export const platformProviderEventRecord = z.object({
+  id: z.string(),
+  provider: z.string().optional(),
+  provider_event_id: z.string().nullable().optional(),
+  event_type: z.string().optional(),
+  processing_status: z.string().optional(),
+  provider_order_id: z.string().nullable().optional(),
+  company_id: z.string().nullable().optional(),
+  received_at: z.string().optional(),
+  processed_at: z.string().nullable().optional(),
+  error_message: z.string().nullable().optional(),
+});
+
+export const platformProviderEventsResponse = z.object({
+  events: z.array(platformProviderEventRecord),
+});
+
+export const platformMarginAlertsResponse = z.object({
+  alerts: z.array(z.record(z.string(), z.unknown())),
+});
+
+export type BillingPriceRecord = z.infer<typeof billingPriceRecord>;
+export type BillingPlanRecord = z.infer<typeof billingPlanRecord>;
+export type BillingPlansResponse = z.infer<typeof billingPlansResponse>;
+export type BillingAccountRecord = z.infer<typeof billingAccountRecord>;
+export type BillingSubscriptionRecord = z.infer<typeof billingSubscriptionRecord>;
+export type BillingUsageSnapshot = z.infer<typeof billingUsageSnapshot>;
+export type BillingCurrentResponse = z.infer<typeof billingCurrentResponse>;
+export type BillingCheckoutResponse = z.infer<typeof billingCheckoutResponse>;
+export type BillingCreditLedgerRecord = z.infer<typeof billingCreditLedgerRecord>;
+export type BillingCreditLedgerResponse = z.infer<typeof billingCreditLedgerResponse>;
+export type BillingUsageBreakdownRow = z.infer<typeof billingUsageBreakdownRow>;
+export type BillingUsageReportResponse = z.infer<typeof billingUsageReportResponse>;
+export type BillingInvoiceRecord = z.infer<typeof billingInvoiceRecord>;
+export type BillingInvoiceListResponse = z.infer<typeof billingInvoiceListResponse>;
+export type DemoRequestResponse = z.infer<typeof demoRequestResponse>;
+export type PlatformOverviewResponse = z.infer<typeof platformOverviewResponse>;
+export type PlatformEnrollmentsResponse = z.infer<typeof platformEnrollmentsResponse>;
+export type PlatformProfitRow = z.infer<typeof platformProfitRow>;
+export type PlatformProfitReportResponse = z.infer<typeof platformProfitReportResponse>;
+export type PlatformCompanyProfitabilityResponse = z.infer<
+  typeof platformCompanyProfitabilityResponse
+>;
+export type PlatformProviderEventsResponse = z.infer<typeof platformProviderEventsResponse>;
+export type PlatformMarginAlertsResponse = z.infer<typeof platformMarginAlertsResponse>;
+
 // Phase B M11 slice 2 — email templates + send action.
 export const emailTemplateVariable = z.object({
   name: z.string(),

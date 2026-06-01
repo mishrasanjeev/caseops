@@ -40,6 +40,10 @@ PUBLIC_MUTATING_ROUTES: set[tuple[str, str]] = {
     ("POST", "/api/auth/password-reset/start"),
     ("POST", "/api/auth/password-reset/complete"),
     ("POST", "/api/bootstrap/company"),
+    # Billing trial/demo enrollment is public lead capture. Tenant
+    # billing checkout/report mutations below remain workspace-admin gated.
+    ("POST", "/api/billing/trials"),
+    ("POST", "/api/billing/enrollments/demo-request"),
     # Pine Labs payment notifications — their own signature is the
     # auth layer; the handler enforces cross-tenant + idempotency.
     ("POST", "/api/payments/pine-labs/webhook"),
@@ -107,8 +111,11 @@ def _is_guarded(route: APIRoute) -> bool:
         if getattr(call, "__name__", "") == "_dep":
             closure = call.__closure__ or ()
             vals = {c.cell_contents for c in closure if _hashable(c.cell_contents)}
-            if "allowed" in (call.__code__.co_freevars or ()) or "roles" in (
-                call.__code__.co_freevars or ()
+            freevars = call.__code__.co_freevars or ()
+            if (
+                "allowed" in freevars
+                or "roles" in freevars
+                or "platform_capability" in freevars
             ):
                 return True
             del vals  # unused — keep for debugging
@@ -177,6 +184,14 @@ def test_guard_detection_recognises_require_role():
     guard = require_role(MembershipRole.OWNER)
     assert guard.__name__ == "_dep"
     assert "allowed" in guard.__code__.co_freevars
+
+
+def test_guard_detection_recognises_platform_admin_dependency():
+    from caseops_api.api.routes.platform_admin import require_platform_capability
+
+    guard = require_platform_capability("platform:billing_manage")
+    assert guard.__name__ == "_dep"
+    assert "platform_capability" in guard.__code__.co_freevars
 
 
 def test_no_stray_inspect_use():

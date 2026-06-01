@@ -136,15 +136,21 @@ test.describe("App spine", () => {
     ).toBeVisible();
 
     // Tab navigation works.
-    await page.getByRole("link", { name: "Documents", exact: true }).click();
+    const cockpitTabs = page.getByRole("navigation", {
+      name: /Matter cockpit tabs/i,
+    });
+    await cockpitTabs
+      .getByRole("link", { name: "Documents", exact: true })
+      .click();
     await page.waitForURL(/\/documents$/);
     await expect(page.getByText(/No documents attached yet/i)).toBeVisible();
 
-    await page.getByRole("link", { name: "Billing", exact: true }).click();
+    await cockpitTabs
+      .getByRole("link", { name: "Billing", exact: true })
+      .click();
     await page.waitForURL(/\/billing$/);
     await expect(page.getByText("Total billed")).toBeVisible();
 
-    const cockpitTabs = page.getByRole("navigation", { name: /Matter cockpit tabs/i });
     await cockpitTabs
       .getByRole("link", { name: "AI Recommendations", exact: true })
       .click();

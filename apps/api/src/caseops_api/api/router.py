@@ -5,6 +5,7 @@ from caseops_api.api.routes import (
     ai,
     auth,
     authorities,
+    billing,
     bootstrap,
     calendar,
     case_tracking,
@@ -25,6 +26,7 @@ from caseops_api.api.routes import (
     notifications,
     outside_counsel,
     payments,
+    platform_admin,
     portal,
     recommendations,
     statutes,
@@ -36,6 +38,7 @@ api_router.include_router(health.router, tags=["health"])
 api_router.include_router(meta.router, tags=["meta"])
 api_router.include_router(bootstrap.router, prefix="/bootstrap", tags=["bootstrap"])
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
+api_router.include_router(billing.router, prefix="/billing", tags=["billing"])
 api_router.include_router(companies.router, prefix="/companies", tags=["companies"])
 api_router.include_router(matters.router, prefix="/matters", tags=["matters"])
 api_router.include_router(matter_tags.router, prefix="/matter-tags", tags=["matter-tags"])
@@ -54,6 +57,11 @@ api_router.include_router(ai.router, prefix="/ai", tags=["ai"])
 api_router.include_router(recommendations.router, tags=["recommendations"])
 api_router.include_router(conflicts.router, tags=["conflicts"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
+api_router.include_router(
+    platform_admin.router,
+    prefix="/platform-admin",
+    tags=["platform-admin"],
+)
 api_router.include_router(courts.router, prefix="/courts", tags=["courts"])
 # MOD-TS-017 Slice S2 (2026-04-25) — bare-acts read API powering
 # /app/statutes browser. Slice S4 (2026-04-25) — matter statute

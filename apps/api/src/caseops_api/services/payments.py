@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from json import JSONDecodeError
 
@@ -31,8 +32,10 @@ from caseops_api.services.pine_labs import (
     WebhookSecretNotConfigured,
     dump_provider_payload,
     redact_provider_payload,
+    verify_pine_labs_plural_signature,
     verify_pine_labs_signature,
 )
+from caseops_api.services.saas_billing import handle_billing_provider_event
 
 
 def _payment_attempt_record(attempt: MatterInvoicePaymentAttempt) -> InvoicePaymentAttemptRecord:
@@ -389,27 +392,94 @@ async def handle_pine_labs_webhook(
     request: Request,
 ) -> PaymentWebhookAckResponse:
     raw_body = await request.body()
-    signature = request.headers.get(get_settings().pine_labs_webhook_signature_header)
-    try:
-        signature_valid = verify_pine_labs_signature(raw_body=raw_body, signature=signature)
-    except WebhookSecretNotConfigured as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=str(exc),
-        ) from exc
-    if not signature_valid:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid Pine Labs webhook signature.",
+    settings = get_settings()
+    signature = request.headers.get(settings.pine_labs_webhook_signature_header)
+    webhook_id = request.headers.get(settings.pine_labs_webhook_id_header)
+    webhook_timestamp_raw = request.headers.get(settings.pine_labs_webhook_timestamp_header)
+    plural_verified = False
+    if signature and webhook_id and webhook_timestamp_raw:
+        try:
+            plural_verified = verify_pine_labs_plural_signature(
+                raw_body=raw_body,
+                webhook_id=webhook_id,
+                webhook_timestamp=webhook_timestamp_raw,
+                signature=signature,
+            )
+        except WebhookSecretNotConfigured as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=str(exc),
+            ) from exc
+        if not plural_verified:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid Pine Labs webhook signature.",
+            )
+        try:
+            payload = json.loads(raw_body.decode("utf-8"))
+        except (JSONDecodeError, ValueError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Webhook payload must be valid JSON.",
+            ) from exc
+        if not isinstance(payload, dict):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Webhook payload must be a JSON object.",
+            )
+        try:
+            webhook_timestamp = datetime.fromtimestamp(int(webhook_timestamp_raw), tz=UTC)
+        except ValueError:
+            webhook_timestamp = None
+        processed, provider_order_id, already_processed = handle_billing_provider_event(
+            session,
+            payload=payload,
+            raw_body=raw_body,
+            signature=signature,
+            webhook_id=webhook_id,
+            webhook_timestamp=webhook_timestamp,
         )
-
-    try:
-        payload = await request.json()
-    except (JSONDecodeError, ValueError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Webhook payload must be valid JSON.",
-        ) from exc
+        if processed:
+            return PaymentWebhookAckResponse(
+                accepted=True,
+                provider="pine_labs",
+                provider_order_id=provider_order_id,
+                already_processed=already_processed,
+            )
+    else:
+        legacy_signature = (
+            request.headers.get("X-PineLabs-Signature")
+            or request.headers.get("x-pinelabs-signature")
+            or signature
+        )
+        try:
+            signature_valid = verify_pine_labs_signature(
+                raw_body=raw_body,
+                signature=legacy_signature,
+            )
+        except WebhookSecretNotConfigured as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=str(exc),
+            ) from exc
+        if not signature_valid:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid Pine Labs webhook signature.",
+            )
+        signature = legacy_signature
+        try:
+            payload = json.loads(raw_body.decode("utf-8"))
+        except (JSONDecodeError, ValueError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Webhook payload must be valid JSON.",
+            ) from exc
+        if not isinstance(payload, dict):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Webhook payload must be a JSON object.",
+            )
 
     gateway_client = _get_gateway_client()
     result = gateway_client.parse_webhook_payload(payload)
@@ -433,7 +503,14 @@ async def handle_pine_labs_webhook(
     event = PaymentWebhookEvent(
         provider="pine_labs",
         provider_event_id=provider_event_id,
+        webhook_id=webhook_id,
+        webhook_timestamp=(
+            datetime.fromtimestamp(int(webhook_timestamp_raw), tz=UTC)
+            if webhook_timestamp_raw and webhook_timestamp_raw.isdigit()
+            else None
+        ),
         provider_order_id=result.provider_order_id,
+        provider_payment_id=result.provider_reference,
         event_type=str(payload.get("event_type", "payment_status")),
         signature=signature,
         payload_json=dump_provider_payload(redact_provider_payload(payload)),

@@ -95,8 +95,8 @@ async def get_payment_config(
     configured = bool(
         settings.pine_labs_api_base_url
         and settings.pine_labs_payment_link_path
-        and settings.pine_labs_api_key
-        and settings.pine_labs_api_secret
+        and (settings.pine_labs_client_id or settings.pine_labs_api_key)
+        and (settings.pine_labs_client_secret or settings.pine_labs_api_secret)
         and settings.pine_labs_merchant_id
     )
     return PaymentConfigResponse(pine_labs_configured=configured)

@@ -983,6 +983,7 @@ def generate_structured[T: BaseModel](
     DEFAULT_POLICY allows everything anyway, so the effect is identical when
     no restriction has been configured.
     """
+    estimated_billing_credits = 0
     if session is not None and context.tenant_id:
         from caseops_api.services.tenant_ai_policy import (
             is_model_allowed,
@@ -1017,6 +1018,21 @@ def generate_structured[T: BaseModel](
             provider=provider.name,
             model=provider.model,
             estimated_tokens=_estimate_call_tokens(messages, max_tokens),
+        )
+        from caseops_api.services.saas_billing import (
+            assert_ai_credits_available,
+            estimate_ai_credits_for_call,
+        )
+
+        estimated_billing_credits = estimate_ai_credits_for_call(
+            purpose=context.purpose,
+            prompt_tokens=sum(_rough_token_estimate(message.content) for message in messages),
+            completion_tokens=max_tokens,
+        )
+        assert_ai_credits_available(
+            session,
+            company_id=context.tenant_id,
+            estimated_credits=estimated_billing_credits,
         )
     completion = provider.generate(
         messages=messages,
@@ -1077,6 +1093,26 @@ def generate_structured[T: BaseModel](
             f"not match the expected schema. violations={violations} "
             f"keys={preview_keys!r}",
         ) from exc
+    if session is not None and context.tenant_id and estimated_billing_credits > 0:
+        from caseops_api.services.saas_billing import (
+            debit_ai_credits,
+            estimate_ai_credits_for_call,
+        )
+
+        debit_ai_credits(
+            session,
+            company_id=context.tenant_id,
+            actor_membership_id=context.actor_membership_id,
+            matter_id=context.matter_id,
+            purpose=context.purpose,
+            credits=estimate_ai_credits_for_call(
+                purpose=context.purpose,
+                prompt_tokens=completion.prompt_tokens,
+                completion_tokens=completion.completion_tokens,
+            ),
+            source_object_type="llm_completion",
+            source_object_id=hashlib.sha256(completion.text.encode("utf-8")).hexdigest()[:32],
+        )
     return validated, completion
 
 

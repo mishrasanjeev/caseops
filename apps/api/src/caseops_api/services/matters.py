@@ -1044,6 +1044,9 @@ def create_matter(
                 "complete conflict clearance before activation."
             ),
         )
+    from caseops_api.services.saas_billing import assert_matter_limit
+
+    assert_matter_limit(session, context=context)
     existing_matter = session.scalar(
         select(Matter).where(
             Matter.company_id == context.company.id,

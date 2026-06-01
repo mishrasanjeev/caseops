@@ -13,12 +13,14 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
     Text,
     UniqueConstraint,
     false,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -347,6 +349,50 @@ class PaymentAttemptStatus(StrEnum):
     CANCELLED = "cancelled"
     EXPIRED = "expired"
     UNKNOWN = "unknown"
+
+
+class BillingSubscriptionStatus(StrEnum):
+    TRIALING = "trialing"
+    CHECKOUT_STARTED = "checkout_started"
+    PAYMENT_PENDING = "payment_pending"
+    ACTIVE = "active"
+    PAST_DUE = "past_due"
+    GRACE = "grace"
+    SUSPENDED = "suspended"
+    CANCELLED = "cancelled"
+    EXPIRED = "expired"
+    MANUAL_ACTIVE = "manual_active"
+
+
+class BillingCheckoutStatus(StrEnum):
+    CREATED = "created"
+    PROVIDER_DISABLED = "provider_disabled"
+    PAYMENT_PENDING = "payment_pending"
+    PAID = "paid"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+    EXPIRED = "expired"
+
+
+class BillingPaymentOrderStatus(StrEnum):
+    CREATED = "created"
+    AUTHORIZED = "authorized"
+    PENDING = "pending"
+    PAID = "paid"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+    REFUNDED = "refunded"
+    UNKNOWN = "unknown"
+
+
+class BillingCreditLedgerEventType(StrEnum):
+    INCLUDED_MONTHLY_GRANT = "included_monthly_grant"
+    TOPUP_PURCHASE = "topup_purchase"
+    MANUAL_ADMIN_GRANT = "manual_admin_grant"
+    USAGE_DEBIT = "usage_debit"
+    USAGE_REFUND = "usage_refund"
+    EXPIRY = "expiry"
+    PLAN_CHANGE_ADJUSTMENT = "plan_change_adjustment"
 
 
 class DocumentProcessingStatus(StrEnum):
@@ -4172,6 +4218,835 @@ class MatterInvoicePaymentAttempt(Base):
     )
 
 
+class BillingPlanVersion(Base):
+    __tablename__ = "billing_plan_versions"
+    __table_args__ = (
+        UniqueConstraint("plan_code", "version", name="uq_billing_plan_versions_code_version"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    plan_code: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    version: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    segment: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    display_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="active", index=True)
+    publicly_visible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    trial_eligible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    feature_summary_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    prices: Mapped[list[BillingPlanPrice]] = relationship(
+        back_populates="plan_version",
+        cascade="all, delete-orphan",
+    )
+    entitlements: Mapped[list[BillingPlanEntitlement]] = relationship(
+        back_populates="plan_version",
+        cascade="all, delete-orphan",
+    )
+
+
+class BillingPlanPrice(Base):
+    __tablename__ = "billing_plan_prices"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    plan_version_id: Mapped[str] = mapped_column(
+        ForeignKey("billing_plan_versions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="INR")
+    amount_minor: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    interval: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
+    tax_behavior: Mapped[str] = mapped_column(String(24), nullable=False, default="exclusive")
+    tax_rate_bps: Mapped[int] = mapped_column(Integer, nullable=False, default=1800)
+    provider_plan_reference: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    provider_plan_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    effective_from: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    effective_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    plan_version: Mapped[BillingPlanVersion] = relationship(back_populates="prices")
+
+
+class BillingPlanEntitlement(Base):
+    __tablename__ = "billing_plan_entitlements"
+    __table_args__ = (
+        UniqueConstraint(
+            "plan_version_id",
+            "entitlement_key",
+            name="uq_billing_plan_entitlements_plan_key",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    plan_version_id: Mapped[str] = mapped_column(
+        ForeignKey("billing_plan_versions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    entitlement_key: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    value_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    value_json: Mapped[object] = mapped_column(JSON, nullable=False)
+
+    plan_version: Mapped[BillingPlanVersion] = relationship(back_populates="entitlements")
+
+
+class BillingAccount(Base):
+    __tablename__ = "billing_accounts"
+    __table_args__ = (UniqueConstraint("company_id", name="uq_billing_accounts_company"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    billing_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    billing_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    billing_phone: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    gstin: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    billing_address_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    tax_treatment: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    company: Mapped[Company] = relationship()
+
+
+class BillingSubscription(Base):
+    __tablename__ = "billing_subscriptions"
+    __table_args__ = (
+        Index(
+            "uq_billing_subscriptions_company_active",
+            "company_id",
+            unique=True,
+            sqlite_where=text("status IN ('active', 'trialing', 'grace', 'manual_active')"),
+            postgresql_where=text(
+                "status IN ('active', 'trialing', 'grace', 'manual_active')"
+            ),
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    billing_account_id: Mapped[str | None] = mapped_column(
+        ForeignKey("billing_accounts.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    plan_version_id: Mapped[str | None] = mapped_column(
+        ForeignKey("billing_plan_versions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=BillingSubscriptionStatus.MANUAL_ACTIVE,
+        index=True,
+    )
+    segment: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    billing_interval: Mapped[str] = mapped_column(String(24), nullable=False, default="month")
+    current_period_start: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    current_period_end: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    trial_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    trial_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    grace_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    provider: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    provider_customer_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    provider_subscription_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, index=True
+    )
+    provider_mandate_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source: Mapped[str] = mapped_column(String(40), nullable=False, default="migration", index=True)
+    externally_billable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    entitlement_overrides_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    company: Mapped[Company] = relationship()
+    billing_account: Mapped[BillingAccount | None] = relationship()
+    plan_version: Mapped[BillingPlanVersion | None] = relationship()
+    items: Mapped[list[BillingSubscriptionItem]] = relationship(
+        back_populates="subscription",
+        cascade="all, delete-orphan",
+    )
+
+
+class BillingSubscriptionItem(Base):
+    __tablename__ = "billing_subscription_items"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    subscription_id: Mapped[str] = mapped_column(
+        ForeignKey("billing_subscriptions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    item_code: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    item_type: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    amount_minor: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="INR")
+    interval: Mapped[str] = mapped_column(String(24), nullable=False, default="month")
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="active", index=True)
+    provider_item_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    subscription: Mapped[BillingSubscription] = relationship(back_populates="items")
+
+
+class BillingCheckoutSession(Base):
+    __tablename__ = "billing_checkout_sessions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    billing_account_id: Mapped[str | None] = mapped_column(
+        ForeignKey("billing_accounts.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    subscription_id: Mapped[str | None] = mapped_column(
+        ForeignKey("billing_subscriptions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    plan_version_id: Mapped[str | None] = mapped_column(
+        ForeignKey("billing_plan_versions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    checkout_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=BillingCheckoutStatus.CREATED,
+        index=True,
+    )
+    amount_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    tax_amount_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_amount_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="INR")
+    success_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    cancel_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    provider: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    provider_checkout_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    provider_order_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    provider_payment_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    provider_subscription_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, index=True
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    company: Mapped[Company] = relationship()
+    subscription: Mapped[BillingSubscription | None] = relationship()
+    plan_version: Mapped[BillingPlanVersion | None] = relationship()
+
+
+class BillingPaymentOrder(Base):
+    __tablename__ = "billing_payment_orders"
+    __table_args__ = (
+        UniqueConstraint("merchant_reference", name="uq_billing_payment_orders_merchant_ref"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    checkout_session_id: Mapped[str | None] = mapped_column(
+        ForeignKey("billing_checkout_sessions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    subscription_id: Mapped[str | None] = mapped_column(
+        ForeignKey("billing_subscriptions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    provider: Mapped[str] = mapped_column(String(40), nullable=False, default="pine_labs")
+    merchant_reference: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    provider_order_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    provider_payment_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    provider_link_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=BillingPaymentOrderStatus.CREATED,
+        index=True,
+    )
+    amount_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    amount_paid_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    tax_amount_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="INR")
+    payment_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    return_signature_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    provider_payload_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    company: Mapped[Company] = relationship()
+    checkout_session: Mapped[BillingCheckoutSession | None] = relationship()
+    subscription: Mapped[BillingSubscription | None] = relationship()
+
+
+class BillingProviderEvent(Base):
+    __tablename__ = "billing_provider_events"
+    __table_args__ = (
+        UniqueConstraint("provider", "provider_event_id", name="uq_billing_provider_event"),
+        UniqueConstraint("provider", "webhook_id", name="uq_billing_provider_webhook"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    provider: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    provider_event_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    webhook_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    webhook_timestamp: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    signature_digest: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    event_type: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    provider_order_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    provider_payment_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    provider_subscription_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, index=True
+    )
+    resource_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    payload_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    processing_status: Mapped[str] = mapped_column(String(32), nullable=False, default="received")
+    first_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class BillingCreditLedger(Base):
+    __tablename__ = "billing_credit_ledger"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    subscription_id: Mapped[str | None] = mapped_column(
+        ForeignKey("billing_subscriptions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    credit_bucket: Mapped[str] = mapped_column(String(40), nullable=False, default="included")
+    event_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    delta: Mapped[int] = mapped_column(Integer, nullable=False)
+    balance_after: Mapped[int] = mapped_column(Integer, nullable=False)
+    reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    source_object_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    source_object_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    actor_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    platform_admin_id: Mapped[str | None] = mapped_column(
+        ForeignKey("platform_admin_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class BillingUsageEvent(Base):
+    __tablename__ = "billing_usage_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    subscription_id: Mapped[str | None] = mapped_column(
+        ForeignKey("billing_subscriptions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    usage_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    unit: Mapped[str] = mapped_column(String(40), nullable=False)
+    estimated_cost_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="INR")
+    source_type: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    source_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class BillingUsageAttribution(Base):
+    __tablename__ = "billing_usage_attribution"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    subscription_id: Mapped[str | None] = mapped_column(
+        ForeignKey("billing_subscriptions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    billing_usage_event_id: Mapped[str | None] = mapped_column(
+        ForeignKey("billing_usage_events.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    actor_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    matter_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matters.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    tracked_case_id: Mapped[str | None] = mapped_column(
+        ForeignKey("tracked_cases.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    feature_key: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    purpose: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    display_label: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    credits_debited: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    provider_units: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    estimated_internal_cost_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    tenant_visible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class BillingUsageRollup(Base):
+    __tablename__ = "billing_usage_rollups"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            "period_start",
+            "period_end",
+            "usage_type",
+            name="uq_billing_usage_rollup_period_type",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    period_start: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    period_end: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    usage_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    estimated_cost_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    revenue_allocated_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    gross_margin_bps: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class BillingProfitRollup(Base):
+    __tablename__ = "billing_profit_rollups"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    subscription_id: Mapped[str | None] = mapped_column(
+        ForeignKey("billing_subscriptions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    period_start: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    period_end: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    recognized_revenue_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    gross_revenue_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    discount_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    tax_collected_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    payment_gateway_cost_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    llm_cost_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    embedding_cost_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    case_refresh_cost_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    document_processing_cost_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    storage_cost_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    manual_support_cost_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    manual_research_cost_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_variable_cost_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    gross_profit_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    gross_margin_bps: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="estimated")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class BillingEnrollment(Base):
+    __tablename__ = "billing_enrollments"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str | None] = mapped_column(
+        ForeignKey("companies.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    contact_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    contact_email: Mapped[str | None] = mapped_column(String(320), nullable=True, index=True)
+    contact_mobile: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    company_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    segment: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    selected_plan: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    source: Mapped[str] = mapped_column(String(40), nullable=False, default="pricing_page")
+    status: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="lead_created", index=True
+    )
+    utm_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    bar_council_number: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    gstin: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    coupon_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    sales_owner_platform_admin_id: Mapped[str | None] = mapped_column(
+        ForeignKey("platform_admin_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status_timestamps_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class BillingAdminNote(Base):
+    __tablename__ = "billing_admin_notes"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str | None] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    enrollment_id: Mapped[str | None] = mapped_column(
+        ForeignKey("billing_enrollments.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    subscription_id: Mapped[str | None] = mapped_column(
+        ForeignKey("billing_subscriptions.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    note_type: Mapped[str] = mapped_column(String(40), nullable=False, default="general")
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_by_platform_admin_id: Mapped[str | None] = mapped_column(
+        ForeignKey("platform_admin_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class BillingManualInvoice(Base):
+    __tablename__ = "billing_manual_invoices"
+    __table_args__ = (UniqueConstraint("invoice_number", name="uq_billing_manual_invoice_number"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    subscription_id: Mapped[str | None] = mapped_column(
+        ForeignKey("billing_subscriptions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    invoice_number: Mapped[str] = mapped_column(String(80), nullable=False)
+    po_number: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    amount_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    tax_amount_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    tds_deducted_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    amount_received_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="INR")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="issued", index=True)
+    issued_on: Mapped[date] = mapped_column(Date, nullable=False)
+    due_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    paid_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    payment_reference: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    attachment_storage_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_by_platform_admin_id: Mapped[str | None] = mapped_column(
+        ForeignKey("platform_admin_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class BillingCoupon(Base):
+    __tablename__ = "billing_coupons"
+    __table_args__ = (UniqueConstraint("code", name="uq_billing_coupons_code"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    code: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    discount_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    discount_value: Mapped[int] = mapped_column(Integer, nullable=False)
+    currency: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    duration: Mapped[str] = mapped_column(String(24), nullable=False, default="once")
+    duration_periods: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    max_redemptions: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    redeemed_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    valid_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    valid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    segment_scope_json: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    plan_scope_json: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="active", index=True)
+    created_by_platform_admin_id: Mapped[str | None] = mapped_column(
+        ForeignKey("platform_admin_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class BillingCouponRedemption(Base):
+    __tablename__ = "billing_coupon_redemptions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    coupon_id: Mapped[str] = mapped_column(
+        ForeignKey("billing_coupons.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    checkout_session_id: Mapped[str | None] = mapped_column(
+        ForeignKey("billing_checkout_sessions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    subscription_id: Mapped[str | None] = mapped_column(
+        ForeignKey("billing_subscriptions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    discount_amount_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="INR")
+    redeemed_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class PlatformAdminMembership(Base):
+    __tablename__ = "platform_admin_memberships"
+    __table_args__ = (
+        UniqueConstraint("user_id", name="uq_platform_admin_memberships_user"),
+        Index(
+            "uq_platform_admin_memberships_one_active",
+            "status",
+            unique=True,
+            sqlite_where=text("status = 'active'"),
+            postgresql_where=text("status = 'active'"),
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    role: Mapped[str] = mapped_column(String(40), nullable=False, default="super_admin")
+    capabilities_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="active", index=True)
+    mfa_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    mfa_enforced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by_platform_admin_id: Mapped[str | None] = mapped_column(
+        ForeignKey("platform_admin_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    user: Mapped[User] = relationship()
+
+
+class PlatformAdminAuditEvent(Base):
+    __tablename__ = "platform_admin_audit_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    platform_admin_id: Mapped[str | None] = mapped_column(
+        ForeignKey("platform_admin_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    actor_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    actor_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    company_id: Mapped[str | None] = mapped_column(
+        ForeignKey("companies.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    action: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    target_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    target_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    result: Mapped[str] = mapped_column(String(24), nullable=False, default="success")
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class BillingOveragePolicy(Base):
+    __tablename__ = "billing_overage_policies"
+    __table_args__ = (
+        UniqueConstraint("company_id", name="uq_billing_overage_policies_company"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    overage_allowed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    unit_prices_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    cap_amount_minor: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="INR")
+    starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    approved_by_platform_admin_id: Mapped[str | None] = mapped_column(
+        ForeignKey("platform_admin_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
 class ClientType(StrEnum):
     INDIVIDUAL = "individual"
     CORPORATE = "corporate"
@@ -5242,7 +6117,15 @@ class PaymentWebhookEvent(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     provider: Mapped[str] = mapped_column(String(40), nullable=False)
     provider_event_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    webhook_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    webhook_timestamp: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     provider_order_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    provider_payment_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    provider_subscription_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, index=True
+    )
     event_type: Mapped[str | None] = mapped_column(String(120), nullable=True)
     signature: Mapped[str | None] = mapped_column(String(500), nullable=True)
     payload_json: Mapped[str] = mapped_column(Text, nullable=False)

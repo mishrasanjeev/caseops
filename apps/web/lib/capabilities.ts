@@ -111,7 +111,15 @@ export type Capability =
   | "portal:manage_grants"
   // PG-001 (2026-04-30) — pre-engagement conflict gate
   | "conflicts:run"
-  | "conflicts:resolve";
+  | "conflicts:resolve"
+  // Founder-only platform console. Tenant owner/admin roles never imply these.
+  | "platform:admin"
+  | "platform:billing_view"
+  | "platform:billing_manage"
+  | "platform:usage_view"
+  | "platform:payment_reconcile"
+  | "platform:plan_manage"
+  | "platform:manual_override";
 
 // Baseline caps for a fee-earner (owner / admin / partner / member).
 // Paralegals inherit most of these but lose a small, explicit set.

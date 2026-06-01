@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import binascii
 import hashlib
 import hmac
 import json
@@ -37,17 +39,47 @@ class PineLabsPaymentStatusResult:
 
 def _normalize_status(status_value: str | None) -> str:
     normalized = (status_value or "").strip().lower()
+    normalized = normalized.replace(".", "_")
+    if normalized.startswith("order_") or normalized.startswith("payment_"):
+        normalized_event = normalized
+    elif normalized.startswith("subscription_") or normalized.startswith("refund_"):
+        normalized_event = normalized
+    else:
+        normalized_event = normalized
     if normalized in {"created", "initiated"}:
         return "created"
+    if normalized_event in {
+        "order_authorized",
+        "order_processed",
+        "subscription_activated",
+        "subscription_charged",
+        "subscription_completed",
+    }:
+        return "paid"
     if normalized in {"pending", "processing", "in_progress"}:
+        return "pending"
+    if normalized_event in {"subscription_pending", "subscription_updated"}:
         return "pending"
     if normalized in {"partial", "partially_paid"}:
         return "partially_paid"
     if normalized in {"paid", "success", "captured", "completed", "authorized"}:
         return "paid"
+    if normalized_event in {"refund_processed"}:
+        return "refunded"
     if normalized in {"failed", "declined"}:
         return "failed"
+    if normalized_event in {
+        "order_failed",
+        "payment_failed",
+        "refund_failed",
+        "subscription_halted",
+        "subscription_revoke_failed",
+        "subscription_update_failed",
+    }:
+        return "failed"
     if normalized in {"cancelled", "canceled"}:
+        return "cancelled"
+    if normalized_event in {"order_cancelled", "subscription_cancelled"}:
         return "cancelled"
     if normalized in {"expired"}:
         return "expired"
@@ -104,23 +136,110 @@ def verify_pine_labs_signature(*, raw_body: bytes, signature: str | None) -> boo
     return hmac.compare_digest(expected, signature.strip())
 
 
+def _signature_values(signature: str | None) -> list[str]:
+    if not signature:
+        return []
+    values: list[str] = []
+    for token in signature.replace(";", ",").split(","):
+        cleaned = token.strip()
+        if not cleaned:
+            continue
+        if "=" in cleaned:
+            cleaned = cleaned.split("=", 1)[1].strip()
+        if cleaned and cleaned.lower() != "v1":
+            values.append(cleaned)
+    if signature.strip() not in values:
+        values.append(signature.strip())
+    return values
+
+
+def _webhook_secret_candidates(secret: str) -> list[bytes]:
+    candidates = [secret.encode("utf-8")]
+    try:
+        decoded = base64.b64decode(secret, validate=True)
+    except (binascii.Error, ValueError):
+        decoded = b""
+    if decoded and decoded not in candidates:
+        candidates.append(decoded)
+    return candidates
+
+
+def verify_pine_labs_plural_signature(
+    *,
+    raw_body: bytes,
+    webhook_id: str | None,
+    webhook_timestamp: str | None,
+    signature: str | None,
+    secret: str | None = None,
+    tolerance_seconds: int | None = None,
+    now: datetime | None = None,
+) -> bool:
+    settings = get_settings()
+    resolved_secret = secret or settings.pine_labs_webhook_secret
+    if not resolved_secret:
+        raise WebhookSecretNotConfigured(
+            "Pine Labs webhook secret is not configured; refusing to accept webhooks.",
+        )
+    if not webhook_id or not webhook_timestamp or not signature:
+        return False
+    try:
+        timestamp_seconds = int(str(webhook_timestamp).strip())
+    except ValueError:
+        return False
+    current = now or datetime.now(UTC)
+    event_time = datetime.fromtimestamp(timestamp_seconds, tz=UTC)
+    tolerance = tolerance_seconds or settings.pine_labs_webhook_tolerance_seconds
+    if abs((current - event_time).total_seconds()) > tolerance:
+        return False
+
+    signed_content = f"{webhook_id}.{webhook_timestamp}.".encode() + raw_body
+    supplied_values = _signature_values(signature)
+    for candidate_secret in _webhook_secret_candidates(resolved_secret):
+        expected = base64.b64encode(
+            hmac.new(candidate_secret, signed_content, hashlib.sha256).digest()
+        ).decode("ascii")
+        if any(hmac.compare_digest(expected, value) for value in supplied_values):
+            return True
+    return False
+
+
 SENSITIVE_PAYLOAD_KEYS = frozenset(
     {
         "card_number",
         "card_cvv",
         "cvv",
         "cvv2",
+        "email",
+        "email_id",
         "upi_vpa",
         "vpa",
         "customer_email",
         "customer_phone",
+        "customer_name",
         "phone",
+        "phone_number",
+        "mobile",
+        "mobile_number",
+        "contact_number",
         "personal_id",
         "pan",
         "aadhaar",
         "aadhar",
         "otp",
         "cvc",
+        "client_secret",
+        "api_key",
+        "api_secret",
+        "access_token",
+        "refresh_token",
+        "token",
+        "authorization",
+        "bearer",
+        "webhook_secret",
+        "merchant_secret",
+        "secret",
+        "signature",
+        "webhook_signature",
     },
 )
 REDACTION_MASK = "[redacted]"
@@ -212,8 +331,8 @@ class PineLabsGatewayClient:
         body (header auth is NOT accepted despite common examples).
         """
         if (
-            not self.settings.pine_labs_api_key
-            or not self.settings.pine_labs_api_secret
+            not (self.settings.pine_labs_client_id or self.settings.pine_labs_api_key)
+            or not (self.settings.pine_labs_client_secret or self.settings.pine_labs_api_secret)
             or not self.settings.pine_labs_merchant_id
         ):
             raise HTTPException(
@@ -231,8 +350,10 @@ class PineLabsGatewayClient:
             token_url,
             json={
                 "grant_type": "client_credentials",
-                "client_id": self.settings.pine_labs_api_key,
-                "client_secret": self.settings.pine_labs_api_secret,
+                "client_id": self.settings.pine_labs_client_id or self.settings.pine_labs_api_key,
+                "client_secret": (
+                    self.settings.pine_labs_client_secret or self.settings.pine_labs_api_secret
+                ),
                 "merchant_id": self.settings.pine_labs_merchant_id,
             },
             headers={
@@ -318,7 +439,7 @@ class PineLabsGatewayClient:
             "amount": {"value": amount_minor, "currency": currency},
             "description": description or "",
             "merchant_payment_link_reference": merchant_order_id,
-            "allowed_payment_methods": ["CARD", "UPI", "NETBANKING"],
+            "allowed_payment_methods": self.settings.pine_labs_allowed_payment_methods,
             "callback_url": return_url,
             "expire_by": expire_by,
         }
@@ -409,12 +530,25 @@ class PineLabsGatewayClient:
                 "provider_order_id",
                 "order_id",
                 "payment_id",
+                "merchant_payment_link_reference",
+                "merchant_reference",
             ),
             provider_reference=_extract_first(
-                inner, "reference_id", "provider_reference",
+                inner,
+                "merchant_payment_link_reference",
+                "merchant_reference",
+                "reference_id",
+                "provider_reference",
             ),
             status=_normalize_status(
-                _extract_first(inner, "payment_link_status", "status", "payment_status"),
+                _extract_first(
+                    inner,
+                    "payment_link_status",
+                    "status",
+                    "payment_status",
+                    "event_type",
+                    "type",
+                ),
             ),
             amount_received_minor=_extract_amount_minor(inner),
             raw_payload=data,
@@ -432,12 +566,25 @@ class PineLabsGatewayClient:
                 "order_id",
                 "payment_id",
                 "merchant_order_id",
+                "merchant_payment_link_reference",
+                "merchant_reference",
             ),
             provider_reference=_extract_first(
-                inner, "reference_id", "provider_reference",
+                inner,
+                "merchant_payment_link_reference",
+                "merchant_reference",
+                "reference_id",
+                "provider_reference",
             ),
             status=_normalize_status(
-                _extract_first(inner, "payment_link_status", "status", "payment_status"),
+                _extract_first(
+                    inner,
+                    "payment_link_status",
+                    "status",
+                    "payment_status",
+                    "event_type",
+                    "type",
+                ),
             ),
             amount_received_minor=_extract_amount_minor(inner),
             raw_payload=payload,
