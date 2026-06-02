@@ -2021,6 +2021,75 @@ export const outlookBulkSyncResponse = z.object({
   ]),
 });
 
+export const providerOperationRecord = z.object({
+  id: z.string(),
+  job_kind: z.enum(["calendar_sync", "notification_delivery"]),
+  provider: z.string(),
+  company_id: z.string(),
+  matter_id: z.string().nullable(),
+  source_type: z.string().nullable(),
+  source_ref: z.string().nullable(),
+  provider_item_ref: z.string().nullable(),
+  status: z.string(),
+  operator_state: z.enum(["open", "ignored", "resolved"]),
+  error_redacted: z.string().nullable(),
+  dead_letter_reason: z.string().nullable(),
+  attempts: z.number().int().min(0),
+  max_attempts: z.number().int().min(1),
+  next_attempt_at: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+  replay_available: z.boolean(),
+  ignore_available: z.boolean(),
+  mark_resolved_available: z.boolean(),
+  notes: z.array(z.string()).default([]),
+});
+
+export const providerOperationListResponse = z.object({
+  operations: z.array(providerOperationRecord),
+  open_count: z.number().int().min(0),
+  ignored_count: z.number().int().min(0),
+  resolved_count: z.number().int().min(0),
+  replayable_count: z.number().int().min(0),
+});
+
+export const providerOperationActionResponse = z.object({
+  action: z.enum(["replay", "ignore", "mark_resolved"]),
+  changed: z.boolean(),
+  message: z.string(),
+  operation: providerOperationRecord,
+});
+
+export const providerReadinessRecord = z.object({
+  provider: z.string(),
+  display_name: z.string(),
+  adp_slice: z.string(),
+  state: z.enum([
+    "blocked_missing_config",
+    "blocked_pending_admin_approval",
+    "foundation_available",
+    "ready",
+  ]),
+  configured: z.boolean(),
+  enabled: z.boolean(),
+  external_calls_enabled: z.boolean(),
+  durable_workflow_available: z.boolean(),
+  required_config_names: z.array(z.string()).default([]),
+  missing_config_names: z.array(z.string()).default([]),
+  required_approval_keys: z.array(z.string()).default([]),
+  missing_approval_keys: z.array(z.string()).default([]),
+  endpoint_paths: z.array(z.string()).default([]),
+  idempotency_fields: z.array(z.string()).default([]),
+  change_detection_fields: z.array(z.string()).default([]),
+  review_queue: z.string().nullable(),
+  retry_dead_letter: z.string(),
+  limitations: z.array(z.string()).default([]),
+});
+
+export const providerReadinessListResponse = z.object({
+  providers: z.array(providerReadinessRecord),
+});
+
 export const notificationRuleRecord = z.object({
   id: z.string(),
   company_id: z.string(),
@@ -2066,6 +2135,14 @@ export type OutlookReadinessTestResponse = z.infer<
 >;
 export type OutlookBulkSyncItem = z.infer<typeof outlookBulkSyncItem>;
 export type OutlookBulkSyncResponse = z.infer<typeof outlookBulkSyncResponse>;
+export type ProviderOperationRecord = z.infer<typeof providerOperationRecord>;
+export type ProviderOperationListResponse =
+  z.infer<typeof providerOperationListResponse>;
+export type ProviderOperationActionResponse =
+  z.infer<typeof providerOperationActionResponse>;
+export type ProviderReadinessRecord = z.infer<typeof providerReadinessRecord>;
+export type ProviderReadinessListResponse =
+  z.infer<typeof providerReadinessListResponse>;
 export type NotificationRuleRecord = z.infer<typeof notificationRuleRecord>;
 export type NotificationRuleListResponse = z.infer<typeof notificationRuleListResponse>;
 

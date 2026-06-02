@@ -1,10 +1,26 @@
 # PRD: CaseOps Pricing, Subscription Billing, Pine Labs Plural Payments, Usage Governance, And Admin Console
 
 Date: 2026-05-31
-Status: Draft for implementation planning
+Status: Implementation shipped for pricing/billing/platform-admin; production
+billing signoff and Pine Labs UAT remain pending as of 2026-06-02
 Owner: CaseOps product/admin
 Primary users: Solo lawyers, Indian law firms, corporate General Counsel teams, CaseOps platform operators
 Related PRD: `docs/PRD_CASEOPS_AI_ENHANCEMENTS_2026-05-26.md`
+
+## 0. Current Production Status - 2026-06-02
+
+- Pricing page, SaaS billing APIs, tenant billing UI, tenant usage/downloads,
+  and founder-only platform-admin billing/profit/provider-event surfaces have
+  been deployed.
+- Production Pine Labs payments remain disabled. Provider-disabled checkout is
+  the expected production behavior until UAT and founder go/no-go pass.
+- Manual production billing signoff is still pending. Use
+  `docs/runbooks/production-billing-signoff-2026-06-02.md`.
+- Pine Labs UAT is still pending credentials, webhook registration, product
+  enablement, endpoint schemas, MDR/settlement details, and UAT payment
+  scenarios. Use `docs/runbooks/pine-labs-uat-readiness-2026-06-02.md`.
+- This PRD remains the product/implementation reference, but its rollout status
+  is no longer "not implemented."
 
 ## 1. Purpose
 

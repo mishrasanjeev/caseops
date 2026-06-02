@@ -34,8 +34,11 @@ _UUID_RE = re.compile(
     re.IGNORECASE,
 )
 _SECRET_ASSIGNMENT_RE = re.compile(
-    r"(?i)\b(api[_ -]?key|authorization|bearer|secret|token)\b\s*[:= ]\s*\S+"
+    r"(?i)\b(api[_ -]?key|authorization|auth[_ -]?header|bearer|"
+    r"client[_ -]?secret|private[_ -]?key|secret|signature|token|"
+    r"webhook[_ -]?signature)\b\s*[:= ]\s*\S+"
 )
+_PHONE_RE = re.compile(r"(?<!\d)(?:\+?\d[\d\s().-]{8,}\d)(?!\d)")
 _LONG_TOKEN_RE = re.compile(r"\b[A-Za-z0-9_.:-]{24,}\b")
 _MAX_REDACTED_ERROR_LENGTH = 200
 _MAX_INTENT_BODY_LENGTH = 500
@@ -111,6 +114,7 @@ def redact_provider_error(value: object) -> str:
     text = _URL_RE.sub("[url-redacted]", text)
     text = _EMAIL_RE.sub("[email-redacted]", text)
     text = _UUID_RE.sub("[id-redacted]", text)
+    text = _PHONE_RE.sub("[phone-redacted]", text)
     text = _LONG_TOKEN_RE.sub("[token-redacted]", text)
     text = " ".join(text.split())
     if len(text) > _MAX_REDACTED_ERROR_LENGTH:

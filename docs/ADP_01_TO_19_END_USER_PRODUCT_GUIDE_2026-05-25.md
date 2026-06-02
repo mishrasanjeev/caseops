@@ -431,16 +431,26 @@ What to expect:
 
 ## Current Production-Use Boundaries
 
-The following are not active as durable production automations through ADP-19:
+The following boundaries apply after the ADP-20 and ADP-24 foundations:
 
-- Durable always-on Outlook sync.
-- Durable Google Drive sync.
-- Durable email provider ingestion.
-- Background mailbox polling.
-- Provider webhooks for calendar/email ingestion.
-- External notification delivery by email, SMS, WhatsApp, push, or digest.
+- ADP-20 implements readiness-gated CaseOps-to-Outlook hearing sync only.
+  Broad two-way Outlook automation, Outlook-to-CaseOps import, task/deadline
+  sync, mailbox ingestion, and provider webhooks remain out of scope.
+- ADP-24 implements an admin provider-operations surface for failed/blocked
+  durable jobs, redacted errors, and audited replay/ignore/resolve actions.
+  Replay reschedules existing idempotent rows; it does not bypass provider
+  readiness gates or make immediate provider calls.
+- Durable Google Drive sync remains pending under ADP-21.
+- Durable email provider ingestion remains pending under ADP-22.
+- Judgment/legal-update external digest delivery remains pending under ADP-23.
+- Background mailbox polling remains disabled.
+- Provider webhooks for calendar/email ingestion remain disabled.
+- External notification delivery by email, SMS, WhatsApp, push, or digest
+  remains provider-gated and disabled unless explicitly configured and tested.
 - Legal outcome prediction or success probability.
 - Judge, bench, court, or counsel scoring.
 
 Use the delivered ADP-01 to ADP-19 features as reviewable, source-backed,
-in-app workflow foundations.
+in-app workflow foundations. Use `/app/admin/provider-operations` for the
+current ADP-21/22/23 readiness ledger and ADP-24 provider retry/dead-letter
+foundation.

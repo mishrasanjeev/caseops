@@ -250,6 +250,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/provider-operations/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List tenant-scoped failed, blocked, or dead-letter provider operations. */
+        get: operations["get_provider_operation_jobs_api_admin_provider_operations_jobs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/provider-operations/jobs/{operation_id}/ignore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark a provider operation ignored with an audit event. */
+        post: operations["post_provider_operation_ignore_api_admin_provider_operations_jobs__operation_id__ignore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/provider-operations/jobs/{operation_id}/mark-resolved": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark a provider operation resolved with an audit event. */
+        post: operations["post_provider_operation_mark_resolved_api_admin_provider_operations_jobs__operation_id__mark_resolved_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/provider-operations/jobs/{operation_id}/replay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Request a safe replay for a tenant-scoped provider operation. */
+        post: operations["post_provider_operation_replay_api_admin_provider_operations_jobs__operation_id__replay_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/provider-operations/readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read provider readiness gates without exposing secret values. */
+        get: operations["get_provider_readiness_api_admin_provider_operations_readiness_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/storage-governance": {
         parameters: {
             query?: never;
@@ -16641,6 +16726,148 @@ export interface components {
              */
             updated_at: string;
         };
+        /** ProviderOperationActionRequest */
+        ProviderOperationActionRequest: {
+            /** Reason */
+            reason: string;
+        };
+        /** ProviderOperationActionResponse */
+        ProviderOperationActionResponse: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "replay" | "ignore" | "mark_resolved";
+            /** Changed */
+            changed: boolean;
+            /** Message */
+            message: string;
+            operation: components["schemas"]["ProviderOperationRecord"];
+        };
+        /** ProviderOperationListResponse */
+        ProviderOperationListResponse: {
+            /** Ignored Count */
+            ignored_count: number;
+            /** Open Count */
+            open_count: number;
+            /** Operations */
+            operations: components["schemas"]["ProviderOperationRecord"][];
+            /** Replayable Count */
+            replayable_count: number;
+            /** Resolved Count */
+            resolved_count: number;
+        };
+        /** ProviderOperationRecord */
+        ProviderOperationRecord: {
+            /** Attempts */
+            attempts: number;
+            /** Company Id */
+            company_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Dead Letter Reason */
+            dead_letter_reason?: string | null;
+            /** Error Redacted */
+            error_redacted?: string | null;
+            /** Id */
+            id: string;
+            /** Ignore Available */
+            ignore_available: boolean;
+            /**
+             * Job Kind
+             * @enum {string}
+             */
+            job_kind: "calendar_sync" | "notification_delivery";
+            /** Mark Resolved Available */
+            mark_resolved_available: boolean;
+            /** Matter Id */
+            matter_id?: string | null;
+            /** Max Attempts */
+            max_attempts: number;
+            /** Next Attempt At */
+            next_attempt_at?: string | null;
+            /** Notes */
+            notes?: string[];
+            /**
+             * Operator State
+             * @default open
+             * @enum {string}
+             */
+            operator_state: "open" | "ignored" | "resolved";
+            /** Provider */
+            provider: string;
+            /** Provider Item Ref */
+            provider_item_ref?: string | null;
+            /** Replay Available */
+            replay_available: boolean;
+            /** Source Ref */
+            source_ref?: string | null;
+            /** Source Type */
+            source_type?: string | null;
+            /** Status */
+            status: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** ProviderReadinessListResponse */
+        ProviderReadinessListResponse: {
+            /** Providers */
+            providers: components["schemas"]["ProviderReadinessRecord"][];
+        };
+        /** ProviderReadinessRecord */
+        ProviderReadinessRecord: {
+            /** Adp Slice */
+            adp_slice: string;
+            /** Change Detection Fields */
+            change_detection_fields?: string[];
+            /** Configured */
+            configured: boolean;
+            /** Display Name */
+            display_name: string;
+            /**
+             * Durable Workflow Available
+             * @default false
+             */
+            durable_workflow_available: boolean;
+            /** Enabled */
+            enabled: boolean;
+            /** Endpoint Paths */
+            endpoint_paths?: string[];
+            /**
+             * External Calls Enabled
+             * @default false
+             */
+            external_calls_enabled: boolean;
+            /** Idempotency Fields */
+            idempotency_fields?: string[];
+            /** Limitations */
+            limitations?: string[];
+            /** Missing Approval Keys */
+            missing_approval_keys?: string[];
+            /** Missing Config Names */
+            missing_config_names?: string[];
+            /** Provider */
+            provider: string;
+            /** Required Approval Keys */
+            required_approval_keys?: string[];
+            /** Required Config Names */
+            required_config_names?: string[];
+            /** Retry Dead Letter */
+            retry_dead_letter: string;
+            /** Review Queue */
+            review_queue?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "blocked_missing_config" | "blocked_pending_admin_approval" | "foundation_available" | "ready";
+        };
         /** RecommendationAnalysisRecord */
         RecommendationAnalysisRecord: {
             /** Confidence Explanation */
@@ -18504,6 +18731,163 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_provider_operation_jobs_api_admin_provider_operations_jobs_get: {
+        parameters: {
+            query?: {
+                include_resolved?: boolean;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderOperationListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_provider_operation_ignore_api_admin_provider_operations_jobs__operation_id__ignore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderOperationActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderOperationActionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_provider_operation_mark_resolved_api_admin_provider_operations_jobs__operation_id__mark_resolved_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderOperationActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderOperationActionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_provider_operation_replay_api_admin_provider_operations_jobs__operation_id__replay_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderOperationActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderOperationActionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_provider_readiness_api_admin_provider_operations_readiness_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderReadinessListResponse"];
                 };
             };
         };

@@ -28,6 +28,7 @@ from caseops_api.api.routes import (
     payments,
     platform_admin,
     portal,
+    provider_operations,
     recommendations,
     statutes,
     teams,
@@ -62,9 +63,14 @@ api_router.include_router(
     prefix="/platform-admin",
     tags=["platform-admin"],
 )
+api_router.include_router(
+    provider_operations.router,
+    prefix="/admin/provider-operations",
+    tags=["provider-operations"],
+)
 api_router.include_router(courts.router, prefix="/courts", tags=["courts"])
-# MOD-TS-017 Slice S2 (2026-04-25) — bare-acts read API powering
-# /app/statutes browser. Slice S4 (2026-04-25) — matter statute
+# MOD-TS-017 Slice S2 (2026-04-25) - bare-acts read API powering
+# /app/statutes browser. Slice S4 (2026-04-25) - matter statute
 # reference write API mounted under /api/matters/.
 api_router.include_router(statutes.router, prefix="/statutes", tags=["statutes"])
 api_router.include_router(
@@ -73,15 +79,15 @@ api_router.include_router(
 api_router.include_router(intake.router, prefix="/intake", tags=["intake"])
 api_router.include_router(teams.router, prefix="/teams", tags=["teams"])
 api_router.include_router(clients.router, prefix="/clients", tags=["clients"])
-# Phase B / J08 / M08 — unified calendar feed across hearings,
+# Phase B / J08 / M08 - unified calendar feed across hearings,
 # tasks, and the generic matter_deadlines table.
 api_router.include_router(calendar.router, prefix="/calendar", tags=["calendar"])
-# Phase B / J12 / M11 — communications log mounted under /matters
+# Phase B / J12 / M11 - communications log mounted under /matters
 # so the URL shape stays consistent with the cockpit's other tabs.
 api_router.include_router(
     communications.router, prefix="/matters", tags=["communications"],
 )
-# Phase B M11 slice 2 — AutoMail templates admin surface.
+# Phase B M11 slice 2 - AutoMail templates admin surface.
 api_router.include_router(
     email_templates.router, prefix="/admin", tags=["email-templates"],
 )
@@ -102,7 +108,7 @@ api_router.include_router(
 api_router.include_router(
     notifications.webhook_router, prefix="/webhooks", tags=["webhooks"],
 )
-# Phase C-1 (2026-04-24, MOD-TS-014) — portal scaffold.
+# Phase C-1 (2026-04-24, MOD-TS-014) - portal scaffold.
 # /api/portal/auth/* + /api/portal/me are the external surface
 # (PortalUser session); /api/admin/portal/invitations is the
 # internal owner-driven invite endpoint.
