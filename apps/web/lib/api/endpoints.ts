@@ -77,6 +77,9 @@ import {
   type PlatformOverviewResponse,
   type PlatformProfitReportResponse,
   type PlatformProviderEventsResponse,
+  type ProviderOperationActionResponse,
+  type ProviderOperationListResponse,
+  type ProviderReadinessListResponse,
   authContext,
   authSession,
   affidavitIntelligenceResponse,
@@ -135,6 +138,9 @@ import {
   platformOverviewResponse,
   platformProfitReportResponse,
   platformProviderEventsResponse,
+  providerOperationActionResponse,
+  providerOperationListResponse,
+  providerReadinessListResponse,
   predictiveIntelligenceResponse,
   proceedingIntelligenceResponse,
   recommendation,
@@ -5311,6 +5317,61 @@ export async function testOutlookTenantConfiguration(): Promise<OutlookReadiness
     body: {},
   });
   return outlookReadinessTestResponse.parse(data);
+}
+
+export async function listProviderOperations(input?: {
+  includeResolved?: boolean;
+  limit?: number;
+}): Promise<ProviderOperationListResponse> {
+  const qs = new URLSearchParams();
+  if (input?.includeResolved) qs.set("include_resolved", "true");
+  if (typeof input?.limit === "number") qs.set("limit", String(input.limit));
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  const data = await apiRequest<unknown>(
+    `/api/admin/provider-operations/jobs${suffix}`,
+  );
+  return providerOperationListResponse.parse(data);
+}
+
+export async function fetchProviderReadiness(): Promise<ProviderReadinessListResponse> {
+  const data = await apiRequest<unknown>("/api/admin/provider-operations/readiness");
+  return providerReadinessListResponse.parse(data);
+}
+
+async function mutateProviderOperation(
+  operationId: string,
+  action: "replay" | "ignore" | "mark-resolved",
+  reason?: string | null,
+): Promise<ProviderOperationActionResponse> {
+  const data = await apiRequest<unknown>(
+    `/api/admin/provider-operations/jobs/${encodeURIComponent(operationId)}/${action}`,
+    {
+      method: "POST",
+      body: { reason: reason || null },
+    },
+  );
+  return providerOperationActionResponse.parse(data);
+}
+
+export async function replayProviderOperation(input: {
+  operationId: string;
+  reason?: string | null;
+}): Promise<ProviderOperationActionResponse> {
+  return mutateProviderOperation(input.operationId, "replay", input.reason);
+}
+
+export async function ignoreProviderOperation(input: {
+  operationId: string;
+  reason?: string | null;
+}): Promise<ProviderOperationActionResponse> {
+  return mutateProviderOperation(input.operationId, "ignore", input.reason);
+}
+
+export async function markProviderOperationResolved(input: {
+  operationId: string;
+  reason?: string | null;
+}): Promise<ProviderOperationActionResponse> {
+  return mutateProviderOperation(input.operationId, "mark-resolved", input.reason);
 }
 
 export async function syncOutlookVisibleRange(input: {

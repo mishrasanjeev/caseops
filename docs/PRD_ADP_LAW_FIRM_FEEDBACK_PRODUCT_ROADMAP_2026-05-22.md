@@ -114,10 +114,19 @@ The following repo truth was used while shaping this PRD:
   workspace admins can replay failed/dead-letter hearing sync rows. Task,
   deadline, mailbox, webhook, Outlook-to-CaseOps, and Google Drive sync remain
   out of scope.
+- ADP-24 admin provider operations foundation is implemented as of 2026-06-02:
+  workspace admins can list failed/blocked/dead-letter Outlook sync and
+  notification delivery jobs, view redacted errors only, and request
+  replay/ignore/mark-resolved actions with audit. Replay reschedules existing
+  idempotent rows and does not make immediate provider calls.
+- ADP-21, ADP-22, and ADP-23 now have names-only provider readiness status
+  under `/app/admin/provider-operations`, but durable Drive sync, mailbox
+  polling/webhooks, and external digest delivery remain pending.
 - WTD-11.4 offline AI safety evaluation harness foundation exists. Broader
   per-workflow goldens and CI gating remain pending.
-- AI token budgets, firm/user quotas, plan entitlements, and storage governance
-  are not fully implemented.
+- AI token budgets, firm/user quotas, SaaS plan entitlements/billing, and
+  storage governance are implemented foundations. Production billing signoff
+  remains pending; Pine Labs production payments remain disabled pending UAT.
 - Staging runtime proof remains missing unless a later prompt specifically
   handles staging setup.
 
@@ -1370,10 +1379,12 @@ Prerequisites:
 Tasks:
 
 - ADP-20 Durable Outlook sync foundation for CaseOps-to-Outlook hearings.
-- ADP-21 Durable Google Drive sync.
-- ADP-22 Durable email ingestion connector.
-- ADP-23 Judgment/legal update external digests.
-- ADP-24 Admin retry/dead-letter/replay UI.
+- ADP-21 Durable Google Drive sync: readiness ledger only; durable sync pending.
+- ADP-22 Durable email ingestion connector: readiness ledger only; durable
+  mailbox connector pending.
+- ADP-23 Judgment/legal update external digests: in-app previews exist and
+  readiness ledger is available; external delivery pending.
+- ADP-24 Admin retry/dead-letter/replay UI: foundation implemented.
 
 ## 11. Detailed Task Backlog
 
@@ -1825,7 +1836,7 @@ and CRUD endpoints under `/api/contracts/tenant-playbooks`. Playbook
 admin (create/update/archive) is gated by `contracts:manage_rules`;
 read is gated by tenant membership. Compare endpoint
 `POST /api/contracts/{contract_id}/tenant-playbook-compare` is
-**deterministic** (no LLM) — for each active rule, it scans the
+**deterministic** (no LLM)  - for each active rule, it scans the
 contract's existing `ContractClause` rows by `clause_type`, applies
 the rule's optional `keyword_pattern` (case-insensitive substring),
 and emits matched / missing / deviation / needs_review. Matched and
@@ -1858,7 +1869,7 @@ Tests:
 Type: Backend + Web
 Priority: P3
 Dependencies: Matter File Q&A/document extraction, drafting
-Status: In progress — deterministic foundation implemented on branch
+Status: In progress  - deterministic foundation implemented on branch
 `codex/adp15-drafting-data-extraction-review-queue`.
 
 Design:
@@ -2036,31 +2047,47 @@ Tests:
 Type: Backend Worker + Provider Integration
 Priority: P4
 Dependencies: WTD-5.1c, WTD-5.3, ADP-12
+Status: **READINESS FOUNDATION IMPLEMENTED** as of 2026-06-02. Workspace admins
+can see names-only Google Drive readiness under
+`/app/admin/provider-operations` and
+`GET /api/admin/provider-operations/readiness`. Durable Drive sync, OAuth token
+storage, file content ingestion, provider webhooks, and background polling are
+still pending and must fail closed until tenant/provider approval exists.
 
 Scope:
 
-- Durable Drive sync.
-- Change detection.
-- Conflict/review queue.
+- Durable Drive sync remains pending.
+- Change detection fields are defined for readiness: provider file id, version,
+  content hash, and modified time.
+- Conflict/review queue remains pending for updated/deleted/duplicate files.
+- Manual bounded dry-run import remains the only Drive file planning path.
+- No raw Drive file contents or OAuth tokens are logged or returned.
 
 Tests:
 
-- Idempotent sync.
-- Updated file detection.
-- Provider failure retry.
+- Names-only readiness status.
+- Manual dry-run idempotency and duplicate detection.
+- Missing config fail-closed.
 
 ### ADP-22: Durable Email Connector
 
 Type: Backend Worker + Provider Integration
 Priority: P4
 Dependencies: WTD-5.1c, WTD-5.3, ADP-05
+Status: **READINESS FOUNDATION IMPLEMENTED** as of 2026-06-02. Workspace admins
+can see mailbox-ingestion readiness under `/app/admin/provider-operations`.
+Durable mailbox polling, provider webhooks, OAuth/token storage, and automatic
+matter mutation remain pending.
 
 Scope:
 
-- Admin-triggered or provider webhook mailbox connector.
-- Thread grouping.
-- Intake routing.
-- Runtime proof.
+- Admin-triggered or provider webhook mailbox connector remains pending.
+- Existing imported-email metadata and email invitation candidates remain
+  review-first.
+- Thread grouping and message idempotency requirements are captured in the
+  readiness ledger.
+- Intake routing remains candidate/review-first; no unsafe automatic matter
+  mutation is enabled.
 
 Tests:
 
@@ -2068,23 +2095,30 @@ Tests:
 - Message idempotency.
 - Thread grouping.
 - No cross-matter leakage.
+- Redaction and replay integration through ADP-24 for notification delivery
+  jobs.
 
 ### ADP-23: Judgment And Legal Update External Digests
 
 Type: Backend Worker + Notification Delivery
 Priority: P4
 Dependencies: WTD-5.3, ADP-17, ADP-18
+Status: **READINESS FOUNDATION IMPLEMENTED** as of 2026-06-02. Judgment and
+legal-update digest previews are in-app only; `/app/admin/provider-operations`
+reports external delivery as disabled until provider approval and config exist.
 
 Scope:
 
-- Email/in-app digest delivery.
-- Retry/dead-letter.
-- User preferences.
+- In-app digest preview is available.
+- Email/SMS/WhatsApp delivery remains provider-gated and fail-closed.
+- Retry/dead-letter behavior is via notification delivery intents and ADP-24
+  provider operations when persisted intents exist.
+- User digest preferences and external provider delivery remain pending.
 
 Tests:
 
 - Digest generation.
-- Delivery retry.
+- Provider-disabled state.
 - Suppression/unsubscribe behavior where applicable.
 - Redacted audit.
 
@@ -2093,18 +2127,27 @@ Tests:
 Type: Backend + Web
 Priority: P4
 Dependencies: Durable workflows
+Status: **FOUNDATION IMPLEMENTED** as of 2026-06-02. Tenant workspace admins
+can use `/app/admin/provider-operations` and
+`/api/admin/provider-operations/jobs` to inspect failed/blocked/dead-letter
+provider operations and request replay/ignore/mark-resolved actions.
 
 Scope:
 
-- Admin view of failed provider jobs.
-- Redacted error display.
-- Replay controls.
-- Audit of replay.
+- Admin view of failed, blocked, and dead-letter provider jobs.
+- Redacted provider error display only; no raw payloads or secrets.
+- Tenant/company scoping.
+- Replay controls guarded by `workspace:admin`.
+- Audit of replay, ignore, and mark-resolved.
+- Idempotency protection through existing unique sync rows and notification
+  delivery intent idempotency keys.
 
 Tests:
 
 - Failure listing.
 - Replay authorization.
+- Replay idempotency.
+- Ignore/resolve audit.
 - No secret leakage.
 
 ## 12. Benchmarking Notes

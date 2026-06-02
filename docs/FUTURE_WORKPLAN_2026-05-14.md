@@ -13,6 +13,9 @@ product, or enterprise evidence from the strict ledgers.
   `docs/RELEASE_SIGNOFF_2026-05-14.md`; preserve it when doing future work.
 - Do not run corpus ingest, backfill, or embedding jobs as part of these
   milestones unless a later prompt explicitly authorizes that scope.
+- Billing/pricing/platform-admin code is deployed. Manual production billing
+  signoff remains pending, and Pine Labs production payments must remain
+  disabled until UAT and founder go/no-go pass.
 
 ## Ordered Milestones
 
@@ -55,6 +58,13 @@ product, or enterprise evidence from the strict ledgers.
      readiness-gated CaseOps-to-Outlook hearing sync only, with retry,
      dead-letter, and tenant-scoped admin replay. Task/deadline, mailbox,
      webhook, Outlook-to-CaseOps, and Google Drive sync remain future work.
+   - ADP-24 provider operations foundation is implemented: tenant admins can
+     list failed/blocked/dead-letter provider jobs, see redacted errors, and
+     request audited replay/ignore/resolve actions without immediate provider
+     calls.
+   - ADP-21 Google Drive durable sync, ADP-22 durable mailbox ingestion, and
+     ADP-23 external digest delivery remain pending. Current readiness status
+     is names-only under `/app/admin/provider-operations`.
 
 5. **AI eval harness**
    - `WTD-11.4` now has a deterministic offline fixture foundation for

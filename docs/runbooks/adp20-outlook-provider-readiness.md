@@ -107,6 +107,19 @@ The implemented foundation includes:
 7. Provider error redaction before DB/API/audit/UI persistence.
 8. Disable/rollback path that leaves bounded manual sync available.
 
+ADP-24 adds a shared provider-operations surface for tenant admins:
+
+```text
+GET /api/admin/provider-operations/jobs
+POST /api/admin/provider-operations/jobs/{operation_id}/replay
+POST /api/admin/provider-operations/jobs/{operation_id}/ignore
+POST /api/admin/provider-operations/jobs/{operation_id}/mark-resolved
+```
+
+Use `/app/admin/provider-operations` for cross-provider triage. ADP-24 replay
+reschedules existing idempotent rows and records audit; it does not bypass
+Outlook readiness or make immediate provider calls.
+
 ## Production Rollout Verification
 
 Before promoting ADP-20 durable hearing sync to production, operators must:

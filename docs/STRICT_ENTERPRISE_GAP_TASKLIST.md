@@ -12,6 +12,28 @@ Status legend:
 - `Missing`
 - `Stale-doc`
 
+## Current Provider And Billing Ledger - 2026-06-02
+
+- Billing/pricing/platform-admin code is `Implemented` and deployed. Manual
+  production billing signoff is still pending; use
+  `docs/runbooks/production-billing-signoff-2026-06-02.md`.
+- Pine Labs production payments are `Missing/UAT blocked` for live enablement.
+  Production must remain `CASEOPS_PINE_LABS_ENV=disabled` until UAT credentials,
+  webhook registration, product enablement, endpoint schemas, MDR/settlement
+  details, test scenarios, and founder go/no-go are complete.
+- ADP-20 is `Partially implemented`: readiness-gated CaseOps-to-Outlook hearing
+  sync only. Broad two-way Outlook/mailbox/provider webhook automation is not
+  included.
+- ADP-21 is `Partially implemented`: Google Drive readiness status exists under
+  provider operations; durable Drive sync is pending.
+- ADP-22 is `Partially implemented`: mailbox connector readiness status exists
+  under provider operations; durable mailbox ingestion is pending.
+- ADP-23 is `Partially implemented`: in-app digest previews and readiness status
+  exist; external digest delivery remains provider-gated and disabled.
+- ADP-24 is `Implemented foundation`: tenant admins can list failed/blocked
+  provider jobs, see redacted errors, and request audited replay/ignore/resolve
+  actions through `/app/admin/provider-operations`.
+
 Current overall verdict (2026-04-25): **`GO`**. Every stop-ship
 control gap (EG-001 through EG-007) is closed and live in prod with
 evidence. EG-001 (HttpOnly cookies + double-submit CSRF), EG-002
@@ -26,7 +48,7 @@ Manager + 90-day rotation runbook + drill executed in
 hardening gaps EG-008 (hotspot decomposition) + EG-009 (exception
 discipline) remain `Partially implemented` but are not stop-ship.
 
-## Strict Repo Quality Audit (2026-04-24) — P0 status
+## Strict Repo Quality Audit (2026-04-24)  - P0 status
 
 All five P0 findings from `docs/STRICT_REPO_QUALITY_AUDIT_2026-04-24.md`
 closed in commit `161c384`:
@@ -81,7 +103,7 @@ P1 status after commit `8466911`:
 The original `QG-*` entries below are retained as audit history; this section
 is the current closure status.
 
-## Phase C-2 (2026-04-24, MOD-TS-015) — client portal matter surface
+## Phase C-2 (2026-04-24, MOD-TS-015)  - client portal matter surface
 
 `Implemented` in commit `b0965e9`:
 
@@ -102,7 +124,7 @@ is the current closure status.
   to real email; portal users sign in, see their matters, click
   in, reply, submit KYC end-to-end.
 
-Phase C-3 (outside-counsel portal — work-product upload, invoice
+Phase C-3 (outside-counsel portal  - work-product upload, invoice
 submission, time entries) intentionally next; not landed today.
 
 ## Automated QA And Coverage Audit (2026-04-25)
@@ -118,7 +140,7 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
   1. The "41.54% line / 9.99% branch" figure was a stale per-area
      `coverage.json` artifact, not the full coverage run. Actual
      full-suite **TOTAL coverage is 81%** (line) per a fresh local
-     run on 2026-04-25 — `779 passed, 11 skipped, 1643.85s` on
+     run on 2026-04-25  - `779 passed, 11 skipped, 1643.85s` on
      Windows; CI Linux baseline is `665.26s` (11m 5s) per the green
      run on 6af7560.
   2. The "904 s timeout" was an audit-script wrapper budget, not a
@@ -127,11 +149,11 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
      1800-2400 s for Windows local).
   Slowest 20 cases are all SETUP time (5-11 s each), driven by
   conftest fixture cost re-running per test. Per-session or
-  per-class fixture scope would shave ~120-200 s — flagged for
+  per-class fixture scope would shave ~120-200 s  - flagged for
   follow-on but not stop-ship.
   Remaining sub-items keep this `Partially implemented`: backend
   coverage thresholds are not yet enforced (the CI step runs
-  `--cov` but does not gate on a regression floor — we only have
+  `--cov` but does not gate on a regression floor  - we only have
   the per-area gates from `scripts/coverage_gate.py` covering 9
   files, not the 81% total). Close when CI either fails-on-regression
   for total coverage or the per-area gate is expanded across the
@@ -145,7 +167,7 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
   `testTimeout: 15_000` leaves headroom without hiding real flakes.
   Reporters: added `json-summary` so CI can upload a stable shape
   alongside `text`, `html`, `lcov`.
-  Thresholds: `lines: 31`, `statements: 30`, `branches: 22` —
+  Thresholds: `lines: 31`, `statements: 30`, `branches: 22`  -
   rounded down from today's baseline (31.83 / 30.31 / 22.89 / 25.28).
   Updated only when real tests lift coverage; never ratcheted down
   to make CI green.
@@ -201,7 +223,7 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
   Verified: 6/6 auto-skip locally (no PG URL); 18/18 sqlite-path
   tests still green; CI on next commit will exercise PG path.
   Per-area test-matrix expansion + Postgres CI for ALL DB-sensitive
-  tests (not just the validation file) remains a separate gap —
+  tests (not just the validation file) remains a separate gap  -
   this commit lays the foundation.
 
 - `AQ-006` `Partially implemented` Provider-skip-on-release loophole
@@ -214,7 +236,7 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
   existing `test.skip` behavior. Under `CASEOPS_RELEASE_MODE=true`
   the same helper throws at describe-load with a loud
   `[CASEOPS_RELEASE_MODE=true] <Provider> credential(s) missing: ...`
-  message — the spec fails instead of silently skipping. Applied to
+  message  - the spec fails instead of silently skipping. Applied to
   Pine Labs in `billing-payment.spec.ts`. Verified both branches
   locally on 2026-04-25 (default = 1 passed + 1 skipped; release-no-key
   = throws with the documented message).
@@ -229,7 +251,7 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
 - `EG-001` `Implemented` Browser bearer-token hardening (closed
   2026-04-24, deployed in revision `caseops-api-00042-zlj` on commit
   `fbb6a29`).
-  Evidence: `apps/web/lib/session.ts:35-37` — `getStoredToken()`
+  Evidence: `apps/web/lib/session.ts:35-37`  - `getStoredToken()`
   always returns `null`; HttpOnly `caseops_session` + JS-readable
   `caseops_csrf` cookies issued by `apps/api/src/caseops_api/core/cookies.py`
   with `Domain=.caseops.ai` (BUG-011 fix) and matching CSRF
@@ -249,7 +271,7 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
   EG-002 anchor comment; separate `caseops-migrate-job` Cloud Run Job
   runs `python -m alembic upgrade head` on the same image as the API;
   `scripts/deploy-prod.sh` (added 2026-04-24) is the canonical deploy
-  path and enforces order: build → migrate-job → api → web →
+  path and enforces order: build -> migrate-job -> api -> web ->
   staleness sweep. Migrate-job re-bumped to `caseops-api:fbb6a29` and
   executed cleanly (`caseops-migrate-job-nxbkc`, no-op since alembic
   already at `20260424_0001`).
@@ -269,7 +291,7 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
   Live prod smoke 2026-04-25: an EICAR test-file upload to
   `POST /api/matters/{matter_id}/attachments` returned HTTP 400 with
   `"Upload 'eicar.txt' matched virus signature 'Eicar-Test-Signature'.
-  Refusing to store the file."` — proves real clamd in the sidecar +
+  Refusing to store the file."`  - proves real clamd in the sidecar +
   signature DB + `reject_if_infected` wired end to end.
   Cost: idle stays $0 (`minScale=0`); per-request adds ~$0.00007/sec
   while clamav shares the request lifecycle. First upload after a
@@ -290,13 +312,13 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
   open as a follow-on under EG-005 / EG-006 model-run governance.
 
 - `EG-005` `Implemented` Matter summary governance (closed
-  2026-04-25 via stale-doc re-look — code shipped earlier; ledger had
+  2026-04-25 via stale-doc re-look  - code shipped earlier; ledger had
   not been re-graded).
   Evidence:
   - **Cache:** `Matter.executive_summary_json` column added in
     migration `20260423_0001`; `services/matter_summary.py:306-309`
     short-circuits and returns the cached payload unless the caller
-    passes `force_refresh=True`. The POST `…/regenerate` route is the
+    passes `force_refresh=True`. The POST `.../regenerate` route is the
     only caller that invalidates; GET / DOCX / PDF use the cache.
   - **ModelRun audit:** `_on_model_run` callback at
     `services/matter_summary.py:329-344` writes a `ModelRun` row per
@@ -304,10 +326,10 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
     latency, tenant, matter, actor membership, status='ok'). Wired
     via `generate_structured(..., on_model_run=_on_model_run)`.
   - **Provider-failure handling:** broadened to catch
-    `LLMQuotaExhaustedError` (Anthropic 402 → straight to OpenAI),
-    `LLMResponseFormatError` (malformed JSON → Haiku retry → OpenAI),
-    and the parent `LLMProviderError` (503/overload/timeouts → OpenAI
-    cutover) — `services/matter_summary.py:360-398`.
+    `LLMQuotaExhaustedError` (Anthropic 402 -> straight to OpenAI),
+    `LLMResponseFormatError` (malformed JSON -> Haiku retry -> OpenAI),
+    and the parent `LLMProviderError` (503/overload/timeouts -> OpenAI
+    cutover)  - `services/matter_summary.py:360-398`.
   - **Test coverage:** `test_matter_summary_export.py
     ::test_summary_caches_after_first_call_and_skips_llm_on_second`
     proves the second GET hits the cache and never invokes the LLM
@@ -315,7 +337,7 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
     and writes a ModelRun audit row each time.
 
 - `EG-006` `Implemented` Draft preview governance (closed
-  2026-04-25 via stale-doc re-look — code shipped earlier; ledger had
+  2026-04-25 via stale-doc re-look  - code shipped earlier; ledger had
   not been re-graded).
   Evidence:
   - **Tenant AI policy gate:** `services/drafting_preview.py:151-166`
@@ -325,10 +347,10 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
   - **ModelRun audit:** `_write_model_run` is invoked on BOTH the
     success path (`services/drafting_preview.py:187-198`, status='ok')
     AND the failure path (`drafting_preview.py:173-184`, status='error',
-    error='preview_provider_failed') — preview failures are now
+    error='preview_provider_failed')  - preview failures are now
     visible in the audit dashboard.
   - **Provider-failure handling:** `_invoke_with_cutover`
-    (`drafting_preview.py:210-251`) is the same Haiku → OpenAI
+    (`drafting_preview.py:210-251`) is the same Haiku -> OpenAI
     cutover ladder used by the structured AI services
     (recommendations / matter_summary). `LLMQuotaExhaustedError` cuts
     straight to OpenAI; `LLMProviderError` tries Haiku first.
@@ -336,7 +358,7 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
     logs the raw exception at WARN with full repr but returns an
     actionable, redacted user-visible detail ("Drafting preview is
     temporarily unavailable. Please retry in a minute, or contact
-    support if this persists.") — no provider name, no exception
+    support if this persists.")  - no provider name, no exception
     class, no internal trace markers leak.
   - **Test coverage:** `test_drafting_preview.py
     ::test_preview_redacts_provider_error_in_502` asserts the user-
@@ -361,7 +383,7 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
   90-day cadence, ownership). Drill executed 2026-04-25 against
   `caseops-pine-labs-api-key`: added v2, redeployed, `/api/health`
   green throughout. 4 orphaned `caseops-pinelabs-*` (no-dash)
-  secrets deleted in the same task — `gcloud secrets list` is now
+  secrets deleted in the same task  - `gcloud secrets list` is now
   the single source of truth.
   Cross-region replication remains `automatic` (Google-managed); a
   multi-region replication policy is a follow-on when the
@@ -474,7 +496,7 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
   / authority_statute_references), `apps/api/src/caseops_api/scripts/
   seed_data/statutes.json` (7 central acts, 91 sections, indiacode.
   nic.in source URLs), `services/statute_resolver.py` (tolerant
-  parser handling BNSS-vs-BNS substring trap, '§', 'S.', 'Article'
+  parser handling BNSS-vs-BNS substring trap, 'Section ', 'S.', 'Article'
   variants), 23 backend tests + 5 vitest cases. Drafting prompt
   receives bare section text for verbatim quoting on appeal-
   memorandum drafts. Live in prod; 7 acts / 91 sections seeded
@@ -519,8 +541,10 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
   `apps/api/src/caseops_api/services/tenant_ai_policy.py:9-11`,
   `apps/api/src/caseops_api/services/llm.py:636-663`.
 
-- `WTD-10.5` `Missing` Plan entitlements and enforcement.
-  Evidence: `docs/WORK_TO_BE_DONE.md:650-652`.
+- `WTD-10.5` `Implemented foundation` Plan entitlements and enforcement.
+  Evidence: pricing/billing/platform-admin rollout, tenant billing APIs,
+  plan catalog, entitlement gating, usage/spend reports, and platform-admin
+  profit/provider-event surfaces. Manual production signoff remains pending.
 
 - `WTD-11.2` `Missing` Authorization matrix tests.
   Evidence: `docs/WORK_TO_BE_DONE.md:664-666`.
@@ -597,8 +621,8 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
 
 ## 2026-04-24 Strict Repo Quality Audit Additions
 
-QG-P0-001 through QG-P0-005 historical entries removed 2026-04-26 —
-all five duplicated the `P0-001` … `P0-005` entries earlier in this
+QG-P0-001 through QG-P0-005 historical entries removed 2026-04-26  -
+all five duplicated the `P0-001` ... `P0-005` entries earlier in this
 file (closed in commit `161c384`). The active per-area coverage
 ledger is `P1-002` / `P1-003` / `AQ-003` / `AQ-004` above.
 
@@ -612,7 +636,7 @@ ledger is `P1-002` / `P1-003` / `AQ-003` / `AQ-004` above.
 - `MOD-TS-001-A` `Implemented` Appeal Strength Analyzer (closed
   2026-04-25). Per-ground argument-completeness analysis on an
   appeal_memorandum draft. Pure-read; no LLM call; deterministic.
-  Frame is **argument completeness, NOT outcome prediction** — the
+  Frame is **argument completeness, NOT outcome prediction**  - the
   no-favorability rule from the bench-aware drafting skill is enforced
   structurally:
   - `_FORBIDDEN_PATTERN` (word-boundary regex) gates EVERY string the
@@ -649,17 +673,17 @@ ledger is `P1-002` / `P1-003` / `AQ-003` / `AQ-004` above.
 - `BAAD-001` `Implemented` Bench-aware appeal drafting wired end to end
   (closed 2026-04-25 across 4 commits + 1 doc closure).
   Slices shipped:
-  1. **Template** (`2b72b0c`) — `DraftTemplateType.APPEAL_MEMORANDUM`,
+  1. **Template** (`2b72b0c`)  - `DraftTemplateType.APPEAL_MEMORANDUM`,
      `AppealMemorandumFacts`, `_APPEAL_FIELDS`, `_APPEAL_MEMORANDUM`
      prompt + golden fixture.
-  2. **Bench strategy context service** (`708587f`) — pure-read
+  2. **Bench strategy context service** (`708587f`)  - pure-read
      `services/bench_strategy_context.py` with structured judges_json
      match + bench_name fallback, citable-authorities preference,
      practice-area pattern derivation suppressed below 3-supporting-
      authority floor, drafting cautions, unsupported gaps, 4-level
      `context_quality` scoring.
   3. **Drafting integration + per-template prompt wiring** (`4a2191d`)
-     — `_build_messages` now appends per-template prompt addendum
+      - `_build_messages` now appends per-template prompt addendum
      for ALL nine templates (turning on the Sprint R2 prompts that
      were registered but never imported); `generate_draft_version`
      calls `build_bench_strategy_context` for `appeal_memorandum`
@@ -667,7 +691,7 @@ ledger is `P1-002` / `P1-003` / `AQ-003` / `AQ-004` above.
      evidence-phrasing anchor + enumerated negative instruction
      against favorability phrases; falls back gracefully to plain
      appeal draft if context build raises.
-  4. **API endpoint + UI** (this commit) — new
+  4. **API endpoint + UI** (this commit)  - new
      `GET /api/matters/{matter_id}/bench-strategy-context` route
      (auth + tenancy gated, 404 on cross-tenant); new
      `BenchContextCard` component in
@@ -703,26 +727,26 @@ ledger is `P1-002` / `P1-003` / `AQ-003` / `AQ-004` above.
 
 ---
 
-## Provider/runtime drift — Hari 2026-05-09 sweep findings
+## Provider/runtime drift  - Hari 2026-05-09 sweep findings
 
 The 2026-05-09 multi-PR sweep surfaced two enterprise hardening gaps
 that span code, infrastructure manifest, runtime env, and provider-side
 config. Both are tracked here so future enterprise audits stop
 re-discovering them as new findings.
 
-### EH-PROV-01 — SendGrid Event Webhook end-to-end wiring (PR #22)
+### EH-PROV-01  - SendGrid Event Webhook end-to-end wiring (PR #22)
 
 - **Status:** Partially implemented (code complete, infrastructure
   manifest landed, **provider-side config + Secret Manager value
   pending operator action**).
 - **Code (in `fix/sendgrid-webhook-delivery-visibility`):**
-  - `apps/api/src/caseops_api/api/routes/sendgrid_webhook.py` —
+  - `apps/api/src/caseops_api/api/routes/sendgrid_webhook.py`  -
     ECDSA P-256 signed-event verification with explicit fail-closed
     on missing/invalid signature.
   - `apps/api/src/caseops_api/db/models/email_suppression.py` +
-    Alembic migration — tenant-scoped suppression table,
+    Alembic migration  - tenant-scoped suppression table,
     `(company_id, recipient_email)` unique constraint.
-  - `apps/api/src/caseops_api/services/email_suppression.py` —
+  - `apps/api/src/caseops_api/services/email_suppression.py`  -
     `is_suppressed`, `record_suppression`, idempotent on duplicate
     events. `services/email_send.py` calls `is_suppressed` before
     every business mailer; `services/employee_mailer.py` and
@@ -731,7 +755,7 @@ re-discovering them as new findings.
   - Test coverage: 12 backend tests including
     `test_auth_flow_mailers_bypass_suppression` (regression lock).
 - **Infrastructure manifest:**
-  - `infra/cloud-run/api.yaml` (or equivalent service.yaml) —
+  - `infra/cloud-run/api.yaml` (or equivalent service.yaml)  -
     references `caseops-sendgrid-webhook-public-key` Secret
     Manager value via `valueFrom.secretKeyRef`.
   - Runbook: `docs/runbooks/sendgrid-event-webhook.md`.
@@ -739,7 +763,7 @@ re-discovering them as new findings.
   1. Create the `caseops-sendgrid-webhook-public-key` Secret
      Manager secret with the SendGrid-provided P-256 public key.
   2. In SendGrid dashboard:
-     Settings → Mail Settings → Event Webhook → enable Signed
+     Settings -> Mail Settings -> Event Webhook -> enable Signed
      Event Webhook, set HTTPS POST URL to
      `https://api.caseops.ai/api/webhooks/sendgrid/events`, enable
      `bounce`, `dropped`, `spam_report`, `unsubscribe`,
@@ -752,16 +776,16 @@ re-discovering them as new findings.
   the enterprise-hardening skill flags as `Stale-doc` /
   `Partially implemented`.
 
-### EH-PROV-02 — Outlook bounded bulk sync vs durable automation (PR #23)
+### EH-PROV-02  - Outlook bounded bulk sync vs durable automation (PR #23)
 
 - **Status:** Implemented (bounded manual sync); durable automation
   is explicitly deferred to Temporal.
 - **Code (in `fix/outlook-sync-all`):**
-  - `apps/api/src/caseops_api/api/routes/calendar.py::sync_all_outlook` —
+  - `apps/api/src/caseops_api/api/routes/calendar.py::sync_all_outlook`  -
     bounded endpoint that returns
     `durable_automation: "blocked_pending_provider_approval"` literal so
     callers cannot mistake it for continuous sync.
-  - `apps/web/components/matters/MatterCalendarSyncCard.tsx` — UI
+  - `apps/web/components/matters/MatterCalendarSyncCard.tsx`  - UI
     button with disabled state + connection-required messaging.
 - **Why tracked here:** any future "always-on Outlook sync" claim
   is a roadmap item gated on Temporal landing, NOT on this PR.
