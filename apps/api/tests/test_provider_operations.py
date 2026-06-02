@@ -71,12 +71,12 @@ def _calendar_sync_fixture(
             last_error=(
                 "authorization example-token-value-that-is-redacted for "
                 "lawyer@example.test at https://provider.example.test/events/"
-                f"{uuid4()}"
+                f"{uuid4()} webhook-signature: signed-secret phone +91 98765 43210"
             ),
             attempts=3,
             max_attempts=3,
             dead_letter_reason=(
-                "retry_limit_exhausted"
+                "retry_limit_exhausted signature=dead-letter-secret"
                 if status == CalendarEventSyncStatus.DEAD_LETTER
                 else None
             ),
@@ -187,6 +187,9 @@ def test_provider_operations_are_admin_only_redacted_and_tenant_scoped(
     assert "example-token-value" not in text
     assert "sensitive-provider-token" not in text
     assert "remote-event-secret-value" not in text
+    assert "signed-secret" not in text
+    assert "dead-letter-secret" not in text
+    assert "98765" not in text
 
     body = response.json()
     assert len(body["operations"]) == 2
@@ -256,6 +259,45 @@ def test_provider_operation_replay_is_idempotent_and_audited(
         assert intent.source_id not in metadata
         assert intent_id not in metadata
         assert "reason_present" in metadata
+
+
+def test_provider_operation_mutation_requires_operator_reason(
+    client: TestClient,
+) -> None:
+    boot = bootstrap_company(client)
+    token = str(boot["access_token"])
+    company_id = str(boot["company"]["id"])
+    membership_id = str(boot["membership"]["id"])
+    intent_id = _notification_intent_fixture(
+        company_id=company_id,
+        membership_id=membership_id,
+        channel=NotificationDeliveryChannel.IN_APP,
+        status=NotificationDeliveryStatus.DEAD_LETTER,
+    )
+
+    response = client.post(
+        f"/api/admin/provider-operations/jobs/notification_delivery:{intent_id}/replay",
+        headers=auth_headers(token),
+        json={},
+    )
+    assert response.status_code == 422, response.text
+
+    factory = get_session_factory()
+    with factory() as session:
+        intent = session.get(NotificationDeliveryIntent, intent_id)
+        assert intent is not None
+        assert intent.status == NotificationDeliveryStatus.DEAD_LETTER
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(AuditEvent)
+                .where(
+                    AuditEvent.company_id == company_id,
+                    AuditEvent.action == "provider_operation.replay",
+                )
+            )
+            == 0
+        )
 
 
 def test_external_delivery_replay_stays_blocked_fail_closed(
@@ -385,4 +427,3 @@ def test_provider_readiness_is_names_only_and_fail_closed(
     assert "GOOGLE_DRIVE_CLIENT_SECRET" in providers["google_drive"][
         "required_config_names"
     ]
-

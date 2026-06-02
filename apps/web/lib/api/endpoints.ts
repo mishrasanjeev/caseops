@@ -5341,13 +5341,13 @@ export async function fetchProviderReadiness(): Promise<ProviderReadinessListRes
 async function mutateProviderOperation(
   operationId: string,
   action: "replay" | "ignore" | "mark-resolved",
-  reason?: string | null,
+  reason: string,
 ): Promise<ProviderOperationActionResponse> {
   const data = await apiRequest<unknown>(
     `/api/admin/provider-operations/jobs/${encodeURIComponent(operationId)}/${action}`,
     {
       method: "POST",
-      body: { reason: reason || null },
+      body: { reason },
     },
   );
   return providerOperationActionResponse.parse(data);
@@ -5355,21 +5355,21 @@ async function mutateProviderOperation(
 
 export async function replayProviderOperation(input: {
   operationId: string;
-  reason?: string | null;
+  reason: string;
 }): Promise<ProviderOperationActionResponse> {
   return mutateProviderOperation(input.operationId, "replay", input.reason);
 }
 
 export async function ignoreProviderOperation(input: {
   operationId: string;
-  reason?: string | null;
+  reason: string;
 }): Promise<ProviderOperationActionResponse> {
   return mutateProviderOperation(input.operationId, "ignore", input.reason);
 }
 
 export async function markProviderOperationResolved(input: {
   operationId: string;
-  reason?: string | null;
+  reason: string;
 }): Promise<ProviderOperationActionResponse> {
   return mutateProviderOperation(input.operationId, "mark-resolved", input.reason);
 }

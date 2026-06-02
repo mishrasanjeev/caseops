@@ -108,7 +108,9 @@ def _calendar_record(row: CalendarEventSync) -> ProviderOperationRecord:
         error_redacted=redact_provider_error(row.last_error)
         if row.last_error
         else None,
-        dead_letter_reason=row.dead_letter_reason,
+        dead_letter_reason=redact_provider_error(row.dead_letter_reason)
+        if row.dead_letter_reason
+        else None,
         attempts=row.attempts,
         max_attempts=max(row.max_attempts, 1),
         next_attempt_at=row.next_attempt_at,
@@ -155,7 +157,9 @@ def _notification_record(row: NotificationDeliveryIntent) -> ProviderOperationRe
         error_redacted=redact_provider_error(row.last_error_redacted)
         if row.last_error_redacted
         else None,
-        dead_letter_reason=row.dead_letter_reason,
+        dead_letter_reason=redact_provider_error(row.dead_letter_reason)
+        if row.dead_letter_reason
+        else None,
         attempts=row.attempts,
         max_attempts=max(row.max_attempts, 1),
         next_attempt_at=row.next_attempt_at,
@@ -666,4 +670,3 @@ __all__ = [
     "replay_provider_operation",
     "update_provider_operation_state",
 ]
-

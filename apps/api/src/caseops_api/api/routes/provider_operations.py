@@ -113,4 +113,3 @@ def post_provider_operation_mark_resolved(
         action="mark_resolved",
         reason=payload.reason,
     )
-

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 ProviderOperationKind = Literal["calendar_sync", "notification_delivery"]
 ProviderOperatorState = Literal["open", "ignored", "resolved"]
@@ -49,7 +49,14 @@ class ProviderOperationListResponse(BaseModel):
 
 
 class ProviderOperationActionRequest(BaseModel):
-    reason: str | None = Field(default=None, max_length=500)
+    reason: str = Field(min_length=8, max_length=500)
+
+    @field_validator("reason", mode="before")
+    @classmethod
+    def strip_reason(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            return value.strip()
+        return value
 
 
 class ProviderOperationActionResponse(BaseModel):
@@ -82,4 +89,3 @@ class ProviderReadinessRecord(BaseModel):
 
 class ProviderReadinessListResponse(BaseModel):
     providers: list[ProviderReadinessRecord]
-

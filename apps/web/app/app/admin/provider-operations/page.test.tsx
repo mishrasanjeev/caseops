@@ -139,12 +139,22 @@ describe("ProviderOperationsPage", () => {
     const user = userEvent.setup();
     render(withClient(<ProviderOperationsPage />));
     await user.click(await screen.findByTestId(`provider-operation-replay-${operation.id}`));
+    expect(replayProviderOperationMock).not.toHaveBeenCalled();
+    expect(screen.getByText("Replay provider operation")).toBeInTheDocument();
+    const confirm = screen.getByTestId("provider-operation-confirm-action");
+    expect(confirm).toBeDisabled();
+    await user.type(
+      screen.getByLabelText("Reason"),
+      "Reviewed provider failure and approved replay.",
+    );
+    expect(confirm).toBeEnabled();
+    await user.click(confirm);
     await waitFor(() =>
       expect(replayProviderOperationMock).toHaveBeenCalled(),
     );
     expect(replayProviderOperationMock.mock.calls[0][0]).toEqual({
       operationId: operation.id,
-      reason: "Manual replay requested from provider operations.",
+      reason: "Reviewed provider failure and approved replay.",
     });
   });
 });

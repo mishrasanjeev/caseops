@@ -34,6 +34,21 @@ POST /api/admin/provider-operations/jobs/{operation_id}/mark-resolved
 The readiness response reports config names and approval keys only. It must not
 return credential values.
 
+Mutation endpoints require an operator reason between 8 and 500 characters.
+The reason is used only to record whether a reason was supplied in audit
+metadata; raw reason text is not exposed in provider-operation list responses.
+
+Stable provider-operation fields:
+
+- `job_kind`: `calendar_sync` or `notification_delivery`
+- `operator_state`: `open`, `ignored`, or `resolved`
+- Calendar statuses: `failed`, `retry_scheduled`, `dead_letter`, `pending`,
+  `synced`, `deleted`
+- Notification statuses: `blocked`, `retry_scheduled`, `dead_letter`,
+  `queued`, `delivered`
+- `replay_available`, `ignore_available`, and `mark_resolved_available`
+  determine which UI actions should be enabled.
+
 ## ADP-21 Google Drive
 
 Current state:
@@ -111,4 +126,3 @@ Manual checks:
 - External delivery replay remains blocked while provider config/approval is
   missing.
 - Audit export shows provider operation actions with redacted ids only.
-

@@ -8,15 +8,25 @@ import {
   ShieldAlert,
   XCircle,
 } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/Dialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Textarea } from "@/components/ui/Textarea";
 import { apiErrorMessage } from "@/lib/api/config";
 import {
   fetchProviderReadiness,
@@ -64,9 +74,21 @@ function formatWhen(value: string | null): string {
   }
 }
 
+type PendingAction = {
+  action: "replay" | "ignore" | "mark_resolved";
+  operation: ProviderOperationRecord;
+};
+
+function actionLabel(action: PendingAction["action"]): string {
+  if (action === "mark_resolved") return "Mark resolved";
+  return action[0].toUpperCase() + action.slice(1);
+}
+
 export default function ProviderOperationsPage() {
   const canAdmin = useCapability("workspace:admin");
   const queryClient = useQueryClient();
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const [actionReason, setActionReason] = useState("");
   const operationsQuery = useQuery({
     queryKey: ["admin", "provider-operations", "jobs"],
     queryFn: () => listProviderOperations({ includeResolved: true, limit: 100 }),
@@ -83,10 +105,15 @@ export default function ProviderOperationsPage() {
       queryKey: ["admin", "provider-operations", "jobs"],
     });
   };
+  const closeActionDialog = () => {
+    setPendingAction(null);
+    setActionReason("");
+  };
   const replayMutation = useMutation({
     mutationFn: replayProviderOperation,
     onSuccess: async (result) => {
       toast.success(result.message);
+      closeActionDialog();
       await refreshJobs();
     },
     onError: (error) =>
@@ -96,6 +123,7 @@ export default function ProviderOperationsPage() {
     mutationFn: ignoreProviderOperation,
     onSuccess: async (result) => {
       toast.success(result.message);
+      closeActionDialog();
       await refreshJobs();
     },
     onError: (error) =>
@@ -105,11 +133,34 @@ export default function ProviderOperationsPage() {
     mutationFn: markProviderOperationResolved,
     onSuccess: async (result) => {
       toast.success(result.message);
+      closeActionDialog();
       await refreshJobs();
     },
     onError: (error) =>
       toast.error(apiErrorMessage(error, "Could not resolve provider operation.")),
   });
+  const actionBusy =
+    replayMutation.isPending || ignoreMutation.isPending || resolveMutation.isPending;
+  const openActionDialog = (
+    action: PendingAction["action"],
+    operation: ProviderOperationRecord,
+  ) => {
+    setPendingAction({ action, operation });
+    setActionReason("");
+  };
+  const submitAction = () => {
+    if (!pendingAction) return;
+    const reason = actionReason.trim();
+    if (reason.length < 8) return;
+    const input = { operationId: pendingAction.operation.id, reason };
+    if (pendingAction.action === "replay") {
+      replayMutation.mutate(input);
+    } else if (pendingAction.action === "ignore") {
+      ignoreMutation.mutate(input);
+    } else {
+      resolveMutation.mutate(input);
+    }
+  };
 
   if (!canAdmin) {
     return (
@@ -189,35 +240,72 @@ export default function ProviderOperationsPage() {
                 <OperationRow
                   key={operation.id}
                   operation={operation}
-                  busy={
-                    replayMutation.isPending ||
-                    ignoreMutation.isPending ||
-                    resolveMutation.isPending
-                  }
-                  onReplay={() =>
-                    replayMutation.mutate({
-                      operationId: operation.id,
-                      reason: "Manual replay requested from provider operations.",
-                    })
-                  }
-                  onIgnore={() =>
-                    ignoreMutation.mutate({
-                      operationId: operation.id,
-                      reason: "Manual ignore requested from provider operations.",
-                    })
-                  }
-                  onResolve={() =>
-                    resolveMutation.mutate({
-                      operationId: operation.id,
-                      reason: "Manual resolution recorded from provider operations.",
-                    })
-                  }
+                  busy={actionBusy}
+                  onReplay={() => openActionDialog("replay", operation)}
+                  onIgnore={() => openActionDialog("ignore", operation)}
+                  onResolve={() => openActionDialog("mark_resolved", operation)}
                 />
               ))}
             </ul>
           )}
         </CardContent>
       </Card>
+
+      <Dialog
+        open={pendingAction !== null}
+        onOpenChange={(open) => {
+          if (!open && !actionBusy) closeActionDialog();
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {pendingAction ? `${actionLabel(pendingAction.action)} provider operation` : ""}
+            </DialogTitle>
+            <DialogDescription>
+              This action writes an audit event and applies only to the selected
+              tenant-scoped provider job.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2">
+            <label
+              htmlFor="provider-operation-reason"
+              className="text-sm font-medium text-[var(--color-ink)]"
+            >
+              Reason
+            </label>
+            <Textarea
+              id="provider-operation-reason"
+              value={actionReason}
+              onChange={(event) => setActionReason(event.target.value)}
+              disabled={actionBusy}
+              maxLength={500}
+              placeholder="Record the operator reason for audit."
+            />
+            <div className="text-xs text-[var(--color-mute)]">
+              {actionReason.trim().length}/500
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={closeActionDialog}
+              disabled={actionBusy}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={submitAction}
+              disabled={actionBusy || actionReason.trim().length < 8}
+              data-testid="provider-operation-confirm-action"
+            >
+              {pendingAction ? actionLabel(pendingAction.action) : "Confirm"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -364,4 +452,3 @@ function OperationRow({
     </li>
   );
 }
-
