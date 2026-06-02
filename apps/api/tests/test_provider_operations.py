@@ -340,6 +340,71 @@ def test_external_delivery_replay_stays_blocked_fail_closed(
         assert audit is not None
 
 
+def test_provider_operation_ignore_is_idempotent_and_audited(
+    client: TestClient,
+) -> None:
+    boot = bootstrap_company(client)
+    token = str(boot["access_token"])
+    company_id = str(boot["company"]["id"])
+    membership_id = str(boot["membership"]["id"])
+    intent_id = _notification_intent_fixture(
+        company_id=company_id,
+        membership_id=membership_id,
+        channel=NotificationDeliveryChannel.IN_APP,
+        status=NotificationDeliveryStatus.DEAD_LETTER,
+    )
+    operation_id = f"notification_delivery:{intent_id}"
+
+    first = client.post(
+        f"/api/admin/provider-operations/jobs/{operation_id}/ignore",
+        headers=auth_headers(token),
+        json={"reason": "Known duplicate provider event."},
+    )
+    assert first.status_code == 200, first.text
+    assert first.json()["changed"] is True
+    assert first.json()["operation"]["operator_state"] == "ignored"
+
+    second = client.post(
+        f"/api/admin/provider-operations/jobs/{operation_id}/ignore",
+        headers=auth_headers(token),
+        json={"reason": "Repeat ignore after refresh."},
+    )
+    assert second.status_code == 200, second.text
+    assert second.json()["changed"] is False
+
+    default_list = client.get(
+        "/api/admin/provider-operations/jobs",
+        headers=auth_headers(token),
+    )
+    assert default_list.status_code == 200, default_list.text
+    assert default_list.json()["operations"] == []
+
+    with_ignored = client.get(
+        "/api/admin/provider-operations/jobs?include_resolved=true",
+        headers=auth_headers(token),
+    )
+    assert with_ignored.status_code == 200, with_ignored.text
+    assert with_ignored.json()["operations"][0]["operator_state"] == "ignored"
+
+    factory = get_session_factory()
+    with factory() as session:
+        actions = list(
+            session.scalars(
+                select(AuditEvent)
+                .where(
+                    AuditEvent.company_id == company_id,
+                    AuditEvent.action == "provider_operation.ignore",
+                )
+                .order_by(AuditEvent.created_at.asc())
+            )
+        )
+        assert len(actions) == 2
+        metadata = json.dumps([json.loads(event.metadata_json or "{}") for event in actions])
+        assert intent_id not in metadata
+        assert "Known duplicate provider event." not in metadata
+        assert "reason_present" in metadata
+
+
 def test_provider_operation_resolve_moves_item_out_of_default_open_list(
     client: TestClient,
 ) -> None:
