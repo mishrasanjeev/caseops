@@ -13,7 +13,7 @@ dependencies = [
   "httpx==0.28.1",
   "email-validator==2.3.0",
   "psycopg[binary]==3.3.3",
-  "PyJWT==2.12.1",
+  "PyJWT==2.13.0",
   "python-multipart==0.0.27",
   "pdfminer.six==20260107",
   "pypdfium2==5.7.0",
