@@ -52,7 +52,7 @@ ocr = [
 # pdfminer + tesseract pipeline runs unchanged. Install with
 # `pip install .[docling]` in deployments that want it.
 docling = [
-  "docling>=2.0.0",
+  "docling>=2.91.0",
 ]
 # Observability. All opt-in via CASEOPS_OTEL_ENABLED; the skeleton in
 # core/observability.py degrades gracefully when these are absent so
