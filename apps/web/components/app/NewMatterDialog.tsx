@@ -47,7 +47,7 @@ const schema = z.object({
   practice_area: z.string().min(2, "Practice area helps classify the work."),
   client_name: z.string().optional(),
   opposing_party: z.string().optional(),
-  status: z.enum(["intake", "active", "on_hold", "closed"]),
+  status: z.enum(["intake", "active", "on_hold", "disposed"]),
   description: z.string().max(2000).optional(),
 });
 
@@ -57,7 +57,7 @@ const STATUSES: { value: FormValues["status"]; label: string }[] = [
   { value: "intake", label: "Intake" },
   { value: "active", label: "Active" },
   { value: "on_hold", label: "On hold" },
-  { value: "closed", label: "Closed" },
+  { value: "disposed", label: "Dispose" },
 ];
 
 export function NewMatterDialog() {

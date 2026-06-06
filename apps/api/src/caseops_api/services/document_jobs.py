@@ -408,6 +408,7 @@ def _process_matter_attachment_job(session: Session, job: DocumentProcessingJob)
         .options(
             selectinload(MatterAttachment.chunks),
             joinedload(MatterAttachment.matter),
+            joinedload(MatterAttachment.linked_court_order),
         )
         .where(MatterAttachment.id == job.attachment_id)
     )
@@ -433,6 +434,25 @@ def _process_matter_attachment_job(session: Session, job: DocumentProcessingJob)
     )
     session.add(attachment)
     session.add(job)
+    if job.status == DocumentProcessingJobStatus.COMPLETED and (
+        attachment.linked_court_order_id or attachment.document_type == "order_judgment"
+    ):
+        try:
+            from caseops_api.services.compliance_extraction import (
+                run_compliance_extraction_for_attachment,
+            )
+
+            run_compliance_extraction_for_attachment(
+                session,
+                matter=attachment.matter,
+                attachment=attachment,
+                trigger="attachment_processed",
+                actor_membership_id=job.requested_by_membership_id,
+            )
+        except Exception as exc:  # noqa: BLE001
+            from caseops_api.services.notification_delivery import redact_provider_error
+
+            job.error_message = f"Compliance extraction failed: {redact_provider_error(exc)}"
     session.add(
         MatterActivity(
             matter_id=attachment.matter_id,

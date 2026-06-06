@@ -5,7 +5,11 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-ProviderOperationKind = Literal["calendar_sync", "notification_delivery"]
+ProviderOperationKind = Literal[
+    "calendar_sync",
+    "notification_delivery",
+    "case_tracking_poll",
+]
 ProviderOperatorState = Literal["open", "ignored", "resolved"]
 ProviderOperationAction = Literal["replay", "ignore", "mark_resolved"]
 ProviderReadinessState = Literal[

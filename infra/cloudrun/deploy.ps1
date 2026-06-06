@@ -35,8 +35,8 @@ param(
     [string]$SchedulerSchedule = "*/2 * * * *",
     [string]$LegalUpdateSchedulerJobName = "caseops-legal-update-sync-midnight",
     [string]$LegalUpdateSchedulerSchedule = "0 0 * * *",
-    [string]$CaseTrackingSchedulerJobName = "caseops-case-tracking-poll-midnight",
-    [string]$CaseTrackingSchedulerSchedule = "0 0 * * *",
+    [string]$CaseTrackingSchedulerJobName = "caseops-case-tracking-poll-1630-ist",
+    [string]$CaseTrackingSchedulerSchedule = "30 16 * * *",
     [string]$SchedulerTimeZone = "Asia/Kolkata",
     [switch]$SkipScheduler
 )

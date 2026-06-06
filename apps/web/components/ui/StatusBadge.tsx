@@ -4,6 +4,7 @@ const PALETTE: Record<string, string> = {
   active: "bg-emerald-50 text-emerald-700 border-emerald-200",
   intake: "bg-sky-50 text-sky-700 border-sky-200",
   on_hold: "bg-amber-50 text-amber-800 border-amber-200",
+  disposed: "bg-slate-100 text-slate-700 border-slate-200",
   closed: "bg-slate-100 text-slate-700 border-slate-200",
   draft: "bg-slate-100 text-slate-700 border-slate-200",
   issued: "bg-sky-50 text-sky-700 border-sky-200",
@@ -28,7 +29,7 @@ export function StatusBadge({
   className?: string;
 }) {
   const key = (status ?? "").toLowerCase();
-  const label = key.replace(/_/g, " ") || "unknown";
+  const label = key === "closed" || key === "disposed" ? "Dispose" : key.replace(/_/g, " ") || "unknown";
   return (
     <span
       className={cn(

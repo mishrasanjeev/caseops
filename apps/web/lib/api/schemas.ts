@@ -60,8 +60,17 @@ export const matter = z.object({
   forum_city: z.string().nullable().optional(),
   forum_consumer_level: z.string().nullable().optional(),
   judge_name: z.string().nullable().optional(),
+  case_number: z.string().nullable().optional(),
+  cnr_number: z.string().nullable().optional(),
   description: z.string().nullable().optional(),
   next_hearing_on: z.string().nullable().optional(),
+  next_hearing_source: z.string().optional().default("unknown"),
+  next_hearing_source_ref_type: z.string().nullable().optional(),
+  next_hearing_source_ref_id: z.string().nullable().optional(),
+  next_hearing_updated_by_membership_id: z.string().nullable().optional(),
+  next_hearing_updated_at: z.string().nullable().optional(),
+  next_hearing_manual_lock: z.boolean().optional().default(false),
+  billing_profile_id: z.string().nullable().optional(),
   claim_amount_minor: z.number().int().nullable().optional(),
   claim_currency: z.string().optional().default("INR"),
   claim_amount_notes: z.string().nullable().optional(),
@@ -92,6 +101,179 @@ export const matter = z.object({
 export const mattersList = z.object({
   matters: z.array(matter),
   next_cursor: z.string().nullable().optional(),
+});
+
+export const matterComplianceExtractionRun = z.object({
+  id: z.string(),
+  company_id: z.string(),
+  matter_id: z.string(),
+  court_order_id: z.string().nullable().optional(),
+  attachment_id: z.string().nullable().optional(),
+  source_type: z.string(),
+  trigger: z.string(),
+  status: z.string(),
+  skip_reason: z.string().nullable().optional(),
+  model_run_id: z.string().nullable().optional(),
+  parser_version: z.string(),
+  started_at: z.string().nullable().optional(),
+  completed_at: z.string().nullable().optional(),
+  error_message_redacted: z.string().nullable().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional().default({}),
+  created_at: z.string(),
+});
+
+export const matterComplianceItem = z.object({
+  id: z.string(),
+  company_id: z.string(),
+  matter_id: z.string(),
+  court_order_id: z.string().nullable().optional(),
+  attachment_id: z.string().nullable().optional(),
+  extraction_run_id: z.string(),
+  description: z.string(),
+  responsible_party: z.string().nullable().optional(),
+  due_on: z.string().nullable().optional(),
+  timeline_text: z.string().nullable().optional(),
+  filing_requirement: z.string().nullable().optional(),
+  court_direction: z.string().nullable().optional(),
+  next_action: z.string().nullable().optional(),
+  source_snippet: z.string(),
+  source_page: z.number().int().nullable().optional(),
+  source_paragraph: z.string().nullable().optional(),
+  confidence_label: z.string(),
+  status: z.string(),
+  review_status: z.string(),
+  generated_task_id: z.string().nullable().optional(),
+  generated_deadline_id: z.string().nullable().optional(),
+  dedupe_key: z.string(),
+  rejection_reason: z.string().nullable().optional(),
+  waived_reason: z.string().nullable().optional(),
+  completed_at: z.string().nullable().optional(),
+  reviewed_by_membership_id: z.string().nullable().optional(),
+  reviewed_at: z.string().nullable().optional(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const matterComplianceListResponse = z.object({
+  runs: z.array(matterComplianceExtractionRun),
+  items: z.array(matterComplianceItem),
+});
+
+export const nextHearingHistoryRecord = z.object({
+  id: z.string(),
+  company_id: z.string(),
+  matter_id: z.string(),
+  old_date: z.string().nullable().optional(),
+  new_date: z.string().nullable().optional(),
+  source: z.string(),
+  source_ref_type: z.string().nullable().optional(),
+  source_ref_id: z.string().nullable().optional(),
+  changed_by_membership_id: z.string().nullable().optional(),
+  change_reason: z.string().nullable().optional(),
+  manual_lock: z.boolean(),
+  created_at: z.string(),
+});
+
+export const nextHearingSuggestionRecord = z.object({
+  id: z.string(),
+  company_id: z.string(),
+  matter_id: z.string(),
+  suggested_date: z.string(),
+  existing_date: z.string().nullable().optional(),
+  source: z.string(),
+  source_ref_type: z.string().nullable().optional(),
+  source_ref_id: z.string().nullable().optional(),
+  confidence_label: z.string(),
+  reason: z.string().nullable().optional(),
+  status: z.string(),
+  decided_by_membership_id: z.string().nullable().optional(),
+  decided_at: z.string().nullable().optional(),
+  created_at: z.string(),
+});
+
+export const nextHearingHistoryResponse = z.object({
+  history: z.array(nextHearingHistoryRecord),
+  suggestions: z.array(nextHearingSuggestionRecord),
+});
+
+export const matterBillingRate = z.object({
+  id: z.string(),
+  company_id: z.string(),
+  billing_profile_id: z.string(),
+  rate_scope: z.string(),
+  membership_id: z.string().nullable().optional(),
+  role: z.string().nullable().optional(),
+  practice_area: z.string().nullable().optional(),
+  currency: z.string(),
+  amount_minor_per_hour: z.number().int(),
+  effective_from: z.string().nullable().optional(),
+  effective_to: z.string().nullable().optional(),
+  is_active: z.boolean(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const matterBillingProfile = z.object({
+  id: z.string(),
+  company_id: z.string(),
+  name: z.string(),
+  is_default: z.boolean(),
+  currency: z.string(),
+  firm_legal_name: z.string().nullable().optional(),
+  firm_address: z.string().nullable().optional(),
+  firm_gstin: z.string().nullable().optional(),
+  firm_pan: z.string().nullable().optional(),
+  default_place_of_supply: z.string().nullable().optional(),
+  default_sac_hsn: z.string().nullable().optional(),
+  gst_applicable: z.boolean(),
+  gstin_state_code: z.string().nullable().optional(),
+  cgst_rate_bps: z.number().int(),
+  sgst_rate_bps: z.number().int(),
+  igst_rate_bps: z.number().int(),
+  tax_rate_bps: z.number().int(),
+  invoice_prefix: z.string(),
+  next_invoice_sequence: z.number().int(),
+  payment_terms_days: z.number().int(),
+  billing_mode: z.string(),
+  default_rate_minor_per_hour: z.number().int().nullable().optional(),
+  notes_template: z.string().nullable().optional(),
+  footer_text: z.string().nullable().optional(),
+  expense_categories: z.array(z.string()).optional().default([]),
+  retainer_adjustments_enabled: z.boolean(),
+  created_at: z.string(),
+  updated_at: z.string(),
+  rates: z.array(matterBillingRate).optional().default([]),
+});
+
+export const matterBillingProfileListResponse = z.object({
+  profiles: z.array(matterBillingProfile),
+});
+
+export const invoiceNumberPreviewResponse = z.object({
+  invoice_number: z.string(),
+  next_invoice_sequence: z.number().int(),
+});
+
+export const causeListRow = z.object({
+  serial_number: z.number().int(),
+  file_number: z.string(),
+  court_name: z.string(),
+  case_number: z.string(),
+  case_title: z.string(),
+  judge_name: z.string(),
+  court_number: z.string(),
+  item_number: z.string(),
+  lawyers_appearing: z.string(),
+  hearing_date: z.string(),
+  source: z.string(),
+  source_ref: z.string().nullable().optional(),
+  missing_field_warnings: z.array(z.string()).optional().default([]),
+});
+
+export const causeListPreviewResponse = z.object({
+  generated_at: z.string(),
+  filters: z.record(z.string(), z.unknown()),
+  rows: z.array(causeListRow),
 });
 
 export const matterTag = z.object({
@@ -135,6 +317,18 @@ export type AuthSession = z.infer<typeof authSession>;
 export type AuthContext = z.infer<typeof authContext>;
 export type Matter = z.infer<typeof matter>;
 export type MattersList = z.infer<typeof mattersList>;
+export type MatterComplianceExtractionRun = z.infer<typeof matterComplianceExtractionRun>;
+export type MatterComplianceItem = z.infer<typeof matterComplianceItem>;
+export type MatterComplianceListResponse = z.infer<typeof matterComplianceListResponse>;
+export type NextHearingHistoryRecord = z.infer<typeof nextHearingHistoryRecord>;
+export type NextHearingSuggestionRecord = z.infer<typeof nextHearingSuggestionRecord>;
+export type NextHearingHistoryResponse = z.infer<typeof nextHearingHistoryResponse>;
+export type MatterBillingRate = z.infer<typeof matterBillingRate>;
+export type MatterBillingProfile = z.infer<typeof matterBillingProfile>;
+export type MatterBillingProfileListResponse = z.infer<typeof matterBillingProfileListResponse>;
+export type InvoiceNumberPreviewResponse = z.infer<typeof invoiceNumberPreviewResponse>;
+export type CauseListRow = z.infer<typeof causeListRow>;
+export type CauseListPreviewResponse = z.infer<typeof causeListPreviewResponse>;
 export type MatterTag = z.infer<typeof matterTag>;
 export type MatterTagsList = z.infer<typeof matterTagsList>;
 export type ForumCatalogEntry = z.infer<typeof forumCatalogEntry>;

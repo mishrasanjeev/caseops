@@ -100,7 +100,13 @@ def _get_invoice(
 
 def _update_invoice_collection_state(invoice: MatterInvoice, *, amount_received_minor: int) -> None:
     invoice.amount_received_minor = max(invoice.amount_received_minor, amount_received_minor)
-    invoice.balance_due_minor = max(invoice.total_amount_minor - invoice.amount_received_minor, 0)
+    invoice.balance_due_minor = max(
+        invoice.total_amount_minor
+        - invoice.amount_received_minor
+        - invoice.tds_deducted_minor
+        - invoice.payment_adjustment_minor,
+        0,
+    )
     if invoice.balance_due_minor == 0:
         invoice.status = "paid"
     elif invoice.amount_received_minor > 0:

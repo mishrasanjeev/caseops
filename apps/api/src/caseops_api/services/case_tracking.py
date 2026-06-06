@@ -3,14 +3,17 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from dataclasses import dataclass
 from datetime import UTC, datetime
+from datetime import time as datetime_time
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
-from caseops_api.core.settings import get_settings
+from caseops_api.core.settings import get_settings, is_non_local_env
 from caseops_api.db.models import (
     Company,
     CompanyMembership,
@@ -59,6 +62,7 @@ from caseops_api.services.llm import (
     generate_structured,
 )
 from caseops_api.services.matter_access import assert_access
+from caseops_api.services.next_hearing import apply_next_hearing_update
 from caseops_api.services.notification_delivery import (
     enqueue_notification_delivery_intent,
     redact_provider_error,
@@ -80,6 +84,72 @@ class CaseUpdateSummaryPayload(BaseModel):
 
 def _now() -> datetime:
     return datetime.now(UTC)
+
+
+@dataclass(frozen=True, slots=True)
+class CaseTrackingWindowState:
+    timezone: str
+    window_start: str
+    window_end: str
+    local_now: datetime
+    inside_window: bool
+    seconds_until_end: int
+
+    def metadata(self) -> dict[str, object]:
+        return {
+            "timezone": self.timezone,
+            "window_start": self.window_start,
+            "window_end": self.window_end,
+            "local_now": self.local_now.isoformat(),
+            "inside_window": self.inside_window,
+            "seconds_until_end": self.seconds_until_end,
+        }
+
+
+def _parse_window_time(value: str, *, field: str) -> datetime_time:
+    try:
+        hour, minute = value.split(":", 1)
+        return datetime_time(hour=int(hour), minute=int(minute))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{field} must use HH:MM 24-hour format.") from exc
+
+
+def case_tracking_window_state(now: datetime | None = None) -> CaseTrackingWindowState:
+    settings = get_settings()
+    start = _parse_window_time(
+        settings.case_tracking_daily_window_start,
+        field="CASEOPS_CASE_TRACKING_DAILY_WINDOW_START",
+    )
+    end = _parse_window_time(
+        settings.case_tracking_daily_window_end,
+        field="CASEOPS_CASE_TRACKING_DAILY_WINDOW_END",
+    )
+    if start >= end:
+        raise ValueError("Case tracking daily window start must be before end.")
+    try:
+        timezone = ZoneInfo(settings.case_tracking_daily_timezone)
+    except ZoneInfoNotFoundError as exc:
+        raise ValueError(
+            "CASEOPS_CASE_TRACKING_DAILY_TIMEZONE must be a valid IANA timezone.",
+        ) from exc
+    local_now = (now or _now()).astimezone(timezone)
+    inside = start <= local_now.time() < end
+    end_at = local_now.replace(hour=end.hour, minute=end.minute, second=0, microsecond=0)
+    seconds_until_end = max(0, int((end_at - local_now).total_seconds()))
+    return CaseTrackingWindowState(
+        timezone=settings.case_tracking_daily_timezone,
+        window_start=settings.case_tracking_daily_window_start,
+        window_end=settings.case_tracking_daily_window_end,
+        local_now=local_now,
+        inside_window=inside,
+        seconds_until_end=seconds_until_end,
+    )
+
+
+def should_enforce_case_tracking_window(*, force: bool = False) -> bool:
+    if force:
+        return False
+    return is_non_local_env(get_settings().env)
 
 
 def _hash_value(value: object) -> str:
@@ -890,6 +960,34 @@ def apply_snapshot(
         "source_url": snapshot.source_url,
     }
     session.add(tracked_case)
+    if snapshot.next_hearing_on is not None:
+        linked_matter_ids = [
+            bookmark.matter_id
+            for bookmark in tracked_case.bookmarks
+            if bookmark.matter_id and not bookmark.is_archived
+        ]
+        if linked_matter_ids:
+            matters = list(
+                session.scalars(
+                    select(Matter).where(
+                        Matter.company_id == context.company.id,
+                        Matter.id.in_(linked_matter_ids),
+                    )
+                )
+            )
+            for matter in matters:
+                apply_next_hearing_update(
+                    session,
+                    matter=matter,
+                    new_date=snapshot.next_hearing_on,
+                    source="case_tracking",
+                    actor_membership_id=context.membership.id,
+                    context=context,
+                    source_ref_type="tracked_case",
+                    source_ref_id=tracked_case.id,
+                    reason="tracked_case_snapshot",
+                    confidence_label="high",
+                )
     session.flush()
     return created
 
@@ -1018,43 +1116,164 @@ def _system_contexts(session: Session) -> list[SessionContext]:
     return contexts
 
 
+def _eligible_tracked_case_count(session: Session, *, company_id: str) -> int:
+    return int(
+        session.scalar(
+            select(func.count(TrackedCase.id)).where(
+                TrackedCase.company_id == company_id,
+                TrackedCase.bookmarks.any(TrackedCaseBookmark.is_archived.is_(False)),
+            )
+        )
+        or 0
+    )
+
+
+def _poll_run_record(run: TrackedCasePollRun) -> CaseTrackingPollRunRecord:
+    return CaseTrackingPollRunRecord(
+        id=run.id,
+        company_id=run.company_id,
+        status=run.status,
+        started_at=run.started_at,
+        completed_at=run.completed_at,
+        checked_count=run.checked_count,
+        update_count=run.update_count,
+        error_count=run.error_count,
+        skipped_count=run.skipped_count,
+        blocked_count=run.blocked_count,
+        provider_call_count=run.provider_call_count,
+        backlog_remaining_count=run.backlog_remaining_count,
+        metadata=dict(run.metadata_json or {}),
+    )
+
+
+def _record_safe_poll_run(
+    session: Session,
+    *,
+    context: SessionContext,
+    status_value: str,
+    reason: str,
+    window: CaseTrackingWindowState,
+    provider_key: str,
+    force: bool,
+) -> CaseTrackingPollRunRecord:
+    eligible_count = _eligible_tracked_case_count(session, company_id=context.company.id)
+    run = TrackedCasePollRun(
+        company_id=context.company.id,
+        status=status_value,
+        started_at=_now(),
+        completed_at=_now(),
+        skipped_count=eligible_count,
+        blocked_count=eligible_count if status_value == "blocked" else 0,
+        backlog_remaining_count=eligible_count,
+        metadata_json={
+            "provider": provider_key,
+            "reason": reason,
+            "tracked_count": eligible_count,
+            "attempted_count": 0,
+            "eligibility": "explicit_tracked_bookmarks_only",
+            "force": force,
+            "window": window.metadata(),
+        },
+    )
+    session.add(run)
+    session.flush()
+    record_from_context(
+        session,
+        context,
+        action="case_tracking.poll_run",
+        target_type="tracked_case_poll_run",
+        target_id=run.id,
+        metadata=dict(run.metadata_json or {}),
+    )
+    session.commit()
+    return _poll_run_record(run)
+
+
 def poll_tracked_cases(
     session: Session,
     *,
     provider: CaseTrackingProvider | None = None,
+    enforce_window: bool = False,
+    force: bool = False,
+    now: datetime | None = None,
 ) -> list[CaseTrackingPollRunRecord]:
     settings = get_settings()
-    if not settings.case_tracking_enabled:
-        return []
-    active_provider = provider or get_case_tracking_provider()
+    window = case_tracking_window_state(now)
+    contexts = _system_contexts(session)
     runs: list[CaseTrackingPollRunRecord] = []
-    for context in _system_contexts(session):
+
+    if enforce_window and not force and not window.inside_window:
+        for context in contexts:
+            runs.append(
+                _record_safe_poll_run(
+                    session,
+                    context=context,
+                    status_value="blocked",
+                    reason="outside_configured_refresh_window",
+                    window=window,
+                    provider_key=settings.case_tracking_provider,
+                    force=force,
+                )
+            )
+        return runs
+
+    if not settings.case_tracking_enabled:
+        for context in contexts:
+            runs.append(
+                _record_safe_poll_run(
+                    session,
+                    context=context,
+                    status_value="skipped",
+                    reason="case_tracking_disabled",
+                    window=window,
+                    provider_key="disabled",
+                    force=force,
+                )
+            )
+        return runs
+
+    try:
+        active_provider = provider or get_case_tracking_provider()
+    except CaseTrackingProviderUnavailable as exc:
+        redacted = redact_provider_error(exc)
+        for context in contexts:
+            runs.append(
+                _record_safe_poll_run(
+                    session,
+                    context=context,
+                    status_value="blocked",
+                    reason=redacted,
+                    window=window,
+                    provider_key=settings.case_tracking_provider,
+                    force=force,
+                )
+            )
+        return runs
+
+    for context in contexts:
+        total_eligible = _eligible_tracked_case_count(session, company_id=context.company.id)
         run = TrackedCasePollRun(
             company_id=context.company.id,
             status="completed",
             started_at=_now(),
-            metadata_json={"provider": active_provider.provider_key},
+            metadata_json={
+                "provider": active_provider.provider_key,
+                "tracked_count": total_eligible,
+                "attempted_count": 0,
+                "eligibility": "explicit_tracked_bookmarks_only",
+                "force": force,
+                "window": window.metadata(),
+            },
         )
         session.add(run)
         session.flush()
-        # Select tracked cases that have at least one active bookmark via an
-        # EXISTS subquery (``.any()``) rather than a JOIN + SELECT DISTINCT.
-        # DISTINCT over a row that includes ``json`` columns
-        # (party_names_json, metadata_json) fails on PostgreSQL —
-        # ``could not identify an equality operator for type json`` — because
-        # the json type has no equality operator. The JOIN was also only there
-        # to filter; ``.any()`` filters without duplicating rows, so no DISTINCT
-        # is needed. (SQLite tolerated the old form, which is why this only
-        # surfaced against Cloud SQL Postgres.)
         cases = list(
             session.scalars(
                 select(TrackedCase)
                 .options(selectinload(TrackedCase.bookmarks))
                 .where(
                     TrackedCase.company_id == context.company.id,
-                    TrackedCase.bookmarks.any(
-                        TrackedCaseBookmark.is_archived.is_(False)
-                    ),
+                    TrackedCase.bookmarks.any(TrackedCaseBookmark.is_archived.is_(False)),
                 )
                 .order_by(
                     TrackedCase.last_provider_checked_at.asc().nullsfirst(),
@@ -1063,6 +1282,12 @@ def poll_tracked_cases(
                 .limit(settings.case_tracking_poll_limit)
             )
         )
+        run.metadata_json = {
+            **dict(run.metadata_json or {}),
+            "attempted_count": len(cases),
+        }
+        run.backlog_remaining_count = max(0, total_eligible - len(cases))
+        run.skipped_count = run.backlog_remaining_count
         bulk_snapshots: dict[str, ProviderCaseSnapshot] = {}
         bulk_errors: dict[str, str] = {}
         cnrs = list(
@@ -1073,36 +1298,56 @@ def poll_tracked_cases(
             )
         )
         if cnrs:
-            try:
-                bulk_result = active_provider.refresh_cases(cnrs=cnrs)
-                bulk_snapshots = {
-                    normalized: snapshot
-                    for snapshot in bulk_result.snapshots
-                    if (normalized := normalize_cnr(snapshot.cnr_number))
+            if enforce_window and not force and not case_tracking_window_state().inside_window:
+                run.status = "partial"
+                run.backlog_remaining_count += len(cases)
+                run.skipped_count += len(cases)
+                run.metadata_json = {
+                    **dict(run.metadata_json or {}),
+                    "partial_reason": "window_closed_before_bulk_refresh",
                 }
-                bulk_errors = {
-                    normalized: message
-                    for raw_cnr, message in bulk_result.errors.items()
-                    if (normalized := normalize_cnr(raw_cnr))
+            else:
+                try:
+                    run.provider_call_count += 1
+                    bulk_result = active_provider.refresh_cases(cnrs=cnrs)
+                    bulk_snapshots = {
+                        normalized: snapshot
+                        for snapshot in bulk_result.snapshots
+                        if (normalized := normalize_cnr(snapshot.cnr_number))
+                    }
+                    bulk_errors = {
+                        normalized: message
+                        for raw_cnr, message in bulk_result.errors.items()
+                        if (normalized := normalize_cnr(raw_cnr))
+                    }
+                except Exception as exc:
+                    bulk_errors = {cnr: redact_provider_error(exc) for cnr in cnrs}
+        for index, tracked_case in enumerate(cases):
+            if run.status == "partial" and dict(run.metadata_json or {}).get(
+                "partial_reason"
+            ) == "window_closed_before_bulk_refresh":
+                break
+            if enforce_window and not force and not case_tracking_window_state().inside_window:
+                remaining = len(cases) - index
+                run.status = "partial"
+                run.backlog_remaining_count += remaining
+                run.skipped_count += remaining
+                run.metadata_json = {
+                    **dict(run.metadata_json or {}),
+                    "partial_reason": "window_closed_before_case_refresh",
                 }
-            except Exception as exc:
-                bulk_errors = {cnr: redact_provider_error(exc) for cnr in cnrs}
-        for tracked_case in cases:
+                break
             try:
                 if tracked_case.cnr_number:
                     normalized_cnr = normalize_cnr(tracked_case.cnr_number)
                     if normalized_cnr and normalized_cnr in bulk_errors:
                         raise CaseTrackingProviderError(bulk_errors[normalized_cnr])
-                    snapshot = (
-                        bulk_snapshots.get(normalized_cnr or "")
-                        if normalized_cnr
-                        else None
-                    )
+                    snapshot = bulk_snapshots.get(normalized_cnr or "") if normalized_cnr else None
                     if snapshot is None:
-                        snapshot = active_provider.get_case_by_cnr(
-                            cnr=tracked_case.cnr_number
-                        )
+                        run.provider_call_count += 1
+                        snapshot = active_provider.get_case_by_cnr(cnr=tracked_case.cnr_number)
                 else:
+                    run.provider_call_count += 1
                     results = active_provider.search_cases(
                         query=CaseSearchQuery(
                             case_number=tracked_case.case_number,
@@ -1127,7 +1372,21 @@ def poll_tracked_cases(
                 run.error_count += 1
                 continue
         run.completed_at = _now()
-        run.status = "partial" if run.error_count else "completed"
+        if run.status != "partial":
+            run.status = (
+                "partial" if run.error_count or run.backlog_remaining_count else "completed"
+            )
+        run.metadata_json = {
+            **dict(run.metadata_json or {}),
+            "checked_count": run.checked_count,
+            "update_count": run.update_count,
+            "error_count": run.error_count,
+            "skipped_count": run.skipped_count,
+            "blocked_count": run.blocked_count,
+            "provider_call_count": run.provider_call_count,
+            "backlog_remaining_count": run.backlog_remaining_count,
+            "bulk_cnr_count": len(cnrs),
+        }
         session.add(run)
         record_from_context(
             session,
@@ -1135,26 +1394,8 @@ def poll_tracked_cases(
             action="case_tracking.poll_run",
             target_type="tracked_case_poll_run",
             target_id=run.id,
-            metadata={
-                "provider": active_provider.provider_key,
-                "checked_count": run.checked_count,
-                "update_count": run.update_count,
-                "error_count": run.error_count,
-                "bulk_cnr_count": len(cnrs),
-            },
+            metadata=dict(run.metadata_json or {}),
         )
         session.commit()
-        runs.append(
-            CaseTrackingPollRunRecord(
-                id=run.id,
-                company_id=run.company_id,
-                status=run.status,
-                started_at=run.started_at,
-                completed_at=run.completed_at,
-                checked_count=run.checked_count,
-                update_count=run.update_count,
-                error_count=run.error_count,
-                metadata=dict(run.metadata_json or {}),
-            )
-        )
+        runs.append(_poll_run_record(run))
     return runs

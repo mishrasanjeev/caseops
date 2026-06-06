@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -206,5 +206,39 @@ describe("NewMatterDialog", () => {
       }),
     );
     await waitFor(() => expect(toastSuccess).toHaveBeenCalled());
+  });
+
+  it("shows Dispose instead of Close or Closed and submits disposed status", async () => {
+    const user = userEvent.setup();
+    createMatterMock.mockResolvedValue({
+      id: "m-1",
+      matter_code: "BLR-001",
+      title: "Disposed matter",
+      created_at: "2026-04-17T10:00:00Z",
+      status: "disposed",
+    });
+    render(withClient(<NewMatterDialog />));
+
+    await openDialog(user);
+    await waitFor(() =>
+      expect(screen.getByTestId("new-matter-forum-state")).toHaveValue("Delhi"),
+    );
+    await fillRequiredMatterFields(user);
+
+    const statusTrigger = screen.getByRole("combobox", { name: "Status" });
+    await user.click(statusTrigger);
+    const listbox = await screen.findByRole("listbox");
+    expect(within(listbox).getByText("Dispose")).toBeInTheDocument();
+    expect(within(listbox).queryByText("Close")).not.toBeInTheDocument();
+    expect(within(listbox).queryByText("Closed")).not.toBeInTheDocument();
+    await user.click(within(listbox).getByText("Dispose"));
+    await user.click(screen.getByRole("button", { name: /Create matter/i }));
+
+    await waitFor(() => expect(createMatterMock).toHaveBeenCalledTimes(1));
+    expect(createMatterMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "disposed",
+      }),
+    );
   });
 });

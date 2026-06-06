@@ -102,7 +102,7 @@ class MatterStatus(StrEnum):
     INTAKE = "intake"
     ACTIVE = "active"
     ON_HOLD = "on_hold"
-    CLOSED = "closed"
+    DISPOSED = "disposed"
 
 
 class MatterForumLevel(StrEnum):
@@ -190,6 +190,72 @@ class MatterProceedingReviewStatus(StrEnum):
     REVIEWED = "reviewed"
     AUTO_PROMOTED = "auto_promoted"
     INSUFFICIENT_EVIDENCE = "insufficient_evidence"
+
+
+class MatterComplianceExtractionStatus(StrEnum):
+    QUEUED = "queued"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+
+class MatterComplianceSourceType(StrEnum):
+    AUTO_FETCHED_ORDER = "auto_fetched_order"
+    MANUAL_ORDER = "manual_order"
+    MANUAL_UPLOAD = "manual_upload"
+
+
+class MatterComplianceTrigger(StrEnum):
+    CASE_TRACKING = "case_tracking"
+    COURT_SYNC = "court_sync"
+    MANUAL_ORDER_CREATE = "manual_order_create"
+    ATTACHMENT_PROCESSED = "attachment_processed"
+    MANUAL_RETRY = "manual_retry"
+
+
+class MatterComplianceStatus(StrEnum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    WAIVED = "waived"
+    NOT_APPLICABLE = "not_applicable"
+
+
+class MatterComplianceReviewStatus(StrEnum):
+    REVIEW_REQUIRED = "review_required"
+    CONFIRMED = "confirmed"
+    EDITED = "edited"
+    REJECTED = "rejected"
+
+
+class MatterBillingMode(StrEnum):
+    HOURLY = "hourly"
+    FIXED_FEE = "fixed_fee"
+    MILESTONE = "milestone"
+    MIXED = "mixed"
+
+
+class MatterBillingRateScope(StrEnum):
+    USER = "user"
+    ROLE = "role"
+    PRACTICE_AREA = "practice_area"
+    DEFAULT = "default"
+
+
+class MatterNextHearingSource(StrEnum):
+    MANUAL = "manual"
+    CASE_TRACKING = "case_tracking"
+    COURT_SYNC = "court_sync"
+    PROCEEDING_INTELLIGENCE = "proceeding_intelligence"
+    CAUSE_LIST = "cause_list"
+    UNKNOWN = "unknown"
+
+
+class MatterNextHearingSuggestionStatus(StrEnum):
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
 
 
 class MatterDocumentType(StrEnum):
@@ -1148,8 +1214,42 @@ class Matter(Base):
     forum_level: Mapped[str] = mapped_column(String(40), nullable=False)
     court_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     judge_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    case_number: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    cnr_number: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     next_hearing_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    next_hearing_source: Mapped[str] = mapped_column(
+        String(40),
+        nullable=False,
+        default=MatterNextHearingSource.UNKNOWN,
+        server_default=MatterNextHearingSource.UNKNOWN,
+    )
+    next_hearing_source_ref_type: Mapped[str | None] = mapped_column(
+        String(40), nullable=True,
+    )
+    next_hearing_source_ref_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True,
+    )
+    next_hearing_updated_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    next_hearing_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    next_hearing_manual_lock: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=false(),
+    )
+    billing_profile_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matter_billing_profiles.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     claim_amount_minor: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     claim_currency: Mapped[str] = mapped_column(
         String(3), nullable=False, default="INR"
@@ -1229,6 +1329,12 @@ class Matter(Base):
         back_populates="assigned_matters",
         foreign_keys=[assignee_membership_id],
     )
+    next_hearing_updated_by_membership: Mapped[CompanyMembership | None] = relationship(
+        foreign_keys=[next_hearing_updated_by_membership_id],
+    )
+    billing_profile: Mapped[MatterBillingProfile | None] = relationship(
+        foreign_keys=[billing_profile_id],
+    )
     forum_catalog_entry: Mapped[ForumCatalogEntry | None] = relationship(
         foreign_keys=[forum_catalog_entry_id]
     )
@@ -1292,6 +1398,29 @@ class Matter(Base):
         back_populates="matter",
         cascade="all, delete-orphan",
         order_by="desc(MatterInvoice.created_at)",
+    )
+    compliance_extraction_runs: Mapped[list[MatterComplianceExtractionRun]] = relationship(
+        back_populates="matter",
+        cascade="all, delete-orphan",
+        order_by="desc(MatterComplianceExtractionRun.created_at)",
+    )
+    compliance_items: Mapped[list[MatterComplianceItem]] = relationship(
+        back_populates="matter",
+        cascade="all, delete-orphan",
+        order_by=(
+            "MatterComplianceItem.due_on.asc().nulls_last(), "
+            "MatterComplianceItem.created_at.desc()"
+        ),
+    )
+    next_hearing_history: Mapped[list[MatterNextHearingHistory]] = relationship(
+        back_populates="matter",
+        cascade="all, delete-orphan",
+        order_by="desc(MatterNextHearingHistory.created_at)",
+    )
+    next_hearing_suggestions: Mapped[list[MatterNextHearingSuggestion]] = relationship(
+        back_populates="matter",
+        cascade="all, delete-orphan",
+        order_by="desc(MatterNextHearingSuggestion.created_at)",
     )
     linked_contracts: Mapped[list[Contract]] = relationship(
         back_populates="linked_matter",
@@ -2842,6 +2971,10 @@ class TrackedCasePollRun(Base):
     checked_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     update_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     error_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    skipped_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    blocked_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    provider_call_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    backlog_remaining_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     company: Mapped[Company | None] = relationship()
@@ -3119,6 +3252,283 @@ class MatterProceedingSignal(Base):
         onupdate=utcnow,
         nullable=False,
     )
+
+
+class MatterComplianceExtractionRun(Base):
+    __tablename__ = "matter_compliance_extraction_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    court_order_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matter_court_orders.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    attachment_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matter_attachments.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    source_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    trigger: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=MatterComplianceExtractionStatus.QUEUED,
+        index=True,
+    )
+    skip_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    model_run_id: Mapped[str | None] = mapped_column(
+        ForeignKey("model_runs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    parser_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    source_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_message_redacted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    matter: Mapped[Matter] = relationship(back_populates="compliance_extraction_runs")
+    court_order: Mapped[MatterCourtOrder | None] = relationship()
+    attachment: Mapped[MatterAttachment | None] = relationship()
+    model_run: Mapped[ModelRun | None] = relationship("ModelRun")
+    created_by_membership: Mapped[CompanyMembership | None] = relationship()
+    items: Mapped[list[MatterComplianceItem]] = relationship(
+        back_populates="extraction_run",
+        cascade="all, delete-orphan",
+        order_by="MatterComplianceItem.created_at.asc()",
+    )
+
+
+class MatterComplianceItem(Base):
+    __tablename__ = "matter_compliance_items"
+    __table_args__ = (
+        UniqueConstraint(
+            "matter_id",
+            "court_order_id",
+            "dedupe_key",
+            name="uq_matter_compliance_order_key",
+        ),
+        UniqueConstraint(
+            "matter_id",
+            "attachment_id",
+            "dedupe_key",
+            name="uq_matter_compliance_attachment_key",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    court_order_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matter_court_orders.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    attachment_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matter_attachments.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    extraction_run_id: Mapped[str] = mapped_column(
+        ForeignKey("matter_compliance_extraction_runs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    responsible_party: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    due_on: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    timeline_text: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    filing_requirement: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    court_direction: Mapped[str | None] = mapped_column(Text, nullable=True)
+    next_action: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_snippet: Mapped[str] = mapped_column(Text, nullable=False)
+    source_page: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source_paragraph: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    confidence_label: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default=MatterProceedingConfidence.LOW,
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=MatterComplianceStatus.PENDING,
+        index=True,
+    )
+    review_status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=MatterComplianceReviewStatus.REVIEW_REQUIRED,
+        index=True,
+    )
+    generated_task_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matter_tasks.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    generated_deadline_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matter_deadlines.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    dedupe_key: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    source_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    waived_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewed_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    matter: Mapped[Matter] = relationship(back_populates="compliance_items")
+    court_order: Mapped[MatterCourtOrder | None] = relationship()
+    attachment: Mapped[MatterAttachment | None] = relationship()
+    extraction_run: Mapped[MatterComplianceExtractionRun] = relationship(back_populates="items")
+    generated_task: Mapped[MatterTask | None] = relationship(foreign_keys=[generated_task_id])
+    generated_deadline: Mapped[MatterDeadline | None] = relationship(
+        foreign_keys=[generated_deadline_id],
+    )
+    reviewed_by_membership: Mapped[CompanyMembership | None] = relationship()
+
+
+class MatterNextHearingHistory(Base):
+    __tablename__ = "matter_next_hearing_history"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    old_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    new_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    source: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    source_ref_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    source_ref_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    changed_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    change_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    manual_lock: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+
+    matter: Mapped[Matter] = relationship(back_populates="next_hearing_history")
+    changed_by_membership: Mapped[CompanyMembership | None] = relationship()
+
+
+class MatterNextHearingSuggestion(Base):
+    __tablename__ = "matter_next_hearing_suggestions"
+    __table_args__ = (
+        UniqueConstraint(
+            "matter_id",
+            "suggested_date",
+            "source",
+            "source_ref_type",
+            "source_ref_id",
+            name="uq_matter_next_hearing_suggestion_source",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    suggested_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    existing_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    source: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    source_ref_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    source_ref_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    confidence_label: Mapped[str] = mapped_column(String(16), nullable=False, default="medium")
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=MatterNextHearingSuggestionStatus.PENDING,
+        index=True,
+    )
+    decided_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+
+    matter: Mapped[Matter] = relationship(back_populates="next_hearing_suggestions")
+    decided_by_membership: Mapped[CompanyMembership | None] = relationship()
 
 
 class MatterCourtSyncJob(Base):
@@ -4020,6 +4430,184 @@ class LegalKnowledgeGraphEdge(Base):
     run: Mapped[LegalKnowledgeGraphRun] = relationship(back_populates="edges")
 
 
+class MatterBillingProfile(Base):
+    __tablename__ = "matter_billing_profiles"
+    __table_args__ = (
+        UniqueConstraint("company_id", "name", name="uq_matter_billing_profile_name"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="INR")
+    firm_legal_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    firm_address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    firm_gstin: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    firm_pan: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    default_place_of_supply: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    default_sac_hsn: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    gst_applicable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    gstin_state_code: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    cgst_rate_bps: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    sgst_rate_bps: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    igst_rate_bps: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    tax_rate_bps: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    invoice_prefix: Mapped[str] = mapped_column(String(40), nullable=False, default="INV")
+    next_invoice_sequence: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    payment_terms_days: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
+    billing_mode: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=MatterBillingMode.HOURLY,
+        index=True,
+    )
+    default_rate_minor_per_hour: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    notes_template: Mapped[str | None] = mapped_column(Text, nullable=True)
+    footer_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    invoice_template_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    expense_categories_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    retainer_adjustments_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=false(),
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    rates: Mapped[list[MatterBillingRate]] = relationship(
+        back_populates="billing_profile",
+        cascade="all, delete-orphan",
+        order_by="MatterBillingRate.created_at.desc()",
+    )
+
+
+class MatterBillingRate(Base):
+    __tablename__ = "matter_billing_rates"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    billing_profile_id: Mapped[str] = mapped_column(
+        ForeignKey("matter_billing_profiles.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    rate_scope: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    role: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    practice_area: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="INR")
+    amount_minor_per_hour: Mapped[int] = mapped_column(Integer, nullable=False)
+    effective_from: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    effective_to: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    billing_profile: Mapped[MatterBillingProfile] = relationship(back_populates="rates")
+    membership: Mapped[CompanyMembership | None] = relationship()
+
+
+class MatterInvoiceExport(Base):
+    __tablename__ = "matter_invoice_exports"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    invoice_id: Mapped[str] = mapped_column(
+        ForeignKey("matter_invoices.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    format: Mapped[str] = mapped_column(String(16), nullable=False, default="pdf")
+    generated_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    generated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    template_version: Mapped[str] = mapped_column(String(40), nullable=False)
+    file_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    checksum: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    invoice: Mapped[MatterInvoice] = relationship()
+    generated_by_membership: Mapped[CompanyMembership | None] = relationship()
+
+
+class CauseListExport(Base):
+    __tablename__ = "cause_list_exports"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    generated_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    date_from: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    date_to: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    filters_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    row_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    format: Mapped[str] = mapped_column(String(16), nullable=False, default="pdf")
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="completed")
+    generated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    file_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    checksum: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    generated_by_membership: Mapped[CompanyMembership | None] = relationship()
+
+
 class MatterTimeEntry(Base):
     __tablename__ = "matter_time_entries"
 
@@ -4045,6 +4633,12 @@ class MatterTimeEntry(Base):
     billable: Mapped[bool] = mapped_column(default=True, nullable=False)
     rate_currency: Mapped[str] = mapped_column(String(8), default="INR", nullable=False)
     rate_amount_minor: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    billing_rate_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matter_billing_rates.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    rate_source: Mapped[str | None] = mapped_column(String(40), nullable=True)
     total_amount_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -4059,6 +4653,7 @@ class MatterTimeEntry(Base):
     invoice_line_item: Mapped[MatterInvoiceLineItem | None] = relationship(
         back_populates="time_entry"
     )
+    billing_rate: Mapped[MatterBillingRate | None] = relationship()
 
 
 class MatterInvoice(Base):
@@ -4092,12 +4687,32 @@ class MatterInvoice(Base):
         nullable=True,
         index=True,
     )
+    billing_profile_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matter_billing_profiles.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     invoice_number: Mapped[str] = mapped_column(String(80), nullable=False)
     client_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    client_billing_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    client_billing_address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    client_gstin: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    place_of_supply: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    sac_hsn: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    firm_legal_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    firm_address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    firm_gstin: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    firm_pan: Mapped[str | None] = mapped_column(String(16), nullable=True)
     status: Mapped[str] = mapped_column(String(24), nullable=False, default=InvoiceStatus.DRAFT)
     currency: Mapped[str] = mapped_column(String(8), default="INR", nullable=False)
     subtotal_amount_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    taxable_value_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    cgst_amount_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    sgst_amount_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    igst_amount_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     tax_amount_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    tds_deducted_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    payment_adjustment_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     total_amount_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     amount_received_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     balance_due_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -4119,6 +4734,7 @@ class MatterInvoice(Base):
     )
 
     matter: Mapped[Matter] = relationship(back_populates="invoices")
+    billing_profile: Mapped[MatterBillingProfile | None] = relationship()
     issued_by_membership: Mapped[CompanyMembership | None] = relationship(
         back_populates="issued_invoices"
     )
@@ -4150,6 +4766,8 @@ class MatterInvoiceLineItem(Base):
         index=True,
     )
     description: Mapped[str] = mapped_column(String(500), nullable=False)
+    category: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    sac_hsn: Mapped[str | None] = mapped_column(String(32), nullable=True)
     duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     unit_rate_amount_minor: Mapped[int | None] = mapped_column(Integer, nullable=True)
     line_total_amount_minor: Mapped[int] = mapped_column(Integer, nullable=False)

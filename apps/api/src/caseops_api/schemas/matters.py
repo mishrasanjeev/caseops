@@ -11,7 +11,8 @@ from caseops_api.schemas.document_processing import DocumentProcessingJobRecord
 from caseops_api.schemas.matter_tags import MatterTagRecord
 from caseops_api.schemas.storage_governance import StorageUploadPolicy
 
-MatterStatusLiteral = Literal["intake", "active", "on_hold", "closed"]
+MatterStatusLiteral = Literal["intake", "active", "on_hold", "disposed"]
+MatterStatusInputLiteral = Literal["intake", "active", "on_hold", "disposed", "closed"]
 MatterForumLevelLiteral = Literal[
     "lower_court",
     "high_court",
@@ -97,12 +98,20 @@ def _clean_judge_names(value: list[str] | None) -> list[str] | None:
     return cleaned or None
 
 
+def normalize_matter_status(value: object) -> object:
+    if isinstance(value, str) and value.strip().lower() == "closed":
+        return "disposed"
+    return value
+
+
 class MatterCreateRequest(BaseModel):
     title: str = Field(min_length=3, max_length=255)
     matter_code: str = Field(min_length=2, max_length=80, pattern=r"^[A-Za-z0-9-_/]+$")
     client_name: str | None = Field(default=None, min_length=2, max_length=255)
     opposing_party: str | None = Field(default=None, min_length=2, max_length=255)
-    status: MatterStatusLiteral = "intake"
+    case_number: str | None = Field(default=None, max_length=120)
+    cnr_number: str | None = Field(default=None, max_length=32)
+    status: MatterStatusInputLiteral = "intake"
     practice_area: str = Field(min_length=2, max_length=120)
     forum_level: MatterForumLevelLiteral
     court_id: str | None = Field(default=None, max_length=36)
@@ -115,6 +124,7 @@ class MatterCreateRequest(BaseModel):
     judge_name: str | None = Field(default=None, min_length=2, max_length=255)
     description: str | None = Field(default=None, max_length=4000)
     next_hearing_on: date | None = None
+    next_hearing_manual_lock: bool = False
     claim_amount_minor: int | None = Field(default=None, ge=0)
     claim_currency: str = Field(default="INR", min_length=3, max_length=3)
     claim_amount_notes: str | None = Field(default=None, max_length=2000)
@@ -123,6 +133,19 @@ class MatterCreateRequest(BaseModel):
     @classmethod
     def normalize_claim_currency(cls, value: object) -> str:
         return _normalize_claim_currency(value)
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def normalize_status(cls, value: object) -> object:
+        return normalize_matter_status(value)
+
+    @field_validator("case_number", "cnr_number", mode="before")
+    @classmethod
+    def normalize_identity_fields(cls, value: object) -> object:
+        if isinstance(value, str):
+            stripped = value.strip()
+            return stripped or None
+        return value
 
     model_config = {
         "json_schema_extra": {
@@ -153,7 +176,9 @@ class MatterUpdateRequest(BaseModel):
     assignee_membership_id: str | None = None
     client_name: str | None = Field(default=None, min_length=2, max_length=255)
     opposing_party: str | None = Field(default=None, min_length=2, max_length=255)
-    status: MatterStatusLiteral | None = None
+    case_number: str | None = Field(default=None, max_length=120)
+    cnr_number: str | None = Field(default=None, max_length=32)
+    status: MatterStatusInputLiteral | None = None
     practice_area: str | None = Field(default=None, min_length=2, max_length=120)
     forum_level: MatterForumLevelLiteral | None = None
     court_id: str | None = Field(default=None, max_length=36)
@@ -166,6 +191,7 @@ class MatterUpdateRequest(BaseModel):
     judge_name: str | None = Field(default=None, min_length=2, max_length=255)
     description: str | None = Field(default=None, max_length=4000)
     next_hearing_on: date | None = None
+    next_hearing_manual_lock: bool | None = None
     claim_amount_minor: int | None = Field(default=None, ge=0)
     claim_currency: str | None = Field(default=None, min_length=3, max_length=3)
     claim_amount_notes: str | None = Field(default=None, max_length=2000)
@@ -184,6 +210,19 @@ class MatterUpdateRequest(BaseModel):
     @classmethod
     def normalize_claim_currency(cls, value: object) -> str:
         return _normalize_claim_currency(value)
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def normalize_status(cls, value: object) -> object:
+        return normalize_matter_status(value)
+
+    @field_validator("case_number", "cnr_number", mode="before")
+    @classmethod
+    def normalize_identity_fields(cls, value: object) -> object:
+        if isinstance(value, str):
+            stripped = value.strip()
+            return stripped or None
+        return value
 
 
 class MatterRecord(BaseModel):
@@ -236,8 +275,17 @@ class MatterRecord(BaseModel):
     forum_city: str | None = None
     forum_consumer_level: str | None = None
     judge_name: str | None
+    case_number: str | None = None
+    cnr_number: str | None = None
     description: str | None
     next_hearing_on: date | None
+    next_hearing_source: str = "unknown"
+    next_hearing_source_ref_type: str | None = None
+    next_hearing_source_ref_id: str | None = None
+    next_hearing_updated_by_membership_id: str | None = None
+    next_hearing_updated_at: datetime | None = None
+    next_hearing_manual_lock: bool = False
+    billing_profile_id: str | None = None
     claim_amount_minor: int | None = None
     claim_currency: str = "INR"
     claim_amount_notes: str | None = None
@@ -265,13 +313,54 @@ class MatterListResponse(BaseModel):
     next_cursor: str | None = None
 
 
+class MatterNextHearingHistoryRecord(BaseModel):
+    id: str
+    company_id: str
+    matter_id: str
+    old_date: date | None
+    new_date: date | None
+    source: str
+    source_ref_type: str | None
+    source_ref_id: str | None
+    changed_by_membership_id: str | None
+    change_reason: str | None
+    manual_lock: bool
+    created_at: datetime
+
+
+class MatterNextHearingSuggestionRecord(BaseModel):
+    id: str
+    company_id: str
+    matter_id: str
+    suggested_date: date
+    existing_date: date | None
+    source: str
+    source_ref_type: str | None
+    source_ref_id: str | None
+    confidence_label: str
+    reason: str | None
+    status: str
+    decided_by_membership_id: str | None
+    decided_at: datetime | None
+    created_at: datetime
+
+
+class MatterNextHearingHistoryResponse(BaseModel):
+    history: list[MatterNextHearingHistoryRecord]
+    suggestions: list[MatterNextHearingSuggestionRecord]
+
+
+class MatterNextHearingSuggestionActionRequest(BaseModel):
+    action: Literal["accept", "reject"]
+
+
 class MatterListFilters(BaseModel):
     q: str | None = Field(default=None, max_length=255)
     client_name: str | None = Field(default=None, max_length=255)
     opposing_party: str | None = Field(default=None, max_length=255)
     forum_level: MatterForumLevelLiteral | None = None
     court_id: str | None = Field(default=None, max_length=36)
-    status: MatterStatusLiteral | None = None
+    status: MatterStatusInputLiteral | None = None
     created_from: date | None = None
     created_to: date | None = None
     next_hearing_from: date | None = None
@@ -280,6 +369,11 @@ class MatterListFilters(BaseModel):
     has_stay: bool | None = None
     min_claim_amount_minor: int | None = Field(default=None, ge=0)
     max_claim_amount_minor: int | None = Field(default=None, ge=0)
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def normalize_status(cls, value: object) -> object:
+        return normalize_matter_status(value)
 
 
 class MatterWorkspaceMembership(BaseModel):

@@ -12,6 +12,7 @@ import {
   Gavel,
   Inbox,
   LayoutDashboard,
+  ListChecks,
   LibraryBig,
   ListTodo,
   type LucideIcon,
@@ -60,6 +61,7 @@ const NAV: NavItem[] = [
     requiresCapability: "intake:submit",
   },
   { href: "/app/hearings", label: "Hearings", icon: Gavel, section: "work" },
+  { href: "/app/cause-list", label: "Cause list", icon: ListChecks, section: "work" },
   // Phase B / J08 / M08 — unified view across hearings + tasks +
   // matter_deadlines. Closes BUG-029.
   { href: "/app/calendar", label: "Calendar", icon: CalendarDays, section: "work" },
@@ -105,6 +107,13 @@ const NAV: NavItem[] = [
   {
     href: "/app/admin/billing",
     label: "Billing",
+    icon: CreditCard,
+    section: "admin",
+    requiresCapability: "workspace:admin",
+  },
+  {
+    href: "/app/admin/matter-billing",
+    label: "Matter billing",
     icon: CreditCard,
     section: "admin",
     requiresCapability: "workspace:admin",

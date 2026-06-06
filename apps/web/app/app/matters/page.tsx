@@ -296,7 +296,7 @@ export default function MattersPage() {
               <SelectItem value="intake">Intake</SelectItem>
               <SelectItem value="active">Active</SelectItem>
               <SelectItem value="on_hold">On hold</SelectItem>
-              <SelectItem value="closed">Closed</SelectItem>
+              <SelectItem value="disposed">Dispose</SelectItem>
             </SelectContent>
           </Select>
         </div>

@@ -31,6 +31,7 @@ from caseops_api.schemas.proceeding_intelligence import (
 from caseops_api.services.audit import record_audit, record_from_context
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import assert_access
+from caseops_api.services.next_hearing import apply_next_hearing_update
 
 PARSER_VERSION = "caseops-proceeding-deterministic-v1"
 MIN_SOURCE_TEXT_CHARS = 24
@@ -549,28 +550,39 @@ def _apply_next_hearing(
     if not hearing_dates:
         return
     next_hearing = min(hearing_dates)
-    if matter.next_hearing_on == next_hearing:
-        return
-    if matter.next_hearing_on is not None and matter.next_hearing_on >= order.order_date:
-        return
-    before = matter.next_hearing_on
-    matter.next_hearing_on = next_hearing
-    session.add(matter)
-    _audit(
+    result = apply_next_hearing_update(
         session,
-        context=context,
-        company_id=matter.company_id,
+        matter=matter,
+        new_date=next_hearing,
+        source="proceeding_intelligence",
         actor_membership_id=actor_membership_id,
-        action="matter.next_hearing.proceeding_intelligence.updated",
-        target_type="matter",
-        target_id=matter.id,
-        matter_id=matter.id,
-        metadata={
-            "before": before.isoformat() if before else None,
-            "after": next_hearing.isoformat(),
-            "court_order_id": order.id,
-        },
+        context=context,
+        source_ref_type="matter_court_order",
+        source_ref_id=order.id,
+        reason="high_confidence_order_signal",
+        confidence_label="high",
     )
+    if result.reason != "unchanged":
+        _audit(
+            session,
+            context=context,
+            company_id=matter.company_id,
+            actor_membership_id=actor_membership_id,
+            action=(
+                "matter.next_hearing.proceeding_intelligence.updated"
+                if result.applied
+                else "matter.next_hearing.proceeding_intelligence.suggested"
+            ),
+            target_type="matter",
+            target_id=matter.id,
+            matter_id=matter.id,
+            metadata={
+                "after": next_hearing.isoformat(),
+                "court_order_id": order.id,
+                "suggestion_id": result.suggestion_id,
+                "reason": result.reason,
+            },
+        )
 
 
 def _response(

@@ -5,7 +5,7 @@ These manifests keep the current founder-stage `CaseOps` API and document worker
 - `api-service.yaml`: HTTP API on Cloud Run with `Cloud SQL` and `GCS`
 - `document-worker-job.yaml`: non-HTTP document processor job for OCR, retries, and reindexing
 - `legal-update-sync-job.yaml`: nightly legal update/watchlist sync job
-- `case-tracking-poll-job.yaml`: nightly bookmarked case polling job
+- `case-tracking-poll-job.yaml`: daily bookmarked case polling job
 - `deploy.ps1`: idempotent deployment helper for the API, worker jobs, and scheduler triggers
 
 ## Assumptions
@@ -15,7 +15,7 @@ These manifests keep the current founder-stage `CaseOps` API and document worker
 - `Cloud SQL for PostgreSQL` is the primary database
 - `GCS` is the document storage backend in cloud
 - `Secret Manager` contains `caseops-ecourtsindia-api-token` before case tracking is enabled in cloud
-- `Cloud Scheduler` triggers run the document worker frequently and legal/case polling nightly
+- `Cloud Scheduler` triggers run the document worker frequently, legal polling nightly, and case polling inside its configured afternoon window
 
 ## Required Replacements
 
@@ -65,6 +65,6 @@ Before deploying, replace these placeholders:
 
 - The worker job runs `caseops-document-worker --once`, which lets Cloud Run Jobs act as the queue drainer without needing a permanently running non-HTTP process.
 - The legal update sync job runs `caseops-sync-legal-updates` at midnight IST by default.
-- The case tracking poll job runs `caseops-poll-tracked-cases` at midnight IST by default.
+- The case tracking poll job runs `caseops-poll-tracked-cases` at 4:30 PM IST by default, inside the configured 4:00 PM to 6:00 PM Asia/Kolkata refresh window. Production/cloud runs refuse to start new provider calls outside that window unless an operator uses `--force`; any unfinished backlog remains visible in provider operations and resumes on the next scheduled run.
 - OCR support expects `tesseract` to be present in the API image. The current Dockerfile installs it directly.
 - Document cache is ephemeral in Cloud Run and intentionally stored under `/tmp`.

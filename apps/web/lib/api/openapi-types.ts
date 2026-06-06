@@ -13489,7 +13489,7 @@ export interface components {
              * @default intake
              * @enum {string}
              */
-            status: "intake" | "active" | "on_hold" | "closed";
+            status: "intake" | "active" | "on_hold" | "disposed";
             /** Title */
             title: string;
         };
@@ -14086,7 +14086,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "intake" | "active" | "on_hold" | "closed";
+            status: "intake" | "active" | "on_hold" | "disposed";
             /** Tags */
             tags?: components["schemas"]["MatterTagRecord"][];
             /** Team Id */
@@ -14588,7 +14588,7 @@ export interface components {
             /** Practice Area */
             practice_area?: string | null;
             /** Status */
-            status?: ("intake" | "active" | "on_hold" | "closed") | null;
+            status?: ("intake" | "active" | "on_hold" | "disposed") | null;
             /** Team Id */
             team_id?: string | null;
             /** Title */
@@ -23998,7 +23998,7 @@ export interface operations {
                 opposing_party?: string | null;
                 forum_level?: ("lower_court" | "high_court" | "supreme_court" | "tribunal" | "arbitration" | "advisory") | null;
                 court_id?: string | null;
-                status?: ("intake" | "active" | "on_hold" | "closed") | null;
+                status?: ("intake" | "active" | "on_hold" | "disposed") | null;
                 created_from?: string | null;
                 created_to?: string | null;
                 next_hearing_from?: string | null;

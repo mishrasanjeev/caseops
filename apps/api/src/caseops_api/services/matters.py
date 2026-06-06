@@ -19,6 +19,7 @@ from caseops_api.db.models import (
     Matter,
     MatterActivity,
     MatterAttachment,
+    MatterBillingProfile,
     MatterCauseListEntry,
     MatterConflictCheckStatus,
     MatterCourtOrder,
@@ -97,7 +98,15 @@ from caseops_api.services.matter_access import (
     can_access,
     visible_matters_filter,
 )
+from caseops_api.services.matter_billing import (
+    calculate_invoice_tax,
+    default_invoice_due_on,
+    next_invoice_number,
+    render_invoice_pdf,
+    resolve_time_entry_rate,
+)
 from caseops_api.services.matter_tags import slugify_tag
+from caseops_api.services.next_hearing import apply_next_hearing_update
 from caseops_api.services.storage_governance import (
     StorageQuotaExceeded,
     assert_storage_quota_allows_upload,
@@ -139,7 +148,8 @@ DOCUMENT_TYPE_DEFAULT_LIFECYCLE: dict[str, str] = {
 def _status_value(value: object) -> str | None:
     if value is None:
         return None
-    return str(value)
+    status_value = str(value)
+    return "disposed" if status_value == "closed" else status_value
 
 
 def _conflict_gate_metadata(
@@ -242,6 +252,8 @@ def _order_is_interim(order: MatterCourtOrder) -> bool:
 
 
 def _matter_record(matter: Matter) -> MatterRecord:
+    if matter.status == "closed":
+        matter.status = MatterStatus.DISPOSED.value
     record = MatterRecord.model_validate(matter)
     assignments = list(getattr(matter, "tag_assignments", []) or [])
     record.tags = [
@@ -733,6 +745,8 @@ def _time_entry_record(time_entry: MatterTimeEntry) -> TimeEntryRecord:
         billable=time_entry.billable,
         rate_currency=time_entry.rate_currency,
         rate_amount_minor=time_entry.rate_amount_minor,
+        billing_rate_id=time_entry.billing_rate_id,
+        rate_source=time_entry.rate_source,
         total_amount_minor=time_entry.total_amount_minor,
         is_invoiced=time_entry.invoice_line_item is not None,
         created_at=time_entry.created_at,
@@ -748,6 +762,8 @@ def _invoice_line_item_record(line_item: MatterInvoiceLineItem) -> InvoiceLineIt
         duration_minutes=line_item.duration_minutes,
         unit_rate_amount_minor=line_item.unit_rate_amount_minor,
         line_total_amount_minor=line_item.line_total_amount_minor,
+        category=line_item.category,
+        sac_hsn=line_item.sac_hsn,
         created_at=line_item.created_at,
     )
 
@@ -765,12 +781,27 @@ def _invoice_record(invoice: MatterInvoice) -> InvoiceRecord:
         ),
         invoice_number=invoice.invoice_number,
         client_name=invoice.client_name,
+        client_billing_name=invoice.client_billing_name,
+        client_billing_address=invoice.client_billing_address,
+        client_gstin=invoice.client_gstin,
+        place_of_supply=invoice.place_of_supply,
+        sac_hsn=invoice.sac_hsn,
+        firm_legal_name=invoice.firm_legal_name,
+        firm_address=invoice.firm_address,
+        firm_gstin=invoice.firm_gstin,
+        firm_pan=invoice.firm_pan,
         status=invoice.status,
         currency=invoice.currency,
         subtotal_amount_minor=invoice.subtotal_amount_minor,
+        taxable_value_minor=invoice.taxable_value_minor,
+        cgst_amount_minor=invoice.cgst_amount_minor,
+        sgst_amount_minor=invoice.sgst_amount_minor,
+        igst_amount_minor=invoice.igst_amount_minor,
         tax_amount_minor=invoice.tax_amount_minor,
         total_amount_minor=invoice.total_amount_minor,
         amount_received_minor=invoice.amount_received_minor,
+        tds_deducted_minor=invoice.tds_deducted_minor,
+        payment_adjustment_minor=invoice.payment_adjustment_minor,
         balance_due_minor=invoice.balance_due_minor,
         issued_on=invoice.issued_on,
         due_on=invoice.due_on,
@@ -1076,6 +1107,8 @@ def create_matter(
         matter_code=payload.matter_code.strip(),
         client_name=payload.client_name.strip() if payload.client_name else None,
         opposing_party=payload.opposing_party.strip() if payload.opposing_party else None,
+        case_number=payload.case_number.strip() if payload.case_number else None,
+        cnr_number=payload.cnr_number.strip() if payload.cnr_number else None,
         status=payload.status,
         practice_area=payload.practice_area.strip(),
         forum_level=forum_selection["forum_level"] or payload.forum_level,
@@ -1088,7 +1121,6 @@ def create_matter(
         forum_consumer_level=forum_selection["forum_consumer_level"],
         judge_name=payload.judge_name.strip() if payload.judge_name else None,
         description=payload.description.strip() if payload.description else None,
-        next_hearing_on=payload.next_hearing_on,
         claim_amount_minor=payload.claim_amount_minor,
         claim_currency=payload.claim_currency.strip().upper(),
         claim_amount_notes=payload.claim_amount_notes.strip()
@@ -1096,6 +1128,17 @@ def create_matter(
     )
     session.add(matter)
     session.flush()
+    if payload.next_hearing_on is not None:
+        apply_next_hearing_update(
+            session,
+            matter=matter,
+            new_date=payload.next_hearing_on,
+            source="manual",
+            actor_membership_id=context.membership.id,
+            context=context,
+            reason="matter_created",
+            manual_lock=payload.next_hearing_manual_lock,
+        )
     _append_activity(
         session,
         matter_id=matter.id,
@@ -1453,12 +1496,67 @@ def update_matter(
         )
         _apply_forum_selection(matter, forum_selection)
 
+    next_hearing_changed = "next_hearing_on" in updates
+    next_hearing_on = updates.pop("next_hearing_on", None)
+    next_hearing_manual_lock = updates.pop("next_hearing_manual_lock", None)
+
     for field_name, value in updates.items():
         if field_name == "claim_currency" and isinstance(value, str):
             value = value.strip().upper()
         if field_name == "claim_amount_notes" and isinstance(value, str):
             value = value.strip() or None
+        if field_name in {"case_number", "cnr_number"} and isinstance(value, str):
+            value = value.strip() or None
         setattr(matter, field_name, value)
+    if next_hearing_changed and next_hearing_on is not None:
+        apply_next_hearing_update(
+            session,
+            matter=matter,
+            new_date=next_hearing_on,
+            source="manual",
+            actor_membership_id=context.membership.id,
+            context=context,
+            reason="matter_updated",
+            manual_lock=bool(next_hearing_manual_lock),
+            force=True,
+        )
+    elif next_hearing_changed and next_hearing_on is None:
+        old_hearing = matter.next_hearing_on
+        matter.next_hearing_on = None
+        matter.next_hearing_source = "manual"
+        matter.next_hearing_updated_by_membership_id = context.membership.id
+        matter.next_hearing_updated_at = utcnow()
+        matter.next_hearing_manual_lock = bool(next_hearing_manual_lock)
+        from caseops_api.db.models import MatterNextHearingHistory
+
+        session.add(
+            MatterNextHearingHistory(
+                company_id=matter.company_id,
+                matter_id=matter.id,
+                old_date=old_hearing,
+                new_date=None,
+                source="manual",
+                changed_by_membership_id=context.membership.id,
+                change_reason="matter_updated",
+                manual_lock=matter.next_hearing_manual_lock,
+            )
+        )
+        record_from_context(
+            session,
+            context,
+            action="matter.next_hearing.updated",
+            target_type="matter",
+            target_id=matter.id,
+            matter_id=matter.id,
+            metadata={
+                "before": old_hearing.isoformat() if old_hearing else None,
+                "after": None,
+                "source": "manual",
+                "manual_lock": matter.next_hearing_manual_lock,
+            },
+        )
+    elif next_hearing_manual_lock is not None:
+        matter.next_hearing_manual_lock = bool(next_hearing_manual_lock)
 
     session.add(matter)
     _append_activity(
@@ -1872,7 +1970,19 @@ def update_matter_hearing(
         hearing.outcome_note = payload.outcome_note.strip() or None
     if payload.hearing_on is not None:
         hearing.hearing_on = payload.hearing_on
-        matter.next_hearing_on = payload.hearing_on
+        apply_next_hearing_update(
+            session,
+            matter=matter,
+            new_date=payload.hearing_on,
+            source="manual",
+            actor_membership_id=context.membership.id,
+            context=context,
+            source_ref_type="matter_hearing",
+            source_ref_id=hearing.id,
+            reason="hearing_updated",
+            manual_lock=True,
+            force=True,
+        )
     session.add(hearing)
     session.flush()
 
@@ -2159,6 +2269,22 @@ def create_matter_court_order(
             linked_court_order_id=order.id,
         )
 
+    try:
+        from caseops_api.services.compliance_extraction import (
+            run_compliance_extraction_for_order,
+        )
+
+        run_compliance_extraction_for_order(
+            session,
+            matter=matter,
+            order=order,
+            trigger="manual_order_create",
+            actor_membership_id=context.membership.id,
+            context=context,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("compliance extraction failed for court_order_id=%s: %s", order.id, exc)
+
     session.commit()
     session.refresh(order)
     return _court_order_record(order)
@@ -2271,10 +2397,22 @@ def create_matter_hearing(
         status=payload.status,
         outcome_note=payload.outcome_note.strip() if payload.outcome_note else None,
     )
-    matter.next_hearing_on = payload.hearing_on
     session.add(hearing)
     session.add(matter)
     session.flush()
+    apply_next_hearing_update(
+        session,
+        matter=matter,
+        new_date=payload.hearing_on,
+        source="manual",
+        actor_membership_id=context.membership.id,
+        context=context,
+        source_ref_type="matter_hearing",
+        source_ref_id=hearing.id,
+        reason="hearing_created",
+        manual_lock=True,
+        force=True,
+    )
     _append_activity(
         session,
         matter_id=matter.id,
@@ -2406,7 +2544,17 @@ def _persist_court_sync_import(
 
     if cause_list_entries:
         next_listing = min(cause_list_entries, key=lambda entry: entry.listing_date)
-        matter.next_hearing_on = next_listing.listing_date
+        apply_next_hearing_update(
+            session,
+            matter=matter,
+            new_date=next_listing.listing_date,
+            source="cause_list",
+            actor_membership_id=actor_membership_id,
+            source_ref_type="matter_court_sync_run",
+            source_ref_id=sync_run.id,
+            reason="court_sync_import",
+            confidence_label="high",
+        )
         matter.court_name = next_listing.forum_name.strip()
         if next_listing.bench_name:
             matter.judge_name = next_listing.bench_name.strip()
@@ -2446,6 +2594,9 @@ def _persist_court_sync_import(
                 )
 
     if new_orders:
+        from caseops_api.services.compliance_extraction import (
+            run_compliance_extraction_for_order,
+        )
         from caseops_api.services.proceeding_intelligence import (
             extract_imported_order_proceeding_intelligence,
         )
@@ -2461,6 +2612,20 @@ def _persist_court_sync_import(
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
                     "proceeding_intelligence: failed for court_order_id=%s: %s",
+                    order.id,
+                    exc,
+                )
+            try:
+                run_compliance_extraction_for_order(
+                    session,
+                    matter=matter,
+                    order=order,
+                    trigger="court_sync",
+                    actor_membership_id=actor_membership_id,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "compliance_extraction: failed for court_order_id=%s: %s",
                     order.id,
                     exc,
                 )
@@ -2621,6 +2786,26 @@ def create_matter_attachment(
                 attachment_id=attachment.id,
                 linked_court_order_id=linked_court_order_id,
             )
+        if linked_court_order_id or document_type == "order_judgment":
+            try:
+                from caseops_api.services.compliance_extraction import (
+                    run_compliance_extraction_for_attachment,
+                )
+
+                run_compliance_extraction_for_attachment(
+                    session,
+                    matter=matter,
+                    attachment=attachment,
+                    trigger="attachment_processed",
+                    actor_membership_id=context.membership.id,
+                    context=context,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "compliance extraction pending run failed for attachment_id=%s: %s",
+                    attachment.id,
+                    exc,
+                )
         session.commit()
     except StorageQuotaExceeded as exc:
         session.rollback()
@@ -2671,7 +2856,8 @@ def update_matter_attachment_metadata(
         .options(
             joinedload(MatterAttachment.uploaded_by_membership).joinedload(
                 CompanyMembership.user
-            )
+            ),
+            joinedload(MatterAttachment.linked_court_order),
         )
         .where(
             MatterAttachment.id == attachment_id,
@@ -2731,6 +2917,26 @@ def update_matter_attachment_metadata(
                 "filename": attachment.original_filename,
             },
         )
+        if attachment.linked_court_order_id or attachment.document_type == "order_judgment":
+            try:
+                from caseops_api.services.compliance_extraction import (
+                    run_compliance_extraction_for_attachment,
+                )
+
+                run_compliance_extraction_for_attachment(
+                    session,
+                    matter=matter,
+                    attachment=attachment,
+                    trigger="manual_retry",
+                    actor_membership_id=context.membership.id,
+                    context=context,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "compliance extraction failed for attachment_id=%s: %s",
+                    attachment.id,
+                    exc,
+                )
     session.commit()
     session.refresh(attachment)
     latest_jobs = load_latest_processing_jobs(
@@ -2843,9 +3049,26 @@ def create_time_entry(
     payload: TimeEntryCreateRequest,
 ) -> TimeEntryRecord:
     matter = _get_matter_model(session, context=context, matter_id=matter_id)
+    rate_currency = payload.rate_currency.strip().upper()
+    rate_amount_minor = payload.rate_amount_minor
+    billing_rate_id: str | None = None
+    rate_source: str | None = "manual" if rate_amount_minor is not None else None
+    if rate_amount_minor is None and payload.billable:
+        resolved_rate = resolve_time_entry_rate(
+            session,
+            matter=matter,
+            membership_id=context.membership.id,
+            role=str(context.membership.role),
+            work_date=payload.work_date,
+            requested_currency=rate_currency,
+        )
+        rate_amount_minor = resolved_rate.rate_amount_minor
+        rate_currency = resolved_rate.currency
+        billing_rate_id = resolved_rate.rate_id
+        rate_source = resolved_rate.source
     total_amount_minor = _calculate_time_entry_total(
         duration_minutes=payload.duration_minutes,
-        rate_amount_minor=payload.rate_amount_minor,
+        rate_amount_minor=rate_amount_minor,
         billable=payload.billable,
     )
     time_entry = MatterTimeEntry(
@@ -2855,8 +3078,10 @@ def create_time_entry(
         description=payload.description.strip(),
         duration_minutes=payload.duration_minutes,
         billable=payload.billable,
-        rate_currency=payload.rate_currency.strip().upper(),
-        rate_amount_minor=payload.rate_amount_minor,
+        rate_currency=rate_currency,
+        rate_amount_minor=rate_amount_minor,
+        billing_rate_id=billing_rate_id,
+        rate_source=rate_source,
         total_amount_minor=total_amount_minor,
     )
     session.add(time_entry)
@@ -2893,7 +3118,29 @@ def create_matter_invoice(
         _raise_billing_permission_error()
 
     matter = _get_matter_model(session, context=context, matter_id=matter_id)
-    invoice_number = payload.invoice_number.strip()
+    billing_profile = None
+    if matter.billing_profile_id:
+        billing_profile = session.scalar(
+            select(MatterBillingProfile).where(
+                MatterBillingProfile.id == matter.billing_profile_id,
+                MatterBillingProfile.company_id == context.company.id,
+            )
+        )
+    if billing_profile is None:
+        billing_profile = session.scalar(
+            select(MatterBillingProfile)
+            .where(
+                MatterBillingProfile.company_id == context.company.id,
+                MatterBillingProfile.is_default.is_(True),
+            )
+            .order_by(MatterBillingProfile.updated_at.desc())
+            .limit(1)
+        )
+    invoice_number = (
+        payload.invoice_number.strip()
+        if payload.invoice_number
+        else next_invoice_number(billing_profile)
+    )
     existing_invoice = session.scalar(
         select(MatterInvoice).where(
             MatterInvoice.company_id == context.company.id,
@@ -2935,13 +3182,36 @@ def create_matter_invoice(
         company_id=context.company.id,
         matter_id=matter.id,
         issued_by_membership_id=context.membership.id,
+        billing_profile_id=billing_profile.id if billing_profile else None,
         invoice_number=invoice_number,
         client_name=(payload.client_name.strip() if payload.client_name else matter.client_name),
+        client_billing_name=(
+            payload.client_billing_name.strip()
+            if payload.client_billing_name
+            else (payload.client_name.strip() if payload.client_name else matter.client_name)
+        ),
+        client_billing_address=payload.client_billing_address,
+        client_gstin=payload.client_gstin,
+        place_of_supply=(
+            payload.place_of_supply
+            or (billing_profile.default_place_of_supply if billing_profile else None)
+        ),
+        sac_hsn=payload.sac_hsn or (billing_profile.default_sac_hsn if billing_profile else None),
+        firm_legal_name=billing_profile.firm_legal_name if billing_profile else None,
+        firm_address=billing_profile.firm_address if billing_profile else None,
+        firm_gstin=billing_profile.firm_gstin if billing_profile else None,
+        firm_pan=billing_profile.firm_pan if billing_profile else None,
         status=payload.status,
-        currency="INR",
+        currency=billing_profile.currency if billing_profile else "INR",
         issued_on=payload.issued_on,
-        due_on=payload.due_on,
-        notes=payload.notes.strip() if payload.notes else None,
+        due_on=payload.due_on or default_invoice_due_on(billing_profile, payload.issued_on),
+        notes=(
+            payload.notes.strip()
+            if payload.notes
+            else (billing_profile.notes_template if billing_profile else None)
+        ),
+        tds_deducted_minor=payload.tds_deducted_minor,
+        payment_adjustment_minor=payload.payment_adjustment_minor,
     )
     session.add(invoice)
     session.flush()
@@ -2952,6 +3222,8 @@ def create_matter_invoice(
             invoice_id=invoice.id,
             time_entry_id=time_entry.id,
             description=time_entry.description,
+            category="time",
+            sac_hsn=invoice.sac_hsn,
             duration_minutes=time_entry.duration_minutes,
             unit_rate_amount_minor=time_entry.rate_amount_minor,
             line_total_amount_minor=time_entry.total_amount_minor,
@@ -2963,6 +3235,8 @@ def create_matter_invoice(
         line_item = MatterInvoiceLineItem(
             invoice_id=invoice.id,
             description=manual_item.description.strip(),
+            category=manual_item.category,
+            sac_hsn=manual_item.sac_hsn or invoice.sac_hsn,
             duration_minutes=None,
             unit_rate_amount_minor=None,
             line_total_amount_minor=manual_item.amount_minor,
@@ -2970,12 +3244,41 @@ def create_matter_invoice(
         subtotal_amount_minor += manual_item.amount_minor
         session.add(line_item)
 
-    total_amount_minor = subtotal_amount_minor + payload.tax_amount_minor
+    if billing_profile is None and payload.tax_amount_minor:
+        taxable_value_minor = subtotal_amount_minor
+        tax_amount_minor = payload.tax_amount_minor
+        total_amount_minor = subtotal_amount_minor + tax_amount_minor
+        balance_due_minor = (
+            total_amount_minor - payload.tds_deducted_minor - payload.payment_adjustment_minor
+        )
+        cgst_amount_minor = 0
+        sgst_amount_minor = 0
+        igst_amount_minor = tax_amount_minor
+    else:
+        tax = calculate_invoice_tax(
+            profile=billing_profile,
+            taxable_value_minor=subtotal_amount_minor,
+            client_gstin=invoice.client_gstin,
+            amount_received_minor=0,
+            tds_deducted_minor=payload.tds_deducted_minor,
+            payment_adjustment_minor=payload.payment_adjustment_minor,
+        )
+        taxable_value_minor = tax.taxable_value_minor
+        tax_amount_minor = tax.tax_amount_minor
+        total_amount_minor = tax.total_amount_minor
+        balance_due_minor = tax.balance_due_minor
+        cgst_amount_minor = tax.cgst_amount_minor
+        sgst_amount_minor = tax.sgst_amount_minor
+        igst_amount_minor = tax.igst_amount_minor
     invoice.subtotal_amount_minor = subtotal_amount_minor
-    invoice.tax_amount_minor = payload.tax_amount_minor
+    invoice.taxable_value_minor = taxable_value_minor
+    invoice.cgst_amount_minor = cgst_amount_minor
+    invoice.sgst_amount_minor = sgst_amount_minor
+    invoice.igst_amount_minor = igst_amount_minor
+    invoice.tax_amount_minor = tax_amount_minor
     invoice.total_amount_minor = total_amount_minor
     invoice.amount_received_minor = 0
-    invoice.balance_due_minor = total_amount_minor
+    invoice.balance_due_minor = balance_due_minor
     session.add(invoice)
     _append_activity(
         session,
@@ -2988,6 +3291,25 @@ def create_matter_invoice(
             f"{invoice.total_amount_minor} minor units."
         ),
     )
+    record_from_context(
+        session,
+        context,
+        action="matter_invoice.created",
+        target_type="matter_invoice",
+        target_id=invoice.id,
+        matter_id=matter.id,
+        metadata={
+            "invoice_number": invoice.invoice_number,
+            "billing_profile_id": invoice.billing_profile_id,
+            "taxable_value_minor": invoice.taxable_value_minor,
+            "cgst_amount_minor": invoice.cgst_amount_minor,
+            "sgst_amount_minor": invoice.sgst_amount_minor,
+            "igst_amount_minor": invoice.igst_amount_minor,
+            "tds_deducted_minor": invoice.tds_deducted_minor,
+            "payment_adjustment_minor": invoice.payment_adjustment_minor,
+            "line_count": len(selected_time_entries) + len(payload.manual_items),
+        },
+    )
     session.commit()
     refreshed_invoice = session.scalar(
         select(MatterInvoice)
@@ -2999,3 +3321,30 @@ def create_matter_invoice(
     )
     assert refreshed_invoice is not None
     return _invoice_record(refreshed_invoice)
+
+
+def get_matter_invoice_pdf(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+    invoice_id: str,
+) -> tuple[bytes, str, str]:
+    if context.membership.role not in {MembershipRole.OWNER, MembershipRole.ADMIN}:
+        _raise_billing_permission_error()
+    matter = _get_matter_model(session, context=context, matter_id=matter_id)
+    invoice = session.scalar(
+        select(MatterInvoice)
+        .options(
+            joinedload(MatterInvoice.matter),
+            selectinload(MatterInvoice.line_items),
+        )
+        .where(
+            MatterInvoice.id == invoice_id,
+            MatterInvoice.matter_id == matter.id,
+            MatterInvoice.company_id == context.company.id,
+        )
+    )
+    if invoice is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invoice not found.")
+    return render_invoice_pdf(session, context=context, invoice=invoice)

@@ -7,27 +7,35 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const {
   completeMockHearingMock,
   fetchCalendarSyncStatusMock,
+  fetchMatterComplianceMock,
+  fetchNextHearingHistoryMock,
   fetchHearingCoachMock,
   fetchMockHearingsMock,
   fetchProceedingIntelligenceMock,
   generateHearingCoachMock,
+  decideNextHearingSuggestionMock,
   listMatterRemindersMock,
   startMockHearingMock,
   submitMockHearingResponseMock,
   syncHearingToOutlookMock,
+  updateMatterComplianceItemMock,
   workspaceData,
   useCapabilityMock,
 } = vi.hoisted(() => ({
   completeMockHearingMock: vi.fn(),
   fetchCalendarSyncStatusMock: vi.fn(),
+  fetchMatterComplianceMock: vi.fn(),
+  fetchNextHearingHistoryMock: vi.fn(),
   fetchHearingCoachMock: vi.fn(),
   fetchMockHearingsMock: vi.fn(),
   fetchProceedingIntelligenceMock: vi.fn(),
   generateHearingCoachMock: vi.fn(),
+  decideNextHearingSuggestionMock: vi.fn(),
   listMatterRemindersMock: vi.fn(),
   startMockHearingMock: vi.fn(),
   submitMockHearingResponseMock: vi.fn(),
   syncHearingToOutlookMock: vi.fn(),
+  updateMatterComplianceItemMock: vi.fn(),
   workspaceData: {
     current: {
       matter: { id: "m1", matter_code: "X", title: "T", status: "active" },
@@ -54,9 +62,12 @@ vi.mock("@/lib/api/endpoints", () => ({
   // the dedicated BUG-032 test below.
   createMatterCourtOrder: vi.fn().mockResolvedValue({ id: "order-new" }),
   uploadMatterAttachment: vi.fn().mockResolvedValue({ id: "att-new" }),
+  decideNextHearingSuggestion: decideNextHearingSuggestionMock,
   fetchCalendarSyncStatus: fetchCalendarSyncStatusMock,
   fetchHearingCoach: fetchHearingCoachMock,
+  fetchMatterCompliance: fetchMatterComplianceMock,
   fetchMockHearings: fetchMockHearingsMock,
+  fetchNextHearingHistory: fetchNextHearingHistoryMock,
   fetchProceedingIntelligence: fetchProceedingIntelligenceMock,
   generateHearingCoach: generateHearingCoachMock,
   listMatterReminders: listMatterRemindersMock,
@@ -64,6 +75,7 @@ vi.mock("@/lib/api/endpoints", () => ({
   startMockHearing: startMockHearingMock,
   submitMockHearingResponse: submitMockHearingResponseMock,
   syncHearingToOutlook: syncHearingToOutlookMock,
+  updateMatterComplianceItem: updateMatterComplianceItemMock,
 }));
 
 vi.mock("@/lib/use-matter-workspace", () => ({
@@ -206,7 +218,10 @@ function hearingCoachReport(overrides: Record<string, unknown> = {}) {
 describe("MatterHearingsPage", () => {
   beforeEach(() => {
     completeMockHearingMock.mockReset();
+    decideNextHearingSuggestionMock.mockReset();
     fetchCalendarSyncStatusMock.mockReset();
+    fetchMatterComplianceMock.mockReset();
+    fetchNextHearingHistoryMock.mockReset();
     fetchHearingCoachMock.mockReset();
     fetchMockHearingsMock.mockReset();
     fetchProceedingIntelligenceMock.mockReset();
@@ -215,6 +230,14 @@ describe("MatterHearingsPage", () => {
     startMockHearingMock.mockReset();
     submitMockHearingResponseMock.mockReset();
     syncHearingToOutlookMock.mockReset();
+    updateMatterComplianceItemMock.mockReset();
+    decideNextHearingSuggestionMock.mockResolvedValue({
+      history: [],
+      suggestions: [],
+    });
+    updateMatterComplianceItemMock.mockResolvedValue({});
+    fetchMatterComplianceMock.mockResolvedValue({ runs: [], items: [] });
+    fetchNextHearingHistoryMock.mockResolvedValue({ history: [], suggestions: [] });
     listMatterRemindersMock.mockResolvedValue({ matter_id: "m1", reminders: [] });
     fetchMockHearingsMock.mockResolvedValue({
       matter_id: "m1",
@@ -875,5 +898,159 @@ describe("MatterHearingsPage", () => {
     expect(section.textContent).not.toMatch(
       /guaranteed|will win|will lose|win probability|loss probability|judge reputation|judge likes|judge dislikes|favorable judge|emotional|psychological|mental|biometric|stress|sentiment|personality|lie detection|voice|audio/i,
     );
+  });
+
+  it("renders review-required compliance items and hides rejected items", async () => {
+    fetchMatterComplianceMock.mockResolvedValue({
+      runs: [],
+      items: [
+        {
+          id: "item-1",
+          company_id: "company-1",
+          matter_id: "m1",
+          court_order_id: "order-1",
+          attachment_id: null,
+          extraction_run_id: "run-1",
+          description: "File compliance affidavit",
+          responsible_party: "Petitioner",
+          due_on: "2026-06-20",
+          timeline_text: "within two weeks from order date",
+          filing_requirement: "Affidavit",
+          court_direction: "File compliance affidavit",
+          next_action: "Prepare affidavit",
+          source_snippet: "Petitioner shall file compliance affidavit.",
+          source_page: 2,
+          source_paragraph: "5",
+          confidence_label: "medium",
+          status: "draft",
+          review_status: "review_required",
+          generated_task_id: null,
+          generated_deadline_id: null,
+          dedupe_key: "order-1:item-1",
+          rejection_reason: null,
+          waived_reason: null,
+          completed_at: null,
+          reviewed_by_membership_id: null,
+          reviewed_at: null,
+          created_at: "2026-06-06T10:00:00Z",
+          updated_at: "2026-06-06T10:00:00Z",
+        },
+        {
+          id: "item-2",
+          company_id: "company-1",
+          matter_id: "m1",
+          court_order_id: "order-1",
+          attachment_id: null,
+          extraction_run_id: "run-1",
+          description: "Rejected direction",
+          responsible_party: null,
+          due_on: null,
+          timeline_text: null,
+          filing_requirement: null,
+          court_direction: null,
+          next_action: null,
+          source_snippet: "Rejected item source.",
+          source_page: null,
+          source_paragraph: null,
+          confidence_label: "low",
+          status: "rejected",
+          review_status: "rejected",
+          generated_task_id: null,
+          generated_deadline_id: null,
+          dedupe_key: "order-1:item-2",
+          rejection_reason: "Not a direction",
+          waived_reason: null,
+          completed_at: null,
+          reviewed_by_membership_id: "member-1",
+          reviewed_at: "2026-06-06T11:00:00Z",
+          created_at: "2026-06-06T10:00:00Z",
+          updated_at: "2026-06-06T11:00:00Z",
+        },
+      ],
+    });
+
+    render(withClient(<MatterHearingsPage />));
+
+    const panel = await screen.findByTestId("matter-compliance-panel");
+    expect(await within(panel).findByText("File compliance affidavit")).toBeInTheDocument();
+    expect(within(panel).queryByText("Rejected direction")).not.toBeInTheDocument();
+
+    await userEvent.click(within(panel).getByRole("button", { name: "Confirm" }));
+    expect(updateMatterComplianceItemMock).toHaveBeenCalledWith({
+      matterId: "m1",
+      itemId: "item-1",
+      action: "confirm",
+    });
+  });
+
+  it("requires explicit accept or reject for next-hearing conflict suggestions", async () => {
+    fetchNextHearingHistoryMock.mockResolvedValue({
+      history: [
+        {
+          id: "history-1",
+          company_id: "company-1",
+          matter_id: "m1",
+          old_date: "2026-06-01",
+          new_date: "2026-06-15",
+          source: "manual",
+          source_ref_type: null,
+          source_ref_id: null,
+          changed_by_membership_id: "member-1",
+          change_reason: "Lead lawyer update",
+          manual_lock: true,
+          created_at: "2026-06-06T10:00:00Z",
+        },
+      ],
+      suggestions: [
+        {
+          id: "suggestion-1",
+          company_id: "company-1",
+          matter_id: "m1",
+          suggested_date: "2026-06-22",
+          existing_date: "2026-06-15",
+          source: "case_tracking",
+          source_ref_type: "tracked_case_update",
+          source_ref_id: "update-1",
+          confidence_label: "high",
+          reason: "Provider date conflicts with manual lock",
+          status: "pending",
+          decided_by_membership_id: null,
+          decided_at: null,
+          created_at: "2026-06-06T10:00:00Z",
+        },
+        {
+          id: "suggestion-2",
+          company_id: "company-1",
+          matter_id: "m1",
+          suggested_date: "2026-06-30",
+          existing_date: "2026-06-15",
+          source: "court_sync",
+          source_ref_type: "cause_list",
+          source_ref_id: "entry-1",
+          confidence_label: "medium",
+          reason: "Already rejected",
+          status: "rejected",
+          decided_by_membership_id: "member-1",
+          decided_at: "2026-06-06T11:00:00Z",
+          created_at: "2026-06-06T10:00:00Z",
+        },
+      ],
+    });
+
+    render(withClient(<MatterHearingsPage />));
+
+    const panel = await screen.findByTestId("next-hearing-provenance");
+    expect(
+      await within(panel).findByText(/Provider date conflicts with manual lock/i),
+    ).toBeInTheDocument();
+    expect(within(panel).queryByText(/Already rejected/i)).not.toBeInTheDocument();
+    expect(within(panel).getAllByText(/manual lock/i).length).toBeGreaterThan(0);
+
+    await userEvent.click(within(panel).getByRole("button", { name: "Accept" }));
+    expect(decideNextHearingSuggestionMock).toHaveBeenCalledWith({
+      matterId: "m1",
+      suggestionId: "suggestion-1",
+      action: "accept",
+    });
   });
 });

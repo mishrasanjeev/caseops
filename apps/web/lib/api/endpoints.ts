@@ -26,6 +26,7 @@ import {
   type CommunicationTimelineFilter,
   type CommunicationTimelineResponse,
   type ContractsList,
+  type CauseListPreviewResponse,
   type DecisionKind,
   type Draft,
   type DraftingDataExtractionResponse,
@@ -46,6 +47,10 @@ import {
   type LitigationIntelligenceReviewMutationResponse,
   type Matter,
   type MatterAuditList,
+  type MatterBillingProfile,
+  type MatterBillingProfileListResponse,
+  type MatterBillingRate,
+  type MatterComplianceListResponse,
   type MatterFileQAAnswerMode,
   type MatterFileQAAnalysisLanguage,
   type MatterFileQAExportNoteResponse,
@@ -62,6 +67,7 @@ import {
   type MatterTimelineResponse,
   type MatterTagsList,
   type MattersList,
+  type NextHearingHistoryResponse,
   type NotificationRuleListResponse,
   type NotificationRuleRecord,
   type OutsideCounselWorkspace,
@@ -77,6 +83,7 @@ import {
   type PlatformOverviewResponse,
   type PlatformProfitReportResponse,
   type PlatformProviderEventsResponse,
+  type InvoiceNumberPreviewResponse,
   type ProviderOperationActionResponse,
   type ProviderOperationListResponse,
   type ProviderReadinessListResponse,
@@ -102,6 +109,7 @@ import {
   communicationRecord,
   communicationTimelineResponse,
   contractsList,
+  causeListPreviewResponse,
   demoRequestResponse,
   draft,
   draftingDataExtractionResponse,
@@ -117,6 +125,10 @@ import {
   legalKnowledgeGraphResponse,
   matter,
   matterAuditList,
+  matterBillingProfile,
+  matterBillingProfileListResponse,
+  matterBillingRate,
+  matterComplianceListResponse,
   matterFileQAExportNoteResponse,
   matterFileQAHistoryResponse,
   matterFileQAResponse,
@@ -127,6 +139,7 @@ import {
   matterTimelineResponse,
   matterTagsList,
   mattersList,
+  nextHearingHistoryResponse,
   mockHearingListResponse,
   mockHearingSession,
   notificationRuleListResponse,
@@ -138,6 +151,7 @@ import {
   platformOverviewResponse,
   platformProfitReportResponse,
   platformProviderEventsResponse,
+  invoiceNumberPreviewResponse,
   providerOperationActionResponse,
   providerOperationListResponse,
   providerReadinessListResponse,
@@ -2307,13 +2321,28 @@ export type MatterInvoiceRecord = {
   status: InvoiceStatus;
   currency: string;
   subtotal_amount_minor: number;
+  taxable_value_minor?: number;
+  cgst_amount_minor?: number;
+  sgst_amount_minor?: number;
+  igst_amount_minor?: number;
   tax_amount_minor: number;
   total_amount_minor: number;
   amount_received_minor: number;
+  tds_deducted_minor?: number;
+  payment_adjustment_minor?: number;
   balance_due_minor: number;
   issued_on: string;
   due_on: string | null;
   client_name: string | null;
+  client_billing_name?: string | null;
+  client_billing_address?: string | null;
+  client_gstin?: string | null;
+  place_of_supply?: string | null;
+  sac_hsn?: string | null;
+  firm_legal_name?: string | null;
+  firm_address?: string | null;
+  firm_gstin?: string | null;
+  firm_pan?: string | null;
   notes: string | null;
   pine_labs_payment_url: string | null;
   pine_labs_order_id: string | null;
@@ -2331,6 +2360,8 @@ export type MatterTimeEntryRecord = {
   billable: boolean;
   rate_currency: string;
   rate_amount_minor: number | null;
+  billing_rate_id?: string | null;
+  rate_source?: string | null;
   total_amount_minor: number;
   is_invoiced: boolean;
   created_at: string;
@@ -2338,27 +2369,44 @@ export type MatterTimeEntryRecord = {
 
 export async function createMatterInvoice(input: {
   matterId: string;
-  invoiceNumber: string;
+  invoiceNumber?: string | null;
   issuedOn: string;
   dueOn?: string | null;
   clientName?: string | null;
+  clientBillingName?: string | null;
+  clientBillingAddress?: string | null;
+  clientGstin?: string | null;
+  placeOfSupply?: string | null;
+  sacHsn?: string | null;
   status?: InvoiceStatus;
-  taxAmountMinor?: number;
+  tdsDeductedMinor?: number;
+  paymentAdjustmentMinor?: number;
   notes?: string | null;
   includeUninvoicedTimeEntries?: boolean;
-  manualItems?: Array<{ description: string; amount_minor: number }>;
+  manualItems?: Array<{
+    description: string;
+    amount_minor: number;
+    category?: string | null;
+    sac_hsn?: string | null;
+  }>;
 }): Promise<MatterInvoiceRecord> {
   const data = await apiRequest<unknown>(
     `/api/matters/${input.matterId}/invoices`,
     {
       method: "POST",
       body: {
-        invoice_number: input.invoiceNumber,
+        invoice_number: input.invoiceNumber || null,
         issued_on: input.issuedOn,
         due_on: input.dueOn ?? null,
         client_name: input.clientName ?? null,
+        client_billing_name: input.clientBillingName ?? null,
+        client_billing_address: input.clientBillingAddress ?? null,
+        client_gstin: input.clientGstin ?? null,
+        place_of_supply: input.placeOfSupply ?? null,
+        sac_hsn: input.sacHsn ?? null,
         status: input.status ?? "draft",
-        tax_amount_minor: input.taxAmountMinor ?? 0,
+        tds_deducted_minor: input.tdsDeductedMinor ?? 0,
+        payment_adjustment_minor: input.paymentAdjustmentMinor ?? 0,
         notes: input.notes ?? null,
         include_uninvoiced_time_entries: input.includeUninvoicedTimeEntries ?? true,
         manual_items: input.manualItems ?? [],
@@ -4971,7 +5019,7 @@ export async function createMatter(input: {
   claim_amount_minor?: number | null;
   claim_currency?: string;
   claim_amount_notes?: string | null;
-  status: "intake" | "active" | "on_hold" | "closed";
+  status: "intake" | "active" | "on_hold" | "disposed";
 }): Promise<Matter> {
   const data = await apiRequest<unknown>("/api/matters/", {
     method: "POST",
@@ -4994,7 +5042,7 @@ export async function updateMatter(input: {
   forum_consumer_level?: string | null;
   judge_name?: string | null;
   description?: string | null;
-  status?: "intake" | "active" | "on_hold" | "closed";
+  status?: "intake" | "active" | "on_hold" | "disposed";
 }): Promise<Matter> {
   const { matterId, ...body } = input;
   const data = await apiRequest<unknown>(`/api/matters/${matterId}`, {
@@ -5002,6 +5050,204 @@ export async function updateMatter(input: {
     body,
   });
   return matter.parse(data);
+}
+
+export async function fetchMatterCompliance(
+  matterId: string,
+): Promise<MatterComplianceListResponse> {
+  const data = await apiRequest<unknown>(
+    `/api/matters/${matterId}/compliance`,
+  );
+  return matterComplianceListResponse.parse(data);
+}
+
+export async function updateMatterComplianceItem(input: {
+  matterId: string;
+  itemId: string;
+  action: "confirm" | "reject" | "waive" | "complete";
+  description?: string | null;
+  responsible_party?: string | null;
+  due_on?: string | null;
+  timeline_text?: string | null;
+  filing_requirement?: string | null;
+  court_direction?: string | null;
+  next_action?: string | null;
+  reason?: string | null;
+}): Promise<MatterComplianceListResponse> {
+  const { matterId, itemId, ...body } = input;
+  const data = await apiRequest<unknown>(
+    `/api/matters/${matterId}/compliance/${itemId}`,
+    { method: "PATCH", body },
+  );
+  return matterComplianceListResponse.parse(data);
+}
+
+export async function retryMatterOrderCompliance(input: {
+  matterId: string;
+  orderId: string;
+}): Promise<unknown> {
+  return apiRequest<unknown>(
+    `/api/matters/${input.matterId}/court-orders/${input.orderId}/compliance/retry`,
+    { method: "POST", body: {} },
+  );
+}
+
+export async function fetchNextHearingHistory(
+  matterId: string,
+): Promise<NextHearingHistoryResponse> {
+  const data = await apiRequest<unknown>(
+    `/api/matters/${matterId}/next-hearing/history`,
+  );
+  return nextHearingHistoryResponse.parse(data);
+}
+
+export async function decideNextHearingSuggestion(input: {
+  matterId: string;
+  suggestionId: string;
+  action: "accept" | "reject";
+}): Promise<NextHearingHistoryResponse> {
+  const data = await apiRequest<unknown>(
+    `/api/matters/${input.matterId}/next-hearing/suggestions/${input.suggestionId}`,
+    { method: "POST", body: { action: input.action } },
+  );
+  return nextHearingHistoryResponse.parse(data);
+}
+
+export async function fetchMatterBillingProfiles(): Promise<MatterBillingProfileListResponse> {
+  const data = await apiRequest<unknown>("/api/admin/matter-billing");
+  return matterBillingProfileListResponse.parse(data);
+}
+
+export async function createMatterBillingProfile(
+  input: Partial<MatterBillingProfile> & { name: string },
+): Promise<MatterBillingProfile> {
+  const data = await apiRequest<unknown>("/api/admin/matter-billing", {
+    method: "POST",
+    body: input,
+  });
+  return matterBillingProfile.parse(data);
+}
+
+export async function updateMatterBillingProfile(input: {
+  profileId: string;
+  body: Partial<MatterBillingProfile>;
+}): Promise<MatterBillingProfile> {
+  const data = await apiRequest<unknown>(
+    `/api/admin/matter-billing/${input.profileId}`,
+    { method: "PATCH", body: input.body },
+  );
+  return matterBillingProfile.parse(data);
+}
+
+export async function createMatterBillingRate(input: {
+  profileId: string;
+  body: {
+    rate_scope: "user" | "role" | "practice_area" | "default";
+    amount_minor_per_hour: number;
+    membership_id?: string | null;
+    role?: string | null;
+    practice_area?: string | null;
+    currency?: string;
+    effective_from?: string | null;
+    effective_to?: string | null;
+    is_active?: boolean;
+  };
+}): Promise<MatterBillingRate> {
+  const data = await apiRequest<unknown>(
+    `/api/admin/matter-billing/${input.profileId}/rates`,
+    { method: "POST", body: input.body },
+  );
+  return matterBillingRate.parse(data);
+}
+
+export async function fetchMatterInvoiceNumberPreview(
+  profileId?: string,
+): Promise<InvoiceNumberPreviewResponse> {
+  const suffix = profileId ? `?profile_id=${encodeURIComponent(profileId)}` : "";
+  const data = await apiRequest<unknown>(
+    `/api/admin/matter-billing/invoice-number-preview${suffix}`,
+  );
+  return invoiceNumberPreviewResponse.parse(data);
+}
+
+export async function downloadMatterInvoicePdf(input: {
+  matterId: string;
+  invoiceId: string;
+}): Promise<void> {
+  await downloadApiFile(
+    `/api/matters/${input.matterId}/invoices/${input.invoiceId}/download`,
+    `invoice-${input.invoiceId}.pdf`,
+  );
+}
+
+export type CauseListPreviewInput = {
+  date?: string | null;
+  date_from?: string | null;
+  date_to?: string | null;
+  court?: string | null;
+  lawyer_membership_id?: string | null;
+  practice_area?: string | null;
+  matter_status?: string | null;
+  include_disposed?: boolean;
+  source?: "hearings" | "cause_list_entries" | "both";
+  sort?: "hearing_date" | "court" | "lawyer" | "serial";
+};
+
+export async function previewCauseList(
+  input: CauseListPreviewInput,
+): Promise<CauseListPreviewResponse> {
+  const data = await apiRequest<unknown>("/api/cause-lists/preview", {
+    method: "POST",
+    body: input,
+  });
+  return causeListPreviewResponse.parse(data);
+}
+
+export async function downloadCauseListPdf(input: CauseListPreviewInput): Promise<void> {
+  await downloadApiFileWithPost("/api/cause-lists/download", input, "cause-list.pdf");
+}
+
+async function downloadApiFileWithPost(
+  path: string,
+  body: unknown,
+  fallbackName: string,
+): Promise<void> {
+  const url = `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
+  const response = await fetch(url, {
+    method: "POST",
+    credentials: "include",
+    headers: { Accept: "*/*", "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    let detail = `Download failed (${response.status}).`;
+    let parsed: unknown = null;
+    try {
+      parsed = await response.json();
+      if (
+        parsed &&
+        typeof parsed === "object" &&
+        typeof (parsed as Record<string, unknown>).detail === "string"
+      ) {
+        detail = (parsed as Record<string, string>).detail;
+      }
+    } catch {
+      /* ignore non-JSON download errors */
+    }
+    throw new ApiError(response.status, detail, parsed, null);
+  }
+  const blob = await response.blob();
+  const href = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = href;
+  a.download = downloadNameFromDisposition(
+    response.headers.get("content-disposition"),
+    fallbackName,
+  );
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(href);
 }
 
 

@@ -38,6 +38,8 @@ class TimeEntryRecord(BaseModel):
     billable: bool
     rate_currency: str
     rate_amount_minor: int | None
+    billing_rate_id: str | None = None
+    rate_source: str | None = None
     total_amount_minor: int
     is_invoiced: bool
     created_at: datetime
@@ -46,16 +48,30 @@ class TimeEntryRecord(BaseModel):
 class InvoiceManualItemCreateRequest(BaseModel):
     description: str = Field(min_length=2, max_length=500)
     amount_minor: int = Field(ge=0)
+    category: str | None = Field(default=None, max_length=80)
+    sac_hsn: str | None = Field(default=None, max_length=32)
 
 
 class InvoiceCreateRequest(BaseModel):
-    invoice_number: str = Field(min_length=2, max_length=80, pattern=r"^[A-Za-z0-9-_/]+$")
+    invoice_number: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=80,
+        pattern=r"^[A-Za-z0-9-_/]+$",
+    )
     issued_on: date
     due_on: date | None = None
     client_name: str | None = Field(default=None, min_length=2, max_length=255)
+    client_billing_name: str | None = Field(default=None, min_length=2, max_length=255)
+    client_billing_address: str | None = Field(default=None, max_length=4000)
+    client_gstin: str | None = Field(default=None, max_length=32)
+    place_of_supply: str | None = Field(default=None, max_length=120)
+    sac_hsn: str | None = Field(default=None, max_length=32)
     status: InvoiceStatusLiteral = "draft"
-    tax_amount_minor: int = Field(default=0, ge=0)
     notes: str | None = Field(default=None, max_length=4000)
+    tax_amount_minor: int = Field(default=0, ge=0)
+    tds_deducted_minor: int = Field(default=0, ge=0)
+    payment_adjustment_minor: int = Field(default=0)
     include_uninvoiced_time_entries: bool = True
     manual_items: list[InvoiceManualItemCreateRequest] = Field(default_factory=list)
 
@@ -68,6 +84,8 @@ class InvoiceLineItemRecord(BaseModel):
     duration_minutes: int | None
     unit_rate_amount_minor: int | None
     line_total_amount_minor: int
+    category: str | None = None
+    sac_hsn: str | None = None
     created_at: datetime
 
 
@@ -109,12 +127,27 @@ class InvoiceRecord(BaseModel):
     issued_by_name: str | None
     invoice_number: str
     client_name: str | None
+    client_billing_name: str | None = None
+    client_billing_address: str | None = None
+    client_gstin: str | None = None
+    place_of_supply: str | None = None
+    sac_hsn: str | None = None
+    firm_legal_name: str | None = None
+    firm_address: str | None = None
+    firm_gstin: str | None = None
+    firm_pan: str | None = None
     status: InvoiceStatusLiteral
     currency: str
     subtotal_amount_minor: int
+    taxable_value_minor: int = 0
+    cgst_amount_minor: int = 0
+    sgst_amount_minor: int = 0
+    igst_amount_minor: int = 0
     tax_amount_minor: int
     total_amount_minor: int
     amount_received_minor: int
+    tds_deducted_minor: int = 0
+    payment_adjustment_minor: int = 0
     balance_due_minor: int
     issued_on: date
     due_on: date | None
