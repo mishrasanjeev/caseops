@@ -82,6 +82,21 @@ def _audit_actions(company_id: str) -> list[AuditEvent]:
         )
 
 
+def _password_reset_token_count(membership_id: str) -> int:
+    factory = get_session_factory()
+    with factory() as session:
+        return len(
+            list(
+                session.scalars(
+                    select(AccountSetupToken).where(
+                        AccountSetupToken.membership_id == membership_id,
+                        AccountSetupToken.purpose == "password_reset",
+                    )
+                )
+            )
+        )
+
+
 def test_employee_create_uses_setup_token_hash_and_audits(
     client: TestClient,
 ) -> None:
@@ -166,6 +181,55 @@ def test_debug_tokens_are_only_exposed_in_local_or_test_envs(
     )
     assert reset_start.status_code == 200, reset_start.text
     assert bool(reset_start.json()["debug_token"]) is expect_debug_token
+
+
+def test_password_reset_start_is_anti_enumeration_in_production_like_env(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    boot = _bootstrap(
+        client,
+        slug="public-reset",
+        email="owner@public-reset.example",
+    )
+    monkeypatch.setenv("CASEOPS_ENV", "production")
+    monkeypatch.setenv("CASEOPS_AUTO_MIGRATE", "false")
+    get_settings.cache_clear()
+    try:
+        known = client.post(
+            "/api/auth/password-reset/start",
+            json={
+                "company_slug": "public-reset",
+                "email": "owner@public-reset.example",
+            },
+        )
+        unknown_email = client.post(
+            "/api/auth/password-reset/start",
+            json={
+                "company_slug": "public-reset",
+                "email": "missing@public-reset.example",
+            },
+        )
+        unknown_company = client.post(
+            "/api/auth/password-reset/start",
+            json={
+                "company_slug": "missing-public-reset",
+                "email": "owner@public-reset.example",
+            },
+        )
+    finally:
+        get_settings.cache_clear()
+
+    expected = {"delivered": True, "debug_token": None}
+    assert known.status_code == 200, known.text
+    assert unknown_email.status_code == 200, unknown_email.text
+    assert unknown_company.status_code == 200, unknown_company.text
+    assert known.json() == expected
+    assert unknown_email.json() == expected
+    assert unknown_company.json() == expected
+
+    actions = [event.action for event in _audit_actions(str(boot["company"]["id"]))]
+    assert actions.count("employee.password_reset_token.created") == 1
 
 
 def test_account_setup_complete_is_single_use_and_enables_login(
@@ -416,6 +480,130 @@ def test_employee_update_reset_and_password_reset_start_are_secure(
     assert "employee.updated" in actions
     assert "employee.password_reset_token.created" in actions
     assert "employee.password_reset.completed" in actions
+
+
+def test_self_service_password_reset_consumes_token_and_revokes_old_sessions(
+    client: TestClient,
+) -> None:
+    boot = _bootstrap(
+        client,
+        slug="self-reset",
+        email="owner@self-reset.example",
+    )
+    owner_token = str(boot["access_token"])
+    created = _create_employee(
+        client,
+        owner_token,
+        email="self-reset@lws5.example",
+        full_name="Self Reset User",
+    )
+    setup_token = created["setup"]["debug_token"]
+    setup = client.post(
+        "/api/auth/account-setup/complete",
+        json={"token": setup_token, "password": "Original123!"},
+    )
+    assert setup.status_code == 200, setup.text
+    old_token = setup.json()["access_token"]
+    client.cookies.clear()
+    assert (
+        client.get("/api/auth/me", headers=auth_headers(old_token)).status_code
+        == 200
+    )
+
+    start = client.post(
+        "/api/auth/password-reset/start",
+        json={
+            "company_slug": "self-reset",
+            "email": "self-reset@lws5.example",
+        },
+    )
+    assert start.status_code == 200, start.text
+    reset_token = start.json()["debug_token"]
+    assert reset_token
+
+    complete = client.post(
+        "/api/auth/password-reset/complete",
+        json={"token": reset_token, "password": "NewPassword123!"},
+    )
+    assert complete.status_code == 200, complete.text
+    new_token = complete.json()["access_token"]
+
+    replay = client.post(
+        "/api/auth/password-reset/complete",
+        json={"token": reset_token, "password": "NewPassword123!"},
+    )
+    assert replay.status_code == 400
+    client.cookies.clear()
+    assert (
+        client.get("/api/auth/me", headers=auth_headers(old_token)).status_code
+        == 401
+    )
+    assert (
+        client.get("/api/auth/me", headers=auth_headers(new_token)).status_code
+        == 200
+    )
+    old_login = client.post(
+        "/api/auth/login",
+        json={
+            "email": "self-reset@lws5.example",
+            "password": "Original123!",
+            "company_slug": "self-reset",
+        },
+    )
+    assert old_login.status_code == 401
+    new_login = client.post(
+        "/api/auth/login",
+        json={
+            "email": "self-reset@lws5.example",
+            "password": "NewPassword123!",
+            "company_slug": "self-reset",
+        },
+    )
+    assert new_login.status_code == 200, new_login.text
+
+    actions = [event.action for event in _audit_actions(str(boot["company"]["id"]))]
+    assert "employee.password_reset_token.created" in actions
+    assert "employee.password_reset.completed" in actions
+
+
+def test_inactive_user_self_service_password_reset_does_not_issue_token(
+    client: TestClient,
+) -> None:
+    boot = _bootstrap(
+        client,
+        slug="inactive-reset",
+        email="owner@inactive-reset.example",
+    )
+    owner_token = str(boot["access_token"])
+    created = _create_employee(
+        client,
+        owner_token,
+        email="inactive-reset@lws5.example",
+        full_name="Inactive Reset User",
+    )
+    membership_id = created["employee"]["membership_id"]
+    deactivate = client.patch(
+        f"/api/companies/current/employees/{membership_id}",
+        headers=auth_headers(owner_token),
+        json={"employment_status": "inactive"},
+    )
+    assert deactivate.status_code == 200, deactivate.text
+
+    before_count = _password_reset_token_count(str(membership_id))
+    start = client.post(
+        "/api/auth/password-reset/start",
+        json={
+            "company_slug": "inactive-reset",
+            "email": "inactive-reset@lws5.example",
+        },
+    )
+    assert start.status_code == 200, start.text
+    assert start.json()["delivered"] is True
+    assert start.json()["debug_token"] is None
+    assert _password_reset_token_count(str(membership_id)) == before_count
+
+    actions = [event.action for event in _audit_actions(str(boot["company"]["id"]))]
+    assert "employee.password_reset_token.created" not in actions
 
 
 def test_password_reset_token_consume_is_atomic_under_parallel_use(

@@ -58,6 +58,25 @@ export async function fetchAuthContext(
   return apiRequest<AuthContext>("/api/auth/me", { token });
 }
 
+export type PasswordResetStartResponse = {
+  delivered: boolean;
+  debug_token?: string | null;
+};
+
+export async function startPasswordReset(input: {
+  companySlug: string;
+  email: string;
+}): Promise<PasswordResetStartResponse> {
+  return apiRequest<PasswordResetStartResponse>("/api/auth/password-reset/start", {
+    method: "POST",
+    body: {
+      company_slug: input.companySlug,
+      email: input.email,
+    },
+    token: null,
+  });
+}
+
 // BUG-033 (Hari 2026-05-09): consume an `account-setup` token issued
 // by the employee onboarding mailer. Wire identical to ``signIn`` —
 // the backend issues the same session cookies on success, so the

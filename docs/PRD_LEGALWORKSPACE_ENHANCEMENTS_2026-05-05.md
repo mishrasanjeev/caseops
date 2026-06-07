@@ -278,7 +278,7 @@ Statuses use the CaseOps roadmap vocabulary:
 | LW-022 | Custom roles | Admin/Teams; US-040, US-041, FT-059, SEC-authorization tests | Implemented in LW-S7 repair | Revoked/inactive/missing custom roles fail closed; same-second session invalidation and delegable-capability guards are covered by targeted tests. |
 | LW-023 | Permission enforcement in API and UI | Admin/Teams; US-040, US-041, FT-059 through FT-063 | Implemented in LW-S7 repair | Server-resolved capabilities drive route guards and sidebar navigation; owner-only, non-delegable, self-assignment, and self-unassignment escalation paths remain blocked. |
 | LW-024 | Employee lifecycle/offboarding | Admin/Teams/Audit; US-040, US-041, FT-059 through FT-063 | Implemented in LW-S8 | Offboarding preview/commit covers supported reassignment, inactive/session revocation, last-owner guard, tenant-only active replacement, ethical-wall blockers, and audit. |
-| LW-025 | Password reset, first-login setup, onboarding notifications | Admin/Email templates; US-040, US-041, FT-059, FT-062 | Implemented with LW-S5 delivery caveat | Single-use hashed setup/reset tokens, first-login setup completion, reset completion, resend/reset admin actions, safe delivery status, and mailer hooks are implemented; actual outbound delivery depends on configured mail provider/templates. |
+| LW-025 | Password reset, first-login setup, onboarding notifications | Admin/Email templates; US-040, US-041, FT-059, FT-062 | Implemented with LW-S5 delivery caveat; self-service request UX added 2026-06-07 | Single-use hashed setup/reset tokens, first-login setup completion, reset completion, resend/reset admin actions, visible `/sign-in` forgot-password link, `/account/forgot-password` request form, safe delivery status, and mailer hooks are implemented; actual outbound delivery depends on configured mail provider/templates. |
 | LW-026 | Employee audit and login activity | Admin/Audit; US-041, FT-059 through FT-063 | Implemented in LW-S8 | Employee admin history reads audit events for create/update/setup/reset/role/custom-role/login/deactivate/offboard where rows exist. |
 
 ## 8. Additive Story and Test IDs
@@ -1366,6 +1366,10 @@ Rules:
 - Store only hash at rest.
 - Short TTL, recommended 24 hours for account setup and 30 to 60 minutes for password reset unless product decides otherwise.
 - Do not email raw passwords in production.
+- Self-service password reset requests must not confirm whether the workspace
+  or email exists.
+- Local/test debug tokens may support automated verification, but browser UI
+  must never render them.
 
 ### 19.5 API
 
@@ -1381,6 +1385,10 @@ Add or update:
 - `POST /api/auth/password-reset/start`
 - `POST /api/auth/password-reset/complete`
 
+Status note 2026-06-07: the backend reset start/complete endpoints existed
+before this update; `/account/forgot-password` and the visible `/sign-in`
+forgot-password link now provide the missing self-service request UX.
+
 If existing `companies.py` user endpoints are reused, keep backward compatibility and add employee-specific schemas.
 
 ### 19.6 Frontend
@@ -1394,6 +1402,8 @@ Add:
 - Role selector
 - Status selector
 - Reset password action
+- Self-service `/account/forgot-password` request page with company slug and
+  work email fields, generic success copy, and resend state
 - Resend setup action
 - Deactivate/offboard action
 
@@ -2069,6 +2079,10 @@ Audit at minimum:
 - Invalidate token on use.
 - Rate-limit reset flows if the auth stack supports it.
 - Audit token creation and use without logging token values.
+- Unknown company/email responses must look identical to known-account
+  responses on public password reset start.
+- Inactive users must not receive usable reset links.
+- Successful password reset must revoke old sessions for the membership.
 
 ### 26.5 Bulk Import Safety
 

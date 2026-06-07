@@ -33,6 +33,15 @@ It supports Indian litigation and legal-operations workflows: BNS, BNSS, BSA, Cr
 - Matter-level ACLs and ethical walls enforce tenant isolation on route/query/write boundaries
 - Next-hearing provenance records source, source reference, actor, old date, new date, reason, timestamp, manual lock, and conflict suggestions
 
+### 1a. Sign-in and password reset
+
+- /sign-in includes a visible "Forgot password?" link that preserves typed workspace slug and email in encoded query parameters
+- /account/forgot-password accepts company slug and work email, validates them client-side, and always shows generic anti-enumeration success copy
+- /api/auth/password-reset/start is public, rate-limited, and returns the same public shape for known and unknown accounts in production-like environments
+- Reset links point to /account/reset-password?token=..., are single-use, expire after 60 minutes, and never contain or email a raw password
+- Reset completion stores the new session through the existing auth response/cookie path and revokes older sessions for that membership
+- Local/test debug tokens are for automated verification only and are not rendered in browser UI
+
 ### 2. Tracked case refresh
 
 - Scheduled production refresh is opt-in by default: only explicitly tracked/bookmarked cases are refreshed
@@ -137,6 +146,7 @@ It supports Indian litigation and legal-operations workflows: BNS, BNSS, BSA, Cr
 - Home: ${siteConfig.url}
 - User guide: ${siteConfig.url}/guide
 - Sign in: ${siteConfig.url}/sign-in
+- Forgot password: ${siteConfig.url}/account/forgot-password
 
 ## Contact
 

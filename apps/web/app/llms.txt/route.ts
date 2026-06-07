@@ -28,6 +28,7 @@ const body = `# CaseOps - Indian legal operating system
 - **Research**: multi-tenant authority corpus, structured extraction, reranking, and tenant-private annotations
 - **Outside counsel**: panel management, spend logging, and counsel recommendations per matter
 - **Matter billing**: law-firm billing profiles, rates, fixed fees, milestones, expenses, retainers/advances, firm/client GST fields, place of supply, SAC/HSN/service classification, CGST/SGST/IGST split, TDS adjustments, amount paid/outstanding, and server-rendered invoice PDFs
+- **Access recovery**: /sign-in links to /account/forgot-password for anti-enumeration reset requests; reset completion uses single-use 60-minute links and never emails raw passwords
 
 ## Safety limits
 
@@ -41,6 +42,7 @@ const body = `# CaseOps - Indian legal operating system
 
 - ${siteConfig.contact.email}
 - Sign-in / try the product: ${siteConfig.url}/sign-in
+- Forgot password: ${siteConfig.url}/account/forgot-password
 `;
 
 export function GET() {

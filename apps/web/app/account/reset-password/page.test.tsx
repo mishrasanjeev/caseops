@@ -74,6 +74,9 @@ describe("ResetPasswordPage", () => {
     expect(
       screen.getByText(/password-reset link is missing a token/i),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Request a new reset link/i }),
+    ).toHaveAttribute("href", "/account/forgot-password");
     expect(screen.queryByTestId("reset-password-submit")).not.toBeInTheDocument();
     expect(completePasswordResetMock).not.toHaveBeenCalled();
   });
@@ -160,6 +163,9 @@ describe("ResetPasswordPage", () => {
     expect(toastError).toHaveBeenCalledWith(
       "Invalid or expired password-reset token.",
     );
+    expect(
+      screen.getByRole("link", { name: /Request a new reset link/i }),
+    ).toHaveAttribute("href", "/account/forgot-password");
     expect(storeSessionMock).not.toHaveBeenCalled();
     expect(routerReplaceMock).not.toHaveBeenCalled();
   });

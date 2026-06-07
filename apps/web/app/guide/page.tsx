@@ -219,6 +219,15 @@ export default function GuidePage() {
                         become the first admin.
                       </>,
                       <>
+                        <strong>Recover access.</strong> Use{" "}
+                        <a className="underline" href="/account/forgot-password">
+                          /account/forgot-password
+                        </a>{" "}
+                        from the sign-in page to request a single-use reset link. The
+                        request message is intentionally generic so it never confirms
+                        whether a workspace or email exists.
+                      </>,
+                      <>
                         <strong>Invite colleagues.</strong> From <em>Admin → Members</em>,
                         send invitations with a role — Partner, Associate, General Counsel,
                         Legal Ops or Reviewer.

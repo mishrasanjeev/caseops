@@ -23,6 +23,45 @@ When a channel's adapter is disabled or unconfigured, the worker
 `last_error` pointing the operator at the env vars to set. Flipping
 the gate later drains the backlog without re-scheduling.
 
+### 1.1 Production Cloud Run job requirements
+
+The production scheduler drains email reminders through
+`caseops-reminders-job` on the `caseops-reminders-cadence` Cloud
+Scheduler trigger. The job must use the current API image and these
+settings:
+
+```text
+CASEOPS_ENV=production
+CASEOPS_AUTO_MIGRATE=false
+CASEOPS_HEARING_REMINDERS_ENABLED=true
+CASEOPS_SENDGRID_SENDER_EMAIL=hearings@caseops.ai
+CASEOPS_SENDGRID_SENDER_NAME=CaseOps
+CASEOPS_DATABASE_URL=secret:caseops-database-url:latest
+CASEOPS_AUTH_SECRET=secret:caseops-auth-secret:latest
+CASEOPS_SENDGRID_API_KEY=secret:caseops-sendgrid-api-key:latest
+```
+
+Do not store a literal database URL on the job. Password rotation will
+break the worker unless `CASEOPS_DATABASE_URL` points at Secret
+Manager. After any API image deploy or secret rotation, verify the job:
+
+```bash
+gcloud run jobs execute caseops-reminders-job \
+  --region asia-south1 --wait
+
+gcloud logging read \
+  'resource.type="cloud_run_job" AND resource.labels.job_name="caseops-reminders-job"' \
+  --freshness=10m --limit=20 \
+  --format='value(timestamp,severity,textPayload,jsonPayload.message)'
+```
+
+Expected result: the execution completes successfully, the container
+exits `0`, and due rows either remain queued for valid provider-gating
+reasons or SendGrid returns `202 Accepted`. For a true delivery smoke,
+use only a temporary workspace and a recipient controlled by the
+operator, then confirm the reminder row reaches `delivered` through the
+SendGrid webhook.
+
 ---
 
 ## 2. Enabling Twilio SMS
