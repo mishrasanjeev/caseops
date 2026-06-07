@@ -3,6 +3,7 @@ import {
   Briefcase,
   FileSignature,
   Gavel,
+  IndianRupee,
   ListTodo,
   Scale,
   ShieldCheck,
@@ -17,7 +18,7 @@ const features = [
   {
     icon: Briefcase,
     title: "Matter Cockpit",
-    body: "A single workspace per matter — parties, stage, documents, hearings, drafts, billing, and audit — always in sync.",
+    body: "A single workspace per matter - parties, stage, documents, hearings, drafts, billing, Dispose status, next-hearing provenance, and audit.",
   },
   {
     icon: BookOpenText,
@@ -31,13 +32,13 @@ const features = [
   },
   {
     icon: Gavel,
-    title: "Hearing Prep",
-    body: "Auto-compile chronologies, proceeding-sheet directions, affidavit prep, mock-hearing prompts, hearing-coach feedback, and oral points before a listing.",
+    title: "Hearing Prep & Cause Lists",
+    body: "Compile hearing packs and generate date-wise cause-list PDFs with missing-field warnings, overrides, printable court tables, and download audit.",
   },
   {
     icon: Sparkles,
-    title: "Litigation Intelligence",
-    body: "Review proceeding signals, affidavit gaps, mock-hearing feedback, bench context, calibrated historical patterns, and knowledge-graph links with sources attached.",
+    title: "Court-Order Compliance",
+    body: "Extract source-backed compliance items from orders and uploads, keep them review-required by default, and activate tasks or deadlines only after confirmation.",
   },
   {
     icon: Scale,
@@ -47,12 +48,17 @@ const features = [
   {
     icon: Users,
     title: "Outside Counsel & Spend",
-    body: "Assign, evaluate, and budget outside counsel. Full fee-collection rail with Pine Labs built in.",
+    body: "Assign, evaluate, and budget outside counsel with matter-scoped spend, realization, panel status, and audited invoice review.",
   },
   {
     icon: ListTodo,
-    title: "Legal Ops & Intake",
-    body: "Route incoming requests, standardize intake, and keep GC dashboards honest with structured workflows.",
+    title: "Case Tracking & Ops",
+    body: "Refresh explicitly tracked cases in the 4-6 PM IST window, surface skipped/blocked/provider-disabled states, and resume backlog fairly by tenant.",
+  },
+  {
+    icon: IndianRupee,
+    title: "Matter Billing India",
+    body: "Configure law-firm profiles, rates, fixed fees, milestones, expenses, GST splits, TDS adjustments, invoice sequencing, and server-rendered PDFs.",
   },
   {
     icon: ShieldCheck,

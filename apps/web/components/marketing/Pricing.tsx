@@ -14,8 +14,8 @@ const tiers = [
     description: "For solo practitioners who want one tool that actually runs the practice.",
     features: [
       "Matter, hearing, and drafting workspace",
-      "Case diary and cause-list sync",
-      "Pine Labs payment collection",
+      "Tracked case diary and cause-list PDFs",
+      "Matter invoice PDFs and payment adjustments",
       "E-mail + knowledge base support",
     ],
     cta: { label: "Join waitlist", href: "#cta" },
@@ -28,8 +28,9 @@ const tiers = [
     description: "For mid-sized and litigation-heavy Indian law firms.",
     features: [
       "Everything in Solo, for the whole firm",
-      "Recommendations, authorities, and playbooks",
+      "Compliance review, recommendations, authorities, and playbooks",
       "Matter-level ethical walls and audit",
+      "Admin matter billing profiles and rate cards",
       "Priority support with a named owner",
     ],
     cta: { label: "Book a demo", href: "#cta" },

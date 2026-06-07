@@ -2,7 +2,7 @@ export const siteConfig = {
   name: "CaseOps",
   tagline: "The matter-native legal operating system.",
   description:
-    "CaseOps unifies matter management, legal research, drafting, hearing prep, contracts, outside counsel, and billing into one citation-grounded workspace for Indian law firms and corporate legal teams.",
+    "CaseOps unifies matter management, legal research, drafting, tracked case refresh, court-order compliance review, cause-list PDFs, contracts, outside counsel, and India-ready matter billing into one citation-grounded workspace for Indian law firms and corporate legal teams.",
   url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://caseops.ai",
   appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "https://caseops.ai/app",
   keywords: [
@@ -13,6 +13,11 @@ export const siteConfig = {
     "legal research platform",
     "AI legal drafting",
     "hearing preparation",
+    "court order compliance",
+    "case tracking India",
+    "cause list PDF",
+    "matter billing India",
+    "GST invoice legal software",
     "contract review",
     "legal operations",
     "general counsel software",
@@ -46,7 +51,10 @@ export const siteConfig = {
         { label: "Research", href: "#product" },
         { label: "Drafting Studio", href: "#product" },
         { label: "Hearing Prep", href: "#product" },
+        { label: "Case tracking", href: "#product" },
+        { label: "Cause lists", href: "#product" },
         { label: "Contracts", href: "#product" },
+        { label: "Matter billing", href: "#product" },
         { label: "Recommendations", href: "#product" },
       ],
       Company: [

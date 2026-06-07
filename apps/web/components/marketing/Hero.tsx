@@ -6,9 +6,10 @@ import { Container } from "@/components/ui/Container";
 
 const proofPoints = [
   "Citation-grounded AI",
-  "Source-backed litigation intelligence",
+  "Review-first court-order compliance",
+  "Tracked case refresh window",
   "Multi-tenant by design",
-  "Built for Indian courts",
+  "India-ready matter billing",
 ];
 
 export function Hero() {
@@ -32,9 +33,10 @@ export function Hero() {
         </h1>
 
         <p className="mt-6 max-w-2xl text-pretty text-lg leading-relaxed text-[var(--color-mute)] md:text-xl">
-          Run every matter, drafting pass, hearing, contract, invoice, and review queue from
-          a single matter-graph workspace. Grounded in statutes, orders, affidavits,
-          judgments, and your own precedents - never guesses.
+          Run every matter, tracked case update, court-order compliance item, cause-list PDF,
+          drafting pass, hearing, contract, invoice, and review queue from a single
+          matter-graph workspace. Grounded in statutes, orders, affidavits, judgments, and
+          your own precedents - never guesses.
         </p>
 
         <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row">
@@ -79,7 +81,7 @@ function HeroPreview() {
             <span className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
           </div>
           <div className="ml-3 flex-1 rounded-md bg-[var(--color-bg-2)] px-3 py-1 text-left text-xs text-[var(--color-mute-2)]">
-            caseops.ai / workspace / matters / arbitral-award-challenge
+            caseops.ai / app / matters / arbitral-award-challenge
           </div>
         </div>
 
@@ -116,33 +118,35 @@ function HeroPreview() {
                 Arbitration
               </span>
               <span>Delhi High Court • OMP (COMM) 314/2025</span>
-              <span className="ml-auto text-[var(--color-ink-2)]">Next hearing — 22 Apr</span>
+              <span className="ml-auto text-[var(--color-ink-2)]">
+                Next hearing — 22 Apr · source: tracked case
+              </span>
             </div>
 
             <h3 className="mt-3 text-lg font-semibold tracking-tight text-[var(--color-ink)]">
-              Recommendation — grounds for setting aside under §34
+              Compliance review — directions from last order
             </h3>
             <p className="mt-1 text-sm leading-relaxed text-[var(--color-mute)]">
-              Three arguable grounds surfaced from the award and prior authorities. Review
-              required before filing.
+              Three source-backed directions were extracted from the order. Review required
+              before tasks or deadlines become active.
             </p>
 
             <div className="mt-4 grid gap-3 md:grid-cols-3">
               {[
                 {
-                  title: "Patent illegality",
-                  note: "Ssangyong Engineering v. NHAI (2019) supports",
+                  title: "Reply due",
+                  note: "Source snippet: respondents to file reply within 10 days",
                   confidence: "High",
                 },
                 {
-                  title: "Violation of natural justice",
-                  note: "Procedural record is thin — needs evidence",
+                  title: "Rejoinder",
+                  note: "Depends on reply filing date; deadline needs review",
                   confidence: "Medium",
                 },
                 {
-                  title: "Public policy conflict",
-                  note: "Weak on current precedent; not recommended",
-                  confidence: "Low",
+                  title: "Next listing",
+                  note: "Court 7, item 14 imported into cause-list preview",
+                  confidence: "High",
                 },
               ].map((opt) => (
                 <div
@@ -165,8 +169,8 @@ function HeroPreview() {
             </div>
 
             <div className="mt-4 rounded-lg border border-dashed border-[var(--color-line)] bg-[var(--color-bg)] p-3 text-xs text-[var(--color-mute)]">
-              <span className="font-semibold text-[var(--color-ink-2)]">Assumptions</span> —
-              seat at Delhi; award pronounced 12 Feb 2026; limitation runs to 12 May 2026.
+              <span className="font-semibold text-[var(--color-ink-2)]">Review controls</span>{" "}
+              — confirm, edit, reject, waive, or create draft task/deadline with audit.
             </div>
           </div>
         </div>

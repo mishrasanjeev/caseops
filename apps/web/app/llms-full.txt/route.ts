@@ -2,106 +2,146 @@ import { NextResponse } from "next/server";
 
 import { siteConfig } from "@/lib/site";
 
-// /llms-full.txt is the "full-content" companion to /llms.txt —
-// LLM crawlers that support it ingest a one-shot markdown dump of
-// the site's public surface so they can answer "what does CaseOps
-// do?" without stitching together fragments of HTML.
-//
-// This is the public-marketing content. The authenticated product
-// surface (/app/*) is disallowed in robots.txt and never appears
-// here. If we add more public docs (blog, case studies, docs site),
-// we concatenate them here.
+// /llms-full.txt is the full-content companion to /llms.txt. It is
+// public marketing and guide content only; authenticated /app/* data is
+// disallowed in robots.txt and never appears here.
 
-const body = `# CaseOps — Indian Legal Operating System
+const body = `# CaseOps - Indian Legal Operating System
 
 ${siteConfig.description}
 
 ## What CaseOps is
 
-CaseOps is a matter-native legal operating system built for Indian legal practice — not a generic workflow tool or a retrofitted US-first product. Every surface respects the Indian statute stack (BNS, BNSS, BSA, CrPC, CPC, Arbitration Act, SRA, Companies Act), the Indian forum hierarchy (Supreme Court → High Court → District Court → Tribunals), and the Indian docketing conventions (SLP / C.A. / W.P. / Arb.P. / Comm. / FAO / RFA numbering).
+CaseOps is a matter-native legal operating system built for Indian legal practice, not a generic workflow tool or a retrofitted US-first product. The system is organized around matters, tenants, source-backed legal work, and auditable review.
 
-The product sits next to Bloomberg Terminal and Linear in tone — dense, keyboard-first, built for lawyers and legal ops teams who run real caseloads, not a consumer SaaS chrome.
+It supports Indian litigation and legal-operations workflows: BNS, BNSS, BSA, CrPC, CPC, Arbitration Act, Companies Act and other Indian sources; Supreme Court, High Courts, lower courts, tribunals and forums where lawful source access and source-quality proof exist; and Indian billing fields for law-firm invoices.
 
-## Who it's for
+## Who it is for
 
-- **Indian law firms** (solo to mid-size): litigation teams that need faster research, drafting, hearing prep, and billing.
-- **Corporate legal / General Counsel** teams: contract review, intake triage from business stakeholders, outside-counsel panel management, compliance.
-- **Litigation partners** who want AI assistance they can actually cite in court without inventing authorities.
+- **Indian law firms**: solo to mid-size litigation teams that need matter management, tracked case updates, court-order compliance review, drafting, hearing prep, cause lists, and matter billing.
+- **Corporate legal / General Counsel teams**: intake, contracts, obligation tracking, outside-counsel spend, panel management, and auditable matter review.
+- **Litigation partners**: source-backed AI assistance with lawyer review, no invented facts, no invented authorities, and no unsupported outcome claims.
 
-## The core workflows it supports
+## Core workflows
 
 ### 1. Matter management
-- Intake queue (GC-facing form or direct lawyer entry) → triage → matter
-- Matter workspace with tabs for documents, drafts, hearings, recommendations, billing, audit trail
-- Matter-level ACL and ethical walls — a partner representing party A can be locked out of party B's matter
-- Team scoping (Sprint 8c) — work visible only to assigned team
-- Court-sync adapters: live cause-list + recent-orders for Delhi HC, Bombay HC, Madras HC, Karnataka HC, Telangana HC, Supreme Court
 
-### 2. Drafting (AI-assisted, citation-grounded)
-- Supported draft types: bail application (regular + anticipatory), quashing petition (BNSS s.528 / Article 226), civil review application, arbitration submission (s.34 / s.11), reply to notice, and more rolling in
-- ABSOLUTE RULES enforced in every generation: no invented facts, no invented authorities, BNS vs BNSS disambiguation, placeholder-markers for missing matter data
-- Multi-query retrieval for bail matters (triple-test, parity, custody-duration queries)
-- Post-generation validators: statute-confusion check, UUID-leakage check, citation-coverage check, findings surfaced on the draft
-- Draft lifecycle: create → generate → submit → request changes → approve → finalize (DOCX export gated on partner approval)
+- Intake queue to matter creation
+- Matter cockpit with Overview, Documents, Drafts, Compliance, Hearings, Cause list, Research, Billing, Team, and Audit
+- Lifecycle terminology uses **Dispose** in the UI and **disposed** in API responses for completed matters
+- Legacy **closed** input is normalized to **disposed** during the compatibility window
+- Matter-level ACLs and ethical walls enforce tenant isolation on route/query/write boundaries
+- Next-hearing provenance records source, source reference, actor, old date, new date, reason, timestamp, manual lock, and conflict suggestions
 
-### 3. Research
-- 14K+ indexed SC + HC judgments as of April 2026, scaling to 500K+ through 2026
-- Voyage voyage-4-large embeddings (1024 dims, 32K context, legal-tuned)
-- pgvector HNSW for sub-second retrieval at 10M-chunk scale
-- Layer-2 structured extraction: per-chunk role (facts / arguments / reasoning / ratio / obiter / directions / procedural / metadata), doc-level judges, parties, advocates, sections cited, outcome
-- Cross-encoder reranker (fastembed + Jina reranker v1 tiny)
-- Per-tenant authority annotations (private notes, flags, tags) layered over the shared corpus
+### 2. Tracked case refresh
 
-### 4. Hearing prep
-- Pack generation tied to a specific hearing date + matter
-- Seven item types: chronology, last-order summary, pending-compliance, issues likely to be framed, anticipated opposition, authority cards, oral-submission notes
-- Every authority card carries a source_ref — provenance is non-negotiable
+- Scheduled production refresh is opt-in by default: only explicitly tracked/bookmarked cases are refreshed
+- Eligible matters with CNR or case numbers are not automatically refreshed unless a tenant admin enables auto-tracking later
+- Default settings: CASEOPS_CASE_TRACKING_DAILY_WINDOW_START=16:00, CASEOPS_CASE_TRACKING_DAILY_WINDOW_END=18:00, CASEOPS_CASE_TRACKING_DAILY_TIMEZONE=Asia/Kolkata
+- The scheduled job should start in the 4 PM-6 PM IST window, preferably around 4:30 PM IST
+- No new provider calls start after 6 PM IST unless an operator uses an explicit force/local override
+- Unfinished backlog persists and resumes on the next run
+- Per-tenant batching prevents one tenant consuming the whole window
+- Disabled or misconfigured providers make no external calls and record safe skipped/blocked state
+- Provider operations surfaces attempted, refreshed, changed, skipped, blocked, provider-call, error, run-window, started, ended, partial, and backlog metrics
 
-### 5. Recommendations
-- Four types: forum (which court to file in), authority (best precedent), remedy, next-best-action
-- All options include rationale, confidence, assumptions, missing facts
-- Partner review required by default
+### 3. Court-order compliance extraction
 
-### 6. Outside counsel
-- Panel profiles with jurisdictions, practice areas, panel status
-- Assignments and spend logging per matter
-- Ranked recommendations: jurisdiction match + practice-area fit + prior spend + panel priority
+- Supported sources: auto-fetched lawful adapter orders, manually created court orders, and uploaded order documents
+- Manual uploads accept PDFs, DOC/DOCX, and images only after file-safety checks and text/OCR availability
+- OCR and extraction have pending, failed, retry, and redacted-error states
+- Deterministic proceeding extraction runs first
+- AI extraction runs only when tenant AI policy allows it
+- AI outputs must pass JSON schema validation and dedupe
+- Compliance items are review-required by default and include description, responsible party, due_on, timeline text, filing requirement, court direction, next action, source order/attachment, source snippet/page/paragraph, confidence label, status, review status, generated task/deadline ids, and dedupe key
+- Generated tasks/deadlines stay draft or review-linked unless a tenant/admin setting enables auto-activation
+- Lawyers can confirm, edit, reject, waive, complete, or retry items
+- Rejected items do not appear as active compliance
+- Every AI run creates model-run and audit metadata without exposing raw prompts, raw LLM responses, provider tokens, raw provider payloads, internal costs, or tenant-private data to unauthorized users
 
-### 7. Contracts
-- Clause + obligation extraction (LLM-assisted, citation to document lines)
-- Playbook comparison (rule match + deviation flagging)
-- DOCX redline diff extraction (insertion / deletion / formatting with author + timestamp)
+### 4. Deadline and hearing caution
 
-### 8. Billing
-- Invoices (draft → issued → paid → void) with matter-scoped line items
-- Time entries linked to invoices
-- Pine Labs payment-link generation with sync-back
+- Deadline calculations default to calendar-day convention shown to the user
+- Court holidays are not assumed unless a court calendar exists
+- Ambiguous phrases such as "from today", "within two weeks", "next date", or missing order dates remain review-required
+- Every computed date shows source snippet and confidence
+- CaseOps never invents due dates
+- Manual next-hearing lock prevents overwrite unless a user accepts a suggestion
+- High-confidence future provider dates may update only when there is no conflict
+- Past dates do not replace future dates unless final/disposed status is explicit
 
-### 9. Governance
-- Audit events on every material mutation (matter, draft, hearing pack, intake, approval, external share)
-- Async audit export (JSONL + CSV)
-- Ethical walls + matter ACL enforced at the API layer, not UI only
-- Tenant isolation verified by continuous tests
+### 5. Cause-list generation
 
-## What CaseOps is NOT
+- Route: /app/cause-list
+- API: /api/cause-lists preview and PDF download
+- Filters: date or date range, court, lawyer/assignee, practice area, matter status, include/exclude disposed matters, source, and sort
+- Required output: serial number, file number, court name, case number, case title, judge name, court number, item number, lawyers appearing, hearing date, and missing-field warnings
+- Missing values display "Not available" or a professional warning in preview
+- Manual or derived overrides are available before PDF generation where appropriate
+- PDF is A4 portrait, black-and-white printable, with firm header/logo where configured, generated timestamp, filters, repeated table header, pagination, and page number footer
+- Downloads are audited with filters, row count, actor, timestamp, checksum, and file name
 
-- Not a generic AI wrapper. Every answer is grounded in a retrieved Indian authority or flagged as assumption.
-- Not a replacement for a lawyer. Substantive outputs require partner review; the workflow is built around that.
-- Not a training set. Customer matter data is never used for cross-tenant training.
-- Not a black-box judge-scoring tool. The product does not rank judges on favorability — PRD §10.6 is explicit on that.
+### 6. Drafting and research
+
+- Drafting supports bail applications, quashing petitions, civil reviews, arbitration submissions, replies, and escalation drafts
+- Generation rules: no invented facts, no invented authorities, BNS/BNSS disambiguation, and placeholders for missing matter data
+- Drafts carry inline citations, grounding panels, reviewer findings, version history, and approval audit
+- Research uses indexed Indian authorities, structured extraction, reranking, tenant-private annotations, and explicit no-result behavior when grounding is insufficient
+
+### 7. Hearing prep and litigation intelligence
+
+- Hearing packs include chronology, last-order summary, pending compliance, likely issues, opposition points, authority cards, and oral-submission notes
+- Litigation Intelligence reviews proceeding signals, affidavit gaps, mock-hearing feedback, bench context, source readiness, knowledge-graph links, and transcript-first coaching with source links and confidence
+- Decision-support surfaces do not provide legal advice, outcome forecasts, judge scoring, biometric analysis, or unsupported court-strategy claims
+
+### 8. Contracts and outside counsel
+
+- Contracts support clause extraction, playbook comparison, obligation tracking, redline diff extraction, and version lineage
+- Outside counsel supports panel profiles, jurisdiction/practice-area fit, budget thresholds, spend logging, matter briefs, and realization rollups
+
+### 9. Matter billing and invoice PDFs
+
+- Matter billing is separate from CaseOps SaaS subscription billing
+- Tenant admins configure billing profiles at /app/admin/matter-billing
+- Profiles include legal name, address, GSTIN, PAN, invoice prefix/sequence, currency, payment terms, SAC/HSN or service classification, footer/note, and branding/header where supported
+- Client billing fields include billing name, address, and GSTIN where available
+- Rate resolution supports user, role, practice-area, and default hourly rates
+- Fixed-fee arrangements, milestones, retainers/advances, expense/reimbursement categories, payment adjustments, and manual line items are supported where applicable
+- Tax is calculated server-side from stored invoice data, including place of supply, taxable value, CGST/SGST/IGST split, totals, grand total, amount paid, outstanding amount, and TDS deduction/payment adjustment fields where recorded
+- Double billing prevention blocks already-invoiced time entries from being billed again
+- Downloadable invoice PDFs render from server-side invoice data
+- Billing profile/rate changes and invoice downloads are audited
+- External payment links are used only when a tenant explicitly configures an approved provider
+
+## Safety and governance
+
+- No captcha/session-gated court-source bypass
+- No unapproved external provider calls
+- No live court/provider calls unless configured safe mode or approved provider configuration exists
+- No external email/SMS/WhatsApp notifications unless provider delivery is explicitly configured
+- Durable in-app notification intents are the safe default
+- Strict tenant isolation applies to every route, query, and write
+- Auditability is preserved for user, admin, and system actions
+- Raw provider payloads, raw prompts, raw LLM responses, provider tokens, internal costs, and unauthorized tenant-private data are not exposed to tenant-facing users
+- Customer matter data is not used for cross-tenant training by default
 
 ## Current deployment
 
 - Region: Mumbai (asia-south1) on Google Cloud
-- API: Cloud Run with Cloud SQL Postgres 17 + pgvector
-- Web: Cloud Run Next.js 16 App Router
+- API: Cloud Run with Cloud SQL Postgres and pgvector
+- Web: Cloud Run Next.js App Router
 - SSL: Google-managed via global HTTPS load balancer
+
+## Canonical public pages
+
+- Home: ${siteConfig.url}
+- User guide: ${siteConfig.url}/guide
+- Sign in: ${siteConfig.url}/sign-in
 
 ## Contact
 
 - Demo requests: ${siteConfig.url}
 - Direct: ${siteConfig.contact.email}
-- Documentation (coming): ${siteConfig.url}/docs
 `;
 
 export function GET() {

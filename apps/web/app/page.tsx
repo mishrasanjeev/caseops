@@ -32,7 +32,7 @@ const faqJsonLd = {
       name: "Is CaseOps another chatbot for lawyers?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "No. CaseOps is a system of work. Drafting, hearing prep, research, contracts, and billing are first-class workspaces backed by a matter graph. AI is a feature of the system, not the product.",
+        text: "No. CaseOps is a system of work. Drafting, hearing prep, research, contracts, compliance review, cause lists, and billing are first-class workspaces backed by a matter graph. AI is a feature of the system, not the product.",
       },
     },
     {
@@ -40,31 +40,31 @@ const faqJsonLd = {
       name: "How does CaseOps avoid hallucinated citations?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Legal knowledge lives in retrieval and source systems, not the model. Every substantive answer is grounded in statutes, judgments, or your own precedents with inline citations, assumptions, missing facts, and confidence. The structured statute model (BNSS, BNS, BSA, CrPC, IPC, Constitution, NI Act) feeds bare text into appeal drafts so the LLM quotes verbatim instead of paraphrasing. Weak-evidence prompts return an explicit refusal.",
+        text: "Legal knowledge lives in retrieval and source systems, not the model. Every substantive answer is grounded in statutes, judgments, or your own precedents with inline citations, assumptions, missing facts, and confidence. Weak-evidence prompts return an explicit refusal.",
       },
     },
     {
       "@type": "Question",
-      name: "What courts and jurisdictions are covered?",
+      name: "How does case tracking work?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Lower courts, High Courts, tribunals, forums, bare acts, arbitration sources, and the Supreme Court are in scope. Current public-source automation is limited to verified official sources; district, session, tribunal, consumer-forum, bare-act, and arbitration sources appear in the readiness registry until lawful adapters and source-quality proof exist.",
+        text: "Production scheduled refresh is opt-in by default: only explicitly tracked or bookmarked matters refresh. The daily job is configured for the 4 PM to 6 PM IST window, keeps backlog for the next run, batches fairly across tenants, and records provider operations metrics. CaseOps does not bypass captcha, login, or session-gated court sources.",
       },
     },
     {
       "@type": "Question",
-      name: "Does the appeal draft consider which bench will hear it?",
+      name: "How does court-order compliance extraction work?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Yes. When a matter has an upcoming listing whose bench is resolved against the judge catalog, the appeal-memorandum draft can pull authorities authored by that bench and prefer ones aligned with the matter's practice area. Predictive and bench-context surfaces show source evidence, sample size, confidence bands, and limitation notes rather than uncited court-strategy claims.",
+        text: "Manual and adapter-created court orders first go through deterministic extraction. AI extraction runs only when tenant policy allows it, must pass schema validation, and creates source-backed review-required compliance items by default. Lawyers confirm, edit, reject, waive, complete, or retry items before tasks and deadlines become active unless a tenant admin has explicitly enabled auto-activation.",
       },
     },
     {
       "@type": "Question",
-      name: "What is Litigation Intelligence?",
+      name: "What is included in matter billing?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Litigation Intelligence is a matter-level review surface for proceeding-sheet signals, affidavit facts and gaps, mock-hearing feedback, bench context, calibrated historical patterns, source readiness, a legal knowledge graph, and a transcript-first hearing coach. It is decision support and a training aid, not legal advice.",
+        text: "Matter billing is separate from CaseOps SaaS subscription billing. Tenant admins configure law-firm profiles, firm GSTIN/PAN/name/address, client billing fields, place of supply, SAC/HSN or service classification, invoice sequence, payment terms, hourly and fixed-fee arrangements, milestones, expenses, retainers or advances, GST split, TDS adjustments, amount paid/outstanding, and server-rendered invoice PDFs.",
       },
     },
     {
