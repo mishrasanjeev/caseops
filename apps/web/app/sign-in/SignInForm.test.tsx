@@ -115,6 +115,22 @@ describe("SignInForm", () => {
     expect(toastSuccess).toHaveBeenCalled();
   });
 
+  it("shows a forgot-password link and preserves typed slug and email", async () => {
+    const user = userEvent.setup();
+    render(withClient(<SignInForm />));
+
+    const link = screen.getByRole("link", { name: /Forgot password\?/i });
+    expect(link).toHaveAttribute("href", "/account/forgot-password");
+
+    await user.type(screen.getByLabelText("Company slug"), "Aster-Legal");
+    await user.type(screen.getByLabelText("Work email"), "Lawyer@Aster.Example");
+
+    expect(link).toHaveAttribute(
+      "href",
+      "/account/forgot-password?company_slug=aster-legal&email=lawyer%40aster.example",
+    );
+  });
+
   it("switches to the New workspace tab and shows the bootstrap form", async () => {
     const user = userEvent.setup();
     render(withClient(<SignInForm />));

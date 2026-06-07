@@ -57,7 +57,7 @@ export function ResetPasswordForm() {
     onError: (err) => {
       const message = apiErrorMessage(
         err,
-        "We could not reset your password. The link may be invalid, expired, or already used. Request a new reset link from sign-in.",
+        "We could not reset your password. The link may be invalid, expired, or already used. Request a new reset link.",
       );
       toast.error(message);
     },
@@ -91,7 +91,7 @@ export function ResetPasswordForm() {
             {!token ? (
               <MissingTokenState
                 title="This password-reset link is missing a token."
-                body="The link in your email may have been broken by your email client. Request a new reset link from sign-in, or paste the full URL from the email into your browser address bar."
+                body="The link in your email may have been broken by your email client. Request a new reset link, or paste the full URL from the email into your browser address bar."
               />
             ) : mutation.isError ? (
               <SubmitErrorState
@@ -175,10 +175,10 @@ function MissingTokenState({ title, body }: { title: string; body: string }) {
       <p className="leading-relaxed text-[var(--color-mute)]">{body}</p>
       <div className="mt-1">
         <Link
-          href="/sign-in"
+          href="/account/forgot-password"
           className="text-sm font-medium text-[var(--color-brand-700)] underline-offset-4 hover:underline"
         >
-          Back to sign in
+          Request a new reset link
         </Link>
       </div>
     </div>
@@ -194,7 +194,7 @@ function SubmitErrorState({
 }) {
   const message = apiErrorMessage(
     error,
-    "We could not reset your password. The link may be invalid, expired, or already used. Request a new reset link from sign-in.",
+    "We could not reset your password. The link may be invalid, expired, or already used. Request a new reset link.",
   );
   return (
     <div
@@ -216,10 +216,10 @@ function SubmitErrorState({
           Try again
         </button>
         <Link
-          href="/sign-in"
+          href="/account/forgot-password"
           className="text-sm font-medium text-[var(--color-mute)] underline-offset-4 hover:underline"
         >
-          Back to sign in
+          Request a new reset link
         </Link>
       </div>
     </div>

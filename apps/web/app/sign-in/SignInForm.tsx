@@ -5,7 +5,7 @@ import { useMutation } from "@tanstack/react-query";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -46,6 +46,12 @@ export function SignInForm() {
     resolver: zodResolver(schema),
     defaultValues: { companySlug: "", email: "", password: "" },
   });
+  const watchedCompanySlug = form.watch("companySlug");
+  const watchedEmail = form.watch("email");
+  const forgotPasswordHref = useMemo(
+    () => buildForgotPasswordHref(watchedCompanySlug, watchedEmail),
+    [watchedCompanySlug, watchedEmail],
+  );
 
   const mutation = useMutation({
     mutationFn: (values: FormValues) =>
@@ -161,6 +167,13 @@ export function SignInForm() {
                     )}
                   </FieldGroup>
 
+                  <Link
+                    href={forgotPasswordHref}
+                    className="-mt-2 self-end text-sm font-medium text-[var(--color-brand-700)] underline-offset-4 hover:underline"
+                  >
+                    Forgot password?
+                  </Link>
+
                   <Button
                     type="submit"
                     size="lg"
@@ -187,6 +200,16 @@ export function SignInForm() {
       </section>
     </main>
   );
+}
+
+function buildForgotPasswordHref(companySlug: string, email: string): string {
+  const params = new URLSearchParams();
+  const cleanedSlug = companySlug.trim().toLowerCase();
+  const cleanedEmail = email.trim().toLowerCase();
+  if (cleanedSlug) params.set("company_slug", cleanedSlug);
+  if (cleanedEmail) params.set("email", cleanedEmail);
+  const query = params.toString();
+  return query ? `/account/forgot-password?${query}` : "/account/forgot-password";
 }
 
 function FieldGroup({

@@ -20,7 +20,7 @@ default.
 | Surface | Status | Where |
 | --- | --- | --- |
 | Marketing site (`/`) | Live | `apps/web/app/page.tsx` |
-| Sign in (`/sign-in`) | Live | `apps/web/app/sign-in/` |
+| Sign in and self-service password reset (`/sign-in`, `/account/forgot-password`, `/account/reset-password`) | Live | `apps/web/app/sign-in/`, `apps/web/app/account/forgot-password/`, `apps/web/app/account/reset-password/` |
 | App shell + Matter Cockpit (`/app`) | Live | `apps/web/app/app/` |
 | API (auth, matters, contracts, documents, billing, authorities, recommendations, drafting, hearing packs, hearing reminders, outside counsel, clients) | Production, security-hardened | `apps/api/` |
 | Document worker | Production (Cloud Run Job) | `apps/api/src/caseops_api/workers/` |
@@ -173,6 +173,7 @@ cd apps/api && uv run caseops-document-worker
 
 - Landing page — http://localhost:3000
 - Sign in — http://localhost:3000/sign-in
+- Forgot password — http://localhost:3000/account/forgot-password
 - Workspace (after sign in) — http://localhost:3000/app
 - Legacy founder console — http://localhost:3000/legacy
 - API docs — http://localhost:8000/docs
@@ -289,7 +290,9 @@ Security, tenant-leakage, agent, and AI-safety tests are tracked in
 - Covers the forms most visible to users on day one:
   - `QueryErrorState` — retry flow, offline copy, secondary actions.
   - `SignInForm` — zod validation with aria-invalid/aria-describedby
-    wiring, happy-path submit, API error toasts.
+    wiring, forgot-password link preservation, happy-path submit, API error toasts.
+  - `ForgotPasswordForm` — anti-enumeration reset request copy,
+    validation, resend state, generic API errors, and debug-token hiding.
   - `NewMatterDialog` — validation, trim + uppercase on matter_code,
     submit success.
   - `DataTable` — filter input, Enter/Space keyboard activation on
