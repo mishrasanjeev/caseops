@@ -4,11 +4,11 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 const flows = [
   {
     persona: "Litigation partner",
-    headline: "From cause list to cited order in an afternoon.",
+    headline: "From tracked update to reviewed compliance in an afternoon.",
     bullets: [
-      "Proceeding sheets extract next dates, compliance directions, and review-required tasks.",
-      "Affidavit intelligence turns chief statements into gaps, contradictions, and cross questions.",
-      "Mock hearings and the transcript-first coach keep feedback source-linked and reviewable.",
+      "Tracked/bookmarked cases refresh in the 4-6 PM IST window with blocked/skipped reasons visible to admins.",
+      "Court orders create source-backed, review-required compliance items before tasks or deadlines become active.",
+      "Date-wise cause-list PDFs show missing-field warnings, overrides, filters, row count, checksum, and download audit.",
     ],
   },
   {
@@ -17,16 +17,16 @@ const flows = [
     bullets: [
       "Structured intake for every business request with SLAs.",
       "Contract repository with clause extraction and obligation tracking.",
-      "Matter intelligence review, outside-counsel spend, aging, and realization in one dashboard.",
+      "Matter intelligence review, outside-counsel spend, aging, realization, and audited provider operations in one dashboard.",
     ],
   },
   {
     persona: "Solo advocate",
     headline: "Operate like a 20-lawyer practice.",
     bullets: [
-      "One app for matters, drafts, hearings, litigation intelligence, billing, and payment collection.",
-      "Pine Labs payment links issued with every invoice.",
-      "Case diary that survives the day you forgot your diary.",
+      "One app for matters, drafts, hearings, litigation intelligence, cause lists, billing, and payment adjustments.",
+      "India-ready matter invoices with firm/client GST fields, SAC/HSN, GST split, TDS recording, amount paid, and outstanding.",
+      "Dispose completed matters without losing audit history or next-hearing provenance.",
     ],
   },
 ] as const;

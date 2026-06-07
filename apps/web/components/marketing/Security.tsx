@@ -12,22 +12,22 @@ const pillars = [
   {
     icon: KeyRound,
     title: "Scoped agent identity",
-    body: "Agents run with expiring grants, budgets, and revocation. No tool call happens without an explicit, auditable scope.",
+    body: "Agents run with expiring grants, budgets, and revocation. No provider call happens without an explicit, auditable scope and tenant policy.",
   },
   {
     icon: ScrollText,
     title: "Audit by default",
-    body: "Actor, tenant, matter, action, target, and result recorded for every mutating event. Append-only and exportable.",
+    body: "Actor, tenant, matter, action, target, result, invoice export, compliance review, and scheduled-job state recorded for material events.",
   },
   {
     icon: Lock,
-    title: "Customer data stays yours",
-    body: "No cross-tenant training without explicit opt-in. Private notes separated from shareable work product.",
+    title: "Customer data stays private",
+    body: "No cross-tenant training without explicit opt-in. Raw prompts, raw LLM responses, provider payloads, tokens, and internal costs stay out of tenant-facing views.",
   },
   {
     icon: Fingerprint,
-    title: "Enterprise identity",
-    body: "OIDC and SAML SSO on the roadmap; MFA and session revocation on suspension. Role-based and team-based scopes.",
+    title: "Notification guardrails",
+    body: "Job failures and review events create durable in-app notification intents. Email, SMS, and WhatsApp are sent only when an approved provider is configured.",
   },
   {
     icon: Server,
@@ -72,7 +72,8 @@ export function Security() {
               <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--color-mute)]">
                 CaseOps keeps law in retrieval, not in weights. Substantive answers come with
                 citations, assumptions, and confidence. Weak-evidence prompts return an explicit
-                refusal instead of a confident guess.
+                refusal instead of a confident guess. Court-order compliance extraction is
+                schema-validated, source-backed, reviewable, and audited before activation.
               </p>
             </div>
             <ul className="grid grid-cols-2 gap-3 text-xs text-[var(--color-ink-2)] md:grid-cols-1">

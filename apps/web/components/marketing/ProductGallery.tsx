@@ -69,7 +69,7 @@ function CockpitMock() {
           </span>
           <span>Delhi HC · OMP (COMM) 314/2025</span>
           <span className="ml-auto font-semibold text-[var(--color-ink-2)]">
-            Next hearing · 22 Apr
+            Next hearing · 22 Apr · tracked case
           </span>
         </div>
 
@@ -81,7 +81,7 @@ function CockpitMock() {
         </div>
 
         <div className="mt-5 flex gap-1 border-b border-[var(--color-line)] text-sm">
-          {["Overview", "Documents", "Drafts", "Hearings", "Research", "Billing"].map(
+          {["Overview", "Documents", "Compliance", "Hearings", "Cause list", "Billing"].map(
             (tab, i) => (
               <div
                 key={tab}
@@ -102,7 +102,7 @@ function CockpitMock() {
           {[
             { label: "Parties", v: "2 applicants · 3 respondents", sub: "Counsel assigned" },
             { label: "Documents", v: "41", sub: "38 indexed · 3 pending OCR" },
-            { label: "Drafts", v: "2", sub: "v3 awaiting review" },
+            { label: "Compliance", v: "4", sub: "review required · 1 draft deadline" },
           ].map((s) => (
             <div
               key={s.label}
@@ -130,11 +130,11 @@ function CockpitMock() {
             </li>
             <li className="flex gap-2">
               <span className="font-mono text-[var(--color-mute-2)]">11:02</span>
-              Drafting Studio produced <em className="not-italic font-semibold">§34 petition v3</em>
+              Compliance extraction created <em className="not-italic font-semibold">3 review items</em>
             </li>
             <li className="flex gap-2">
               <span className="font-mono text-[var(--color-mute-2)]">14:31</span>
-              Hearing pack compiled for 22 Apr listing
+              Cause-list PDF preview generated for 22 Apr listing
             </li>
           </ul>
         </div>
@@ -335,7 +335,7 @@ const surfaces: Surface[] = [
     tab: "Matter cockpit",
     headline: "Every matter as one system of record.",
     blurb:
-      "Parties, stage, documents, drafts, hearings, billing and audit — in one workspace, always in sync.",
+      "Parties, stage, documents, compliance, hearings, cause lists, billing and audit - in one workspace, always in sync.",
     render: CockpitMock,
   },
   {
@@ -348,10 +348,10 @@ const surfaces: Surface[] = [
   },
   {
     id: "hearing",
-    tab: "Hearing pack",
-    headline: "From cause list to brief in an afternoon.",
+    tab: "Hearings & cause list",
+    headline: "From tracked listing to printable court list.",
     blurb:
-      "Chronology, last order, oral points and bench context compiled from the matter record in seconds.",
+      "Chronology, last order, oral points, bench context and date-wise cause-list PDFs compiled from the matter record.",
     render: HearingPackMock,
   },
 ];
@@ -366,7 +366,7 @@ export function ProductGallery() {
         <SectionHeader
           eyebrow="Inside the product"
           title="Three surfaces. One matter graph."
-          description="Cockpit, drafting and hearing prep share the same documents, parties and audit trail — no copy-paste between silos."
+          description="Cockpit, drafting, compliance review, hearings, cause lists and billing share the same documents, parties and audit trail - no copy-paste between silos."
         />
 
         <div className="mt-12 flex flex-col items-stretch">
@@ -435,7 +435,7 @@ export function ProductGallery() {
                     <span className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
                   </div>
                   <div className="ml-3 flex-1 rounded-md bg-[var(--color-bg-2)] px-3 py-1 text-left text-xs text-[var(--color-ink-2)]">
-                    caseops.ai / workspace / {current.id === "cockpit" ? "matters / arbitral-award-challenge" : current.id === "drafting" ? "matters / arbitral-award-challenge / drafts / v3" : "hearings / 22-apr-2026"}
+                    caseops.ai / app / {current.id === "cockpit" ? "matters / arbitral-award-challenge" : current.id === "drafting" ? "matters / arbitral-award-challenge / drafts / v3" : "cause-list / 22-apr-2026"}
                   </div>
                 </div>
                 {current.render()}

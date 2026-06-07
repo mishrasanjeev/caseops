@@ -3,8 +3,10 @@
 **The matter-native legal operating system for Indian law firms and corporate legal teams.**
 
 CaseOps unifies matter management, legal research, AI-assisted drafting, hearing preparation,
-contract workflows, outside-counsel management, and billing into one citation-grounded
-workspace — with tenant isolation, scoped agent grants, and audit by default.
+tracked case refresh, court-order compliance review, date-wise cause-list PDFs, contract
+workflows, outside-counsel management, and India-ready matter billing into one
+citation-grounded workspace - with tenant isolation, scoped agent grants, and audit by
+default.
 
 > Founder-stage monorepo. **Pre-alpha.** The backend foundation (matters, documents,
 > contracts, billing, authority ingestion) is working and hardened; the AI core is actively
@@ -23,6 +25,7 @@ workspace — with tenant isolation, scoped agent grants, and audit by default.
 | API (auth, matters, contracts, documents, billing, authorities, recommendations, drafting, hearing packs, hearing reminders, outside counsel, clients) | Production, security-hardened | `apps/api/` |
 | Document worker | Production (Cloud Run Job) | `apps/api/src/caseops_api/workers/` |
 | Hearing reminders worker | Production (Cloud Run Job + Scheduler `*/5 * * * *` Asia/Kolkata, SendGrid sender `hearings@caseops.ai`) | `apps/api/src/caseops_api/scripts/send_hearing_reminders.py` |
+| GBA Law Office operations pack: Dispose matter status, tracked-only case refresh, review-first compliance extraction, next-hearing provenance, cause-list PDF generation, India-ready matter billing/invoice PDFs | Implemented (2026-06-07) | [`docs/GBA_LAW_OFFICE_USER_GUIDE_2026-06-07.md`](./docs/GBA_LAW_OFFICE_USER_GUIDE_2026-06-07.md), [`docs/PRD_GBA_LAW_OFFICE_REQUIREMENTS_2026-06-06.md`](./docs/PRD_GBA_LAW_OFFICE_REQUIREMENTS_2026-06-06.md), `/guide` |
 | Mobile responsive | Hamburger nav + responsive forms verified on Pixel-5 viewport | Playwright `app-mobile` project |
 | PRD | Stable | [`docs/PRD.md`](./docs/PRD.md) |
 | Architecture | Stable | [`docs/architecture.md`](./docs/architecture.md) |
@@ -30,6 +33,15 @@ workspace — with tenant isolation, scoped agent grants, and audit by default.
 | Strict bug ledger | Closed (10/10 Properly fixed) | [`docs/STRICT_BUG_TASKLIST_2026-04-22.md`](./docs/STRICT_BUG_TASKLIST_2026-04-22.md) |
 | Drafting studio (31 specialised templates including the SC escalation pack — SLP, supreme-court appeal, review, curative, transfer, contempt, interim relief, condonation of delay, exemption, synopsis / list of dates, filing index — plus court-aware PDF + filing bundle + revision diff + bench-aware drafting + filing checklist + mobile + solo mode + governance + live-LLM eval) | Implemented (PG-005, 12 sprints, 2026-05-01; SC pack 2026-05-03) | [`docs/RELEASE_NOTES_2026-05-01.md`](./docs/RELEASE_NOTES_2026-05-01.md) |
 | Litigation Strategy & Escalation Planner (matter-level strategy: current posture, primary + alternative routes, forum sequence up to Supreme Court, recommended draft pack with one-click generation, limitation flags, missing facts, risks, authorities, lawyer-review workflow) | Implemented (MOD-LSE, 2026-05-03) | [`docs/PRD_LITIGATION_STRATEGY_ESCALATION_PLANNER_2026-05-03.md`](./docs/PRD_LITIGATION_STRATEGY_ESCALATION_PLANNER_2026-05-03.md) |
+
+---
+
+## User documentation
+
+- Deployed user guide: `/guide` on the web app.
+- Detailed GBA Law Office guide: [`docs/GBA_LAW_OFFICE_USER_GUIDE_2026-06-07.md`](./docs/GBA_LAW_OFFICE_USER_GUIDE_2026-06-07.md).
+- Source PRD: [`docs/PRD_GBA_LAW_OFFICE_REQUIREMENTS_2026-06-06.md`](./docs/PRD_GBA_LAW_OFFICE_REQUIREMENTS_2026-06-06.md).
+- Machine-readable public summaries: `/llms.txt` and `/llms-full.txt`.
 
 ---
 
@@ -58,8 +70,11 @@ caseops/
   self-hosted Gemma 4 for enterprise tenants that need private inference.
 - **Data** — PostgreSQL 17 with `pgvector`, Valkey cache, GCS (or local FS) for documents.
 - **Workflow** — custom polling worker today; Temporal is the declared target (work plan §5.1).
-- **Payments** — Pine Labs integration with HMAC webhook verification, idempotency, and
-  cross-tenant guards.
+- **Payments** — optional Pine Labs integration with HMAC webhook verification,
+  idempotency, and cross-tenant guards when explicitly configured.
+- **Matter billing** - separate from CaseOps SaaS subscription billing; supports firm/client
+  billing fields, rates, fixed fees, milestones, GST split fields, TDS adjustments, double
+  billing prevention, and server-rendered invoice PDFs.
 - **Deployment** — Cloud Run + Cloud SQL + GCS for founder stage; GKE + private networking +
   dedicated inference preserved as the enterprise path.
 - **Tests** — pytest (unit + integration), Playwright (marketing + app spine + legacy).
@@ -205,6 +220,18 @@ CASEOPS_LLM_PROVIDER=mock         # mock | anthropic | gemini
 CASEOPS_LLM_MODEL=claude-opus-4-7 # or gemini-2.5-pro, etc.
 CASEOPS_LLM_API_KEY=              # required for anthropic / gemini
 ```
+
+Scheduled tracked-case refresh uses the India window by default:
+
+```bash
+CASEOPS_CASE_TRACKING_DAILY_WINDOW_START=16:00
+CASEOPS_CASE_TRACKING_DAILY_WINDOW_END=18:00
+CASEOPS_CASE_TRACKING_DAILY_TIMEZONE=Asia/Kolkata
+```
+
+Production scheduled runs should stay inside the 4 PM-6 PM IST window unless an
+operator uses an explicit force/local override. Disabled or misconfigured court
+providers must record skipped/blocked state and make no external calls.
 
 > **Security note.** The default `CASEOPS_AUTH_SECRET` is a placeholder and is rejected at
 > startup whenever `CASEOPS_ENV` is `staging`, `production`, or `prod`. See
