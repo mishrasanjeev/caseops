@@ -215,4 +215,8 @@ class CaseTrackingPollRunRecord(BaseModel):
     checked_count: int
     update_count: int
     error_count: int
+    skipped_count: int = 0
+    blocked_count: int = 0
+    provider_call_count: int = 0
+    backlog_remaining_count: int = 0
     metadata: dict[str, object] = Field(default_factory=dict)

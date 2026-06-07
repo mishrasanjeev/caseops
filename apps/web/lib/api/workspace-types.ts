@@ -13,10 +13,19 @@ export type WorkspaceMatter = {
   forum_city?: string | null;
   forum_consumer_level?: string | null;
   judge_name?: string | null;
+  case_number?: string | null;
+  cnr_number?: string | null;
   client_name?: string | null;
   opposing_party?: string | null;
   description?: string | null;
   next_hearing_on?: string | null;
+  next_hearing_source?: string;
+  next_hearing_source_ref_type?: string | null;
+  next_hearing_source_ref_id?: string | null;
+  next_hearing_updated_by_membership_id?: string | null;
+  next_hearing_updated_at?: string | null;
+  next_hearing_manual_lock?: boolean;
+  billing_profile_id?: string | null;
   claim_amount_minor?: number | null;
   claim_currency?: string;
   claim_amount_notes?: string | null;
@@ -91,14 +100,51 @@ export type WorkspacePaymentAttempt = {
 
 export type WorkspaceInvoice = {
   id: string;
+  company_id?: string;
+  matter_id?: string;
+  issued_by_membership_id?: string | null;
+  issued_by_name?: string | null;
   invoice_number: string;
+  client_name?: string | null;
+  client_billing_name?: string | null;
+  client_billing_address?: string | null;
+  client_gstin?: string | null;
+  place_of_supply?: string | null;
+  sac_hsn?: string | null;
+  firm_legal_name?: string | null;
+  firm_address?: string | null;
+  firm_gstin?: string | null;
+  firm_pan?: string | null;
   status: string;
   issued_on?: string | null;
   due_on?: string | null;
+  subtotal_amount_minor?: number;
+  taxable_value_minor?: number;
+  cgst_amount_minor?: number;
+  sgst_amount_minor?: number;
+  igst_amount_minor?: number;
+  tax_amount_minor?: number;
   total_amount_minor: number;
   balance_due_minor: number;
   amount_received_minor: number;
+  tds_deducted_minor?: number;
+  payment_adjustment_minor?: number;
   currency: string;
+  notes?: string | null;
+  pine_labs_payment_url?: string | null;
+  pine_labs_order_id?: string | null;
+  line_items?: Array<{
+    id: string;
+    invoice_id: string;
+    time_entry_id?: string | null;
+    description: string;
+    duration_minutes?: number | null;
+    unit_rate_amount_minor?: number | null;
+    line_total_amount_minor: number;
+    category?: string | null;
+    sac_hsn?: string | null;
+    created_at: string;
+  }>;
   // Surfaced so the UI can gate the Sync action (BUG-016): Sync is
   // only meaningful after at least one Pay Link has been issued.
   payment_attempts?: WorkspacePaymentAttempt[];
@@ -111,6 +157,12 @@ export type WorkspaceTimeEntry = {
   duration_minutes: number;
   billable: boolean;
   author_name?: string | null;
+  rate_currency?: string;
+  rate_amount_minor?: number | null;
+  billing_rate_id?: string | null;
+  rate_source?: string | null;
+  total_amount_minor?: number;
+  is_invoiced?: boolean;
 };
 
 export type WorkspaceActivity = {

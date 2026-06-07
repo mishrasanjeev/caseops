@@ -35,26 +35,32 @@ import { apiErrorMessage, isApiErrorShape } from "@/lib/api/config";
 import {
   completeMockHearing,
   fetchCalendarSyncStatus,
+  fetchMatterCompliance,
   fetchHearingCoach,
   fetchMockHearings,
+  fetchNextHearingHistory,
   fetchProceedingIntelligence,
   generateHearingCoach,
   listMatterReminders,
   type MatterCourtSyncJob,
   type MatterReminderRecord,
   pullMatterCourtSync,
+  decideNextHearingSuggestion,
   startMockHearing,
   submitMockHearingResponse,
   syncHearingToOutlook,
+  updateMatterComplianceItem,
 } from "@/lib/api/endpoints";
 import type {
   CalendarEventSyncRecord,
   HearingCoachFeedbackItem,
   HearingCoachReportResponse,
   HearingCoachStatusResponse,
+  MatterComplianceListResponse,
   MockHearingListResponse,
   MockHearingQuestion,
   MockHearingSession,
+  NextHearingHistoryResponse,
   ProceedingIntelligenceResponse,
   ProceedingOrderIntelligence,
   ProceedingSignal,
@@ -125,6 +131,16 @@ export default function MatterHearingsPage() {
   const proceedingQuery = useQuery({
     queryKey: ["matters", matterId, "proceeding-intelligence"],
     queryFn: () => fetchProceedingIntelligence({ matterId }),
+    enabled: Boolean(matterId),
+  });
+  const complianceQuery = useQuery({
+    queryKey: ["matters", matterId, "compliance"],
+    queryFn: () => fetchMatterCompliance(matterId),
+    enabled: Boolean(matterId),
+  });
+  const nextHearingHistoryQuery = useQuery({
+    queryKey: ["matters", matterId, "next-hearing-history"],
+    queryFn: () => fetchNextHearingHistory(matterId),
     enabled: Boolean(matterId),
   });
   const mockHearingQuery = useQuery({
@@ -287,6 +303,42 @@ export default function MatterHearingsPage() {
       toast.error(apiErrorMessage(err, "Could not generate hearing coach report."));
     },
   });
+  const complianceMutation = useMutation({
+    mutationFn: ({
+      itemId,
+      action,
+    }: {
+      itemId: string;
+      action: "confirm" | "reject" | "waive" | "complete";
+    }) => updateMatterComplianceItem({ matterId, itemId, action }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["matters", matterId, "compliance"] });
+      await queryClient.invalidateQueries({ queryKey: ["matters", matterId, "workspace"] });
+      toast.success("Compliance item updated.");
+    },
+    onError: (err) => {
+      toast.error(apiErrorMessage(err, "Could not update compliance item."));
+    },
+  });
+  const nextHearingSuggestionMutation = useMutation({
+    mutationFn: ({
+      suggestionId,
+      action,
+    }: {
+      suggestionId: string;
+      action: "accept" | "reject";
+    }) => decideNextHearingSuggestion({ matterId, suggestionId, action }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["matters", matterId, "next-hearing-history"],
+      });
+      await queryClient.invalidateQueries({ queryKey: ["matters", matterId, "workspace"] });
+      toast.success("Next hearing suggestion updated.");
+    },
+    onError: (err) => {
+      toast.error(apiErrorMessage(err, "Could not update next hearing suggestion."));
+    },
+  });
 
   if (!data) return null;
   const completedHearings = data.hearings.filter((hearing) => hearing.status === "completed");
@@ -414,6 +466,22 @@ export default function MatterHearingsPage() {
           </Button>
         </CardHeader>
       </Card>
+
+      <NextHearingProvenanceSection
+        response={nextHearingHistoryQuery.data}
+        isLoading={nextHearingHistoryQuery.isPending}
+        onDecide={(suggestionId, action) =>
+          nextHearingSuggestionMutation.mutate({ suggestionId, action })
+        }
+        isPending={nextHearingSuggestionMutation.isPending}
+      />
+
+      <ComplianceReviewSection
+        response={complianceQuery.data}
+        isLoading={complianceQuery.isPending}
+        onAction={(itemId, action) => complianceMutation.mutate({ itemId, action })}
+        isPending={complianceMutation.isPending}
+      />
 
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
@@ -780,6 +848,161 @@ function signalDueText(signal: ProceedingSignal): string | null {
   if (signal.due_on) return `Due ${formatDateTime(signal.due_on)}`;
   if (signal.hearing_on) return `Hearing ${formatDateTime(signal.hearing_on)}`;
   return null;
+}
+
+export function NextHearingProvenanceSection({
+  response,
+  isLoading,
+  onDecide,
+  isPending,
+}: {
+  response: NextHearingHistoryResponse | undefined;
+  isLoading: boolean;
+  onDecide: (suggestionId: string, action: "accept" | "reject") => void;
+  isPending: boolean;
+}) {
+  const pending = response?.suggestions.filter((item) => item.status === "pending") ?? [];
+  const history = response?.history ?? [];
+  return (
+    <Card className="lg:col-span-2" data-testid="next-hearing-provenance">
+      <CardHeader>
+        <CardTitle>Next hearing provenance</CardTitle>
+        <CardDescription>Review automatic hearing-date suggestions and source history.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4 lg:grid-cols-2">
+        <div>
+          <div className="mb-2 text-sm font-medium text-[var(--color-ink)]">Suggestions</div>
+          {isLoading ? (
+            <p className="text-sm text-[var(--color-mute)]">Loading suggestions...</p>
+          ) : pending.length === 0 ? (
+            <p className="text-sm text-[var(--color-mute)]">No pending suggestions.</p>
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {pending.map((suggestion) => (
+                <li key={suggestion.id} className="rounded-lg border border-[var(--color-line)] p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-medium text-[var(--color-ink)]">
+                        {formatDateTime(suggestion.suggested_date)}
+                      </div>
+                      <div className="text-xs text-[var(--color-mute)]">
+                        {suggestion.source} - {suggestion.reason ?? "review required"}
+                      </div>
+                    </div>
+                    <StatusBadge status={suggestion.confidence_label} />
+                  </div>
+                  <div className="mt-3 flex gap-2">
+                    <Button size="sm" onClick={() => onDecide(suggestion.id, "accept")} disabled={isPending}>
+                      Accept
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => onDecide(suggestion.id, "reject")} disabled={isPending}>
+                      Reject
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <div>
+          <div className="mb-2 text-sm font-medium text-[var(--color-ink)]">History</div>
+          {history.length === 0 ? (
+            <p className="text-sm text-[var(--color-mute)]">No history recorded yet.</p>
+          ) : (
+            <ul className="flex max-h-64 flex-col gap-2 overflow-auto">
+              {history.slice(0, 8).map((row) => (
+                <li key={row.id} className="rounded-lg bg-[var(--color-bg)] px-3 py-2 text-sm">
+                  <div className="font-medium text-[var(--color-ink)]">
+                    {row.old_date ? formatDateTime(row.old_date) : "Not set"}
+                    {" -> "}
+                    {row.new_date ? formatDateTime(row.new_date) : "Not set"}
+                  </div>
+                  <div className="text-xs text-[var(--color-mute)]">
+                    {row.source} - {row.change_reason ?? "updated"} {row.manual_lock ? "- manual lock" : ""}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+export function ComplianceReviewSection({
+  response,
+  isLoading,
+  onAction,
+  isPending,
+}: {
+  response: MatterComplianceListResponse | undefined;
+  isLoading: boolean;
+  onAction: (itemId: string, action: "confirm" | "reject" | "waive" | "complete") => void;
+  isPending: boolean;
+}) {
+  const activeItems =
+    response?.items.filter((item) => item.review_status !== "rejected") ?? [];
+  return (
+    <Card className="lg:col-span-2" data-testid="matter-compliance-panel">
+      <CardHeader>
+        <CardTitle>Compliance review</CardTitle>
+        <CardDescription>
+          Court-order directions are source-backed and stay review-required until confirmed.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <p className="text-sm text-[var(--color-mute)]">Loading compliance items...</p>
+        ) : activeItems.length === 0 ? (
+          <EmptyState
+            icon={ClipboardList}
+            title="No compliance items"
+            description="Create or upload a court order with extractable text to populate review items."
+          />
+        ) : (
+          <ul className="flex flex-col gap-3">
+            {activeItems.map((item) => (
+              <li key={item.id} className="rounded-xl border border-[var(--color-line)] bg-white p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-[var(--color-ink)]">{item.description}</div>
+                    <div className="mt-1 text-xs text-[var(--color-mute)]">
+                      {item.due_on ? `Due ${formatDateTime(item.due_on)}` : "Due date not available"} - {item.responsible_party ?? "Responsible party not available"}
+                    </div>
+                  </div>
+                  <StatusBadge status={item.review_status} />
+                </div>
+                <p className="mt-2 line-clamp-3 text-sm text-[var(--color-ink-2)]">
+                  {item.source_snippet}
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {item.review_status === "review_required" || item.review_status === "edited" ? (
+                    <>
+                      <Button size="sm" onClick={() => onAction(item.id, "confirm")} disabled={isPending}>
+                        Confirm
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => onAction(item.id, "reject")} disabled={isPending}>
+                        Reject
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => onAction(item.id, "waive")} disabled={isPending}>
+                        Waive
+                      </Button>
+                    </>
+                  ) : null}
+                  {item.review_status === "confirmed" && item.status !== "completed" ? (
+                    <Button size="sm" variant="outline" onClick={() => onAction(item.id, "complete")} disabled={isPending}>
+                      Complete
+                    </Button>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 function ProceedingIntelligenceSection({

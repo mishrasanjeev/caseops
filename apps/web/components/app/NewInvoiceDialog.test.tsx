@@ -80,8 +80,11 @@ describe("NewInvoiceDialog", () => {
     await user.click(screen.getByTestId("new-invoice-trigger"));
     await user.clear(screen.getByLabelText(/Invoice number/i));
     await user.type(screen.getByLabelText(/Invoice number/i), "INV-2026-0001");
-    // issued_on pre-filled with today; tax optional
-    await user.type(screen.getByLabelText(/Tax amount/i), "1800");
+    await user.type(screen.getByLabelText(/Client GSTIN/i), "07ABCDE1234F1Z5");
+    await user.type(screen.getByLabelText(/Place of supply/i), "Delhi");
+    await user.type(screen.getByLabelText(/SAC\/HSN/i), "9982");
+    await user.type(screen.getByLabelText(/TDS deducted INR/i), "1000");
+    await user.type(screen.getByLabelText(/Payment adjustment INR/i), "500");
 
     // Add one manual item
     await user.click(screen.getByTestId("new-invoice-add-item"));
@@ -94,7 +97,12 @@ describe("NewInvoiceDialog", () => {
     const call = createInvoiceMock.mock.calls[0][0];
     expect(call.matterId).toBe("m1");
     expect(call.invoiceNumber).toBe("INV-2026-0001");
-    expect(call.taxAmountMinor).toBe(180_000);
+    expect(call.clientGstin).toBe("07ABCDE1234F1Z5");
+    expect(call.placeOfSupply).toBe("Delhi");
+    expect(call.sacHsn).toBe("9982");
+    expect(call.tdsDeductedMinor).toBe(100_000);
+    expect(call.paymentAdjustmentMinor).toBe(50_000);
+    expect(call.taxAmountMinor).toBeUndefined();
     expect(call.includeUninvoicedTimeEntries).toBe(true);
     expect(call.manualItems).toEqual([
       { description: "Court fees", amount_minor: 1_500_000 },

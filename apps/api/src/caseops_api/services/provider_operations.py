@@ -16,6 +16,7 @@ from caseops_api.db.models import (
     NotificationDeliveryChannel,
     NotificationDeliveryIntent,
     NotificationDeliveryStatus,
+    TrackedCasePollRun,
     UserCalendarConnection,
 )
 from caseops_api.schemas.provider_operations import (
@@ -66,7 +67,7 @@ def _split_operation_id(operation_id: str) -> tuple[str, str]:
             detail="Provider operation not found.",
         )
     kind, row_id = operation_id.split(":", 1)
-    if kind not in {"calendar_sync", "notification_delivery"} or not row_id:
+    if kind not in {"calendar_sync", "notification_delivery", "case_tracking_poll"} or not row_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Provider operation not found.",
@@ -172,6 +173,53 @@ def _notification_record(row: NotificationDeliveryIntent) -> ProviderOperationRe
     )
 
 
+def _case_tracking_poll_record(row: TrackedCasePollRun) -> ProviderOperationRecord:
+    metadata = dict(row.metadata_json or {})
+    provider = str(metadata.get("provider") or "case_tracking")
+    reason = metadata.get("reason") or metadata.get("partial_reason")
+    notes = [
+        f"tracked={metadata.get('tracked_count', 0)}",
+        f"attempted={metadata.get('attempted_count', 0)}",
+        f"checked={row.checked_count}",
+        f"changed={row.update_count}",
+        f"skipped={row.skipped_count}",
+        f"blocked={row.blocked_count}",
+        f"provider_calls={row.provider_call_count}",
+        f"backlog={row.backlog_remaining_count}",
+        "Only explicitly tracked/bookmarked cases are eligible for scheduled refresh.",
+    ]
+    window = metadata.get("window")
+    if isinstance(window, dict):
+        notes.append(
+            "window="
+            f"{window.get('window_start')}-{window.get('window_end')} "
+            f"{window.get('timezone')}"
+        )
+    return ProviderOperationRecord(
+        id=_operation_id("case_tracking_poll", row.id),
+        job_kind="case_tracking_poll",
+        provider=provider,
+        company_id=row.company_id or "",
+        matter_id=None,
+        source_type="tracked_case_poll_run",
+        source_ref=redact_identifier(row.id),
+        provider_item_ref=None,
+        status=row.status,
+        operator_state="open",
+        error_redacted=redact_provider_error(str(reason)) if reason else None,
+        dead_letter_reason=None,
+        attempts=1,
+        max_attempts=1,
+        next_attempt_at=None,
+        created_at=row.started_at,
+        updated_at=row.completed_at or row.started_at,
+        replay_available=False,
+        ignore_available=False,
+        mark_resolved_available=False,
+        notes=notes,
+    )
+
+
 def list_provider_operations(
     session: Session,
     *,
@@ -208,9 +256,28 @@ def list_provider_operations(
             .limit(limit)
         )
     )
+    poll_statuses = ("blocked", "skipped", "partial", "failed") if not include_resolved else (
+        "blocked",
+        "skipped",
+        "partial",
+        "failed",
+        "completed",
+    )
+    case_tracking_rows = list(
+        session.scalars(
+            select(TrackedCasePollRun)
+            .where(
+                TrackedCasePollRun.company_id == context.company.id,
+                TrackedCasePollRun.status.in_(poll_statuses),
+            )
+            .order_by(TrackedCasePollRun.started_at.desc())
+            .limit(limit)
+        )
+    )
     records = [
         *(_calendar_record(row) for row in calendar_rows),
         *(_notification_record(row) for row in notification_rows),
+        *(_case_tracking_poll_record(row) for row in case_tracking_rows),
     ]
     if not include_resolved:
         records = [row for row in records if row.operator_state == "open"]
@@ -261,6 +328,26 @@ def _load_notification_operation(
         select(NotificationDeliveryIntent).where(
             NotificationDeliveryIntent.id == row_id,
             NotificationDeliveryIntent.company_id == context.company.id,
+        )
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Provider operation not found.",
+        )
+    return row
+
+
+def _load_case_tracking_poll_operation(
+    session: Session,
+    *,
+    context: SessionContext,
+    row_id: str,
+) -> TrackedCasePollRun:
+    row = session.scalar(
+        select(TrackedCasePollRun).where(
+            TrackedCasePollRun.id == row_id,
+            TrackedCasePollRun.company_id == context.company.id,
         )
     )
     if row is None:
@@ -347,6 +434,34 @@ def replay_provider_operation(
             if changed
             else "Calendar sync row was already outside a replayable state.",
             operation=_calendar_record(row),
+        )
+
+    if kind == "case_tracking_poll":
+        row = _load_case_tracking_poll_operation(session, context=context, row_id=row_id)
+        _audit_operation_action(
+            session,
+            context=context,
+            action="replay",
+            target_type="tracked_case_poll_run",
+            target_id=row.id,
+            provider=str((row.metadata_json or {}).get("provider") or "case_tracking"),
+            previous_status=row.status,
+            next_status=row.status,
+            changed=False,
+            result=AuditResult.DENIED,
+            reason=reason,
+        )
+        session.commit()
+        return ProviderOperationActionResponse(
+            action="replay",
+            changed=False,
+            message=(
+                "Case tracking poll runs are scheduled-window controlled and "
+                "are not replayed from provider operations. Run the poll job "
+                "again in the configured window or use the explicit CLI force "
+                "override for operator break-glass."
+            ),
+            operation=_case_tracking_poll_record(row),
         )
 
     row = _load_notification_operation(session, context=context, row_id=row_id)
@@ -459,6 +574,33 @@ def update_provider_operation_state(
                 else "Calendar sync row was marked operator-resolved."
             ),
             operation=_calendar_record(row),
+        )
+
+    if kind == "case_tracking_poll":
+        row = _load_case_tracking_poll_operation(session, context=context, row_id=row_id)
+        _audit_operation_action(
+            session,
+            context=context,
+            action=action,
+            target_type="tracked_case_poll_run",
+            target_id=row.id,
+            provider=str((row.metadata_json or {}).get("provider") or "case_tracking"),
+            previous_status=row.status,
+            next_status=row.status,
+            changed=False,
+            result=AuditResult.DENIED,
+            reason=reason,
+        )
+        session.commit()
+        return ProviderOperationActionResponse(
+            action=action,
+            changed=False,
+            message=(
+                "Case tracking poll run history is read-only from provider "
+                "operations; the next scheduled run will resume remaining "
+                "eligible backlog."
+            ),
+            operation=_case_tracking_poll_record(row),
         )
 
     row = _load_notification_operation(session, context=context, row_id=row_id)

@@ -40,6 +40,11 @@ from caseops_api.schemas.billing import (
     TimeEntryCreateRequest,
     TimeEntryRecord,
 )
+from caseops_api.schemas.compliance import (
+    ComplianceItemUpdateRequest,
+    ComplianceListResponse,
+    ComplianceRetryResponse,
+)
 from caseops_api.schemas.drafting_data import (
     DraftingDataExtractionResponse,
     DraftingDataFieldRecord,
@@ -111,6 +116,8 @@ from caseops_api.schemas.matters import (
     MatterLifecycleStageLiteral,
     MatterListFilters,
     MatterListResponse,
+    MatterNextHearingHistoryResponse,
+    MatterNextHearingSuggestionActionRequest,
     MatterNoteCreateRequest,
     MatterNoteRecord,
     MatterRecord,
@@ -139,6 +146,13 @@ from caseops_api.services.bench_matcher import (
 )
 from caseops_api.services.bench_matcher import (
     suggest_bench_for_matter_id,
+)
+from caseops_api.services.compliance_extraction import (
+    _item_record,
+    _run_record,
+    list_compliance,
+    retry_order_compliance_extraction,
+    update_compliance_item,
 )
 from caseops_api.services.court_sync_jobs import (
     create_matter_court_sync_job,
@@ -247,6 +261,7 @@ from caseops_api.services.matters import (
     create_time_entry,
     get_matter,
     get_matter_attachment_download,
+    get_matter_invoice_pdf,
     get_matter_workspace,
     list_matter_tasks,
     list_matters,
@@ -257,6 +272,10 @@ from caseops_api.services.matters import (
     update_matter_court_order,
     update_matter_hearing,
     update_matter_task,
+)
+from caseops_api.services.next_hearing import (
+    decide_next_hearing_suggestion,
+    list_next_hearing_history,
 )
 from caseops_api.services.today_view import build_matter_next_action
 
@@ -2158,6 +2177,51 @@ async def patch_current_company_matter_hearing(
     )
 
 
+@router.get(
+    "/{matter_id}/next-hearing/history",
+    response_model=MatterNextHearingHistoryResponse,
+    summary="List next-hearing provenance history and review suggestions",
+)
+async def get_current_company_matter_next_hearing_history(
+    matter_id: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> MatterNextHearingHistoryResponse:
+    history, suggestions = list_next_hearing_history(
+        session,
+        context=context,
+        matter_id=matter_id,
+    )
+    return MatterNextHearingHistoryResponse(history=history, suggestions=suggestions)
+
+
+@router.post(
+    "/{matter_id}/next-hearing/suggestions/{suggestion_id}",
+    response_model=MatterNextHearingHistoryResponse,
+    summary="Accept or reject a next-hearing review suggestion",
+)
+async def decide_current_company_matter_next_hearing_suggestion(
+    matter_id: str,
+    suggestion_id: str,
+    payload: MatterNextHearingSuggestionActionRequest,
+    context: MatterWriter,
+    session: DbSession,
+) -> MatterNextHearingHistoryResponse:
+    decide_next_hearing_suggestion(
+        session,
+        context=context,
+        matter_id=matter_id,
+        suggestion_id=suggestion_id,
+        action=payload.action,
+    )
+    history, suggestions = list_next_hearing_history(
+        session,
+        context=context,
+        matter_id=matter_id,
+    )
+    return MatterNextHearingHistoryResponse(history=history, suggestions=suggestions)
+
+
 @router.post(
     "/{matter_id}/court-sync/import",
     response_model=MatterCourtSyncRunRecord,
@@ -2227,6 +2291,67 @@ async def patch_current_company_matter_court_order(
     )
 
 
+@router.get(
+    "/{matter_id}/compliance",
+    response_model=ComplianceListResponse,
+    summary="List review-required court-order compliance items for a matter",
+)
+async def get_current_company_matter_compliance(
+    matter_id: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> ComplianceListResponse:
+    runs, items = list_compliance(session, context=context, matter_id=matter_id)
+    return ComplianceListResponse(runs=runs, items=items)
+
+
+@router.patch(
+    "/{matter_id}/compliance/{item_id}",
+    response_model=ComplianceListResponse,
+    summary="Confirm, reject, waive, complete, or edit a compliance item",
+)
+async def patch_current_company_matter_compliance_item(
+    matter_id: str,
+    item_id: str,
+    payload: ComplianceItemUpdateRequest,
+    context: MatterWriter,
+    session: DbSession,
+) -> ComplianceListResponse:
+    update_compliance_item(
+        session,
+        context=context,
+        matter_id=matter_id,
+        item_id=item_id,
+        action=payload.action,
+        updates=payload.model_dump(exclude_unset=True, exclude={"action"}),
+    )
+    runs, items = list_compliance(session, context=context, matter_id=matter_id)
+    return ComplianceListResponse(runs=runs, items=items)
+
+
+@router.post(
+    "/{matter_id}/court-orders/{order_id}/compliance/retry",
+    response_model=ComplianceRetryResponse,
+    summary="Retry compliance extraction for a court order",
+)
+async def retry_current_company_matter_order_compliance(
+    matter_id: str,
+    order_id: str,
+    context: MatterWriter,
+    session: DbSession,
+) -> ComplianceRetryResponse:
+    run, items = retry_order_compliance_extraction(
+        session,
+        context=context,
+        matter_id=matter_id,
+        order_id=order_id,
+    )
+    return ComplianceRetryResponse(
+        run=_run_record(run),
+        items=[_item_record(item) for item in items],
+    )
+
+
 @router.post(
     "/{matter_id}/court-sync/pull",
     response_model=MatterCourtSyncJobRecord,
@@ -2262,6 +2387,32 @@ async def post_current_company_matter_invoice(
     session: DbSession,
 ) -> InvoiceRecord:
     return create_matter_invoice(session, context=context, matter_id=matter_id, payload=payload)
+
+
+@router.get(
+    "/{matter_id}/invoices/{invoice_id}/download",
+    summary="Download a server-rendered matter invoice PDF",
+)
+async def download_current_company_matter_invoice_pdf(
+    matter_id: str,
+    invoice_id: str,
+    context: InvoiceIssuer,
+    session: DbSession,
+) -> Response:
+    body, filename, checksum = get_matter_invoice_pdf(
+        session,
+        context=context,
+        matter_id=matter_id,
+        invoice_id=invoice_id,
+    )
+    return Response(
+        content=body,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-CaseOps-Checksum": checksum,
+        },
+    )
 
 
 @router.post(

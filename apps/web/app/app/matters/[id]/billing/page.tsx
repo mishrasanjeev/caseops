@@ -8,6 +8,7 @@ import {
   Loader2,
   Receipt,
   RefreshCw,
+  Download,
 } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -30,6 +31,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { apiErrorMessage } from "@/lib/api/config";
 import {
   createInvoicePaymentLink,
+  downloadMatterInvoicePdf,
   fetchPaymentConfig,
   syncInvoicePaymentLink,
 } from "@/lib/api/endpoints";
@@ -43,6 +45,11 @@ function formatMoney(minor: number, currency = "INR"): string {
     currency,
     minimumFractionDigits: 0,
   }).format(minor / 100);
+}
+
+function formatHourlyRate(entry: WorkspaceTimeEntry): string {
+  if (!entry.rate_amount_minor) return "Rate not resolved";
+  return `${formatMoney(entry.rate_amount_minor, entry.rate_currency ?? "INR")}/hr`;
 }
 
 function canIssuePaymentLink(inv: WorkspaceInvoice): boolean {
@@ -122,6 +129,12 @@ export default function MatterBillingPage() {
     },
     onSettled: () => setPendingPaymentInvoiceId(null),
   });
+  const downloadInvoiceMutation = useMutation({
+    mutationFn: (invoiceId: string) => downloadMatterInvoicePdf({ matterId, invoiceId }),
+    onError: (err) => {
+      toast.error(apiErrorMessage(err, "Could not download invoice PDF."));
+    },
+  });
 
   const filteredTimeEntries = useMemo(() => {
     if (!data) return [] as WorkspaceTimeEntry[];
@@ -150,6 +163,10 @@ export default function MatterBillingPage() {
   const billableMinutes = data.time_entries
     .filter((t) => t.billable)
     .reduce((acc, t) => acc + t.duration_minutes, 0);
+  const resolvedRates = data.time_entries
+    .filter((entry) => entry.billable && entry.rate_amount_minor)
+    .map((entry) => `${formatHourlyRate(entry)} (${entry.rate_source ?? "configured"})`);
+  const rateSummary = [...new Set(resolvedRates)].slice(0, 3).join(", ") || "No resolved rates yet";
 
   return (
     <div className="flex flex-col gap-5">
@@ -159,6 +176,29 @@ export default function MatterBillingPage() {
         <KpiCard icon={Banknote} label="Balance due" value={formatMoney(balanceDue)} />
         <KpiCard icon={Clock} label="Billable minutes" value={String(billableMinutes)} />
       </section>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Billing setup</CardTitle>
+          <CardDescription>Applied law-firm profile and resolved matter rates.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 text-sm md:grid-cols-2">
+          <div>
+            <div className="text-xs uppercase tracking-[0.06em] text-[var(--color-mute)]">
+              Applied profile
+            </div>
+            <div className="mt-1 font-medium text-[var(--color-ink)]">
+              {data.matter.billing_profile_id ?? "Default billing profile"}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs uppercase tracking-[0.06em] text-[var(--color-mute)]">
+              Applied rates
+            </div>
+            <div className="mt-1 font-medium text-[var(--color-ink)]">{rateSummary}</div>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
@@ -188,9 +228,7 @@ export default function MatterBillingPage() {
                   <th className="px-4 py-2.5 text-right font-semibold">Total</th>
                   <th className="px-4 py-2.5 text-right font-semibold">Balance</th>
                   <th className="px-4 py-2.5 text-left font-semibold">Status</th>
-                  {canSendPaymentLink ? (
-                    <th className="px-4 py-2.5 text-right font-semibold">Payments</th>
-                  ) : null}
+                  <th className="px-4 py-2.5 text-right font-semibold">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -216,9 +254,21 @@ export default function MatterBillingPage() {
                       <td className="px-4 py-3">
                         <StatusBadge status={inv.status} />
                       </td>
-                      {canSendPaymentLink ? (
-                        <td className="px-4 py-3 text-right">
-                          <div className="inline-flex items-center gap-2">
+                      <td className="px-4 py-3 text-right">
+                        <div className="inline-flex items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            disabled={downloadInvoiceMutation.isPending}
+                            onClick={() => downloadInvoiceMutation.mutate(inv.id)}
+                            data-testid={`invoice-pdf-${inv.id}`}
+                          >
+                            <Download className="h-4 w-4" aria-hidden />
+                            PDF
+                          </Button>
+                          {canSendPaymentLink ? (
+                            <>
                             {canIssuePaymentLink(inv) && pineLabsConfigured ? (
                               <Button
                                 type="button"
@@ -255,9 +305,10 @@ export default function MatterBillingPage() {
                                 Sync
                               </Button>
                             ) : null}
-                          </div>
-                        </td>
-                      ) : null}
+                            </>
+                          ) : null}
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}

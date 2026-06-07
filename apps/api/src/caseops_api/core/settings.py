@@ -199,6 +199,21 @@ class Settings(BaseSettings):
     ecourtsindia_api_token: str | None = Field(default=None)
     case_tracking_poll_limit: int = Field(default=50, ge=1, le=500)
     case_tracking_default_poll_interval_hours: int = Field(default=24, ge=1, le=168)
+    case_tracking_daily_window_start: str = Field(
+        default="16:00",
+        pattern=r"^\d{2}:\d{2}$",
+    )
+    case_tracking_daily_window_end: str = Field(
+        default="18:00",
+        pattern=r"^\d{2}:\d{2}$",
+    )
+    case_tracking_daily_timezone: str = Field(default="Asia/Kolkata")
+
+    compliance_ai_extraction_enabled: bool = Field(default=False)
+    compliance_ai_extraction_auto_run_enabled: bool = Field(default=False)
+    compliance_auto_activate_generated_work_enabled: bool = Field(default=False)
+    matter_billing_config_enabled: bool = Field(default=True)
+    cause_list_export_enabled: bool = Field(default=True)
 
     # WTD-5.1/WTD-5.3 durable workflow foundation. Disabled by
     # default; these slices only add safe Temporal config/worker

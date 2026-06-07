@@ -9,6 +9,7 @@ from caseops_api.api.routes import (
     bootstrap,
     calendar,
     case_tracking,
+    cause_lists,
     clients,
     communications,
     companies,
@@ -19,6 +20,7 @@ from caseops_api.api.routes import (
     email_templates,
     health,
     intake,
+    matter_billing,
     matter_tags,
     matters,
     me,
@@ -54,6 +56,7 @@ api_router.include_router(
 api_router.include_router(payments.router, prefix="/payments", tags=["payments"])
 api_router.include_router(authorities.router, prefix="/authorities", tags=["authorities"])
 api_router.include_router(case_tracking.router, prefix="/case-tracking", tags=["case-tracking"])
+api_router.include_router(cause_lists.router, prefix="/cause-lists", tags=["cause-lists"])
 api_router.include_router(ai.router, prefix="/ai", tags=["ai"])
 api_router.include_router(recommendations.router, tags=["recommendations"])
 api_router.include_router(conflicts.router, tags=["conflicts"])
@@ -67,6 +70,11 @@ api_router.include_router(
     provider_operations.router,
     prefix="/admin/provider-operations",
     tags=["provider-operations"],
+)
+api_router.include_router(
+    matter_billing.router,
+    prefix="/admin/matter-billing",
+    tags=["matter-billing"],
 )
 api_router.include_router(courts.router, prefix="/courts", tags=["courts"])
 # MOD-TS-017 Slice S2 (2026-04-25) - bare-acts read API powering

@@ -1,10 +1,17 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { useMatterWorkspaceMock, useCapabilityMock, fetchPaymentConfigMock } =
+const {
+  downloadMatterInvoicePdfMock,
+  useMatterWorkspaceMock,
+  useCapabilityMock,
+  fetchPaymentConfigMock,
+} =
   vi.hoisted(() => ({
+    downloadMatterInvoicePdfMock: vi.fn(),
     useMatterWorkspaceMock: vi.fn(),
     useCapabilityMock: vi.fn(),
     fetchPaymentConfigMock: vi.fn(),
@@ -20,6 +27,7 @@ vi.mock("@/lib/capabilities", () => ({
 
 vi.mock("@/lib/api/endpoints", () => ({
   createInvoicePaymentLink: vi.fn(),
+  downloadMatterInvoicePdf: downloadMatterInvoicePdfMock,
   fetchPaymentConfig: fetchPaymentConfigMock,
   syncInvoicePaymentLink: vi.fn(),
 }));
@@ -49,9 +57,11 @@ const BASE_DATA = {
 
 describe("MatterBillingPage", () => {
   beforeEach(() => {
+    downloadMatterInvoicePdfMock.mockReset();
     useMatterWorkspaceMock.mockReset();
     useCapabilityMock.mockReset();
     fetchPaymentConfigMock.mockReset();
+    downloadMatterInvoicePdfMock.mockResolvedValue(undefined);
     fetchPaymentConfigMock.mockResolvedValue({
       provider_configured: false,
       provider: null,
@@ -87,5 +97,76 @@ describe("MatterBillingPage", () => {
     // Page returns null OR renders empty shell when data is missing —
     // either way, no crash.
     expect(container).toBeInTheDocument();
+  });
+
+  it("shows the applied billing profile and resolved configured rate", () => {
+    useMatterWorkspaceMock.mockReturnValue({
+      data: {
+        ...BASE_DATA,
+        matter: {
+          id: "m-1",
+          title: "Test Matter",
+          matter_code: "T-1",
+          billing_profile_id: "profile-gba",
+        },
+        time_entries: [
+          {
+            id: "time-1",
+            work_date: "2026-06-05",
+            description: "Draft compliance note",
+            duration_minutes: 60,
+            billable: true,
+            author_name: "Lead Lawyer",
+            rate_currency: "INR",
+            rate_amount_minor: 300000,
+            billing_rate_id: "rate-1",
+            rate_source: "default",
+            total_amount_minor: 300000,
+            is_invoiced: false,
+          },
+        ],
+      },
+    });
+    useCapabilityMock.mockReturnValue(false);
+
+    render(withClient(<MatterBillingPage />));
+
+    expect(screen.getByText("Billing setup")).toBeInTheDocument();
+    expect(screen.getByText("profile-gba")).toBeInTheDocument();
+    expect(screen.getByText(/default/)).toBeInTheDocument();
+    expect(screen.getByText(/Draft compliance note/)).toBeInTheDocument();
+  });
+
+  it("downloads the server-rendered invoice PDF for the selected matter invoice", async () => {
+    const user = userEvent.setup();
+    useMatterWorkspaceMock.mockReturnValue({
+      data: {
+        ...BASE_DATA,
+        invoices: [
+          {
+            id: "invoice-1",
+            invoice_number: "GBA-0001",
+            status: "issued",
+            issued_on: "2026-06-06",
+            due_on: "2026-07-06",
+            total_amount_minor: 1180000,
+            balance_due_minor: 1180000,
+            amount_received_minor: 0,
+            currency: "INR",
+            payment_attempts: [],
+          },
+        ],
+      },
+    });
+    useCapabilityMock.mockReturnValue(false);
+
+    render(withClient(<MatterBillingPage />));
+    await user.click(screen.getByTestId("invoice-pdf-invoice-1"));
+
+    await waitFor(() => expect(downloadMatterInvoicePdfMock).toHaveBeenCalledTimes(1));
+    expect(downloadMatterInvoicePdfMock).toHaveBeenCalledWith({
+      matterId: "m-1",
+      invoiceId: "invoice-1",
+    });
   });
 });

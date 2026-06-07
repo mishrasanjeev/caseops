@@ -27,17 +27,19 @@ import { createMatterInvoice } from "@/lib/api/endpoints";
 const schema = z.object({
   invoice_number: z
     .string()
-    .min(2, "At least 2 characters.")
     .max(80, "Keep it under 80.")
-    .regex(/^[A-Za-z0-9\-_/]+$/, "Letters, digits, hyphen, underscore, slash only."),
+    .regex(/^[A-Za-z0-9\-_/]+$/, "Letters, digits, hyphen, underscore, slash only.")
+    .optional()
+    .or(z.literal("")),
   issued_on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD."),
   due_on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD.").optional().or(z.literal("")),
   client_name: z.string().max(255).optional(),
-  tax_amount_rupees: z
-    .string()
-    .regex(/^\d+(\.\d{1,2})?$/, "Tax as a number (e.g. 500 or 500.00).")
-    .optional()
-    .or(z.literal("")),
+  client_billing_address: z.string().max(4000).optional(),
+  client_gstin: z.string().max(32).optional(),
+  place_of_supply: z.string().max(120).optional(),
+  sac_hsn: z.string().max(32).optional(),
+  tds_deducted_rupees: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().or(z.literal("")),
+  payment_adjustment_rupees: z.string().regex(/^-?\d+(\.\d{1,2})?$/).optional().or(z.literal("")),
   notes: z.string().max(4000).optional(),
   include_uninvoiced_time_entries: z.boolean(),
   manual_items: z
@@ -79,7 +81,12 @@ export function NewInvoiceDialog({ matterId }: { matterId: string }) {
       issued_on: todayIso(),
       due_on: "",
       client_name: "",
-      tax_amount_rupees: "",
+      client_billing_address: "",
+      client_gstin: "",
+      place_of_supply: "",
+      sac_hsn: "",
+      tds_deducted_rupees: "",
+      payment_adjustment_rupees: "",
       notes: "",
       include_uninvoiced_time_entries: true,
       manual_items: [],
@@ -95,11 +102,17 @@ export function NewInvoiceDialog({ matterId }: { matterId: string }) {
     mutationFn: (values: FormValues) =>
       createMatterInvoice({
         matterId,
-        invoiceNumber: values.invoice_number.trim(),
+        invoiceNumber: values.invoice_number?.trim() || null,
         issuedOn: values.issued_on,
         dueOn: values.due_on?.trim() || null,
         clientName: values.client_name?.trim() || null,
-        taxAmountMinor: rupeesToMinor(values.tax_amount_rupees),
+        clientBillingName: values.client_name?.trim() || null,
+        clientBillingAddress: values.client_billing_address?.trim() || null,
+        clientGstin: values.client_gstin?.trim() || null,
+        placeOfSupply: values.place_of_supply?.trim() || null,
+        sacHsn: values.sac_hsn?.trim() || null,
+        tdsDeductedMinor: rupeesToMinor(values.tds_deducted_rupees),
+        paymentAdjustmentMinor: rupeesToMinor(values.payment_adjustment_rupees),
         notes: values.notes?.trim() || null,
         includeUninvoicedTimeEntries: values.include_uninvoiced_time_entries,
         manualItems: values.manual_items.map((item) => ({
@@ -117,7 +130,12 @@ export function NewInvoiceDialog({ matterId }: { matterId: string }) {
         issued_on: todayIso(),
         due_on: "",
         client_name: "",
-        tax_amount_rupees: "",
+        client_billing_address: "",
+        client_gstin: "",
+        place_of_supply: "",
+        sac_hsn: "",
+        tds_deducted_rupees: "",
+        payment_adjustment_rupees: "",
         notes: "",
         include_uninvoiced_time_entries: true,
         manual_items: [],
@@ -155,12 +173,12 @@ export function NewInvoiceDialog({ matterId }: { matterId: string }) {
         >
           <FormField
             id="invoice-number"
-            label="Invoice number"
+            label="Invoice number (optional)"
             error={form.formState.errors.invoice_number?.message}
           >
             <Input
               id="invoice-number"
-              placeholder="INV-2026-0001"
+              placeholder="Auto from billing profile"
               aria-invalid={Boolean(form.formState.errors.invoice_number) || undefined}
               {...form.register("invoice_number")}
             />
@@ -187,22 +205,31 @@ export function NewInvoiceDialog({ matterId }: { matterId: string }) {
             </FormField>
           </div>
 
-          <FormField id="client-name" label="Client name (optional)">
+          <FormField id="client-name" label="Client billing name (optional)">
             <Input id="client-name" {...form.register("client_name")} />
           </FormField>
 
-          <FormField
-            id="tax-amount"
-            label="Tax amount in INR (optional)"
-            error={form.formState.errors.tax_amount_rupees?.message}
-          >
-            <Input
-              id="tax-amount"
-              inputMode="decimal"
-              placeholder="0"
-              {...form.register("tax_amount_rupees")}
-            />
+          <FormField id="client-address" label="Client billing address">
+            <Textarea id="client-address" rows={2} {...form.register("client_billing_address")} />
           </FormField>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <FormField id="client-gstin" label="Client GSTIN">
+              <Input id="client-gstin" {...form.register("client_gstin")} />
+            </FormField>
+            <FormField id="place-of-supply" label="Place of supply">
+              <Input id="place-of-supply" {...form.register("place_of_supply")} />
+            </FormField>
+            <FormField id="sac-hsn" label="SAC/HSN">
+              <Input id="sac-hsn" {...form.register("sac_hsn")} />
+            </FormField>
+            <FormField id="tds" label="TDS deducted INR">
+              <Input id="tds" inputMode="decimal" placeholder="0" {...form.register("tds_deducted_rupees")} />
+            </FormField>
+            <FormField id="payment-adjustment" label="Payment adjustment INR">
+              <Input id="payment-adjustment" inputMode="decimal" placeholder="0" {...form.register("payment_adjustment_rupees")} />
+            </FormField>
+          </div>
 
           <label className="flex items-start gap-2 text-sm text-[var(--color-ink-2)]">
             <input

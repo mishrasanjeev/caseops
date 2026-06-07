@@ -46,6 +46,12 @@ spec:
                   value: "true"
                 - name: CASEOPS_CASE_TRACKING_PROVIDER
                   value: "ecourtsindia"
+                - name: CASEOPS_CASE_TRACKING_DAILY_WINDOW_START
+                  value: "16:00"
+                - name: CASEOPS_CASE_TRACKING_DAILY_WINDOW_END
+                  value: "18:00"
+                - name: CASEOPS_CASE_TRACKING_DAILY_TIMEZONE
+                  value: "Asia/Kolkata"
                 - name: CASEOPS_ECOURTSINDIA_API_BASE_URL
                   value: "https://webapi.ecourtsindia.com"
                 - name: CASEOPS_ECOURTSINDIA_API_TOKEN

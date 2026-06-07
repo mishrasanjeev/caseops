@@ -164,6 +164,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/matter-billing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List tenant matter billing profiles and rates */
+        get: operations["get_matter_billing_profiles_api_admin_matter_billing_get"];
+        put?: never;
+        /** Create a tenant matter billing profile */
+        post: operations["post_matter_billing_profile_api_admin_matter_billing_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/matter-billing/invoice-number-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Preview the next matter invoice number */
+        get: operations["get_matter_invoice_number_preview_api_admin_matter_billing_invoice_number_preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/matter-billing/{profile_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update a tenant matter billing profile */
+        patch: operations["patch_matter_billing_profile_api_admin_matter_billing__profile_id__patch"];
+        trace?: never;
+    };
+    "/api/admin/matter-billing/{profile_id}/rates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add a rate rule to a matter billing profile */
+        post: operations["post_matter_billing_rate_api_admin_matter_billing__profile_id__rates_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/notifications": {
         parameters: {
             query?: never;
@@ -1667,6 +1736,40 @@ export interface paths {
         get: operations["get_case_tracking_status_api_case_tracking_status_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cause-lists/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Download a date-wise cause list PDF */
+        post: operations["post_cause_list_download_api_cause_lists_download_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cause-lists/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview a date-wise cause list for visible matters */
+        post: operations["post_cause_list_preview_api_cause_lists_preview_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3488,6 +3591,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matters/{matter_id}/compliance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List review-required court-order compliance items for a matter */
+        get: operations["get_current_company_matter_compliance_api_matters__matter_id__compliance_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/{matter_id}/compliance/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Confirm, reject, waive, complete, or edit a compliance item */
+        patch: operations["patch_current_company_matter_compliance_item_api_matters__matter_id__compliance__item_id__patch"];
+        trace?: never;
+    };
     "/api/matters/{matter_id}/conflict-checks": {
         parameters: {
             query?: never;
@@ -3549,6 +3686,23 @@ export interface paths {
         head?: never;
         /** Update court order metadata, interim flag, and stay status */
         patch: operations["patch_current_company_matter_court_order_api_matters__matter_id__court_orders__order_id__patch"];
+        trace?: never;
+    };
+    "/api/matters/{matter_id}/court-orders/{order_id}/compliance/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retry compliance extraction for a court order */
+        post: operations["retry_current_company_matter_order_compliance_api_matters__matter_id__court_orders__order_id__compliance_retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/matters/{matter_id}/court-orders/{order_id}/proceeding-intelligence/extract": {
@@ -4053,6 +4207,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matters/{matter_id}/invoices/{invoice_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download a server-rendered matter invoice PDF */
+        get: operations["download_current_company_matter_invoice_pdf_api_matters__matter_id__invoices__invoice_id__download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matters/{matter_id}/legal-knowledge-graph": {
         parameters: {
             query?: never;
@@ -4218,6 +4389,40 @@ export interface paths {
         get: operations["get_matter_next_action_api_matters__matter_id__next_action_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/{matter_id}/next-hearing/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List next-hearing provenance history and review suggestions */
+        get: operations["get_current_company_matter_next_hearing_history_api_matters__matter_id__next_hearing_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/{matter_id}/next-hearing/suggestions/{suggestion_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Accept or reject a next-hearing review suggestion */
+        post: operations["decide_current_company_matter_next_hearing_suggestion_api_matters__matter_id__next_hearing_suggestions__suggestion_id__post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -8140,6 +8345,86 @@ export interface components {
              */
             update_type: "new_order" | "new_judgment" | "hearing_update" | "status_change" | "case_metadata_change";
         };
+        /** CauseListPreviewRequest */
+        CauseListPreviewRequest: {
+            /** Court */
+            court?: string | null;
+            /** Date */
+            date?: string | null;
+            /** Date From */
+            date_from?: string | null;
+            /** Date To */
+            date_to?: string | null;
+            /**
+             * Include Disposed
+             * @default false
+             */
+            include_disposed: boolean;
+            /** Lawyer Membership Id */
+            lawyer_membership_id?: string | null;
+            /** Matter Status */
+            matter_status?: string | null;
+            /** Practice Area */
+            practice_area?: string | null;
+            /**
+             * Sort
+             * @default hearing_date
+             * @enum {string}
+             */
+            sort: "hearing_date" | "court" | "lawyer" | "serial";
+            /**
+             * Source
+             * @default both
+             * @enum {string}
+             */
+            source: "hearings" | "cause_list_entries" | "both";
+        };
+        /** CauseListPreviewResponse */
+        CauseListPreviewResponse: {
+            /** Filters */
+            filters: {
+                [key: string]: unknown;
+            };
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Rows */
+            rows: components["schemas"]["CauseListRow"][];
+        };
+        /** CauseListRow */
+        CauseListRow: {
+            /** Case Number */
+            case_number: string;
+            /** Case Title */
+            case_title: string;
+            /** Court Name */
+            court_name: string;
+            /** Court Number */
+            court_number: string;
+            /** File Number */
+            file_number: string;
+            /**
+             * Hearing Date
+             * Format: date
+             */
+            hearing_date: string;
+            /** Item Number */
+            item_number: string;
+            /** Judge Name */
+            judge_name: string;
+            /** Lawyers Appearing */
+            lawyers_appearing: string;
+            /** Missing Field Warnings */
+            missing_field_warnings?: string[];
+            /** Serial Number */
+            serial_number: number;
+            /** Source */
+            source: string;
+            /** Source Ref */
+            source_ref?: string | null;
+        };
         /** ClauseExtractionResponse */
         ClauseExtractionResponse: {
             /** Contract Id */
@@ -8682,6 +8967,150 @@ export interface components {
             company_slug: string;
             /** Users */
             users: components["schemas"]["CompanyUserRecord"][];
+        };
+        /** ComplianceExtractionRunRecord */
+        ComplianceExtractionRunRecord: {
+            /** Attachment Id */
+            attachment_id: string | null;
+            /** Company Id */
+            company_id: string;
+            /** Completed At */
+            completed_at: string | null;
+            /** Court Order Id */
+            court_order_id: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Error Message Redacted */
+            error_message_redacted?: string | null;
+            /** Id */
+            id: string;
+            /** Matter Id */
+            matter_id: string;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Model Run Id */
+            model_run_id?: string | null;
+            /** Parser Version */
+            parser_version: string;
+            /** Skip Reason */
+            skip_reason?: string | null;
+            /** Source Type */
+            source_type: string;
+            /** Started At */
+            started_at: string | null;
+            /** Status */
+            status: string;
+            /** Trigger */
+            trigger: string;
+        };
+        /** ComplianceItemRecord */
+        ComplianceItemRecord: {
+            /** Attachment Id */
+            attachment_id: string | null;
+            /** Company Id */
+            company_id: string;
+            /** Completed At */
+            completed_at?: string | null;
+            /** Confidence Label */
+            confidence_label: string;
+            /** Court Direction */
+            court_direction: string | null;
+            /** Court Order Id */
+            court_order_id: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Dedupe Key */
+            dedupe_key: string;
+            /** Description */
+            description: string;
+            /** Due On */
+            due_on: string | null;
+            /** Extraction Run Id */
+            extraction_run_id: string;
+            /** Filing Requirement */
+            filing_requirement: string | null;
+            /** Generated Deadline Id */
+            generated_deadline_id: string | null;
+            /** Generated Task Id */
+            generated_task_id: string | null;
+            /** Id */
+            id: string;
+            /** Matter Id */
+            matter_id: string;
+            /** Next Action */
+            next_action: string | null;
+            /** Rejection Reason */
+            rejection_reason?: string | null;
+            /** Responsible Party */
+            responsible_party: string | null;
+            /** Review Status */
+            review_status: string;
+            /** Reviewed At */
+            reviewed_at?: string | null;
+            /** Reviewed By Membership Id */
+            reviewed_by_membership_id?: string | null;
+            /** Source Page */
+            source_page: number | null;
+            /** Source Paragraph */
+            source_paragraph: string | null;
+            /** Source Snippet */
+            source_snippet: string;
+            /** Status */
+            status: string;
+            /** Timeline Text */
+            timeline_text: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Waived Reason */
+            waived_reason?: string | null;
+        };
+        /** ComplianceItemUpdateRequest */
+        ComplianceItemUpdateRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "confirm" | "reject" | "waive" | "complete";
+            /** Court Direction */
+            court_direction?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Due On */
+            due_on?: string | null;
+            /** Filing Requirement */
+            filing_requirement?: string | null;
+            /** Next Action */
+            next_action?: string | null;
+            /** Reason */
+            reason?: string | null;
+            /** Responsible Party */
+            responsible_party?: string | null;
+            /** Timeline Text */
+            timeline_text?: string | null;
+        };
+        /** ComplianceListResponse */
+        ComplianceListResponse: {
+            /** Items */
+            items: components["schemas"]["ComplianceItemRecord"][];
+            /** Runs */
+            runs: components["schemas"]["ComplianceExtractionRunRecord"][];
+        };
+        /** ComplianceRetryResponse */
+        ComplianceRetryResponse: {
+            /** Items */
+            items: components["schemas"]["ComplianceItemRecord"][];
+            run: components["schemas"]["ComplianceExtractionRunRecord"];
         };
         /**
          * ConflictCandidate
@@ -11551,6 +11980,12 @@ export interface components {
         };
         /** InvoiceCreateRequest */
         InvoiceCreateRequest: {
+            /** Client Billing Address */
+            client_billing_address?: string | null;
+            /** Client Billing Name */
+            client_billing_name?: string | null;
+            /** Client Gstin */
+            client_gstin?: string | null;
             /** Client Name */
             client_name?: string | null;
             /** Due On */
@@ -11561,7 +11996,7 @@ export interface components {
              */
             include_uninvoiced_time_entries: boolean;
             /** Invoice Number */
-            invoice_number: string;
+            invoice_number?: string | null;
             /**
              * Issued On
              * Format: date
@@ -11571,6 +12006,15 @@ export interface components {
             manual_items?: components["schemas"]["InvoiceManualItemCreateRequest"][];
             /** Notes */
             notes?: string | null;
+            /**
+             * Payment Adjustment Minor
+             * @default 0
+             */
+            payment_adjustment_minor: number;
+            /** Place Of Supply */
+            place_of_supply?: string | null;
+            /** Sac Hsn */
+            sac_hsn?: string | null;
             /**
              * Status
              * @default draft
@@ -11582,9 +12026,16 @@ export interface components {
              * @default 0
              */
             tax_amount_minor: number;
+            /**
+             * Tds Deducted Minor
+             * @default 0
+             */
+            tds_deducted_minor: number;
         };
         /** InvoiceLineItemRecord */
         InvoiceLineItemRecord: {
+            /** Category */
+            category?: string | null;
             /**
              * Created At
              * Format: date-time
@@ -11600,6 +12051,8 @@ export interface components {
             invoice_id: string;
             /** Line Total Amount Minor */
             line_total_amount_minor: number;
+            /** Sac Hsn */
+            sac_hsn?: string | null;
             /** Time Entry Id */
             time_entry_id: string | null;
             /** Unit Rate Amount Minor */
@@ -11609,8 +12062,19 @@ export interface components {
         InvoiceManualItemCreateRequest: {
             /** Amount Minor */
             amount_minor: number;
+            /** Category */
+            category?: string | null;
             /** Description */
             description: string;
+            /** Sac Hsn */
+            sac_hsn?: string | null;
+        };
+        /** InvoiceNumberPreviewResponse */
+        InvoiceNumberPreviewResponse: {
+            /** Invoice Number */
+            invoice_number: string;
+            /** Next Invoice Sequence */
+            next_invoice_sequence: number;
         };
         /** InvoicePaymentAttemptRecord */
         InvoicePaymentAttemptRecord: {
@@ -11668,6 +12132,17 @@ export interface components {
             amount_received_minor: number;
             /** Balance Due Minor */
             balance_due_minor: number;
+            /**
+             * Cgst Amount Minor
+             * @default 0
+             */
+            cgst_amount_minor: number;
+            /** Client Billing Address */
+            client_billing_address?: string | null;
+            /** Client Billing Name */
+            client_billing_name?: string | null;
+            /** Client Gstin */
+            client_gstin?: string | null;
             /** Client Name */
             client_name: string | null;
             /** Company Id */
@@ -11681,8 +12156,21 @@ export interface components {
             currency: string;
             /** Due On */
             due_on: string | null;
+            /** Firm Address */
+            firm_address?: string | null;
+            /** Firm Gstin */
+            firm_gstin?: string | null;
+            /** Firm Legal Name */
+            firm_legal_name?: string | null;
+            /** Firm Pan */
+            firm_pan?: string | null;
             /** Id */
             id: string;
+            /**
+             * Igst Amount Minor
+             * @default 0
+             */
+            igst_amount_minor: number;
             /** Invoice Number */
             invoice_number: string;
             /** Issued By Membership Id */
@@ -11700,12 +12188,26 @@ export interface components {
             matter_id: string;
             /** Notes */
             notes: string | null;
+            /**
+             * Payment Adjustment Minor
+             * @default 0
+             */
+            payment_adjustment_minor: number;
             /** Payment Attempts */
             payment_attempts: components["schemas"]["InvoicePaymentAttemptRecord"][];
             /** Pine Labs Order Id */
             pine_labs_order_id: string | null;
             /** Pine Labs Payment Url */
             pine_labs_payment_url: string | null;
+            /** Place Of Supply */
+            place_of_supply?: string | null;
+            /** Sac Hsn */
+            sac_hsn?: string | null;
+            /**
+             * Sgst Amount Minor
+             * @default 0
+             */
+            sgst_amount_minor: number;
             /**
              * Status
              * @enum {string}
@@ -11715,6 +12217,16 @@ export interface components {
             subtotal_amount_minor: number;
             /** Tax Amount Minor */
             tax_amount_minor: number;
+            /**
+             * Taxable Value Minor
+             * @default 0
+             */
+            taxable_value_minor: number;
+            /**
+             * Tds Deducted Minor
+             * @default 0
+             */
+            tds_deducted_minor: number;
             /** Total Amount Minor */
             total_amount_minor: number;
             /**
@@ -12979,6 +13491,285 @@ export interface components {
             /** Total */
             total: number;
         };
+        /** MatterBillingProfileCreateRequest */
+        MatterBillingProfileCreateRequest: {
+            /**
+             * Billing Mode
+             * @default hourly
+             * @enum {string}
+             */
+            billing_mode: "hourly" | "fixed_fee" | "milestone" | "mixed";
+            /**
+             * Cgst Rate Bps
+             * @default 0
+             */
+            cgst_rate_bps: number;
+            /**
+             * Currency
+             * @default INR
+             */
+            currency: string;
+            /** Default Place Of Supply */
+            default_place_of_supply?: string | null;
+            /** Default Rate Minor Per Hour */
+            default_rate_minor_per_hour?: number | null;
+            /** Default Sac Hsn */
+            default_sac_hsn?: string | null;
+            /** Expense Categories */
+            expense_categories?: string[];
+            /** Firm Address */
+            firm_address?: string | null;
+            /** Firm Gstin */
+            firm_gstin?: string | null;
+            /** Firm Legal Name */
+            firm_legal_name?: string | null;
+            /** Firm Pan */
+            firm_pan?: string | null;
+            /** Footer Text */
+            footer_text?: string | null;
+            /**
+             * Gst Applicable
+             * @default false
+             */
+            gst_applicable: boolean;
+            /** Gstin State Code */
+            gstin_state_code?: string | null;
+            /**
+             * Igst Rate Bps
+             * @default 0
+             */
+            igst_rate_bps: number;
+            /**
+             * Invoice Prefix
+             * @default INV
+             */
+            invoice_prefix: string;
+            /**
+             * Is Default
+             * @default false
+             */
+            is_default: boolean;
+            /** Name */
+            name: string;
+            /**
+             * Next Invoice Sequence
+             * @default 1
+             */
+            next_invoice_sequence: number;
+            /** Notes Template */
+            notes_template?: string | null;
+            /**
+             * Payment Terms Days
+             * @default 30
+             */
+            payment_terms_days: number;
+            /**
+             * Retainer Adjustments Enabled
+             * @default false
+             */
+            retainer_adjustments_enabled: boolean;
+            /**
+             * Sgst Rate Bps
+             * @default 0
+             */
+            sgst_rate_bps: number;
+            /**
+             * Tax Rate Bps
+             * @default 0
+             */
+            tax_rate_bps: number;
+        };
+        /** MatterBillingProfileListResponse */
+        MatterBillingProfileListResponse: {
+            /** Profiles */
+            profiles: components["schemas"]["MatterBillingProfileRecord"][];
+        };
+        /** MatterBillingProfileRecord */
+        MatterBillingProfileRecord: {
+            /** Billing Mode */
+            billing_mode: string;
+            /** Cgst Rate Bps */
+            cgst_rate_bps: number;
+            /** Company Id */
+            company_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Currency */
+            currency: string;
+            /** Default Place Of Supply */
+            default_place_of_supply: string | null;
+            /** Default Rate Minor Per Hour */
+            default_rate_minor_per_hour: number | null;
+            /** Default Sac Hsn */
+            default_sac_hsn: string | null;
+            /** Expense Categories */
+            expense_categories: string[];
+            /** Firm Address */
+            firm_address: string | null;
+            /** Firm Gstin */
+            firm_gstin: string | null;
+            /** Firm Legal Name */
+            firm_legal_name: string | null;
+            /** Firm Pan */
+            firm_pan: string | null;
+            /** Footer Text */
+            footer_text: string | null;
+            /** Gst Applicable */
+            gst_applicable: boolean;
+            /** Gstin State Code */
+            gstin_state_code: string | null;
+            /** Id */
+            id: string;
+            /** Igst Rate Bps */
+            igst_rate_bps: number;
+            /** Invoice Prefix */
+            invoice_prefix: string;
+            /** Is Default */
+            is_default: boolean;
+            /** Name */
+            name: string;
+            /** Next Invoice Sequence */
+            next_invoice_sequence: number;
+            /** Notes Template */
+            notes_template: string | null;
+            /** Payment Terms Days */
+            payment_terms_days: number;
+            /** Rates */
+            rates?: components["schemas"]["MatterBillingRateRecord"][];
+            /** Retainer Adjustments Enabled */
+            retainer_adjustments_enabled: boolean;
+            /** Sgst Rate Bps */
+            sgst_rate_bps: number;
+            /** Tax Rate Bps */
+            tax_rate_bps: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** MatterBillingProfileUpdateRequest */
+        MatterBillingProfileUpdateRequest: {
+            /** Billing Mode */
+            billing_mode?: ("hourly" | "fixed_fee" | "milestone" | "mixed") | null;
+            /** Cgst Rate Bps */
+            cgst_rate_bps?: number | null;
+            /** Currency */
+            currency?: string | null;
+            /** Default Place Of Supply */
+            default_place_of_supply?: string | null;
+            /** Default Rate Minor Per Hour */
+            default_rate_minor_per_hour?: number | null;
+            /** Default Sac Hsn */
+            default_sac_hsn?: string | null;
+            /** Expense Categories */
+            expense_categories?: string[] | null;
+            /** Firm Address */
+            firm_address?: string | null;
+            /** Firm Gstin */
+            firm_gstin?: string | null;
+            /** Firm Legal Name */
+            firm_legal_name?: string | null;
+            /** Firm Pan */
+            firm_pan?: string | null;
+            /** Footer Text */
+            footer_text?: string | null;
+            /** Gst Applicable */
+            gst_applicable?: boolean | null;
+            /** Gstin State Code */
+            gstin_state_code?: string | null;
+            /** Igst Rate Bps */
+            igst_rate_bps?: number | null;
+            /** Invoice Prefix */
+            invoice_prefix?: string | null;
+            /** Is Default */
+            is_default?: boolean | null;
+            /** Name */
+            name?: string | null;
+            /** Next Invoice Sequence */
+            next_invoice_sequence?: number | null;
+            /** Notes Template */
+            notes_template?: string | null;
+            /** Payment Terms Days */
+            payment_terms_days?: number | null;
+            /** Retainer Adjustments Enabled */
+            retainer_adjustments_enabled?: boolean | null;
+            /** Sgst Rate Bps */
+            sgst_rate_bps?: number | null;
+            /** Tax Rate Bps */
+            tax_rate_bps?: number | null;
+        };
+        /** MatterBillingRateCreateRequest */
+        MatterBillingRateCreateRequest: {
+            /** Amount Minor Per Hour */
+            amount_minor_per_hour: number;
+            /**
+             * Currency
+             * @default INR
+             */
+            currency: string;
+            /** Effective From */
+            effective_from?: string | null;
+            /** Effective To */
+            effective_to?: string | null;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Membership Id */
+            membership_id?: string | null;
+            /** Practice Area */
+            practice_area?: string | null;
+            /**
+             * Rate Scope
+             * @default default
+             * @enum {string}
+             */
+            rate_scope: "user" | "role" | "practice_area" | "default";
+            /** Role */
+            role?: string | null;
+        };
+        /** MatterBillingRateRecord */
+        MatterBillingRateRecord: {
+            /** Amount Minor Per Hour */
+            amount_minor_per_hour: number;
+            /** Billing Profile Id */
+            billing_profile_id: string;
+            /** Company Id */
+            company_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Currency */
+            currency: string;
+            /** Effective From */
+            effective_from: string | null;
+            /** Effective To */
+            effective_to: string | null;
+            /** Id */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Membership Id */
+            membership_id: string | null;
+            /** Practice Area */
+            practice_area: string | null;
+            /** Rate Scope */
+            rate_scope: string;
+            /** Role */
+            role: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
         /** MatterBriefGenerateRequest */
         MatterBriefGenerateRequest: {
             /**
@@ -13442,6 +14233,8 @@ export interface components {
          *     }
          */
         MatterCreateRequest: {
+            /** Case Number */
+            case_number?: string | null;
             /** Claim Amount Minor */
             claim_amount_minor?: number | null;
             /** Claim Amount Notes */
@@ -13453,6 +14246,8 @@ export interface components {
             claim_currency: string;
             /** Client Name */
             client_name?: string | null;
+            /** Cnr Number */
+            cnr_number?: string | null;
             /** Court Id */
             court_id?: string | null;
             /** Court Name */
@@ -13478,6 +14273,11 @@ export interface components {
             judge_name?: string | null;
             /** Matter Code */
             matter_code: string;
+            /**
+             * Next Hearing Manual Lock
+             * @default false
+             */
+            next_hearing_manual_lock: boolean;
             /** Next Hearing On */
             next_hearing_on?: string | null;
             /** Opposing Party */
@@ -13489,7 +14289,7 @@ export interface components {
              * @default intake
              * @enum {string}
              */
-            status: "intake" | "active" | "on_hold" | "closed";
+            status: "intake" | "active" | "on_hold" | "disposed" | "closed";
             /** Title */
             title: string;
         };
@@ -13966,6 +14766,88 @@ export interface components {
             /** Next Cursor */
             next_cursor?: string | null;
         };
+        /** MatterNextHearingHistoryRecord */
+        MatterNextHearingHistoryRecord: {
+            /** Change Reason */
+            change_reason: string | null;
+            /** Changed By Membership Id */
+            changed_by_membership_id: string | null;
+            /** Company Id */
+            company_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Manual Lock */
+            manual_lock: boolean;
+            /** Matter Id */
+            matter_id: string;
+            /** New Date */
+            new_date: string | null;
+            /** Old Date */
+            old_date: string | null;
+            /** Source */
+            source: string;
+            /** Source Ref Id */
+            source_ref_id: string | null;
+            /** Source Ref Type */
+            source_ref_type: string | null;
+        };
+        /** MatterNextHearingHistoryResponse */
+        MatterNextHearingHistoryResponse: {
+            /** History */
+            history: components["schemas"]["MatterNextHearingHistoryRecord"][];
+            /** Suggestions */
+            suggestions: components["schemas"]["MatterNextHearingSuggestionRecord"][];
+        };
+        /** MatterNextHearingSuggestionActionRequest */
+        MatterNextHearingSuggestionActionRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "accept" | "reject";
+        };
+        /** MatterNextHearingSuggestionRecord */
+        MatterNextHearingSuggestionRecord: {
+            /** Company Id */
+            company_id: string;
+            /** Confidence Label */
+            confidence_label: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Decided At */
+            decided_at: string | null;
+            /** Decided By Membership Id */
+            decided_by_membership_id: string | null;
+            /** Existing Date */
+            existing_date: string | null;
+            /** Id */
+            id: string;
+            /** Matter Id */
+            matter_id: string;
+            /** Reason */
+            reason: string | null;
+            /** Source */
+            source: string;
+            /** Source Ref Id */
+            source_ref_id: string | null;
+            /** Source Ref Type */
+            source_ref_type: string | null;
+            /** Status */
+            status: string;
+            /**
+             * Suggested Date
+             * Format: date
+             */
+            suggested_date: string;
+        };
         /** MatterNoteCreateRequest */
         MatterNoteCreateRequest: {
             /** Body */
@@ -14014,6 +14896,10 @@ export interface components {
         MatterRecord: {
             /** Assignee Membership Id */
             assignee_membership_id: string | null;
+            /** Billing Profile Id */
+            billing_profile_id?: string | null;
+            /** Case Number */
+            case_number?: string | null;
             /** Claim Amount Minor */
             claim_amount_minor?: number | null;
             /** Claim Amount Notes */
@@ -14025,6 +14911,8 @@ export interface components {
             claim_currency: string;
             /** Client Name */
             client_name: string | null;
+            /** Cnr Number */
+            cnr_number?: string | null;
             /** Company Id */
             company_id: string;
             /** Court Id */
@@ -14071,8 +14959,26 @@ export interface components {
             judge_name: string | null;
             /** Matter Code */
             matter_code: string;
+            /**
+             * Next Hearing Manual Lock
+             * @default false
+             */
+            next_hearing_manual_lock: boolean;
             /** Next Hearing On */
             next_hearing_on: string | null;
+            /**
+             * Next Hearing Source
+             * @default unknown
+             */
+            next_hearing_source: string;
+            /** Next Hearing Source Ref Id */
+            next_hearing_source_ref_id?: string | null;
+            /** Next Hearing Source Ref Type */
+            next_hearing_source_ref_type?: string | null;
+            /** Next Hearing Updated At */
+            next_hearing_updated_at?: string | null;
+            /** Next Hearing Updated By Membership Id */
+            next_hearing_updated_by_membership_id?: string | null;
             /**
              * Oc Cross Visibility Enabled
              * @default false
@@ -14086,7 +14992,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "intake" | "active" | "on_hold" | "closed";
+            status: "intake" | "active" | "on_hold" | "disposed";
             /** Tags */
             tags?: components["schemas"]["MatterTagRecord"][];
             /** Team Id */
@@ -14549,6 +15455,8 @@ export interface components {
         MatterUpdateRequest: {
             /** Assignee Membership Id */
             assignee_membership_id?: string | null;
+            /** Case Number */
+            case_number?: string | null;
             /** Claim Amount Minor */
             claim_amount_minor?: number | null;
             /** Claim Amount Notes */
@@ -14557,6 +15465,8 @@ export interface components {
             claim_currency?: string | null;
             /** Client Name */
             client_name?: string | null;
+            /** Cnr Number */
+            cnr_number?: string | null;
             /** Court Id */
             court_id?: string | null;
             /** Court Name */
@@ -14579,6 +15489,8 @@ export interface components {
             is_active?: boolean | null;
             /** Judge Name */
             judge_name?: string | null;
+            /** Next Hearing Manual Lock */
+            next_hearing_manual_lock?: boolean | null;
             /** Next Hearing On */
             next_hearing_on?: string | null;
             /** Oc Cross Visibility Enabled */
@@ -14588,7 +15500,7 @@ export interface components {
             /** Practice Area */
             practice_area?: string | null;
             /** Status */
-            status?: ("intake" | "active" | "on_hold" | "closed") | null;
+            status?: ("intake" | "active" | "on_hold" | "disposed" | "closed") | null;
             /** Team Id */
             team_id?: string | null;
             /** Title */
@@ -16780,7 +17692,7 @@ export interface components {
              * Job Kind
              * @enum {string}
              */
-            job_kind: "calendar_sync" | "notification_delivery";
+            job_kind: "calendar_sync" | "notification_delivery" | "case_tracking_poll";
             /** Mark Resolved Available */
             mark_resolved_available: boolean;
             /** Matter Id */
@@ -17878,6 +18790,8 @@ export interface components {
             author_name: string | null;
             /** Billable */
             billable: boolean;
+            /** Billing Rate Id */
+            billing_rate_id?: string | null;
             /**
              * Created At
              * Format: date-time
@@ -17897,6 +18811,8 @@ export interface components {
             rate_amount_minor: number | null;
             /** Rate Currency */
             rate_currency: string;
+            /** Rate Source */
+            rate_source?: string | null;
             /** Total Amount Minor */
             total_amount_minor: number;
             /**
@@ -18551,6 +19467,160 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EmailRenderResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_matter_billing_profiles_api_admin_matter_billing_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterBillingProfileListResponse"];
+                };
+            };
+        };
+    };
+    post_matter_billing_profile_api_admin_matter_billing_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MatterBillingProfileCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterBillingProfileRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_matter_invoice_number_preview_api_admin_matter_billing_invoice_number_preview_get: {
+        parameters: {
+            query?: {
+                profile_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceNumberPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_matter_billing_profile_api_admin_matter_billing__profile_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profile_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MatterBillingProfileUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterBillingProfileRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_matter_billing_rate_api_admin_matter_billing__profile_id__rates_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profile_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MatterBillingRateCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterBillingRateRecord"];
                 };
             };
             /** @description Validation Error */
@@ -21227,6 +22297,73 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CaseTrackingProviderStatusResponse"];
+                };
+            };
+        };
+    };
+    post_cause_list_download_api_cause_lists_download_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CauseListPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                    "application/pdf": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_cause_list_preview_api_cause_lists_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CauseListPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CauseListPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -23998,7 +25135,7 @@ export interface operations {
                 opposing_party?: string | null;
                 forum_level?: ("lower_court" | "high_court" | "supreme_court" | "tribunal" | "arbitration" | "advisory") | null;
                 court_id?: string | null;
-                status?: ("intake" | "active" | "on_hold" | "closed") | null;
+                status?: ("intake" | "active" | "on_hold" | "disposed" | "closed") | null;
                 created_from?: string | null;
                 created_to?: string | null;
                 next_hearing_from?: string | null;
@@ -25288,6 +26425,73 @@ export interface operations {
             };
         };
     };
+    get_current_company_matter_compliance_api_matters__matter_id__compliance_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComplianceListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_current_company_matter_compliance_item_api_matters__matter_id__compliance__item_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ComplianceItemUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComplianceListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_matter_conflict_checks_api_matters__matter_id__conflict_checks_get: {
         parameters: {
             query?: never;
@@ -25412,6 +26616,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MatterCourtOrderRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_current_company_matter_order_compliance_api_matters__matter_id__court_orders__order_id__compliance_retry_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+                order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComplianceRetryResponse"];
                 };
             };
             /** @description Validation Error */
@@ -26491,6 +27727,38 @@ export interface operations {
             };
         };
     };
+    download_current_company_matter_invoice_pdf_api_matters__matter_id__invoices__invoice_id__download_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+                invoice_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_current_company_matter_legal_knowledge_graph_api_matters__matter_id__legal_knowledge_graph_get: {
         parameters: {
             query?: never;
@@ -26839,6 +28107,73 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NextActionResponse"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_current_company_matter_next_hearing_history_api_matters__matter_id__next_hearing_history_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterNextHearingHistoryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decide_current_company_matter_next_hearing_suggestion_api_matters__matter_id__next_hearing_suggestions__suggestion_id__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+                suggestion_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MatterNextHearingSuggestionActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterNextHearingHistoryResponse"];
                 };
             };
             /** @description Validation Error */
