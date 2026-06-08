@@ -7,6 +7,7 @@ import {
   Eye,
   File,
   FileText,
+  HardDrive,
   HelpCircle,
   Loader2,
   MessageSquareText,
@@ -37,9 +38,13 @@ import {
   analyzeAffidavitIntelligence,
   exportMatterFileQANote,
   fetchAffidavitIntelligence,
+  fetchGoogleDriveStatus,
   fetchMatterFileQAHistory,
+  listGoogleDriveFiles,
   reindexMatterAttachment,
+  revokeGoogleDriveConnection,
   retryMatterAttachment,
+  startGoogleDriveConnection,
   updateMatterAttachmentMetadata,
   uploadMatterAttachment,
 } from "@/lib/api/endpoints";
@@ -56,6 +61,7 @@ import type {
   MatterFileQAHistoryEntry,
   MatterFileQAResponse,
   MatterFileQAStructuredItem,
+  GoogleDriveFileRecord,
 } from "@/lib/api/schemas";
 import { useCapability } from "@/lib/capabilities";
 import { useMatterWorkspace } from "@/lib/use-matter-workspace";
@@ -280,6 +286,130 @@ function selectClassName() {
   return "h-10 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm text-[var(--color-ink)] shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-500)]";
 }
 
+function GoogleDriveDocumentsPanel({
+  configured,
+  missingConfigNames,
+  connectedEmail,
+  files,
+  message,
+  isBusy,
+  onConnect,
+  onListFiles,
+  onRevoke,
+}: {
+  configured: boolean;
+  missingConfigNames: string[];
+  connectedEmail: string | null;
+  files: GoogleDriveFileRecord[];
+  message: string | null;
+  isBusy: boolean;
+  onConnect: () => void;
+  onListFiles: () => void;
+  onRevoke: () => void;
+}) {
+  return (
+    <div
+      className="rounded-lg border border-[var(--color-line)] bg-white p-4"
+      data-testid="matter-google-drive-panel"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-[var(--color-bg-2)] text-[var(--color-ink-2)]">
+            <HardDrive className="h-4 w-4" aria-hidden />
+          </span>
+          <div>
+            <h2 className="text-sm font-semibold text-[var(--color-ink)]">
+              Google Drive
+            </h2>
+            <p className="text-xs text-[var(--color-mute)]">
+              {connectedEmail
+                ? `Connected as ${connectedEmail}`
+                : configured
+                  ? "Connect your Drive to list recent file metadata."
+                  : "Google Drive OAuth is not configured."}
+            </p>
+            {!configured && missingConfigNames.length > 0 ? (
+              <p className="mt-1 text-xs text-[var(--color-mute)]">
+                Missing config: {missingConfigNames.join(", ")}
+              </p>
+            ) : null}
+          </div>
+        </div>
+        <Badge tone={connectedEmail ? "success" : configured ? "brand" : "warning"}>
+          {connectedEmail ? "connected" : configured ? "ready" : "blocked"}
+        </Badge>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {connectedEmail ? (
+          <>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={isBusy}
+              onClick={onListFiles}
+              data-testid="matter-google-drive-list"
+            >
+              {isBusy ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              ) : (
+                <RefreshCw className="h-4 w-4" aria-hidden />
+              )}
+              List files
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={isBusy}
+              onClick={onRevoke}
+              data-testid="matter-google-drive-revoke"
+            >
+              Revoke
+            </Button>
+          </>
+        ) : (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={isBusy || !configured}
+            onClick={onConnect}
+            data-testid="matter-google-drive-connect"
+          >
+            Connect Drive
+          </Button>
+        )}
+      </div>
+      {message ? (
+        <div
+          className="mt-3 text-xs text-[var(--color-mute)]"
+          data-testid="matter-google-drive-message"
+        >
+          {message}
+        </div>
+      ) : null}
+      {files.length > 0 ? (
+        <div
+          className="mt-3 divide-y divide-[var(--color-line)] rounded-md border border-[var(--color-line)] bg-[var(--color-bg-2)]"
+          data-testid="matter-google-drive-files"
+        >
+          {files.slice(0, 5).map((file) => (
+            <div key={file.provider_file_id} className="px-3 py-2">
+              <div className="truncate text-xs font-medium text-[var(--color-ink)]">
+                {file.name}
+              </div>
+              <div className="mt-0.5 text-xs text-[var(--color-mute)]">
+                {file.mime_type ?? "file"} - {humanSize(file.size_bytes)}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function compactLabel(value: string): string {
   return value
     .split("_")
@@ -328,6 +458,8 @@ export default function MatterDocumentsPage() {
     linkedCourtOrderId: NO_LINKED_ORDER,
     hearingId: NO_LINKED_HEARING,
   });
+  const [googleDriveMessage, setGoogleDriveMessage] = useState<string | null>(null);
+  const [googleDriveFiles, setGoogleDriveFiles] = useState<GoogleDriveFileRecord[]>([]);
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["matters", matterId, "workspace"] });
@@ -335,6 +467,11 @@ export default function MatterDocumentsPage() {
     queryKey: ["matters", matterId, "affidavit-intelligence"],
     queryFn: () => fetchAffidavitIntelligence({ matterId }),
     enabled: Boolean(matterId),
+  });
+  const googleDriveStatusQuery = useQuery({
+    queryKey: ["drive", "google", "status"],
+    queryFn: fetchGoogleDriveStatus,
+    enabled: canUpload,
   });
 
   const uploadMutation = useMutation({
@@ -437,6 +574,43 @@ export default function MatterDocumentsPage() {
     },
     onSettled: () => setAnalysisPendingId(null),
   });
+  const startGoogleDriveMutation = useMutation({
+    mutationFn: startGoogleDriveConnection,
+    onSuccess: (result) => {
+      if (result.auth_url) {
+        window.location.assign(result.auth_url);
+        return;
+      }
+      setGoogleDriveMessage(
+        result.unavailable_reason ?? "Google Drive connection is unavailable.",
+      );
+    },
+    onError: (err) => {
+      setGoogleDriveMessage(apiErrorMessage(err, "Could not start Google Drive."));
+    },
+  });
+  const listGoogleDriveMutation = useMutation({
+    mutationFn: () => listGoogleDriveFiles({ limit: 10 }),
+    onSuccess: (result) => {
+      setGoogleDriveFiles(result.files);
+      setGoogleDriveMessage(`Loaded ${result.files.length} recent Drive files.`);
+      void queryClient.invalidateQueries({ queryKey: ["drive", "google", "status"] });
+    },
+    onError: (err) => {
+      setGoogleDriveMessage(apiErrorMessage(err, "Could not list Google Drive files."));
+    },
+  });
+  const revokeGoogleDriveMutation = useMutation({
+    mutationFn: revokeGoogleDriveConnection,
+    onSuccess: () => {
+      setGoogleDriveFiles([]);
+      setGoogleDriveMessage("Google Drive connection revoked.");
+      void queryClient.invalidateQueries({ queryKey: ["drive", "google", "status"] });
+    },
+    onError: (err) => {
+      setGoogleDriveMessage(apiErrorMessage(err, "Could not revoke Google Drive."));
+    },
+  });
 
   const filteredAttachments = useMemo(() => {
     const all = data?.attachments ?? [];
@@ -485,6 +659,33 @@ export default function MatterDocumentsPage() {
     (storagePolicy.remaining_bytes ?? 0) <= 0;
   const isFiltered =
     searchQ.trim().length > 0 || hearingFilter !== HEARING_FILTER_ALL;
+  const googleDriveConnection =
+    googleDriveStatusQuery.data?.connections.find(
+      (connection) => connection.status === "connected",
+    ) ?? null;
+  const googleDriveConfigured = googleDriveStatusQuery.data?.configured ?? false;
+  const googleDriveBusy =
+    googleDriveStatusQuery.isPending ||
+    startGoogleDriveMutation.isPending ||
+    listGoogleDriveMutation.isPending ||
+    revokeGoogleDriveMutation.isPending;
+  const googleDrivePanel = canUpload ? (
+    <GoogleDriveDocumentsPanel
+      configured={googleDriveConfigured}
+      missingConfigNames={googleDriveStatusQuery.data?.missing_config_names ?? []}
+      connectedEmail={googleDriveConnection?.display_email ?? null}
+      files={googleDriveFiles}
+      message={googleDriveMessage}
+      isBusy={googleDriveBusy}
+      onConnect={() => startGoogleDriveMutation.mutate()}
+      onListFiles={() => listGoogleDriveMutation.mutate()}
+      onRevoke={() => {
+        if (googleDriveConnection) {
+          revokeGoogleDriveMutation.mutate(googleDriveConnection.id);
+        }
+      }}
+    />
+  ) : null;
   const affidavitSection = (
     <AffidavitIntelligenceSection
       matterId={matterId}
@@ -709,6 +910,7 @@ export default function MatterDocumentsPage() {
     return (
       <div className="flex flex-col gap-6">
         {uploader}
+        {googleDrivePanel}
         {askCaseFileSection}
         {affidavitSection}
         <EmptyState
@@ -727,6 +929,7 @@ export default function MatterDocumentsPage() {
   return (
     <div className="flex flex-col gap-6">
       {uploader}
+      {googleDrivePanel}
       {askCaseFileSection}
       {affidavitSection}
       {/* BUG-043 (Hari 2026-05-11): document search bar. Filters the

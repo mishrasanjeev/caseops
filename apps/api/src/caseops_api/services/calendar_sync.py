@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, Protocol
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 import jwt
 from cryptography.fernet import Fernet, InvalidToken
@@ -25,7 +25,10 @@ from caseops_api.db.models import (
     Company,
     CompanyMembership,
     Matter,
+    MatterDeadline,
     MatterHearing,
+    MatterHearingStatus,
+    MatterTask,
     TenantOutlookConfiguration,
     UserCalendarConnection,
 )
@@ -63,7 +66,11 @@ from caseops_api.services.notification_delivery import (
 )
 
 OUTLOOK_SCOPES = ["offline_access", "User.Read", "Calendars.ReadWrite"]
-_STATE_KIND = "outlook_calendar_oauth"
+GOOGLE_CALENDAR_SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
+_STATE_KINDS = {
+    CalendarProvider.OUTLOOK: "outlook_calendar_oauth",
+    CalendarProvider.GOOGLE_CALENDAR: "google_calendar_oauth",
+}
 _STATE_TTL_MINUTES = 10
 
 
@@ -76,6 +83,18 @@ class OutlookRuntimeConfig:
     client_id: str | None
     client_secret: str | None
     tenant_id: str
+    redirect_uri: str | None
+    source: str
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.client_id and self.client_secret and self.redirect_uri)
+
+
+@dataclass(frozen=True)
+class GoogleCalendarRuntimeConfig:
+    client_id: str | None
+    client_secret: str | None
     redirect_uri: str | None
     source: str
 
@@ -100,6 +119,18 @@ class DurableOutlookSyncProcessResult:
     provider_calls: int
 
 
+@dataclass(frozen=True, slots=True)
+class CalendarSourcePayload:
+    source_type: str
+    source_id: str
+    matter: Matter
+    title: str
+    occurs_on: date
+    detail_lines: tuple[str, ...]
+    category: str
+    private_properties: dict[str, str]
+
+
 class OutlookProvider(Protocol):
     @property
     def configured(self) -> bool: ...
@@ -120,7 +151,22 @@ class OutlookProvider(Protocol):
         existing_provider_event_id: str | None,
     ) -> str: ...
 
+    def upsert_calendar_item(
+        self,
+        *,
+        token_payload: dict[str, Any],
+        item: CalendarSourcePayload,
+        existing_provider_event_id: str | None,
+    ) -> str: ...
+
     def validate_connection(self, *, token_payload: dict[str, Any]) -> dict[str, Any]: ...
+
+    def delete_event(
+        self,
+        *,
+        token_payload: dict[str, Any],
+        provider_event_id: str,
+    ) -> None: ...
 
 
 class MicrosoftGraphOutlookProvider:
@@ -255,6 +301,19 @@ class MicrosoftGraphOutlookProvider:
         matter: Matter,
         existing_provider_event_id: str | None,
     ) -> str:
+        return self.upsert_calendar_item(
+            token_payload=token_payload,
+            item=_hearing_source_payload(hearing, matter),
+            existing_provider_event_id=existing_provider_event_id,
+        )
+
+    def upsert_calendar_item(
+        self,
+        *,
+        token_payload: dict[str, Any],
+        item: CalendarSourcePayload,
+        existing_provider_event_id: str | None,
+    ) -> str:
         try:
             import httpx
         except ImportError as exc:  # pragma: no cover - dependency is present in app envs
@@ -263,27 +322,18 @@ class MicrosoftGraphOutlookProvider:
         if not access_token:
             raise CalendarProviderError("Stored Outlook token is unavailable.")
 
-        subject = f"{matter.matter_code}: {hearing.purpose or 'Hearing'}"
-        start = f"{hearing.hearing_on.isoformat()}T00:00:00"
-        end = f"{(hearing.hearing_on + timedelta(days=1)).isoformat()}T00:00:00"
-        body_lines = [
-            f"Matter: {matter.title}",
-            f"Forum: {hearing.forum_name}",
-        ]
-        if hearing.judge_name:
-            body_lines.append(f"Judge: {hearing.judge_name}")
-        if hearing.outcome_note:
-            body_lines.append(f"Outcome: {hearing.outcome_note}")
+        start = f"{item.occurs_on.isoformat()}T00:00:00"
+        end = f"{(item.occurs_on + timedelta(days=1)).isoformat()}T00:00:00"
         payload = {
-            "subject": subject[:255],
+            "subject": item.title[:255],
             "isAllDay": True,
             "start": {"dateTime": start, "timeZone": "India Standard Time"},
             "end": {"dateTime": end, "timeZone": "India Standard Time"},
             "body": {
                 "contentType": "text",
-                "content": "\n".join(body_lines),
+                "content": "\n".join(item.detail_lines),
             },
-            "categories": ["CaseOps", "Hearing"],
+            "categories": ["CaseOps", item.category],
         }
         headers = {"Authorization": f"Bearer {access_token}"}
         try:
@@ -311,8 +361,247 @@ class MicrosoftGraphOutlookProvider:
             raise CalendarProviderError("Microsoft Graph did not return an event id.")
         return event_id
 
+    def delete_event(
+        self,
+        *,
+        token_payload: dict[str, Any],
+        provider_event_id: str,
+    ) -> None:
+        try:
+            import httpx
+        except ImportError as exc:  # pragma: no cover - dependency is present in app envs
+            raise CalendarProviderError("Microsoft Graph HTTP client is unavailable.") from exc
+        access_token = str(token_payload.get("access_token") or "")
+        if not access_token:
+            raise CalendarProviderError("Stored Outlook token is unavailable.")
+        try:
+            response = httpx.delete(
+                "https://graph.microsoft.com/v1.0/me/events/"
+                f"{quote(provider_event_id, safe='')}",
+                headers={"Authorization": f"Bearer {access_token}"},
+                timeout=15,
+            )
+            if response.status_code == 404:
+                return
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise CalendarProviderError("Microsoft Graph calendar delete failed.") from exc
+
+
+class GoogleCalendarProvider:
+    """Google Calendar adapter for CaseOps-to-Google hearing sync.
+
+    Tests replace this provider through ``set_google_calendar_provider_for_tests``.
+    The app never calls Google when the required OAuth settings are missing.
+    """
+
+    def __init__(self, config: GoogleCalendarRuntimeConfig | None = None) -> None:
+        self._config = config
+
+    def _runtime_config(self) -> GoogleCalendarRuntimeConfig:
+        if self._config is not None:
+            return self._config
+        settings = get_settings()
+        return GoogleCalendarRuntimeConfig(
+            client_id=settings.google_calendar_client_id,
+            client_secret=settings.google_calendar_client_secret,
+            redirect_uri=settings.google_calendar_redirect_uri,
+            source="environment",
+        )
+
+    @property
+    def configured(self) -> bool:
+        return self._runtime_config().configured
+
+    @property
+    def unavailable_reason(self) -> str | None:
+        if self.configured:
+            return None
+        return "Google Calendar OAuth is not configured."
+
+    def authorization_url(self, *, state: str) -> str:
+        config = self._runtime_config()
+        if not self.configured:
+            raise CalendarProviderError(
+                self.unavailable_reason or "Google Calendar unavailable."
+            )
+        qs = urlencode(
+            {
+                "client_id": config.client_id,
+                "response_type": "code",
+                "redirect_uri": config.redirect_uri,
+                "scope": " ".join(GOOGLE_CALENDAR_SCOPES),
+                "state": state,
+                "access_type": "offline",
+                "include_granted_scopes": "true",
+                "prompt": "consent",
+            }
+        )
+        return f"https://accounts.google.com/o/oauth2/v2/auth?{qs}"
+
+    def exchange_code(self, *, code: str) -> dict[str, Any]:
+        config = self._runtime_config()
+        if not self.configured:
+            raise CalendarProviderError(
+                self.unavailable_reason or "Google Calendar unavailable."
+            )
+        try:
+            import httpx
+        except ImportError as exc:  # pragma: no cover - dependency is present in app envs
+            raise CalendarProviderError("Google Calendar HTTP client is unavailable.") from exc
+
+        try:
+            token_response = httpx.post(
+                "https://oauth2.googleapis.com/token",
+                data={
+                    "client_id": config.client_id,
+                    "client_secret": config.client_secret,
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "redirect_uri": config.redirect_uri,
+                },
+                timeout=15,
+            )
+            token_response.raise_for_status()
+            token_payload = token_response.json()
+            access_token = str(token_payload.get("access_token") or "")
+            if not access_token:
+                raise CalendarProviderError("Google did not return an access token.")
+            userinfo_response = httpx.get(
+                "https://www.googleapis.com/oauth2/v3/userinfo",
+                headers={"Authorization": f"Bearer {access_token}"},
+                timeout=15,
+            )
+            userinfo_response.raise_for_status()
+            userinfo = userinfo_response.json()
+        except httpx.HTTPError as exc:
+            raise CalendarProviderError("Google Calendar OAuth exchange failed.") from exc
+
+        scope_text = str(token_payload.get("scope") or " ".join(GOOGLE_CALENDAR_SCOPES))
+        return {
+            "token_payload": token_payload,
+            "provider_account_id": str(userinfo.get("sub") or ""),
+            "display_email": str(userinfo.get("email") or "") or None,
+            "scopes": scope_text.split(),
+        }
+
+    def validate_connection(self, *, token_payload: dict[str, Any]) -> dict[str, Any]:
+        try:
+            import httpx
+        except ImportError as exc:  # pragma: no cover - dependency is present in app envs
+            raise CalendarProviderError("Google Calendar HTTP client is unavailable.") from exc
+        access_token = str(token_payload.get("access_token") or "")
+        if not access_token:
+            raise CalendarProviderError("Stored Google Calendar token is unavailable.")
+        try:
+            userinfo_response = httpx.get(
+                "https://www.googleapis.com/oauth2/v3/userinfo",
+                headers={"Authorization": f"Bearer {access_token}"},
+                timeout=15,
+            )
+            userinfo_response.raise_for_status()
+            userinfo = userinfo_response.json()
+        except httpx.HTTPError as exc:
+            raise CalendarProviderError("Google Calendar connection test failed.") from exc
+        return {
+            "provider_account_id": str(userinfo.get("sub") or ""),
+            "display_email": str(userinfo.get("email") or "") or None,
+        }
+
+    def upsert_hearing_event(
+        self,
+        *,
+        token_payload: dict[str, Any],
+        hearing: MatterHearing,
+        matter: Matter,
+        existing_provider_event_id: str | None,
+    ) -> str:
+        return self.upsert_calendar_item(
+            token_payload=token_payload,
+            item=_hearing_source_payload(hearing, matter),
+            existing_provider_event_id=existing_provider_event_id,
+        )
+
+    def upsert_calendar_item(
+        self,
+        *,
+        token_payload: dict[str, Any],
+        item: CalendarSourcePayload,
+        existing_provider_event_id: str | None,
+    ) -> str:
+        try:
+            import httpx
+        except ImportError as exc:  # pragma: no cover - dependency is present in app envs
+            raise CalendarProviderError("Google Calendar HTTP client is unavailable.") from exc
+        access_token = str(token_payload.get("access_token") or "")
+        if not access_token:
+            raise CalendarProviderError("Stored Google Calendar token is unavailable.")
+
+        payload = {
+            "summary": item.title[:255],
+            "description": "\n".join(item.detail_lines),
+            "start": {"date": item.occurs_on.isoformat()},
+            "end": {"date": (item.occurs_on + timedelta(days=1)).isoformat()},
+            "extendedProperties": {
+                "private": item.private_properties,
+            },
+        }
+        headers = {"Authorization": f"Bearer {access_token}"}
+        try:
+            if existing_provider_event_id:
+                response = httpx.patch(
+                    "https://www.googleapis.com/calendar/v3/calendars/primary/"
+                    f"events/{quote(existing_provider_event_id, safe='')}",
+                    headers=headers,
+                    json=payload,
+                    timeout=15,
+                )
+                response.raise_for_status()
+                return existing_provider_event_id
+            response = httpx.post(
+                "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+                headers=headers,
+                json=payload,
+                timeout=15,
+            )
+            response.raise_for_status()
+            event = response.json()
+        except httpx.HTTPError as exc:
+            raise CalendarProviderError("Google Calendar sync failed.") from exc
+        event_id = str(event.get("id") or "")
+        if not event_id:
+            raise CalendarProviderError("Google Calendar did not return an event id.")
+        return event_id
+
+    def delete_event(
+        self,
+        *,
+        token_payload: dict[str, Any],
+        provider_event_id: str,
+    ) -> None:
+        try:
+            import httpx
+        except ImportError as exc:  # pragma: no cover - dependency is present in app envs
+            raise CalendarProviderError("Google Calendar HTTP client is unavailable.") from exc
+        access_token = str(token_payload.get("access_token") or "")
+        if not access_token:
+            raise CalendarProviderError("Stored Google Calendar token is unavailable.")
+        try:
+            response = httpx.delete(
+                "https://www.googleapis.com/calendar/v3/calendars/primary/"
+                f"events/{quote(provider_event_id, safe='')}",
+                headers={"Authorization": f"Bearer {access_token}"},
+                timeout=15,
+            )
+            if response.status_code == 404:
+                return
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise CalendarProviderError("Google Calendar delete failed.") from exc
+
 
 _outlook_provider_override: OutlookProvider | None = None
+_google_calendar_provider_override: OutlookProvider | None = None
 
 
 def set_outlook_provider_for_tests(provider: OutlookProvider | None) -> None:
@@ -320,7 +609,12 @@ def set_outlook_provider_for_tests(provider: OutlookProvider | None) -> None:
     _outlook_provider_override = provider
 
 
-def _provider(
+def set_google_calendar_provider_for_tests(provider: OutlookProvider | None) -> None:
+    global _google_calendar_provider_override
+    _google_calendar_provider_override = provider
+
+
+def _outlook_provider(
     session: Session | None = None,
     *,
     context: SessionContext | None = None,
@@ -328,6 +622,33 @@ def _provider(
     return _outlook_provider_override or MicrosoftGraphOutlookProvider(
         _outlook_runtime_config(session, context=context)
     )
+
+
+def _google_calendar_provider() -> OutlookProvider:
+    return _google_calendar_provider_override or GoogleCalendarProvider(
+        _google_calendar_runtime_config()
+    )
+
+
+def _provider(
+    session: Session | None = None,
+    *,
+    context: SessionContext | None = None,
+) -> OutlookProvider:
+    return _outlook_provider(session, context=context)
+
+
+def _provider_for(
+    provider: CalendarProvider,
+    session: Session | None = None,
+    *,
+    context: SessionContext | None = None,
+) -> OutlookProvider:
+    if provider == CalendarProvider.OUTLOOK:
+        return _outlook_provider(session, context=context)
+    if provider == CalendarProvider.GOOGLE_CALENDAR:
+        return _google_calendar_provider()
+    raise CalendarProviderError(f"Unsupported calendar provider: {provider}.")
 
 
 def _fernet() -> Fernet:
@@ -349,24 +670,24 @@ def _decrypt_secret(value: str | None) -> str | None:
     if not value:
         return None
     if not value.startswith("fernet:"):
-        raise CalendarProviderError("Stored Outlook credential is unavailable.")
+        raise CalendarProviderError("Stored calendar credential is unavailable.")
     try:
         raw = _fernet().decrypt(value.removeprefix("fernet:").encode("ascii"))
     except (InvalidToken, ValueError) as exc:
-        raise CalendarProviderError("Stored Outlook credential cannot be decrypted.") from exc
+        raise CalendarProviderError("Stored calendar credential cannot be decrypted.") from exc
     return raw.decode("utf-8")
 
 
 def _decrypt_token_payload(value: str | None) -> dict[str, Any]:
     if not value or not value.startswith("fernet:"):
-        raise CalendarProviderError("Stored Outlook token is unavailable.")
+        raise CalendarProviderError("Stored calendar token is unavailable.")
     try:
         raw = _fernet().decrypt(value.removeprefix("fernet:").encode("ascii"))
     except (InvalidToken, ValueError) as exc:
-        raise CalendarProviderError("Stored Outlook token cannot be decrypted.") from exc
+        raise CalendarProviderError("Stored calendar token cannot be decrypted.") from exc
     decoded = json.loads(raw.decode("utf-8"))
     if not isinstance(decoded, dict):
-        raise CalendarProviderError("Stored Outlook token payload is malformed.")
+        raise CalendarProviderError("Stored calendar token payload is malformed.")
     return decoded
 
 
@@ -377,6 +698,16 @@ def _environment_runtime_config() -> OutlookRuntimeConfig:
         client_secret=settings.outlook_client_secret,
         tenant_id=settings.outlook_tenant_id.strip("/") or "organizations",
         redirect_uri=settings.outlook_redirect_uri,
+        source="environment",
+    )
+
+
+def _google_calendar_runtime_config() -> GoogleCalendarRuntimeConfig:
+    settings = get_settings()
+    return GoogleCalendarRuntimeConfig(
+        client_id=settings.google_calendar_client_id,
+        client_secret=settings.google_calendar_client_secret,
+        redirect_uri=settings.google_calendar_redirect_uri,
         source="environment",
     )
 
@@ -413,10 +744,11 @@ def _outlook_runtime_config(
     return _environment_runtime_config()
 
 
-def _sign_state(context: SessionContext) -> str:
+def _sign_state(context: SessionContext, *, provider: CalendarProvider) -> str:
     now = datetime.now(UTC)
     payload = {
-        "kind": _STATE_KIND,
+        "kind": _STATE_KINDS[provider],
+        "provider": provider,
         "company_id": context.company.id,
         "membership_id": context.membership.id,
         "iat": now,
@@ -425,22 +757,28 @@ def _sign_state(context: SessionContext) -> str:
     return jwt.encode(payload, get_settings().auth_secret, algorithm="HS256")
 
 
-def _verify_state(context: SessionContext, state: str) -> None:
+def _verify_state(
+    context: SessionContext,
+    state: str,
+    *,
+    provider: CalendarProvider,
+) -> None:
     try:
         payload = jwt.decode(state, get_settings().auth_secret, algorithms=["HS256"])
     except InvalidTokenError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid Outlook connection state.",
+            detail="Invalid calendar connection state.",
         ) from exc
     if (
-        payload.get("kind") != _STATE_KIND
+        payload.get("kind") != _STATE_KINDS[provider]
+        or str(payload.get("provider")) != str(provider)
         or str(payload.get("company_id")) != context.company.id
         or str(payload.get("membership_id")) != context.membership.id
     ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Outlook connection state does not match the current session.",
+            detail="Calendar connection state does not match the current session.",
         )
 
 
@@ -449,7 +787,7 @@ def _connection_record(connection: UserCalendarConnection) -> CalendarConnection
         id=connection.id,
         company_id=connection.company_id,
         membership_id=connection.membership_id,
-        provider="outlook",
+        provider=connection.provider,  # type: ignore[arg-type]
         provider_account_id=connection.provider_account_id,
         display_email=connection.display_email,
         status=connection.status,  # type: ignore[arg-type]
@@ -481,6 +819,171 @@ def _sync_record(sync: CalendarEventSync) -> CalendarEventSyncRecord:
     )
 
 
+def _hearing_source_payload(
+    hearing: MatterHearing,
+    matter: Matter,
+) -> CalendarSourcePayload:
+    detail_lines = [
+        f"Matter: {matter.title}",
+        f"Matter code: {matter.matter_code}",
+        f"Forum: {hearing.forum_name}",
+        f"Status: {hearing.status}",
+    ]
+    if hearing.judge_name:
+        detail_lines.append(f"Judge: {hearing.judge_name}")
+    if hearing.outcome_note:
+        detail_lines.append(f"Outcome: {hearing.outcome_note}")
+    return CalendarSourcePayload(
+        source_type=CalendarSyncSourceType.MATTER_HEARING.value,
+        source_id=hearing.id,
+        matter=matter,
+        title=f"{matter.matter_code}: {hearing.purpose or 'Hearing'}",
+        occurs_on=hearing.hearing_on,
+        detail_lines=tuple(detail_lines),
+        category="Hearing",
+        private_properties={
+            "caseops_matter_id": matter.id,
+            "caseops_source_type": CalendarSyncSourceType.MATTER_HEARING.value,
+            "caseops_source_id": hearing.id,
+            "caseops_hearing_id": hearing.id,
+        },
+    )
+
+
+def _task_source_payload(task: MatterTask, matter: Matter) -> CalendarSourcePayload:
+    detail_lines = [
+        f"Matter: {matter.title}",
+        f"Matter code: {matter.matter_code}",
+        f"Status: {task.status}",
+        f"Priority: {task.priority}",
+    ]
+    if task.description:
+        detail_lines.append(f"Description: {task.description[:500]}")
+    assert task.due_on is not None
+    return CalendarSourcePayload(
+        source_type=CalendarSyncSourceType.MATTER_TASK.value,
+        source_id=task.id,
+        matter=matter,
+        title=f"{matter.matter_code}: {task.title}",
+        occurs_on=task.due_on,
+        detail_lines=tuple(detail_lines),
+        category="Task",
+        private_properties={
+            "caseops_matter_id": matter.id,
+            "caseops_source_type": CalendarSyncSourceType.MATTER_TASK.value,
+            "caseops_source_id": task.id,
+            "caseops_task_id": task.id,
+        },
+    )
+
+
+def _deadline_source_payload(
+    deadline: MatterDeadline,
+    matter: Matter,
+) -> CalendarSourcePayload:
+    detail_lines = [
+        f"Matter: {matter.title}",
+        f"Matter code: {matter.matter_code}",
+        f"Status: {deadline.status}",
+        f"Source: {deadline.source}",
+        f"Kind: {deadline.kind}",
+    ]
+    if deadline.notes:
+        detail_lines.append(f"Notes: {deadline.notes[:500]}")
+    return CalendarSourcePayload(
+        source_type=CalendarSyncSourceType.MATTER_DEADLINE.value,
+        source_id=deadline.id,
+        matter=matter,
+        title=f"{matter.matter_code}: {deadline.title}",
+        occurs_on=deadline.due_on,
+        detail_lines=tuple(detail_lines),
+        category="Deadline",
+        private_properties={
+            "caseops_matter_id": matter.id,
+            "caseops_source_type": CalendarSyncSourceType.MATTER_DEADLINE.value,
+            "caseops_source_id": deadline.id,
+            "caseops_deadline_id": deadline.id,
+        },
+    )
+
+
+def _source_payload_for(
+    session: Session,
+    *,
+    context: SessionContext,
+    source_type: str,
+    source_id: str,
+) -> CalendarSourcePayload:
+    if source_type == CalendarSyncSourceType.MATTER_HEARING.value:
+        row = session.execute(
+            select(MatterHearing, Matter)
+            .join(Matter, Matter.id == MatterHearing.matter_id)
+            .where(
+                MatterHearing.id == source_id,
+                Matter.company_id == context.company.id,
+            )
+        ).first()
+        if row is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Hearing not found.",
+            )
+        hearing, matter = row
+        assert_access(session, context=context, matter=matter)
+        if hearing.status == MatterHearingStatus.CANCELLED:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Cancelled hearings are removed from provider calendars.",
+            )
+        return _hearing_source_payload(hearing, matter)
+
+    if source_type == CalendarSyncSourceType.MATTER_TASK.value:
+        row = session.execute(
+            select(MatterTask, Matter)
+            .join(Matter, Matter.id == MatterTask.matter_id)
+            .where(
+                MatterTask.id == source_id,
+                Matter.company_id == context.company.id,
+            )
+        ).first()
+        if row is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Task not found.",
+            )
+        task, matter = row
+        assert_access(session, context=context, matter=matter)
+        if task.due_on is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Task has no due date and cannot be synced to calendar.",
+            )
+        return _task_source_payload(task, matter)
+
+    if source_type == CalendarSyncSourceType.MATTER_DEADLINE.value:
+        row = session.execute(
+            select(MatterDeadline, Matter)
+            .join(Matter, Matter.id == MatterDeadline.matter_id)
+            .where(
+                MatterDeadline.id == source_id,
+                Matter.company_id == context.company.id,
+            )
+        ).first()
+        if row is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Deadline not found.",
+            )
+        deadline, matter = row
+        assert_access(session, context=context, matter=matter)
+        return _deadline_source_payload(deadline, matter)
+
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Unsupported calendar source type.",
+    )
+
+
 def _missing_outlook_config_names(
     provider: OutlookProvider,
     runtime_config: OutlookRuntimeConfig | None = None,
@@ -506,6 +1009,37 @@ def _provider_config_status(
     return CalendarProviderConfigStatus(
         configured=provider.configured,
         missing_config_names=_missing_outlook_config_names(provider, runtime_config),
+    )
+
+
+def _missing_google_calendar_config_names(
+    provider: OutlookProvider,
+    runtime_config: GoogleCalendarRuntimeConfig | None = None,
+) -> list[str]:
+    """Return Google Calendar config names only; never expose values."""
+    if provider.configured:
+        return []
+    config = runtime_config or _google_calendar_runtime_config()
+    missing: list[str] = []
+    if not config.client_id:
+        missing.append("GOOGLE_CALENDAR_CLIENT_ID")
+    if not config.client_secret:
+        missing.append("GOOGLE_CALENDAR_CLIENT_SECRET")
+    if not config.redirect_uri:
+        missing.append("GOOGLE_CALENDAR_REDIRECT_URI")
+    return missing
+
+
+def _google_calendar_provider_config_status(
+    provider: OutlookProvider,
+    runtime_config: GoogleCalendarRuntimeConfig | None = None,
+) -> CalendarProviderConfigStatus:
+    return CalendarProviderConfigStatus(
+        provider="google_calendar",
+        configured=provider.configured,
+        missing_config_names=_missing_google_calendar_config_names(
+            provider, runtime_config
+        ),
     )
 
 
@@ -858,6 +1392,11 @@ def test_outlook_tenant_configuration(
 
 
 _DURABLE_OUTLOOK_SYNC_WINDOW_DAYS = 92
+_GOOGLE_CALENDAR_SYNC_SOURCE_TYPES = (
+    CalendarSyncSourceType.MATTER_HEARING.value,
+    CalendarSyncSourceType.MATTER_TASK.value,
+    CalendarSyncSourceType.MATTER_DEADLINE.value,
+)
 
 
 def _current_time() -> datetime:
@@ -893,6 +1432,7 @@ def _record_calendar_sync_retry_failure(
     sync: CalendarEventSync,
     context: SessionContext,
     raw_error: object,
+    calendar_provider: CalendarProvider = CalendarProvider.OUTLOOK,
     now: datetime | None = None,
 ) -> str:
     current_time = now or _current_time()
@@ -908,15 +1448,20 @@ def _record_calendar_sync_retry_failure(
         sync.next_attempt_at = current_time + retry_delay_for_attempt(sync.attempts)
         sync.dead_letter_reason = None
     session.add(sync)
+    action_name = (
+        "calendar.durable_google_calendar_sync.failed"
+        if calendar_provider == CalendarProvider.GOOGLE_CALENDAR
+        else "calendar.durable_outlook_sync.failed"
+    )
     record_from_context(
         session,
         context,
-        action="calendar.durable_outlook_sync.failed",
+        action=action_name,
         target_type="calendar_event_sync",
         target_id=sync.id,
         result="failed",
         metadata={
-            "provider": CalendarProvider.OUTLOOK,
+            "provider": calendar_provider,
             "source_type": sync.source_type,
             "source_ref": redact_identifier(sync.source_id),
             "sync_status": sync.sync_status,
@@ -995,6 +1540,58 @@ def _process_durable_hearing_sync(
         sync=stored,
         context=context,
         raw_error=response.sync.last_error or "Outlook calendar sync failed.",
+    )
+
+
+def _process_durable_source_sync(
+    session: Session,
+    *,
+    context: SessionContext,
+    connection: UserCalendarConnection,
+    source_type: str,
+    source_id: str,
+    calendar_provider: CalendarProvider,
+    replay: bool,
+) -> str:
+    sync = session.scalar(
+        select(CalendarEventSync).where(
+            CalendarEventSync.company_id == context.company.id,
+            CalendarEventSync.calendar_connection_id == connection.id,
+            CalendarEventSync.source_type == source_type,
+            CalendarEventSync.source_id == source_id,
+        )
+    )
+    if sync is not None and not replay:
+        if sync.sync_status in {
+            CalendarEventSyncStatus.DEAD_LETTER,
+            CalendarEventSyncStatus.DELETED,
+        }:
+            return "skipped"
+        if (
+            sync.sync_status == CalendarEventSyncStatus.RETRY_SCHEDULED
+            and sync.next_attempt_at is not None
+            and _aware(sync.next_attempt_at) > _current_time()
+        ):
+            return "skipped"
+
+    response = _sync_source_to_provider(
+        session,
+        context=context,
+        source_type=source_type,
+        source_id=source_id,
+        calendar_provider=calendar_provider,
+    )
+    stored = session.get(CalendarEventSync, response.sync.id)
+    if stored is None:
+        return "failed"
+    if response.sync.sync_status == CalendarEventSyncStatus.SYNCED:
+        return "synced"
+    return _record_calendar_sync_retry_failure(
+        session,
+        sync=stored,
+        context=context,
+        raw_error=response.sync.last_error or f"{calendar_provider} calendar sync failed.",
+        calendar_provider=calendar_provider,
     )
 
 
@@ -1078,6 +1675,7 @@ def _replay_durable_outlook_sync_rows(
             .where(
                 MatterHearing.id == sync.source_id,
                 Matter.company_id == context.company.id,
+                MatterHearing.status != MatterHearingStatus.CANCELLED,
             )
         ).first()
         if row is None:
@@ -1230,6 +1828,7 @@ def process_durable_outlook_sync(
                     visible_matters_filter(session, context=connection_context),
                     MatterHearing.hearing_on >= range_from,
                     MatterHearing.hearing_on <= range_to,
+                    MatterHearing.status != MatterHearingStatus.CANCELLED,
                 )
                 .order_by(MatterHearing.hearing_on, MatterHearing.id)
                 .limit(remaining)
@@ -1337,6 +1936,343 @@ def process_durable_outlook_sync_by_company(
         )
 
 
+def _replay_durable_google_calendar_sync_rows(
+    session: Session,
+    *,
+    context: SessionContext,
+    limit: int,
+) -> DurableOutlookSyncProcessResult:
+    provider = _google_calendar_provider()
+    if not provider.configured:
+        missing = _missing_google_calendar_config_names(provider)
+        record_from_context(
+            session,
+            context,
+            action="calendar.durable_google_calendar_sync.skipped",
+            target_type="user_calendar_connection",
+            target_id=context.company.id,
+            result="denied",
+            metadata={
+                "provider": CalendarProvider.GOOGLE_CALENDAR,
+                "reason": "blocked_missing_google_calendar_config",
+                "missing_config_names": missing,
+            },
+        )
+        session.commit()
+        return _durable_sync_blocked_result(
+            missing_config_names=missing,
+            missing_approval_keys=[],
+        )
+
+    counters = {
+        "examined": 0,
+        "synced": 0,
+        "failed": 0,
+        "retry_scheduled": 0,
+        "dead_lettered": 0,
+        "skipped": 0,
+        "replayed": 0,
+        "provider_calls": 0,
+    }
+    rows = list(
+        session.scalars(
+            select(CalendarEventSync)
+            .join(
+                UserCalendarConnection,
+                UserCalendarConnection.id == CalendarEventSync.calendar_connection_id,
+            )
+            .options(
+                joinedload(CalendarEventSync.connection)
+                .joinedload(UserCalendarConnection.membership)
+                .joinedload(CompanyMembership.user),
+                joinedload(CalendarEventSync.connection).joinedload(
+                    UserCalendarConnection.company
+                ),
+            )
+            .where(
+                CalendarEventSync.company_id == context.company.id,
+                UserCalendarConnection.provider == CalendarProvider.GOOGLE_CALENDAR,
+                UserCalendarConnection.status == CalendarConnectionStatus.CONNECTED,
+                CalendarEventSync.sync_status.in_(
+                    (
+                        CalendarEventSyncStatus.FAILED,
+                        CalendarEventSyncStatus.RETRY_SCHEDULED,
+                        CalendarEventSyncStatus.DEAD_LETTER,
+                    )
+                ),
+            )
+            .order_by(CalendarEventSync.updated_at.asc())
+            .limit(limit)
+        )
+    )
+    for sync in rows:
+        counters["examined"] += 1
+        connection_context = _membership_context(
+            company=sync.connection.company,
+            membership=sync.connection.membership,
+        )
+        try:
+            _source_payload_for(
+                session,
+                context=connection_context,
+                source_type=sync.source_type,
+                source_id=sync.source_id,
+            )
+        except HTTPException:
+            counters["skipped"] += 1
+            continue
+        counters["provider_calls"] += 1
+        counters["replayed"] += 1
+        outcome = _process_durable_source_sync(
+            session,
+            context=connection_context,
+            connection=sync.connection,
+            source_type=sync.source_type,
+            source_id=sync.source_id,
+            calendar_provider=CalendarProvider.GOOGLE_CALENDAR,
+            replay=True,
+        )
+        if outcome == "synced":
+            counters["synced"] += 1
+        elif outcome == CalendarEventSyncStatus.RETRY_SCHEDULED:
+            counters["retry_scheduled"] += 1
+        elif outcome == CalendarEventSyncStatus.DEAD_LETTER:
+            counters["dead_lettered"] += 1
+        elif outcome == "skipped":
+            counters["skipped"] += 1
+        else:
+            counters["failed"] += 1
+
+    record_from_context(
+        session,
+        context,
+        action="calendar.durable_google_calendar_sync.replayed",
+        target_type="calendar_event_sync",
+        target_id=context.company.id,
+        metadata={
+            "provider": CalendarProvider.GOOGLE_CALENDAR,
+            "source_types": list(_GOOGLE_CALENDAR_SYNC_SOURCE_TYPES),
+            "examined": counters["examined"],
+            "replayed": counters["replayed"],
+            "synced": counters["synced"],
+            "retry_scheduled": counters["retry_scheduled"],
+            "dead_lettered": counters["dead_lettered"],
+            "skipped": counters["skipped"],
+        },
+    )
+    session.commit()
+    return DurableOutlookSyncProcessResult(
+        status="processed",
+        adp20_readiness="ready_for_adp20_implementation",
+        missing_config_names=(),
+        missing_approval_keys=(),
+        **counters,
+    )
+
+
+def process_durable_google_calendar_sync(
+    session: Session,
+    *,
+    context: SessionContext,
+    range_from: date | None = None,
+    range_to: date | None = None,
+    replay_failed_only: bool = False,
+    limit: int = 200,
+) -> DurableOutlookSyncProcessResult:
+    if replay_failed_only:
+        return _replay_durable_google_calendar_sync_rows(
+            session,
+            context=context,
+            limit=limit,
+        )
+
+    provider = _google_calendar_provider()
+    if not provider.configured:
+        missing = _missing_google_calendar_config_names(provider)
+        record_from_context(
+            session,
+            context,
+            action="calendar.durable_google_calendar_sync.skipped",
+            target_type="user_calendar_connection",
+            target_id=context.company.id,
+            result="denied",
+            metadata={
+                "provider": CalendarProvider.GOOGLE_CALENDAR,
+                "reason": "blocked_missing_google_calendar_config",
+                "missing_config_names": missing,
+            },
+        )
+        session.commit()
+        return _durable_sync_blocked_result(
+            missing_config_names=missing,
+            missing_approval_keys=[],
+        )
+
+    if range_from is None or range_to is None:
+        default_from, default_to = _default_durable_range()
+        range_from = range_from or default_from
+        range_to = range_to or default_to
+    if range_to < range_from:
+        raise ValueError("Durable Google Calendar sync range is invalid.")
+    if (range_to - range_from).days > _DURABLE_OUTLOOK_SYNC_WINDOW_DAYS:
+        raise ValueError("Durable Google Calendar sync range exceeds the bounded window.")
+
+    counters = {
+        "examined": 0,
+        "synced": 0,
+        "failed": 0,
+        "retry_scheduled": 0,
+        "dead_lettered": 0,
+        "skipped": 0,
+        "replayed": 0,
+        "provider_calls": 0,
+    }
+    connections = list(
+        session.scalars(
+            select(UserCalendarConnection)
+            .options(
+                joinedload(UserCalendarConnection.company),
+                joinedload(UserCalendarConnection.membership).joinedload(
+                    CompanyMembership.user
+                ),
+            )
+            .where(
+                UserCalendarConnection.company_id == context.company.id,
+                UserCalendarConnection.provider == CalendarProvider.GOOGLE_CALENDAR,
+                UserCalendarConnection.status == CalendarConnectionStatus.CONNECTED,
+            )
+            .order_by(UserCalendarConnection.created_at.asc())
+        )
+    )
+    remaining = limit
+    for connection in connections:
+        if remaining <= 0:
+            break
+        connection_context = _membership_context(
+            company=connection.company,
+            membership=connection.membership,
+        )
+        request = OutlookBulkSyncRequest.model_validate(
+            {
+                "from": range_from,
+                "to": range_to,
+                "source_types": list(_GOOGLE_CALENDAR_SYNC_SOURCE_TYPES),
+                "limit": remaining,
+            }
+        )
+        for source_type in _GOOGLE_CALENDAR_SYNC_SOURCE_TYPES:
+            if remaining <= 0:
+                break
+            source_rows = _google_bulk_source_payloads(
+                session,
+                context=connection_context,
+                payload=request,
+                connection=connection,
+                source_type=source_type,
+                limit=remaining,
+            )
+            for item, _was_existing in source_rows:
+                counters["examined"] += 1
+                remaining -= 1
+                outcome = _process_durable_source_sync(
+                    session,
+                    context=connection_context,
+                    connection=connection,
+                    source_type=item.source_type,
+                    source_id=item.source_id,
+                    calendar_provider=CalendarProvider.GOOGLE_CALENDAR,
+                    replay=False,
+                )
+                if outcome == "skipped":
+                    counters["skipped"] += 1
+                    continue
+                counters["provider_calls"] += 1
+                if outcome == "synced":
+                    counters["synced"] += 1
+                elif outcome == CalendarEventSyncStatus.RETRY_SCHEDULED:
+                    counters["retry_scheduled"] += 1
+                elif outcome == CalendarEventSyncStatus.DEAD_LETTER:
+                    counters["dead_lettered"] += 1
+                else:
+                    counters["failed"] += 1
+                if remaining <= 0:
+                    break
+
+    record_from_context(
+        session,
+        context,
+        action="calendar.durable_google_calendar_sync.processed",
+        target_type="user_calendar_connection",
+        target_id=context.company.id,
+        metadata={
+            "provider": CalendarProvider.GOOGLE_CALENDAR,
+            "source_types": list(_GOOGLE_CALENDAR_SYNC_SOURCE_TYPES),
+            "examined": counters["examined"],
+            "synced": counters["synced"],
+            "retry_scheduled": counters["retry_scheduled"],
+            "dead_lettered": counters["dead_lettered"],
+            "skipped": counters["skipped"],
+        },
+    )
+    session.commit()
+    return DurableOutlookSyncProcessResult(
+        status="processed",
+        adp20_readiness="ready_for_adp20_implementation",
+        missing_config_names=(),
+        missing_approval_keys=(),
+        **counters,
+    )
+
+
+def process_durable_google_calendar_sync_by_company(
+    company_id: str,
+    *,
+    initiated_by_membership_id: str | None = None,
+    range_from: date | None = None,
+    range_to: date | None = None,
+    replay_failed_only: bool = False,
+    limit: int = 200,
+) -> DurableOutlookSyncProcessResult:
+    from caseops_api.db.session import get_session_factory
+
+    session_factory = get_session_factory()
+    with session_factory() as session:
+        company = session.get(Company, company_id)
+        if company is None:
+            return _durable_sync_blocked_result(
+                missing_config_names=[],
+                missing_approval_keys=["company_not_found"],
+            )
+        membership_stmt = (
+            select(CompanyMembership)
+            .options(joinedload(CompanyMembership.user))
+            .where(
+                CompanyMembership.company_id == company_id,
+                CompanyMembership.is_active.is_(True),
+            )
+            .order_by(CompanyMembership.created_at.asc())
+        )
+        if initiated_by_membership_id is not None:
+            membership_stmt = membership_stmt.where(
+                CompanyMembership.id == initiated_by_membership_id,
+            )
+        membership = session.scalar(membership_stmt)
+        if membership is None:
+            return _durable_sync_blocked_result(
+                missing_config_names=[],
+                missing_approval_keys=["active_membership_not_found"],
+            )
+        context = _membership_context(company=company, membership=membership)
+        return process_durable_google_calendar_sync(
+            session,
+            context=context,
+            range_from=range_from,
+            range_to=range_to,
+            replay_failed_only=replay_failed_only,
+            limit=limit,
+        )
+
+
 def _duplicate_conflict_candidates(
     syncs: list[CalendarEventSync],
 ) -> list[CalendarSyncConflictCandidate]:
@@ -1352,6 +2288,12 @@ def _duplicate_conflict_candidates(
         if len(rows) < 2:
             continue
         rows = sorted(rows, key=lambda row: (row.source_type, row.source_id, row.id))
+        provider_value = rows[0].connection.provider
+        provider_label = (
+            "Outlook"
+            if provider_value == CalendarProvider.OUTLOOK
+            else "Google Calendar"
+        )
         candidate_id = hashlib.sha256(
             f"{connection_id}:{provider_event_id}".encode()
         ).hexdigest()[:16]
@@ -1359,6 +2301,7 @@ def _duplicate_conflict_candidates(
             CalendarSyncConflictCandidate(
                 id=f"dup-provider-event:{candidate_id}",
                 conflict_type="duplicate_provider_event_id",
+                provider=provider_value,  # type: ignore[arg-type]
                 calendar_connection_id=connection_id,
                 provider_event_id=provider_event_id,
                 duplicate_count=len(rows),
@@ -1367,7 +2310,7 @@ def _duplicate_conflict_candidates(
                 sync_ids=[row.id for row in rows],
                 message=(
                     "Multiple CaseOps calendar sync records point to the same "
-                    "Outlook event. Review before running another manual sync."
+                    f"{provider_label} event. Review before running another manual sync."
                 ),
             )
         )
@@ -1383,14 +2326,13 @@ def list_connections(
     *,
     context: SessionContext,
 ) -> CalendarConnectionListResponse:
-    provider = _provider(session, context=context)
+    provider = _outlook_provider(session, context=context)
     rows = list(
         session.scalars(
             select(UserCalendarConnection)
             .where(
                 UserCalendarConnection.company_id == context.company.id,
                 UserCalendarConnection.membership_id == context.membership.id,
-                UserCalendarConnection.provider == CalendarProvider.OUTLOOK,
             )
             .order_by(UserCalendarConnection.created_at.asc())
         )
@@ -1408,15 +2350,44 @@ def start_outlook_connection(
     *,
     context: SessionContext,
 ) -> CalendarConnectionStartResponse:
-    provider = _provider(session, context=context)
+    return _start_connection(
+        session,
+        context=context,
+        calendar_provider=CalendarProvider.OUTLOOK,
+    )
+
+
+def start_google_calendar_connection(
+    session: Session,
+    *,
+    context: SessionContext,
+) -> CalendarConnectionStartResponse:
+    return _start_connection(
+        session,
+        context=context,
+        calendar_provider=CalendarProvider.GOOGLE_CALENDAR,
+    )
+
+
+def _start_connection(
+    session: Session,
+    *,
+    context: SessionContext,
+    calendar_provider: CalendarProvider,
+) -> CalendarConnectionStartResponse:
+    provider = _provider_for(calendar_provider, session, context=context)
     if not provider.configured:
         return CalendarConnectionStartResponse(
+            provider=calendar_provider,  # type: ignore[arg-type]
             provider_available=False,
             unavailable_reason=provider.unavailable_reason,
         )
     return CalendarConnectionStartResponse(
+        provider=calendar_provider,  # type: ignore[arg-type]
         provider_available=True,
-        auth_url=provider.authorization_url(state=_sign_state(context)),
+        auth_url=provider.authorization_url(
+            state=_sign_state(context, provider=calendar_provider)
+        ),
     )
 
 
@@ -1427,33 +2398,66 @@ def complete_outlook_connection(
     code: str,
     state: str,
 ) -> CalendarConnectionRecord:
-    provider = _provider(session, context=context)
+    return _complete_connection(
+        session,
+        context=context,
+        code=code,
+        state=state,
+        calendar_provider=CalendarProvider.OUTLOOK,
+    )
+
+
+def complete_google_calendar_connection(
+    session: Session,
+    *,
+    context: SessionContext,
+    code: str,
+    state: str,
+) -> CalendarConnectionRecord:
+    return _complete_connection(
+        session,
+        context=context,
+        code=code,
+        state=state,
+        calendar_provider=CalendarProvider.GOOGLE_CALENDAR,
+    )
+
+
+def _complete_connection(
+    session: Session,
+    *,
+    context: SessionContext,
+    code: str,
+    state: str,
+    calendar_provider: CalendarProvider,
+) -> CalendarConnectionRecord:
+    provider = _provider_for(calendar_provider, session, context=context)
     if not provider.configured:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=provider.unavailable_reason or "Outlook calendar sync is unavailable.",
+            detail=provider.unavailable_reason or "Calendar sync is unavailable.",
         )
-    _verify_state(context, state)
+    _verify_state(context, state, provider=calendar_provider)
     exchanged = provider.exchange_code(code=code)
     token_payload = exchanged.get("token_payload")
     if not isinstance(token_payload, dict):
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Outlook OAuth provider returned an invalid token response.",
+            detail="Calendar OAuth provider returned an invalid token response.",
         )
     now = datetime.now(UTC)
     connection = session.scalar(
         select(UserCalendarConnection).where(
             UserCalendarConnection.company_id == context.company.id,
             UserCalendarConnection.membership_id == context.membership.id,
-            UserCalendarConnection.provider == CalendarProvider.OUTLOOK,
+            UserCalendarConnection.provider == calendar_provider,
         )
     )
     if connection is None:
         connection = UserCalendarConnection(
             company_id=context.company.id,
             membership_id=context.membership.id,
-            provider=CalendarProvider.OUTLOOK,
+            provider=calendar_provider,
         )
         session.add(connection)
         session.flush()
@@ -1461,8 +2465,13 @@ def complete_outlook_connection(
     connection.display_email = str(exchanged.get("display_email") or "") or None
     connection.status = CalendarConnectionStatus.CONNECTED
     connection.encrypted_token_ref = _encrypt_token_payload(token_payload)
+    default_scopes = (
+        OUTLOOK_SCOPES
+        if calendar_provider == CalendarProvider.OUTLOOK
+        else GOOGLE_CALENDAR_SCOPES
+    )
     connection.scopes_json = [
-        str(scope) for scope in exchanged.get("scopes", OUTLOOK_SCOPES) if str(scope)
+        str(scope) for scope in exchanged.get("scopes", default_scopes) if str(scope)
     ]
     connection.connected_at = now
     session.add(connection)
@@ -1473,7 +2482,7 @@ def complete_outlook_connection(
         target_type="user_calendar_connection",
         target_id=connection.id,
         metadata={
-            "provider": CalendarProvider.OUTLOOK,
+            "provider": calendar_provider,
             "display_email": connection.display_email,
             "scopes": connection.scopes_json,
         },
@@ -1520,18 +2529,48 @@ def _connected_outlook_connection(
     *,
     context: SessionContext,
 ) -> UserCalendarConnection:
+    return _connected_calendar_connection(
+        session,
+        context=context,
+        calendar_provider=CalendarProvider.OUTLOOK,
+    )
+
+
+def _connected_google_calendar_connection(
+    session: Session,
+    *,
+    context: SessionContext,
+) -> UserCalendarConnection:
+    return _connected_calendar_connection(
+        session,
+        context=context,
+        calendar_provider=CalendarProvider.GOOGLE_CALENDAR,
+    )
+
+
+def _connected_calendar_connection(
+    session: Session,
+    *,
+    context: SessionContext,
+    calendar_provider: CalendarProvider,
+) -> UserCalendarConnection:
     connection = session.scalar(
         select(UserCalendarConnection).where(
             UserCalendarConnection.company_id == context.company.id,
             UserCalendarConnection.membership_id == context.membership.id,
-            UserCalendarConnection.provider == CalendarProvider.OUTLOOK,
+            UserCalendarConnection.provider == calendar_provider,
             UserCalendarConnection.status == CalendarConnectionStatus.CONNECTED,
         )
     )
     if connection is None:
+        provider_label = (
+            "Outlook"
+            if calendar_provider == CalendarProvider.OUTLOOK
+            else "Google Calendar"
+        )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Outlook calendar is not connected.",
+            detail=f"{provider_label} is not connected.",
         )
     return connection
 
@@ -1542,48 +2581,146 @@ def sync_hearing_to_outlook(
     context: SessionContext,
     hearing_id: str,
 ) -> CalendarEventSyncResponse:
-    row = session.execute(
-        select(MatterHearing, Matter)
-        .join(Matter, Matter.id == MatterHearing.matter_id)
-        .where(
-            MatterHearing.id == hearing_id,
-            Matter.company_id == context.company.id,
-        )
-    ).first()
-    if row is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Hearing not found.",
-        )
-    hearing, matter = row
-    assert_access(session, context=context, matter=matter)
-    connection = _connected_outlook_connection(session, context=context)
+    return _sync_hearing_to_provider(
+        session,
+        context=context,
+        hearing_id=hearing_id,
+        calendar_provider=CalendarProvider.OUTLOOK,
+    )
+
+
+def sync_hearing_to_google_calendar(
+    session: Session,
+    *,
+    context: SessionContext,
+    hearing_id: str,
+) -> CalendarEventSyncResponse:
+    return _sync_hearing_to_provider(
+        session,
+        context=context,
+        hearing_id=hearing_id,
+        calendar_provider=CalendarProvider.GOOGLE_CALENDAR,
+    )
+
+
+def sync_task_to_google_calendar(
+    session: Session,
+    *,
+    context: SessionContext,
+    task_id: str,
+) -> CalendarEventSyncResponse:
+    return _sync_source_to_provider(
+        session,
+        context=context,
+        source_type=CalendarSyncSourceType.MATTER_TASK.value,
+        source_id=task_id,
+        calendar_provider=CalendarProvider.GOOGLE_CALENDAR,
+    )
+
+
+def sync_deadline_to_google_calendar(
+    session: Session,
+    *,
+    context: SessionContext,
+    deadline_id: str,
+) -> CalendarEventSyncResponse:
+    return _sync_source_to_provider(
+        session,
+        context=context,
+        source_type=CalendarSyncSourceType.MATTER_DEADLINE.value,
+        source_id=deadline_id,
+        calendar_provider=CalendarProvider.GOOGLE_CALENDAR,
+    )
+
+
+def delete_hearing_from_google_calendar(
+    session: Session,
+    *,
+    context: SessionContext,
+    hearing_id: str,
+) -> CalendarEventSyncResponse:
+    return _delete_hearing_from_provider(
+        session,
+        context=context,
+        hearing_id=hearing_id,
+        calendar_provider=CalendarProvider.GOOGLE_CALENDAR,
+    )
+
+
+def _sync_hearing_to_provider(
+    session: Session,
+    *,
+    context: SessionContext,
+    hearing_id: str,
+    calendar_provider: CalendarProvider,
+) -> CalendarEventSyncResponse:
+    return _sync_source_to_provider(
+        session,
+        context=context,
+        source_type=CalendarSyncSourceType.MATTER_HEARING.value,
+        source_id=hearing_id,
+        calendar_provider=calendar_provider,
+    )
+
+
+def _sync_source_to_provider(
+    session: Session,
+    *,
+    context: SessionContext,
+    source_type: str,
+    source_id: str,
+    calendar_provider: CalendarProvider,
+) -> CalendarEventSyncResponse:
+    item = _source_payload_for(
+        session,
+        context=context,
+        source_type=source_type,
+        source_id=source_id,
+    )
+    connection = _connected_calendar_connection(
+        session,
+        context=context,
+        calendar_provider=calendar_provider,
+    )
     sync = session.scalar(
         select(CalendarEventSync).where(
             CalendarEventSync.company_id == context.company.id,
             CalendarEventSync.calendar_connection_id == connection.id,
-            CalendarEventSync.source_type == CalendarSyncSourceType.MATTER_HEARING,
-            CalendarEventSync.source_id == hearing.id,
+            CalendarEventSync.source_type == item.source_type,
+            CalendarEventSync.source_id == item.source_id,
         )
     )
     if sync is None:
         sync = CalendarEventSync(
             company_id=context.company.id,
             calendar_connection_id=connection.id,
-            source_type=CalendarSyncSourceType.MATTER_HEARING,
-            source_id=hearing.id,
+            source_type=item.source_type,
+            source_id=item.source_id,
             sync_status=CalendarEventSyncStatus.PENDING,
         )
         session.add(sync)
         session.flush()
     try:
         token_payload = _decrypt_token_payload(connection.encrypted_token_ref)
-        provider_event_id = _provider(session, context=context).upsert_hearing_event(
-            token_payload=token_payload,
-            hearing=hearing,
-            matter=matter,
-            existing_provider_event_id=sync.provider_event_id,
-        )
+        provider = _provider_for(calendar_provider, session, context=context)
+        if item.source_type == CalendarSyncSourceType.MATTER_HEARING.value and hasattr(
+            provider, "upsert_hearing_event"
+        ):
+            hearing = session.get(MatterHearing, item.source_id)
+            if hearing is None:
+                raise CalendarProviderError("Hearing disappeared before sync.")
+            provider_event_id = provider.upsert_hearing_event(
+                token_payload=token_payload,
+                hearing=hearing,
+                matter=item.matter,
+                existing_provider_event_id=sync.provider_event_id,
+            )
+        else:
+            provider_event_id = provider.upsert_calendar_item(
+                token_payload=token_payload,
+                item=item,
+                existing_provider_event_id=sync.provider_event_id,
+            )
     except Exception as exc:
         sync.sync_status = CalendarEventSyncStatus.FAILED
         sync.last_error = _safe_error(exc)
@@ -1594,12 +2731,12 @@ def sync_hearing_to_outlook(
             action="calendar.sync.failed",
             target_type="calendar_event_sync",
             target_id=sync.id,
-            matter_id=matter.id,
+            matter_id=item.matter.id,
             result="failed",
             metadata={
-                "provider": CalendarProvider.OUTLOOK,
-                "source_type": CalendarSyncSourceType.MATTER_HEARING,
-                "source_id": hearing.id,
+                "provider": calendar_provider,
+                "source_type": item.source_type,
+                "source_id": item.source_id,
                 "error": sync.last_error,
             },
         )
@@ -1621,16 +2758,227 @@ def sync_hearing_to_outlook(
         action="calendar.sync.succeeded",
         target_type="calendar_event_sync",
         target_id=sync.id,
-        matter_id=matter.id,
+        matter_id=item.matter.id,
         metadata={
-            "provider": CalendarProvider.OUTLOOK,
-            "source_type": CalendarSyncSourceType.MATTER_HEARING,
-            "source_id": hearing.id,
+            "provider": calendar_provider,
+            "source_type": item.source_type,
+            "source_id": item.source_id,
             "provider_event_id": provider_event_id,
         },
     )
     session.commit()
     return CalendarEventSyncResponse(sync=_sync_record(sync))
+
+
+def _delete_hearing_from_provider(
+    session: Session,
+    *,
+    context: SessionContext,
+    hearing_id: str,
+    calendar_provider: CalendarProvider,
+) -> CalendarEventSyncResponse:
+    row = session.execute(
+        select(MatterHearing, Matter)
+        .join(Matter, Matter.id == MatterHearing.matter_id)
+        .where(
+            MatterHearing.id == hearing_id,
+            Matter.company_id == context.company.id,
+        )
+    ).first()
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Hearing not found.",
+        )
+    hearing, matter = row
+    assert_access(session, context=context, matter=matter)
+    connection = _connected_calendar_connection(
+        session,
+        context=context,
+        calendar_provider=calendar_provider,
+    )
+    sync = session.scalar(
+        select(CalendarEventSync).where(
+            CalendarEventSync.company_id == context.company.id,
+            CalendarEventSync.calendar_connection_id == connection.id,
+            CalendarEventSync.source_type == CalendarSyncSourceType.MATTER_HEARING,
+            CalendarEventSync.source_id == hearing.id,
+        )
+    )
+    if sync is None or not sync.provider_event_id:
+        provider_label = (
+            "Outlook"
+            if calendar_provider == CalendarProvider.OUTLOOK
+            else "Google Calendar"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"No synced {provider_label} event found for this hearing.",
+        )
+    if sync.sync_status == CalendarEventSyncStatus.DELETED:
+        return CalendarEventSyncResponse(sync=_sync_record(sync))
+
+    try:
+        token_payload = _decrypt_token_payload(connection.encrypted_token_ref)
+        _provider_for(
+            calendar_provider,
+            session,
+            context=context,
+        ).delete_event(
+            token_payload=token_payload,
+            provider_event_id=sync.provider_event_id,
+        )
+    except Exception as exc:
+        sync.sync_status = CalendarEventSyncStatus.FAILED
+        sync.last_error = _safe_error(exc)
+        session.add(sync)
+        record_from_context(
+            session,
+            context,
+            action="calendar.sync.delete_failed",
+            target_type="calendar_event_sync",
+            target_id=sync.id,
+            matter_id=matter.id,
+            result="failed",
+            metadata={
+                "provider": calendar_provider,
+                "source_type": CalendarSyncSourceType.MATTER_HEARING,
+                "source_id": hearing.id,
+                "error": sync.last_error,
+            },
+        )
+        session.commit()
+        return CalendarEventSyncResponse(sync=_sync_record(sync))
+
+    now = datetime.now(UTC)
+    sync.sync_status = CalendarEventSyncStatus.DELETED
+    sync.last_error = None
+    sync.last_synced_at = now
+    sync.next_attempt_at = None
+    sync.dead_letter_reason = None
+    connection.last_sync_at = now
+    session.add_all([sync, connection])
+    record_from_context(
+        session,
+        context,
+        action="calendar.sync.deleted",
+        target_type="calendar_event_sync",
+        target_id=sync.id,
+        matter_id=matter.id,
+        metadata={
+            "provider": calendar_provider,
+            "source_type": CalendarSyncSourceType.MATTER_HEARING,
+            "source_id": hearing.id,
+            "provider_event_id": sync.provider_event_id,
+        },
+    )
+    session.commit()
+    return CalendarEventSyncResponse(sync=_sync_record(sync))
+
+
+def delete_synced_hearing_events_for_context(
+    session: Session,
+    *,
+    context: SessionContext,
+    hearing_id: str,
+    commit: bool = True,
+) -> int:
+    row = session.execute(
+        select(MatterHearing, Matter)
+        .join(Matter, Matter.id == MatterHearing.matter_id)
+        .where(
+            MatterHearing.id == hearing_id,
+            Matter.company_id == context.company.id,
+        )
+    ).first()
+    if row is None:
+        return 0
+    _hearing, matter = row
+    assert_access(session, context=context, matter=matter)
+    syncs = list(
+        session.scalars(
+            select(CalendarEventSync)
+            .join(
+                UserCalendarConnection,
+                UserCalendarConnection.id
+                == CalendarEventSync.calendar_connection_id,
+            )
+            .options(joinedload(CalendarEventSync.connection))
+            .where(
+                CalendarEventSync.company_id == context.company.id,
+                CalendarEventSync.source_type == CalendarSyncSourceType.MATTER_HEARING,
+                CalendarEventSync.source_id == hearing_id,
+                CalendarEventSync.provider_event_id.is_not(None),
+                CalendarEventSync.sync_status != CalendarEventSyncStatus.DELETED,
+                UserCalendarConnection.status == CalendarConnectionStatus.CONNECTED,
+            )
+        )
+    )
+    deleted_count = 0
+    now = datetime.now(UTC)
+    for sync in syncs:
+        provider_event_id = sync.provider_event_id
+        if not provider_event_id:
+            continue
+        try:
+            token_payload = _decrypt_token_payload(sync.connection.encrypted_token_ref)
+            _provider_for(
+                CalendarProvider(sync.connection.provider),
+                session,
+                context=context,
+            ).delete_event(
+                token_payload=token_payload,
+                provider_event_id=provider_event_id,
+            )
+        except Exception as exc:
+            sync.sync_status = CalendarEventSyncStatus.FAILED
+            sync.last_error = _safe_error(exc)
+            sync.updated_at = now
+            session.add(sync)
+            record_from_context(
+                session,
+                context,
+                action="calendar.sync.auto_delete_failed",
+                target_type="calendar_event_sync",
+                target_id=sync.id,
+                matter_id=matter.id,
+                result="failed",
+                metadata={
+                    "provider": sync.connection.provider,
+                    "source_type": CalendarSyncSourceType.MATTER_HEARING,
+                    "source_id": hearing_id,
+                    "reason": "hearing_cancelled",
+                    "error": sync.last_error,
+                },
+            )
+            continue
+        sync.sync_status = CalendarEventSyncStatus.DELETED
+        sync.last_error = None
+        sync.last_synced_at = now
+        sync.next_attempt_at = None
+        sync.dead_letter_reason = None
+        sync.updated_at = now
+        sync.connection.last_sync_at = now
+        session.add_all([sync, sync.connection])
+        deleted_count += 1
+        record_from_context(
+            session,
+            context,
+            action="calendar.sync.auto_deleted",
+            target_type="calendar_event_sync",
+            target_id=sync.id,
+            matter_id=matter.id,
+            metadata={
+                "provider": sync.connection.provider,
+                "source_type": CalendarSyncSourceType.MATTER_HEARING,
+                "source_id": hearing_id,
+                "reason": "hearing_cancelled",
+                "provider_event_id": provider_event_id,
+            },
+        )
+    if commit:
+        session.commit()
+    return deleted_count
 
 
 def sync_outlook_bulk(
@@ -1712,6 +3060,7 @@ def sync_outlook_bulk(
                 visible_matters_filter(session, context=context),
                 MatterHearing.hearing_on >= payload.range_from,
                 MatterHearing.hearing_on <= payload.range_to,
+                MatterHearing.status != MatterHearingStatus.CANCELLED,
             )
             .order_by(MatterHearing.hearing_on, MatterHearing.id)
             .limit(payload.limit)
@@ -1818,13 +3167,221 @@ def sync_outlook_bulk(
     )
 
 
+def _google_bulk_source_payloads(
+    session: Session,
+    *,
+    context: SessionContext,
+    payload: OutlookBulkSyncRequest,
+    connection: UserCalendarConnection,
+    source_type: str,
+    limit: int,
+) -> list[tuple[CalendarSourcePayload, bool]]:
+    if limit <= 0:
+        return []
+
+    if source_type == CalendarSyncSourceType.MATTER_HEARING:
+        stmt = (
+            select(MatterHearing, Matter)
+            .join(Matter, Matter.id == MatterHearing.matter_id)
+            .where(
+                Matter.company_id == context.company.id,
+                visible_matters_filter(session, context=context),
+                MatterHearing.hearing_on >= payload.range_from,
+                MatterHearing.hearing_on <= payload.range_to,
+                MatterHearing.status != MatterHearingStatus.CANCELLED,
+            )
+            .order_by(MatterHearing.hearing_on, MatterHearing.id)
+            .limit(limit)
+        )
+        if payload.matter_id is not None:
+            stmt = stmt.where(Matter.id == payload.matter_id)
+        pairs = [
+            _hearing_source_payload(hearing, matter)
+            for hearing, matter in session.execute(stmt).all()
+        ]
+    elif source_type == CalendarSyncSourceType.MATTER_TASK.value:
+        stmt = (
+            select(MatterTask, Matter)
+            .join(Matter, Matter.id == MatterTask.matter_id)
+            .where(
+                Matter.company_id == context.company.id,
+                visible_matters_filter(session, context=context),
+                MatterTask.due_on.is_not(None),
+                MatterTask.due_on >= payload.range_from,
+                MatterTask.due_on <= payload.range_to,
+            )
+            .order_by(MatterTask.due_on, MatterTask.id)
+            .limit(limit)
+        )
+        if payload.matter_id is not None:
+            stmt = stmt.where(Matter.id == payload.matter_id)
+        pairs = [
+            _task_source_payload(task, matter)
+            for task, matter in session.execute(stmt).all()
+        ]
+    elif source_type == CalendarSyncSourceType.MATTER_DEADLINE.value:
+        stmt = (
+            select(MatterDeadline, Matter)
+            .join(Matter, Matter.id == MatterDeadline.matter_id)
+            .where(
+                Matter.company_id == context.company.id,
+                visible_matters_filter(session, context=context),
+                MatterDeadline.due_on >= payload.range_from,
+                MatterDeadline.due_on <= payload.range_to,
+            )
+            .order_by(MatterDeadline.due_on, MatterDeadline.id)
+            .limit(limit)
+        )
+        if payload.matter_id is not None:
+            stmt = stmt.where(Matter.id == payload.matter_id)
+        pairs = [
+            _deadline_source_payload(deadline, matter)
+            for deadline, matter in session.execute(stmt).all()
+        ]
+    else:
+        return []
+
+    existing_ids: set[str] = set()
+    source_ids = [item.source_id for item in pairs]
+    if source_ids:
+        existing_ids = set(
+            session.scalars(
+                select(CalendarEventSync.source_id).where(
+                    CalendarEventSync.company_id == context.company.id,
+                    CalendarEventSync.calendar_connection_id == connection.id,
+                    CalendarEventSync.source_type == source_type,
+                    CalendarEventSync.source_id.in_(source_ids),
+                )
+            )
+        )
+    return [(item, item.source_id in existing_ids) for item in pairs]
+
+
+def sync_google_calendar_bulk(
+    session: Session,
+    *,
+    context: SessionContext,
+    payload: OutlookBulkSyncRequest,
+) -> OutlookBulkSyncResponse:
+    """Bounded manual Google Calendar sync for visible hearings/tasks/deadlines."""
+    connection = _connected_google_calendar_connection(session, context=context)
+
+    if (payload.range_to - payload.range_from).days > 92:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Range exceeds 92 days. Narrow the from/to window before "
+                "retrying - bulk sync is intentionally bounded."
+            ),
+        )
+    if payload.range_to < payload.range_from:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="`to` must be on or after `from`.",
+        )
+
+    requested_sources = list(payload.source_types or _GOOGLE_CALENDAR_SYNC_SOURCE_TYPES)
+    seen_sources: set[str] = set()
+    items: list[OutlookBulkSyncItem] = []
+    counters = {"created": 0, "updated": 0, "failed": 0, "skipped": 0}
+    examined = 0
+    remaining = payload.limit
+
+    for source in requested_sources:
+        if source in seen_sources:
+            continue
+        seen_sources.add(source)
+        if source not in _GOOGLE_CALENDAR_SYNC_SOURCE_TYPES:
+            counters["skipped"] += 1
+            items.append(
+                OutlookBulkSyncItem(
+                    source_type=source,
+                    source_id="",
+                    sync_status="skipped",
+                    matter_id=None,
+                    matter_title=None,
+                    skip_reason="source_type_unsupported",
+                )
+            )
+            continue
+        if remaining <= 0:
+            break
+
+        source_rows = _google_bulk_source_payloads(
+            session,
+            context=context,
+            payload=payload,
+            connection=connection,
+            source_type=source,
+            limit=remaining,
+        )
+        for item, was_existing in source_rows:
+            examined += 1
+            remaining -= 1
+            try:
+                resp = _sync_source_to_provider(
+                    session,
+                    context=context,
+                    source_type=item.source_type,
+                    source_id=item.source_id,
+                    calendar_provider=CalendarProvider.GOOGLE_CALENDAR,
+                )
+            except HTTPException as exc:
+                counters["failed"] += 1
+                items.append(
+                    OutlookBulkSyncItem(
+                        source_type=item.source_type,  # type: ignore[arg-type]
+                        source_id=item.source_id,
+                        sync_status=CalendarEventSyncStatus.FAILED,
+                        matter_id=item.matter.id,
+                        matter_title=item.matter.title,
+                        last_error=str(exc.detail),
+                    )
+                )
+                continue
+
+            sync = resp.sync
+            if sync.sync_status == CalendarEventSyncStatus.SYNCED:
+                if was_existing:
+                    counters["updated"] += 1
+                else:
+                    counters["created"] += 1
+            else:
+                counters["failed"] += 1
+            items.append(
+                OutlookBulkSyncItem(
+                    source_type=item.source_type,  # type: ignore[arg-type]
+                    source_id=item.source_id,
+                    sync_status=sync.sync_status,
+                    matter_id=item.matter.id,
+                    matter_title=item.matter.title,
+                    provider_event_id=sync.provider_event_id,
+                    last_error=sync.last_error,
+                )
+            )
+            if remaining <= 0:
+                break
+
+    return OutlookBulkSyncResponse(
+        examined=examined,
+        created=counters["created"],
+        updated=counters["updated"],
+        failed=counters["failed"],
+        skipped=counters["skipped"],
+        items=items,
+        durable_automation="blocked_pending_provider_approval",
+    )
+
+
 def sync_status(
     session: Session,
     *,
     context: SessionContext,
 ) -> CalendarSyncStatusResponse:
     runtime_config = _outlook_runtime_config(session, context=context)
-    provider = _provider(session, context=context)
+    provider = _outlook_provider(session, context=context)
+    google_runtime_config = _google_calendar_runtime_config()
+    google_provider = _google_calendar_provider()
     connections = list(
         session.scalars(
             select(UserCalendarConnection).where(
@@ -1849,17 +3406,23 @@ def sync_status(
     )
     conflict_candidates = _duplicate_conflict_candidates(syncs)
     durable_automation = _durable_automation_value(session, context=context)
+    any_provider_configured = provider.configured or google_provider.configured
     return CalendarSyncStatusResponse(
-        provider_available=provider.configured,
+        provider_available=any_provider_configured,
         durable_automation=durable_automation,  # type: ignore[arg-type]
         notification_delivery="wtd_5_3_foundation_available",
         capabilities=CalendarSyncCapabilityStatus(
-            manual_sync_available=provider.configured,
+            manual_sync_available=any_provider_configured,
             durable_automation=durable_automation,  # type: ignore[arg-type]
             notification_delivery="wtd_5_3_foundation_available",
             email_invitation_candidates="review_queue_available",
         ),
-        provider_config=[_provider_config_status(provider, runtime_config)],
+        provider_config=[
+            _provider_config_status(provider, runtime_config),
+            _google_calendar_provider_config_status(
+                google_provider, google_runtime_config
+            ),
+        ],
         conflict_summary=CalendarSyncConflictSummary(
             has_conflicts=bool(conflict_candidates),
             candidate_count=len(conflict_candidates),
@@ -1874,17 +3437,29 @@ def sync_status(
 
 
 __all__ = [
+    "complete_google_calendar_connection",
     "complete_outlook_connection",
+    "delete_hearing_from_google_calendar",
+    "delete_synced_hearing_events_for_context",
     "DurableOutlookSyncProcessResult",
+    "GOOGLE_CALENDAR_SCOPES",
     "list_connections",
     "outlook_tenant_configuration_status",
+    "process_durable_google_calendar_sync",
+    "process_durable_google_calendar_sync_by_company",
     "process_durable_outlook_sync",
     "process_durable_outlook_sync_by_company",
     "revoke_connection",
+    "set_google_calendar_provider_for_tests",
     "set_outlook_provider_for_tests",
+    "start_google_calendar_connection",
     "start_outlook_connection",
+    "sync_google_calendar_bulk",
+    "sync_deadline_to_google_calendar",
+    "sync_hearing_to_google_calendar",
     "sync_hearing_to_outlook",
     "sync_status",
+    "sync_task_to_google_calendar",
     "test_outlook_tenant_configuration",
     "update_outlook_tenant_configuration",
 ]

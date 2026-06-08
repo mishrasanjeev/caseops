@@ -118,6 +118,7 @@ class MatterHearingStatus(StrEnum):
     SCHEDULED = "scheduled"
     COMPLETED = "completed"
     ADJOURNED = "adjourned"
+    CANCELLED = "cancelled"
 
 
 class MatterTaskStatus(StrEnum):
@@ -459,6 +460,19 @@ class BillingCreditLedgerEventType(StrEnum):
     USAGE_REFUND = "usage_refund"
     EXPIRY = "expiry"
     PLAN_CHANGE_ADJUSTMENT = "plan_change_adjustment"
+
+
+class ProviderCostCategory(StrEnum):
+    CASE_REFRESH = "case_refresh"
+    LLM = "llm"
+    EMBEDDING = "embedding"
+    DOCUMENT_PROCESSING = "document_processing"
+    STORAGE = "storage"
+    PAYMENT_MDR = "payment_mdr"
+    PAYMENT_FIXED_FEE = "payment_fixed_fee"
+    SMS = "sms"
+    WHATSAPP = "whatsapp"
+    MANUAL_SUPPORT = "manual_support"
 
 
 class DocumentProcessingStatus(StrEnum):
@@ -1797,6 +1811,7 @@ class HearingReminderStatus(StrEnum):
 
 class CalendarProvider(StrEnum):
     OUTLOOK = "outlook"
+    GOOGLE_CALENDAR = "google_calendar"
 
 
 class CalendarConnectionStatus(StrEnum):
@@ -1818,6 +1833,51 @@ class CalendarEventSyncStatus(StrEnum):
     RETRY_SCHEDULED = "retry_scheduled"
     DEAD_LETTER = "dead_letter"
     DELETED = "deleted"
+
+
+class MailboxProvider(StrEnum):
+    GMAIL = "gmail"
+
+
+class DriveProvider(StrEnum):
+    GOOGLE_DRIVE = "google_drive"
+
+
+class MailboxConnectionStatus(StrEnum):
+    CONNECTED = "connected"
+    REVOKED = "revoked"
+    ERROR = "error"
+
+
+class DriveConnectionStatus(StrEnum):
+    CONNECTED = "connected"
+    REVOKED = "revoked"
+    ERROR = "error"
+
+
+class MailboxImportStatus(StrEnum):
+    QUEUED = "queued"
+    IMPORTED = "imported"
+    UNMATCHED = "unmatched"
+    DUPLICATE = "duplicate"
+    FAILED = "failed"
+    DEAD_LETTER = "dead_letter"
+    IGNORED = "ignored"
+    RESOLVED = "resolved"
+
+
+class MailboxAttachmentCandidateStatus(StrEnum):
+    NEEDS_REVIEW = "needs_review"
+    APPROVED_IMPORTED = "approved_imported"
+    REJECTED = "rejected"
+    DUPLICATE_SKIPPED = "duplicate_skipped"
+
+
+class MailboxWebhookStatus(StrEnum):
+    QUEUED = "queued"
+    PROCESSED = "processed"
+    FAILED = "failed"
+    DEAD_LETTER = "dead_letter"
 
 
 class NotificationRuleScopeType(StrEnum):
@@ -2221,6 +2281,318 @@ class CalendarEventSync(Base):
 
     company: Mapped[Company] = relationship()
     connection: Mapped[UserCalendarConnection] = relationship(back_populates="event_syncs")
+
+
+class UserMailboxConnection(Base):
+    __tablename__ = "user_mailbox_connections"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            "membership_id",
+            "provider",
+            name="uq_mailbox_connections_company_membership_provider",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    membership_id: Mapped[str] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    provider: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=MailboxProvider.GMAIL,
+    )
+    provider_account_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    display_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=MailboxConnectionStatus.CONNECTED,
+        index=True,
+    )
+    encrypted_token_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
+    scopes_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    last_history_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    watch_resource_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    watch_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_import_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    connected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship()
+    membership: Mapped[CompanyMembership] = relationship()
+    message_imports: Mapped[list[MailboxMessageImport]] = relationship(
+        back_populates="connection",
+        cascade="all, delete-orphan",
+    )
+
+
+class UserDriveConnection(Base):
+    __tablename__ = "user_drive_connections"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            "membership_id",
+            "provider",
+            name="uq_drive_connections_company_membership_provider",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    membership_id: Mapped[str] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    provider: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=DriveProvider.GOOGLE_DRIVE,
+    )
+    provider_account_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    display_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=DriveConnectionStatus.CONNECTED,
+        index=True,
+    )
+    encrypted_token_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
+    scopes_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    connected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_list_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship()
+    membership: Mapped[CompanyMembership] = relationship()
+
+
+class MailboxMessageImport(Base):
+    __tablename__ = "mailbox_message_imports"
+    __table_args__ = (
+        UniqueConstraint(
+            "mailbox_connection_id",
+            "provider_message_id",
+            name="uq_mailbox_message_import_connection_message",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    mailbox_connection_id: Mapped[str] = mapped_column(
+        ForeignKey("user_mailbox_connections.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matters.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    communication_id: Mapped[str | None] = mapped_column(
+        ForeignKey("communications.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    provider_message_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    provider_thread_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    history_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    subject: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    sender_email_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    sender_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    occurred_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    snippet: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    labels_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    attachment_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=MailboxImportStatus.UNMATCHED,
+        index=True,
+    )
+    last_error_redacted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    dead_letter_reason: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship()
+    connection: Mapped[UserMailboxConnection] = relationship(back_populates="message_imports")
+    matter: Mapped[Matter | None] = relationship()
+    communication: Mapped[Communication | None] = relationship()
+    attachment_candidates: Mapped[list[MailboxAttachmentCandidate]] = relationship(
+        back_populates="message_import",
+        cascade="all, delete-orphan",
+    )
+
+
+class MailboxAttachmentCandidate(Base):
+    __tablename__ = "mailbox_attachment_candidates"
+    __table_args__ = (
+        UniqueConstraint(
+            "message_import_id",
+            "provider_attachment_ref_hash",
+            name="uq_mailbox_attachment_candidate_message_ref",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    message_import_id: Mapped[str] = mapped_column(
+        ForeignKey("mailbox_message_imports.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matters.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    provider_attachment_ref_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    encrypted_provider_attachment_ref: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
+    filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    content_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    imported_attachment_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matter_attachments.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    last_error_redacted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=MailboxAttachmentCandidateStatus.NEEDS_REVIEW,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    message_import: Mapped[MailboxMessageImport] = relationship(
+        back_populates="attachment_candidates"
+    )
+    matter: Mapped[Matter | None] = relationship()
+    imported_attachment: Mapped[MatterAttachment | None] = relationship()
+
+
+class MailboxWebhookEvent(Base):
+    __tablename__ = "mailbox_webhook_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "provider",
+            "history_id",
+            "email_address_hash",
+            name="uq_mailbox_webhook_provider_history_address",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str | None] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    mailbox_connection_id: Mapped[str | None] = mapped_column(
+        ForeignKey("user_mailbox_connections.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    provider: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=MailboxProvider.GMAIL,
+        index=True,
+    )
+    history_id: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    email_address_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    raw_payload_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=MailboxWebhookStatus.QUEUED,
+        index=True,
+    )
+    last_error_redacted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company | None] = relationship()
+    connection: Mapped[UserMailboxConnection | None] = relationship()
 
 
 class NotificationRule(Base):
@@ -5663,6 +6035,71 @@ class BillingOveragePolicy(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
     )
+
+
+class ProviderCostProfile(Base):
+    __tablename__ = "provider_cost_profiles"
+    __table_args__ = (
+        CheckConstraint(
+            "unit_amount_minor IS NOT NULL OR unit_amount_bps IS NOT NULL",
+            name="ck_provider_cost_profiles_amount_present",
+        ),
+        Index(
+            "ix_provider_cost_profiles_lookup",
+            "category",
+            "provider",
+            "currency",
+            "effective_from",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    category: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(String(80), nullable=False, default="default", index=True)
+    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="INR", index=True)
+    unit_amount_minor: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    unit_amount_bps: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    effective_from: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False, index=True
+    )
+    effective_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="active", index=True)
+    source: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by_platform_admin_id: Mapped[str | None] = mapped_column(
+        ForeignKey("platform_admin_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    created_by_platform_admin: Mapped[PlatformAdminMembership | None] = relationship()
+
+
+class BillingMarginSimulation(Base):
+    __tablename__ = "billing_margin_simulations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    scenario_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="INR", index=True)
+    input_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    result_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    warnings_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    run_by_platform_admin_id: Mapped[str | None] = mapped_column(
+        ForeignKey("platform_admin_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False, index=True
+    )
+
+    run_by_platform_admin: Mapped[PlatformAdminMembership | None] = relationship()
 
 
 class ClientType(StrEnum):

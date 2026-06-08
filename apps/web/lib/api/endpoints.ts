@@ -16,6 +16,7 @@ import {
   type CalendarEventListResponse,
   type CalendarEventSyncResponse,
   type CalendarSyncStatusResponse,
+  type ConnectorRegistryResponse,
   type OutlookReadinessTestResponse,
   type OutlookBulkSyncResponse,
   type OutlookTenantConfigurationResponse,
@@ -86,7 +87,21 @@ import {
   type InvoiceNumberPreviewResponse,
   type ProviderOperationActionResponse,
   type ProviderOperationListResponse,
+  type ProviderCostProfileListResponse,
+  type ProviderCostProfileRecord,
   type ProviderReadinessListResponse,
+  type TenantConnectorRegistryResponse,
+  type MarginSimulationListResponse,
+  type MarginSimulationRecord,
+  type MailboxConnectionRecord,
+  type MailboxConnectionStartResponse,
+  type GoogleDriveConnectionRecord,
+  type GoogleDriveConnectionStartResponse,
+  type GoogleDriveFileListResponse,
+  type GoogleDriveStatusResponse,
+  type MailboxImportResponse,
+  type MailboxStatusResponse,
+  type MailboxWatchResponse,
   authContext,
   authSession,
   affidavitIntelligenceResponse,
@@ -102,6 +117,7 @@ import {
   calendarEventListResponse,
   calendarEventSyncResponse,
   calendarSyncStatusResponse,
+  connectorRegistryResponse,
   outlookReadinessTestResponse,
   outlookBulkSyncResponse,
   outlookTenantConfigurationResponse,
@@ -154,7 +170,21 @@ import {
   invoiceNumberPreviewResponse,
   providerOperationActionResponse,
   providerOperationListResponse,
+  providerCostProfileListResponse,
+  providerCostProfileRecord,
   providerReadinessListResponse,
+  tenantConnectorRegistryResponse,
+  marginSimulationListResponse,
+  marginSimulationRecord,
+  mailboxConnectionRecord,
+  mailboxConnectionStartResponse,
+  googleDriveConnectionRecord,
+  googleDriveConnectionStartResponse,
+  googleDriveFileListResponse,
+  googleDriveStatusResponse,
+  mailboxImportResponse,
+  mailboxStatusResponse,
+  mailboxWatchResponse,
   predictiveIntelligenceResponse,
   proceedingIntelligenceResponse,
   recommendation,
@@ -1482,7 +1512,7 @@ export type MatterHearingCreateInput = {
   purpose: string;
   judge_name?: string | null;
   outcome_note?: string | null;
-  status?: "scheduled" | "completed" | "adjourned";
+  status?: "scheduled" | "completed" | "adjourned" | "cancelled";
 };
 
 export async function createMatterHearing(
@@ -1495,6 +1525,25 @@ export async function createMatterHearing(
   });
 }
 
+
+export type MatterHearingUpdateInput = {
+  matterId: string;
+  hearingId: string;
+  hearing_on?: string | null;
+  outcome_note?: string | null;
+  status?: "scheduled" | "completed" | "adjourned" | "cancelled";
+  create_follow_up?: boolean | null;
+};
+
+export async function updateMatterHearing(
+  input: MatterHearingUpdateInput,
+): Promise<unknown> {
+  const { matterId, hearingId, ...body } = input;
+  return apiRequest<unknown>(`/api/matters/${matterId}/hearings/${hearingId}`, {
+    method: "PATCH",
+    body,
+  });
+}
 
 // BUG-032 (Hari 2026-05-09) — manual court-order create. The hearings
 // page Orders-on-file card needs an explicit Add-order affordance;
@@ -5484,7 +5533,28 @@ export async function startOutlookCalendarConnection(): Promise<{
     "/api/calendar/connections/outlook/start",
     { method: "POST", body: {} },
   );
-  return calendarConnectionStartResponse.parse(data);
+  const parsed = calendarConnectionStartResponse.parse(data);
+  if (parsed.provider !== "outlook") {
+    throw new Error("Unexpected calendar provider returned for Outlook OAuth.");
+  }
+  return { ...parsed, provider: "outlook" };
+}
+
+export async function startGoogleCalendarConnection(): Promise<{
+  provider: "google_calendar";
+  provider_available: boolean;
+  auth_url?: string | null;
+  unavailable_reason?: string | null;
+}> {
+  const data = await apiRequest<unknown>(
+    "/api/calendar/connections/google-calendar/start",
+    { method: "POST", body: {} },
+  );
+  const parsed = calendarConnectionStartResponse.parse(data);
+  if (parsed.provider !== "google_calendar") {
+    throw new Error("Unexpected calendar provider returned for Google OAuth.");
+  }
+  return { ...parsed, provider: "google_calendar" };
 }
 
 export async function revokeCalendarConnection(
@@ -5505,6 +5575,91 @@ export async function syncHearingToOutlook(
     { method: "POST", body: {} },
   );
   return calendarEventSyncResponse.parse(data);
+}
+
+export async function syncHearingToGoogleCalendar(
+  hearingId: string,
+): Promise<CalendarEventSyncResponse> {
+  const data = await apiRequest<unknown>(
+    `/api/calendar/sync/google-calendar/hearings/${hearingId}`,
+    { method: "POST", body: {} },
+  );
+  return calendarEventSyncResponse.parse(data);
+}
+
+export async function fetchGmailMailboxStatus(): Promise<MailboxStatusResponse> {
+  const data = await apiRequest<unknown>("/api/mailbox/gmail/status");
+  return mailboxStatusResponse.parse(data);
+}
+
+export async function startGmailMailboxConnection(): Promise<MailboxConnectionStartResponse> {
+  const data = await apiRequest<unknown>("/api/mailbox/gmail/start", {
+    method: "POST",
+    body: {},
+  });
+  return mailboxConnectionStartResponse.parse(data);
+}
+
+export async function revokeGmailMailboxConnection(
+  connectionId: string,
+): Promise<MailboxConnectionRecord> {
+  const data = await apiRequest<unknown>(
+    `/api/mailbox/connections/${connectionId}`,
+    { method: "DELETE" },
+  );
+  return mailboxConnectionRecord.parse(data);
+}
+
+export async function importRecentGmailMessages(input?: {
+  limit?: number;
+}): Promise<MailboxImportResponse> {
+  const data = await apiRequest<unknown>("/api/mailbox/gmail/import", {
+    method: "POST",
+    body: { limit: input?.limit ?? 25 },
+  });
+  return mailboxImportResponse.parse(data);
+}
+
+export async function startGmailWatch(): Promise<MailboxWatchResponse> {
+  const data = await apiRequest<unknown>("/api/mailbox/gmail/watch", {
+    method: "POST",
+    body: {},
+  });
+  return mailboxWatchResponse.parse(data);
+}
+
+export async function fetchGoogleDriveStatus(): Promise<GoogleDriveStatusResponse> {
+  const data = await apiRequest<unknown>("/api/drive/google/status");
+  return googleDriveStatusResponse.parse(data);
+}
+
+export async function startGoogleDriveConnection(): Promise<GoogleDriveConnectionStartResponse> {
+  const data = await apiRequest<unknown>("/api/drive/google/start", {
+    method: "POST",
+    body: {},
+  });
+  return googleDriveConnectionStartResponse.parse(data);
+}
+
+export async function revokeGoogleDriveConnection(
+  connectionId: string,
+): Promise<GoogleDriveConnectionRecord> {
+  const data = await apiRequest<unknown>(
+    `/api/drive/connections/${connectionId}`,
+    { method: "DELETE" },
+  );
+  return googleDriveConnectionRecord.parse(data);
+}
+
+export async function listGoogleDriveFiles(input?: {
+  limit?: number;
+}): Promise<GoogleDriveFileListResponse> {
+  const qs = new URLSearchParams();
+  qs.set("limit", String(input?.limit ?? 10));
+  const data = await apiRequest<unknown>(
+    `/api/drive/google/files?${qs.toString()}`,
+  );
+  return googleDriveFileListResponse.parse(data);
 }
 
 export async function fetchCalendarSyncStatus(): Promise<CalendarSyncStatusResponse> {
@@ -5584,6 +5739,11 @@ export async function fetchProviderReadiness(): Promise<ProviderReadinessListRes
   return providerReadinessListResponse.parse(data);
 }
 
+export async function fetchTenantIntegrations(): Promise<TenantConnectorRegistryResponse> {
+  const data = await apiRequest<unknown>("/api/admin/integrations");
+  return tenantConnectorRegistryResponse.parse(data);
+}
+
 async function mutateProviderOperation(
   operationId: string,
   action: "replay" | "ignore" | "mark-resolved",
@@ -5637,6 +5797,30 @@ export async function syncOutlookVisibleRange(input: {
   const data = await apiRequest<unknown>("/api/calendar/sync/outlook", {
     method: "POST",
     body,
+  });
+  return outlookBulkSyncResponse.parse(data);
+}
+
+export async function syncGoogleCalendarVisibleRange(input: {
+  from: string;
+  to: string;
+  matterId?: string | null;
+  sourceTypes?: Array<"matter_hearing" | "matter_task" | "matter_deadline">;
+  limit?: number;
+}): Promise<OutlookBulkSyncResponse> {
+  const data = await apiRequest<unknown>("/api/calendar/sync/google-calendar", {
+    method: "POST",
+    body: {
+      from: input.from,
+      to: input.to,
+      matter_id: input.matterId ?? null,
+      source_types: input.sourceTypes ?? [
+        "matter_hearing",
+        "matter_task",
+        "matter_deadline",
+      ],
+      limit: input.limit ?? 100,
+    },
   });
   return outlookBulkSyncResponse.parse(data);
 }
@@ -6178,6 +6362,101 @@ export async function fetchPlatformProviderEvents(input?: {
 export async function fetchPlatformMarginAlerts(): Promise<PlatformMarginAlertsResponse> {
   const data = await apiRequest<unknown>("/api/platform-admin/margin-alerts");
   return platformMarginAlertsResponse.parse(data);
+}
+
+export async function fetchPlatformIntegrations(): Promise<ConnectorRegistryResponse> {
+  const data = await apiRequest<unknown>("/api/platform-admin/integrations");
+  return connectorRegistryResponse.parse(data);
+}
+
+export async function fetchProviderCostProfiles(): Promise<ProviderCostProfileListResponse> {
+  const data = await apiRequest<unknown>("/api/platform-admin/cost-profiles");
+  return providerCostProfileListResponse.parse(data);
+}
+
+export type ProviderCostProfileInput = {
+  category:
+    | "case_refresh"
+    | "llm"
+    | "embedding"
+    | "document_processing"
+    | "storage"
+    | "payment_mdr"
+    | "payment_fixed_fee"
+    | "sms"
+    | "whatsapp"
+    | "manual_support";
+  provider?: string;
+  unitAmountMinor?: number | null;
+  unitAmountBps?: number | null;
+  source?: string | null;
+  notes?: string | null;
+};
+
+export async function createProviderCostProfile(
+  input: ProviderCostProfileInput,
+): Promise<ProviderCostProfileRecord> {
+  const data = await apiRequest<unknown>("/api/platform-admin/cost-profiles", {
+    method: "POST",
+    body: {
+      category: input.category,
+      provider: input.provider ?? "default",
+      currency: "INR",
+      unit_amount_minor: input.unitAmountMinor ?? null,
+      unit_amount_bps: input.unitAmountBps ?? null,
+      source: input.source ?? null,
+      notes: input.notes ?? null,
+    },
+  });
+  return providerCostProfileRecord.parse(data);
+}
+
+export type MarginSimulationInput = {
+  scenarioName?: string | null;
+  planCode?: string | null;
+  billingInterval?: "month" | "year" | "one_time" | "custom";
+  revenueMinor?: number | null;
+  paymentAmountMinor?: number | null;
+  paymentCount?: number;
+  trackedCaseRefreshes?: number;
+  aiCredits?: number;
+  embeddingUnits?: number;
+  documentPages?: number;
+  storageGbMonths?: number;
+  smsMessages?: number;
+  whatsappMessages?: number;
+  manualSupportMinutes?: number;
+};
+
+export async function fetchMarginSimulations(): Promise<MarginSimulationListResponse> {
+  const data = await apiRequest<unknown>("/api/platform-admin/margin-simulations");
+  return marginSimulationListResponse.parse(data);
+}
+
+export async function runMarginSimulation(
+  input: MarginSimulationInput,
+): Promise<MarginSimulationRecord> {
+  const data = await apiRequest<unknown>("/api/platform-admin/margin-simulations/run", {
+    method: "POST",
+    body: {
+      scenario_name: input.scenarioName ?? null,
+      plan_code: input.planCode ?? null,
+      billing_interval: input.billingInterval ?? "month",
+      revenue_minor: input.revenueMinor ?? null,
+      payment_amount_minor: input.paymentAmountMinor ?? null,
+      payment_count: input.paymentCount ?? 1,
+      tracked_case_refreshes: input.trackedCaseRefreshes ?? 0,
+      ai_credits: input.aiCredits ?? 0,
+      embedding_units: input.embeddingUnits ?? 0,
+      document_pages: input.documentPages ?? 0,
+      storage_gb_months: input.storageGbMonths ?? 0,
+      sms_messages: input.smsMessages ?? 0,
+      whatsapp_messages: input.whatsappMessages ?? 0,
+      manual_support_minutes: input.manualSupportMinutes ?? 0,
+      currency: "INR",
+    },
+  });
+  return marginSimulationRecord.parse(data);
 }
 
 export async function reprocessPlatformProviderEvent(eventId: string): Promise<unknown> {

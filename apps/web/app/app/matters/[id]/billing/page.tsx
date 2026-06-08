@@ -256,17 +256,19 @@ export default function MatterBillingPage() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="inline-flex items-center gap-2">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            disabled={downloadInvoiceMutation.isPending}
-                            onClick={() => downloadInvoiceMutation.mutate(inv.id)}
-                            data-testid={`invoice-pdf-${inv.id}`}
-                          >
-                            <Download className="h-4 w-4" aria-hidden />
-                            PDF
-                          </Button>
+                          {canIssueInvoice ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              disabled={downloadInvoiceMutation.isPending}
+                              onClick={() => downloadInvoiceMutation.mutate(inv.id)}
+                              data-testid={`invoice-pdf-${inv.id}`}
+                            >
+                              <Download className="h-4 w-4" aria-hidden />
+                              PDF
+                            </Button>
+                          ) : null}
                           {canSendPaymentLink ? (
                             <>
                             {canIssuePaymentLink(inv) && pineLabsConfigured ? (

@@ -278,10 +278,10 @@ def test_calendar_rejects_inverted_range_400(client: TestClient) -> None:
 
 
 def test_calendar_ics_export_shape_is_rfc5545(client: TestClient) -> None:
-    """Phase B slice 2b / FT-043 — the .ics feed is what Google /
-    Outlook / Apple Calendar subscribe to. If the wire shape drifts
-    off RFC 5545, every subscribed client silently stops updating.
-    Lock in the invariants:
+    """Phase B slice 2b / FT-043 - the authenticated .ics export is for
+    browser download/import. Direct external subscription requires
+    a tokenized feed or provider OAuth connector. If the wire shape drifts
+    off RFC 5545, import clients silently fail. Lock in the invariants:
 
     - ``BEGIN:VCALENDAR`` / ``END:VCALENDAR`` wrap the file
     - exactly one ``BEGIN:VEVENT`` per event returned by the

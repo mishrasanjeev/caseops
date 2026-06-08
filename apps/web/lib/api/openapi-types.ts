@@ -1556,11 +1556,13 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Download / subscribe to the calendar as iCalendar (FT-043).
+         * Download the calendar as iCalendar (FT-043).
          * @description Return the same event feed as :func:`list_calendar_events` but
-         *     wire-formatted as RFC 5545 vCalendar. Google Calendar / Outlook
-         *     / Apple Calendar all accept this as a subscribable URL so users
-         *     see their CaseOps events alongside their personal calendar.
+         *     wire-formatted as RFC 5545 vCalendar.
+         *
+         *     This route is authenticated. Browsers can download/import the file, but
+         *     direct external calendar subscription needs a future tokenized feed or a
+         *     provider OAuth connector.
          */
         get: operations["list_calendar_events_ical_api_calendar_events_ics_get"];
         put?: never;

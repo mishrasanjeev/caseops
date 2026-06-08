@@ -19,20 +19,36 @@ const {
   fetchCalendarEventsMock,
   fetchCalendarSyncStatusMock,
   extractEmailInvitationCandidatesMock,
+  fetchGmailMailboxStatusMock,
   listCalendarConnectionsMock,
   listEmailInvitationCandidatesMock,
+  importRecentGmailMessagesMock,
   reviewEmailInvitationCandidateMock,
+  revokeCalendarConnectionMock,
+  revokeGmailMailboxConnectionMock,
+  startGmailMailboxConnectionMock,
+  startGmailWatchMock,
+  startGoogleCalendarConnectionMock,
   startOutlookCalendarConnectionMock,
+  syncGoogleCalendarVisibleRangeMock,
   syncOutlookVisibleRangeMock,
   useCapabilityMock,
 } = vi.hoisted(() => ({
   fetchCalendarEventsMock: vi.fn(),
   fetchCalendarSyncStatusMock: vi.fn(),
   extractEmailInvitationCandidatesMock: vi.fn(),
+  fetchGmailMailboxStatusMock: vi.fn(),
   listCalendarConnectionsMock: vi.fn(),
   listEmailInvitationCandidatesMock: vi.fn(),
+  importRecentGmailMessagesMock: vi.fn(),
   reviewEmailInvitationCandidateMock: vi.fn(),
+  revokeCalendarConnectionMock: vi.fn(),
+  revokeGmailMailboxConnectionMock: vi.fn(),
+  startGmailMailboxConnectionMock: vi.fn(),
+  startGmailWatchMock: vi.fn(),
+  startGoogleCalendarConnectionMock: vi.fn(),
   startOutlookCalendarConnectionMock: vi.fn(),
+  syncGoogleCalendarVisibleRangeMock: vi.fn(),
   syncOutlookVisibleRangeMock: vi.fn(),
   useCapabilityMock: vi.fn(),
 }));
@@ -41,11 +57,18 @@ vi.mock("@/lib/api/endpoints", () => ({
   extractEmailInvitationCandidates: extractEmailInvitationCandidatesMock,
   fetchCalendarEvents: fetchCalendarEventsMock,
   fetchCalendarSyncStatus: fetchCalendarSyncStatusMock,
+  fetchGmailMailboxStatus: fetchGmailMailboxStatusMock,
+  importRecentGmailMessages: importRecentGmailMessagesMock,
   listCalendarConnections: listCalendarConnectionsMock,
   listEmailInvitationCandidates: listEmailInvitationCandidatesMock,
   reviewEmailInvitationCandidate: reviewEmailInvitationCandidateMock,
-  revokeCalendarConnection: vi.fn(),
+  revokeCalendarConnection: revokeCalendarConnectionMock,
+  revokeGmailMailboxConnection: revokeGmailMailboxConnectionMock,
+  startGmailMailboxConnection: startGmailMailboxConnectionMock,
+  startGmailWatch: startGmailWatchMock,
+  startGoogleCalendarConnection: startGoogleCalendarConnectionMock,
   startOutlookCalendarConnection: startOutlookCalendarConnectionMock,
+  syncGoogleCalendarVisibleRange: syncGoogleCalendarVisibleRangeMock,
   syncOutlookVisibleRange: syncOutlookVisibleRangeMock,
 }));
 
@@ -72,10 +95,18 @@ describe("CalendarPage", () => {
     fetchCalendarEventsMock.mockReset();
     fetchCalendarSyncStatusMock.mockReset();
     extractEmailInvitationCandidatesMock.mockReset();
+    fetchGmailMailboxStatusMock.mockReset();
     listCalendarConnectionsMock.mockReset();
     listEmailInvitationCandidatesMock.mockReset();
+    importRecentGmailMessagesMock.mockReset();
     reviewEmailInvitationCandidateMock.mockReset();
+    revokeCalendarConnectionMock.mockReset();
+    revokeGmailMailboxConnectionMock.mockReset();
+    startGmailMailboxConnectionMock.mockReset();
+    startGmailWatchMock.mockReset();
+    startGoogleCalendarConnectionMock.mockReset();
     startOutlookCalendarConnectionMock.mockReset();
+    syncGoogleCalendarVisibleRangeMock.mockReset();
     syncOutlookVisibleRangeMock.mockReset();
     useCapabilityMock.mockReset();
     useCapabilityMock.mockReturnValue(true);
@@ -120,6 +151,39 @@ describe("CalendarPage", () => {
       pending_count: 0,
       duplicate_count: 0,
     });
+    fetchGmailMailboxStatusMock.mockResolvedValue({
+      provider: "gmail",
+      configured: false,
+      webhook_configured: false,
+      missing_config_names: [
+        "GMAIL_CLIENT_ID",
+        "GMAIL_CLIENT_SECRET",
+        "GMAIL_REDIRECT_URI",
+      ],
+      missing_webhook_config_names: [
+        "GMAIL_PUBSUB_TOPIC",
+        "GMAIL_WEBHOOK_VERIFICATION_TOKEN",
+      ],
+      connections: [],
+    });
+    importRecentGmailMessagesMock.mockResolvedValue({
+      summary: {
+        imported: 0,
+        unmatched: 0,
+        duplicate: 0,
+        failed: 0,
+        attachment_candidates: 0,
+      },
+      imports: [],
+    });
+    startGmailWatchMock.mockResolvedValue({
+      provider: "gmail",
+      watch_started: true,
+      webhook_configured: true,
+      history_id: "history-id",
+      watch_expires_at: new Date().toISOString(),
+      missing_config_names: [],
+    });
     extractEmailInvitationCandidatesMock.mockResolvedValue({
       examined_count: 0,
       created_count: 0,
@@ -144,7 +208,272 @@ describe("CalendarPage", () => {
     expect(screen.getByTestId("calendar-prev-month")).toBeTruthy();
     expect(screen.getByTestId("calendar-next-month")).toBeTruthy();
     expect(await screen.findByTestId("calendar-outlook-panel")).toBeTruthy();
+    expect(await screen.findByTestId("calendar-google-panel")).toHaveTextContent(
+      "Google Calendar",
+    );
+    expect(screen.getByTestId("calendar-google-connect")).toBeDisabled();
+    expect(
+      screen.getByTestId("calendar-google-provider-config-status"),
+    ).toHaveTextContent(/GOOGLE_CALENDAR_CLIENT_ID/);
+    expect(screen.getByTestId("calendar-google-ics-download")).toBeInTheDocument();
+    expect(screen.getByTestId("calendar-google-integrations-link")).toHaveAttribute(
+      "href",
+      "/app/admin/integrations",
+    );
+    expect(await screen.findByTestId("calendar-gmail-panel")).toHaveTextContent(
+      "Gmail mailbox",
+    );
+    expect(screen.getByTestId("calendar-gmail-connect")).toBeDisabled();
+    expect(
+      screen.getByTestId("calendar-gmail-provider-config-status"),
+    ).toHaveTextContent(/GMAIL_CLIENT_ID/);
+    expect(
+      screen.getByTestId("calendar-gmail-webhook-config-status"),
+    ).toHaveTextContent(/GMAIL_WEBHOOK_VERIFICATION_TOKEN/);
     expect(screen.getByTestId("calendar-ics-download")).toBeTruthy();
+  });
+
+  it("enables Google Calendar connect when OAuth configuration is present", async () => {
+    fetchCalendarEventsMock.mockResolvedValueOnce({
+      range_from: "2026-04-01",
+      range_to: "2026-05-31",
+      events: [],
+    });
+    fetchCalendarSyncStatusMock.mockResolvedValue({
+      provider_available: true,
+      durable_automation: "blocked_pending_provider_approval",
+      notification_delivery: "wtd_5_3_foundation_available",
+      capabilities: {
+        sync_mode: "manual_bounded",
+        manual_sync_available: true,
+        durable_automation: "blocked_pending_provider_approval",
+        notification_delivery: "wtd_5_3_foundation_available",
+        email_invitation_candidates: "review_queue_available",
+      },
+      provider_config: [
+        {
+          provider: "outlook",
+          configured: true,
+          missing_config_names: [],
+        },
+        {
+          provider: "google_calendar",
+          configured: true,
+          missing_config_names: [],
+        },
+      ],
+      conflict_summary: {
+        has_conflicts: false,
+        candidate_count: 0,
+        duplicate_provider_event_count: 0,
+        changed_event_candidate_count: 0,
+        changed_event_detection: "unsupported_no_provider_snapshot",
+      },
+      conflict_candidates: [],
+      connections: [],
+      syncs: [],
+    });
+
+    render(withClient(<CalendarPage />));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("calendar-google-panel")).toHaveTextContent(
+        "Manual hearing, task, and deadline sync is available after a Google Calendar connection is added.",
+      ),
+    );
+    expect(screen.getByTestId("calendar-google-connect")).toBeEnabled();
+    expect(
+      screen.queryByTestId("calendar-google-provider-config-status"),
+    ).toBeNull();
+    expect(startGoogleCalendarConnectionMock).not.toHaveBeenCalled();
+  });
+
+  it("syncs and revokes a connected Google Calendar account", async () => {
+    const now = new Date().toISOString();
+    const googleConnection = {
+      id: "google-conn-1",
+      company_id: "co-1",
+      membership_id: "mem-1",
+      provider: "google_calendar",
+      provider_account_id: "google-account-1",
+      display_email: "owner@gmail.example",
+      status: "connected",
+      scopes: ["https://www.googleapis.com/auth/calendar.events"],
+      connected_at: now,
+      last_sync_at: null,
+      created_at: now,
+      updated_at: now,
+    };
+    fetchCalendarEventsMock.mockResolvedValueOnce({
+      range_from: "2026-04-01",
+      range_to: "2026-05-31",
+      events: [],
+    });
+    listCalendarConnectionsMock.mockResolvedValueOnce({
+      provider: "outlook",
+      provider_available: true,
+      unavailable_reason: null,
+      durable_automation: "blocked_pending_provider_approval",
+      connections: [googleConnection],
+    });
+    fetchCalendarSyncStatusMock.mockResolvedValue({
+      provider_available: true,
+      durable_automation: "blocked_pending_provider_approval",
+      notification_delivery: "wtd_5_3_foundation_available",
+      capabilities: {
+        sync_mode: "manual_bounded",
+        manual_sync_available: true,
+        durable_automation: "blocked_pending_provider_approval",
+        notification_delivery: "wtd_5_3_foundation_available",
+        email_invitation_candidates: "review_queue_available",
+      },
+      provider_config: [
+        {
+          provider: "outlook",
+          configured: true,
+          missing_config_names: [],
+        },
+        {
+          provider: "google_calendar",
+          configured: true,
+          missing_config_names: [],
+        },
+      ],
+      conflict_summary: {
+        has_conflicts: false,
+        candidate_count: 0,
+        duplicate_provider_event_count: 0,
+        changed_event_candidate_count: 0,
+        changed_event_detection: "unsupported_no_provider_snapshot",
+      },
+      conflict_candidates: [],
+      connections: [googleConnection],
+      syncs: [],
+    });
+    syncGoogleCalendarVisibleRangeMock.mockResolvedValueOnce({
+      examined: 2,
+      created: 1,
+      updated: 1,
+      failed: 0,
+      skipped: 0,
+      items: [],
+      durable_automation: "blocked_pending_provider_approval",
+    });
+    revokeCalendarConnectionMock.mockResolvedValueOnce({
+      ...googleConnection,
+      status: "revoked",
+    });
+
+    const user = userEvent.setup();
+    render(withClient(<CalendarPage />));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("calendar-google-panel")).toHaveTextContent(
+        "Connected as owner@gmail.example",
+      ),
+    );
+    await user.click(screen.getByTestId("calendar-google-sync-range"));
+    await waitFor(() =>
+      expect(syncGoogleCalendarVisibleRangeMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          from: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+          to: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+        }),
+      ),
+    );
+    expect(
+      await screen.findByText(
+        /Synced 1 new, 1 updated, 0 failed, 0 skipped \(2 examined\)\./,
+      ),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("calendar-google-revoke"));
+    await waitFor(() =>
+      expect(revokeCalendarConnectionMock).toHaveBeenCalledWith(
+        "google-conn-1",
+        expect.anything(),
+      ),
+    );
+  });
+
+  it("imports, watches, and revokes a connected Gmail mailbox without internal fields", async () => {
+    const now = new Date().toISOString();
+    const gmailConnection = {
+      id: "gmail-conn-1",
+      company_id: "co-1",
+      membership_id: "mem-1",
+      provider: "gmail",
+      provider_account_id: "owner@gmail.example",
+      display_email: "owner@gmail.example",
+      status: "connected",
+      scopes: ["https://www.googleapis.com/auth/gmail.readonly"],
+      last_history_id: "history-1",
+      watch_expires_at: now,
+      last_import_at: now,
+      connected_at: now,
+      created_at: now,
+      updated_at: now,
+    };
+    fetchCalendarEventsMock.mockResolvedValueOnce({
+      range_from: "2026-04-01",
+      range_to: "2026-05-31",
+      events: [],
+    });
+    fetchGmailMailboxStatusMock.mockResolvedValue({
+      provider: "gmail",
+      configured: true,
+      webhook_configured: true,
+      missing_config_names: [],
+      missing_webhook_config_names: [],
+      connections: [gmailConnection],
+    });
+    importRecentGmailMessagesMock.mockResolvedValueOnce({
+      summary: {
+        imported: 2,
+        unmatched: 1,
+        duplicate: 0,
+        failed: 0,
+        attachment_candidates: 1,
+      },
+      imports: [],
+    });
+    revokeGmailMailboxConnectionMock.mockResolvedValueOnce({
+      ...gmailConnection,
+      status: "revoked",
+    });
+
+    const user = userEvent.setup();
+    render(withClient(<CalendarPage />));
+
+    const panel = await screen.findByTestId("calendar-gmail-panel");
+    await waitFor(() =>
+      expect(panel).toHaveTextContent("Connected as owner@gmail.example"),
+    );
+    expect(panel.textContent).not.toMatch(
+      /token|secret|gross profit|gross margin|provider fee|internal cost/i,
+    );
+
+    await user.click(screen.getByTestId("calendar-gmail-import"));
+    await waitFor(() =>
+      expect(importRecentGmailMessagesMock).toHaveBeenCalledWith({ limit: 25 }),
+    );
+    expect(
+      await screen.findByText(
+        "Imported 2, unmatched 1, duplicates 0, attachment candidates 1.",
+      ),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("calendar-gmail-watch"));
+    await waitFor(() => expect(startGmailWatchMock).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText("Gmail webhook watch started.")).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("calendar-gmail-revoke"));
+    await waitFor(() =>
+      expect(revokeGmailMailboxConnectionMock).toHaveBeenCalledWith(
+        "gmail-conn-1",
+        expect.anything(),
+      ),
+    );
   });
 
   it("shows Outlook unavailable state without hiding ICS export", async () => {
@@ -203,6 +532,15 @@ describe("CalendarPage", () => {
           provider: "outlook",
           configured: true,
           missing_config_names: [],
+        },
+        {
+          provider: "google_calendar",
+          configured: false,
+          missing_config_names: [
+            "GOOGLE_CALENDAR_CLIENT_ID",
+            "GOOGLE_CALENDAR_CLIENT_SECRET",
+            "GOOGLE_CALENDAR_REDIRECT_URI",
+          ],
         },
       ],
       conflict_summary: {
@@ -461,6 +799,21 @@ describe("CalendarPage", () => {
   // events query is using. Result counts surface to the user via the
   // existing outlook-message panel.
   it("renders Sync visible range to Outlook button when connected and posts the visible range", async () => {
+    const now = new Date().toISOString();
+    const outlookConnection = {
+      id: "conn-1",
+      company_id: "co-1",
+      membership_id: "mem-1",
+      provider: "outlook",
+      provider_account_id: "acct-1",
+      display_email: "qa-bot@caseops.ai",
+      status: "connected",
+      scopes: ["Calendars.ReadWrite"],
+      connected_at: now,
+      last_sync_at: null,
+      created_at: now,
+      updated_at: now,
+    };
     fetchCalendarEventsMock.mockResolvedValueOnce({
       range_from: "2026-04-01",
       range_to: "2026-05-31",
@@ -471,22 +824,45 @@ describe("CalendarPage", () => {
       provider_available: true,
       unavailable_reason: null,
       durable_automation: "blocked_pending_provider_approval",
-      connections: [
+      connections: [outlookConnection],
+    });
+    fetchCalendarSyncStatusMock.mockResolvedValueOnce({
+      provider_available: true,
+      durable_automation: "blocked_pending_provider_approval",
+      notification_delivery: "wtd_5_3_foundation_available",
+      capabilities: {
+        sync_mode: "manual_bounded",
+        manual_sync_available: true,
+        durable_automation: "blocked_pending_provider_approval",
+        notification_delivery: "wtd_5_3_foundation_available",
+        email_invitation_candidates: "review_queue_available",
+      },
+      provider_config: [
         {
-          id: "conn-1",
-          company_id: "co-1",
-          membership_id: "mem-1",
           provider: "outlook",
-          provider_account_id: "acct-1",
-          display_email: "qa-bot@caseops.ai",
-          status: "connected",
-          scopes: ["Calendars.ReadWrite"],
-          connected_at: new Date().toISOString(),
-          last_sync_at: null,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+          configured: true,
+          missing_config_names: [],
+        },
+        {
+          provider: "google_calendar",
+          configured: false,
+          missing_config_names: [
+            "GOOGLE_CALENDAR_CLIENT_ID",
+            "GOOGLE_CALENDAR_CLIENT_SECRET",
+            "GOOGLE_CALENDAR_REDIRECT_URI",
+          ],
         },
       ],
+      conflict_summary: {
+        has_conflicts: false,
+        candidate_count: 0,
+        duplicate_provider_event_count: 0,
+        changed_event_candidate_count: 0,
+        changed_event_detection: "unsupported_no_provider_snapshot",
+      },
+      conflict_candidates: [],
+      connections: [outlookConnection],
+      syncs: [],
     });
     syncOutlookVisibleRangeMock.mockResolvedValueOnce({
       examined: 3,

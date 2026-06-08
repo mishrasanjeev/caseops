@@ -23,6 +23,13 @@ const { fetchMatterTimelineMock, workspaceData } = vi.hoisted(() => ({
           status: "completed",
           outcome_note: "Stay continued.",
         },
+        {
+          id: "h-cancelled",
+          hearing_on: "2026-05-15",
+          purpose: "Cancelled mention",
+          status: "cancelled",
+          outcome_note: "Removed from board.",
+        },
       ],
       attachments: [],
       invoices: [],
@@ -109,8 +116,11 @@ describe("MatterTimelinePage", () => {
 
     expect(screen.getByText(/Upcoming hearings/i)).toBeInTheDocument();
     expect(screen.getByText(/Completed hearings/i)).toBeInTheDocument();
+    expect(screen.getByText(/Cancelled hearings/i)).toBeInTheDocument();
     expect(screen.getByText("Arguments")).toBeInTheDocument();
     expect(screen.getByText("Interim hearing")).toBeInTheDocument();
+    expect(screen.getByText("Cancelled mention")).toBeInTheDocument();
+    expect(screen.getByText("Removed from board.")).toBeInTheDocument();
     expect(await screen.findByText("Interim stay granted")).toBeInTheDocument();
     expect(screen.getByText("Interim order")).toBeInTheDocument();
     expect(screen.getByText("Stay granted")).toBeInTheDocument();

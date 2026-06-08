@@ -343,6 +343,228 @@ export const providerEvents = {
   ],
 };
 
+export const tenantIntegrations = {
+  connectors: [
+    {
+      key: "google_calendar",
+      name: "Google Calendar",
+      category: "calendar",
+      provider: "google_calendar",
+      status: "blocked",
+      enabled: true,
+      configured: false,
+      blocked: true,
+      healthy: false,
+      degraded: false,
+      last_success: null,
+      last_failure: null,
+      next_run: null,
+      webhook_status: "not_configured",
+      token_expiry: null,
+      required_config_names: [
+        "GOOGLE_CALENDAR_CLIENT_ID",
+        "GOOGLE_CALENDAR_CLIENT_SECRET",
+        "GOOGLE_CALENDAR_REDIRECT_URI",
+      ],
+      scopes: [
+        "https://www.googleapis.com/auth/calendar.events",
+      ],
+      runbook_link: "docs/runbooks/provider-operations-readiness-2026-06-02.md",
+      provider_operations_link: "/app/admin/provider-operations",
+    },
+    {
+      key: "gmail",
+      name: "Gmail",
+      category: "email",
+      provider: "gmail",
+      status: "blocked",
+      enabled: true,
+      configured: false,
+      blocked: true,
+      healthy: false,
+      degraded: false,
+      last_success: null,
+      last_failure: null,
+      next_run: null,
+      webhook_status: "missing",
+      token_expiry: null,
+      required_config_names: [
+        "GMAIL_CLIENT_ID",
+        "GMAIL_CLIENT_SECRET",
+        "GMAIL_REDIRECT_URI",
+        "GMAIL_PUBSUB_TOPIC",
+        "GMAIL_WEBHOOK_VERIFICATION_TOKEN",
+      ],
+      scopes: [
+        "https://www.googleapis.com/auth/gmail.metadata",
+      ],
+      runbook_link: "docs/runbooks/provider-operations-readiness-2026-06-02.md",
+      provider_operations_link: "/app/admin/provider-operations",
+    },
+    {
+      key: "google_drive",
+      name: "Google Drive",
+      category: "documents",
+      provider: "google_drive",
+      status: "healthy",
+      enabled: true,
+      configured: true,
+      blocked: false,
+      healthy: true,
+      degraded: false,
+      last_success: null,
+      last_failure: null,
+      next_run: null,
+      webhook_status: "disabled",
+      token_expiry: null,
+      required_config_names: [
+        "GOOGLE_DRIVE_CLIENT_ID",
+        "GOOGLE_DRIVE_CLIENT_SECRET",
+        "GOOGLE_DRIVE_REDIRECT_URI",
+      ],
+      scopes: [
+        "https://www.googleapis.com/auth/drive.readonly",
+      ],
+      runbook_link: "docs/runbooks/provider-operations-readiness-2026-06-02.md",
+      provider_operations_link: "/app/admin/provider-operations",
+    },
+    {
+      key: "pine_labs",
+      name: "Pine Labs Plural",
+      category: "payments",
+      provider: "pine_labs_plural",
+      status: "disabled",
+      enabled: false,
+      configured: false,
+      blocked: true,
+      healthy: false,
+      degraded: false,
+      last_success: null,
+      last_failure: null,
+      next_run: null,
+      webhook_status: "missing",
+      token_expiry: null,
+      required_config_names: ["PINE_LABS_API_BASE_URL", "PINE_LABS_WEBHOOK_SECRET"],
+      scopes: [],
+      runbook_link: "docs/runbooks/pine-labs-uat-readiness-2026-06-02.md",
+      provider_operations_link: "/app/admin/billing",
+    },
+    {
+      key: "sendgrid",
+      name: "SendGrid",
+      category: "email",
+      provider: "sendgrid",
+      status: "blocked",
+      enabled: false,
+      configured: false,
+      blocked: true,
+      healthy: false,
+      degraded: false,
+      last_success: null,
+      last_failure: null,
+      next_run: null,
+      webhook_status: "missing",
+      token_expiry: null,
+      required_config_names: ["SENDGRID_API_KEY", "SENDGRID_WEBHOOK_PUBLIC_KEY"],
+      scopes: [],
+      runbook_link: "docs/runbooks/provider-operations-readiness-2026-06-02.md",
+      provider_operations_link: "/app/admin/provider-operations",
+    },
+  ],
+};
+
+export const platformIntegrations = {
+  connectors: tenantIntegrations.connectors.map((connector) => ({
+    ...connector,
+    internal_cost_label:
+      connector.key === "pine_labs" ? "payment MDR/fixed-fee" : "email delivery unit cost",
+    risk_label:
+      connector.key === "pine_labs" ? "production payments disabled" : "webhook risk",
+    platform_notes:
+      connector.key === "pine_labs"
+        ? ["Do not enable live payments until founder UAT go/no-go."]
+        : ["Webhook events must remain signature verified."],
+  })),
+};
+
+export const googleDriveStatus = {
+  provider: "google_drive",
+  configured: true,
+  missing_config_names: [],
+  connections: [
+    {
+      id: "drive-conn-1",
+      company_id: "company-1",
+      membership_id: "membership-1",
+      provider: "google_drive",
+      provider_account_id: "drive-account-1",
+      display_email: "owner@example.com",
+      status: "connected",
+      scopes: ["https://www.googleapis.com/auth/drive.readonly"],
+      connected_at: "2026-06-08T00:00:00Z",
+      last_list_at: null,
+      created_at: "2026-06-08T00:00:00Z",
+      updated_at: "2026-06-08T00:00:00Z",
+    },
+  ],
+};
+
+export const googleDriveFiles = {
+  provider: "google_drive",
+  connection_id: "drive-conn-1",
+  files: [
+    {
+      provider_file_id: "drive-file-1",
+      name: "Signed vakalatnama.pdf",
+      mime_type: "application/pdf",
+      size_bytes: 2048,
+      modified_time: "2026-06-08T00:00:00Z",
+      web_url: null,
+    },
+  ],
+};
+
+export const providerCostProfiles = {
+  cost_profiles: [
+    {
+      id: "cost-1",
+      category: "case_refresh",
+      provider: "case_tracking",
+      currency: "INR",
+      unit_amount_minor: 10,
+      unit_amount_bps: null,
+      effective_from: "2026-06-08T00:00:00Z",
+      effective_until: null,
+      status: "active",
+      source: "provider invoice",
+      notes: "Founder-reviewed refresh cost.",
+      created_by_platform_admin_id: "platform-1",
+      created_at: "2026-06-08T00:00:00Z",
+      updated_at: "2026-06-08T00:00:00Z",
+    },
+  ],
+};
+
+export const marginSimulations = {
+  simulations: [
+    {
+      id: "sim-1",
+      scenario_name: "Founder smoke margin",
+      currency: "INR",
+      input: { revenue_minor: 1999900 },
+      result: {
+        revenue_minor: 1999900,
+        total_variable_cost_minor: 250000,
+        gross_profit_minor: 1749900,
+        gross_margin_bps: 8750,
+      },
+      warnings: [],
+      run_by_platform_admin_id: "platform-1",
+      created_at: "2026-06-08T00:05:00Z",
+    },
+  ],
+};
+
 export function mockBillingFetch(fetchMock: ReturnType<typeof vi.fn>) {
   fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
@@ -395,6 +617,40 @@ export function mockBillingFetch(fetchMock: ReturnType<typeof vi.fn>) {
       return jsonResponse({ status: "queued_for_manual_reprocess" });
     }
     if (url.includes("/api/platform-admin/provider-events")) return jsonResponse(providerEvents);
+    if (url.includes("/api/admin/integrations")) return jsonResponse(tenantIntegrations);
+    if (url.includes("/api/drive/google/status")) return jsonResponse(googleDriveStatus);
+    if (url.includes("/api/drive/google/files")) return jsonResponse(googleDriveFiles);
+    if (url.includes("/api/drive/connections/")) {
+      return jsonResponse({
+        ...googleDriveStatus.connections[0],
+        status: "revoked",
+      });
+    }
+    if (url.includes("/api/drive/google/start")) {
+      return jsonResponse({
+        provider: "google_drive",
+        provider_available: true,
+        auth_url: null,
+        unavailable_reason: null,
+      });
+    }
+    if (url.includes("/api/platform-admin/integrations")) return jsonResponse(platformIntegrations);
+    if (url.includes("/api/platform-admin/cost-profiles") && init?.method === "POST") {
+      return jsonResponse({
+        ...providerCostProfiles.cost_profiles[0],
+        id: "cost-created",
+      });
+    }
+    if (url.includes("/api/platform-admin/cost-profiles")) return jsonResponse(providerCostProfiles);
+    if (url.includes("/api/platform-admin/margin-simulations/run")) {
+      return jsonResponse({
+        ...marginSimulations.simulations[0],
+        id: "sim-created",
+      });
+    }
+    if (url.includes("/api/platform-admin/margin-simulations")) {
+      return jsonResponse(marginSimulations);
+    }
     if (url.includes("/api/platform-admin/profit/export")) {
       return downloadResponse("caseops-platform-profit.csv");
     }

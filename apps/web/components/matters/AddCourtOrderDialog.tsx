@@ -122,6 +122,9 @@ export function AddCourtOrderDialog({
       await queryClient.invalidateQueries({
         queryKey: ["matters", matterId, "workspace"],
       });
+      await queryClient.invalidateQueries({
+        queryKey: ["matters", matterId, "compliance"],
+      });
       toast.success("Court order added.");
     },
     onError: (err) => {

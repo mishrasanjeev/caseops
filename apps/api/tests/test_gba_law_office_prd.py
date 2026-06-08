@@ -338,10 +338,17 @@ def test_matter_billing_rate_tax_tds_pdf_and_audit(client: TestClient) -> None:
 
     pdf = client.get(
         f"/api/matters/{matter['id']}/invoices/{body['id']}/download",
-        headers=auth_headers(token),
+        headers={**auth_headers(token), "Origin": "http://localhost:3000"},
     )
     assert pdf.status_code == 200, pdf.text
     assert pdf.headers["content-type"].startswith("application/pdf")
+    assert (
+        'filename="caseops-matter-invoice-GBA-0001.pdf"'
+        in pdf.headers["content-disposition"]
+    )
+    exposed_headers = pdf.headers["access-control-expose-headers"].lower()
+    assert "content-disposition" in exposed_headers
+    assert "x-caseops-checksum" in exposed_headers
     assert pdf.content.startswith(b"%PDF")
     assert len(pdf.headers["x-caseops-checksum"]) == 64
 

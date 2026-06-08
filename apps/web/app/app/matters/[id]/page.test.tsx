@@ -105,4 +105,34 @@ describe("MatterOverviewPage", () => {
     const { container } = render(withClient(<MatterOverviewPage />));
     expect(container.firstChild).toBeNull();
   });
+
+  it("does not treat cancelled hearings as upcoming on the overview", () => {
+    useMatterWorkspaceMock.mockReturnValue({
+      data: {
+        ...BASE_DATA,
+        hearings: [
+          {
+            id: "h-cancelled",
+            hearing_on: "2026-06-12",
+            purpose: "Cancelled mention",
+            status: "cancelled",
+          },
+        ],
+      },
+    });
+    fetchBenchStrategyMock.mockResolvedValue({
+      matter_id: "m-1",
+      bench_judge_ids: [],
+      total_decisions_indexed: 0,
+      evidence_quality: "insufficient",
+      top_authorities: [],
+      top_statute_sections: [],
+      disclaimer: "Not legal advice.",
+    });
+
+    render(withClient(<MatterOverviewPage />));
+
+    expect(screen.getByTestId("matter-overview-no-hearings")).toBeInTheDocument();
+    expect(screen.queryByText("Cancelled mention")).toBeNull();
+  });
 });

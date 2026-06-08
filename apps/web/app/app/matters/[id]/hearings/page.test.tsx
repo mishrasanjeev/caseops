@@ -15,10 +15,12 @@ const {
   generateHearingCoachMock,
   decideNextHearingSuggestionMock,
   listMatterRemindersMock,
+  retryMatterAttachmentMock,
   startMockHearingMock,
   submitMockHearingResponseMock,
   syncHearingToOutlookMock,
   updateMatterComplianceItemMock,
+  updateMatterHearingMock,
   workspaceData,
   useCapabilityMock,
 } = vi.hoisted(() => ({
@@ -32,10 +34,12 @@ const {
   generateHearingCoachMock: vi.fn(),
   decideNextHearingSuggestionMock: vi.fn(),
   listMatterRemindersMock: vi.fn(),
+  retryMatterAttachmentMock: vi.fn(),
   startMockHearingMock: vi.fn(),
   submitMockHearingResponseMock: vi.fn(),
   syncHearingToOutlookMock: vi.fn(),
   updateMatterComplianceItemMock: vi.fn(),
+  updateMatterHearingMock: vi.fn(),
   workspaceData: {
     current: {
       matter: { id: "m1", matter_code: "X", title: "T", status: "active" },
@@ -72,10 +76,12 @@ vi.mock("@/lib/api/endpoints", () => ({
   generateHearingCoach: generateHearingCoachMock,
   listMatterReminders: listMatterRemindersMock,
   pullMatterCourtSync: vi.fn(),
+  retryMatterAttachment: retryMatterAttachmentMock,
   startMockHearing: startMockHearingMock,
   submitMockHearingResponse: submitMockHearingResponseMock,
   syncHearingToOutlook: syncHearingToOutlookMock,
   updateMatterComplianceItem: updateMatterComplianceItemMock,
+  updateMatterHearing: updateMatterHearingMock,
 }));
 
 vi.mock("@/lib/use-matter-workspace", () => ({
@@ -227,15 +233,19 @@ describe("MatterHearingsPage", () => {
     fetchProceedingIntelligenceMock.mockReset();
     generateHearingCoachMock.mockReset();
     listMatterRemindersMock.mockReset();
+    retryMatterAttachmentMock.mockReset();
     startMockHearingMock.mockReset();
     submitMockHearingResponseMock.mockReset();
     syncHearingToOutlookMock.mockReset();
     updateMatterComplianceItemMock.mockReset();
+    updateMatterHearingMock.mockReset();
     decideNextHearingSuggestionMock.mockResolvedValue({
       history: [],
       suggestions: [],
     });
     updateMatterComplianceItemMock.mockResolvedValue({});
+    updateMatterHearingMock.mockResolvedValue({});
+    retryMatterAttachmentMock.mockResolvedValue({ id: "att-order" });
     fetchMatterComplianceMock.mockResolvedValue({ runs: [], items: [] });
     fetchNextHearingHistoryMock.mockResolvedValue({ history: [], suggestions: [] });
     listMatterRemindersMock.mockResolvedValue({ matter_id: "m1", reminders: [] });
@@ -449,6 +459,46 @@ describe("MatterHearingsPage", () => {
     expect(screen.getAllByText(/New stay order|Old daily order/)[0]).toHaveTextContent(
       "Old daily order",
     );
+  });
+
+  it("keeps cancelled hearings out of upcoming and cancels active hearings through the update endpoint", async () => {
+    useCapabilityMock.mockImplementation((cap: string) => cap === "matters:write");
+    workspaceData.current = {
+      ...(workspaceData.current as { matter: unknown }),
+      hearings: [
+        {
+          id: "h-active",
+          hearing_on: "2026-06-10",
+          purpose: "Active arguments",
+          status: "scheduled",
+        },
+        {
+          id: "h-cancelled",
+          hearing_on: "2026-06-12",
+          purpose: "Cancelled mention",
+          status: "cancelled",
+          outcome_note: "Court removed the listing.",
+        },
+      ],
+      court_orders: [],
+      cause_list_entries: [],
+    } as unknown;
+
+    render(withClient(<MatterHearingsPage />));
+
+    expect(screen.getByText("Upcoming hearings")).toBeInTheDocument();
+    const cancelledRow = screen.getByTestId("cancelled-hearing-h-cancelled");
+    expect(cancelledRow).toHaveTextContent("Cancelled mention");
+    expect(cancelledRow).toHaveTextContent("Court removed the listing.");
+    expect(screen.queryByTestId("hearing-cancel-h-cancelled")).toBeNull();
+
+    await userEvent.click(screen.getByTestId("hearing-cancel-h-active"));
+
+    expect(updateMatterHearingMock).toHaveBeenCalledWith({
+      matterId: "m1",
+      hearingId: "h-active",
+      status: "cancelled",
+    });
   });
 
   it("renders cause-list bench as clickable judge links when resolved", () => {
@@ -980,6 +1030,49 @@ describe("MatterHearingsPage", () => {
       matterId: "m1",
       itemId: "item-1",
       action: "confirm",
+    });
+  });
+
+  it("BUG-051: shows uploaded order extraction status and queues document processing", async () => {
+    useCapabilityMock.mockImplementation((cap: string) => cap === "documents:manage");
+    fetchMatterComplianceMock.mockResolvedValue({
+      runs: [
+        {
+          id: "upload",
+          company_id: "company-1",
+          matter_id: "m1",
+          court_order_id: null,
+          attachment_id: "att-order",
+          source_type: "manual_upload",
+          trigger: "attachment_processed",
+          status: "skipped",
+          skip_reason: "text_extraction_pending",
+          model_run_id: null,
+          parser_version: "compliance-v1",
+          started_at: "2026-06-08T10:00:00Z",
+          completed_at: "2026-06-08T10:00:01Z",
+          error_message_redacted: null,
+          metadata: {},
+          created_at: "2026-06-08T10:00:00Z",
+        },
+      ],
+      items: [],
+    });
+
+    render(withClient(<MatterHearingsPage />));
+
+    const run = await screen.findByTestId("matter-compliance-run-upload");
+    expect(run).toHaveTextContent(
+      "text_extraction_pending",
+    );
+
+    await userEvent.click(
+      screen.getByTestId("matter-compliance-process-att-order"),
+    );
+
+    expect(retryMatterAttachmentMock).toHaveBeenCalledWith({
+      matterId: "m1",
+      attachmentId: "att-order",
     });
   });
 

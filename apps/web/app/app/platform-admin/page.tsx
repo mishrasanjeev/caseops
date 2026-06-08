@@ -99,6 +99,12 @@ export default function PlatformAdminPage() {
         description="Cross-tenant billing, revenue, costs, margins, enrollment, and provider reconciliation."
         actions={
           <div className="flex gap-2">
+            <Button href="/app/platform-admin/integrations" variant="outline">
+              Integrations
+            </Button>
+            <Button href="/app/platform-admin/costs" variant="outline">
+              Costs
+            </Button>
             <Button href="/app/platform-admin/profit" variant="outline">
               Profit dashboard
             </Button>

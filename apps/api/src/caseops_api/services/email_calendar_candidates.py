@@ -592,7 +592,9 @@ def _is_imported_email(row: Communication) -> bool:
     metadata = row.metadata_json if isinstance(row.metadata_json, dict) else {}
     return (
         metadata.get("source") == "manual_inbound_email_import"
+        or metadata.get("source") == "gmail_provider_import"
         or metadata.get("automation_mode") == "manual_only"
+        or metadata.get("automation_mode") == "provider_review_first"
     )
 
 

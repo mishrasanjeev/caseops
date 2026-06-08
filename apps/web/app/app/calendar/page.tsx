@@ -4,7 +4,7 @@
 //
 // Slice 1 (shipped 2026-04-23): month grid + tenant-scoped event feed
 // across hearings + tasks + matter_deadlines.
-// Slice 2b (this file): adds Week + Day views and an .ics subscribe link.
+// Slice 2b (this file): adds Week + Day views and an authenticated .ics export.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -15,7 +15,10 @@ import {
   Download,
   ExternalLink,
   Gavel,
+  Inbox,
   ListTodo,
+  Mail,
+  RefreshCw,
   Timer,
 } from "lucide-react";
 import Link from "next/link";
@@ -26,12 +29,19 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import {
   fetchCalendarEvents,
   fetchCalendarSyncStatus,
+  fetchGmailMailboxStatus,
   extractEmailInvitationCandidates,
+  importRecentGmailMessages,
   listCalendarConnections,
   listEmailInvitationCandidates,
+  revokeGmailMailboxConnection,
   revokeCalendarConnection,
   reviewEmailInvitationCandidate,
+  startGmailMailboxConnection,
+  startGmailWatch,
+  startGoogleCalendarConnection,
   startOutlookCalendarConnection,
+  syncGoogleCalendarVisibleRange,
   syncOutlookVisibleRange,
 } from "@/lib/api/endpoints";
 import type {
@@ -127,6 +137,8 @@ export default function CalendarPage() {
   const [view, setView] = useState<ViewMode>("month");
   const [cursor, setCursor] = useState<Date>(() => new Date());
   const [outlookMessage, setOutlookMessage] = useState<string | null>(null);
+  const [googleMessage, setGoogleMessage] = useState<string | null>(null);
+  const [gmailMessage, setGmailMessage] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const canSyncCalendar = useCapability("calendar:sync");
 
@@ -179,6 +191,10 @@ export default function CalendarPage() {
     queryKey: ["calendar", "email-invitation-candidates"],
     queryFn: () => listEmailInvitationCandidates({ limit: 20 }),
   });
+  const gmailStatusQuery = useQuery({
+    queryKey: ["mailbox", "gmail", "status"],
+    queryFn: fetchGmailMailboxStatus,
+  });
   const extractCandidatesMutation = useMutation({
     mutationFn: () => extractEmailInvitationCandidates({ limit: 50 }),
     onSuccess: (result) => {
@@ -215,6 +231,19 @@ export default function CalendarPage() {
     },
     onError: (error) => setOutlookMessage(String(error)),
   });
+  const startGoogleMutation = useMutation({
+    mutationFn: startGoogleCalendarConnection,
+    onSuccess: (result) => {
+      if (result.auth_url) {
+        window.location.assign(result.auth_url);
+        return;
+      }
+      setGoogleMessage(
+        result.unavailable_reason ?? "Google Calendar sync is unavailable.",
+      );
+    },
+    onError: (error) => setGoogleMessage(String(error)),
+  });
   const revokeOutlookMutation = useMutation({
     mutationFn: revokeCalendarConnection,
     onSuccess: () => {
@@ -223,6 +252,59 @@ export default function CalendarPage() {
       void queryClient.invalidateQueries({ queryKey: ["calendar", "sync-status"] });
     },
     onError: (error) => setOutlookMessage(String(error)),
+  });
+  const revokeGoogleMutation = useMutation({
+    mutationFn: revokeCalendarConnection,
+    onSuccess: () => {
+      setGoogleMessage("Google Calendar connection revoked.");
+      void queryClient.invalidateQueries({ queryKey: ["calendar", "connections"] });
+      void queryClient.invalidateQueries({ queryKey: ["calendar", "sync-status"] });
+    },
+    onError: (error) => setGoogleMessage(String(error)),
+  });
+  const startGmailMutation = useMutation({
+    mutationFn: startGmailMailboxConnection,
+    onSuccess: (result) => {
+      if (result.auth_url) {
+        window.location.assign(result.auth_url);
+        return;
+      }
+      setGmailMessage(result.unavailable_reason ?? "Gmail sync is unavailable.");
+    },
+    onError: (error) => setGmailMessage(String(error)),
+  });
+  const importGmailMutation = useMutation({
+    mutationFn: () => importRecentGmailMessages({ limit: 25 }),
+    onSuccess: (result) => {
+      setGmailMessage(
+        `Imported ${result.summary.imported}, unmatched ${result.summary.unmatched}, duplicates ${result.summary.duplicate}, attachment candidates ${result.summary.attachment_candidates}.`,
+      );
+      void queryClient.invalidateQueries({ queryKey: ["mailbox", "gmail", "status"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["calendar", "email-invitation-candidates"],
+      });
+    },
+    onError: (error) => setGmailMessage(String(error)),
+  });
+  const startGmailWatchMutation = useMutation({
+    mutationFn: startGmailWatch,
+    onSuccess: (result) => {
+      setGmailMessage(
+        result.watch_started
+          ? "Gmail webhook watch started."
+          : `Gmail webhook config missing: ${result.missing_config_names.join(", ")}`,
+      );
+      void queryClient.invalidateQueries({ queryKey: ["mailbox", "gmail", "status"] });
+    },
+    onError: (error) => setGmailMessage(String(error)),
+  });
+  const revokeGmailMutation = useMutation({
+    mutationFn: revokeGmailMailboxConnection,
+    onSuccess: () => {
+      setGmailMessage("Gmail connection revoked.");
+      void queryClient.invalidateQueries({ queryKey: ["mailbox", "gmail", "status"] });
+    },
+    onError: (error) => setGmailMessage(String(error)),
   });
 
   // BUG-039 (Hari 2026-05-09) — bounded manual bulk sync of the
@@ -245,6 +327,19 @@ export default function CalendarPage() {
     },
     onError: (error) => setOutlookMessage(String(error)),
   });
+  const syncGoogleRangeMutation = useMutation({
+    mutationFn: () =>
+      syncGoogleCalendarVisibleRange({
+        from: isoDate(rangeFrom),
+        to: isoDate(rangeTo),
+      }),
+    onSuccess: (result) => {
+      const summary = `Synced ${result.created} new, ${result.updated} updated, ${result.failed} failed, ${result.skipped} skipped (${result.examined} examined).`;
+      setGoogleMessage(summary);
+      void queryClient.invalidateQueries({ queryKey: ["calendar", "sync-status"] });
+    },
+    onError: (error) => setGoogleMessage(String(error)),
+  });
 
   const eventsByDay = useMemo(() => {
     const map = new Map<string, CalendarEventRecord[]>();
@@ -264,8 +359,48 @@ export default function CalendarPage() {
     durableAutomation === "caseops_to_outlook_hearings_ready"
       ? "CaseOps-to-Outlook hearing sync ready"
       : "Pending provider approval";
-  const providerConfig = syncStatus?.provider_config?.[0] ?? null;
-  const missingConfigNames = providerConfig?.missing_config_names ?? [];
+  const providerConfigs = syncStatus?.provider_config ?? [];
+  const outlookProviderConfig =
+    providerConfigs.find((item) => item.provider === "outlook") ?? null;
+  const googleProviderConfig =
+    providerConfigs.find((item) => item.provider === "google_calendar") ?? null;
+  const missingConfigNames = outlookProviderConfig?.missing_config_names ?? [];
+  const googleMissingConfigNames =
+    googleProviderConfig?.missing_config_names ?? [
+      "GOOGLE_CALENDAR_CLIENT_ID",
+      "GOOGLE_CALENDAR_CLIENT_SECRET",
+      "GOOGLE_CALENDAR_REDIRECT_URI",
+    ];
+  const googleConfigured = googleProviderConfig?.configured ?? false;
+  const calendarConnections =
+    syncStatus?.connections ?? connectionsQuery.data?.connections ?? [];
+  const outlookConnections = calendarConnections.filter(
+    (connection) => connection.provider === "outlook",
+  );
+  const googleConnections = calendarConnections.filter(
+    (connection) => connection.provider === "google_calendar",
+  );
+  const gmailStatus = gmailStatusQuery.data;
+  const connectedGmailConnection =
+    gmailStatus?.connections.find((connection) => connection.status === "connected") ??
+    null;
+  const gmailConfigured = gmailStatus?.configured ?? false;
+  const gmailWebhookConfigured = gmailStatus?.webhook_configured ?? false;
+  const gmailMissingConfigNames =
+    gmailStatus?.missing_config_names ?? [
+      "GMAIL_CLIENT_ID",
+      "GMAIL_CLIENT_SECRET",
+      "GMAIL_REDIRECT_URI",
+    ];
+  const gmailMissingWebhookConfigNames =
+    gmailStatus?.missing_webhook_config_names ?? [
+      "GMAIL_PUBSUB_TOPIC",
+      "GMAIL_WEBHOOK_VERIFICATION_TOKEN",
+    ];
+  const connectedOutlookConnection =
+    outlookConnections.find((connection) => connection.status === "connected") ?? null;
+  const connectedGoogleConnection =
+    googleConnections.find((connection) => connection.status === "connected") ?? null;
   const conflictSummary = syncStatus?.conflict_summary ?? null;
   const conflictCandidates = syncStatus?.conflict_candidates ?? [];
   const emailCandidates = emailCandidatesQuery.data?.candidates ?? [];
@@ -354,10 +489,9 @@ export default function CalendarPage() {
           >
             Today
           </button>
-          {/* iCal export — Google Calendar / Outlook / Apple Calendar
-              all subscribe to this URL. The link target uses the
-              current view's range so a "Subscribe" downloads
-              exactly what's on screen. */}
+          {/* iCal export: authenticated visible-range download.
+              Direct provider subscription needs a public/tokenized feed
+              or OAuth connector. */}
           <a
             href={icsHref}
             className="ml-2 inline-flex h-8 items-center gap-1.5 rounded-md border border-[var(--color-line-2)] px-3 text-xs font-medium text-[var(--color-ink)] hover:bg-[var(--color-line-1)]"
@@ -400,16 +534,13 @@ export default function CalendarPage() {
               ) : connectionsQuery.data?.provider_available === false ? (
                 connectionsQuery.data.unavailable_reason ??
                 "Microsoft Graph configuration required."
-              ) : connectionsQuery.data?.connections.some((c) => c.status === "connected") ? (
+              ) : connectedOutlookConnection ? (
                 <>
                   Connected as{" "}
-                  {connectionsQuery.data.connections.find((c) => c.status === "connected")
-                    ?.display_email ?? "Outlook account"}
-                  {connectionsQuery.data.connections.find((c) => c.status === "connected")
-                    ?.last_sync_at
+                  {connectedOutlookConnection.display_email ?? "Outlook account"}
+                  {connectedOutlookConnection.last_sync_at
                     ? ` · Last sync ${formatDateTime(
-                        connectionsQuery.data.connections.find((c) => c.status === "connected")
-                          ?.last_sync_at ?? null,
+                        connectedOutlookConnection.last_sync_at,
                       )}`
                     : ""}
                 </>
@@ -608,7 +739,7 @@ export default function CalendarPage() {
           </div>
           {canSyncCalendar ? (
             <div className="flex items-center gap-2">
-              {connectionsQuery.data?.connections.some((c) => c.status === "connected") ? (
+              {connectedOutlookConnection ? (
                 <>
                   <button
                     type="button"
@@ -625,10 +756,7 @@ export default function CalendarPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      const connection = connectionsQuery.data?.connections.find(
-                        (c) => c.status === "connected",
-                      );
-                      if (connection) revokeOutlookMutation.mutate(connection.id);
+                      revokeOutlookMutation.mutate(connectedOutlookConnection.id);
                     }}
                     disabled={revokeOutlookMutation.isPending}
                     className="inline-flex h-8 items-center rounded-md border border-[var(--color-line-2)] px-3 text-xs font-medium text-[var(--color-ink)] hover:bg-[var(--color-line-1)] disabled:opacity-60"
@@ -649,6 +777,217 @@ export default function CalendarPage() {
                   data-testid="calendar-outlook-connect"
                 >
                   Connect Outlook
+                </button>
+              )}
+            </div>
+          ) : null}
+        </div>
+      </section>
+
+      <section
+        className="rounded-lg border border-[var(--color-line-2)] bg-white px-4 py-3"
+        data-testid="calendar-google-panel"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-sm font-semibold text-[var(--color-ink)]">
+              <CalendarDays className="h-4 w-4" aria-hidden />
+              Google Calendar
+            </div>
+            <div className="mt-1 text-xs text-[var(--color-mute)]">
+              {syncStatusQuery.isPending ? (
+                "Checking Google Calendar readiness..."
+              ) : !googleConfigured ? (
+                "Google Calendar OAuth is not configured. The authenticated .ics export remains available as a one-time download."
+              ) : connectedGoogleConnection ? (
+                <>
+                  Connected as{" "}
+                  {connectedGoogleConnection.display_email ?? "Google account"}
+                  {connectedGoogleConnection.last_sync_at
+                    ? ` Â· Last sync ${formatDateTime(
+                        connectedGoogleConnection.last_sync_at,
+                      )}`
+                    : ""}
+                </>
+              ) : (
+                "Manual hearing, task, and deadline sync is available after a Google Calendar connection is added."
+              )}
+            </div>
+            {googleMissingConfigNames.length > 0 ? (
+              <div
+                className="mt-1 text-xs text-[var(--color-mute)]"
+                data-testid="calendar-google-provider-config-status"
+              >
+                Missing Google config: {googleMissingConfigNames.join(", ")}
+              </div>
+            ) : null}
+            {googleMessage ? (
+              <div className="mt-1 text-xs text-[var(--color-warning-700,#8a5a00)]">
+                {googleMessage}
+              </div>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <a
+              href={icsHref}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[var(--color-line-2)] px-3 text-xs font-medium text-[var(--color-ink)] hover:bg-[var(--color-line-1)]"
+              data-testid="calendar-google-ics-download"
+              download="caseops-calendar.ics"
+            >
+              <Download className="h-3.5 w-3.5" aria-hidden />
+              Download .ics
+            </a>
+            <Link
+              href="/app/admin/integrations"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[var(--color-line-2)] px-3 text-xs font-medium text-[var(--color-ink)] hover:bg-[var(--color-line-1)]"
+              data-testid="calendar-google-integrations-link"
+            >
+              <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+              Integration status
+            </Link>
+            {canSyncCalendar ? (
+              connectedGoogleConnection ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => syncGoogleRangeMutation.mutate()}
+                    disabled={syncGoogleRangeMutation.isPending}
+                    className="inline-flex h-8 items-center rounded-md bg-[var(--color-ink)] px-3 text-xs font-medium text-white hover:bg-[var(--color-ink-2)] disabled:opacity-60"
+                    data-testid="calendar-google-sync-range"
+                    aria-label={`Sync visible range ${label} to Google Calendar`}
+                  >
+                    {syncGoogleRangeMutation.isPending
+                      ? "Syncing..."
+                      : "Sync visible range to Google"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      revokeGoogleMutation.mutate(connectedGoogleConnection.id);
+                    }}
+                    disabled={revokeGoogleMutation.isPending}
+                    className="inline-flex h-8 items-center rounded-md border border-[var(--color-line-2)] px-3 text-xs font-medium text-[var(--color-ink)] hover:bg-[var(--color-line-1)] disabled:opacity-60"
+                    data-testid="calendar-google-revoke"
+                  >
+                    Revoke
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => startGoogleMutation.mutate()}
+                  disabled={startGoogleMutation.isPending || !googleConfigured}
+                  className="inline-flex h-8 items-center rounded-md bg-[var(--color-line-2)] px-3 text-xs font-medium text-[var(--color-mute)] enabled:bg-[var(--color-ink)] enabled:text-white enabled:hover:bg-[var(--color-ink-2)] disabled:opacity-70"
+                  data-testid="calendar-google-connect"
+                >
+                  Connect Google
+                </button>
+              )
+            ) : null}
+          </div>
+        </div>
+      </section>
+
+      <section
+        className="rounded-lg border border-[var(--color-line-2)] bg-white px-4 py-3"
+        data-testid="calendar-gmail-panel"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-sm font-semibold text-[var(--color-ink)]">
+              <Mail className="h-4 w-4" aria-hidden />
+              Gmail mailbox
+            </div>
+            <div className="mt-1 text-xs text-[var(--color-mute)]">
+              {gmailStatusQuery.isPending ? (
+                "Checking Gmail readiness..."
+              ) : !gmailConfigured ? (
+                "Gmail OAuth is not configured. Imported email candidates remain available from manual imports."
+              ) : connectedGmailConnection ? (
+                <>
+                  Connected as {connectedGmailConnection.display_email ?? "Gmail account"}
+                  {connectedGmailConnection.last_import_at
+                    ? ` Â· Last import ${formatDateTime(
+                        connectedGmailConnection.last_import_at,
+                      )}`
+                    : ""}
+                  {connectedGmailConnection.watch_expires_at
+                    ? ` Â· Watch expires ${formatDateTime(
+                        connectedGmailConnection.watch_expires_at,
+                      )}`
+                    : ""}
+                </>
+              ) : (
+                "Connect Gmail to import message metadata into the review-first mailbox queue."
+              )}
+            </div>
+            {gmailMissingConfigNames.length > 0 ? (
+              <div
+                className="mt-1 text-xs text-[var(--color-mute)]"
+                data-testid="calendar-gmail-provider-config-status"
+              >
+                Missing Gmail config: {gmailMissingConfigNames.join(", ")}
+              </div>
+            ) : null}
+            {!gmailWebhookConfigured ? (
+              <div
+                className="mt-1 text-xs text-[var(--color-mute)]"
+                data-testid="calendar-gmail-webhook-config-status"
+              >
+                Gmail webhook blocked: {gmailMissingWebhookConfigNames.join(", ")}
+              </div>
+            ) : null}
+            {gmailMessage ? (
+              <div className="mt-1 text-xs text-[var(--color-warning-700,#8a5a00)]">
+                {gmailMessage}
+              </div>
+            ) : null}
+          </div>
+          {canSyncCalendar ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {connectedGmailConnection ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => importGmailMutation.mutate()}
+                    disabled={importGmailMutation.isPending}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[var(--color-ink)] px-3 text-xs font-medium text-white hover:bg-[var(--color-ink-2)] disabled:opacity-60"
+                    data-testid="calendar-gmail-import"
+                  >
+                    <Inbox className="h-3.5 w-3.5" aria-hidden />
+                    {importGmailMutation.isPending ? "Importing..." : "Import Gmail"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => startGmailWatchMutation.mutate()}
+                    disabled={
+                      startGmailWatchMutation.isPending || !gmailWebhookConfigured
+                    }
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[var(--color-line-2)] px-3 text-xs font-medium text-[var(--color-ink)] hover:bg-[var(--color-line-1)] disabled:opacity-60"
+                    data-testid="calendar-gmail-watch"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+                    {startGmailWatchMutation.isPending ? "Starting..." : "Start watch"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => revokeGmailMutation.mutate(connectedGmailConnection.id)}
+                    disabled={revokeGmailMutation.isPending}
+                    className="inline-flex h-8 items-center rounded-md border border-[var(--color-line-2)] px-3 text-xs font-medium text-[var(--color-ink)] hover:bg-[var(--color-line-1)] disabled:opacity-60"
+                    data-testid="calendar-gmail-revoke"
+                  >
+                    Revoke
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => startGmailMutation.mutate()}
+                  disabled={startGmailMutation.isPending || !gmailConfigured}
+                  className="inline-flex h-8 items-center rounded-md bg-[var(--color-line-2)] px-3 text-xs font-medium text-[var(--color-mute)] enabled:bg-[var(--color-ink)] enabled:text-white enabled:hover:bg-[var(--color-ink-2)] disabled:opacity-70"
+                  data-testid="calendar-gmail-connect"
+                >
+                  Connect Gmail
                 </button>
               )}
             </div>
@@ -731,7 +1070,6 @@ export default function CalendarPage() {
     </div>
   );
 }
-
 // --- views ----------------------------------------------------------
 
 function MonthView({
@@ -983,6 +1321,3 @@ function CalendarEventChip({ event }: { event: CalendarEventRecord }) {
     </Link>
   );
 }
-
-const _calendarIcon = CalendarDays;
-void _calendarIcon;

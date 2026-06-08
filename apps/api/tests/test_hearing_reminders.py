@@ -256,6 +256,66 @@ def test_update_hearing_mark_completed_cancels_queued_reminders(
         )
     assert rows, "row count shouldn't change on complete"
     assert {r.status for r in rows} == {HearingReminderStatus.CANCELLED}
+    with factory() as session:
+        matter_row = session.get(Matter, matter["id"])
+        assert matter_row.next_hearing_on is None
+
+
+def test_update_hearing_cancelled_clears_next_hearing_and_reminders(
+    client: TestClient,
+) -> None:
+    """Cancelling the only active hearing must not leave a stale
+    ``Matter.next_hearing_on`` behind. That stale date is what makes a
+    cancelled case look reopened in portfolio hearing buckets."""
+    token = str(bootstrap_company(client)["access_token"])
+    matter = _mk_matter(client, token, code="REM-H-CANCEL")
+    hearing = _mk_hearing_via_api(client, token, matter["id"], days_ahead=3)
+
+    resp = client.patch(
+        f"/api/matters/{matter['id']}/hearings/{hearing['id']}",
+        headers=auth_headers(token),
+        json={"status": MatterHearingStatus.CANCELLED.value},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["status"] == MatterHearingStatus.CANCELLED.value
+
+    factory = get_session_factory()
+    with factory() as session:
+        matter_row = session.get(Matter, matter["id"])
+        assert matter_row.next_hearing_on is None
+        rows = list(
+            session.query(HearingReminder).filter(
+                HearingReminder.hearing_id == hearing["id"]
+            )
+        )
+    assert rows
+    assert {r.status for r in rows} == {HearingReminderStatus.CANCELLED}
+
+
+def test_update_hearing_cancelled_recomputes_next_hearing_from_remaining_open(
+    client: TestClient,
+) -> None:
+    """If the cancelled hearing was the matter's tracked next date, the
+    service must move the matter to another open hearing instead of
+    leaving the cancelled date in place."""
+    token = str(bootstrap_company(client)["access_token"])
+    matter = _mk_matter(client, token, code="REM-H-RECOMP")
+    replacement = _mk_hearing_via_api(client, token, matter["id"], days_ahead=7)
+    current = _mk_hearing_via_api(client, token, matter["id"], days_ahead=10)
+
+    resp = client.patch(
+        f"/api/matters/{matter['id']}/hearings/{current['id']}",
+        headers=auth_headers(token),
+        json={"status": MatterHearingStatus.CANCELLED.value},
+    )
+    assert resp.status_code == 200, resp.text
+
+    factory = get_session_factory()
+    with factory() as session:
+        matter_row = session.get(Matter, matter["id"])
+        replacement_row = session.get(MatterHearing, replacement["id"])
+        assert matter_row.next_hearing_on == replacement_row.hearing_on
+        assert matter_row.next_hearing_source_ref_id == replacement["id"]
 
 
 # ---------------------------------------------------------------

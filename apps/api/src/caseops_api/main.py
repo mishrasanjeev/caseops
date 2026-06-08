@@ -62,6 +62,7 @@ def create_application() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["Content-Disposition", "X-CaseOps-Checksum"],
     )
 
     @application.exception_handler(RateLimitExceeded)

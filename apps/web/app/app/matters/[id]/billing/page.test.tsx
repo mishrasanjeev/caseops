@@ -158,7 +158,7 @@ describe("MatterBillingPage", () => {
         ],
       },
     });
-    useCapabilityMock.mockReturnValue(false);
+    useCapabilityMock.mockImplementation((cap: string) => cap === "invoices:issue");
 
     render(withClient(<MatterBillingPage />));
     await user.click(screen.getByTestId("invoice-pdf-invoice-1"));
@@ -168,5 +168,32 @@ describe("MatterBillingPage", () => {
       matterId: "m-1",
       invoiceId: "invoice-1",
     });
+  });
+
+  it("hides invoice PDF download when the user lacks invoice permission", () => {
+    useMatterWorkspaceMock.mockReturnValue({
+      data: {
+        ...BASE_DATA,
+        invoices: [
+          {
+            id: "invoice-1",
+            invoice_number: "GBA-0001",
+            status: "issued",
+            issued_on: "2026-06-06",
+            due_on: "2026-07-06",
+            total_amount_minor: 1180000,
+            balance_due_minor: 1180000,
+            amount_received_minor: 0,
+            currency: "INR",
+            payment_attempts: [],
+          },
+        ],
+      },
+    });
+    useCapabilityMock.mockReturnValue(false);
+
+    render(withClient(<MatterBillingPage />));
+
+    expect(screen.queryByTestId("invoice-pdf-invoice-1")).not.toBeInTheDocument();
   });
 });

@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import json
 import time
+from datetime import UTC, datetime
 
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
@@ -16,6 +17,7 @@ from caseops_api.db.models import (
     AuditEvent,
     BillingCreditLedger,
     BillingManualInvoice,
+    BillingMarginSimulation,
     BillingPaymentOrder,
     BillingProviderEvent,
     BillingSubscription,
@@ -23,6 +25,7 @@ from caseops_api.db.models import (
     CompanyMembership,
     PlatformAdminAuditEvent,
     PlatformAdminMembership,
+    ProviderCostProfile,
     User,
 )
 from caseops_api.db.session import get_session_factory
@@ -550,6 +553,32 @@ def test_tenant_owner_is_denied_from_platform_admin_route_surface(
         ("GET", "/api/platform-admin/revenue/export", None),
         ("GET", "/api/platform-admin/coupons", None),
         ("GET", "/api/platform-admin/margin-alerts", None),
+        ("GET", "/api/platform-admin/integrations", None),
+        ("GET", "/api/platform-admin/cost-profiles", None),
+        ("GET", "/api/platform-admin/margin-simulations", None),
+        (
+            "POST",
+            "/api/platform-admin/cost-profiles",
+            {
+                "category": "case_refresh",
+                "provider": "case_tracking",
+                "unit_amount_minor": 10,
+                "source": "Denied route test",
+            },
+        ),
+        (
+            "PATCH",
+            "/api/platform-admin/cost-profiles/cost-deny",
+            {"unit_amount_minor": 11},
+        ),
+        (
+            "POST",
+            "/api/platform-admin/margin-simulations/run",
+            {
+                "scenario_name": "Denied route test",
+                "revenue_minor": 1000,
+            },
+        ),
         (
             "POST",
             f"/api/platform-admin/companies/{company_id}/subscription",
@@ -644,6 +673,9 @@ def test_founder_platform_admin_read_routes_and_exports_are_audited(
         client.get("/api/platform-admin/revenue/export", headers=auth_headers(token)),
         client.get("/api/platform-admin/coupons", headers=auth_headers(token)),
         client.get("/api/platform-admin/margin-alerts", headers=auth_headers(token)),
+        client.get("/api/platform-admin/integrations", headers=auth_headers(token)),
+        client.get("/api/platform-admin/cost-profiles", headers=auth_headers(token)),
+        client.get("/api/platform-admin/margin-simulations", headers=auth_headers(token)),
     ]
 
     assert all(response.status_code == 200 for response in requests), [
@@ -666,6 +698,9 @@ def test_founder_platform_admin_read_routes_and_exports_are_audited(
             "platform.revenue_report.exported",
             "platform.coupons.viewed",
             "platform.margin_alerts.viewed",
+            "platform.integrations.viewed",
+            "platform.cost_profiles.viewed",
+            "platform.margin_simulations.viewed",
         }.issubset(audit_actions)
 
 
@@ -753,3 +788,246 @@ def test_platform_profit_report_exposes_internal_costs_to_founder_only(
     assert company_row["gross_revenue_minor"] == checkout_payload["amount_minor"]
     assert company_row["recognized_revenue_minor"] == checkout_payload["amount_minor"]
     assert "payment_provider_cost_minor" in company_row
+
+
+def test_platform_cost_profiles_and_margin_simulations_are_founder_only_audited(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("CASEOPS_PLATFORM_SUPER_ADMIN_EMAIL", "owner@asterlegal.in")
+    get_settings.cache_clear()
+    token = _bootstrap_token(client)
+
+    create_cost = client.post(
+        "/api/platform-admin/cost-profiles",
+        headers=auth_headers(token),
+        json={
+            "category": "case_refresh",
+            "provider": "case_tracking",
+            "currency": "INR",
+            "unit_amount_minor": 10,
+            "source": "provider invoice",
+            "notes": "Founder-reviewed actual refresh cost.",
+        },
+    )
+    assert create_cost.status_code == 200, create_cost.text
+    profile = create_cost.json()
+    assert profile["created_by_platform_admin_id"]
+    assert profile["unit_amount_minor"] == 10
+
+    update_cost = client.patch(
+        f"/api/platform-admin/cost-profiles/{profile['id']}",
+        headers=auth_headers(token),
+        json={"unit_amount_minor": 12, "source": "settlement reconciliation"},
+    )
+    assert update_cost.status_code == 200, update_cost.text
+    assert update_cost.json()["unit_amount_minor"] == 12
+
+    simulation = client.post(
+        "/api/platform-admin/margin-simulations/run",
+        headers=auth_headers(token),
+        json={
+            "scenario_name": "Founder smoke margin",
+            "revenue_minor": 1999900,
+            "tracked_case_refreshes": 1000,
+            "ai_credits": 1200,
+        },
+    )
+    assert simulation.status_code == 200, simulation.text
+    body = simulation.json()
+    assert body["result"]["gross_profit_minor"] < body["result"]["revenue_minor"]
+    assert any(warning["type"] == "case_refresh_cost_guardrail" for warning in body["warnings"])
+
+    factory = get_session_factory()
+    with factory() as session:
+        assert session.scalar(select(func.count(ProviderCostProfile.id))) == 1
+        assert session.scalar(select(func.count(BillingMarginSimulation.id))) == 1
+        audit_actions = {
+            row.action for row in session.scalars(select(PlatformAdminAuditEvent))
+        }
+        assert {
+            "platform.cost_profile.created",
+            "platform.cost_profile.updated",
+            "platform.margin_simulation.ran",
+        }.issubset(audit_actions)
+
+
+def test_profit_rollup_uses_configured_provider_cost_profile_when_available(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("CASEOPS_PLATFORM_SUPER_ADMIN_EMAIL", "owner@asterlegal.in")
+    monkeypatch.setenv("CASEOPS_PINE_LABS_ENV", "mock")
+    get_settings.cache_clear()
+    token = _bootstrap_token(client)
+
+    mdr = client.post(
+        "/api/platform-admin/cost-profiles",
+        headers=auth_headers(token),
+        json={
+            "category": "payment_mdr",
+            "provider": "pine_labs_plural",
+            "currency": "INR",
+            "unit_amount_bps": 1000,
+            "source": "MDR smoke",
+        },
+    )
+    assert mdr.status_code == 200, mdr.text
+    fixed = client.post(
+        "/api/platform-admin/cost-profiles",
+        headers=auth_headers(token),
+        json={
+            "category": "payment_fixed_fee",
+            "provider": "pine_labs_plural",
+            "currency": "INR",
+            "unit_amount_minor": 25,
+            "source": "MDR smoke",
+        },
+    )
+    assert fixed.status_code == 200, fixed.text
+
+    checkout = client.post(
+        "/api/billing/checkout",
+        headers=auth_headers(token),
+        json={"plan_code": "solo_core", "interval": "month"},
+    )
+    assert checkout.status_code == 200, checkout.text
+    checkout_payload = checkout.json()
+    sync = client.post(
+        f"/api/billing/checkout/{checkout_payload['id']}/sync",
+        headers=auth_headers(token),
+    )
+    assert sync.status_code == 200, sync.text
+
+    profit = client.get("/api/platform-admin/profit-report", headers=auth_headers(token))
+    assert profit.status_code == 200, profit.text
+    row = profit.json()["rows"][0]
+    expected_cost = round(checkout_payload["total_amount_minor"] * 1000 / 10_000) + 25
+    assert row["payment_provider_cost_minor"] == expected_cost
+
+
+def test_tenant_integrations_registry_is_safe_and_audited(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("CASEOPS_SENDGRID_API_KEY", "sendgrid-secret-token")
+    monkeypatch.setenv("CASEOPS_SENDGRID_SENDER_EMAIL", "billing@example.test")
+    monkeypatch.setenv("CASEOPS_SENDGRID_WEBHOOK_PUBLIC_KEY", "sendgrid-public-key")
+    get_settings.cache_clear()
+    token = _bootstrap_token(client)
+
+    response = client.get("/api/admin/integrations", headers=auth_headers(token))
+
+    assert response.status_code == 200, response.text
+    text = response.text
+    for forbidden in (
+        "sendgrid-secret-token",
+        "billing@example.test",
+        "sendgrid-public-key",
+        "internal_cost_label",
+        "gross_profit",
+        "gross_margin",
+        "payment_provider_cost",
+        "platform_notes",
+    ):
+        assert forbidden not in text
+    body = response.json()
+    keys = {connector["key"] for connector in body["connectors"]}
+    assert {
+        "outlook_calendar",
+        "microsoft_mailbox",
+        "gmail",
+        "google_calendar",
+        "google_drive",
+        "pine_labs",
+        "sendgrid",
+        "sms",
+        "whatsapp",
+        "case_tracking",
+        "prs_legal_updates",
+        "temporal",
+        "clamav",
+        "storage",
+    }.issubset(keys)
+    pine = next(connector for connector in body["connectors"] if connector["key"] == "pine_labs")
+    assert pine["enabled"] is False
+    assert pine["blocked"] is True
+    assert pine["status"] == "disabled"
+
+    factory = get_session_factory()
+    with factory() as session:
+        audit = session.scalar(
+            select(AuditEvent).where(AuditEvent.action == "connector_registry.viewed")
+        )
+        assert audit is not None
+
+
+def test_tenant_integrations_do_not_leak_other_tenant_outlook_sync_times(
+    client: TestClient,
+) -> None:
+    tenant_a = bootstrap_company(client)
+    token_a = str(tenant_a["access_token"])
+    company_a = str(tenant_a["company"]["id"])
+    membership_a = str(tenant_a["membership"]["id"])
+
+    tenant_b_response = client.post(
+        "/api/bootstrap/company",
+        json={
+            "company_name": "Beta Legal",
+            "company_slug": "beta-legal",
+            "company_type": "law_firm",
+            "owner_full_name": "Beta Owner",
+            "owner_email": "owner@betalegal.in",
+            "owner_password": "FoundersPass123!",
+        },
+    )
+    assert tenant_b_response.status_code == 200, tenant_b_response.text
+    token_b = str(tenant_b_response.json()["access_token"])
+
+    factory = get_session_factory()
+    with factory() as session:
+        from caseops_api.db.models import (
+            CalendarEventSync,
+            CalendarEventSyncStatus,
+            CalendarProvider,
+            UserCalendarConnection,
+        )
+
+        connection = UserCalendarConnection(
+            company_id=company_a,
+            membership_id=membership_a,
+            provider=CalendarProvider.OUTLOOK,
+            status="connected",
+            display_email="owner@asterlegal.in",
+        )
+        session.add(connection)
+        session.flush()
+        session.add(
+            CalendarEventSync(
+                company_id=company_a,
+                calendar_connection_id=connection.id,
+                source_type="matter_hearing",
+                source_id="hearing-1",
+                sync_status=CalendarEventSyncStatus.SYNCED,
+                last_synced_at=datetime(2026, 6, 8, tzinfo=UTC),
+            )
+        )
+        session.commit()
+
+    a_response = client.get("/api/admin/integrations", headers=auth_headers(token_a))
+    b_response = client.get("/api/admin/integrations", headers=auth_headers(token_b))
+
+    assert a_response.status_code == 200, a_response.text
+    assert b_response.status_code == 200, b_response.text
+    a_outlook = next(
+        connector
+        for connector in a_response.json()["connectors"]
+        if connector["key"] == "outlook_calendar"
+    )
+    b_outlook = next(
+        connector
+        for connector in b_response.json()["connectors"]
+        if connector["key"] == "outlook_calendar"
+    )
+    assert a_outlook["last_success"] is not None
+    assert b_outlook["last_success"] is None
