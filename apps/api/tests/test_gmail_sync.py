@@ -17,6 +17,7 @@ from sqlalchemy import select
 
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
+    AuditEvent,
     Communication,
     MailboxAttachmentCandidate,
     MailboxAttachmentCandidateStatus,
@@ -346,6 +347,47 @@ def test_gmail_import_is_metadata_only_review_first_and_token_safe(
             assert "provider-attachment-secret" not in (
                 candidate.encrypted_provider_attachment_ref
             )
+    finally:
+        set_gmail_provider_for_tests(None)
+
+
+def test_gmail_connection_revoke_is_token_safe(client: TestClient) -> None:
+    provider = StubGmailProvider()
+    try:
+        bootstrap = _bootstrap_company(
+            client,
+            slug="gmail-revoke",
+            email="owner@gmail-revoke.example",
+        )
+        token = str(bootstrap["access_token"])
+        connection_id = _connect_gmail(client, token, provider)
+
+        revoked = client.delete(
+            f"/api/mailbox/connections/{connection_id}",
+            headers=_auth(token),
+        )
+        assert revoked.status_code == 200, revoked.text
+        assert revoked.json()["id"] == connection_id
+        assert revoked.json()["provider"] == "gmail"
+        assert revoked.json()["status"] == "revoked"
+        assert "gmail-access-credential" not in revoked.text
+        assert "gmail-refresh-credential" not in revoked.text
+
+        factory = get_session_factory()
+        with factory() as session:
+            connection = session.get(UserMailboxConnection, connection_id)
+            assert connection is not None
+            assert connection.encrypted_token_ref is None
+            audit = session.scalar(
+                select(AuditEvent)
+                .where(
+                    AuditEvent.action == "mailbox.gmail.revoked",
+                    AuditEvent.company_id == str(bootstrap["company"]["id"]),
+                )
+                .order_by(AuditEvent.created_at.desc())
+            )
+            assert audit is not None
+            assert "gmail-access-credential" not in (audit.metadata_json or "")
     finally:
         set_gmail_provider_for_tests(None)
 

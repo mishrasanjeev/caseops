@@ -610,3 +610,45 @@ def test_google_calendar_failures_show_in_provider_operations_as_google(
             assert "Handled in Google console." not in audit.metadata_json
     finally:
         set_google_calendar_provider_for_tests(None)
+
+
+def test_admin_google_calendar_replay_is_local_safe_and_token_safe(
+    client: TestClient,
+) -> None:
+    provider = StubGoogleCalendarProvider()
+    try:
+        bootstrap = bootstrap_company(client)
+        token = str(bootstrap["access_token"])
+        _connect_google(client, token, provider)
+
+        replay = client.post(
+            "/api/admin/google-calendar-sync/replay",
+            headers=_auth(token),
+            json={"limit": 10},
+        )
+        assert replay.status_code == 200, replay.text
+        body = replay.json()
+        assert body["provider"] == "google_calendar"
+        assert body["status"] == "processed"
+        assert body["examined"] == 0
+        assert body["replayed"] == 0
+        assert provider.calls == []
+        assert "google-access-credential" not in replay.text
+        assert "google-refresh-credential" not in replay.text
+
+        factory = get_session_factory()
+        with factory() as session:
+            audit = session.scalar(
+                select(AuditEvent)
+                .where(
+                    AuditEvent.action
+                    == "calendar.durable_google_calendar_sync.replayed"
+                )
+                .order_by(AuditEvent.created_at.desc())
+            )
+            assert audit is not None
+            metadata = json.loads(audit.metadata_json or "{}")
+            assert metadata["provider"] == "google_calendar"
+            assert "google-access-credential" not in audit.metadata_json
+    finally:
+        set_google_calendar_provider_for_tests(None)

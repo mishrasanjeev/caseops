@@ -2322,7 +2322,10 @@ class UserMailboxConnection(Base):
     scopes_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     last_history_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
     watch_resource_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    watch_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    watch_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     last_import_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     connected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(

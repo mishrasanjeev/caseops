@@ -456,16 +456,22 @@ def test_drive_dry_run_does_not_introduce_durable_sync_routes(
     client: TestClient,
 ) -> None:
     # Foundation must not introduce background sync, webhook, or polling
-    # endpoints. Asserts the ADP-12 surface is dry-run + status only.
+    # endpoints. The BUG-053 surface adds tenant-controlled OAuth/metadata
+    # browsing, but still no durable provider automation.
     response = client.get("/openapi.json")
     assert response.status_code == 200, response.text
     paths = set(response.json()["paths"].keys())
     drive_paths = {path for path in paths if "drive" in path.lower()}
     assert drive_paths == {
+        "/api/drive/connections/{connection_id}",
+        "/api/drive/google/callback",
+        "/api/drive/google/files",
+        "/api/drive/google/start",
+        "/api/drive/google/status",
         "/api/matters/imports/drive/provider-config",
         "/api/matters/{matter_id}/imports/drive/dry-run",
     }, drive_paths
-    for forbidden_substring in ("sync", "poll", "webhook", "commit", "oauth", "callback"):
+    for forbidden_substring in ("sync", "poll", "webhook", "commit"):
         assert not any(
             forbidden_substring in path.lower() for path in drive_paths
         ), (forbidden_substring, drive_paths)

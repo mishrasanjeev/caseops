@@ -164,6 +164,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/google-calendar-sync/replay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Replay this tenant's failed/dead-letter Google Calendar sync rows without exposing provider payloads. */
+        post: operations["post_google_calendar_sync_replay_api_admin_google_calendar_sync_replay_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/integrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Admin Integrations */
+        get: operations["get_admin_integrations_api_admin_integrations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/matter-billing": {
         parameters: {
             query?: never;
@@ -1429,6 +1463,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/calendar/connections/google-calendar/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Complete Google Calendar OAuth callback. */
+        get: operations["complete_calendar_google_connection_api_calendar_connections_google_calendar_callback_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/calendar/connections/google-calendar/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Google Calendar OAuth without exposing tokens. */
+        post: operations["start_calendar_google_connection_api_calendar_connections_google_calendar_start_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/calendar/connections/outlook/callback": {
         parameters: {
             query?: never;
@@ -1584,6 +1652,75 @@ export interface paths {
         get: operations["get_calendar_sync_status_api_calendar_sync_status_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/calendar/sync/google-calendar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Manually sync the caller's visible hearings within a date range to Google Calendar. Bounded; no durable background automation. */
+        post: operations["sync_google_calendar_visible_range_api_calendar_sync_google_calendar_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/calendar/sync/google-calendar/deadlines/{deadline_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Manually sync one deadline to Google Calendar. */
+        post: operations["sync_deadline_google_calendar_api_calendar_sync_google_calendar_deadlines__deadline_id__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/calendar/sync/google-calendar/hearings/{hearing_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Manually sync one hearing to Google Calendar. */
+        post: operations["sync_hearing_google_calendar_api_calendar_sync_google_calendar_hearings__hearing_id__post"];
+        /** Delete one previously synced hearing event from Google Calendar. */
+        delete: operations["delete_hearing_google_calendar_api_calendar_sync_google_calendar_hearings__hearing_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/calendar/sync/google-calendar/tasks/{task_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Manually sync one dated task to Google Calendar. */
+        post: operations["sync_task_google_calendar_api_calendar_sync_google_calendar_tasks__task_id__post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2851,6 +2988,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/drive/connections/{connection_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke a Google Drive connection for the current user. */
+        delete: operations["revoke_google_drive_api_drive_connections__connection_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/drive/google/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Complete Google Drive OAuth callback. */
+        get: operations["complete_google_drive_api_drive_google_callback_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/drive/google/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List recent Google Drive file metadata for the current user. */
+        get: operations["get_google_drive_files_api_drive_google_files_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/drive/google/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Google Drive OAuth without exposing tokens. */
+        post: operations["start_google_drive_api_drive_google_start_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/drive/google/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the caller's Google Drive connector status. */
+        get: operations["get_google_drive_status_api_drive_google_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -2940,6 +3162,176 @@ export interface paths {
         put?: never;
         /** Promote an intake request into a matter */
         post: operations["post_intake_promote_api_intake_requests__request_id__promote_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mailbox/attachment-candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Gmail attachment candidates awaiting review. */
+        get: operations["get_attachment_candidates_api_mailbox_attachment_candidates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mailbox/attachment-candidates/{candidate_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Approve/import or reject one Gmail attachment candidate. */
+        patch: operations["patch_attachment_candidate_api_mailbox_attachment_candidates__candidate_id__patch"];
+        trace?: never;
+    };
+    "/api/mailbox/connections/{connection_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke a Gmail mailbox connection for the caller. */
+        delete: operations["revoke_gmail_api_mailbox_connections__connection_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mailbox/gmail/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Complete Gmail OAuth callback. */
+        get: operations["complete_gmail_api_mailbox_gmail_callback_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mailbox/gmail/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import recent Gmail metadata into review-first CaseOps records. */
+        post: operations["import_gmail_api_mailbox_gmail_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mailbox/gmail/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Gmail OAuth without exposing tokens. */
+        post: operations["start_gmail_api_mailbox_gmail_start_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mailbox/gmail/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the caller's Gmail mailbox connector status. */
+        get: operations["get_gmail_status_api_mailbox_gmail_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mailbox/gmail/watch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Gmail Pub/Sub watch for the caller's connected mailbox. */
+        post: operations["watch_gmail_api_mailbox_gmail_watch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mailbox/gmail/webhook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ingest a token-verified Gmail Pub/Sub webhook. */
+        post: operations["gmail_webhook_api_mailbox_gmail_webhook_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mailbox/imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List tenant-safe Gmail message import records. */
+        get: operations["get_imports_api_mailbox_imports_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -5197,6 +5589,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/platform-admin/cost-profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Provider Cost Profiles */
+        get: operations["get_provider_cost_profiles_api_platform_admin_cost_profiles_get"];
+        put?: never;
+        /** Create Platform Cost Profile */
+        post: operations["create_platform_cost_profile_api_platform_admin_cost_profiles_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/cost-profiles/{profile_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Patch Platform Cost Profile */
+        patch: operations["patch_platform_cost_profile_api_platform_admin_cost_profiles__profile_id__patch"];
+        trace?: never;
+    };
     "/api/platform-admin/coupons": {
         parameters: {
             query?: never;
@@ -5224,6 +5651,23 @@ export interface paths {
         };
         /** List Platform Enrollments */
         get: operations["list_platform_enrollments_api_platform_admin_enrollments_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/integrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Platform Integrations */
+        get: operations["get_platform_integrations_api_platform_admin_integrations_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5277,6 +5721,40 @@ export interface paths {
         get: operations["get_margin_alerts_api_platform_admin_margin_alerts_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/margin-simulations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Margin Simulations */
+        get: operations["get_margin_simulations_api_platform_admin_margin_simulations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/margin-simulations/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run Platform Margin Simulation */
+        post: operations["run_platform_margin_simulation_api_platform_admin_margin_simulations_run_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7721,9 +8199,9 @@ export interface components {
             /**
              * Provider
              * @default outlook
-             * @constant
+             * @enum {string}
              */
-            provider: "outlook";
+            provider: "outlook" | "google_calendar";
         };
         /** CalendarConnectionListResponse */
         CalendarConnectionListResponse: {
@@ -7738,9 +8216,9 @@ export interface components {
             /**
              * Provider
              * @default outlook
-             * @constant
+             * @enum {string}
              */
-            provider: "outlook";
+            provider: "outlook" | "google_calendar";
             /** Provider Available */
             provider_available: boolean;
             /** Unavailable Reason */
@@ -7767,9 +8245,9 @@ export interface components {
             membership_id: string;
             /**
              * Provider
-             * @constant
+             * @enum {string}
              */
-            provider: "outlook";
+            provider: "outlook" | "google_calendar";
             /** Provider Account Id */
             provider_account_id: string | null;
             /** Scopes */
@@ -7792,9 +8270,9 @@ export interface components {
             /**
              * Provider
              * @default outlook
-             * @constant
+             * @enum {string}
              */
-            provider: "outlook";
+            provider: "outlook" | "google_calendar";
             /** Provider Available */
             provider_available: boolean;
             /** Unavailable Reason */
@@ -7913,9 +8391,9 @@ export interface components {
             /**
              * Provider
              * @default outlook
-             * @constant
+             * @enum {string}
              */
-            provider: "outlook";
+            provider: "outlook" | "google_calendar";
         };
         /** CalendarSyncCapabilityStatus */
         CalendarSyncCapabilityStatus: {
@@ -7964,9 +8442,9 @@ export interface components {
             /**
              * Provider
              * @default outlook
-             * @constant
+             * @enum {string}
              */
-            provider: "outlook";
+            provider: "outlook" | "google_calendar";
             /** Provider Event Id */
             provider_event_id: string;
             /**
@@ -9204,6 +9682,61 @@ export interface components {
             opposing_party_name: string;
             /** Related Party Names */
             related_party_names?: string[];
+        };
+        /** ConnectorRecord */
+        ConnectorRecord: {
+            /** Blocked */
+            blocked: boolean;
+            /** Category */
+            category: string;
+            /** Configured */
+            configured: boolean;
+            /** Degraded */
+            degraded: boolean;
+            /** Enabled */
+            enabled: boolean;
+            /** Healthy */
+            healthy: boolean;
+            /** Internal Cost Label */
+            internal_cost_label?: string | null;
+            /** Key */
+            key: string;
+            /** Last Failure */
+            last_failure?: string | null;
+            /** Last Success */
+            last_success?: string | null;
+            /** Name */
+            name: string;
+            /** Next Run */
+            next_run?: string | null;
+            /** Platform Notes */
+            platform_notes?: string[];
+            /** Provider */
+            provider: string;
+            /** Provider Operations Link */
+            provider_operations_link?: string | null;
+            /** Required Config Names */
+            required_config_names?: string[];
+            /** Risk Label */
+            risk_label?: string | null;
+            /** Runbook Link */
+            runbook_link?: string | null;
+            /** Scopes */
+            scopes?: string[];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "healthy" | "degraded" | "blocked" | "disabled" | "configured";
+            /** Token Expiry */
+            token_expiry?: string | null;
+            /** Webhook Status */
+            webhook_status?: string | null;
+        };
+        /** ConnectorRegistryResponse */
+        ConnectorRegistryResponse: {
+            /** Connectors */
+            connectors: components["schemas"]["ConnectorRecord"][];
         };
         /** ContractActivityRecord */
         ContractActivityRecord: {
@@ -11362,6 +11895,86 @@ export interface components {
              */
             unverified: boolean;
         };
+        /** GoogleDriveConnectionCallbackResponse */
+        GoogleDriveConnectionCallbackResponse: {
+            /** Connected */
+            connected: boolean;
+            connection: components["schemas"]["GoogleDriveConnectionRecord"];
+            /**
+             * Provider
+             * @default google_drive
+             * @constant
+             */
+            provider: "google_drive";
+        };
+        /** GoogleDriveConnectionRecord */
+        GoogleDriveConnectionRecord: {
+            /** Company Id */
+            company_id: string;
+            /** Connected At */
+            connected_at?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Display Email */
+            display_email: string | null;
+            /** Id */
+            id: string;
+            /** Last List At */
+            last_list_at?: string | null;
+            /** Membership Id */
+            membership_id: string;
+            /**
+             * Provider
+             * @default google_drive
+             * @constant
+             */
+            provider: "google_drive";
+            /** Provider Account Id */
+            provider_account_id: string | null;
+            /** Scopes */
+            scopes?: string[];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "connected" | "revoked" | "error";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** GoogleDriveConnectionStartResponse */
+        GoogleDriveConnectionStartResponse: {
+            /** Auth Url */
+            auth_url?: string | null;
+            /**
+             * Provider
+             * @default google_drive
+             * @constant
+             */
+            provider: "google_drive";
+            /** Provider Available */
+            provider_available: boolean;
+            /** Unavailable Reason */
+            unavailable_reason?: string | null;
+        };
+        /** GoogleDriveFileListResponse */
+        GoogleDriveFileListResponse: {
+            /** Connection Id */
+            connection_id: string;
+            /** Files */
+            files: components["schemas"]["GoogleDriveFileRecord"][];
+            /**
+             * Provider
+             * @default google_drive
+             * @constant
+             */
+            provider: "google_drive";
+        };
         /** GoogleDriveFileMetadata */
         GoogleDriveFileMetadata: {
             /** Mime Type */
@@ -11378,6 +11991,21 @@ export interface components {
             provider_file_id: string;
             /** Size Bytes */
             size_bytes: number;
+        };
+        /** GoogleDriveFileRecord */
+        GoogleDriveFileRecord: {
+            /** Mime Type */
+            mime_type?: string | null;
+            /** Modified Time */
+            modified_time?: string | null;
+            /** Name */
+            name: string;
+            /** Provider File Id */
+            provider_file_id: string;
+            /** Size Bytes */
+            size_bytes?: number | null;
+            /** Web Url */
+            web_url?: string | null;
         };
         /** GoogleDriveImportDryRunRequest */
         GoogleDriveImportDryRunRequest: {
@@ -11470,6 +12098,21 @@ export interface components {
         GoogleDriveProviderConfigStatus: {
             /** Configured */
             configured: boolean;
+            /** Missing Config Names */
+            missing_config_names?: string[];
+            /**
+             * Provider
+             * @default google_drive
+             * @constant
+             */
+            provider: "google_drive";
+        };
+        /** GoogleDriveStatusResponse */
+        GoogleDriveStatusResponse: {
+            /** Configured */
+            configured: boolean;
+            /** Connections */
+            connections: components["schemas"]["GoogleDriveConnectionRecord"][];
             /** Missing Config Names */
             missing_config_names?: string[];
             /**
@@ -13314,6 +13957,376 @@ export interface components {
             /** Password */
             password: string;
         };
+        /** MailboxAttachmentCandidateListResponse */
+        MailboxAttachmentCandidateListResponse: {
+            /** Candidates */
+            candidates: components["schemas"]["MailboxAttachmentCandidateRecord"][];
+            /** Pending Count */
+            pending_count: number;
+        };
+        /** MailboxAttachmentCandidateRecord */
+        MailboxAttachmentCandidateRecord: {
+            /** Company Id */
+            company_id: string;
+            /** Content Type */
+            content_type: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Filename */
+            filename: string | null;
+            /** Id */
+            id: string;
+            /** Matter Id */
+            matter_id: string | null;
+            /** Message Import Id */
+            message_import_id: string;
+            /** Size Bytes */
+            size_bytes: number | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "needs_review" | "approved_imported" | "rejected" | "duplicate_skipped";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** MailboxAttachmentCandidateReviewRequest */
+        MailboxAttachmentCandidateReviewRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "approve_import" | "reject";
+        };
+        /** MailboxAttachmentCandidateReviewResponse */
+        MailboxAttachmentCandidateReviewResponse: {
+            candidate: components["schemas"]["MailboxAttachmentCandidateRecord"];
+            /** Imported Attachment Id */
+            imported_attachment_id?: string | null;
+        };
+        /** MailboxConnectionCallbackResponse */
+        MailboxConnectionCallbackResponse: {
+            /** Connected */
+            connected: boolean;
+            connection: components["schemas"]["MailboxConnectionRecord"];
+            /**
+             * Provider
+             * @default gmail
+             * @constant
+             */
+            provider: "gmail";
+        };
+        /** MailboxConnectionRecord */
+        MailboxConnectionRecord: {
+            /** Company Id */
+            company_id: string;
+            /** Connected At */
+            connected_at?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Display Email */
+            display_email: string | null;
+            /** Id */
+            id: string;
+            /** Last History Id */
+            last_history_id?: string | null;
+            /** Last Import At */
+            last_import_at?: string | null;
+            /** Membership Id */
+            membership_id: string;
+            /**
+             * Provider
+             * @constant
+             */
+            provider: "gmail";
+            /** Provider Account Id */
+            provider_account_id: string | null;
+            /** Scopes */
+            scopes?: string[];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "connected" | "revoked" | "error";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Watch Expires At */
+            watch_expires_at?: string | null;
+        };
+        /** MailboxConnectionStartResponse */
+        MailboxConnectionStartResponse: {
+            /** Auth Url */
+            auth_url?: string | null;
+            /**
+             * Provider
+             * @default gmail
+             * @constant
+             */
+            provider: "gmail";
+            /** Provider Available */
+            provider_available: boolean;
+            /** Unavailable Reason */
+            unavailable_reason?: string | null;
+        };
+        /** MailboxImportRequest */
+        MailboxImportRequest: {
+            /**
+             * Limit
+             * @default 25
+             */
+            limit: number;
+        };
+        /** MailboxImportResponse */
+        MailboxImportResponse: {
+            /** Imports */
+            imports: components["schemas"]["MailboxMessageImportRecord"][];
+            summary: components["schemas"]["MailboxImportSummary"];
+        };
+        /** MailboxImportSummary */
+        MailboxImportSummary: {
+            /** Attachment Candidates */
+            attachment_candidates: number;
+            /** Duplicate */
+            duplicate: number;
+            /** Failed */
+            failed: number;
+            /** Imported */
+            imported: number;
+            /** Unmatched */
+            unmatched: number;
+        };
+        /** MailboxMessageImportRecord */
+        MailboxMessageImportRecord: {
+            /** Attachment Count */
+            attachment_count: number;
+            /** Attempts */
+            attempts: number;
+            /** Communication Id */
+            communication_id: string | null;
+            /** Company Id */
+            company_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Dead Letter Reason */
+            dead_letter_reason: string | null;
+            /** Id */
+            id: string;
+            /** Labels */
+            labels?: string[];
+            /** Last Error Redacted */
+            last_error_redacted: string | null;
+            /** Mailbox Connection Id */
+            mailbox_connection_id: string;
+            /** Matter Id */
+            matter_id: string | null;
+            /** Max Attempts */
+            max_attempts: number;
+            /** Next Attempt At */
+            next_attempt_at: string | null;
+            /** Occurred At */
+            occurred_at: string | null;
+            /**
+             * Provider
+             * @default gmail
+             * @constant
+             */
+            provider: "gmail";
+            /** Provider Message Id */
+            provider_message_id: string;
+            /** Provider Thread Id */
+            provider_thread_id: string | null;
+            /** Sender Name */
+            sender_name: string | null;
+            /** Snippet */
+            snippet: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "imported" | "unmatched" | "duplicate" | "failed" | "dead_letter" | "ignored" | "resolved";
+            /** Subject */
+            subject: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** MailboxStatusResponse */
+        MailboxStatusResponse: {
+            /** Configured */
+            configured: boolean;
+            /** Connections */
+            connections: components["schemas"]["MailboxConnectionRecord"][];
+            /** Missing Config Names */
+            missing_config_names?: string[];
+            /** Missing Webhook Config Names */
+            missing_webhook_config_names?: string[];
+            /**
+             * Provider
+             * @default gmail
+             * @constant
+             */
+            provider: "gmail";
+            /** Webhook Configured */
+            webhook_configured: boolean;
+        };
+        /** MailboxWatchResponse */
+        MailboxWatchResponse: {
+            /** History Id */
+            history_id?: string | null;
+            /** Missing Config Names */
+            missing_config_names?: string[];
+            /**
+             * Provider
+             * @default gmail
+             * @constant
+             */
+            provider: "gmail";
+            /** Watch Expires At */
+            watch_expires_at?: string | null;
+            /** Watch Started */
+            watch_started: boolean;
+            /** Webhook Configured */
+            webhook_configured: boolean;
+        };
+        /** MailboxWebhookIngestResponse */
+        MailboxWebhookIngestResponse: {
+            /** Accepted */
+            accepted: boolean;
+            /** Event Id */
+            event_id?: string | null;
+            /**
+             * Provider
+             * @default gmail
+             * @constant
+             */
+            provider: "gmail";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "processed" | "failed" | "dead_letter";
+        };
+        /** MarginSimulationListResponse */
+        MarginSimulationListResponse: {
+            /** Simulations */
+            simulations: components["schemas"]["MarginSimulationRecord"][];
+        };
+        /** MarginSimulationRecord */
+        MarginSimulationRecord: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Currency
+             * @constant
+             */
+            currency: "INR";
+            /** Id */
+            id: string;
+            /** Input */
+            input: {
+                [key: string]: unknown;
+            };
+            /** Result */
+            result: {
+                [key: string]: unknown;
+            };
+            /** Run By Platform Admin Id */
+            run_by_platform_admin_id: string | null;
+            /** Scenario Name */
+            scenario_name: string | null;
+            /** Warnings */
+            warnings: {
+                [key: string]: unknown;
+            }[];
+        };
+        /** MarginSimulationRunRequest */
+        MarginSimulationRunRequest: {
+            /**
+             * Ai Credits
+             * @default 0
+             */
+            ai_credits: number;
+            /**
+             * Billing Interval
+             * @default month
+             * @enum {string}
+             */
+            billing_interval: "month" | "year" | "one_time" | "custom";
+            /**
+             * Currency
+             * @default INR
+             * @constant
+             */
+            currency: "INR";
+            /**
+             * Document Pages
+             * @default 0
+             */
+            document_pages: number;
+            /**
+             * Embedding Units
+             * @default 0
+             */
+            embedding_units: number;
+            /**
+             * Manual Support Minutes
+             * @default 0
+             */
+            manual_support_minutes: number;
+            /** Payment Amount Minor */
+            payment_amount_minor?: number | null;
+            /**
+             * Payment Count
+             * @default 1
+             */
+            payment_count: number;
+            /** Plan Code */
+            plan_code?: string | null;
+            /** Revenue Minor */
+            revenue_minor?: number | null;
+            /** Scenario Name */
+            scenario_name?: string | null;
+            /**
+             * Sms Messages
+             * @default 0
+             */
+            sms_messages: number;
+            /**
+             * Storage Gb Months
+             * @default 0
+             */
+            storage_gb_months: number;
+            /**
+             * Tracked Case Refreshes
+             * @default 0
+             */
+            tracked_case_refreshes: number;
+            /**
+             * Whatsapp Messages
+             * @default 0
+             */
+            whatsapp_messages: number;
+        };
         /** MatterAccessGrantCreateRequest */
         MatterAccessGrantCreateRequest: {
             /**
@@ -14716,7 +15729,7 @@ export interface components {
              * @default scheduled
              * @enum {string}
              */
-            status: "scheduled" | "completed" | "adjourned";
+            status: "scheduled" | "completed" | "adjourned" | "cancelled";
         };
         /** MatterHearingRecord */
         MatterHearingRecord: {
@@ -14746,7 +15759,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "scheduled" | "completed" | "adjourned";
+            status: "scheduled" | "completed" | "adjourned" | "cancelled";
         };
         /** MatterHearingUpdateRequest */
         MatterHearingUpdateRequest: {
@@ -14757,7 +15770,7 @@ export interface components {
             /** Outcome Note */
             outcome_note?: string | null;
             /** Status */
-            status?: ("scheduled" | "completed" | "adjourned") | null;
+            status?: ("scheduled" | "completed" | "adjourned" | "cancelled") | null;
         };
         /** MatterListResponse */
         MatterListResponse: {
@@ -16094,9 +17107,9 @@ export interface components {
             /**
              * Provider
              * @default outlook
-             * @constant
+             * @enum {string}
              */
-            provider: "outlook";
+            provider: "outlook" | "google_calendar";
             /** Replayed */
             replayed: number;
             /** Retry Scheduled */
@@ -16137,9 +17150,9 @@ export interface components {
             /**
              * Provider
              * @default outlook
-             * @constant
+             * @enum {string}
              */
-            provider: "outlook";
+            provider: "outlook" | "google_calendar";
             /**
              * Status
              * @enum {string}
@@ -16190,9 +17203,9 @@ export interface components {
             /**
              * Provider
              * @default outlook
-             * @constant
+             * @enum {string}
              */
-            provider: "outlook";
+            provider: "outlook" | "google_calendar";
             /** Required Approvals */
             required_approvals: components["schemas"]["OutlookApprovalItemStatus"][];
             /** Required Config */
@@ -17640,6 +18653,112 @@ export interface components {
              */
             updated_at: string;
         };
+        /** ProviderCostProfileCreateRequest */
+        ProviderCostProfileCreateRequest: {
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "case_refresh" | "llm" | "embedding" | "document_processing" | "storage" | "payment_mdr" | "payment_fixed_fee" | "sms" | "whatsapp" | "manual_support";
+            /**
+             * Currency
+             * @default INR
+             * @constant
+             */
+            currency: "INR";
+            /** Effective From */
+            effective_from?: string | null;
+            /** Effective Until */
+            effective_until?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /**
+             * Provider
+             * @default default
+             */
+            provider: string;
+            /** Source */
+            source?: string | null;
+            /** Unit Amount Bps */
+            unit_amount_bps?: number | null;
+            /** Unit Amount Minor */
+            unit_amount_minor?: number | null;
+        };
+        /** ProviderCostProfileListResponse */
+        ProviderCostProfileListResponse: {
+            /** Cost Profiles */
+            cost_profiles: components["schemas"]["ProviderCostProfileRecord"][];
+        };
+        /** ProviderCostProfileRecord */
+        ProviderCostProfileRecord: {
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "case_refresh" | "llm" | "embedding" | "document_processing" | "storage" | "payment_mdr" | "payment_fixed_fee" | "sms" | "whatsapp" | "manual_support";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Platform Admin Id */
+            created_by_platform_admin_id?: string | null;
+            /**
+             * Currency
+             * @constant
+             */
+            currency: "INR";
+            /**
+             * Effective From
+             * Format: date-time
+             */
+            effective_from: string;
+            /** Effective Until */
+            effective_until?: string | null;
+            /** Id */
+            id: string;
+            /** Notes */
+            notes?: string | null;
+            /** Provider */
+            provider: string;
+            /** Source */
+            source?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "inactive";
+            /** Unit Amount Bps */
+            unit_amount_bps?: number | null;
+            /** Unit Amount Minor */
+            unit_amount_minor?: number | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** ProviderCostProfileUpdateRequest */
+        ProviderCostProfileUpdateRequest: {
+            /** Currency */
+            currency?: "INR" | null;
+            /** Effective From */
+            effective_from?: string | null;
+            /** Effective Until */
+            effective_until?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Provider */
+            provider?: string | null;
+            /** Source */
+            source?: string | null;
+            /** Status */
+            status?: ("active" | "inactive") | null;
+            /** Unit Amount Bps */
+            unit_amount_bps?: number | null;
+            /** Unit Amount Minor */
+            unit_amount_minor?: number | null;
+        };
         /** ProviderOperationActionRequest */
         ProviderOperationActionRequest: {
             /** Reason */
@@ -17694,7 +18813,7 @@ export interface components {
              * Job Kind
              * @enum {string}
              */
-            job_kind: "calendar_sync" | "notification_delivery" | "case_tracking_poll";
+            job_kind: "calendar_sync" | "notification_delivery" | "case_tracking_poll" | "mailbox_message_import" | "mailbox_webhook";
             /** Mark Resolved Available */
             mark_resolved_available: boolean;
             /** Matter Id */
@@ -18515,6 +19634,55 @@ export interface components {
             disabled_template_types: string[];
             /** Predictive Bench Strategy Enabled */
             predictive_bench_strategy_enabled: boolean;
+        };
+        /** TenantConnectorRecord */
+        TenantConnectorRecord: {
+            /** Blocked */
+            blocked: boolean;
+            /** Category */
+            category: string;
+            /** Configured */
+            configured: boolean;
+            /** Degraded */
+            degraded: boolean;
+            /** Enabled */
+            enabled: boolean;
+            /** Healthy */
+            healthy: boolean;
+            /** Key */
+            key: string;
+            /** Last Failure */
+            last_failure?: string | null;
+            /** Last Success */
+            last_success?: string | null;
+            /** Name */
+            name: string;
+            /** Next Run */
+            next_run?: string | null;
+            /** Provider */
+            provider: string;
+            /** Provider Operations Link */
+            provider_operations_link?: string | null;
+            /** Required Config Names */
+            required_config_names?: string[];
+            /** Runbook Link */
+            runbook_link?: string | null;
+            /** Scopes */
+            scopes?: string[];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "healthy" | "degraded" | "blocked" | "disabled" | "configured";
+            /** Token Expiry */
+            token_expiry?: string | null;
+            /** Webhook Status */
+            webhook_status?: string | null;
+        };
+        /** TenantConnectorRegistryResponse */
+        TenantConnectorRegistryResponse: {
+            /** Connectors */
+            connectors: components["schemas"]["TenantConnectorRecord"][];
         };
         /** TenantPlaybookCompareFinding */
         TenantPlaybookCompareFinding: {
@@ -19478,6 +20646,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_google_calendar_sync_replay_api_admin_google_calendar_sync_replay_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OutlookDurableSyncReplayRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OutlookDurableSyncReplayResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_admin_integrations_api_admin_integrations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantConnectorRegistryResponse"];
                 };
             };
         };
@@ -21763,6 +22984,58 @@ export interface operations {
             };
         };
     };
+    complete_calendar_google_connection_api_calendar_connections_google_calendar_callback_get: {
+        parameters: {
+            query: {
+                code: string;
+                state: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarConnectionCallbackResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_calendar_google_connection_api_calendar_connections_google_calendar_start_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarConnectionStartResponse"];
+                };
+            };
+        };
+    };
     complete_calendar_outlook_connection_api_calendar_connections_outlook_callback_get: {
         parameters: {
             query: {
@@ -22032,6 +23305,163 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CalendarSyncStatusResponse"];
+                };
+            };
+        };
+    };
+    sync_google_calendar_visible_range_api_calendar_sync_google_calendar_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OutlookBulkSyncRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OutlookBulkSyncResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sync_deadline_google_calendar_api_calendar_sync_google_calendar_deadlines__deadline_id__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deadline_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarEventSyncResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sync_hearing_google_calendar_api_calendar_sync_google_calendar_hearings__hearing_id__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hearing_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarEventSyncResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_hearing_google_calendar_api_calendar_sync_google_calendar_hearings__hearing_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hearing_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarEventSyncResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sync_task_google_calendar_api_calendar_sync_google_calendar_tasks__task_id__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarEventSyncResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -24831,6 +26261,140 @@ export interface operations {
             };
         };
     };
+    revoke_google_drive_api_drive_connections__connection_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoogleDriveConnectionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    complete_google_drive_api_drive_google_callback_get: {
+        parameters: {
+            query: {
+                code: string;
+                state: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoogleDriveConnectionCallbackResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_google_drive_files_api_drive_google_files_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoogleDriveFileListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_google_drive_api_drive_google_start_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoogleDriveConnectionStartResponse"];
+                };
+            };
+        };
+    };
+    get_google_drive_status_api_drive_google_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoogleDriveStatusResponse"];
+                };
+            };
+        };
+    };
     healthcheck_api_health_get: {
         parameters: {
             query?: never;
@@ -24997,6 +26561,296 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IntakeRequestRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_attachment_candidates_api_mailbox_attachment_candidates_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailboxAttachmentCandidateListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_attachment_candidate_api_mailbox_attachment_candidates__candidate_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                candidate_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MailboxAttachmentCandidateReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailboxAttachmentCandidateReviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_gmail_api_mailbox_connections__connection_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailboxConnectionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    complete_gmail_api_mailbox_gmail_callback_get: {
+        parameters: {
+            query: {
+                code: string;
+                state: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailboxConnectionCallbackResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_gmail_api_mailbox_gmail_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MailboxImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailboxImportResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_gmail_api_mailbox_gmail_start_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailboxConnectionStartResponse"];
+                };
+            };
+        };
+    };
+    get_gmail_status_api_mailbox_gmail_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailboxStatusResponse"];
+                };
+            };
+        };
+    };
+    watch_gmail_api_mailbox_gmail_watch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailboxWatchResponse"];
+                };
+            };
+        };
+    };
+    gmail_webhook_api_mailbox_gmail_webhook_post: {
+        parameters: {
+            query?: {
+                token?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailboxWebhookIngestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_imports_api_mailbox_imports_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailboxImportResponse"];
                 };
             };
             /** @description Validation Error */
@@ -29812,6 +31666,94 @@ export interface operations {
             };
         };
     };
+    get_provider_cost_profiles_api_platform_admin_cost_profiles_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderCostProfileListResponse"];
+                };
+            };
+        };
+    };
+    create_platform_cost_profile_api_platform_admin_cost_profiles_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderCostProfileCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderCostProfileRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_platform_cost_profile_api_platform_admin_cost_profiles__profile_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profile_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderCostProfileUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderCostProfileRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_coupons_api_platform_admin_coupons_get: {
         parameters: {
             query?: never;
@@ -29887,6 +31829,26 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+        };
+    };
+    get_platform_integrations_api_platform_admin_integrations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectorRegistryResponse"];
                 };
             };
         };
@@ -29981,6 +31943,59 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+        };
+    };
+    get_margin_simulations_api_platform_admin_margin_simulations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarginSimulationListResponse"];
+                };
+            };
+        };
+    };
+    run_platform_margin_simulation_api_platform_admin_margin_simulations_run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarginSimulationRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarginSimulationRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
