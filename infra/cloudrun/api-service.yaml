@@ -17,7 +17,11 @@ spec:
         # Anthropic / Pine Labs keys all use secretKeyRef.
         run.googleapis.com/secrets: "caseops-auth-secret:projects/__PROJECT_NUMBER__/secrets/caseops-auth-secret,caseops-database-url:projects/__PROJECT_NUMBER__/secrets/caseops-database-url,caseops-openai-api-key:projects/__PROJECT_NUMBER__/secrets/caseops-openai-api-key,caseops-sendgrid-webhook-public-key:projects/__PROJECT_NUMBER__/secrets/caseops-sendgrid-webhook-public-key,caseops-ecourtsindia-api-token:projects/__PROJECT_NUMBER__/secrets/caseops-ecourtsindia-api-token"
     spec:
-      containerConcurrency: 40
+      # 2026-06-08 incident: one blocking request pinned the API event
+      # loop and every subsequent request to the same instance timed out.
+      # Keep per-instance concurrency at 1 until the sync DB handlers are
+      # moved fully off the event loop.
+      containerConcurrency: 1
       timeoutSeconds: 300
       serviceAccountName: "__SERVICE_ACCOUNT__"
       containers:
