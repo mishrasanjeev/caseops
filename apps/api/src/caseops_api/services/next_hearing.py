@@ -345,6 +345,66 @@ def apply_next_hearing_update(
     return NextHearingApplyResult(applied=True, reason="updated")
 
 
+def clear_next_hearing(
+    session: Session,
+    *,
+    matter: Matter,
+    source: str | MatterNextHearingSource,
+    actor_membership_id: str | None = None,
+    context: SessionContext | None = None,
+    source_ref_type: str | None = None,
+    source_ref_id: str | None = None,
+    reason: str | None = None,
+    manual_lock: bool = False,
+) -> NextHearingApplyResult:
+    source_value = str(source.value if isinstance(source, MatterNextHearingSource) else source)
+    if matter.next_hearing_on is None:
+        return NextHearingApplyResult(applied=False, reason="unchanged")
+
+    old_date = matter.next_hearing_on
+    matter.next_hearing_on = None
+    matter.next_hearing_source = source_value
+    matter.next_hearing_source_ref_type = source_ref_type
+    matter.next_hearing_source_ref_id = source_ref_id
+    matter.next_hearing_updated_by_membership_id = actor_membership_id
+    matter.next_hearing_updated_at = datetime.now(UTC)
+    matter.next_hearing_manual_lock = manual_lock
+    session.add(matter)
+    history = MatterNextHearingHistory(
+        company_id=matter.company_id,
+        matter_id=matter.id,
+        old_date=old_date,
+        new_date=None,
+        source=source_value,
+        source_ref_type=source_ref_type,
+        source_ref_id=source_ref_id,
+        changed_by_membership_id=actor_membership_id,
+        change_reason=reason,
+        manual_lock=matter.next_hearing_manual_lock,
+    )
+    session.add(history)
+    session.flush()
+    _audit_next_hearing(
+        session,
+        context=context,
+        company_id=matter.company_id,
+        actor_membership_id=actor_membership_id,
+        action="matter.next_hearing.cleared",
+        target_type="matter_next_hearing_history",
+        target_id=history.id,
+        matter_id=matter.id,
+        metadata={
+            "before": old_date.isoformat() if old_date else None,
+            "after": None,
+            "source": source_value,
+            "source_ref_type": source_ref_type,
+            "source_ref_id": source_ref_id,
+            "manual_lock": matter.next_hearing_manual_lock,
+        },
+    )
+    return NextHearingApplyResult(applied=True, reason="cleared")
+
+
 def accept_next_hearing_suggestion(
     session: Session,
     *,

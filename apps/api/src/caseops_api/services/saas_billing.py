@@ -81,6 +81,11 @@ from caseops_api.services.pine_labs import (
     redact_provider_payload,
 )
 from caseops_api.services.platform_admin import record_platform_audit
+from caseops_api.services.provider_costs import (
+    case_refresh_guardrail_warnings,
+    effective_cost_minor,
+    estimate_payment_gateway_cost_minor,
+)
 
 CATALOG_VERSION = "2026.05.v1"
 GRANDFATHERED_PLAN_CODE = "grandfathered_free"
@@ -711,15 +716,12 @@ def _calculate_amounts(price: BillingPlanPrice, quantity: int) -> tuple[int, int
     return amount, tax, amount + tax
 
 
-def _estimated_payment_gateway_cost_minor(amount_minor: int) -> int:
-    settings = get_settings()
-    fee_bps = max(
-        settings.billing_payment_gateway_fee_bps,
-        settings.pine_labs_mdr_bps_upi,
-        settings.pine_labs_mdr_bps_card,
-        settings.pine_labs_mdr_bps_netbanking,
+def _estimated_payment_gateway_cost_minor(session: Session, amount_minor: int) -> int:
+    return estimate_payment_gateway_cost_minor(
+        session,
+        amount_minor=amount_minor,
+        provider="pine_labs_plural",
     )
-    return round(amount_minor * fee_bps / 10_000) + settings.pine_labs_fixed_fee_minor
 
 
 def _merchant_reference(company: Company, plan_code: str) -> str:
@@ -998,7 +1000,8 @@ def _create_or_update_profit_rollup(
         )
     )
     gateway_cost = _estimated_payment_gateway_cost_minor(
-        order.amount_paid_minor or checkout.total_amount_minor
+        session,
+        order.amount_paid_minor or checkout.total_amount_minor,
     )
     if row is None:
         row = BillingProfitRollup(
@@ -1194,7 +1197,10 @@ def _record_usage_event_for_payment(
             usage_type="payment_gateway",
             quantity=1,
             unit="order",
-            estimated_cost_minor=_estimated_payment_gateway_cost_minor(order.amount_paid_minor),
+            estimated_cost_minor=_estimated_payment_gateway_cost_minor(
+                session,
+                order.amount_paid_minor,
+            ),
             source_type="billing_payment_order",
             source_id=order.id,
             metadata_json={"source": source},
@@ -1303,6 +1309,11 @@ def debit_ai_credits(
         return
     entitlements = resolve_entitlements(session, subscription)
     if entitlements.get("ai_credits_monthly") is None:
+        llm_cost_minor, _ = effective_cost_minor(
+            session,
+            category="llm",
+            provider=get_settings().llm_provider or "llm",
+        )
         record_usage(
             session,
             company_id=company_id,
@@ -1314,7 +1325,7 @@ def debit_ai_credits(
             actor_membership_id=actor_membership_id,
             matter_id=matter_id,
             credits_debited=credits,
-            estimated_cost_minor=credits * get_settings().billing_llm_cost_minor_per_credit,
+            estimated_cost_minor=credits * llm_cost_minor,
             purpose=purpose,
             display_label=purpose.replace("_", " ").title(),
             source_type=source_object_type,
@@ -1333,6 +1344,11 @@ def debit_ai_credits(
         source_object_id=source_object_id,
         actor_membership_id=actor_membership_id,
     )
+    llm_cost_minor, _ = effective_cost_minor(
+        session,
+        category="llm",
+        provider=get_settings().llm_provider or "llm",
+    )
     record_usage(
         session,
         company_id=company_id,
@@ -1344,7 +1360,7 @@ def debit_ai_credits(
         actor_membership_id=actor_membership_id,
         matter_id=matter_id,
         credits_debited=credits,
-        estimated_cost_minor=credits * get_settings().billing_llm_cost_minor_per_credit,
+        estimated_cost_minor=credits * llm_cost_minor,
         purpose=purpose,
         display_label=purpose.replace("_", " ").title(),
         source_type=source_object_type,
@@ -1479,6 +1495,11 @@ def record_manual_refresh_usage(
     subscription = _subscription_for_gate(session, context.company)
     if subscription is None:
         return
+    case_refresh_cost_minor, _ = effective_cost_minor(
+        session,
+        category="case_refresh",
+        provider="case_tracking",
+    )
     record_usage(
         session,
         company_id=context.company.id,
@@ -1489,7 +1510,7 @@ def record_manual_refresh_usage(
         unit="refresh",
         actor_membership_id=context.membership.id,
         tracked_case_id=tracked_case_id,
-        estimated_cost_minor=get_settings().billing_case_refresh_cost_minor,
+        estimated_cost_minor=case_refresh_cost_minor,
         display_label="Manual case refresh",
         source_type="tracked_case",
         source_id=tracked_case_id,
@@ -2210,6 +2231,7 @@ def platform_overview(session: Session) -> PlatformOverviewResponse:
         if row.gross_profit_minor < 0
         or (row.gross_margin_bps is not None and row.gross_margin_bps < 4000)
     ]
+    alerts.extend(case_refresh_guardrail_warnings(session))
     return PlatformOverviewResponse(
         mrr_minor=mrr,
         arr_minor=mrr * 12,

@@ -68,6 +68,11 @@ PUBLIC_MUTATING_ROUTES: set[tuple[str, str]] = {
     # (SendGrid is a third party), so a role/capability guard would
     # reject every legitimate event.
     ("POST", "/api/webhooks/sendgrid/events"),
+    # Gmail Pub/Sub push webhook (BUG-053) - verified by
+    # CASEOPS_GMAIL_WEBHOOK_VERIFICATION_TOKEN and mapped back to the
+    # tenant by connected mailbox display_email. Raw payloads are hashed
+    # before persistence and no browser session exists for Google.
+    ("POST", "/api/mailbox/gmail/webhook"),
     # Phase C-1 (2026-04-24, MOD-TS-014) — portal sign-in surface.
     # request-link is intentionally unauthenticated and returns the
     # same response on hit/miss to defeat email enumeration.

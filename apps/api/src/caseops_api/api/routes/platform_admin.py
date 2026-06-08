@@ -9,6 +9,16 @@ from sqlalchemy import select
 
 from caseops_api.api.dependencies import DbSession, get_current_context
 from caseops_api.db.models import BillingEnrollment, PlatformAdminMembership
+from caseops_api.schemas.integrations import ConnectorRegistryResponse
+from caseops_api.schemas.provider_costs import (
+    MarginSimulationListResponse,
+    MarginSimulationRecord,
+    MarginSimulationRunRequest,
+    ProviderCostProfileCreateRequest,
+    ProviderCostProfileListResponse,
+    ProviderCostProfileRecord,
+    ProviderCostProfileUpdateRequest,
+)
 from caseops_api.schemas.saas_billing import (
     PlatformCouponCreateRequest,
     PlatformGrantCreditsRequest,
@@ -20,9 +30,17 @@ from caseops_api.schemas.saas_billing import (
     PlatformSubscriptionMutation,
 )
 from caseops_api.services.identity import SessionContext
+from caseops_api.services.integrations import connector_registry
 from caseops_api.services.platform_admin import (
     record_platform_audit,
     require_platform_admin,
+)
+from caseops_api.services.provider_costs import (
+    create_provider_cost_profile,
+    list_margin_simulations,
+    list_provider_cost_profiles,
+    run_margin_simulation,
+    update_provider_cost_profile,
 )
 from caseops_api.services.saas_billing import (
     platform_company_billing_detail,
@@ -81,6 +99,10 @@ PlatformPaymentReconciler = Annotated[
 PlatformPlanManager = Annotated[
     PlatformRouteContext,
     Depends(require_platform_capability("platform:plan_manage")),
+]
+PlatformUsageViewer = Annotated[
+    PlatformRouteContext,
+    Depends(require_platform_capability("platform:usage_view")),
 ]
 
 
@@ -143,6 +165,143 @@ def list_platform_enrollments(context: PlatformContext, session: DbSession) -> d
             for row in rows
         ]
     }
+
+
+@router.get("/integrations", response_model=ConnectorRegistryResponse)
+def get_platform_integrations(
+    context: PlatformContext,
+    session: DbSession,
+) -> ConnectorRegistryResponse:
+    platform_admin = require_platform_admin(session, context, capability="platform:usage_view")
+    connectors = connector_registry(session, context=context, platform=True)
+    record_platform_audit(
+        session,
+        context=context,
+        platform_admin=platform_admin,
+        action="platform.integrations.viewed",
+        target_type="connector_registry",
+        metadata={"connector_count": len(connectors)},
+    )
+    session.commit()
+    return ConnectorRegistryResponse(connectors=connectors)
+
+
+@router.get("/cost-profiles", response_model=ProviderCostProfileListResponse)
+def get_provider_cost_profiles(
+    context: PlatformContext,
+    session: DbSession,
+) -> ProviderCostProfileListResponse:
+    platform_admin = require_platform_admin(session, context, capability="platform:usage_view")
+    profiles = list_provider_cost_profiles(session)
+    record_platform_audit(
+        session,
+        context=context,
+        platform_admin=platform_admin,
+        action="platform.cost_profiles.viewed",
+        target_type="provider_cost_profile",
+        metadata={"profile_count": len(profiles)},
+    )
+    session.commit()
+    return ProviderCostProfileListResponse(cost_profiles=profiles)
+
+
+@router.post("/cost-profiles", response_model=ProviderCostProfileRecord)
+def create_platform_cost_profile(
+    payload: ProviderCostProfileCreateRequest,
+    route_context: PlatformBillingManager,
+    session: DbSession,
+) -> ProviderCostProfileRecord:
+    profile = create_provider_cost_profile(
+        session,
+        payload=payload,
+        platform_admin=route_context.platform_admin,
+    )
+    record_platform_audit(
+        session,
+        context=route_context.context,
+        platform_admin=route_context.platform_admin,
+        action="platform.cost_profile.created",
+        target_type="provider_cost_profile",
+        target_id=profile.id,
+        metadata={
+            "category": profile.category,
+            "provider": profile.provider,
+            "currency": profile.currency,
+        },
+    )
+    session.commit()
+    return profile
+
+
+@router.patch("/cost-profiles/{profile_id}", response_model=ProviderCostProfileRecord)
+def patch_platform_cost_profile(
+    profile_id: str,
+    payload: ProviderCostProfileUpdateRequest,
+    route_context: PlatformBillingManager,
+    session: DbSession,
+) -> ProviderCostProfileRecord:
+    profile = update_provider_cost_profile(session, profile_id=profile_id, payload=payload)
+    record_platform_audit(
+        session,
+        context=route_context.context,
+        platform_admin=route_context.platform_admin,
+        action="platform.cost_profile.updated",
+        target_type="provider_cost_profile",
+        target_id=profile.id,
+        metadata={
+            "category": profile.category,
+            "provider": profile.provider,
+            "currency": profile.currency,
+            "status": profile.status,
+        },
+    )
+    session.commit()
+    return profile
+
+
+@router.get("/margin-simulations", response_model=MarginSimulationListResponse)
+def get_margin_simulations(
+    route_context: PlatformUsageViewer,
+    session: DbSession,
+) -> MarginSimulationListResponse:
+    simulations = list_margin_simulations(session)
+    record_platform_audit(
+        session,
+        context=route_context.context,
+        platform_admin=route_context.platform_admin,
+        action="platform.margin_simulations.viewed",
+        target_type="billing_margin_simulation",
+        metadata={"simulation_count": len(simulations)},
+    )
+    session.commit()
+    return MarginSimulationListResponse(simulations=simulations)
+
+
+@router.post("/margin-simulations/run", response_model=MarginSimulationRecord)
+def run_platform_margin_simulation(
+    payload: MarginSimulationRunRequest,
+    route_context: PlatformUsageViewer,
+    session: DbSession,
+) -> MarginSimulationRecord:
+    simulation = run_margin_simulation(
+        session,
+        payload=payload,
+        platform_admin=route_context.platform_admin,
+    )
+    record_platform_audit(
+        session,
+        context=route_context.context,
+        platform_admin=route_context.platform_admin,
+        action="platform.margin_simulation.ran",
+        target_type="billing_margin_simulation",
+        target_id=simulation.id,
+        metadata={
+            "scenario_name": simulation.scenario_name,
+            "warning_count": len(simulation.warnings),
+        },
+    )
+    session.commit()
+    return simulation
 
 
 @router.get("/companies/profitability")

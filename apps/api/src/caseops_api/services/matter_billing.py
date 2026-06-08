@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import dataclass
 from datetime import timedelta
 from decimal import ROUND_HALF_UP, Decimal
@@ -29,7 +30,7 @@ from caseops_api.schemas.matter_billing import (
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.identity import SessionContext
 
-PDF_TEMPLATE_VERSION = "caseops-matter-invoice-gst-v1"
+PDF_TEMPLATE_VERSION = "caseops-matter-invoice-receipt-v2"
 
 
 @dataclass(frozen=True, slots=True)
@@ -525,7 +526,15 @@ def render_invoice_pdf(
     matter = invoice.matter or session.get(Matter, invoice.matter_id)
     pdf = FPDF(format="A4", unit="mm")
     pdf.set_auto_page_break(auto=True, margin=16)
+    pdf.set_title(f"CaseOps matter invoice {invoice.invoice_number}")
+    pdf.set_author(invoice.firm_legal_name or "CaseOps")
     pdf.add_page()
+    pdf.set_fill_color(17, 24, 39)
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.cell(0, 9, "Tax Invoice / Receipt", fill=True, new_x="LMARGIN", new_y="NEXT")
+    pdf.set_text_color(17, 24, 39)
+    pdf.ln(3)
     pdf.set_font("Helvetica", "B", 15)
     pdf.cell(0, 8, invoice.firm_legal_name or "Invoice", new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", "", 9)
@@ -537,7 +546,7 @@ def render_invoice_pdf(
         pdf.cell(0, 5, f"PAN: {invoice.firm_pan}", new_x="LMARGIN", new_y="NEXT")
     pdf.ln(4)
     pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(0, 8, "Matter Invoice", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 8, "Matter billing receipt", new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", "", 9)
     pdf.cell(95, 5, f"Invoice No: {invoice.invoice_number}")
     pdf.cell(
@@ -553,6 +562,15 @@ def render_invoice_pdf(
         0,
         5,
         f"Place of Supply: {invoice.place_of_supply or 'Not available'}",
+        new_x="LMARGIN",
+        new_y="NEXT",
+    )
+    receipt_status = "Paid" if invoice.balance_due_minor <= 0 else "Balance due"
+    pdf.cell(95, 5, f"Receipt Status: {receipt_status}")
+    pdf.cell(
+        0,
+        5,
+        f"Outstanding: {_format_minor(invoice.balance_due_minor, invoice.currency)}",
         new_x="LMARGIN",
         new_y="NEXT",
     )
@@ -640,7 +658,7 @@ def render_invoice_pdf(
     pdf.cell(0, 5, f"Page {pdf.page_no()}", align="C")
     body = bytes(pdf.output())
     checksum = hashlib.sha256(body).hexdigest()
-    filename = f"invoice-{invoice.invoice_number}.pdf"
+    filename = _safe_invoice_filename(invoice.invoice_number)
     export = MatterInvoiceExport(
         company_id=invoice.company_id,
         matter_id=invoice.matter_id,
@@ -674,3 +692,8 @@ def render_invoice_pdf(
 def _format_minor(amount_minor: int | None, currency: str) -> str:
     amount = Decimal(amount_minor or 0) / Decimal(100)
     return f"{currency} {amount:,.2f}"
+
+
+def _safe_invoice_filename(invoice_number: str) -> str:
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "-", invoice_number.strip()).strip(".-")
+    return f"caseops-matter-invoice-{slug or 'receipt'}.pdf"

@@ -175,6 +175,22 @@ class Settings(BaseSettings):
     outlook_tenant_id: str = Field(default="organizations")
     outlook_redirect_uri: str | None = Field(default=None)
 
+    # BUG-053 / Google Calendar V1. Manual CaseOps-to-Google hearing
+    # sync is enabled only when all three OAuth settings are present.
+    # Missing config reports a blocked connector and must not call Google.
+    google_calendar_client_id: str | None = Field(default=None)
+    google_calendar_client_secret: str | None = Field(default=None)
+    google_calendar_redirect_uri: str | None = Field(default=None)
+    google_calendar_webhook_token: str | None = Field(default=None)
+
+    # ADP-22 Gmail mailbox ingestion. Disabled unless OAuth settings are
+    # present; Pub/Sub/webhook config is required before watch/webhook processing.
+    gmail_client_id: str | None = Field(default=None)
+    gmail_client_secret: str | None = Field(default=None)
+    gmail_redirect_uri: str | None = Field(default=None)
+    gmail_pubsub_topic: str | None = Field(default=None)
+    gmail_webhook_verification_token: str | None = Field(default=None)
+
     # ADP-12: Google Drive bounded manual import. Provider config
     # status fails closed (configured=False) when any of these is
     # unset. No OAuth flow, token storage, or external Google API

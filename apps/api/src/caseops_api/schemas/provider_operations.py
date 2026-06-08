@@ -9,6 +9,8 @@ ProviderOperationKind = Literal[
     "calendar_sync",
     "notification_delivery",
     "case_tracking_poll",
+    "mailbox_message_import",
+    "mailbox_webhook",
 ]
 ProviderOperatorState = Literal["open", "ignored", "resolved"]
 ProviderOperationAction = Literal["replay", "ignore", "mark_resolved"]

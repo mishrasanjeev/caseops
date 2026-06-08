@@ -19,7 +19,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 CalendarEventKind = Literal["hearing", "task", "deadline"]
-CalendarProviderLiteral = Literal["outlook"]
+CalendarProviderLiteral = Literal["outlook", "google_calendar"]
 CalendarConnectionStatusLiteral = Literal["connected", "revoked", "error"]
 CalendarSyncSourceTypeLiteral = Literal["matter_hearing", "matter_deadline", "matter_task"]
 CalendarEventSyncStatusLiteral = Literal[

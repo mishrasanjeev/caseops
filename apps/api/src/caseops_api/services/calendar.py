@@ -28,6 +28,7 @@ from caseops_api.db.models import (
     Matter,
     MatterDeadline,
     MatterHearing,
+    MatterHearingStatus,
     MatterTask,
 )
 from caseops_api.schemas.calendar import (
@@ -87,6 +88,7 @@ def _collect_hearings(
             visible_matters_filter(session, context=context),
             MatterHearing.hearing_on >= range_from,
             MatterHearing.hearing_on <= range_to,
+            MatterHearing.status != MatterHearingStatus.CANCELLED,
         )
     ).all()
     out: list[CalendarEventRecord] = []
@@ -193,8 +195,7 @@ def render_events_as_ical(
     calendar_name: str = "CaseOps",
 ) -> str:
     """Serialise ``CalendarEventRecord`` rows as an RFC 5545 VCALENDAR
-    stream for subscribe-by-URL (Google Calendar, Outlook, Apple
-    Calendar).
+    stream for authenticated browser download/import.
 
     All events are date-granular — VALUE=DATE with DTSTART and
     DTEND on consecutive days. RFC 5545 line folding at 75 octets is

@@ -17,9 +17,12 @@ from caseops_api.api.routes import (
     contracts,
     courts,
     drafting,
+    drive,
     email_templates,
     health,
     intake,
+    integrations,
+    mailbox,
     matter_billing,
     matter_tags,
     matters,
@@ -72,6 +75,11 @@ api_router.include_router(
     tags=["provider-operations"],
 )
 api_router.include_router(
+    integrations.router,
+    prefix="/admin/integrations",
+    tags=["integrations"],
+)
+api_router.include_router(
     matter_billing.router,
     prefix="/admin/matter-billing",
     tags=["matter-billing"],
@@ -90,6 +98,8 @@ api_router.include_router(clients.router, prefix="/clients", tags=["clients"])
 # Phase B / J08 / M08 - unified calendar feed across hearings,
 # tasks, and the generic matter_deadlines table.
 api_router.include_router(calendar.router, prefix="/calendar", tags=["calendar"])
+api_router.include_router(mailbox.router, prefix="/mailbox", tags=["mailbox"])
+api_router.include_router(drive.router, prefix="/drive", tags=["drive"])
 # Phase B / J12 / M11 - communications log mounted under /matters
 # so the URL shape stays consistent with the cockpit's other tabs.
 api_router.include_router(

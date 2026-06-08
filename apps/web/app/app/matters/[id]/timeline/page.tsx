@@ -102,8 +102,11 @@ function hearingDate(hearing: WorkspaceHearing): string | null | undefined {
 
 function splitHearings(hearings: WorkspaceHearing[]) {
   const completed = hearings.filter((hearing) => hearing.status === "completed");
-  const upcoming = hearings.filter((hearing) => hearing.status !== "completed");
-  return { completed, upcoming };
+  const cancelled = hearings.filter((hearing) => hearing.status === "cancelled");
+  const upcoming = hearings.filter(
+    (hearing) => hearing.status !== "completed" && hearing.status !== "cancelled",
+  );
+  return { cancelled, completed, upcoming };
 }
 
 function eventIcon(type: string) {
@@ -131,7 +134,7 @@ export default function MatterTimelinePage() {
     enabled: Boolean(matterId),
   });
 
-  const { completed, upcoming } = useMemo(
+  const { cancelled, completed, upcoming } = useMemo(
     () => splitHearings(workspace?.hearings ?? []),
     [workspace?.hearings],
   );
@@ -142,6 +145,7 @@ export default function MatterTimelinePage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <HearingSection title="Upcoming hearings" hearings={upcoming} />
         <HearingSection title="Completed hearings" hearings={completed} completed />
+        <HearingSection title="Cancelled hearings" hearings={cancelled} cancelled />
       </div>
 
       <Card>
@@ -211,17 +215,23 @@ function HearingSection({
   title,
   hearings,
   completed = false,
+  cancelled = false,
 }: {
   title: string;
   hearings: WorkspaceHearing[];
   completed?: boolean;
+  cancelled?: boolean;
 }) {
   return (
     <Card>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
         <CardDescription>
-          {completed ? "Closed listings on this matter." : "Active listings and adjourned dates."}
+          {cancelled
+            ? "Listings removed from active calendars and reminder queues."
+            : completed
+              ? "Closed listings on this matter."
+              : "Active listings and adjourned dates."}
         </CardDescription>
       </CardHeader>
       <CardContent>

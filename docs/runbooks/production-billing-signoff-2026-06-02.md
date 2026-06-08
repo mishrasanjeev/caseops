@@ -21,6 +21,9 @@ platform-admin billing visibility, and Pine Labs disabled-state safety.
 | Platform admin | Founder-only smoke pending | Founder |
 | Tenant billing | Smoke pending on designated smoke tenant | Founder/operator |
 | Tenant downloads/exports | Smoke pending on designated smoke tenant | Founder/operator |
+| Tenant integrations registry | Smoke pending on designated smoke tenant | Founder/operator |
+| Platform integrations/costs | Founder-only smoke pending | Founder |
+| Margin simulation evidence | Founder-only smoke pending | Founder |
 | Internal cost/profit leakage | Smoke pending | Founder/operator |
 | Backup/migration/deploy evidence | Pending attachment | Operator |
 
@@ -76,10 +79,13 @@ screenshots, or operational metadata that should not be committed.
 | API deploy evidence | Cloud Run revision/build id and deploy timestamp |
 | Web deploy evidence | Cloud Run/hosting revision and deploy timestamp |
 | Migration evidence | Migration job id/log showing `20260531_0001` success |
+| Cost-profile migration evidence | Migration job id/log showing `20260608_0001` success, if deployed |
 | Backup evidence | Snapshot/PITR timestamp before migration/deploy |
 | Rollback evidence | Last known previous revision and DB rollback posture |
 | Smoke tenant | Company slug/id, not customer-sensitive |
 | Founder smoke account | Founder email only if already public/approved |
+| Cost-profile evidence | Source name only, effective date, category, unit minor/BPS; no invoices with secrets |
+| Margin simulation evidence | Scenario name, revenue/cost/margin output, warnings, screenshot/link stored externally |
 
 ## Founder-Only Platform Admin Smoke
 
@@ -90,17 +96,90 @@ screenshots, or operational metadata that should not be committed.
 5. Confirm profit/revenue tables and export buttons are visible.
 6. Open `/app/platform-admin/provider-events`.
 7. Confirm provider-event search loads without requiring Pine Labs live mode.
-8. Sign in as a tenant owner/admin that is not the configured founder.
-9. Open `/app/platform-admin`.
-10. Confirm access denied.
-11. Confirm backend route denial with a non-founder token for at least:
+8. Open `/app/platform-admin/integrations`.
+9. Confirm connector readiness includes Pine Labs, SendGrid, SMS, WhatsApp,
+   case tracking, PRS/legal updates, Temporal, ClamAV, and storage.
+10. Open `/app/platform-admin/costs`.
+11. Confirm existing cost profiles load, and run a no-side-effect margin
+    simulation using founder-approved test quantities.
+12. Confirm case-refresh cost warnings appear when the configured actual cost is
+    INR 0.10 or more per tracked-case refresh equivalent.
+13. Sign in as a tenant owner/admin that is not the configured founder.
+14. Open `/app/platform-admin`.
+15. Confirm access denied.
+16. Confirm backend route denial with a non-founder token for at least:
     - `GET /api/platform-admin/overview`
+    - `GET /api/platform-admin/integrations`
+    - `GET /api/platform-admin/cost-profiles`
+    - `GET /api/platform-admin/margin-simulations`
     - `GET /api/platform-admin/profit/export`
     - `GET /api/platform-admin/provider-events`
-12. Confirm platform access and denials write audit rows.
+17. Confirm platform access and denials write audit rows.
 
 Expected result: only the configured founder has platform-admin access. Tenant
 owner/admin roles alone do not grant platform-admin capabilities.
+
+## Tenant Integrations Smoke
+
+Run this only on the designated smoke tenant.
+
+1. Sign in as a workspace owner/admin.
+2. Open `/app/admin/integrations`.
+3. Call or inspect `GET /api/admin/integrations`.
+4. Confirm the connector list includes:
+   - Outlook calendar
+   - Microsoft mailbox readiness
+   - Gmail
+   - Google Calendar
+   - Google Drive
+   - Pine Labs
+   - SendGrid
+   - SMS
+   - WhatsApp
+   - Case tracking provider
+   - PRS/legal updates
+   - Temporal
+   - ClamAV
+   - Storage
+5. Confirm missing credentials show disabled or blocked state and no provider
+   calls occur.
+6. Confirm response fields are safe names/status only and do not include
+   platform cost/risk labels, secrets, tokens, raw signatures, provider raw
+   payloads, internal fees, gross profit, or gross margin.
+7. Confirm the registry view writes a tenant audit row
+   `connector_registry.viewed`.
+
+Expected result: tenant admins can understand integration readiness without
+seeing platform-only costs, profit, or secret material.
+
+## Founder Cost And Margin Smoke
+
+Run only as the configured founder/company-owner.
+
+1. Open `/app/platform-admin/costs`.
+2. Call or inspect `GET /api/platform-admin/cost-profiles`.
+3. Create or update only founder-approved non-secret cost-profile records:
+   - category
+   - provider label
+   - currency `INR`
+   - unit minor amount or BPS
+   - effective date
+   - source name
+   - notes without secrets or invoice payloads
+4. Run `POST /api/platform-admin/margin-simulations/run` with smoke quantities.
+5. Confirm the saved simulation appears in
+   `GET /api/platform-admin/margin-simulations`.
+6. Confirm actions write platform audit rows:
+   - `platform.cost_profiles.viewed`
+   - `platform.cost_profile.created`
+   - `platform.cost_profile.updated`, if updated
+   - `platform.margin_simulation.ran`
+7. Confirm tenant APIs and pages do not expose the cost profile or simulation
+   fields.
+
+Expected result: configured actual costs are visible only to founder platform
+admin and are used by founder-only calculations, with fallback defaults when no
+actual profile exists.
 
 ## Tenant Billing Smoke
 
@@ -230,6 +309,8 @@ customer-sensitive data.
 | Founder-only platform admin smoke | Pending |  |  |
 | Tenant billing smoke | Pending |  |  |
 | Tenant downloads/exports | Pending |  |  |
+| Tenant integrations registry | Pending |  |  |
+| Founder integrations/costs/margin simulation | Pending |  |  |
 | Pine Labs disabled-state verification | Pending |  |  |
 | No tenant cost/profit leakage | Pending |  |  |
 | Backup/migration/deploy evidence | Pending |  |  |

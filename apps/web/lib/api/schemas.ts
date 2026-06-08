@@ -1985,6 +1985,7 @@ export type OutsideCounselWorkspace = z.infer<typeof outsideCounselWorkspace>;
 
 // Phase B / J08 / M08 — unified calendar feed.
 export const calendarEventKind = z.enum(["hearing", "task", "deadline"]);
+export const calendarProvider = z.enum(["outlook", "google_calendar"]);
 
 export const calendarEventRecord = z.object({
   id: z.string(),
@@ -2008,7 +2009,7 @@ export const calendarConnectionRecord = z.object({
   id: z.string(),
   company_id: z.string(),
   membership_id: z.string(),
-  provider: z.literal("outlook"),
+  provider: calendarProvider,
   provider_account_id: z.string().nullable(),
   display_email: z.string().nullable(),
   status: z.enum(["connected", "revoked", "error"]),
@@ -2020,7 +2021,7 @@ export const calendarConnectionRecord = z.object({
 });
 
 export const calendarConnectionListResponse = z.object({
-  provider: z.literal("outlook").default("outlook"),
+  provider: calendarProvider.default("outlook"),
   provider_available: z.boolean(),
   unavailable_reason: z.string().nullable().optional(),
   durable_automation: z.enum([
@@ -2031,7 +2032,7 @@ export const calendarConnectionListResponse = z.object({
 });
 
 export const calendarConnectionStartResponse = z.object({
-  provider: z.literal("outlook").default("outlook"),
+  provider: calendarProvider.default("outlook"),
   provider_available: z.boolean(),
   auth_url: z.string().nullable().optional(),
   unavailable_reason: z.string().nullable().optional(),
@@ -2067,7 +2068,7 @@ export const calendarEventSyncResponse = z.object({
 });
 
 export const calendarProviderConfigStatus = z.object({
-  provider: z.literal("outlook").default("outlook"),
+  provider: calendarProvider.default("outlook"),
   configured: z.boolean(),
   missing_config_names: z.array(z.string()).default([]),
 });
@@ -2093,7 +2094,7 @@ export const calendarSyncConflictCandidate = z.object({
   id: z.string(),
   conflict_type: z.literal("duplicate_provider_event_id"),
   severity: z.literal("review").default("review"),
-  provider: z.literal("outlook").default("outlook"),
+  provider: calendarProvider.default("outlook"),
   calendar_connection_id: z.string(),
   provider_event_id: z.string(),
   duplicate_count: z.number().int().min(2),
@@ -2217,7 +2218,13 @@ export const outlookBulkSyncResponse = z.object({
 
 export const providerOperationRecord = z.object({
   id: z.string(),
-  job_kind: z.enum(["calendar_sync", "notification_delivery"]),
+  job_kind: z.enum([
+    "calendar_sync",
+    "notification_delivery",
+    "case_tracking_poll",
+    "mailbox_message_import",
+    "mailbox_webhook",
+  ]),
   provider: z.string(),
   company_id: z.string(),
   matter_id: z.string().nullable(),
@@ -2308,6 +2315,222 @@ export const notificationRuleListResponse = z.object({
   rules: z.array(notificationRuleRecord),
 });
 
+export const mailboxConnectionRecord = z.object({
+  id: z.string(),
+  company_id: z.string(),
+  membership_id: z.string(),
+  provider: z.literal("gmail"),
+  provider_account_id: z.string().nullable(),
+  display_email: z.string().nullable(),
+  status: z.enum(["connected", "revoked", "error"]),
+  scopes: z.array(z.string()).default([]),
+  last_history_id: z.string().nullable().optional(),
+  watch_expires_at: z.string().nullable().optional(),
+  last_import_at: z.string().nullable().optional(),
+  connected_at: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const mailboxStatusResponse = z.object({
+  provider: z.literal("gmail").default("gmail"),
+  configured: z.boolean(),
+  webhook_configured: z.boolean(),
+  missing_config_names: z.array(z.string()).default([]),
+  missing_webhook_config_names: z.array(z.string()).default([]),
+  connections: z.array(mailboxConnectionRecord),
+});
+
+export const mailboxConnectionStartResponse = z.object({
+  provider: z.literal("gmail").default("gmail"),
+  provider_available: z.boolean(),
+  auth_url: z.string().nullable().optional(),
+  unavailable_reason: z.string().nullable().optional(),
+});
+
+export const mailboxImportSummary = z.object({
+  imported: z.number().int().min(0),
+  unmatched: z.number().int().min(0),
+  duplicate: z.number().int().min(0),
+  failed: z.number().int().min(0),
+  attachment_candidates: z.number().int().min(0),
+});
+
+export const mailboxMessageImportRecord = z.object({
+  id: z.string(),
+  company_id: z.string(),
+  mailbox_connection_id: z.string(),
+  provider: z.literal("gmail").default("gmail"),
+  matter_id: z.string().nullable(),
+  communication_id: z.string().nullable(),
+  provider_message_id: z.string(),
+  provider_thread_id: z.string().nullable(),
+  subject: z.string().nullable(),
+  sender_name: z.string().nullable(),
+  occurred_at: z.string().nullable(),
+  snippet: z.string().nullable(),
+  labels: z.array(z.string()).default([]),
+  attachment_count: z.number().int().min(0),
+  status: z.enum([
+    "queued",
+    "imported",
+    "unmatched",
+    "duplicate",
+    "failed",
+    "dead_letter",
+    "ignored",
+    "resolved",
+  ]),
+  last_error_redacted: z.string().nullable(),
+  attempts: z.number().int().min(0),
+  max_attempts: z.number().int().min(1),
+  next_attempt_at: z.string().nullable(),
+  dead_letter_reason: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const mailboxImportResponse = z.object({
+  summary: mailboxImportSummary,
+  imports: z.array(mailboxMessageImportRecord),
+});
+
+export const mailboxWatchResponse = z.object({
+  provider: z.literal("gmail").default("gmail"),
+  watch_started: z.boolean(),
+  webhook_configured: z.boolean(),
+  history_id: z.string().nullable().optional(),
+  watch_expires_at: z.string().nullable().optional(),
+  missing_config_names: z.array(z.string()).default([]),
+});
+
+export const googleDriveConnectionRecord = z.object({
+  id: z.string(),
+  company_id: z.string(),
+  membership_id: z.string(),
+  provider: z.literal("google_drive").default("google_drive"),
+  provider_account_id: z.string().nullable(),
+  display_email: z.string().nullable(),
+  status: z.enum(["connected", "revoked", "error"]),
+  scopes: z.array(z.string()).default([]),
+  connected_at: z.string().nullable(),
+  last_list_at: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const googleDriveStatusResponse = z.object({
+  provider: z.literal("google_drive").default("google_drive"),
+  configured: z.boolean(),
+  missing_config_names: z.array(z.string()).default([]),
+  connections: z.array(googleDriveConnectionRecord),
+});
+
+export const googleDriveConnectionStartResponse = z.object({
+  provider: z.literal("google_drive").default("google_drive"),
+  provider_available: z.boolean(),
+  auth_url: z.string().nullable().optional(),
+  unavailable_reason: z.string().nullable().optional(),
+});
+
+export const googleDriveFileRecord = z.object({
+  provider_file_id: z.string(),
+  name: z.string(),
+  mime_type: z.string().nullable(),
+  size_bytes: z.number().int().nonnegative().nullable(),
+  modified_time: z.string().nullable(),
+  web_url: z.string().nullable(),
+});
+
+export const googleDriveFileListResponse = z.object({
+  provider: z.literal("google_drive").default("google_drive"),
+  connection_id: z.string(),
+  files: z.array(googleDriveFileRecord),
+});
+
+export const tenantConnectorRecord = z.object({
+  key: z.string(),
+  name: z.string(),
+  category: z.string(),
+  provider: z.string(),
+  status: z.enum(["healthy", "degraded", "blocked", "disabled", "configured"]),
+  enabled: z.boolean(),
+  configured: z.boolean(),
+  blocked: z.boolean(),
+  healthy: z.boolean(),
+  degraded: z.boolean(),
+  last_success: z.string().nullable(),
+  last_failure: z.string().nullable(),
+  next_run: z.string().nullable(),
+  webhook_status: z.string().nullable(),
+  token_expiry: z.string().nullable(),
+  required_config_names: z.array(z.string()).default([]),
+  scopes: z.array(z.string()).default([]),
+  runbook_link: z.string().nullable(),
+  provider_operations_link: z.string().nullable(),
+});
+
+export const connectorRecord = tenantConnectorRecord.extend({
+  internal_cost_label: z.string().nullable(),
+  risk_label: z.string().nullable(),
+  platform_notes: z.array(z.string()).default([]),
+});
+
+export const tenantConnectorRegistryResponse = z.object({
+  connectors: z.array(tenantConnectorRecord),
+});
+
+export const connectorRegistryResponse = z.object({
+  connectors: z.array(connectorRecord),
+});
+
+export const providerCostProfileRecord = z.object({
+  id: z.string(),
+  category: z.enum([
+    "case_refresh",
+    "llm",
+    "embedding",
+    "document_processing",
+    "storage",
+    "payment_mdr",
+    "payment_fixed_fee",
+    "sms",
+    "whatsapp",
+    "manual_support",
+  ]),
+  provider: z.string(),
+  currency: z.literal("INR"),
+  unit_amount_minor: z.number().int().nullable(),
+  unit_amount_bps: z.number().int().nullable(),
+  effective_from: z.string(),
+  effective_until: z.string().nullable(),
+  status: z.enum(["active", "inactive"]),
+  source: z.string().nullable(),
+  notes: z.string().nullable(),
+  created_by_platform_admin_id: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const providerCostProfileListResponse = z.object({
+  cost_profiles: z.array(providerCostProfileRecord),
+});
+
+export const marginSimulationRecord = z.object({
+  id: z.string(),
+  scenario_name: z.string().nullable(),
+  currency: z.literal("INR"),
+  input: z.record(z.string(), z.unknown()),
+  result: z.record(z.string(), z.unknown()),
+  warnings: z.array(z.record(z.string(), z.unknown())),
+  run_by_platform_admin_id: z.string().nullable(),
+  created_at: z.string(),
+});
+
+export const marginSimulationListResponse = z.object({
+  simulations: z.array(marginSimulationRecord),
+});
+
 export type CalendarEventKind = z.infer<typeof calendarEventKind>;
 export type CalendarEventRecord = z.infer<typeof calendarEventRecord>;
 export type CalendarEventListResponse = z.infer<typeof calendarEventListResponse>;
@@ -2337,8 +2560,34 @@ export type ProviderOperationActionResponse =
 export type ProviderReadinessRecord = z.infer<typeof providerReadinessRecord>;
 export type ProviderReadinessListResponse =
   z.infer<typeof providerReadinessListResponse>;
+export type MailboxConnectionRecord = z.infer<typeof mailboxConnectionRecord>;
+export type MailboxStatusResponse = z.infer<typeof mailboxStatusResponse>;
+export type MailboxConnectionStartResponse = z.infer<
+  typeof mailboxConnectionStartResponse
+>;
+export type MailboxImportResponse = z.infer<typeof mailboxImportResponse>;
+export type MailboxWatchResponse = z.infer<typeof mailboxWatchResponse>;
+export type GoogleDriveConnectionRecord = z.infer<typeof googleDriveConnectionRecord>;
+export type GoogleDriveStatusResponse = z.infer<typeof googleDriveStatusResponse>;
+export type GoogleDriveConnectionStartResponse = z.infer<
+  typeof googleDriveConnectionStartResponse
+>;
+export type GoogleDriveFileRecord = z.infer<typeof googleDriveFileRecord>;
+export type GoogleDriveFileListResponse = z.infer<typeof googleDriveFileListResponse>;
 export type NotificationRuleRecord = z.infer<typeof notificationRuleRecord>;
 export type NotificationRuleListResponse = z.infer<typeof notificationRuleListResponse>;
+export type TenantConnectorRecord = z.infer<typeof tenantConnectorRecord>;
+export type ConnectorRecord = z.infer<typeof connectorRecord>;
+export type TenantConnectorRegistryResponse = z.infer<
+  typeof tenantConnectorRegistryResponse
+>;
+export type ConnectorRegistryResponse = z.infer<typeof connectorRegistryResponse>;
+export type ProviderCostProfileRecord = z.infer<typeof providerCostProfileRecord>;
+export type ProviderCostProfileListResponse = z.infer<
+  typeof providerCostProfileListResponse
+>;
+export type MarginSimulationRecord = z.infer<typeof marginSimulationRecord>;
+export type MarginSimulationListResponse = z.infer<typeof marginSimulationListResponse>;
 
 // Phase B / J12 / M11 — communications log.
 export const communicationDirection = z.enum(["outbound", "inbound"]);

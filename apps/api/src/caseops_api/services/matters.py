@@ -26,6 +26,7 @@ from caseops_api.db.models import (
     MatterCourtSyncJob,
     MatterCourtSyncRun,
     MatterHearing,
+    MatterHearingStatus,
     MatterInvoice,
     MatterInvoiceLineItem,
     MatterInvoicePaymentAttempt,
@@ -106,7 +107,7 @@ from caseops_api.services.matter_billing import (
     resolve_time_entry_rate,
 )
 from caseops_api.services.matter_tags import slugify_tag
-from caseops_api.services.next_hearing import apply_next_hearing_update
+from caseops_api.services.next_hearing import apply_next_hearing_update, clear_next_hearing
 from caseops_api.services.storage_governance import (
     StorageQuotaExceeded,
     assert_storage_quota_allows_upload,
@@ -1970,19 +1971,20 @@ def update_matter_hearing(
         hearing.outcome_note = payload.outcome_note.strip() or None
     if payload.hearing_on is not None:
         hearing.hearing_on = payload.hearing_on
-        apply_next_hearing_update(
-            session,
-            matter=matter,
-            new_date=payload.hearing_on,
-            source="manual",
-            actor_membership_id=context.membership.id,
-            context=context,
-            source_ref_type="matter_hearing",
-            source_ref_id=hearing.id,
-            reason="hearing_updated",
-            manual_lock=True,
-            force=True,
-        )
+        if hearing.status not in _CLOSED_HEARING_STATUSES:
+            apply_next_hearing_update(
+                session,
+                matter=matter,
+                new_date=payload.hearing_on,
+                source="manual",
+                actor_membership_id=context.membership.id,
+                context=context,
+                source_ref_type="matter_hearing",
+                source_ref_id=hearing.id,
+                reason="hearing_updated",
+                manual_lock=True,
+                force=True,
+            )
     session.add(hearing)
     session.flush()
 
@@ -1994,22 +1996,49 @@ def update_matter_hearing(
     rescheduled = (
         payload.hearing_on is not None and payload.hearing_on != prior_hearing_on
     )
-    completed_transition = (
-        hearing.status == "completed" and prior_status != "completed"
+    completed_transition = hearing.status == "completed" and prior_status != "completed"
+    cancelled_transition = hearing.status == "cancelled" and prior_status != "cancelled"
+    closed_hearing_changed = hearing.status in _CLOSED_HEARING_STATUSES and (
+        completed_transition
+        or cancelled_transition
+        or payload.hearing_on is not None
     )
-    if rescheduled or completed_transition:
+    if closed_hearing_changed:
+        _reconcile_next_hearing_after_closed_hearing(
+            session,
+            context=context,
+            matter=matter,
+            hearing=hearing,
+            prior_hearing_on=prior_hearing_on,
+        )
+    if rescheduled or completed_transition or cancelled_transition:
         try:
             from caseops_api.services.hearing_reminders import (
                 cancel_reminders_for_hearing,
                 schedule_reminders_for_hearing,
             )
             cancel_reminders_for_hearing(session, hearing_id=hearing.id)
-            if rescheduled and hearing.status != "completed":
+            if rescheduled and hearing.status not in {"completed", "cancelled"}:
                 schedule_reminders_for_hearing(session, hearing=hearing)
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "hearing_reminders sync on update failed: %s", exc,
             )
+
+    if cancelled_transition:
+        try:
+            from caseops_api.services.calendar_sync import (
+                delete_synced_hearing_events_for_context,
+            )
+
+            delete_synced_hearing_events_for_context(
+                session,
+                context=context,
+                hearing_id=hearing.id,
+                commit=False,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("calendar sync auto-delete on cancellation failed: %s", exc)
 
     completed = (
         payload.status == "completed"
@@ -2033,22 +2062,31 @@ def update_matter_hearing(
         session.add(follow_up)
         session.flush()
 
+    if completed:
+        activity_event_type = "hearing_completed"
+        activity_title = f"Hearing marked completed - {hearing.purpose}"
+        audit_action = "hearing.completed"
+    elif cancelled_transition:
+        activity_event_type = "hearing_cancelled"
+        activity_title = f"Hearing cancelled - {hearing.purpose}"
+        audit_action = "hearing.cancelled"
+    else:
+        activity_event_type = "hearing_updated"
+        activity_title = f"Hearing updated - {hearing.purpose}"
+        audit_action = "hearing.updated"
+
     _append_activity(
         session,
         matter_id=matter.id,
         actor_membership_id=context.membership.id,
-        event_type="hearing_updated" if not completed else "hearing_completed",
-        title=(
-            f"Hearing marked completed — {hearing.purpose}"
-            if completed
-            else f"Hearing updated — {hearing.purpose}"
-        ),
-        detail=hearing.outcome_note,
+        event_type=activity_event_type,
+        title=activity_title,
+        detail=hearing.outcome_note or activity_title,
     )
     record_from_context(
         session,
         context,
-        action="hearing.completed" if completed else "hearing.updated",
+        action=audit_action,
         target_type="hearing",
         target_id=hearing.id,
         matter_id=matter.id,
@@ -2061,6 +2099,71 @@ def update_matter_hearing(
     session.commit()
     session.refresh(hearing)
     return _hearing_record(hearing)
+
+
+_OPEN_HEARING_STATUSES = {
+    MatterHearingStatus.SCHEDULED.value,
+    MatterHearingStatus.ADJOURNED.value,
+}
+_CLOSED_HEARING_STATUSES = {
+    MatterHearingStatus.COMPLETED.value,
+    MatterHearingStatus.CANCELLED.value,
+}
+
+
+def _reconcile_next_hearing_after_closed_hearing(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter: Matter,
+    hearing: MatterHearing,
+    prior_hearing_on: date | None,
+) -> None:
+    tracked_by_source = (
+        matter.next_hearing_source_ref_type == "matter_hearing"
+        and matter.next_hearing_source_ref_id == hearing.id
+    )
+    tracked_by_date = matter.next_hearing_on in {prior_hearing_on, hearing.hearing_on}
+    if not tracked_by_source and not tracked_by_date:
+        return
+
+    replacement = session.scalar(
+        select(MatterHearing)
+        .where(
+            MatterHearing.matter_id == matter.id,
+            MatterHearing.id != hearing.id,
+            MatterHearing.status.in_(tuple(_OPEN_HEARING_STATUSES)),
+        )
+        .order_by(MatterHearing.hearing_on.asc(), MatterHearing.created_at.asc())
+        .limit(1)
+    )
+    if replacement is not None:
+        apply_next_hearing_update(
+            session,
+            matter=matter,
+            new_date=replacement.hearing_on,
+            source="manual",
+            actor_membership_id=context.membership.id,
+            context=context,
+            source_ref_type="matter_hearing",
+            source_ref_id=replacement.id,
+            reason="hearing_closed_recomputed",
+            manual_lock=True,
+            force=True,
+        )
+        return
+
+    clear_next_hearing(
+        session,
+        matter=matter,
+        source="manual",
+        actor_membership_id=context.membership.id,
+        context=context,
+        source_ref_type="matter_hearing",
+        source_ref_id=hearing.id,
+        reason="hearing_closed_cleared",
+        manual_lock=True,
+    )
 
 
 def _validated_order_attachment_id(
@@ -2400,19 +2503,20 @@ def create_matter_hearing(
     session.add(hearing)
     session.add(matter)
     session.flush()
-    apply_next_hearing_update(
-        session,
-        matter=matter,
-        new_date=payload.hearing_on,
-        source="manual",
-        actor_membership_id=context.membership.id,
-        context=context,
-        source_ref_type="matter_hearing",
-        source_ref_id=hearing.id,
-        reason="hearing_created",
-        manual_lock=True,
-        force=True,
-    )
+    if hearing.status not in _CLOSED_HEARING_STATUSES:
+        apply_next_hearing_update(
+            session,
+            matter=matter,
+            new_date=payload.hearing_on,
+            source="manual",
+            actor_membership_id=context.membership.id,
+            context=context,
+            source_ref_type="matter_hearing",
+            source_ref_id=hearing.id,
+            reason="hearing_created",
+            manual_lock=True,
+            force=True,
+        )
     _append_activity(
         session,
         matter_id=matter.id,
@@ -2428,16 +2532,17 @@ def create_matter_hearing(
     # ``memory/feedback_fix_vs_mitigation.md``. Scheduling failure
     # must not block the hearing create — the transaction proceeds
     # even if reminder persistence raises.
-    try:
-        from caseops_api.services.hearing_reminders import (
-            schedule_reminders_for_hearing,
-        )
-        schedule_reminders_for_hearing(session, hearing=hearing)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            "hearing_reminders.schedule_reminders_for_hearing failed: %s",
-            exc,
-        )
+    if hearing.status not in _CLOSED_HEARING_STATUSES:
+        try:
+            from caseops_api.services.hearing_reminders import (
+                schedule_reminders_for_hearing,
+            )
+            schedule_reminders_for_hearing(session, hearing=hearing)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "hearing_reminders.schedule_reminders_for_hearing failed: %s",
+                exc,
+            )
     session.commit()
     session.refresh(hearing)
     return _hearing_record(hearing)

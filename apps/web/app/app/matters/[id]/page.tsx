@@ -52,7 +52,7 @@ export default function MatterOverviewPage() {
 
   const activeTasks = data.tasks.filter((t) => t.status !== "done").slice(0, 5);
   const upcomingHearings = data.hearings
-    .filter((h) => h.status !== "completed")
+    .filter((h) => h.status !== "completed" && h.status !== "cancelled")
     .filter((h) => h.hearing_on || h.scheduled_for || h.listing_date)
     .slice(0, 4);
   const latestOrder = data.court_orders[0];

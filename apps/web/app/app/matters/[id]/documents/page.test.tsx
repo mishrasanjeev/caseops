@@ -14,6 +14,10 @@ const {
   exportMatterFileQANoteMock,
   fetchAffidavitMock,
   analyzeAffidavitMock,
+  fetchGoogleDriveStatusMock,
+  listGoogleDriveFilesMock,
+  revokeGoogleDriveConnectionMock,
+  startGoogleDriveConnectionMock,
   workspaceData,
   useCapabilityMock,
   toastSuccess,
@@ -28,6 +32,10 @@ const {
   exportMatterFileQANoteMock: vi.fn(),
   fetchAffidavitMock: vi.fn(),
   analyzeAffidavitMock: vi.fn(),
+  fetchGoogleDriveStatusMock: vi.fn(),
+  listGoogleDriveFilesMock: vi.fn(),
+  revokeGoogleDriveConnectionMock: vi.fn(),
+  startGoogleDriveConnectionMock: vi.fn(),
   workspaceData: {
     current: {
       matter: { id: "m1", matter_code: "X", title: "T", status: "active" },
@@ -66,6 +74,10 @@ vi.mock("@/lib/api/endpoints", () => ({
   exportMatterFileQANote: exportMatterFileQANoteMock,
   fetchAffidavitIntelligence: fetchAffidavitMock,
   analyzeAffidavitIntelligence: analyzeAffidavitMock,
+  fetchGoogleDriveStatus: fetchGoogleDriveStatusMock,
+  listGoogleDriveFiles: listGoogleDriveFilesMock,
+  revokeGoogleDriveConnection: revokeGoogleDriveConnectionMock,
+  startGoogleDriveConnection: startGoogleDriveConnectionMock,
 }));
 
 vi.mock("@/lib/use-matter-workspace", () => ({
@@ -120,6 +132,10 @@ describe("MatterDocumentsPage", () => {
     exportMatterFileQANoteMock.mockReset();
     fetchAffidavitMock.mockReset();
     analyzeAffidavitMock.mockReset();
+    fetchGoogleDriveStatusMock.mockReset();
+    listGoogleDriveFilesMock.mockReset();
+    revokeGoogleDriveConnectionMock.mockReset();
+    startGoogleDriveConnectionMock.mockReset();
     fetchMatterFileQAHistoryMock.mockResolvedValue({
       matter_id: "m1",
       entries: [],
@@ -138,6 +154,37 @@ describe("MatterDocumentsPage", () => {
         "Affidavit intelligence is source-backed hearing-preparation decision support. It is not legal advice.",
       runs: [],
       latest_run: null,
+    });
+    fetchGoogleDriveStatusMock.mockResolvedValue({
+      provider: "google_drive",
+      configured: true,
+      missing_config_names: [],
+      connections: [],
+    });
+    listGoogleDriveFilesMock.mockResolvedValue({
+      provider: "google_drive",
+      connection_id: "drive-1",
+      files: [],
+    });
+    revokeGoogleDriveConnectionMock.mockResolvedValue({
+      id: "drive-1",
+      company_id: "company-1",
+      membership_id: "member-1",
+      provider: "google_drive",
+      provider_account_id: "google-user-1",
+      display_email: "lawyer@example.com",
+      status: "revoked",
+      scopes: ["https://www.googleapis.com/auth/drive.readonly"],
+      connected_at: "2026-06-08T10:00:00Z",
+      last_list_at: null,
+      created_at: "2026-06-08T10:00:00Z",
+      updated_at: "2026-06-08T10:00:00Z",
+    });
+    startGoogleDriveConnectionMock.mockResolvedValue({
+      provider: "google_drive",
+      provider_available: true,
+      auth_url: "https://accounts.google.com/o/oauth2/v2/auth",
+      unavailable_reason: null,
     });
     useCapabilityMock.mockReset();
     toastSuccess.mockReset();
@@ -190,6 +237,66 @@ describe("MatterDocumentsPage", () => {
       hearingId: null,
     });
     expect(toastSuccess).toHaveBeenCalled();
+  });
+
+  it("lets document uploaders list and revoke their own Google Drive metadata safely", async () => {
+    useCapabilityMock.mockImplementation((cap: string) => cap === "documents:upload");
+    fetchGoogleDriveStatusMock.mockResolvedValue({
+      provider: "google_drive",
+      configured: true,
+      missing_config_names: [],
+      connections: [
+        {
+          id: "drive-1",
+          company_id: "company-1",
+          membership_id: "member-1",
+          provider: "google_drive",
+          provider_account_id: "google-user-1",
+          display_email: "lawyer@example.com",
+          status: "connected",
+          scopes: ["https://www.googleapis.com/auth/drive.readonly"],
+          connected_at: "2026-06-08T10:00:00Z",
+          last_list_at: null,
+          created_at: "2026-06-08T10:00:00Z",
+          updated_at: "2026-06-08T10:00:00Z",
+        },
+      ],
+    });
+    listGoogleDriveFilesMock.mockResolvedValue({
+      provider: "google_drive",
+      connection_id: "drive-1",
+      files: [
+        {
+          provider_file_id: "file-1",
+          name: "Signed vakalatnama.pdf",
+          mime_type: "application/pdf",
+          size_bytes: 2048,
+          modified_time: "2026-06-08T09:00:00Z",
+          web_url: "https://drive.google.com/file/d/file-1/view",
+        },
+      ],
+    });
+
+    render(withClient(<MatterDocumentsPage />));
+
+    const panel = await screen.findByTestId("matter-google-drive-panel");
+    expect(await screen.findByText("Connected as lawyer@example.com")).toBeInTheDocument();
+    expect(panel).toHaveTextContent("Connected as lawyer@example.com");
+    expect(panel.textContent).not.toMatch(
+      /access_token|refresh_token|client_secret|encrypted_token_ref|provider payload|gross profit|gross margin|internal cost/i,
+    );
+
+    await userEvent.click(screen.getByTestId("matter-google-drive-list"));
+    await waitFor(() =>
+      expect(listGoogleDriveFilesMock).toHaveBeenCalledWith({ limit: 10 }),
+    );
+    expect(await screen.findByText("Signed vakalatnama.pdf")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId("matter-google-drive-revoke"));
+    await waitFor(() =>
+      expect(revokeGoogleDriveConnectionMock).toHaveBeenCalledTimes(1),
+    );
+    expect(revokeGoogleDriveConnectionMock.mock.calls[0][0]).toBe("drive-1");
   });
 
   it("groups documents by lifecycle and shows unclassified legacy documents", () => {

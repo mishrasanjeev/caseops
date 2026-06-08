@@ -487,12 +487,12 @@ class MatterHearingCreateRequest(BaseModel):
     forum_name: str = Field(min_length=2, max_length=255)
     judge_name: str | None = Field(default=None, min_length=2, max_length=255)
     purpose: str = Field(min_length=2, max_length=255)
-    status: Literal["scheduled", "completed", "adjourned"] = "scheduled"
+    status: Literal["scheduled", "completed", "adjourned", "cancelled"] = "scheduled"
     outcome_note: str | None = Field(default=None, max_length=4000)
 
 
 class MatterHearingUpdateRequest(BaseModel):
-    status: Literal["scheduled", "completed", "adjourned"] | None = None
+    status: Literal["scheduled", "completed", "adjourned", "cancelled"] | None = None
     outcome_note: str | None = Field(default=None, max_length=4000)
     hearing_on: date | None = None
     # When set, the caller is explicitly asking the server to schedule
@@ -510,7 +510,7 @@ class MatterHearingRecord(BaseModel):
     forum_name: str
     judge_name: str | None
     purpose: str
-    status: Literal["scheduled", "completed", "adjourned"]
+    status: Literal["scheduled", "completed", "adjourned", "cancelled"]
     outcome_note: str | None
     created_at: datetime
 

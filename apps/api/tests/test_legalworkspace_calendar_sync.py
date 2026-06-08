@@ -339,7 +339,16 @@ def test_sync_status_reports_bounded_manual_state_and_missing_config_names(
                     "OUTLOOK_CLIENT_SECRET",
                     "OUTLOOK_REDIRECT_URI",
                 ],
-            }
+            },
+            {
+                "provider": "google_calendar",
+                "configured": False,
+                "missing_config_names": [
+                    "GOOGLE_CALENDAR_CLIENT_ID",
+                    "GOOGLE_CALENDAR_CLIENT_SECRET",
+                    "GOOGLE_CALENDAR_REDIRECT_URI",
+                ],
+            },
         ]
         assert body["conflict_summary"] == {
             "has_conflicts": False,

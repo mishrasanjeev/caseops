@@ -12,7 +12,10 @@ from caseops_api.db.models import (
     AuditResult,
     CalendarEventSync,
     CalendarEventSyncStatus,
-    CalendarProvider,
+    MailboxImportStatus,
+    MailboxMessageImport,
+    MailboxWebhookEvent,
+    MailboxWebhookStatus,
     NotificationDeliveryChannel,
     NotificationDeliveryIntent,
     NotificationDeliveryStatus,
@@ -48,6 +51,15 @@ _NOTIFICATION_OPEN_STATUSES = {
     NotificationDeliveryStatus.BLOCKED,
     NotificationDeliveryStatus.DEAD_LETTER,
 }
+_MAILBOX_IMPORT_OPEN_STATUSES = {
+    MailboxImportStatus.FAILED,
+    MailboxImportStatus.DEAD_LETTER,
+    MailboxImportStatus.UNMATCHED,
+}
+_MAILBOX_WEBHOOK_OPEN_STATUSES = {
+    MailboxWebhookStatus.FAILED,
+    MailboxWebhookStatus.DEAD_LETTER,
+}
 _OPERATOR_IGNORE_REASON = "operator_ignored"
 _OPERATOR_RESOLVE_REASON = "operator_resolved"
 
@@ -67,7 +79,13 @@ def _split_operation_id(operation_id: str) -> tuple[str, str]:
             detail="Provider operation not found.",
         )
     kind, row_id = operation_id.split(":", 1)
-    if kind not in {"calendar_sync", "notification_delivery", "case_tracking_poll"} or not row_id:
+    if kind not in {
+        "calendar_sync",
+        "notification_delivery",
+        "case_tracking_poll",
+        "mailbox_message_import",
+        "mailbox_webhook",
+    } or not row_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Provider operation not found.",
@@ -98,7 +116,7 @@ def _calendar_record(row: CalendarEventSync) -> ProviderOperationRecord:
     return ProviderOperationRecord(
         id=_operation_id("calendar_sync", row.id),
         job_kind="calendar_sync",
-        provider=str(CalendarProvider.OUTLOOK),
+        provider=str(row.connection.provider),
         company_id=row.company_id,
         matter_id=None,
         source_type=str(row.source_type),
@@ -122,7 +140,7 @@ def _calendar_record(row: CalendarEventSync) -> ProviderOperationRecord:
         mark_resolved_available=open_action and operator_state == "open",
         notes=[
             "Replay only reschedules the stored sync row; provider calls remain "
-            "gated by Outlook tenant readiness."
+            "gated by provider readiness."
         ],
     )
 
@@ -220,6 +238,86 @@ def _case_tracking_poll_record(row: TrackedCasePollRun) -> ProviderOperationReco
     )
 
 
+def _mailbox_import_record(row: MailboxMessageImport) -> ProviderOperationRecord:
+    operator_state = _operator_state(row.dead_letter_reason)
+    open_action = row.status not in {
+        MailboxImportStatus.IMPORTED,
+        MailboxImportStatus.DUPLICATE,
+        MailboxImportStatus.IGNORED,
+        MailboxImportStatus.RESOLVED,
+    }
+    replayable = row.status in {
+        MailboxImportStatus.FAILED,
+        MailboxImportStatus.DEAD_LETTER,
+    }
+    return ProviderOperationRecord(
+        id=_operation_id("mailbox_message_import", row.id),
+        job_kind="mailbox_message_import",
+        provider="gmail",
+        company_id=row.company_id,
+        matter_id=row.matter_id,
+        source_type="gmail_message_metadata",
+        source_ref=redact_identifier(row.provider_message_id),
+        provider_item_ref=redact_identifier(row.provider_thread_id),
+        status=str(row.status),
+        operator_state=operator_state,
+        error_redacted=redact_provider_error(row.last_error_redacted)
+        if row.last_error_redacted
+        else None,
+        dead_letter_reason=redact_provider_error(row.dead_letter_reason)
+        if row.dead_letter_reason
+        else None,
+        attempts=row.attempts,
+        max_attempts=max(row.max_attempts, 1),
+        next_attempt_at=row.next_attempt_at,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+        replay_available=replayable,
+        ignore_available=open_action and operator_state == "open",
+        mark_resolved_available=open_action and operator_state == "open",
+        notes=[
+            "Gmail imports store metadata/snippets only; attachment bytes require "
+            "explicit candidate approval."
+        ],
+    )
+
+
+def _mailbox_webhook_record(row: MailboxWebhookEvent) -> ProviderOperationRecord:
+    operator_state = _operator_state(row.last_error_redacted)
+    replayable = (
+        row.status in _MAILBOX_WEBHOOK_OPEN_STATUSES
+        and row.mailbox_connection_id is not None
+    )
+    return ProviderOperationRecord(
+        id=_operation_id("mailbox_webhook", row.id),
+        job_kind="mailbox_webhook",
+        provider=str(row.provider),
+        company_id=row.company_id or "",
+        matter_id=None,
+        source_type="gmail_pubsub_webhook",
+        source_ref=redact_identifier(row.history_id),
+        provider_item_ref=redact_identifier(row.email_address_hash),
+        status=str(row.status),
+        operator_state=operator_state,
+        error_redacted=redact_provider_error(row.last_error_redacted)
+        if row.last_error_redacted
+        else None,
+        dead_letter_reason=None,
+        attempts=row.attempts,
+        max_attempts=max(row.max_attempts, 1),
+        next_attempt_at=row.next_attempt_at,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+        replay_available=replayable,
+        ignore_available=row.status != MailboxWebhookStatus.PROCESSED and operator_state == "open",
+        mark_resolved_available=row.status != MailboxWebhookStatus.PROCESSED
+        and operator_state == "open",
+        notes=[
+            "Webhook payloads are hashed only; raw Pub/Sub data is not exposed."
+        ],
+    )
+
+
 def list_provider_operations(
     session: Session,
     *,
@@ -236,7 +334,6 @@ def list_provider_operations(
             )
             .where(
                 CalendarEventSync.company_id == context.company.id,
-                UserCalendarConnection.provider == CalendarProvider.OUTLOOK,
                 CalendarEventSync.sync_status.in_(tuple(_CALENDAR_OPEN_STATUSES)),
             )
             .order_by(CalendarEventSync.updated_at.desc())
@@ -274,10 +371,34 @@ def list_provider_operations(
             .limit(limit)
         )
     )
+    mailbox_import_rows = list(
+        session.scalars(
+            select(MailboxMessageImport)
+            .where(
+                MailboxMessageImport.company_id == context.company.id,
+                MailboxMessageImport.status.in_(tuple(_MAILBOX_IMPORT_OPEN_STATUSES)),
+            )
+            .order_by(MailboxMessageImport.updated_at.desc())
+            .limit(limit)
+        )
+    )
+    mailbox_webhook_rows = list(
+        session.scalars(
+            select(MailboxWebhookEvent)
+            .where(
+                MailboxWebhookEvent.company_id == context.company.id,
+                MailboxWebhookEvent.status.in_(tuple(_MAILBOX_WEBHOOK_OPEN_STATUSES)),
+            )
+            .order_by(MailboxWebhookEvent.updated_at.desc())
+            .limit(limit)
+        )
+    )
     records = [
         *(_calendar_record(row) for row in calendar_rows),
         *(_notification_record(row) for row in notification_rows),
         *(_case_tracking_poll_record(row) for row in case_tracking_rows),
+        *(_mailbox_import_record(row) for row in mailbox_import_rows),
+        *(_mailbox_webhook_record(row) for row in mailbox_webhook_rows),
     ]
     if not include_resolved:
         records = [row for row in records if row.operator_state == "open"]
@@ -307,7 +428,6 @@ def _load_calendar_operation(
         .where(
             CalendarEventSync.id == row_id,
             CalendarEventSync.company_id == context.company.id,
-            UserCalendarConnection.provider == CalendarProvider.OUTLOOK,
         )
     )
     if row is None:
@@ -348,6 +468,46 @@ def _load_case_tracking_poll_operation(
         select(TrackedCasePollRun).where(
             TrackedCasePollRun.id == row_id,
             TrackedCasePollRun.company_id == context.company.id,
+        )
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Provider operation not found.",
+        )
+    return row
+
+
+def _load_mailbox_import_operation(
+    session: Session,
+    *,
+    context: SessionContext,
+    row_id: str,
+) -> MailboxMessageImport:
+    row = session.scalar(
+        select(MailboxMessageImport).where(
+            MailboxMessageImport.id == row_id,
+            MailboxMessageImport.company_id == context.company.id,
+        )
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Provider operation not found.",
+        )
+    return row
+
+
+def _load_mailbox_webhook_operation(
+    session: Session,
+    *,
+    context: SessionContext,
+    row_id: str,
+) -> MailboxWebhookEvent:
+    row = session.scalar(
+        select(MailboxWebhookEvent).where(
+            MailboxWebhookEvent.id == row_id,
+            MailboxWebhookEvent.company_id == context.company.id,
         )
     )
     if row is None:
@@ -417,7 +577,7 @@ def replay_provider_operation(
             action="replay",
             target_type="calendar_event_sync",
             target_id=row.id,
-            provider=str(CalendarProvider.OUTLOOK),
+            provider=str(row.connection.provider),
             previous_status=previous_status,
             next_status=str(row.sync_status),
             changed=changed,
@@ -428,7 +588,7 @@ def replay_provider_operation(
             action="replay",
             changed=changed,
             message=(
-                "Calendar sync row was rescheduled; Outlook provider calls "
+                "Calendar sync row was rescheduled; provider calls "
                 "remain gated by tenant readiness."
             )
             if changed
@@ -462,6 +622,80 @@ def replay_provider_operation(
                 "override for operator break-glass."
             ),
             operation=_case_tracking_poll_record(row),
+        )
+
+    if kind == "mailbox_message_import":
+        row = _load_mailbox_import_operation(session, context=context, row_id=row_id)
+        previous_status = str(row.status)
+        changed = row.status in {
+            MailboxImportStatus.FAILED,
+            MailboxImportStatus.DEAD_LETTER,
+        }
+        if changed:
+            if row.status == MailboxImportStatus.DEAD_LETTER:
+                row.attempts = 0
+            row.status = MailboxImportStatus.QUEUED
+            row.next_attempt_at = current_time
+            row.dead_letter_reason = None
+            row.updated_at = current_time
+            session.add(row)
+        _audit_operation_action(
+            session,
+            context=context,
+            action="replay",
+            target_type="mailbox_message_import",
+            target_id=row.id,
+            provider="gmail",
+            previous_status=previous_status,
+            next_status=str(row.status),
+            changed=changed,
+            reason=reason,
+        )
+        session.commit()
+        return ProviderOperationActionResponse(
+            action="replay",
+            changed=changed,
+            message=(
+                "Gmail import row was queued for a bounded metadata retry."
+                if changed
+                else "Gmail import row was already outside a replayable state."
+            ),
+            operation=_mailbox_import_record(row),
+        )
+
+    if kind == "mailbox_webhook":
+        row = _load_mailbox_webhook_operation(session, context=context, row_id=row_id)
+        previous_status = str(row.status)
+        changed = row.status in _MAILBOX_WEBHOOK_OPEN_STATUSES
+        if changed:
+            row.status = MailboxWebhookStatus.QUEUED
+            row.attempts = 0
+            row.last_error_redacted = None
+            row.next_attempt_at = current_time
+            row.updated_at = current_time
+            session.add(row)
+        _audit_operation_action(
+            session,
+            context=context,
+            action="replay",
+            target_type="mailbox_webhook_event",
+            target_id=row.id,
+            provider=str(row.provider),
+            previous_status=previous_status,
+            next_status=str(row.status),
+            changed=changed,
+            reason=reason,
+        )
+        session.commit()
+        return ProviderOperationActionResponse(
+            action="replay",
+            changed=changed,
+            message=(
+                "Gmail webhook row was queued for operator retry."
+                if changed
+                else "Gmail webhook row was already outside a replayable state."
+            ),
+            operation=_mailbox_webhook_record(row),
         )
 
     row = _load_notification_operation(session, context=context, row_id=row_id)
@@ -558,7 +792,7 @@ def update_provider_operation_state(
             action=action,
             target_type="calendar_event_sync",
             target_id=row.id,
-            provider=str(CalendarProvider.OUTLOOK),
+            provider=str(row.connection.provider),
             previous_status=previous_status,
             next_status=str(row.sync_status),
             changed=changed,
@@ -601,6 +835,83 @@ def update_provider_operation_state(
                 "eligible backlog."
             ),
             operation=_case_tracking_poll_record(row),
+        )
+
+    if kind == "mailbox_message_import":
+        row = _load_mailbox_import_operation(session, context=context, row_id=row_id)
+        previous_status = str(row.status)
+        changed = row.status not in {
+            MailboxImportStatus.IMPORTED,
+            MailboxImportStatus.DUPLICATE,
+            MailboxImportStatus.IGNORED,
+            MailboxImportStatus.RESOLVED,
+        }
+        if changed:
+            row.status = (
+                MailboxImportStatus.IGNORED
+                if action == "ignore"
+                else MailboxImportStatus.RESOLVED
+            )
+            row.dead_letter_reason = marker
+            row.next_attempt_at = None
+            row.updated_at = current_time
+            session.add(row)
+        _audit_operation_action(
+            session,
+            context=context,
+            action=action,
+            target_type="mailbox_message_import",
+            target_id=row.id,
+            provider="gmail",
+            previous_status=previous_status,
+            next_status=str(row.status),
+            changed=changed,
+            reason=reason,
+        )
+        session.commit()
+        return ProviderOperationActionResponse(
+            action=action,
+            changed=changed,
+            message=(
+                "Gmail import row was marked ignored."
+                if action == "ignore"
+                else "Gmail import row was marked operator-resolved."
+            ),
+            operation=_mailbox_import_record(row),
+        )
+
+    if kind == "mailbox_webhook":
+        row = _load_mailbox_webhook_operation(session, context=context, row_id=row_id)
+        previous_status = str(row.status)
+        changed = row.status != MailboxWebhookStatus.PROCESSED
+        if changed:
+            row.status = MailboxWebhookStatus.DEAD_LETTER
+            row.last_error_redacted = marker
+            row.next_attempt_at = None
+            row.updated_at = current_time
+            session.add(row)
+        _audit_operation_action(
+            session,
+            context=context,
+            action=action,
+            target_type="mailbox_webhook_event",
+            target_id=row.id,
+            provider=str(row.provider),
+            previous_status=previous_status,
+            next_status=str(row.status),
+            changed=changed,
+            reason=reason,
+        )
+        session.commit()
+        return ProviderOperationActionResponse(
+            action=action,
+            changed=changed,
+            message=(
+                "Gmail webhook row was marked ignored."
+                if action == "ignore"
+                else "Gmail webhook row was marked operator-resolved."
+            ),
+            operation=_mailbox_webhook_record(row),
         )
 
     row = _load_notification_operation(session, context=context, row_id=row_id)
@@ -646,12 +957,17 @@ def provider_readiness_status() -> ProviderReadinessListResponse:
     workflow = durable_workflow_status(settings)
     drive_status = google_drive_provider_config_status()
     drive_missing_approvals = ["tenant_drive_sync_approved"]
-    email_missing_config = [
-        "MAILBOX_CONNECTOR_PROVIDER",
-        "MAILBOX_CLIENT_ID",
-        "MAILBOX_CLIENT_SECRET",
-        "MAILBOX_WEBHOOK_SIGNING_SECRET",
-    ]
+    email_missing_config = []
+    if not settings.gmail_client_id:
+        email_missing_config.append("GMAIL_CLIENT_ID")
+    if not settings.gmail_client_secret:
+        email_missing_config.append("GMAIL_CLIENT_SECRET")
+    if not settings.gmail_redirect_uri:
+        email_missing_config.append("GMAIL_REDIRECT_URI")
+    if not settings.gmail_pubsub_topic:
+        email_missing_config.append("GMAIL_PUBSUB_TOPIC")
+    if not settings.gmail_webhook_verification_token:
+        email_missing_config.append("GMAIL_WEBHOOK_VERIFICATION_TOKEN")
     digest_email_missing = []
     if not settings.sendgrid_api_key:
         digest_email_missing.append("SENDGRID_API_KEY")
@@ -715,25 +1031,30 @@ def provider_readiness_status() -> ProviderReadinessListResponse:
                 provider="email_connector",
                 display_name="Mailbox ingestion",
                 adp_slice="ADP-22",
-                state="blocked_missing_config",
-                configured=False,
-                enabled=False,
-                external_calls_enabled=False,
+                state="ready" if not email_missing_config else "blocked_missing_config",
+                configured=not email_missing_config,
+                enabled=not email_missing_config,
+                external_calls_enabled=not email_missing_config,
                 durable_workflow_available=workflow.available,
-                required_config_names=email_missing_config,
-                missing_config_names=email_missing_config,
-                required_approval_keys=[
-                    "tenant_mailbox_ingestion_approved",
-                    "redaction_rules_approved",
-                    "matter_routing_review_approved",
+                required_config_names=[
+                    "GMAIL_CLIENT_ID",
+                    "GMAIL_CLIENT_SECRET",
+                    "GMAIL_REDIRECT_URI",
+                    "GMAIL_PUBSUB_TOPIC",
+                    "GMAIL_WEBHOOK_VERIFICATION_TOKEN",
                 ],
-                missing_approval_keys=[
-                    "tenant_mailbox_ingestion_approved",
-                    "redaction_rules_approved",
-                    "matter_routing_review_approved",
+                missing_config_names=email_missing_config,
+                required_approval_keys=["review_first_mailbox_ingestion_approved"],
+                missing_approval_keys=[] if not email_missing_config else [
+                    "review_first_mailbox_ingestion_approved"
                 ],
                 endpoint_paths=[
-                    "/api/matters/{matter_id}/communications/import-email",
+                    "/api/mailbox/gmail/status",
+                    "/api/mailbox/gmail/start",
+                    "/api/mailbox/gmail/import",
+                    "/api/mailbox/gmail/watch",
+                    "/api/mailbox/gmail/webhook",
+                    "/api/mailbox/attachment-candidates",
                     "/api/calendar/email-invitation-candidates",
                     "/api/calendar/email-invitation-candidates/extract",
                 ],
@@ -750,9 +1071,10 @@ def provider_readiness_status() -> ProviderReadinessListResponse:
                     "intents; inbound mailbox provider jobs remain gated."
                 ),
                 limitations=[
-                    "No mailbox polling, provider webhook ingestion, or raw email "
-                    "body logging is enabled.",
-                    "Matter association remains candidate/review-first.",
+                    "Gmail imports store metadata/snippets only; raw provider payloads "
+                    "and OAuth tokens are never returned by APIs.",
+                    "Attachment bytes are fetched only after explicit tenant review.",
+                    "Matter association remains matter-code/review-first.",
                 ],
             ),
             ProviderReadinessRecord(

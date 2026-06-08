@@ -35,13 +35,20 @@ from caseops_api.services.calendar import (
     render_events_as_ical,
 )
 from caseops_api.services.calendar_sync import (
+    complete_google_calendar_connection,
     complete_outlook_connection,
+    delete_hearing_from_google_calendar,
     list_connections,
     revoke_connection,
+    start_google_calendar_connection,
     start_outlook_connection,
+    sync_deadline_to_google_calendar,
+    sync_google_calendar_bulk,
+    sync_hearing_to_google_calendar,
     sync_hearing_to_outlook,
     sync_outlook_bulk,
     sync_status,
+    sync_task_to_google_calendar,
 )
 from caseops_api.services.email_calendar_candidates import (
     extract_email_invitation_candidates,
@@ -136,7 +143,7 @@ async def list_calendar_events(
 @router.get(
     "/events.ics",
     response_class=ICalendarResponse,
-    summary="Download / subscribe to the calendar as iCalendar (FT-043).",
+    summary="Download the calendar as iCalendar (FT-043).",
 )
 async def list_calendar_events_ical(
     context: CalendarViewer,
@@ -146,9 +153,11 @@ async def list_calendar_events_ical(
     kinds: Annotated[list[CalendarEventKind] | None, Query()] = None,
 ) -> ICalendarResponse:
     """Return the same event feed as :func:`list_calendar_events` but
-    wire-formatted as RFC 5545 vCalendar. Google Calendar / Outlook
-    / Apple Calendar all accept this as a subscribable URL so users
-    see their CaseOps events alongside their personal calendar.
+    wire-formatted as RFC 5545 vCalendar.
+
+    This route is authenticated. Browsers can download/import the file, but
+    direct external calendar subscription needs a future tokenized feed or a
+    provider OAuth connector.
     """
     if range_from > range_to:
         raise HTTPException(
@@ -177,8 +186,7 @@ async def list_calendar_events_ical(
         content=body,
         headers={
             # Content-Disposition so a browser "download" button
-            # yields a nicely-named .ics file, while subscribe-by-
-            # URL clients just read the body and ignore the header.
+            # yields a nicely-named .ics file for import clients.
             "Content-Disposition": 'inline; filename="caseops-calendar.ics"',
         },
     )
@@ -228,6 +236,42 @@ async def complete_calendar_outlook_connection(
     return CalendarConnectionCallbackResponse(connected=True, connection=connection)
 
 
+@router.post(
+    "/connections/google-calendar/start",
+    response_model=CalendarConnectionStartResponse,
+    summary="Start Google Calendar OAuth without exposing tokens.",
+)
+async def start_calendar_google_connection(
+    context: CalendarSyncer,
+    session: DbSession,
+) -> CalendarConnectionStartResponse:
+    return start_google_calendar_connection(session, context=context)
+
+
+@router.get(
+    "/connections/google-calendar/callback",
+    response_model=CalendarConnectionCallbackResponse,
+    summary="Complete Google Calendar OAuth callback.",
+)
+async def complete_calendar_google_connection(
+    context: CalendarSyncer,
+    session: DbSession,
+    code: Annotated[str, Query(min_length=1)],
+    state: Annotated[str, Query(min_length=1)],
+) -> CalendarConnectionCallbackResponse:
+    connection = complete_google_calendar_connection(
+        session,
+        context=context,
+        code=code,
+        state=state,
+    )
+    return CalendarConnectionCallbackResponse(
+        provider="google_calendar",
+        connected=True,
+        connection=connection,
+    )
+
+
 @router.delete(
     "/connections/{connection_id}",
     response_model=CalendarConnectionRecord,
@@ -252,6 +296,74 @@ async def sync_hearing(
     hearing_id: str,
 ) -> CalendarEventSyncResponse:
     return sync_hearing_to_outlook(session, context=context, hearing_id=hearing_id)
+
+
+@router.post(
+    "/sync/google-calendar/hearings/{hearing_id}",
+    response_model=CalendarEventSyncResponse,
+    summary="Manually sync one hearing to Google Calendar.",
+)
+async def sync_hearing_google_calendar(
+    context: CalendarSyncer,
+    session: DbSession,
+    hearing_id: str,
+) -> CalendarEventSyncResponse:
+    return sync_hearing_to_google_calendar(
+        session,
+        context=context,
+        hearing_id=hearing_id,
+    )
+
+
+@router.delete(
+    "/sync/google-calendar/hearings/{hearing_id}",
+    response_model=CalendarEventSyncResponse,
+    summary="Delete one previously synced hearing event from Google Calendar.",
+)
+async def delete_hearing_google_calendar(
+    context: CalendarSyncer,
+    session: DbSession,
+    hearing_id: str,
+) -> CalendarEventSyncResponse:
+    return delete_hearing_from_google_calendar(
+        session,
+        context=context,
+        hearing_id=hearing_id,
+    )
+
+
+@router.post(
+    "/sync/google-calendar/tasks/{task_id}",
+    response_model=CalendarEventSyncResponse,
+    summary="Manually sync one dated task to Google Calendar.",
+)
+async def sync_task_google_calendar(
+    context: CalendarSyncer,
+    session: DbSession,
+    task_id: str,
+) -> CalendarEventSyncResponse:
+    return sync_task_to_google_calendar(
+        session,
+        context=context,
+        task_id=task_id,
+    )
+
+
+@router.post(
+    "/sync/google-calendar/deadlines/{deadline_id}",
+    response_model=CalendarEventSyncResponse,
+    summary="Manually sync one deadline to Google Calendar.",
+)
+async def sync_deadline_google_calendar(
+    context: CalendarSyncer,
+    session: DbSession,
+    deadline_id: str,
+) -> CalendarEventSyncResponse:
+    return sync_deadline_to_google_calendar(
+        session,
+        context=context,
+        deadline_id=deadline_id,
+    )
 
 
 @router.post(
@@ -284,6 +396,22 @@ async def sync_outlook_visible_range(
     is not yet available — this endpoint is the only sync path.
     """
     return sync_outlook_bulk(session, context=context, payload=payload)
+
+
+@router.post(
+    "/sync/google-calendar",
+    response_model=OutlookBulkSyncResponse,
+    summary=(
+        "Manually sync the caller's visible hearings within a date range "
+        "to Google Calendar. Bounded; no durable background automation."
+    ),
+)
+async def sync_google_calendar_visible_range(
+    context: CalendarSyncer,
+    session: DbSession,
+    payload: OutlookBulkSyncRequest,
+) -> OutlookBulkSyncResponse:
+    return sync_google_calendar_bulk(session, context=context, payload=payload)
 
 
 @router.get(

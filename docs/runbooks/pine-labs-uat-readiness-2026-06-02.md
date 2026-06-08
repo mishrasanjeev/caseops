@@ -348,6 +348,10 @@ Do not switch production to `uat` or `prod` payment behavior until all gates pas
 
 ## Remaining Production Blockers
 
+Pine Labs live activation remains blocked until every item below is complete
+with founder-approved evidence. Do not enable production payments as part of
+billing signoff or connector/cost work.
+
 - Pine Labs UAT credentials and webhook secret must be obtained.
 - UAT webhook URL must be registered and verified.
 - Payment-link status path and payload schema must be confirmed.

@@ -54,6 +54,7 @@ from caseops_api.services.audit_exports import (
 )
 from caseops_api.services.calendar_sync import (
     outlook_tenant_configuration_status,
+    process_durable_google_calendar_sync,
     process_durable_outlook_sync,
     test_outlook_tenant_configuration,
     update_outlook_tenant_configuration,
@@ -420,6 +421,41 @@ def post_outlook_sync_replay(
         limit=payload.limit,
     )
     return OutlookDurableSyncReplayResponse(
+        status=result.status,  # type: ignore[arg-type]
+        adp20_readiness=result.adp20_readiness,  # type: ignore[arg-type]
+        missing_config_names=list(result.missing_config_names),
+        missing_approval_keys=list(result.missing_approval_keys),
+        examined=result.examined,
+        synced=result.synced,
+        failed=result.failed,
+        retry_scheduled=result.retry_scheduled,
+        dead_lettered=result.dead_lettered,
+        skipped=result.skipped,
+        replayed=result.replayed,
+    )
+
+
+@router.post(
+    "/google-calendar-sync/replay",
+    response_model=OutlookDurableSyncReplayResponse,
+    summary=(
+        "Replay this tenant's failed/dead-letter Google Calendar sync rows "
+        "without exposing provider payloads."
+    ),
+)
+def post_google_calendar_sync_replay(
+    payload: OutlookDurableSyncReplayRequest,
+    context: WorkspaceAdmin,
+    session: DbSession,
+) -> OutlookDurableSyncReplayResponse:
+    result = process_durable_google_calendar_sync(
+        session,
+        context=context,
+        replay_failed_only=True,
+        limit=payload.limit,
+    )
+    return OutlookDurableSyncReplayResponse(
+        provider="google_calendar",
         status=result.status,  # type: ignore[arg-type]
         adp20_readiness=result.adp20_readiness,  # type: ignore[arg-type]
         missing_config_names=list(result.missing_config_names),

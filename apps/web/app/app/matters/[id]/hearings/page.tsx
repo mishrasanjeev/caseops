@@ -16,6 +16,7 @@ import {
   RefreshCw,
   ScrollText,
   Send,
+  XCircle,
 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -46,16 +47,19 @@ import {
   type MatterReminderRecord,
   pullMatterCourtSync,
   decideNextHearingSuggestion,
+  retryMatterAttachment,
   startMockHearing,
   submitMockHearingResponse,
   syncHearingToOutlook,
   updateMatterComplianceItem,
+  updateMatterHearing,
 } from "@/lib/api/endpoints";
 import type {
   CalendarEventSyncRecord,
   HearingCoachFeedbackItem,
   HearingCoachReportResponse,
   HearingCoachStatusResponse,
+  MatterComplianceExtractionRun,
   MatterComplianceListResponse,
   MockHearingListResponse,
   MockHearingQuestion,
@@ -113,6 +117,8 @@ export default function MatterHearingsPage() {
   const canRunSync = useCapability("court_sync:run");
   const canSyncOutlook = useCapability("calendar:sync");
   const canRunMockHearing = useCapability("hearing_packs:generate");
+  const canManageDocuments = useCapability("documents:manage");
+  const canManageHearings = useCapability("matters:write");
   const [lastJob, setLastJob] = useState<MatterCourtSyncJob | null>(null);
   const [orderSort, setOrderSort] = useState<"latest" | "oldest">("latest");
   const [mockResponseDraft, setMockResponseDraft] = useState("");
@@ -320,6 +326,18 @@ export default function MatterHearingsPage() {
       toast.error(apiErrorMessage(err, "Could not update compliance item."));
     },
   });
+  const retryOrderAttachmentMutation = useMutation({
+    mutationFn: (attachmentId: string) =>
+      retryMatterAttachment({ matterId, attachmentId }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["matters", matterId, "workspace"] });
+      await queryClient.invalidateQueries({ queryKey: ["matters", matterId, "compliance"] });
+      toast.success("Order document processing queued.");
+    },
+    onError: (err) => {
+      toast.error(apiErrorMessage(err, "Could not process order document."));
+    },
+  });
   const nextHearingSuggestionMutation = useMutation({
     mutationFn: ({
       suggestionId,
@@ -339,10 +357,34 @@ export default function MatterHearingsPage() {
       toast.error(apiErrorMessage(err, "Could not update next hearing suggestion."));
     },
   });
+  const cancelHearingMutation = useMutation({
+    mutationFn: (hearingId: string) =>
+      updateMatterHearing({
+        matterId,
+        hearingId,
+        status: "cancelled",
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["matters", matterId, "workspace"],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["matters", matterId, "reminders"],
+      });
+      await queryClient.invalidateQueries({ queryKey: ["calendar", "sync-status"] });
+      toast.success("Hearing cancelled. Queued reminders and provider calendar events were removed where connected.");
+    },
+    onError: (err) => {
+      toast.error(apiErrorMessage(err, "Could not cancel hearing."));
+    },
+  });
 
   if (!data) return null;
   const completedHearings = data.hearings.filter((hearing) => hearing.status === "completed");
-  const upcomingHearings = data.hearings.filter((hearing) => hearing.status !== "completed");
+  const cancelledHearings = data.hearings.filter((hearing) => hearing.status === "cancelled");
+  const upcomingHearings = data.hearings.filter(
+    (hearing) => hearing.status !== "completed" && hearing.status !== "cancelled",
+  );
   const sortedOrders = sortOrders(data.court_orders, orderSort);
 
   // Courts with a live court-sync adapter wired on the backend. Must
@@ -481,6 +523,13 @@ export default function MatterHearingsPage() {
         isLoading={complianceQuery.isPending}
         onAction={(itemId, action) => complianceMutation.mutate({ itemId, action })}
         isPending={complianceMutation.isPending}
+        canRetryAttachmentProcessing={canManageDocuments}
+        retryingAttachmentId={
+          retryOrderAttachmentMutation.variables ?? null
+        }
+        onRetryAttachment={(attachmentId) =>
+          retryOrderAttachmentMutation.mutate(attachmentId)
+        }
       />
 
       <Card>
@@ -535,8 +584,32 @@ export default function MatterHearingsPage() {
                         onSync={() => outlookSyncMutation.mutate(h.id)}
                       />
                     ) : null}
-                    <div className="mt-3">
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
                       <HearingPackDialog matterId={matterId} hearingId={h.id} />
+                      {canManageHearings ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={
+                            cancelHearingMutation.isPending &&
+                            cancelHearingMutation.variables === h.id
+                          }
+                          onClick={() => cancelHearingMutation.mutate(h.id)}
+                          data-testid={`hearing-cancel-${h.id}`}
+                        >
+                          {cancelHearingMutation.isPending &&
+                          cancelHearingMutation.variables === h.id ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Cancelling
+                            </>
+                          ) : (
+                            <>
+                              <XCircle className="h-4 w-4" aria-hidden /> Cancel hearing
+                            </>
+                          )}
+                        </Button>
+                      ) : null}
                     </div>
                   </div>
                   <StatusBadge status={h.status ?? "pending"} />
@@ -590,6 +663,47 @@ export default function MatterHearingsPage() {
                     ) : null}
                   </div>
                   <StatusBadge status={h.status ?? "completed"} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Cancelled hearings</CardTitle>
+          <CardDescription>
+            Listings removed from active calendars and reminder queues.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {cancelledHearings.length === 0 ? (
+            <p className="text-sm text-[var(--color-mute)]">
+              No cancelled hearings.
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-3">
+              {cancelledHearings.map((h) => (
+                <li
+                  key={h.id}
+                  className="flex items-start justify-between gap-3 rounded-xl border border-[var(--color-line)] bg-[var(--color-bg)] p-4"
+                  data-testid={`cancelled-hearing-${h.id}`}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-semibold text-[var(--color-ink)]">
+                      {hearingTitle(h)}
+                    </div>
+                    <div className="mt-1 text-xs text-[var(--color-mute)]">
+                      Cancelled listing date: {formatDateTime(hearingDate(h))}
+                    </div>
+                    {hearingOutcome(h) ? (
+                      <p className="mt-2 line-clamp-3 text-sm text-[var(--color-ink-2)]">
+                        {hearingOutcome(h)}
+                      </p>
+                    ) : null}
+                  </div>
+                  <StatusBadge status={h.status ?? "cancelled"} />
                 </li>
               ))}
             </ul>
@@ -935,14 +1049,21 @@ export function ComplianceReviewSection({
   isLoading,
   onAction,
   isPending,
+  canRetryAttachmentProcessing,
+  retryingAttachmentId,
+  onRetryAttachment,
 }: {
   response: MatterComplianceListResponse | undefined;
   isLoading: boolean;
   onAction: (itemId: string, action: "confirm" | "reject" | "waive" | "complete") => void;
   isPending: boolean;
+  canRetryAttachmentProcessing: boolean;
+  retryingAttachmentId: string | null;
+  onRetryAttachment: (attachmentId: string) => void;
 }) {
   const activeItems =
     response?.items.filter((item) => item.review_status !== "rejected") ?? [];
+  const recentRuns = response?.runs.slice(0, 4) ?? [];
   return (
     <Card className="lg:col-span-2" data-testid="matter-compliance-panel">
       <CardHeader>
@@ -954,54 +1075,130 @@ export function ComplianceReviewSection({
       <CardContent>
         {isLoading ? (
           <p className="text-sm text-[var(--color-mute)]">Loading compliance items...</p>
-        ) : activeItems.length === 0 ? (
-          <EmptyState
-            icon={ClipboardList}
-            title="No compliance items"
-            description="Create or upload a court order with extractable text to populate review items."
-          />
         ) : (
-          <ul className="flex flex-col gap-3">
-            {activeItems.map((item) => (
-              <li key={item.id} className="rounded-xl border border-[var(--color-line)] bg-white p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-semibold text-[var(--color-ink)]">{item.description}</div>
-                    <div className="mt-1 text-xs text-[var(--color-mute)]">
-                      {item.due_on ? `Due ${formatDateTime(item.due_on)}` : "Due date not available"} - {item.responsible_party ?? "Responsible party not available"}
+          <div className="flex flex-col gap-4">
+            <ComplianceExtractionRuns
+              runs={recentRuns}
+              canRetryAttachmentProcessing={canRetryAttachmentProcessing}
+              retryingAttachmentId={retryingAttachmentId}
+              onRetryAttachment={onRetryAttachment}
+            />
+            {activeItems.length === 0 ? (
+              <EmptyState
+                icon={ClipboardList}
+                title="No compliance items"
+                description="Create or upload a court order with extractable text to populate review items."
+              />
+            ) : (
+              <ul className="flex flex-col gap-3">
+                {activeItems.map((item) => (
+                  <li key={item.id} className="rounded-xl border border-[var(--color-line)] bg-white p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold text-[var(--color-ink)]">{item.description}</div>
+                        <div className="mt-1 text-xs text-[var(--color-mute)]">
+                          {item.due_on ? `Due ${formatDateTime(item.due_on)}` : "Due date not available"} - {item.responsible_party ?? "Responsible party not available"}
+                        </div>
+                      </div>
+                      <StatusBadge status={item.review_status} />
                     </div>
-                  </div>
-                  <StatusBadge status={item.review_status} />
-                </div>
-                <p className="mt-2 line-clamp-3 text-sm text-[var(--color-ink-2)]">
-                  {item.source_snippet}
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {item.review_status === "review_required" || item.review_status === "edited" ? (
-                    <>
-                      <Button size="sm" onClick={() => onAction(item.id, "confirm")} disabled={isPending}>
-                        Confirm
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => onAction(item.id, "reject")} disabled={isPending}>
-                        Reject
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => onAction(item.id, "waive")} disabled={isPending}>
-                        Waive
-                      </Button>
-                    </>
-                  ) : null}
-                  {item.review_status === "confirmed" && item.status !== "completed" ? (
-                    <Button size="sm" variant="outline" onClick={() => onAction(item.id, "complete")} disabled={isPending}>
-                      Complete
-                    </Button>
-                  ) : null}
-                </div>
-              </li>
-            ))}
-          </ul>
+                    <p className="mt-2 line-clamp-3 text-sm text-[var(--color-ink-2)]">
+                      {item.source_snippet}
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {item.review_status === "review_required" || item.review_status === "edited" ? (
+                        <>
+                          <Button size="sm" onClick={() => onAction(item.id, "confirm")} disabled={isPending}>
+                            Confirm
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => onAction(item.id, "reject")} disabled={isPending}>
+                            Reject
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => onAction(item.id, "waive")} disabled={isPending}>
+                            Waive
+                          </Button>
+                        </>
+                      ) : null}
+                      {item.review_status === "confirmed" && item.status !== "completed" ? (
+                        <Button size="sm" variant="outline" onClick={() => onAction(item.id, "complete")} disabled={isPending}>
+                          Complete
+                        </Button>
+                      ) : null}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function ComplianceExtractionRuns({
+  runs,
+  canRetryAttachmentProcessing,
+  retryingAttachmentId,
+  onRetryAttachment,
+}: {
+  runs: MatterComplianceExtractionRun[];
+  canRetryAttachmentProcessing: boolean;
+  retryingAttachmentId: string | null;
+  onRetryAttachment: (attachmentId: string) => void;
+}) {
+  if (runs.length === 0) return null;
+  return (
+    <div className="rounded-lg border border-[var(--color-line)] bg-[var(--color-bg)] p-3">
+      <div className="mb-2 text-sm font-medium text-[var(--color-ink)]">
+        Extraction status
+      </div>
+      <ul className="flex flex-col gap-2" data-testid="matter-compliance-run-list">
+        {runs.map((run) => {
+          const canProcessAttachment =
+            Boolean(run.attachment_id) &&
+            canRetryAttachmentProcessing &&
+            (run.status === "skipped" || run.status === "failed") &&
+            (
+              run.skip_reason === "text_extraction_pending" ||
+              run.skip_reason === "text_extraction_failed"
+            );
+          return (
+            <li
+              key={run.id}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-white px-3 py-2 text-xs"
+              data-testid={`matter-compliance-run-${run.id}`}
+            >
+              <div className="min-w-0">
+                <div className="font-medium text-[var(--color-ink)]">
+                  {run.attachment_id ? "Uploaded order document" : "Court order"} - {run.status}
+                </div>
+                <div className="text-[var(--color-mute)]">
+                  {run.skip_reason ?? run.error_message_redacted ?? "Source text reviewed"}
+                </div>
+              </div>
+              {canProcessAttachment && run.attachment_id ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={retryingAttachmentId === run.attachment_id}
+                  onClick={() => onRetryAttachment(run.attachment_id as string)}
+                  data-testid={`matter-compliance-process-${run.attachment_id}`}
+                >
+                  {retryingAttachmentId === run.attachment_id ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                  ) : (
+                    <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+                  )}
+                  Process order document
+                </Button>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
