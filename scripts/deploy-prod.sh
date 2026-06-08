@@ -32,7 +32,12 @@ REPO=caseops-images
 REGISTRY="${REGION}-docker.pkg.dev/${PROJECT}/${REPO}"
 API_CPU=2
 API_MEMORY=4Gi
-API_CONCURRENCY=40
+# 2026-06-08 incident: a blocking request pinned the single Uvicorn
+# event loop and Cloud Run kept routing unrelated API calls to that
+# same instance until each hit the 300s service timeout. Keep
+# concurrency at 1 so one stuck request cannot take the whole API
+# surface down.
+API_CONCURRENCY=1
 API_TIMEOUT=300s
 # P1-2 (2026-05-15 perf review): keep one API instance always warm.
 # caseops-api previously had no minScale (scaled to 0), so the first
