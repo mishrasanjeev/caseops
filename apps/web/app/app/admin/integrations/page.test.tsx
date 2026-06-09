@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -46,6 +46,13 @@ describe("TenantIntegrationsPage", () => {
   it("renders tenant-safe connector readiness without internal labels", async () => {
     renderWithQuery(<TenantIntegrationsPage />);
 
+    expect(
+      await screen.findByTestId("google-workspace-configuration"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Google Workspace configuration")).toBeInTheDocument();
+    expect(
+      screen.getByText("Tenant-owned OAuth setup for Calendar, Gmail, and Drive."),
+    ).toBeInTheDocument();
     expect(await screen.findByTestId("google-workspace-setup")).toBeInTheDocument();
     expect(screen.getByText("Google Workspace")).toBeInTheDocument();
     expect(screen.getByTestId("google-workspace-google_calendar")).toHaveTextContent(
@@ -63,5 +70,54 @@ describe("TenantIntegrationsPage", () => {
     expect(screen.queryByText(/gross margin/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/internal cost/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/payment MDR/i)).not.toBeInTheDocument();
+  });
+
+  it("saves and tests tenant Google Workspace configuration from the UI", async () => {
+    renderWithQuery(<TenantIntegrationsPage />);
+
+    const clientId = await screen.findByTestId("google-workspace-client-id");
+    fireEvent.change(clientId, { target: { value: "new-google-client" } });
+    fireEvent.change(screen.getByTestId("google-workspace-client-secret"), {
+      target: { value: "new-google-secret" },
+    });
+    fireEvent.change(screen.getByTestId("google-calendar-redirect-uri"), {
+      target: { value: "https://tenant.example/calendar/callback" },
+    });
+    fireEvent.change(screen.getByTestId("gmail-redirect-uri"), {
+      target: { value: "https://tenant.example/gmail/callback" },
+    });
+    fireEvent.change(screen.getByTestId("google-drive-redirect-uri"), {
+      target: { value: "https://tenant.example/drive/callback" },
+    });
+    fireEvent.click(screen.getByTestId("google-workspace-save"));
+
+    await screen.findByText("Google Workspace");
+    await waitFor(() => {
+      const saveCall = fetchMock.mock.calls.find(
+        ([url, init]) =>
+          String(url).includes("/api/admin/google-workspace-configuration") &&
+          init?.method === "PATCH",
+      );
+      expect(saveCall).toBeTruthy();
+      const body = JSON.parse(String(saveCall?.[1]?.body));
+      expect(body).toEqual(
+        expect.objectContaining({
+          client_id: "new-google-client",
+          client_secret: "new-google-secret",
+          calendar_redirect_uri: "https://tenant.example/calendar/callback",
+          gmail_redirect_uri: "https://tenant.example/gmail/callback",
+          drive_redirect_uri: "https://tenant.example/drive/callback",
+        }),
+      );
+    });
+
+    fireEvent.click(screen.getByTestId("google-workspace-test"));
+    expect(await screen.findByTestId("google-workspace-test-results")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/api/admin/google-workspace-configuration/test"),
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
   });
 });

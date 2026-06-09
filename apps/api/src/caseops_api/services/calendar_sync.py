@@ -55,6 +55,7 @@ from caseops_api.schemas.calendar import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.durable_workflows import redact_identifier
+from caseops_api.services.google_workspace import google_workspace_oauth_config
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import (
     assert_access,
@@ -624,9 +625,13 @@ def _outlook_provider(
     )
 
 
-def _google_calendar_provider() -> OutlookProvider:
+def _google_calendar_provider(
+    session: Session | None = None,
+    *,
+    context: SessionContext | None = None,
+) -> OutlookProvider:
     return _google_calendar_provider_override or GoogleCalendarProvider(
-        _google_calendar_runtime_config()
+        _google_calendar_runtime_config(session, context=context)
     )
 
 
@@ -647,7 +652,7 @@ def _provider_for(
     if provider == CalendarProvider.OUTLOOK:
         return _outlook_provider(session, context=context)
     if provider == CalendarProvider.GOOGLE_CALENDAR:
-        return _google_calendar_provider()
+        return _google_calendar_provider(session, context=context)
     raise CalendarProviderError(f"Unsupported calendar provider: {provider}.")
 
 
@@ -702,7 +707,23 @@ def _environment_runtime_config() -> OutlookRuntimeConfig:
     )
 
 
-def _google_calendar_runtime_config() -> GoogleCalendarRuntimeConfig:
+def _google_calendar_runtime_config(
+    session: Session | None = None,
+    *,
+    context: SessionContext | None = None,
+) -> GoogleCalendarRuntimeConfig:
+    workspace_config = google_workspace_oauth_config(
+        session,
+        context=context,
+        connector="calendar",
+    )
+    if workspace_config.source in {"tenant_admin", "missing"}:
+        return GoogleCalendarRuntimeConfig(
+            client_id=workspace_config.client_id,
+            client_secret=workspace_config.client_secret,
+            redirect_uri=workspace_config.redirect_uri,
+            source=workspace_config.source,
+        )
     settings = get_settings()
     return GoogleCalendarRuntimeConfig(
         client_id=settings.google_calendar_client_id,
@@ -1942,9 +1963,12 @@ def _replay_durable_google_calendar_sync_rows(
     context: SessionContext,
     limit: int,
 ) -> DurableOutlookSyncProcessResult:
-    provider = _google_calendar_provider()
+    provider = _google_calendar_provider(session, context=context)
     if not provider.configured:
-        missing = _missing_google_calendar_config_names(provider)
+        missing = _missing_google_calendar_config_names(
+            provider,
+            _google_calendar_runtime_config(session, context=context),
+        )
         record_from_context(
             session,
             context,
@@ -2086,9 +2110,12 @@ def process_durable_google_calendar_sync(
             limit=limit,
         )
 
-    provider = _google_calendar_provider()
+    provider = _google_calendar_provider(session, context=context)
     if not provider.configured:
-        missing = _missing_google_calendar_config_names(provider)
+        missing = _missing_google_calendar_config_names(
+            provider,
+            _google_calendar_runtime_config(session, context=context),
+        )
         record_from_context(
             session,
             context,
@@ -3380,8 +3407,8 @@ def sync_status(
 ) -> CalendarSyncStatusResponse:
     runtime_config = _outlook_runtime_config(session, context=context)
     provider = _outlook_provider(session, context=context)
-    google_runtime_config = _google_calendar_runtime_config()
-    google_provider = _google_calendar_provider()
+    google_runtime_config = _google_calendar_runtime_config(session, context=context)
+    google_provider = _google_calendar_provider(session, context=context)
     connections = list(
         session.scalars(
             select(UserCalendarConnection).where(

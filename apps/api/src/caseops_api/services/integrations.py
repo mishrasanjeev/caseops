@@ -24,6 +24,12 @@ from caseops_api.services.calendar_sync import (
     outlook_tenant_configuration_status,
 )
 from caseops_api.services.google_drive_imports import google_drive_provider_config_status
+from caseops_api.services.google_workspace import (
+    GOOGLE_WORKSPACE_DRIVE_SCOPES,
+    GOOGLE_WORKSPACE_GMAIL_SCOPES,
+    google_workspace_connector_configured,
+    google_workspace_connector_missing_config_names,
+)
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.saas_billing import provider_readiness as billing_provider_readiness
 
@@ -334,18 +340,83 @@ def connector_registry(
         ]
         outlook_scopes = list(OUTLOOK_SCOPES)
 
-    drive_status = google_drive_provider_config_status()
-    google_calendar_missing = _config_missing(
-        [
-            ("GOOGLE_CALENDAR_CLIENT_ID", settings.google_calendar_client_id),
-            ("GOOGLE_CALENDAR_CLIENT_SECRET", settings.google_calendar_client_secret),
-            ("GOOGLE_CALENDAR_REDIRECT_URI", settings.google_calendar_redirect_uri),
+    if context is not None and not platform:
+        google_calendar_missing = google_workspace_connector_missing_config_names(
+            session,
+            context=context,
+            connector="calendar",
+        )
+        google_calendar_configured = google_workspace_connector_configured(
+            session,
+            context=context,
+            connector="calendar",
+        )
+        gmail_missing = google_workspace_connector_missing_config_names(
+            session,
+            context=context,
+            connector="gmail",
+        )
+        gmail_configured = google_workspace_connector_configured(
+            session,
+            context=context,
+            connector="gmail",
+        )
+        drive_configured = google_workspace_connector_configured(
+            session,
+            context=context,
+            connector="drive",
+        )
+        google_calendar_required = [
+            "GOOGLE_WORKSPACE_CLIENT_ID",
+            "GOOGLE_WORKSPACE_CLIENT_SECRET",
+            "GOOGLE_CALENDAR_REDIRECT_URI",
         ]
-    )
-    google_calendar_configured = not google_calendar_missing
-    gmail_missing = _gmail_missing()
+        gmail_required = [
+            "GOOGLE_WORKSPACE_CLIENT_ID",
+            "GOOGLE_WORKSPACE_CLIENT_SECRET",
+            "GMAIL_REDIRECT_URI",
+            "GMAIL_PUBSUB_TOPIC",
+            "GMAIL_WEBHOOK_VERIFICATION_TOKEN",
+        ]
+        drive_required = [
+            "GOOGLE_WORKSPACE_CLIENT_ID",
+            "GOOGLE_WORKSPACE_CLIENT_SECRET",
+            "GOOGLE_DRIVE_REDIRECT_URI",
+        ]
+    else:
+        drive_status = google_drive_provider_config_status()
+        google_calendar_missing = _config_missing(
+            [
+                ("GOOGLE_CALENDAR_CLIENT_ID", settings.google_calendar_client_id),
+                (
+                    "GOOGLE_CALENDAR_CLIENT_SECRET",
+                    settings.google_calendar_client_secret,
+                ),
+                ("GOOGLE_CALENDAR_REDIRECT_URI", settings.google_calendar_redirect_uri),
+            ]
+        )
+        google_calendar_configured = not google_calendar_missing
+        gmail_missing = _gmail_missing()
+        gmail_configured = not gmail_missing
+        drive_configured = drive_status.configured
+        google_calendar_required = [
+            "GOOGLE_CALENDAR_CLIENT_ID",
+            "GOOGLE_CALENDAR_CLIENT_SECRET",
+            "GOOGLE_CALENDAR_REDIRECT_URI",
+        ]
+        gmail_required = [
+            "GMAIL_CLIENT_ID",
+            "GMAIL_CLIENT_SECRET",
+            "GMAIL_REDIRECT_URI",
+            "GMAIL_PUBSUB_TOPIC",
+            "GMAIL_WEBHOOK_VERIFICATION_TOKEN",
+        ]
+        drive_required = [
+            "GOOGLE_DRIVE_CLIENT_ID",
+            "GOOGLE_DRIVE_CLIENT_SECRET",
+            "GOOGLE_DRIVE_REDIRECT_URI",
+        ]
     gmail_webhook_missing = _gmail_webhook_missing()
-    gmail_configured = not gmail_missing
     gmail_webhook_configured = not gmail_webhook_missing
     sendgrid_missing = _sendgrid_missing()
     sms_missing = _sms_missing()
@@ -451,14 +522,8 @@ def connector_registry(
             last_success=last_gmail_success,
             last_failure=last_gmail_failure,
             webhook_status="configured" if gmail_webhook_configured else "missing",
-            required_config_names=[
-                "GMAIL_CLIENT_ID",
-                "GMAIL_CLIENT_SECRET",
-                "GMAIL_REDIRECT_URI",
-                "GMAIL_PUBSUB_TOPIC",
-                "GMAIL_WEBHOOK_VERIFICATION_TOKEN",
-            ],
-            scopes=["https://www.googleapis.com/auth/gmail.readonly"],
+            required_config_names=gmail_required,
+            scopes=list(GOOGLE_WORKSPACE_GMAIL_SCOPES),
             runbook_link="docs/runbooks/provider-operations-readiness-2026-06-02.md",
             internal_cost_label="mailbox metadata ingestion cost driver",
             risk_label="OAuth/raw-email risk",
@@ -489,11 +554,7 @@ def connector_registry(
             last_success=last_google_calendar_success,
             last_failure=last_google_calendar_failure,
             webhook_status="not_enabled",
-            required_config_names=[
-                "GOOGLE_CALENDAR_CLIENT_ID",
-                "GOOGLE_CALENDAR_CLIENT_SECRET",
-                "GOOGLE_CALENDAR_REDIRECT_URI",
-            ],
+            required_config_names=google_calendar_required,
             scopes=list(GOOGLE_CALENDAR_SCOPES),
             runbook_link="docs/runbooks/provider-operations-readiness-2026-06-02.md",
             internal_cost_label="calendar sync variable cost",
@@ -508,9 +569,9 @@ def connector_registry(
             name="Google Drive",
             category="documents",
             provider="google",
-            enabled=drive_status.configured,
-            configured=drive_status.configured,
-            blocked=not drive_status.configured,
+            enabled=drive_configured,
+            configured=drive_configured,
+            blocked=not drive_configured,
             degraded=bool(
                 last_drive_failure
                 and (
@@ -521,12 +582,8 @@ def connector_registry(
             last_success=last_drive_success,
             last_failure=last_drive_failure,
             webhook_status="not_enabled",
-            required_config_names=[
-                "GOOGLE_DRIVE_CLIENT_ID",
-                "GOOGLE_DRIVE_CLIENT_SECRET",
-                "GOOGLE_DRIVE_REDIRECT_URI",
-            ],
-            scopes=["https://www.googleapis.com/auth/drive.readonly"],
+            required_config_names=drive_required,
+            scopes=list(GOOGLE_WORKSPACE_DRIVE_SCOPES),
             runbook_link="docs/runbooks/provider-operations-readiness-2026-06-02.md",
             internal_cost_label="document processing/storage cost driver",
             risk_label="OAuth/file-content risk",

@@ -2223,6 +2223,91 @@ class TenantOutlookConfiguration(Base):
     )
 
 
+class TenantGoogleWorkspaceConfiguration(Base):
+    __tablename__ = "tenant_google_workspace_configurations"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            name="uq_tenant_google_workspace_configurations_company",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    client_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    encrypted_client_secret_ref: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
+    calendar_redirect_uri: Mapped[str | None] = mapped_column(
+        String(500), nullable=True
+    )
+    gmail_redirect_uri: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    drive_redirect_uri: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    scopes_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    oauth_consent_model_approved: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    scopes_approved: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    webhook_runbook_approved: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    redaction_rules_approved: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    calendar_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
+    gmail_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    drive_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    last_test_status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default="not_run",
+    )
+    last_tested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_error_redacted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    updated_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship()
+    created_by_membership: Mapped[CompanyMembership | None] = relationship(
+        foreign_keys=[created_by_membership_id],
+    )
+    updated_by_membership: Mapped[CompanyMembership | None] = relationship(
+        foreign_keys=[updated_by_membership_id],
+    )
+
+
 class CalendarEventSync(Base):
     __tablename__ = "calendar_event_syncs"
     __table_args__ = (

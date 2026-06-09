@@ -17,6 +17,7 @@ from caseops_api.schemas.google_drive_imports import (
     GoogleDriveProviderConfigStatus,
 )
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.google_workspace import google_workspace_oauth_config
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import _load_matter_or_404, assert_access
 
@@ -125,7 +126,18 @@ def _categorize(filename: str, mime_type: str) -> str | None:
     return None
 
 
-def _missing_google_drive_config_names() -> list[str]:
+def _missing_google_drive_config_names(
+    session: Session | None = None,
+    *,
+    context: SessionContext | None = None,
+) -> list[str]:
+    workspace_config = google_workspace_oauth_config(
+        session,
+        context=context,
+        connector="drive",
+    )
+    if workspace_config.source in {"tenant_admin", "missing"}:
+        return list(workspace_config.missing_config_names)
     settings = get_settings()
     missing: list[str] = []
     if not settings.google_drive_client_id:
@@ -137,8 +149,12 @@ def _missing_google_drive_config_names() -> list[str]:
     return missing
 
 
-def google_drive_provider_config_status() -> GoogleDriveProviderConfigStatus:
-    missing = _missing_google_drive_config_names()
+def google_drive_provider_config_status(
+    session: Session | None = None,
+    *,
+    context: SessionContext | None = None,
+) -> GoogleDriveProviderConfigStatus:
+    missing = _missing_google_drive_config_names(session, context=context)
     return GoogleDriveProviderConfigStatus(
         configured=not missing,
         missing_config_names=missing,

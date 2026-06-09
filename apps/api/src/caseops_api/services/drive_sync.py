@@ -28,6 +28,7 @@ from caseops_api.schemas.drive import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.calendar_sync import _decrypt_token_payload, _encrypt_token_payload
+from caseops_api.services.google_workspace import google_workspace_oauth_config
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.notification_delivery import redact_provider_error
 
@@ -207,12 +208,33 @@ def set_google_drive_provider_for_tests(
     _drive_provider_override = provider
 
 
-def _drive_provider() -> GoogleDriveProviderProtocol:
-    return _drive_provider_override or GoogleDriveProvider(_google_drive_runtime_config())
+def _drive_provider(
+    session: Session | None = None,
+    *,
+    context: SessionContext | None = None,
+) -> GoogleDriveProviderProtocol:
+    return _drive_provider_override or GoogleDriveProvider(
+        _google_drive_runtime_config(session, context=context)
+    )
 
 
-def _google_drive_runtime_config() -> GoogleDriveRuntimeConfig:
+def _google_drive_runtime_config(
+    session: Session | None = None,
+    *,
+    context: SessionContext | None = None,
+) -> GoogleDriveRuntimeConfig:
     settings = get_settings()
+    workspace_config = google_workspace_oauth_config(
+        session,
+        context=context,
+        connector="drive",
+    )
+    if workspace_config.source in {"tenant_admin", "missing"}:
+        return GoogleDriveRuntimeConfig(
+            client_id=workspace_config.client_id,
+            client_secret=workspace_config.client_secret,
+            redirect_uri=workspace_config.redirect_uri,
+        )
     return GoogleDriveRuntimeConfig(
         client_id=settings.google_drive_client_id,
         client_secret=settings.google_drive_client_secret,
@@ -298,7 +320,7 @@ def list_google_drive_status(
     *,
     context: SessionContext,
 ) -> GoogleDriveStatusResponse:
-    config = _google_drive_runtime_config()
+    config = _google_drive_runtime_config(session, context=context)
     rows = list(
         session.scalars(
             select(UserDriveConnection)
@@ -323,7 +345,7 @@ def start_google_drive_connection(
     context: SessionContext,
 ) -> GoogleDriveConnectionStartResponse:
     _ = session
-    provider = _drive_provider()
+    provider = _drive_provider(session, context=context)
     if not provider.configured:
         return GoogleDriveConnectionStartResponse(
             provider_available=False,
@@ -342,7 +364,7 @@ def complete_google_drive_connection(
     code: str,
     state: str,
 ) -> GoogleDriveConnectionCallbackResponse:
-    provider = _drive_provider()
+    provider = _drive_provider(session, context=context)
     if not provider.configured:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -444,7 +466,7 @@ def list_google_drive_files(
     connection = _connected_google_drive_connection(session, context=context)
     try:
         token_payload = _decrypt_token_payload(connection.encrypted_token_ref)
-        files = _drive_provider().list_files(
+        files = _drive_provider(session, context=context).list_files(
             token_payload=token_payload,
             limit=max(1, min(limit, 100)),
         )

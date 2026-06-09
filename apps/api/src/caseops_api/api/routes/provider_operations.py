@@ -51,9 +51,9 @@ def get_provider_operation_jobs(
 )
 def get_provider_readiness(
     context: WorkspaceAdmin,
+    session: DbSession,
 ) -> ProviderReadinessListResponse:
-    _ = context
-    return provider_readiness_status()
+    return provider_readiness_status(session, context=context)
 
 
 @router.post(

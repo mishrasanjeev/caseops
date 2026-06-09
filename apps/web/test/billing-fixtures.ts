@@ -524,6 +524,79 @@ export const googleDriveFiles = {
   ],
 };
 
+export const googleWorkspaceConfiguration = {
+  provider: "google_workspace",
+  configured: true,
+  config_source: "tenant_admin",
+  enabled: true,
+  calendar_enabled: true,
+  gmail_enabled: true,
+  drive_enabled: true,
+  required_config: [
+    { name: "GOOGLE_WORKSPACE_CLIENT_ID", configured: true },
+    { name: "GOOGLE_WORKSPACE_CLIENT_SECRET", configured: true },
+    { name: "GOOGLE_CALENDAR_REDIRECT_URI", configured: true },
+    { name: "GMAIL_REDIRECT_URI", configured: true },
+    { name: "GOOGLE_DRIVE_REDIRECT_URI", configured: true },
+  ],
+  required_approvals: [
+    {
+      key: "oauth_consent_model_approved",
+      label: "Google Workspace OAuth consent approved",
+      approved: true,
+    },
+    {
+      key: "scopes_approved",
+      label: "Calendar, Gmail, and Drive scopes approved",
+      approved: true,
+    },
+    {
+      key: "webhook_runbook_approved",
+      label: "Gmail webhook and disable runbook reviewed",
+      approved: true,
+    },
+    {
+      key: "redaction_rules_approved",
+      label: "Provider error redaction rules approved",
+      approved: true,
+    },
+  ],
+  approved_scopes: [
+    "https://www.googleapis.com/auth/calendar.events",
+    "https://www.googleapis.com/auth/drive.readonly",
+    "https://www.googleapis.com/auth/gmail.readonly",
+  ],
+  missing_config_names: [],
+  missing_approval_keys: [],
+  connection_counts: {
+    calendar_connection_count: 1,
+    gmail_connection_count: 1,
+    drive_connection_count: 1,
+    connected_calendar_account_count: 1,
+    connected_gmail_account_count: 1,
+    connected_drive_account_count: 1,
+  },
+  last_test_status: "passed",
+  last_tested_at: "2026-06-09T00:00:00Z",
+  last_error_redacted: null,
+  readiness: "ready_for_user_connections",
+};
+
+export const googleWorkspaceReadinessTest = {
+  provider: "google_workspace",
+  status: "passed",
+  checks: [
+    {
+      key: "GOOGLE_WORKSPACE_CLIENT_ID",
+      label: "GOOGLE_WORKSPACE_CLIENT_ID",
+      status: "passed",
+      detail: null,
+    },
+  ],
+  readiness: "ready_for_user_connections",
+  tested_at: "2026-06-09T00:01:00Z",
+};
+
 export const providerCostProfiles = {
   cost_profiles: [
     {
@@ -617,6 +690,20 @@ export function mockBillingFetch(fetchMock: ReturnType<typeof vi.fn>) {
       return jsonResponse({ status: "queued_for_manual_reprocess" });
     }
     if (url.includes("/api/platform-admin/provider-events")) return jsonResponse(providerEvents);
+    if (
+      url.includes("/api/admin/google-workspace-configuration/test")
+    ) {
+      return jsonResponse(googleWorkspaceReadinessTest);
+    }
+    if (
+      url.includes("/api/admin/google-workspace-configuration") &&
+      init?.method === "PATCH"
+    ) {
+      return jsonResponse(googleWorkspaceConfiguration);
+    }
+    if (url.includes("/api/admin/google-workspace-configuration")) {
+      return jsonResponse(googleWorkspaceConfiguration);
+    }
     if (url.includes("/api/admin/integrations")) return jsonResponse(tenantIntegrations);
     if (url.includes("/api/drive/google/status")) return jsonResponse(googleDriveStatus);
     if (url.includes("/api/drive/google/files")) return jsonResponse(googleDriveFiles);
