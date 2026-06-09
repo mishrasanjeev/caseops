@@ -8,9 +8,21 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
 from caseops_api.core.settings import get_settings
-from caseops_api.db.models import NotificationDeliveryIntent, TrackedCase, TrackedCaseUpdate
+from caseops_api.db.models import (
+    AuditEvent,
+    Company,
+    CompanyMembership,
+    NotificationDeliveryIntent,
+    TrackedCase,
+    TrackedCaseUpdate,
+    User,
+)
 from caseops_api.db.session import get_session_factory
-from caseops_api.services.case_tracking import normalize_cnr, poll_tracked_cases
+from caseops_api.services.case_tracking import (
+    download_case_tracking_source,
+    normalize_cnr,
+    poll_tracked_cases,
+)
 from caseops_api.services.case_tracking_providers import (
     CaseSearchQuery,
     CaseTrackingProviderError,
@@ -19,6 +31,7 @@ from caseops_api.services.case_tracking_providers import (
     ProviderCaseEvent,
     ProviderCaseSnapshot,
 )
+from caseops_api.services.identity import SessionContext
 from tests.test_auth_company import auth_headers, bootstrap_company
 
 
@@ -69,7 +82,10 @@ class FakeCaseTrackingProvider:
                     source_record_key="order:1",
                     title="Order dated 26 May 2026",
                     event_date=date(2026, 5, 26),
-                    source_url="https://provider.example/order-1",
+                    source_url=(
+                        "https://provider.example/api/partner/case/"
+                        "DLHC010012342026/order/order-1.pdf"
+                    ),
                     text="The court issued directions and listed the matter.",
                 )
             ],
@@ -90,6 +106,17 @@ class FakeCaseTrackingProvider:
 
 def _bootstrap(client: TestClient) -> str:
     return str(bootstrap_company(client)["access_token"])
+
+
+def _context_from_bootstrap(boot: dict[str, object]) -> SessionContext:
+    with get_session_factory()() as session:
+        company = session.get(Company, str(boot["company"]["id"]))
+        user = session.get(User, str(boot["user"]["id"]))
+        membership = session.get(CompanyMembership, str(boot["membership"]["id"]))
+        assert company is not None
+        assert user is not None
+        assert membership is not None
+        return SessionContext(company=company, user=user, membership=membership)
 
 
 def test_case_tracking_provider_disabled_state_is_safe(client: TestClient) -> None:
@@ -368,6 +395,10 @@ def test_case_tracking_refresh_detects_order_and_enqueues_in_app_idempotently(
     assert body["delivery_status"] == "in_app_only"
     assert len(body["created_updates"]) == 1
     assert body["created_updates"][0]["update_type"] == "new_order"
+    assert body["created_updates"][0]["source_url"].startswith(
+        f"/api/case-tracking/bookmarks/{bookmark_id}/updates/",
+    )
+    assert "provider.example" not in json.dumps(body)
     assert "lawyer review" in body["created_updates"][0]["ai_summary"]["review_framing"]
 
     rerun = client.post(
@@ -383,6 +414,10 @@ def test_case_tracking_refresh_detects_order_and_enqueues_in_app_idempotently(
     )
     assert updates.status_code == 200, updates.text
     assert len(updates.json()["updates"]) == 1
+    assert updates.json()["updates"][0]["source_url"].startswith(
+        f"/api/case-tracking/bookmarks/{bookmark_id}/updates/",
+    )
+    assert "provider.example" not in json.dumps(updates.json())
 
     with get_session_factory()() as session:
         assert session.scalar(select(TrackedCaseUpdate)) is not None
@@ -390,6 +425,90 @@ def test_case_tracking_refresh_detects_order_and_enqueues_in_app_idempotently(
         assert len(intents) == 1
         assert intents[0].channel == "in_app"
         assert intents[0].event_type == "case_tracking.new_order"
+
+
+def test_case_tracking_source_download_uses_server_side_provider_auth(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    boot = bootstrap_company(client)
+    token = str(boot["access_token"])
+    provider = FakeCaseTrackingProvider()
+    monkeypatch.setattr(
+        "caseops_api.services.case_tracking.get_case_tracking_provider",
+        lambda: provider,
+    )
+    create = client.post(
+        "/api/case-tracking/bookmarks",
+        headers=auth_headers(token),
+        json={
+            "provider": "ecourtsindia",
+            "cnr_number": "DLHC010012342026",
+            "case_number": "WP(C) 1/2026",
+            "court_code": "DLHC",
+            "court_name": "Delhi High Court",
+            "case_title": "Example Petitioner v Example Respondent",
+            "notification_enabled": True,
+        },
+    )
+    assert create.status_code == 201, create.text
+    bookmark_id = create.json()["id"]
+    refresh = client.post(
+        f"/api/case-tracking/bookmarks/{bookmark_id}/refresh",
+        headers=auth_headers(token),
+    )
+    assert refresh.status_code == 200, refresh.text
+    update = refresh.json()["created_updates"][0]
+    assert update["source_url"].startswith(
+        f"/api/case-tracking/bookmarks/{bookmark_id}/updates/{update['id']}/source"
+    )
+
+    monkeypatch.setenv("CASEOPS_CASE_TRACKING_ENABLED", "true")
+    monkeypatch.setenv("CASEOPS_CASE_TRACKING_PROVIDER", "ecourtsindia")
+    monkeypatch.setenv("CASEOPS_ECOURTSINDIA_API_BASE_URL", "https://provider.example")
+    monkeypatch.setenv("CASEOPS_ECOURTSINDIA_API_TOKEN", "server-side-token")
+    get_settings.cache_clear()
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        assert request.headers["authorization"] == "Bearer server-side-token"
+        assert request.url.path == (
+            "/api/partner/case/DLHC010012342026/order/order-1.pdf"
+        )
+        return httpx.Response(
+            200,
+            headers={
+                "content-type": "application/pdf",
+                "content-disposition": 'attachment; filename="order-1.pdf"',
+            },
+            content=b"%PDF-1.4\nsource\n%%EOF",
+        )
+
+    try:
+        context = _context_from_bootstrap(boot)
+        with get_session_factory()() as session:
+            download = download_case_tracking_source(
+                session,
+                context=context,
+                bookmark_id=bookmark_id,
+                update_id=update["id"],
+                transport=httpx.MockTransport(handler),
+            )
+            assert download.content.startswith(b"%PDF")
+            assert download.content_type == "application/pdf"
+            assert download.filename == "order-1.pdf"
+            assert requests
+            assert (
+                session.scalar(
+                    select(AuditEvent).where(
+                        AuditEvent.action == "case_tracking.source_downloaded"
+                    )
+                )
+                is not None
+            )
+    finally:
+        get_settings.cache_clear()
 
 
 def test_case_tracking_poll_continues_after_provider_failure(

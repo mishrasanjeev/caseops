@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
+from fastapi.responses import Response
 
 from caseops_api.api.dependencies import DbSession, require_capability
 from caseops_api.schemas.case_tracking import (
@@ -18,6 +19,7 @@ from caseops_api.schemas.case_tracking import (
 )
 from caseops_api.services.case_tracking import (
     create_bookmark,
+    download_case_tracking_source,
     list_bookmarks,
     list_updates,
     provider_status_response,
@@ -129,3 +131,26 @@ def get_case_tracking_bookmark_updates(
     session: DbSession,
 ) -> CaseTrackingUpdateListResponse:
     return list_updates(session, context=context, bookmark_id=bookmark_id)
+
+
+@router.get(
+    "/bookmarks/{bookmark_id}/updates/{update_id}/source",
+    summary="Download a tracked-case source document through CaseOps provider auth.",
+)
+def get_case_tracking_update_source(
+    bookmark_id: str,
+    update_id: str,
+    context: CaseTrackingUser,
+    session: DbSession,
+) -> Response:
+    download = download_case_tracking_source(
+        session,
+        context=context,
+        bookmark_id=bookmark_id,
+        update_id=update_id,
+    )
+    return Response(
+        content=download.content,
+        media_type=download.content_type,
+        headers={"Content-Disposition": f'attachment; filename="{download.filename}"'},
+    )

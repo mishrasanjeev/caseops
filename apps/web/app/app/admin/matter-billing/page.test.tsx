@@ -10,6 +10,7 @@ const {
   fetchMatterBillingProfilesMock,
   fetchMatterInvoiceNumberPreviewMock,
   toastSuccess,
+  updateMatterBillingProfileMock,
   useCapabilityMock,
 } = vi.hoisted(() => ({
   createMatterBillingProfileMock: vi.fn(),
@@ -17,6 +18,7 @@ const {
   fetchMatterBillingProfilesMock: vi.fn(),
   fetchMatterInvoiceNumberPreviewMock: vi.fn(),
   toastSuccess: vi.fn(),
+  updateMatterBillingProfileMock: vi.fn(),
   useCapabilityMock: vi.fn(),
 }));
 
@@ -25,6 +27,7 @@ vi.mock("@/lib/api/endpoints", () => ({
   createMatterBillingRate: createMatterBillingRateMock,
   fetchMatterBillingProfiles: fetchMatterBillingProfilesMock,
   fetchMatterInvoiceNumberPreview: fetchMatterInvoiceNumberPreviewMock,
+  updateMatterBillingProfile: updateMatterBillingProfileMock,
 }));
 
 vi.mock("@/lib/capabilities", () => ({
@@ -85,6 +88,7 @@ describe("AdminMatterBillingPage", () => {
     fetchMatterBillingProfilesMock.mockReset();
     fetchMatterInvoiceNumberPreviewMock.mockReset();
     toastSuccess.mockReset();
+    updateMatterBillingProfileMock.mockReset();
     useCapabilityMock.mockReset();
     useCapabilityMock.mockReturnValue(true);
     fetchMatterBillingProfilesMock.mockResolvedValue({ profiles: [defaultProfile] });
@@ -94,6 +98,7 @@ describe("AdminMatterBillingPage", () => {
       profile_id: "profile-1",
     });
     createMatterBillingProfileMock.mockResolvedValue(defaultProfile);
+    updateMatterBillingProfileMock.mockResolvedValue(defaultProfile);
     createMatterBillingRateMock.mockResolvedValue({
       id: "rate-1",
       company_id: "company-1",
@@ -128,7 +133,7 @@ describe("AdminMatterBillingPage", () => {
     expect(screen.getByText("9982")).toBeInTheDocument();
   });
 
-  it("saves a default billing profile with Indian invoice fields", async () => {
+  it("updates the existing default billing profile with Indian invoice fields", async () => {
     const user = userEvent.setup();
     render(withClient(<AdminMatterBillingPage />));
 
@@ -140,11 +145,14 @@ describe("AdminMatterBillingPage", () => {
     await user.type(screen.getByLabelText("Place of supply"), "Delhi");
     await user.clear(screen.getByLabelText("Default SAC/HSN"));
     await user.type(screen.getByLabelText("Default SAC/HSN"), "9982");
+    await screen.findByText("GBA-0007");
     await user.click(screen.getByRole("button", { name: /Save default profile/i }));
 
-    await waitFor(() => expect(createMatterBillingProfileMock).toHaveBeenCalledTimes(1));
-    expect(createMatterBillingProfileMock).toHaveBeenCalledWith(
-      expect.objectContaining({
+    await waitFor(() => expect(updateMatterBillingProfileMock).toHaveBeenCalledTimes(1));
+    expect(createMatterBillingProfileMock).not.toHaveBeenCalled();
+    expect(updateMatterBillingProfileMock).toHaveBeenCalledWith({
+      profileId: "profile-1",
+      body: expect.objectContaining({
         currency: "INR",
         firm_gstin: "07ABCDE1234F1Z5",
         firm_pan: "ABCDE1234F",
@@ -152,6 +160,27 @@ describe("AdminMatterBillingPage", () => {
         default_sac_hsn: "9982",
         gst_applicable: true,
         retainer_adjustments_enabled: true,
+      }),
+    });
+    expect(updateMatterBillingProfileMock.mock.calls[0][0].body).not.toHaveProperty(
+      "next_invoice_sequence",
+    );
+  });
+
+  it("creates a default billing profile when none exists yet", async () => {
+    const user = userEvent.setup();
+    fetchMatterBillingProfilesMock.mockResolvedValue({ profiles: [] });
+    render(withClient(<AdminMatterBillingPage />));
+
+    await user.click(screen.getByRole("button", { name: /Save default profile/i }));
+
+    await waitFor(() => expect(createMatterBillingProfileMock).toHaveBeenCalledTimes(1));
+    expect(updateMatterBillingProfileMock).not.toHaveBeenCalled();
+    expect(createMatterBillingProfileMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "GBA Law Office",
+        is_default: true,
+        currency: "INR",
       }),
     );
   });

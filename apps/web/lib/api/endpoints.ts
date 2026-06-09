@@ -1,5 +1,5 @@
 import { apiRequest } from "./client";
-import { API_BASE_URL, ApiError } from "./config";
+import { API_BASE_URL, ApiError, NetworkError } from "./config";
 import {
   type AuthContext,
   type AuthSession,
@@ -6357,10 +6357,24 @@ export async function downloadApiFile(path: string, fallbackName: string): Promi
   const url = path.startsWith("http")
     ? path
     : `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
-  const response = await fetch(url, {
-    credentials: "include",
-    headers: { Accept: "*/*" },
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      credentials: "include",
+      headers: { Accept: "*/*" },
+    });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw err;
+    }
+    if (startBrowserDownload(url, fallbackName)) {
+      return;
+    }
+    throw new NetworkError(
+      "Could not reach the workspace API. Check your connection and try again.",
+      err,
+    );
+  }
   if (!response.ok) {
     let detail = `Download failed (${response.status}).`;
     let parsed: unknown = null;
@@ -6389,7 +6403,20 @@ export async function downloadApiFile(path: string, fallbackName: string): Promi
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL(href);
+  window.setTimeout(() => URL.revokeObjectURL(href), 30_000);
+}
+
+function startBrowserDownload(url: string, fallbackName: string): boolean {
+  if (typeof document === "undefined") return false;
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fallbackName;
+  a.rel = "noopener noreferrer";
+  a.target = "_blank";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  return true;
 }
 
 export async function fetchPlatformOverview(): Promise<PlatformOverviewResponse> {

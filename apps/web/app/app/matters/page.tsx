@@ -2,7 +2,7 @@
 
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Briefcase, Filter, RotateCcw, Tags } from "lucide-react";
+import { Briefcase, Filter, Loader2, RotateCcw, Tags } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -25,7 +25,13 @@ import {
 } from "@/components/ui/Select";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { bulkAssignMatterTag, listMatterTags, listMatters } from "@/lib/api/endpoints";
+import { apiErrorMessage } from "@/lib/api/config";
+import {
+  bulkAssignMatterTag,
+  listMatterTags,
+  listMatters,
+  updateMatter,
+} from "@/lib/api/endpoints";
 import type { Matter } from "@/lib/api/schemas";
 import { useCapability } from "@/lib/capabilities";
 import { formatLegalDate } from "@/lib/dates";
@@ -57,6 +63,19 @@ const EMPTY_FILTERS: FilterState = {
   min_claim_amount: "",
   max_claim_amount: "",
 };
+
+const MATTER_STATUSES = [
+  { value: "intake", label: "Intake" },
+  { value: "active", label: "Active" },
+  { value: "on_hold", label: "On hold" },
+  { value: "disposed", label: "Disposed" },
+] as const;
+
+type MatterStatusValue = (typeof MATTER_STATUSES)[number]["value"];
+
+const MATTER_STATUS_LABELS: Record<string, string> = Object.fromEntries(
+  MATTER_STATUSES.map((status) => [status.value, status.label]),
+);
 
 function formatDate(value: string | null | undefined): string {
   // Legal calendar dates (next_hearing_on etc.) are SQL Date values
@@ -118,6 +137,8 @@ export default function MattersPage() {
   const [draftFilters, setDraftFilters] = useState<FilterState>(EMPTY_FILTERS);
   const [appliedFilters, setAppliedFilters] = useState<FilterState>(EMPTY_FILTERS);
   const [bulkTagId, setBulkTagId] = useState<string>("none");
+  const canCreateMatter = useCapability("matters:create");
+  const canEditMatters = useCapability("matters:edit");
   const listParams = useMemo(
     () => ({
       q: appliedFilters.q.trim() || undefined,
@@ -149,6 +170,19 @@ export default function MattersPage() {
   const { data: tagData } = useQuery({
     queryKey: ["matter-tags"],
     queryFn: listMatterTags,
+  });
+  const statusMutation = useMutation({
+    mutationFn: (input: { matterId: string; status: MatterStatusValue }) =>
+      updateMatter({ matterId: input.matterId, status: input.status }),
+    onSuccess: async (matter) => {
+      await queryClient.invalidateQueries({ queryKey: ["matters"] });
+      toast.success(
+        `Status updated to ${MATTER_STATUS_LABELS[matter.status] ?? matter.status}.`,
+      );
+    },
+    onError: (err) => {
+      toast.error(apiErrorMessage(err, "Could not update matter status."));
+    },
   });
 
   const columns = useMemo<ColumnDef<Matter>[]>(
@@ -227,18 +261,57 @@ export default function MattersPage() {
       {
         accessorKey: "status",
         header: "Status",
-        cell: (ctx) => <StatusBadge status={ctx.getValue<string>()} />,
+        cell: (ctx) => {
+          const matter = ctx.row.original;
+          if (!canEditMatters) {
+            return <StatusBadge status={ctx.getValue<string>()} />;
+          }
+          const rowPending =
+            statusMutation.isPending &&
+            statusMutation.variables?.matterId === matter.id;
+          return (
+            <div
+              className="flex items-center gap-2"
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => event.stopPropagation()}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <select
+                aria-label={`Status for ${matter.matter_code}`}
+                className="h-9 min-w-32 rounded-md border border-[var(--color-line)] bg-white px-2 text-sm text-[var(--color-ink)]"
+                value={matter.status}
+                disabled={rowPending}
+                onChange={(event) => {
+                  const nextStatus = event.target.value as MatterStatusValue;
+                  if (nextStatus !== matter.status) {
+                    statusMutation.mutate({
+                      matterId: matter.id,
+                      status: nextStatus,
+                    });
+                  }
+                }}
+              >
+                {MATTER_STATUSES.map((statusOption) => (
+                  <option key={statusOption.value} value={statusOption.value}>
+                    {statusOption.label}
+                  </option>
+                ))}
+              </select>
+              {rowPending ? (
+                <Loader2 className="h-4 w-4 animate-spin text-[var(--color-mute)]" />
+              ) : null}
+            </div>
+          );
+        },
       },
     ],
-    [],
+    [canEditMatters, statusMutation],
   );
 
   const matters = useMemo(
     () => data?.pages.flatMap((page) => page.matters) ?? [],
     [data],
   );
-  const canCreateMatter = useCapability("matters:create");
-  const canEditMatters = useCapability("matters:edit");
   const matterTags = tagData?.tags ?? [];
   const bulkMutation = useMutation({
     mutationFn: () =>
@@ -296,7 +369,7 @@ export default function MattersPage() {
               <SelectItem value="intake">Intake</SelectItem>
               <SelectItem value="active">Active</SelectItem>
               <SelectItem value="on_hold">On hold</SelectItem>
-              <SelectItem value="disposed">Dispose</SelectItem>
+              <SelectItem value="disposed">Disposed</SelectItem>
             </SelectContent>
           </Select>
         </div>

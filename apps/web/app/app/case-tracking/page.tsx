@@ -27,7 +27,7 @@ import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { apiErrorMessage } from "@/lib/api/config";
+import { API_BASE_URL, apiErrorMessage } from "@/lib/api/config";
 import {
   createCaseTrackingBookmark,
   fetchCaseTrackingStatus,
@@ -249,7 +249,7 @@ export default function CaseTrackingPage() {
                         next_hearing_on: result.next_hearing_on,
                         matter_id: matterId,
                         notification_enabled: true,
-                        metadata: { source_url: result.source_url },
+                        metadata: {},
                       })
                     }
                   />
@@ -437,6 +437,11 @@ function BookmarkRow({
 }
 
 function UpdateRow({ update }: { update: CaseTrackingUpdateRecord }) {
+  const sourceHref = update.source_url
+    ? update.source_url.startsWith("/api/")
+      ? `${API_BASE_URL}${update.source_url}`
+      : update.source_url
+    : null;
   return (
     <div className="space-y-2 p-3">
       <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
@@ -447,9 +452,9 @@ function UpdateRow({ update }: { update: CaseTrackingUpdateRecord }) {
             <Badge tone="neutral">AI summary for lawyer review</Badge>
           </div>
         </div>
-        {update.source_url ? (
+        {sourceHref ? (
           <a
-            href={update.source_url}
+            href={sourceHref}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-xs font-medium text-[var(--color-brand-600)] hover:underline"

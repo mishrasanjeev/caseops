@@ -6,8 +6,10 @@ import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from datetime import time as datetime_time
+from urllib.parse import unquote, urljoin, urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+import httpx
 from fastapi import HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
@@ -69,6 +71,16 @@ from caseops_api.services.notification_delivery import (
 )
 
 _MAX_BODY_LENGTH = 500
+_TENANT_METADATA_BLOCKLIST = (
+    "secret",
+    "token",
+    "signature",
+    "raw",
+    "payload",
+    "url",
+    "pdf",
+    "authorization",
+)
 
 
 class CaseUpdateSummaryPayload(BaseModel):
@@ -257,7 +269,9 @@ def _search_record(snapshot: ProviderCaseSnapshot) -> CaseTrackingSearchResultRe
         current_status=snapshot.current_status,
         current_stage=snapshot.current_stage,
         next_hearing_on=snapshot.next_hearing_on,
-        source_url=snapshot.source_url,
+        # Source documents/case links can require provider bearer auth. Tenant
+        # browsers must use CaseOps-controlled routes, not provider URLs.
+        source_url=None,
     )
 
 
@@ -338,7 +352,7 @@ def _tracked_case_record(case: TrackedCase) -> TrackedCaseRecord:
         next_hearing_on=case.next_hearing_on,
         last_provider_checked_at=case.last_provider_checked_at,
         last_error=case.last_error,
-        metadata=dict(case.metadata_json or {}),
+        metadata=_tenant_safe_metadata(case.metadata_json or {}),
     )
 
 
@@ -386,6 +400,61 @@ def _find_tracked_case(
         ),
     )
     return session.scalar(statement)
+
+
+def _tenant_safe_metadata(metadata: dict[str, object]) -> dict[str, object]:
+    safe: dict[str, object] = {}
+    for key, value in metadata.items():
+        lowered = key.lower()
+        if any(blocked in lowered for blocked in _TENANT_METADATA_BLOCKLIST):
+            continue
+        safe_value = _tenant_safe_value(value)
+        if safe_value is not _UNSAFE_METADATA_VALUE:
+            safe[key] = safe_value
+    return safe
+
+
+_UNSAFE_METADATA_VALUE = object()
+
+
+def _tenant_safe_value(value: object) -> object:
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    if isinstance(value, list):
+        cleaned = []
+        for item in value[:20]:
+            safe_item = _tenant_safe_value(item)
+            if safe_item is not _UNSAFE_METADATA_VALUE:
+                cleaned.append(safe_item)
+        return cleaned
+    if isinstance(value, dict):
+        return _tenant_safe_metadata(value)
+    return _UNSAFE_METADATA_VALUE
+
+
+def _source_proxy_path(*, bookmark_id: str | None, update_id: str) -> str | None:
+    if not bookmark_id:
+        return None
+    return (
+        f"/api/case-tracking/bookmarks/{bookmark_id}/updates/{update_id}/source"
+    )
+
+
+def _safe_ai_summary(
+    update: TrackedCaseUpdate,
+    *,
+    bookmark_id: str | None,
+) -> dict[str, object] | None:
+    if not update.ai_summary_json:
+        return None
+    summary = dict(update.ai_summary_json)
+    if "source_reference" in summary:
+        summary["source_reference"] = (
+            _source_proxy_path(bookmark_id=bookmark_id, update_id=update.id)
+            if update.source_url
+            else None
+        )
+    return _tenant_safe_metadata(summary)
 
 
 def create_bookmark(
@@ -679,7 +748,11 @@ def _summary_for_update(
     return summary["concise_summary"], summary, model_run.id
 
 
-def _update_record(update: TrackedCaseUpdate) -> CaseTrackingUpdateRecord:
+def _update_record(
+    update: TrackedCaseUpdate,
+    *,
+    bookmark_id: str | None = None,
+) -> CaseTrackingUpdateRecord:
     return CaseTrackingUpdateRecord(
         id=update.id,
         company_id=update.company_id,
@@ -688,11 +761,13 @@ def _update_record(update: TrackedCaseUpdate) -> CaseTrackingUpdateRecord:
         source_record_key=update.source_record_key,
         title=update.title,
         summary=update.summary,
-        ai_summary=dict(update.ai_summary_json) if update.ai_summary_json else None,
-        source_url=update.source_url,
+        ai_summary=_safe_ai_summary(update, bookmark_id=bookmark_id),
+        source_url=_source_proxy_path(bookmark_id=bookmark_id, update_id=update.id)
+        if update.source_url
+        else None,
         order_date=update.order_date,
         hearing_date=update.hearing_date,
-        provider_metadata=dict(update.provider_metadata_json or {}),
+        provider_metadata=_tenant_safe_metadata(update.provider_metadata_json or {}),
         created_at=update.created_at,
     )
 
@@ -721,8 +796,7 @@ def _notification_body(update: TrackedCaseUpdate, tracked_case: TrackedCase) -> 
     parts = [
         update.summary or update.title,
         tracked_case.court_name,
-        update.source_url,
-        "Provider-normalized source. In-app only.",
+        "Open the source from the CaseOps case-tracking update. In-app only.",
     ]
     text = " ".join(part for part in parts if part)
     return text[: _MAX_BODY_LENGTH - 3].rstrip() + "..." if len(text) > _MAX_BODY_LENGTH else text
@@ -1058,7 +1132,9 @@ def refresh_bookmark(
     session.commit()
     return CaseTrackingRefreshResponse(
         bookmark=_bookmark_record(session, bookmark),
-        created_updates=[_update_record(update) for update in created],
+        created_updates=[
+            _update_record(update, bookmark_id=bookmark.id) for update in created
+        ],
     )
 
 
@@ -1079,7 +1155,173 @@ def list_updates(
             .order_by(TrackedCaseUpdate.created_at.desc())
         )
     )
-    return CaseTrackingUpdateListResponse(updates=[_update_record(row) for row in rows])
+    return CaseTrackingUpdateListResponse(
+        updates=[_update_record(row, bookmark_id=bookmark.id) for row in rows]
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class CaseTrackingSourceDownload:
+    content: bytes
+    content_type: str
+    filename: str
+
+
+def _get_update_for_bookmark(
+    session: Session,
+    *,
+    context: SessionContext,
+    bookmark: TrackedCaseBookmark,
+    update_id: str,
+) -> TrackedCaseUpdate:
+    update = session.scalar(
+        select(TrackedCaseUpdate).where(
+            TrackedCaseUpdate.id == update_id,
+            TrackedCaseUpdate.company_id == context.company.id,
+            TrackedCaseUpdate.tracked_case_id == bookmark.tracked_case_id,
+        )
+    )
+    if update is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Case tracking update not found.",
+        )
+    return update
+
+
+def _validated_ecourts_source_url(raw_url: str, *, base_url: str) -> str:
+    base = base_url.rstrip("/")
+    parsed_base = urlparse(base)
+    if not parsed_base.scheme or not parsed_base.netloc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Case tracking provider base URL is not configured correctly.",
+        )
+    absolute = raw_url
+    if raw_url.startswith("/"):
+        absolute = urljoin(f"{parsed_base.scheme}://{parsed_base.netloc}", raw_url)
+    parsed = urlparse(absolute)
+    if parsed.scheme not in {"http", "https"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Case tracking source URL is not downloadable.",
+        )
+    if parsed.netloc.lower() != parsed_base.netloc.lower():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Case tracking source is outside the configured provider.",
+        )
+    if "/api/partner/case/" not in parsed.path or "/order/" not in parsed.path:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Case tracking source path is not an order document.",
+        )
+    return absolute
+
+
+def _filename_from_disposition(disposition: str | None) -> str | None:
+    if not disposition:
+        return None
+    match = re.search(r'filename\*?=(?:UTF-8\'\')?"?([^";]+)"?', disposition, re.I)
+    if not match:
+        return None
+    return unquote(match.group(1)).strip() or None
+
+
+def _safe_source_filename(update: TrackedCaseUpdate, response: httpx.Response) -> str:
+    header_name = _filename_from_disposition(response.headers.get("content-disposition"))
+    base_name = header_name or update.title or update.source_record_key or "case-source"
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "-", base_name.strip()).strip(".-")
+    if not safe:
+        safe = "case-source"
+    if "." not in safe:
+        content_type = response.headers.get("content-type", "").lower()
+        safe = f"{safe}.pdf" if "pdf" in content_type else f"{safe}.bin"
+    return safe[:180]
+
+
+def download_case_tracking_source(
+    session: Session,
+    *,
+    context: SessionContext,
+    bookmark_id: str,
+    update_id: str,
+    transport: httpx.BaseTransport | None = None,
+) -> CaseTrackingSourceDownload:
+    bookmark = _get_bookmark(session, context=context, bookmark_id=bookmark_id)
+    update = _get_update_for_bookmark(
+        session,
+        context=context,
+        bookmark=bookmark,
+        update_id=update_id,
+    )
+    if not update.source_url:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No source document is available for this case tracking update.",
+        )
+    settings = get_settings()
+    enabled, provider, configured, reason = provider_status()
+    if not enabled or not configured or provider != "ecourtsindia":
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=reason or "Case tracking provider credentials are not configured.",
+        )
+    if not settings.ecourtsindia_api_base_url or not settings.ecourtsindia_api_token:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="eCourtsIndia provider credentials are not configured.",
+        )
+    source_url = _validated_ecourts_source_url(
+        update.source_url,
+        base_url=settings.ecourtsindia_api_base_url,
+    )
+    try:
+        with httpx.Client(
+            timeout=30,
+            follow_redirects=True,
+            transport=transport,
+        ) as client:
+            response = client.get(
+                source_url,
+                headers={
+                    "Authorization": f"Bearer {settings.ecourtsindia_api_token}",
+                    "Accept": "application/pdf,application/octet-stream,*/*",
+                },
+            )
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=redact_provider_error(exc),
+        ) from exc
+    content_type = response.headers.get("content-type") or "application/octet-stream"
+    if "application/json" in content_type.lower():
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Case tracking provider returned an error instead of a source document.",
+        )
+    record_from_context(
+        session,
+        context,
+        action="case_tracking.source_downloaded",
+        target_type="tracked_case_update",
+        target_id=update.id,
+        matter_id=bookmark.matter_id,
+        metadata={
+            "tracked_case_id_sha256": _hash_value(update.tracked_case_id),
+            "bookmark_id_sha256": _hash_value(bookmark.id),
+            "provider": provider,
+            "update_type": update.update_type,
+            "source_record_key_sha256": _hash_value(update.source_record_key),
+        },
+    )
+    session.commit()
+    return CaseTrackingSourceDownload(
+        content=response.content,
+        content_type=content_type,
+        filename=_safe_source_filename(update, response),
+    )
 
 
 def _system_contexts(session: Session) -> list[SessionContext]:
