@@ -473,6 +473,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/security-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read tenant MFA policy without exposing MFA secrets. */
+        get: operations["get_security_policy_api_admin_security_policy_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update tenant MFA policy with a grace period for existing users. */
+        patch: operations["patch_security_policy_api_admin_security_policy_patch"];
+        trace?: never;
+    };
     "/api/admin/storage-governance": {
         parameters: {
             query?: never;
@@ -793,6 +811,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/mfa/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Disable MFA after step-up verification. */
+        post: operations["mfa_disable_api_auth_mfa_disable_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/mfa/enroll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start TOTP MFA enrollment. */
+        post: operations["mfa_enroll_api_auth_mfa_enroll_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/mfa/enroll/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Verify TOTP MFA enrollment and return one-time recovery codes. */
+        post: operations["mfa_enroll_verify_api_auth_mfa_enroll_verify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/mfa/recovery-codes/regenerate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Regenerate single-use MFA recovery codes. */
+        post: operations["mfa_recovery_codes_regenerate_api_auth_mfa_recovery_codes_regenerate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/mfa/step-up": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Complete MFA step-up for high-risk actions. */
+        post: operations["mfa_step_up_api_auth_mfa_step_up_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/password-reset/complete": {
         parameters: {
             query?: never;
@@ -846,6 +949,23 @@ export interface paths {
          *     mid-session.
          */
         post: operations["refresh_api_auth_refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/security": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get account security and MFA status. */
+        get: operations["security_status_api_auth_security_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1925,6 +2045,23 @@ export interface paths {
         };
         /** Return case tracking provider availability without exposing credentials. */
         get: operations["get_case_tracking_status_api_case_tracking_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/case-tracking/support-matrix": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List tenant-visible court support before a user tracks a case. */
+        get: operations["get_case_tracking_support_matrix_api_case_tracking_support_matrix_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5522,6 +5659,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/platform-admin/billing-signoff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Production Billing Signoff */
+        get: operations["get_production_billing_signoff_api_platform_admin_billing_signoff_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/billing-signoff/evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Production Billing Signoff Evidence */
+        post: operations["post_production_billing_signoff_evidence_api_platform_admin_billing_signoff_evidence_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/case-tracking/support-matrix": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Platform Case Tracking Support Matrix */
+        get: operations["get_platform_case_tracking_support_matrix_api_platform_admin_case_tracking_support_matrix_get"];
+        put?: never;
+        /** Post Platform Case Tracking Support Matrix */
+        post: operations["post_platform_case_tracking_support_matrix_api_platform_admin_case_tracking_support_matrix_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/case-tracking/support-matrix/{row_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Patch Platform Case Tracking Support Matrix */
+        patch: operations["patch_platform_case_tracking_support_matrix_api_platform_admin_case_tracking_support_matrix__row_id__patch"];
+        trace?: never;
+    };
     "/api/platform-admin/companies/profitability": {
         parameters: {
             query?: never;
@@ -5711,6 +5917,125 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/platform-admin/finance/chargebacks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Chargeback Record */
+        post: operations["post_chargeback_record_api_platform_admin_finance_chargebacks_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/finance/credit-notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Credit Note */
+        post: operations["post_credit_note_api_platform_admin_finance_credit_notes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/finance/refunds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Refund Record */
+        post: operations["post_refund_record_api_platform_admin_finance_refunds_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/finance/settlement-imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Settlement Import */
+        post: operations["post_settlement_import_api_platform_admin_finance_settlement_imports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/finance/tds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Tds Reconciliation Row */
+        post: operations["post_tds_reconciliation_row_api_platform_admin_finance_tds_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/finance/{report}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Finance Report */
+        get: operations["get_finance_report_api_platform_admin_finance__report__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/finance/{report}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Finance Report */
+        get: operations["export_finance_report_api_platform_admin_finance__report__export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/platform-admin/integrations": {
         parameters: {
             query?: never;
@@ -5779,6 +6104,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/platform-admin/margin-readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Margin Readiness */
+        get: operations["get_margin_readiness_api_platform_admin_margin_readiness_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/platform-admin/margin-simulations": {
         parameters: {
             query?: never;
@@ -5824,6 +6166,91 @@ export interface paths {
         get: operations["get_platform_overview_api_platform_admin_overview_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/password-reset-readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Password Reset Readiness */
+        get: operations["get_password_reset_readiness_api_platform_admin_password_reset_readiness_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/pine-labs/production-activation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Pine Labs Production Activation Decision */
+        post: operations["post_pine_labs_production_activation_decision_api_platform_admin_pine_labs_production_activation_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/pine-labs/uat-evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Pine Labs Uat Evidence */
+        post: operations["post_pine_labs_uat_evidence_api_platform_admin_pine_labs_uat_evidence_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/pine-labs/uat-readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Pine Labs Uat Readiness */
+        get: operations["get_pine_labs_uat_readiness_api_platform_admin_pine_labs_uat_readiness_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/pine-labs/uat-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Pine Labs Uat Run */
+        post: operations["create_pine_labs_uat_run_api_platform_admin_pine_labs_uat_runs_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -8833,6 +9260,181 @@ export interface components {
             /** Source Url */
             source_url?: string | null;
         };
+        /** CaseTrackingSupportMatrixAdminRecord */
+        CaseTrackingSupportMatrixAdminRecord: {
+            /** Bench Jurisdiction */
+            bench_jurisdiction?: string | null;
+            /** Bulk Refresh Cost Minor */
+            bulk_refresh_cost_minor: number;
+            /** Court */
+            court: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Currency
+             * @constant
+             */
+            currency: "INR";
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+            /** Evidence Ref */
+            evidence_ref?: string | null;
+            /** Failure Code Mapping */
+            failure_code_mapping?: {
+                [key: string]: unknown;
+            } | null;
+            /** Freshness Sla */
+            freshness_sla?: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Legal Tos Status
+             * @default unknown
+             */
+            legal_tos_status: string;
+            /** Lookup Method */
+            lookup_method: string;
+            /** Provider */
+            provider: string;
+            /** Rate Limit */
+            rate_limit?: string | null;
+            /** Refresh Cost Minor */
+            refresh_cost_minor: number;
+            /** Status Notes */
+            status_notes?: string | null;
+            /**
+             * Tenant Visible
+             * @default true
+             */
+            tenant_visible: boolean;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** CaseTrackingSupportMatrixCreateRequest */
+        CaseTrackingSupportMatrixCreateRequest: {
+            /** Bench Jurisdiction */
+            bench_jurisdiction?: string | null;
+            /**
+             * Bulk Refresh Cost Minor
+             * @default 0
+             */
+            bulk_refresh_cost_minor: number;
+            /** Court */
+            court: string;
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+            /** Evidence Ref */
+            evidence_ref?: string | null;
+            /** Failure Code Mapping */
+            failure_code_mapping?: {
+                [key: string]: unknown;
+            } | null;
+            /** Freshness Sla */
+            freshness_sla?: string | null;
+            /**
+             * Legal Tos Status
+             * @default unknown
+             */
+            legal_tos_status: string;
+            /** Lookup Method */
+            lookup_method: string;
+            /** Provider */
+            provider: string;
+            /** Rate Limit */
+            rate_limit?: string | null;
+            /**
+             * Refresh Cost Minor
+             * @default 0
+             */
+            refresh_cost_minor: number;
+            /** Status Notes */
+            status_notes?: string | null;
+            /**
+             * Tenant Visible
+             * @default true
+             */
+            tenant_visible: boolean;
+        };
+        /** CaseTrackingSupportMatrixResponse */
+        CaseTrackingSupportMatrixResponse: {
+            /** Rows */
+            rows: components["schemas"]["CaseTrackingSupportMatrixAdminRecord"][];
+        };
+        /** CaseTrackingSupportMatrixTenantRecord */
+        CaseTrackingSupportMatrixTenantRecord: {
+            /** Bench Jurisdiction */
+            bench_jurisdiction?: string | null;
+            /** Court */
+            court: string;
+            /** Enabled */
+            enabled: boolean;
+            /** Failure Code Mapping */
+            failure_code_mapping?: {
+                [key: string]: unknown;
+            } | null;
+            /** Freshness Sla */
+            freshness_sla?: string | null;
+            /** Id */
+            id: string;
+            /** Legal Tos Status */
+            legal_tos_status: string;
+            /** Lookup Method */
+            lookup_method: string;
+            /** Provider */
+            provider: string;
+            /** Rate Limit */
+            rate_limit?: string | null;
+            /** Status Notes */
+            status_notes?: string | null;
+        };
+        /** CaseTrackingSupportMatrixUpdateRequest */
+        CaseTrackingSupportMatrixUpdateRequest: {
+            /** Bench Jurisdiction */
+            bench_jurisdiction?: string | null;
+            /** Bulk Refresh Cost Minor */
+            bulk_refresh_cost_minor?: number | null;
+            /** Court */
+            court?: string | null;
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Evidence Ref */
+            evidence_ref?: string | null;
+            /** Failure Code Mapping */
+            failure_code_mapping?: {
+                [key: string]: unknown;
+            } | null;
+            /** Freshness Sla */
+            freshness_sla?: string | null;
+            /** Legal Tos Status */
+            legal_tos_status?: string | null;
+            /** Lookup Method */
+            lookup_method?: string | null;
+            /** Rate Limit */
+            rate_limit?: string | null;
+            /** Refresh Cost Minor */
+            refresh_cost_minor?: number | null;
+            /** Status Notes */
+            status_notes?: string | null;
+            /** Tenant Visible */
+            tenant_visible?: boolean | null;
+        };
+        /** CaseTrackingTenantSupportMatrixResponse */
+        CaseTrackingTenantSupportMatrixResponse: {
+            /** Rows */
+            rows: components["schemas"]["CaseTrackingSupportMatrixTenantRecord"][];
+        };
         /** CaseTrackingUpdateListResponse */
         CaseTrackingUpdateListResponse: {
             /** Updates */
@@ -10573,6 +11175,45 @@ export interface components {
             /** Courts */
             courts: components["schemas"]["CourtRecord"][];
         };
+        /** CreditNoteCreateRequest */
+        CreditNoteCreateRequest: {
+            /**
+             * Amount Minor
+             * @default 0
+             */
+            amount_minor: number;
+            /** Company Id */
+            company_id: string;
+            /** Credit Note Number */
+            credit_note_number: string;
+            /** Evidence Ref */
+            evidence_ref?: string | null;
+            /** Issued On */
+            issued_on?: string | null;
+            /** Payment Order Id */
+            payment_order_id?: string | null;
+            /** Reason */
+            reason?: string | null;
+            /** Refund Record Id */
+            refund_record_id?: string | null;
+            /**
+             * Status
+             * @default issued
+             */
+            status: string;
+            /** Subscription Id */
+            subscription_id?: string | null;
+            /**
+             * Tax Amount Minor
+             * @default 0
+             */
+            tax_amount_minor: number;
+            /**
+             * Tds Adjustment Minor
+             * @default 0
+             */
+            tds_adjustment_minor: number;
+        };
         /** CustomRoleCreateRequest */
         CustomRoleCreateRequest: {
             /** Base Role */
@@ -11840,6 +12481,65 @@ export interface components {
             satisfied: boolean;
             /** Source */
             source?: string | null;
+        };
+        /** FinanceListResponse */
+        FinanceListResponse: {
+            /** Rows */
+            rows: {
+                [key: string]: unknown;
+            }[];
+        };
+        /** FinanceRecordRequest */
+        FinanceRecordRequest: {
+            /**
+             * Amount Minor
+             * @default 0
+             */
+            amount_minor: number;
+            /** Company Id */
+            company_id?: string | null;
+            /**
+             * Currency
+             * @default INR
+             * @constant
+             */
+            currency: "INR";
+            /** Occurred At */
+            occurred_at?: string | null;
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            } | null;
+            /** Payment Order Id */
+            payment_order_id?: string | null;
+            /**
+             * Provider
+             * @default pine_labs_plural
+             */
+            provider: string;
+            /**
+             * Provider Fee Minor
+             * @default 0
+             */
+            provider_fee_minor: number;
+            /** Provider Order Id */
+            provider_order_id?: string | null;
+            /** Provider Reference Id */
+            provider_reference_id?: string | null;
+            /** Reason */
+            reason?: string | null;
+            /**
+             * Status
+             * @default recorded
+             */
+            status: string;
+            /** Subscription Id */
+            subscription_id?: string | null;
+            /**
+             * Tax Minor
+             * @default 0
+             */
+            tax_minor: number;
         };
         /** FirmStorageQuotaPatchRequest */
         FirmStorageQuotaPatchRequest: {
@@ -14185,6 +14885,124 @@ export interface components {
             /** Password */
             password: string;
         };
+        /** MFADisableRequest */
+        MFADisableRequest: {
+            /** Code */
+            code?: string | null;
+            /** Reason */
+            reason: string;
+        };
+        /** MFADisableResponse */
+        MFADisableResponse: {
+            /**
+             * Status
+             * @constant
+             */
+            status: "disabled";
+        };
+        /** MFAEnrollmentStartResponse */
+        MFAEnrollmentStartResponse: {
+            /** Enrollment Id */
+            enrollment_id: string;
+            /** Otpauth Url */
+            otpauth_url: string;
+            /** Qr Svg */
+            qr_svg: string;
+            /** Secret */
+            secret: string;
+            /**
+             * Status
+             * @constant
+             */
+            status: "pending";
+        };
+        /** MFAEnrollmentVerifyResponse */
+        MFAEnrollmentVerifyResponse: {
+            /** Recovery Codes */
+            recovery_codes: string[];
+            /**
+             * Status
+             * @constant
+             */
+            status: "enrolled";
+        };
+        /** MFARecoveryCodesResponse */
+        MFARecoveryCodesResponse: {
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Recovery Codes */
+            recovery_codes: string[];
+        };
+        /** MFASecurityStatusResponse */
+        MFASecurityStatusResponse: {
+            /**
+             * All Users Required
+             * @default false
+             */
+            all_users_required: boolean;
+            /** Grace Period Ends At */
+            grace_period_ends_at?: string | null;
+            /** Mfa Enforced At */
+            mfa_enforced_at?: string | null;
+            /** Mfa Required */
+            mfa_required: boolean;
+            /**
+             * Mfa Status
+             * @enum {string}
+             */
+            mfa_status: "not_enrolled" | "pending" | "enrolled" | "disabled";
+            /**
+             * Platform Admin Required
+             * @default false
+             */
+            platform_admin_required: boolean;
+            /** Recent Step Up Expires At */
+            recent_step_up_expires_at?: string | null;
+            /** Recovery Codes Remaining */
+            recovery_codes_remaining: number;
+            /**
+             * Tenant Admin Required
+             * @default false
+             */
+            tenant_admin_required: boolean;
+        };
+        /** MFAStepUpRequest */
+        MFAStepUpRequest: {
+            /** Code */
+            code: string;
+            /**
+             * Method
+             * @default totp
+             * @enum {string}
+             */
+            method: "totp" | "recovery_code";
+            /**
+             * Purpose
+             * @default step_up
+             */
+            purpose: string;
+        };
+        /** MFAStepUpResponse */
+        MFAStepUpResponse: {
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /**
+             * Status
+             * @constant
+             */
+            status: "verified";
+        };
+        /** MFAVerifyRequest */
+        MFAVerifyRequest: {
+            /** Code */
+            code: string;
+        };
         /** MailboxAttachmentCandidateListResponse */
         MailboxAttachmentCandidateListResponse: {
             /** Candidates */
@@ -14451,6 +15269,35 @@ export interface components {
              */
             status: "queued" | "processed" | "failed" | "dead_letter";
         };
+        /** MarginReadinessResponse */
+        MarginReadinessResponse: {
+            /** Blocked */
+            blocked: boolean;
+            /** Minimum Gross Margin Bps */
+            minimum_gross_margin_bps: number;
+            /** Required Scenarios */
+            required_scenarios: components["schemas"]["MarginReadinessScenarioStatus"][];
+        };
+        /** MarginReadinessScenarioStatus */
+        MarginReadinessScenarioStatus: {
+            /** Label */
+            label: string;
+            /** Latest Gross Margin Bps */
+            latest_gross_margin_bps?: number | null;
+            /** Latest Simulation Id */
+            latest_simulation_id?: string | null;
+            /**
+             * Missing
+             * @default false
+             */
+            missing: boolean;
+            /** Readiness Blocked */
+            readiness_blocked: boolean;
+            /** Scenario Code */
+            scenario_code: string;
+            /** Uses Unapproved Estimated Costs */
+            uses_unapproved_estimated_costs: boolean;
+        };
         /** MarginSimulationListResponse */
         MarginSimulationListResponse: {
             /** Simulations */
@@ -14458,6 +15305,10 @@ export interface components {
         };
         /** MarginSimulationRecord */
         MarginSimulationRecord: {
+            /** Approved At */
+            approved_at?: string | null;
+            /** Approved By Platform Admin Id */
+            approved_by_platform_admin_id?: string | null;
             /**
              * Created At
              * Format: date-time
@@ -14468,20 +15319,35 @@ export interface components {
              * @constant
              */
             currency: "INR";
+            /**
+             * Founder Approval Status
+             * @enum {string}
+             */
+            founder_approval_status: "pending" | "approved" | "rejected";
             /** Id */
             id: string;
             /** Input */
             input: {
                 [key: string]: unknown;
             };
+            /** Minimum Gross Margin Bps */
+            minimum_gross_margin_bps: number;
+            /** Plan Code */
+            plan_code?: string | null;
+            /** Readiness Blocked */
+            readiness_blocked: boolean;
             /** Result */
             result: {
                 [key: string]: unknown;
             };
             /** Run By Platform Admin Id */
             run_by_platform_admin_id: string | null;
+            /** Scenario Code */
+            scenario_code?: string | null;
             /** Scenario Name */
             scenario_name: string | null;
+            /** Uses Unapproved Estimated Costs */
+            uses_unapproved_estimated_costs: boolean;
             /** Warnings */
             warnings: {
                 [key: string]: unknown;
@@ -14495,11 +15361,21 @@ export interface components {
              */
             ai_credits: number;
             /**
+             * Bandwidth Export Gb
+             * @default 0
+             */
+            bandwidth_export_gb: number;
+            /**
              * Billing Interval
              * @default month
              * @enum {string}
              */
             billing_interval: "month" | "year" | "one_time" | "custom";
+            /**
+             * Bulk Case Refreshes
+             * @default 0
+             */
+            bulk_case_refreshes: number;
             /**
              * Currency
              * @default INR
@@ -14512,15 +15388,37 @@ export interface components {
              */
             document_pages: number;
             /**
+             * Email Messages
+             * @default 0
+             */
+            email_messages: number;
+            /**
              * Embedding Units
              * @default 0
              */
             embedding_units: number;
             /**
+             * Llm Input Units
+             * @default 0
+             */
+            llm_input_units: number;
+            /**
+             * Llm Output Units
+             * @default 0
+             */
+            llm_output_units: number;
+            /**
              * Manual Support Minutes
              * @default 0
              */
             manual_support_minutes: number;
+            /** Minimum Gross Margin Bps */
+            minimum_gross_margin_bps?: number | null;
+            /**
+             * Ocr Pages
+             * @default 0
+             */
+            ocr_pages: number;
             /** Payment Amount Minor */
             payment_amount_minor?: number | null;
             /**
@@ -14532,6 +15430,8 @@ export interface components {
             plan_code?: string | null;
             /** Revenue Minor */
             revenue_minor?: number | null;
+            /** Scenario Code */
+            scenario_code?: string | null;
             /** Scenario Name */
             scenario_name?: string | null;
             /**
@@ -18018,6 +18918,45 @@ export interface components {
             /** Snippet */
             snippet: string;
         };
+        /** PasswordResetReadinessResponse */
+        PasswordResetReadinessResponse: {
+            /** Debug Tokens Allowed */
+            debug_tokens_allowed: boolean;
+            /**
+             * Email Provider
+             * @constant
+             */
+            email_provider: "sendgrid";
+            /** Non Prod Debug Tokens Only */
+            non_prod_debug_tokens_only: boolean;
+            /** Provider Configured */
+            provider_configured: boolean;
+            /** Public App Url */
+            public_app_url: string;
+            /** Reset Link Domain */
+            reset_link_domain: string;
+            /** Reset Path */
+            reset_path: string;
+            /**
+             * Secrets Exposed
+             * @default false
+             * @constant
+             */
+            secrets_exposed: false;
+            /** Sender Email Configured */
+            sender_email_configured: boolean;
+            /** Sender Name */
+            sender_name: string;
+            /** Subject Template */
+            subject_template: string;
+            /**
+             * Template Kind
+             * @constant
+             */
+            template_kind: "employee_password_reset_plain_text";
+            /** Token Ttl Minutes */
+            token_ttl_minutes: number;
+        };
         /** PasswordResetStartRequest */
         PasswordResetStartRequest: {
             /** Company Slug */
@@ -18077,6 +19016,115 @@ export interface components {
             provider: string;
             /** Provider Order Id */
             provider_order_id: string | null;
+        };
+        /** PineLabsActivationDecisionRequest */
+        PineLabsActivationDecisionRequest: {
+            /**
+             * Founder Go No Go
+             * @enum {string}
+             */
+            founder_go_no_go: "go" | "no_go";
+            /** Notes */
+            notes: string;
+            /** Run Id */
+            run_id?: string | null;
+        };
+        /** PineLabsUATEvidenceRequest */
+        PineLabsUATEvidenceRequest: {
+            /** Attachment Refs */
+            attachment_refs?: string[];
+            /** Operator Notes */
+            operator_notes?: string | null;
+            /** Provider Order Id */
+            provider_order_id?: string | null;
+            /** Provider Payment Id */
+            provider_payment_id?: string | null;
+            /** Redacted Payload */
+            redacted_payload?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Result Status
+             * @enum {string}
+             */
+            result_status: "pending" | "pass" | "fail" | "blocked" | "not_applicable";
+            /** Run Id */
+            run_id?: string | null;
+            /**
+             * Scenario Code
+             * @enum {string}
+             */
+            scenario_code: "plan_payment_success" | "top_up_success" | "failed_payment" | "pending_payment" | "cancelled_expired_payment" | "duplicate_webhook" | "tampered_webhook" | "stale_webhook" | "refund_processed" | "refund_failed" | "subscription_charged" | "subscription_cancelled" | "settlement_report_import";
+            /** Webhook Id */
+            webhook_id?: string | null;
+            /** Webhook Timestamp */
+            webhook_timestamp?: string | null;
+        };
+        /** PineLabsUATReadinessResponse */
+        PineLabsUATReadinessResponse: {
+            /** Complete */
+            complete: boolean;
+            /** Environment */
+            environment: string;
+            /** Latest Decision */
+            latest_decision?: {
+                [key: string]: unknown;
+            } | null;
+            /** Missing Required Scenarios */
+            missing_required_scenarios: ("plan_payment_success" | "top_up_success" | "failed_payment" | "pending_payment" | "cancelled_expired_payment" | "duplicate_webhook" | "tampered_webhook" | "stale_webhook" | "refund_processed" | "refund_failed" | "subscription_charged" | "subscription_cancelled" | "settlement_report_import")[];
+            /** Production Activation Blocked */
+            production_activation_blocked: boolean;
+            /** Provider Mode */
+            provider_mode: string;
+            /** Run Id */
+            run_id: string;
+            /** Run Status */
+            run_status: string;
+            /** Scenarios */
+            scenarios: components["schemas"]["PineLabsUATScenarioStatus"][];
+        };
+        /** PineLabsUATRunCreateRequest */
+        PineLabsUATRunCreateRequest: {
+            /**
+             * Environment
+             * @default uat
+             * @enum {string}
+             */
+            environment: "mock" | "uat";
+            /** Notes */
+            notes?: string | null;
+            /**
+             * Provider Mode
+             * @default mock
+             */
+            provider_mode: string;
+        };
+        /** PineLabsUATScenarioStatus */
+        PineLabsUATScenarioStatus: {
+            /** Attachment Refs */
+            attachment_refs?: string[];
+            /** Label */
+            label: string;
+            /** Observed At */
+            observed_at?: string | null;
+            /** Operator Notes */
+            operator_notes?: string | null;
+            /** Provider Order Id */
+            provider_order_id?: string | null;
+            /** Required */
+            required: boolean;
+            /**
+             * Result Status
+             * @enum {string}
+             */
+            result_status: "pending" | "pass" | "fail" | "blocked" | "not_applicable";
+            /**
+             * Scenario Code
+             * @enum {string}
+             */
+            scenario_code: "plan_payment_success" | "top_up_success" | "failed_payment" | "pending_payment" | "cancelled_expired_payment" | "duplicate_webhook" | "tampered_webhook" | "stale_webhook" | "refund_processed" | "refund_failed" | "subscription_charged" | "subscription_cancelled" | "settlement_report_import";
+            /** Webhook Id */
+            webhook_id?: string | null;
         };
         /** PlatformCouponCreateRequest */
         PlatformCouponCreateRequest: {
@@ -18881,13 +19929,86 @@ export interface components {
              */
             updated_at: string;
         };
+        /** ProductionBillingSignoffCheckStatus */
+        ProductionBillingSignoffCheckStatus: {
+            /**
+             * Check Code
+             * @enum {string}
+             */
+            check_code: "platform_admin" | "platform_admin_profit" | "platform_admin_costs" | "platform_admin_integrations" | "platform_admin_provider_events" | "tenant_billing_current_plan" | "invoice_download" | "statement_download" | "credit_ledger_export" | "payment_export" | "spend_export" | "disabled_pine_checkout_behavior" | "tenant_no_leak_checks";
+            /** Evidence Ref */
+            evidence_ref?: string | null;
+            /** Label */
+            label: string;
+            /** Operator Notes */
+            operator_notes?: string | null;
+            /** Recorded At */
+            recorded_at?: string | null;
+            /**
+             * Result Status
+             * @enum {string}
+             */
+            result_status: "pending" | "pass" | "fail" | "blocked" | "not_applicable";
+        };
+        /** ProductionBillingSignoffEvidenceRequest */
+        ProductionBillingSignoffEvidenceRequest: {
+            /**
+             * Check Code
+             * @enum {string}
+             */
+            check_code: "platform_admin" | "platform_admin_profit" | "platform_admin_costs" | "platform_admin_integrations" | "platform_admin_provider_events" | "tenant_billing_current_plan" | "invoice_download" | "statement_download" | "credit_ledger_export" | "payment_export" | "spend_export" | "disabled_pine_checkout_behavior" | "tenant_no_leak_checks";
+            /** Evidence */
+            evidence?: {
+                [key: string]: unknown;
+            } | null;
+            /** Evidence Ref */
+            evidence_ref?: string | null;
+            /** Operator Notes */
+            operator_notes?: string | null;
+            /**
+             * Result Status
+             * @enum {string}
+             */
+            result_status: "pending" | "pass" | "fail" | "blocked" | "not_applicable";
+            /** Signoff Id */
+            signoff_id?: string | null;
+        };
+        /** ProductionBillingSignoffResponse */
+        ProductionBillingSignoffResponse: {
+            /** Checks */
+            checks: components["schemas"]["ProductionBillingSignoffCheckStatus"][];
+            /** Complete */
+            complete: boolean;
+            /** Missing Required Checks */
+            missing_required_checks: ("platform_admin" | "platform_admin_profit" | "platform_admin_costs" | "platform_admin_integrations" | "platform_admin_provider_events" | "tenant_billing_current_plan" | "invoice_download" | "statement_download" | "credit_ledger_export" | "payment_export" | "spend_export" | "disabled_pine_checkout_behavior" | "tenant_no_leak_checks")[];
+            /** Notes */
+            notes?: string | null;
+            /** Signed Off At */
+            signed_off_at?: string | null;
+            /** Signoff Id */
+            signoff_id: string;
+            /** Status */
+            status: string;
+        };
         /** ProviderCostProfileCreateRequest */
         ProviderCostProfileCreateRequest: {
             /**
              * Category
              * @enum {string}
              */
-            category: "case_refresh" | "llm" | "embedding" | "document_processing" | "storage" | "payment_mdr" | "payment_fixed_fee" | "sms" | "whatsapp" | "manual_support";
+            category: "case_refresh" | "bulk_case_refresh" | "llm" | "llm_input" | "llm_output" | "embedding" | "document_processing" | "ocr_page" | "storage" | "bandwidth_export" | "payment_mdr" | "payment_fixed_fee" | "payment_refund_fee" | "payment_chargeback_fee" | "email" | "sms" | "whatsapp" | "manual_support";
+            /**
+             * Confidence Level
+             * @default low
+             * @enum {string}
+             */
+            confidence_level: "low" | "medium" | "high";
+            /**
+             * Cost Basis
+             * @default estimated
+             * @enum {string}
+             */
+            cost_basis: "estimated" | "actual";
             /**
              * Currency
              * @default INR
@@ -18898,6 +20019,14 @@ export interface components {
             effective_from?: string | null;
             /** Effective Until */
             effective_until?: string | null;
+            /** Evidence Ref */
+            evidence_ref?: string | null;
+            /**
+             * Founder Approval Status
+             * @default pending
+             * @enum {string}
+             */
+            founder_approval_status: "pending" | "approved" | "rejected";
             /** Notes */
             notes?: string | null;
             /**
@@ -18907,10 +20036,14 @@ export interface components {
             provider: string;
             /** Source */
             source?: string | null;
+            /** Tax Fee Notes */
+            tax_fee_notes?: string | null;
             /** Unit Amount Bps */
             unit_amount_bps?: number | null;
             /** Unit Amount Minor */
             unit_amount_minor?: number | null;
+            /** Unit Label */
+            unit_label?: string | null;
         };
         /** ProviderCostProfileListResponse */
         ProviderCostProfileListResponse: {
@@ -18919,11 +20052,25 @@ export interface components {
         };
         /** ProviderCostProfileRecord */
         ProviderCostProfileRecord: {
+            /** Approved At */
+            approved_at?: string | null;
+            /** Approved By Platform Admin Id */
+            approved_by_platform_admin_id?: string | null;
             /**
              * Category
              * @enum {string}
              */
-            category: "case_refresh" | "llm" | "embedding" | "document_processing" | "storage" | "payment_mdr" | "payment_fixed_fee" | "sms" | "whatsapp" | "manual_support";
+            category: "case_refresh" | "bulk_case_refresh" | "llm" | "llm_input" | "llm_output" | "embedding" | "document_processing" | "ocr_page" | "storage" | "bandwidth_export" | "payment_mdr" | "payment_fixed_fee" | "payment_refund_fee" | "payment_chargeback_fee" | "email" | "sms" | "whatsapp" | "manual_support";
+            /**
+             * Confidence Level
+             * @enum {string}
+             */
+            confidence_level: "low" | "medium" | "high";
+            /**
+             * Cost Basis
+             * @enum {string}
+             */
+            cost_basis: "estimated" | "actual";
             /**
              * Created At
              * Format: date-time
@@ -18943,6 +20090,13 @@ export interface components {
             effective_from: string;
             /** Effective Until */
             effective_until?: string | null;
+            /** Evidence Ref */
+            evidence_ref?: string | null;
+            /**
+             * Founder Approval Status
+             * @enum {string}
+             */
+            founder_approval_status: "pending" | "approved" | "rejected";
             /** Id */
             id: string;
             /** Notes */
@@ -18956,10 +20110,14 @@ export interface components {
              * @enum {string}
              */
             status: "active" | "inactive";
+            /** Tax Fee Notes */
+            tax_fee_notes?: string | null;
             /** Unit Amount Bps */
             unit_amount_bps?: number | null;
             /** Unit Amount Minor */
             unit_amount_minor?: number | null;
+            /** Unit Label */
+            unit_label?: string | null;
             /**
              * Updated At
              * Format: date-time
@@ -18968,12 +20126,20 @@ export interface components {
         };
         /** ProviderCostProfileUpdateRequest */
         ProviderCostProfileUpdateRequest: {
+            /** Confidence Level */
+            confidence_level?: ("low" | "medium" | "high") | null;
+            /** Cost Basis */
+            cost_basis?: ("estimated" | "actual") | null;
             /** Currency */
             currency?: "INR" | null;
             /** Effective From */
             effective_from?: string | null;
             /** Effective Until */
             effective_until?: string | null;
+            /** Evidence Ref */
+            evidence_ref?: string | null;
+            /** Founder Approval Status */
+            founder_approval_status?: ("pending" | "approved" | "rejected") | null;
             /** Notes */
             notes?: string | null;
             /** Provider */
@@ -18982,10 +20148,14 @@ export interface components {
             source?: string | null;
             /** Status */
             status?: ("active" | "inactive") | null;
+            /** Tax Fee Notes */
+            tax_fee_notes?: string | null;
             /** Unit Amount Bps */
             unit_amount_bps?: number | null;
             /** Unit Amount Minor */
             unit_amount_minor?: number | null;
+            /** Unit Label */
+            unit_label?: string | null;
         };
         /** ProviderOperationActionRequest */
         ProviderOperationActionRequest: {
@@ -19411,6 +20581,78 @@ export interface components {
              */
             updated_at: string;
         };
+        /** SettlementImportRequest */
+        SettlementImportRequest: {
+            /** Notes */
+            notes?: string | null;
+            /**
+             * Provider
+             * @default pine_labs_plural
+             */
+            provider: string;
+            /** Rows */
+            rows?: components["schemas"]["SettlementImportRowRequest"][];
+            /** Settlement Period End */
+            settlement_period_end?: string | null;
+            /** Settlement Period Start */
+            settlement_period_start?: string | null;
+            /** Source Filename */
+            source_filename?: string | null;
+        };
+        /** SettlementImportResponse */
+        SettlementImportResponse: {
+            /** Exception Count */
+            exception_count: number;
+            /** Id */
+            id: string;
+            /** Matched Count */
+            matched_count: number;
+            /** Row Count */
+            row_count: number;
+            /** Status */
+            status: string;
+        };
+        /** SettlementImportRowRequest */
+        SettlementImportRowRequest: {
+            /**
+             * Amount Minor
+             * @default 0
+             */
+            amount_minor: number;
+            /**
+             * Currency
+             * @default INR
+             * @constant
+             */
+            currency: "INR";
+            /**
+             * Net Settlement Minor
+             * @default 0
+             */
+            net_settlement_minor: number;
+            /**
+             * Provider Fee Minor
+             * @default 0
+             */
+            provider_fee_minor: number;
+            /** Provider Order Id */
+            provider_order_id?: string | null;
+            /** Provider Payment Id */
+            provider_payment_id?: string | null;
+            /** Raw */
+            raw?: {
+                [key: string]: unknown;
+            };
+            /** Settled On */
+            settled_on?: string | null;
+            /** Status */
+            status?: string | null;
+            /**
+             * Tax Minor
+             * @default 0
+             */
+            tax_minor: number;
+        };
         /** StatuteAmendmentHistoryResponse */
         StatuteAmendmentHistoryResponse: {
             /** Events */
@@ -19706,6 +20948,49 @@ export interface components {
         /** SubscriptionActionResponse */
         SubscriptionActionResponse: {
             subscription: components["schemas"]["BillingSubscriptionRecord"];
+        };
+        /** TDSReconciliationCreateRequest */
+        TDSReconciliationCreateRequest: {
+            /** Certificate Number */
+            certificate_number?: string | null;
+            /** Company Id */
+            company_id?: string | null;
+            /** Credit Note Id */
+            credit_note_id?: string | null;
+            /** Evidence Ref */
+            evidence_ref?: string | null;
+            /** Financial Year */
+            financial_year?: string | null;
+            /**
+             * Gross Amount Minor
+             * @default 0
+             */
+            gross_amount_minor: number;
+            /** Invoice Id */
+            invoice_id?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Payer Name */
+            payer_name?: string | null;
+            /** Payer Pan */
+            payer_pan?: string | null;
+            /**
+             * Status
+             * @default open
+             */
+            status: string;
+            /** Subscription Id */
+            subscription_id?: string | null;
+            /**
+             * Tds Deducted Minor
+             * @default 0
+             */
+            tds_deducted_minor: number;
+            /**
+             * Tds Deposited Minor
+             * @default 0
+             */
+            tds_deposited_minor: number;
         };
         /** TeamCreateRequest */
         TeamCreateRequest: {
@@ -20155,6 +21440,33 @@ export interface components {
             name?: string | null;
             /** Party Perspective */
             party_perspective?: ("first" | "second") | null;
+        };
+        /** TenantSecurityPolicyRecord */
+        TenantSecurityPolicyRecord: {
+            /** All Users Mfa Required */
+            all_users_mfa_required: boolean;
+            /** Mfa Enforced At */
+            mfa_enforced_at?: string | null;
+            /** Mfa Grace Period Days */
+            mfa_grace_period_days: number;
+            /** Tenant Admin Mfa Required */
+            tenant_admin_mfa_required: boolean;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** TenantSecurityPolicyUpdateRequest */
+        TenantSecurityPolicyUpdateRequest: {
+            /** All Users Mfa Required */
+            all_users_mfa_required?: boolean | null;
+            /** Mfa Grace Period Days */
+            mfa_grace_period_days?: number | null;
+            /** Reason */
+            reason: string;
+            /** Tenant Admin Mfa Required */
+            tenant_admin_mfa_required?: boolean | null;
         };
         /** TimeEntryCreateRequest */
         TimeEntryCreateRequest: {
@@ -21486,6 +22798,59 @@ export interface operations {
             };
         };
     };
+    get_security_policy_api_admin_security_policy_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantSecurityPolicyRecord"];
+                };
+            };
+        };
+    };
+    patch_security_policy_api_admin_security_policy_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TenantSecurityPolicyUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantSecurityPolicyRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_storage_governance_api_admin_storage_governance_get: {
         parameters: {
             query?: never;
@@ -22093,6 +23458,145 @@ export interface operations {
             };
         };
     };
+    mfa_disable_api_auth_mfa_disable_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MFADisableRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MFADisableResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mfa_enroll_api_auth_mfa_enroll_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MFAEnrollmentStartResponse"];
+                };
+            };
+        };
+    };
+    mfa_enroll_verify_api_auth_mfa_enroll_verify_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MFAVerifyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MFAEnrollmentVerifyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mfa_recovery_codes_regenerate_api_auth_mfa_recovery_codes_regenerate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MFARecoveryCodesResponse"];
+                };
+            };
+        };
+    };
+    mfa_step_up_api_auth_mfa_step_up_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MFAStepUpRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MFAStepUpResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     password_reset_complete_api_auth_password_reset_complete_post: {
         parameters: {
             query?: never;
@@ -22175,6 +23679,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuthSessionResponse"];
+                };
+            };
+        };
+    };
+    security_status_api_auth_security_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MFASecurityStatusResponse"];
                 };
             };
         };
@@ -24062,6 +25586,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CaseTrackingProviderStatusResponse"];
+                };
+            };
+        };
+    };
+    get_case_tracking_support_matrix_api_case_tracking_support_matrix_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseTrackingTenantSupportMatrixResponse"];
                 };
             };
         };
@@ -31759,6 +33303,147 @@ export interface operations {
             };
         };
     };
+    get_production_billing_signoff_api_platform_admin_billing_signoff_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductionBillingSignoffResponse"];
+                };
+            };
+        };
+    };
+    post_production_billing_signoff_evidence_api_platform_admin_billing_signoff_evidence_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductionBillingSignoffEvidenceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductionBillingSignoffResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_platform_case_tracking_support_matrix_api_platform_admin_case_tracking_support_matrix_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseTrackingSupportMatrixResponse"];
+                };
+            };
+        };
+    };
+    post_platform_case_tracking_support_matrix_api_platform_admin_case_tracking_support_matrix_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CaseTrackingSupportMatrixCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseTrackingSupportMatrixResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_platform_case_tracking_support_matrix_api_platform_admin_case_tracking_support_matrix__row_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                row_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CaseTrackingSupportMatrixUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseTrackingSupportMatrixResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_company_profitability_api_platform_admin_companies_profitability_get: {
         parameters: {
             query?: never;
@@ -32166,6 +33851,241 @@ export interface operations {
             };
         };
     };
+    post_chargeback_record_api_platform_admin_finance_chargebacks_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FinanceRecordRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_credit_note_api_platform_admin_finance_credit_notes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreditNoteCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_refund_record_api_platform_admin_finance_refunds_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FinanceRecordRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_settlement_import_api_platform_admin_finance_settlement_imports_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SettlementImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettlementImportResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_tds_reconciliation_row_api_platform_admin_finance_tds_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TDSReconciliationCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_finance_report_api_platform_admin_finance__report__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinanceListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_finance_report_api_platform_admin_finance__report__export_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_platform_integrations_api_platform_admin_integrations_get: {
         parameters: {
             query?: never;
@@ -32280,6 +34200,26 @@ export interface operations {
             };
         };
     };
+    get_margin_readiness_api_platform_admin_margin_readiness_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarginReadinessResponse"];
+                };
+            };
+        };
+    };
     get_margin_simulations_api_platform_admin_margin_simulations_get: {
         parameters: {
             query?: never;
@@ -32349,6 +34289,147 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlatformOverviewResponse"];
+                };
+            };
+        };
+    };
+    get_password_reset_readiness_api_platform_admin_password_reset_readiness_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasswordResetReadinessResponse"];
+                };
+            };
+        };
+    };
+    post_pine_labs_production_activation_decision_api_platform_admin_pine_labs_production_activation_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PineLabsActivationDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_pine_labs_uat_evidence_api_platform_admin_pine_labs_uat_evidence_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PineLabsUATEvidenceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PineLabsUATReadinessResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_pine_labs_uat_readiness_api_platform_admin_pine_labs_uat_readiness_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PineLabsUATReadinessResponse"];
+                };
+            };
+        };
+    };
+    create_pine_labs_uat_run_api_platform_admin_pine_labs_uat_runs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PineLabsUATRunCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PineLabsUATReadinessResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

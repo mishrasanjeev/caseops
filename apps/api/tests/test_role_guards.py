@@ -39,6 +39,15 @@ PUBLIC_MUTATING_ROUTES: set[tuple[str, str]] = {
     ("POST", "/api/auth/account-setup/complete"),
     ("POST", "/api/auth/password-reset/start"),
     ("POST", "/api/auth/password-reset/complete"),
+    # P0 paid-production safety (2026-06-09) - MFA self-service routes
+    # are guarded by get_current_context plus per-user TOTP/recovery-code
+    # verification, not by tenant roles/capabilities. These mutate only
+    # the caller's own MFA state or recent step-up state.
+    ("POST", "/api/auth/mfa/enroll"),
+    ("POST", "/api/auth/mfa/enroll/verify"),
+    ("POST", "/api/auth/mfa/step-up"),
+    ("POST", "/api/auth/mfa/recovery-codes/regenerate"),
+    ("POST", "/api/auth/mfa/disable"),
     ("POST", "/api/bootstrap/company"),
     # Billing trial/demo enrollment is public lead capture. Tenant
     # billing checkout/report mutations below remain workspace-admin gated.
