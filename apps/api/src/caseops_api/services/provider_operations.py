@@ -38,6 +38,11 @@ from caseops_api.services.durable_workflows import (
 from caseops_api.services.google_drive_imports import (
     google_drive_provider_config_status,
 )
+from caseops_api.services.google_workspace import (
+    google_workspace_connector_configured,
+    google_workspace_connector_missing_config_names,
+    google_workspace_oauth_config,
+)
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.notification_delivery import redact_provider_error
 
@@ -952,18 +957,85 @@ def update_provider_operation_state(
     )
 
 
-def provider_readiness_status() -> ProviderReadinessListResponse:
+def provider_readiness_status(
+    session: Session | None = None,
+    *,
+    context: SessionContext | None = None,
+) -> ProviderReadinessListResponse:
     settings = get_settings()
     workflow = durable_workflow_status(settings)
-    drive_status = google_drive_provider_config_status()
+    drive_status = google_drive_provider_config_status(session, context=context)
     drive_missing_approvals = ["tenant_drive_sync_approved"]
-    email_missing_config = []
-    if not settings.gmail_client_id:
-        email_missing_config.append("GMAIL_CLIENT_ID")
-    if not settings.gmail_client_secret:
-        email_missing_config.append("GMAIL_CLIENT_SECRET")
-    if not settings.gmail_redirect_uri:
-        email_missing_config.append("GMAIL_REDIRECT_URI")
+    if session is not None and context is not None:
+        email_oauth_config = google_workspace_oauth_config(
+            session,
+            context=context,
+            connector="gmail",
+        )
+        drive_oauth_config = google_workspace_oauth_config(
+            session,
+            context=context,
+            connector="drive",
+        )
+        email_missing_config = google_workspace_connector_missing_config_names(
+            session,
+            context=context,
+            connector="gmail",
+        )
+        email_oauth_configured = google_workspace_connector_configured(
+            session,
+            context=context,
+            connector="gmail",
+        )
+        if email_oauth_config.source == "tenant_admin":
+            email_required_config = [
+                "GOOGLE_WORKSPACE_CLIENT_ID",
+                "GOOGLE_WORKSPACE_CLIENT_SECRET",
+                "GMAIL_REDIRECT_URI",
+                "GMAIL_PUBSUB_TOPIC",
+                "GMAIL_WEBHOOK_VERIFICATION_TOKEN",
+            ]
+        else:
+            email_required_config = [
+                "GMAIL_CLIENT_ID",
+                "GMAIL_CLIENT_SECRET",
+                "GMAIL_REDIRECT_URI",
+                "GMAIL_PUBSUB_TOPIC",
+                "GMAIL_WEBHOOK_VERIFICATION_TOKEN",
+            ]
+        if drive_oauth_config.source == "tenant_admin":
+            drive_required_config = [
+                "GOOGLE_WORKSPACE_CLIENT_ID",
+                "GOOGLE_WORKSPACE_CLIENT_SECRET",
+                "GOOGLE_DRIVE_REDIRECT_URI",
+            ]
+        else:
+            drive_required_config = [
+                "GOOGLE_DRIVE_CLIENT_ID",
+                "GOOGLE_DRIVE_CLIENT_SECRET",
+                "GOOGLE_DRIVE_REDIRECT_URI",
+            ]
+    else:
+        email_missing_config = []
+        if not settings.gmail_client_id:
+            email_missing_config.append("GMAIL_CLIENT_ID")
+        if not settings.gmail_client_secret:
+            email_missing_config.append("GMAIL_CLIENT_SECRET")
+        if not settings.gmail_redirect_uri:
+            email_missing_config.append("GMAIL_REDIRECT_URI")
+        email_oauth_configured = not email_missing_config
+        email_required_config = [
+            "GMAIL_CLIENT_ID",
+            "GMAIL_CLIENT_SECRET",
+            "GMAIL_REDIRECT_URI",
+            "GMAIL_PUBSUB_TOPIC",
+            "GMAIL_WEBHOOK_VERIFICATION_TOKEN",
+        ]
+        drive_required_config = [
+            "GOOGLE_DRIVE_CLIENT_ID",
+            "GOOGLE_DRIVE_CLIENT_SECRET",
+            "GOOGLE_DRIVE_REDIRECT_URI",
+        ]
     if not settings.gmail_pubsub_topic:
         email_missing_config.append("GMAIL_PUBSUB_TOPIC")
     if not settings.gmail_webhook_verification_token:
@@ -991,11 +1063,7 @@ def provider_readiness_status() -> ProviderReadinessListResponse:
                 enabled=False,
                 external_calls_enabled=False,
                 durable_workflow_available=workflow.available,
-                required_config_names=[
-                    "GOOGLE_DRIVE_CLIENT_ID",
-                    "GOOGLE_DRIVE_CLIENT_SECRET",
-                    "GOOGLE_DRIVE_REDIRECT_URI",
-                ],
+                required_config_names=drive_required_config,
                 missing_config_names=drive_status.missing_config_names,
                 required_approval_keys=drive_missing_approvals,
                 missing_approval_keys=drive_missing_approvals,
@@ -1033,16 +1101,10 @@ def provider_readiness_status() -> ProviderReadinessListResponse:
                 adp_slice="ADP-22",
                 state="ready" if not email_missing_config else "blocked_missing_config",
                 configured=not email_missing_config,
-                enabled=not email_missing_config,
+                enabled=email_oauth_configured,
                 external_calls_enabled=not email_missing_config,
                 durable_workflow_available=workflow.available,
-                required_config_names=[
-                    "GMAIL_CLIENT_ID",
-                    "GMAIL_CLIENT_SECRET",
-                    "GMAIL_REDIRECT_URI",
-                    "GMAIL_PUBSUB_TOPIC",
-                    "GMAIL_WEBHOOK_VERIFICATION_TOKEN",
-                ],
+                required_config_names=email_required_config,
                 missing_config_names=email_missing_config,
                 required_approval_keys=["review_first_mailbox_ingestion_approved"],
                 missing_approval_keys=[] if not email_missing_config else [

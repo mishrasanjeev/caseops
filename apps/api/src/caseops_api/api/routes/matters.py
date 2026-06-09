@@ -457,8 +457,9 @@ async def dry_run_current_company_matter_import(
 )
 async def get_google_drive_provider_config_status(
     context: CurrentContext,
+    session: DbSession,
 ) -> GoogleDriveProviderConfigStatus:
-    return google_drive_provider_config_status()
+    return google_drive_provider_config_status(session, context=context)
 
 
 @router.post(

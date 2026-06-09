@@ -181,6 +181,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/google-workspace-configuration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the tenant Google Workspace readiness gate without exposing OAuth values. */
+        get: operations["get_google_workspace_configuration_api_admin_google_workspace_configuration_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Configure tenant Google Workspace OAuth values for Calendar, Gmail, and Drive. Values are accepted once and never echoed back. */
+        patch: operations["patch_google_workspace_configuration_api_admin_google_workspace_configuration_patch"];
+        trace?: never;
+    };
+    "/api/admin/google-workspace-configuration/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run a safe tenant Google Workspace readiness probe without calling Google providers. */
+        post: operations["post_google_workspace_configuration_test_api_admin_google_workspace_configuration_test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/integrations": {
         parameters: {
             query?: never;
@@ -12122,6 +12157,182 @@ export interface components {
              */
             provider: "google_drive";
         };
+        /** GoogleWorkspaceApprovalItemStatus */
+        GoogleWorkspaceApprovalItemStatus: {
+            /** Approved */
+            approved: boolean;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+        };
+        /** GoogleWorkspaceConfigurationItemStatus */
+        GoogleWorkspaceConfigurationItemStatus: {
+            /** Configured */
+            configured: boolean;
+            /** Name */
+            name: string;
+        };
+        /** GoogleWorkspaceConnectionCounts */
+        GoogleWorkspaceConnectionCounts: {
+            /** Calendar Connection Count */
+            calendar_connection_count: number;
+            /** Connected Calendar Account Count */
+            connected_calendar_account_count: number;
+            /** Connected Drive Account Count */
+            connected_drive_account_count: number;
+            /** Connected Gmail Account Count */
+            connected_gmail_account_count: number;
+            /** Drive Connection Count */
+            drive_connection_count: number;
+            /** Gmail Connection Count */
+            gmail_connection_count: number;
+        };
+        /** GoogleWorkspaceReadinessCheckResult */
+        GoogleWorkspaceReadinessCheckResult: {
+            /** Detail */
+            detail?: string | null;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "passed" | "failed" | "blocked" | "not_run";
+        };
+        /** GoogleWorkspaceReadinessTestResponse */
+        GoogleWorkspaceReadinessTestResponse: {
+            /** Checks */
+            checks: components["schemas"]["GoogleWorkspaceReadinessCheckResult"][];
+            /**
+             * Provider
+             * @default google_workspace
+             * @constant
+             */
+            provider: "google_workspace";
+            /**
+             * Readiness
+             * @enum {string}
+             */
+            readiness: "blocked_pending_admin_configuration" | "ready_for_user_connections";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "passed" | "failed" | "blocked" | "not_run";
+            /**
+             * Tested At
+             * Format: date-time
+             */
+            tested_at: string;
+        };
+        /** GoogleWorkspaceTenantConfigurationResponse */
+        GoogleWorkspaceTenantConfigurationResponse: {
+            /** Approved Scopes */
+            approved_scopes?: string[];
+            /** Calendar Enabled */
+            calendar_enabled: boolean;
+            /**
+             * Config Source
+             * @enum {string}
+             */
+            config_source: "tenant_admin" | "environment" | "missing";
+            /** Configured */
+            configured: boolean;
+            connection_counts: components["schemas"]["GoogleWorkspaceConnectionCounts"];
+            /** Drive Enabled */
+            drive_enabled: boolean;
+            /** Enabled */
+            enabled: boolean;
+            /** Gmail Enabled */
+            gmail_enabled: boolean;
+            /** Last Error Redacted */
+            last_error_redacted?: string | null;
+            /**
+             * Last Test Status
+             * @default not_run
+             * @enum {string}
+             */
+            last_test_status: "passed" | "failed" | "blocked" | "not_run";
+            /** Last Tested At */
+            last_tested_at?: string | null;
+            /** Missing Approval Keys */
+            missing_approval_keys?: string[];
+            /** Missing Config Names */
+            missing_config_names?: string[];
+            /**
+             * Provider
+             * @default google_workspace
+             * @constant
+             */
+            provider: "google_workspace";
+            /**
+             * Readiness
+             * @enum {string}
+             */
+            readiness: "blocked_pending_admin_configuration" | "ready_for_user_connections";
+            /** Required Approvals */
+            required_approvals: components["schemas"]["GoogleWorkspaceApprovalItemStatus"][];
+            /** Required Config */
+            required_config: components["schemas"]["GoogleWorkspaceConfigurationItemStatus"][];
+        };
+        /** GoogleWorkspaceTenantConfigurationUpdateRequest */
+        GoogleWorkspaceTenantConfigurationUpdateRequest: {
+            /**
+             * Calendar Enabled
+             * @default true
+             */
+            calendar_enabled: boolean;
+            /** Calendar Redirect Uri */
+            calendar_redirect_uri?: string | null;
+            /** Client Id */
+            client_id?: string | null;
+            /** Client Secret */
+            client_secret?: string | null;
+            /**
+             * Drive Enabled
+             * @default true
+             */
+            drive_enabled: boolean;
+            /** Drive Redirect Uri */
+            drive_redirect_uri?: string | null;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Gmail Enabled
+             * @default true
+             */
+            gmail_enabled: boolean;
+            /** Gmail Redirect Uri */
+            gmail_redirect_uri?: string | null;
+            /**
+             * Oauth Consent Model Approved
+             * @default false
+             */
+            oauth_consent_model_approved: boolean;
+            /**
+             * Redaction Rules Approved
+             * @default false
+             */
+            redaction_rules_approved: boolean;
+            /** Scopes */
+            scopes?: string[] | null;
+            /**
+             * Scopes Approved
+             * @default false
+             */
+            scopes_approved: boolean;
+            /**
+             * Webhook Runbook Approved
+             * @default false
+             */
+            webhook_runbook_approved: boolean;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -20679,6 +20890,79 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_google_workspace_configuration_api_admin_google_workspace_configuration_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoogleWorkspaceTenantConfigurationResponse"];
+                };
+            };
+        };
+    };
+    patch_google_workspace_configuration_api_admin_google_workspace_configuration_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoogleWorkspaceTenantConfigurationUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoogleWorkspaceTenantConfigurationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_google_workspace_configuration_test_api_admin_google_workspace_configuration_test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoogleWorkspaceReadinessTestResponse"];
                 };
             };
         };

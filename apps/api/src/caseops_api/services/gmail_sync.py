@@ -63,6 +63,7 @@ from caseops_api.services.calendar_sync import (
     _encrypt_token_payload,
 )
 from caseops_api.services.durable_workflows import redact_identifier
+from caseops_api.services.google_workspace import google_workspace_oauth_config
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import assert_access, visible_matters_filter
 from caseops_api.services.notification_delivery import redact_provider_error
@@ -365,12 +366,35 @@ def set_gmail_provider_for_tests(provider: GmailProvider | None) -> None:
     _gmail_provider_override = provider
 
 
-def _gmail_provider() -> GmailProvider:
-    return _gmail_provider_override or GoogleGmailProvider(_gmail_runtime_config())
+def _gmail_provider(
+    session: Session | None = None,
+    *,
+    context: SessionContext | None = None,
+) -> GmailProvider:
+    return _gmail_provider_override or GoogleGmailProvider(
+        _gmail_runtime_config(session, context=context)
+    )
 
 
-def _gmail_runtime_config() -> GmailRuntimeConfig:
+def _gmail_runtime_config(
+    session: Session | None = None,
+    *,
+    context: SessionContext | None = None,
+) -> GmailRuntimeConfig:
     settings = get_settings()
+    workspace_config = google_workspace_oauth_config(
+        session,
+        context=context,
+        connector="gmail",
+    )
+    if workspace_config.source in {"tenant_admin", "missing"}:
+        return GmailRuntimeConfig(
+            client_id=workspace_config.client_id,
+            client_secret=workspace_config.client_secret,
+            redirect_uri=workspace_config.redirect_uri,
+            pubsub_topic=settings.gmail_pubsub_topic,
+            webhook_verification_token=settings.gmail_webhook_verification_token,
+        )
     return GmailRuntimeConfig(
         client_id=settings.gmail_client_id,
         client_secret=settings.gmail_client_secret,
@@ -512,7 +536,7 @@ def list_gmail_status(
     *,
     context: SessionContext,
 ) -> MailboxStatusResponse:
-    config = _gmail_runtime_config()
+    config = _gmail_runtime_config(session, context=context)
     rows = list(
         session.scalars(
             select(UserMailboxConnection)
@@ -539,7 +563,7 @@ def start_gmail_connection(
     context: SessionContext,
 ) -> MailboxConnectionStartResponse:
     _ = session
-    provider = _gmail_provider()
+    provider = _gmail_provider(session, context=context)
     if not provider.configured:
         return MailboxConnectionStartResponse(
             provider_available=False,
@@ -558,7 +582,7 @@ def complete_gmail_connection(
     code: str,
     state: str,
 ) -> MailboxConnectionCallbackResponse:
-    provider = _gmail_provider()
+    provider = _gmail_provider(session, context=context)
     if not provider.configured:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -677,7 +701,7 @@ def import_recent_gmail_messages(
 ) -> MailboxImportResponse:
     connection = _connected_gmail_connection(session, context=context)
     token_payload = _decrypt_token_payload(connection.encrypted_token_ref)
-    provider = _gmail_provider()
+    provider = _gmail_provider(session, context=context)
     messages = provider.list_recent_messages(
         token_payload=token_payload,
         limit=payload.limit,
@@ -1027,7 +1051,7 @@ def review_attachment_candidate(
         raise HTTPException(status_code=409, detail="Provider attachment reference is missing.")
     try:
         token_payload = _decrypt_token_payload(connection.encrypted_token_ref)
-        content = _gmail_provider().fetch_attachment(
+        content = _gmail_provider(session, context=context).fetch_attachment(
             token_payload=token_payload,
             message_id=candidate.message_import.provider_message_id,
             attachment_id=provider_attachment_id,
@@ -1091,16 +1115,20 @@ def start_gmail_watch(
     *,
     context: SessionContext,
 ) -> MailboxWatchResponse:
-    config = _gmail_runtime_config()
-    if not config.webhook_configured:
+    config = _gmail_runtime_config(session, context=context)
+    provider = _gmail_provider(session, context=context)
+    if not provider.configured or not provider.webhook_configured:
         return MailboxWatchResponse(
             watch_started=False,
-            webhook_configured=False,
-            missing_config_names=_missing_gmail_webhook_config_names(config),
+            webhook_configured=provider.webhook_configured,
+            missing_config_names=[
+                *_missing_gmail_config_names(config),
+                *_missing_gmail_webhook_config_names(config),
+            ],
         )
     connection = _connected_gmail_connection(session, context=context)
     token_payload = _decrypt_token_payload(connection.encrypted_token_ref)
-    response = _gmail_provider().start_watch(token_payload=token_payload)
+    response = provider.start_watch(token_payload=token_payload)
     history_id = str(response.get("historyId") or "") or None
     expiration_ms = response.get("expiration")
     expires_at = None
@@ -1212,7 +1240,7 @@ def ingest_gmail_webhook(
     )
     try:
         token_payload = _decrypt_token_payload(connection.encrypted_token_ref)
-        messages = _gmail_provider().list_history_messages(
+        messages = _gmail_provider(session, context=context).list_history_messages(
             token_payload=token_payload,
             start_history_id=connection.last_history_id or history_id,
             limit=50,

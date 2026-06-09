@@ -95,6 +95,8 @@ import {
   type MarginSimulationRecord,
   type MailboxConnectionRecord,
   type MailboxConnectionStartResponse,
+  type GoogleWorkspaceReadinessTestResponse,
+  type GoogleWorkspaceTenantConfigurationResponse,
   type GoogleDriveConnectionRecord,
   type GoogleDriveConnectionStartResponse,
   type GoogleDriveFileListResponse,
@@ -178,6 +180,8 @@ import {
   marginSimulationRecord,
   mailboxConnectionRecord,
   mailboxConnectionStartResponse,
+  googleWorkspaceReadinessTestResponse,
+  googleWorkspaceTenantConfigurationResponse,
   googleDriveConnectionRecord,
   googleDriveConnectionStartResponse,
   googleDriveFileListResponse,
@@ -5718,6 +5722,67 @@ export async function testOutlookTenantConfiguration(): Promise<OutlookReadiness
     body: {},
   });
   return outlookReadinessTestResponse.parse(data);
+}
+
+export type GoogleWorkspaceTenantConfigurationInput = {
+  clientId?: string | null;
+  clientSecret?: string | null;
+  calendarRedirectUri?: string | null;
+  gmailRedirectUri?: string | null;
+  driveRedirectUri?: string | null;
+  scopes?: string[] | null;
+  oauthConsentModelApproved: boolean;
+  scopesApproved: boolean;
+  webhookRunbookApproved: boolean;
+  redactionRulesApproved: boolean;
+  calendarEnabled: boolean;
+  gmailEnabled: boolean;
+  driveEnabled: boolean;
+  enabled: boolean;
+};
+
+export async function fetchGoogleWorkspaceTenantConfiguration(): Promise<GoogleWorkspaceTenantConfigurationResponse> {
+  const data = await apiRequest<unknown>("/api/admin/google-workspace-configuration");
+  return googleWorkspaceTenantConfigurationResponse.parse(data);
+}
+
+export async function updateGoogleWorkspaceTenantConfiguration(
+  input: GoogleWorkspaceTenantConfigurationInput,
+): Promise<GoogleWorkspaceTenantConfigurationResponse> {
+  const data = await apiRequest<unknown>(
+    "/api/admin/google-workspace-configuration",
+    {
+      method: "PATCH",
+      body: {
+        client_id: input.clientId || null,
+        client_secret: input.clientSecret || null,
+        calendar_redirect_uri: input.calendarRedirectUri || null,
+        gmail_redirect_uri: input.gmailRedirectUri || null,
+        drive_redirect_uri: input.driveRedirectUri || null,
+        scopes: input.scopes,
+        oauth_consent_model_approved: input.oauthConsentModelApproved,
+        scopes_approved: input.scopesApproved,
+        webhook_runbook_approved: input.webhookRunbookApproved,
+        redaction_rules_approved: input.redactionRulesApproved,
+        calendar_enabled: input.calendarEnabled,
+        gmail_enabled: input.gmailEnabled,
+        drive_enabled: input.driveEnabled,
+        enabled: input.enabled,
+      },
+    },
+  );
+  return googleWorkspaceTenantConfigurationResponse.parse(data);
+}
+
+export async function testGoogleWorkspaceTenantConfiguration(): Promise<GoogleWorkspaceReadinessTestResponse> {
+  const data = await apiRequest<unknown>(
+    "/api/admin/google-workspace-configuration/test",
+    {
+      method: "POST",
+      body: {},
+    },
+  );
+  return googleWorkspaceReadinessTestResponse.parse(data);
 }
 
 export async function listProviderOperations(input?: {

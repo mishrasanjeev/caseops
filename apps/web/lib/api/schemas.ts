@@ -2184,6 +2184,69 @@ export const outlookReadinessTestResponse = z.object({
   tested_at: z.string(),
 });
 
+export const googleWorkspaceConfigurationItemStatus = z.object({
+  name: z.string(),
+  configured: z.boolean(),
+});
+
+export const googleWorkspaceApprovalItemStatus = z.object({
+  key: z.string(),
+  label: z.string(),
+  approved: z.boolean(),
+});
+
+export const googleWorkspaceConnectionCounts = z.object({
+  calendar_connection_count: z.number().int().min(0),
+  gmail_connection_count: z.number().int().min(0),
+  drive_connection_count: z.number().int().min(0),
+  connected_calendar_account_count: z.number().int().min(0),
+  connected_gmail_account_count: z.number().int().min(0),
+  connected_drive_account_count: z.number().int().min(0),
+});
+
+export const googleWorkspaceTenantConfigurationResponse = z.object({
+  provider: z.literal("google_workspace").default("google_workspace"),
+  configured: z.boolean(),
+  config_source: z.enum(["tenant_admin", "environment", "missing"]),
+  enabled: z.boolean(),
+  calendar_enabled: z.boolean(),
+  gmail_enabled: z.boolean(),
+  drive_enabled: z.boolean(),
+  required_config: z.array(googleWorkspaceConfigurationItemStatus),
+  required_approvals: z.array(googleWorkspaceApprovalItemStatus),
+  approved_scopes: z.array(z.string()).default([]),
+  missing_config_names: z.array(z.string()).default([]),
+  missing_approval_keys: z.array(z.string()).default([]),
+  connection_counts: googleWorkspaceConnectionCounts,
+  last_test_status: z
+    .enum(["passed", "failed", "blocked", "not_run"])
+    .default("not_run"),
+  last_tested_at: z.string().nullable(),
+  last_error_redacted: z.string().nullable(),
+  readiness: z.enum([
+    "blocked_pending_admin_configuration",
+    "ready_for_user_connections",
+  ]),
+});
+
+export const googleWorkspaceReadinessCheckResult = z.object({
+  key: z.string(),
+  label: z.string(),
+  status: z.enum(["passed", "failed", "blocked", "not_run"]),
+  detail: z.string().nullable().optional(),
+});
+
+export const googleWorkspaceReadinessTestResponse = z.object({
+  provider: z.literal("google_workspace").default("google_workspace"),
+  status: z.enum(["passed", "failed", "blocked", "not_run"]),
+  checks: z.array(googleWorkspaceReadinessCheckResult),
+  readiness: z.enum([
+    "blocked_pending_admin_configuration",
+    "ready_for_user_connections",
+  ]),
+  tested_at: z.string(),
+});
+
 export const outlookBulkSyncItem = z.object({
   source_type: z.enum(["matter_hearing", "matter_deadline", "matter_task"]),
   source_id: z.string(),
@@ -2549,6 +2612,12 @@ export type OutlookTenantConfigurationResponse = z.infer<
 >;
 export type OutlookReadinessTestResponse = z.infer<
   typeof outlookReadinessTestResponse
+>;
+export type GoogleWorkspaceTenantConfigurationResponse = z.infer<
+  typeof googleWorkspaceTenantConfigurationResponse
+>;
+export type GoogleWorkspaceReadinessTestResponse = z.infer<
+  typeof googleWorkspaceReadinessTestResponse
 >;
 export type OutlookBulkSyncItem = z.infer<typeof outlookBulkSyncItem>;
 export type OutlookBulkSyncResponse = z.infer<typeof outlookBulkSyncResponse>;

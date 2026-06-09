@@ -36,6 +36,11 @@ from caseops_api.schemas.calendar import (
     OutlookTenantConfigurationResponse,
     OutlookTenantConfigurationUpdateRequest,
 )
+from caseops_api.schemas.google_workspace import (
+    GoogleWorkspaceReadinessTestResponse,
+    GoogleWorkspaceTenantConfigurationResponse,
+    GoogleWorkspaceTenantConfigurationUpdateRequest,
+)
 from caseops_api.schemas.storage_governance import (
     FirmStorageQuotaPatchRequest,
     FirmStorageUsageSummary,
@@ -58,6 +63,11 @@ from caseops_api.services.calendar_sync import (
     process_durable_outlook_sync,
     test_outlook_tenant_configuration,
     update_outlook_tenant_configuration,
+)
+from caseops_api.services.google_workspace import (
+    google_workspace_tenant_configuration_status,
+    test_google_workspace_tenant_configuration,
+    update_google_workspace_tenant_configuration,
 )
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.storage_governance import (
@@ -399,6 +409,56 @@ def post_outlook_configuration_test(
     session: DbSession,
 ) -> OutlookReadinessTestResponse:
     return test_outlook_tenant_configuration(session, context=context)
+
+
+@router.get(
+    "/google-workspace-configuration",
+    response_model=GoogleWorkspaceTenantConfigurationResponse,
+    summary=(
+        "Read the tenant Google Workspace readiness gate without exposing "
+        "OAuth values."
+    ),
+)
+def get_google_workspace_configuration(
+    context: WorkspaceAdmin,
+    session: DbSession,
+) -> GoogleWorkspaceTenantConfigurationResponse:
+    return google_workspace_tenant_configuration_status(session, context=context)
+
+
+@router.patch(
+    "/google-workspace-configuration",
+    response_model=GoogleWorkspaceTenantConfigurationResponse,
+    summary=(
+        "Configure tenant Google Workspace OAuth values for Calendar, Gmail, "
+        "and Drive. Values are accepted once and never echoed back."
+    ),
+)
+def patch_google_workspace_configuration(
+    payload: GoogleWorkspaceTenantConfigurationUpdateRequest,
+    context: WorkspaceAdmin,
+    session: DbSession,
+) -> GoogleWorkspaceTenantConfigurationResponse:
+    return update_google_workspace_tenant_configuration(
+        session,
+        context=context,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/google-workspace-configuration/test",
+    response_model=GoogleWorkspaceReadinessTestResponse,
+    summary=(
+        "Run a safe tenant Google Workspace readiness probe without calling "
+        "Google providers."
+    ),
+)
+def post_google_workspace_configuration_test(
+    context: WorkspaceAdmin,
+    session: DbSession,
+) -> GoogleWorkspaceReadinessTestResponse:
+    return test_google_workspace_tenant_configuration(session, context=context)
 
 
 @router.post(
