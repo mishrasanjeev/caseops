@@ -1116,10 +1116,11 @@ def start_gmail_watch(
     context: SessionContext,
 ) -> MailboxWatchResponse:
     config = _gmail_runtime_config(session, context=context)
-    if not config.configured or not config.webhook_configured:
+    provider = _gmail_provider(session, context=context)
+    if not provider.configured or not provider.webhook_configured:
         return MailboxWatchResponse(
             watch_started=False,
-            webhook_configured=False,
+            webhook_configured=provider.webhook_configured,
             missing_config_names=[
                 *_missing_gmail_config_names(config),
                 *_missing_gmail_webhook_config_names(config),
@@ -1127,9 +1128,7 @@ def start_gmail_watch(
         )
     connection = _connected_gmail_connection(session, context=context)
     token_payload = _decrypt_token_payload(connection.encrypted_token_ref)
-    response = _gmail_provider(session, context=context).start_watch(
-        token_payload=token_payload
-    )
+    response = provider.start_watch(token_payload=token_payload)
     history_id = str(response.get("historyId") or "") or None
     expiration_ms = response.get("expiration")
     expires_at = None

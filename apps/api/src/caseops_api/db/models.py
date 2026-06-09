@@ -2226,6 +2226,9 @@ class TenantOutlookConfiguration(Base):
 class TenantGoogleWorkspaceConfiguration(Base):
     __tablename__ = "tenant_google_workspace_configurations"
     __table_args__ = (
+        Index("ix_tgws_config_company", "company_id"),
+        Index("ix_tgws_config_created_by", "created_by_membership_id"),
+        Index("ix_tgws_config_updated_by", "updated_by_membership_id"),
         UniqueConstraint(
             "company_id",
             name="uq_tenant_google_workspace_configurations_company",
@@ -2238,7 +2241,6 @@ class TenantGoogleWorkspaceConfiguration(Base):
     company_id: Mapped[str] = mapped_column(
         ForeignKey("companies.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
     client_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     encrypted_client_secret_ref: Mapped[str | None] = mapped_column(
@@ -2280,12 +2282,10 @@ class TenantGoogleWorkspaceConfiguration(Base):
     created_by_membership_id: Mapped[str | None] = mapped_column(
         ForeignKey("company_memberships.id", ondelete="SET NULL"),
         nullable=True,
-        index=True,
     )
     updated_by_membership_id: Mapped[str | None] = mapped_column(
         ForeignKey("company_memberships.id", ondelete="SET NULL"),
         nullable=True,
-        index=True,
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

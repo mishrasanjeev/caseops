@@ -120,17 +120,17 @@ def upgrade() -> None:
         ),
     )
     op.create_index(
-        "ix_tenant_google_workspace_configurations_company_id",
+        "ix_tgws_config_company",
         "tenant_google_workspace_configurations",
         ["company_id"],
     )
     op.create_index(
-        "ix_tenant_google_workspace_configurations_created_by_membership_id",
+        "ix_tgws_config_created_by",
         "tenant_google_workspace_configurations",
         ["created_by_membership_id"],
     )
     op.create_index(
-        "ix_tenant_google_workspace_configurations_updated_by_membership_id",
+        "ix_tgws_config_updated_by",
         "tenant_google_workspace_configurations",
         ["updated_by_membership_id"],
     )
@@ -138,15 +138,15 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_index(
-        "ix_tenant_google_workspace_configurations_updated_by_membership_id",
+        "ix_tgws_config_updated_by",
         table_name="tenant_google_workspace_configurations",
     )
     op.drop_index(
-        "ix_tenant_google_workspace_configurations_created_by_membership_id",
+        "ix_tgws_config_created_by",
         table_name="tenant_google_workspace_configurations",
     )
     op.drop_index(
-        "ix_tenant_google_workspace_configurations_company_id",
+        "ix_tgws_config_company",
         table_name="tenant_google_workspace_configurations",
     )
     op.drop_table("tenant_google_workspace_configurations")
