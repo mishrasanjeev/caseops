@@ -3,10 +3,19 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { bulkAssignMatterTagMock, listMatterTagsMock, listMattersMock, useRouterMock } = vi.hoisted(() => ({
+const {
+  bulkAssignMatterTagMock,
+  listMatterTagsMock,
+  listMattersMock,
+  updateMatterMock,
+  useCapabilityMock,
+  useRouterMock,
+} = vi.hoisted(() => ({
   bulkAssignMatterTagMock: vi.fn(),
   listMatterTagsMock: vi.fn(),
   listMattersMock: vi.fn(),
+  updateMatterMock: vi.fn(),
+  useCapabilityMock: vi.fn(),
   useRouterMock: vi.fn(),
 }));
 
@@ -14,10 +23,19 @@ vi.mock("@/lib/api/endpoints", () => ({
   bulkAssignMatterTag: bulkAssignMatterTagMock,
   listMatterTags: listMatterTagsMock,
   listMatters: listMattersMock,
+  updateMatter: updateMatterMock,
+}));
+
+vi.mock("@/lib/capabilities", () => ({
+  useCapability: useCapabilityMock,
 }));
 
 vi.mock("next/navigation", () => ({
   useRouter: useRouterMock,
+}));
+
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
 }));
 
 import MattersPage from "@/app/app/matters/page";
@@ -34,10 +52,24 @@ describe("MattersPage", () => {
     bulkAssignMatterTagMock.mockReset();
     listMatterTagsMock.mockReset();
     listMattersMock.mockReset();
+    updateMatterMock.mockReset();
+    useCapabilityMock.mockReset();
     listMatterTagsMock.mockResolvedValue({
       tags: [{ id: "tag-1", company_id: "c-1", name: "Urgent", slug: "urgent" }],
     });
     bulkAssignMatterTagMock.mockResolvedValue({ assigned_count: 1, skipped_count: 0 });
+    updateMatterMock.mockResolvedValue({
+      id: "m1",
+      matter_code: "ACME-1",
+      title: "Acme v Smith",
+      status: "disposed",
+      practice_area: "Commercial",
+      forum_level: "high_court",
+      next_hearing_on: null,
+      created_at: "2026-04-01T00:00:00Z",
+      updated_at: "2026-04-15T00:00:00Z",
+    });
+    useCapabilityMock.mockImplementation((capability: string) => capability === "matters:edit");
     useRouterMock.mockReturnValue({
       push: vi.fn(),
       replace: vi.fn(),
@@ -150,5 +182,42 @@ describe("MattersPage", () => {
         }),
       ),
     );
+  });
+
+  it("lets matter editors update status from the portfolio without opening the row", async () => {
+    const push = vi.fn();
+    useRouterMock.mockReturnValue({
+      push,
+      replace: vi.fn(),
+      refresh: vi.fn(),
+    });
+    listMattersMock.mockResolvedValue({
+      matters: [
+        {
+          id: "m1",
+          matter_code: "ACME-1",
+          title: "Acme v Smith",
+          status: "active",
+          practice_area: "Commercial",
+          forum_level: "high_court",
+          next_hearing_on: null,
+          created_at: "2026-04-01T00:00:00Z",
+          updated_at: "2026-04-15T00:00:00Z",
+        },
+      ],
+      next_cursor: null,
+    });
+
+    render(withClient(<MattersPage />));
+
+    const statusSelect = await screen.findByLabelText("Status for ACME-1");
+    fireEvent.change(statusSelect, { target: { value: "disposed" } });
+
+    await waitFor(() => expect(updateMatterMock).toHaveBeenCalledTimes(1));
+    expect(updateMatterMock).toHaveBeenCalledWith({
+      matterId: "m1",
+      status: "disposed",
+    });
+    expect(push).not.toHaveBeenCalled();
   });
 });

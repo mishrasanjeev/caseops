@@ -16,6 +16,7 @@ import {
   createMatterBillingRate,
   fetchMatterBillingProfiles,
   fetchMatterInvoiceNumberPreview,
+  updateMatterBillingProfile,
 } from "@/lib/api/endpoints";
 import { useCapability } from "@/lib/capabilities";
 
@@ -55,32 +56,49 @@ export default function AdminMatterBillingPage() {
     enabled: canAdmin,
   });
 
-  const createProfileMutation = useMutation({
-    mutationFn: () =>
-      createMatterBillingProfile({
-        name,
-        is_default: true,
-        currency: "INR",
-        firm_legal_name: firmLegalName,
-        firm_address: firmAddress || null,
-        firm_gstin: firmGstin || null,
-        firm_pan: firmPan || null,
-        default_place_of_supply: placeOfSupply || null,
-        default_sac_hsn: sac || null,
-        gst_applicable: true,
-        gstin_state_code: gstStateCode || null,
-        cgst_rate_bps: 900,
-        sgst_rate_bps: 900,
-        igst_rate_bps: Number(igstBps || "0"),
-        tax_rate_bps: Number(igstBps || "0"),
-        invoice_prefix: prefix,
-        next_invoice_sequence: 1,
-        payment_terms_days: 30,
-        billing_mode: "hourly",
-        default_rate_minor_per_hour: defaultRate ? rupeesToMinor(defaultRate) : null,
-        expense_categories: ["court_fee", "filing_fee", "travel", "reimbursement"],
-        retainer_adjustments_enabled: true,
-      }),
+  const buildProfilePayload = () => ({
+    name,
+    is_default: true,
+    currency: "INR",
+    firm_legal_name: firmLegalName,
+    firm_address: firmAddress || null,
+    firm_gstin: firmGstin || null,
+    firm_pan: firmPan || null,
+    default_place_of_supply: placeOfSupply || null,
+    default_sac_hsn: sac || null,
+    gst_applicable: true,
+    gstin_state_code: gstStateCode || null,
+    cgst_rate_bps: 900,
+    sgst_rate_bps: 900,
+    igst_rate_bps: Number(igstBps || "0"),
+    tax_rate_bps: Number(igstBps || "0"),
+    invoice_prefix: prefix,
+    next_invoice_sequence: 1,
+    payment_terms_days: 30,
+    billing_mode: "hourly",
+    default_rate_minor_per_hour: defaultRate ? rupeesToMinor(defaultRate) : null,
+    expense_categories: ["court_fee", "filing_fee", "travel", "reimbursement"],
+    retainer_adjustments_enabled: true,
+  });
+  const saveProfileMutation = useMutation({
+    mutationFn: () => {
+      const payload = buildProfilePayload();
+      const existingProfile =
+        profilesQuery.data?.profiles.find((profile) => profile.is_default) ??
+        profilesQuery.data?.profiles.find(
+          (profile) => profile.name.trim().toLowerCase() === name.trim().toLowerCase(),
+      );
+      if (existingProfile) {
+        const { next_invoice_sequence: omittedNextInvoiceSequence, ...updateBody } =
+          payload;
+        void omittedNextInvoiceSequence;
+        return updateMatterBillingProfile({
+          profileId: existingProfile.id,
+          body: updateBody,
+        });
+      }
+      return createMatterBillingProfile(payload);
+    },
     onSuccess: async (profile) => {
       setProfileForRate(profile.id);
       await queryClient.invalidateQueries({ queryKey: ["admin", "matter-billing"] });
@@ -176,10 +194,10 @@ export default function AdminMatterBillingPage() {
             <div className="md:col-span-2">
               <Button
                 type="button"
-                onClick={() => createProfileMutation.mutate()}
-                disabled={createProfileMutation.isPending}
+                onClick={() => saveProfileMutation.mutate()}
+                disabled={saveProfileMutation.isPending}
               >
-                {createProfileMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                {saveProfileMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                 Save default profile
               </Button>
             </div>

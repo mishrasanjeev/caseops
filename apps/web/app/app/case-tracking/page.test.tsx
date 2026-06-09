@@ -139,7 +139,7 @@ describe("CaseTrackingPage", () => {
           current_status: "Pending",
           current_stage: "Arguments",
           next_hearing_on: "2026-06-15",
-          source_url: "https://provider.example/case",
+          source_url: null,
           provenance_label: "Provider-normalized case status",
         },
       ],
@@ -156,7 +156,7 @@ describe("CaseTrackingPage", () => {
           title: "Order dated 26 May 2026",
           summary: "Source-backed case update summary for lawyer review.",
           ai_summary: { review_framing: "Source-backed case update summary for lawyer review." },
-          source_url: "https://provider.example/order-1",
+          source_url: "/api/case-tracking/bookmarks/bm-1/updates/upd-1/source",
           order_date: "2026-05-26",
           hearing_date: null,
           provider_metadata: {},
@@ -185,11 +185,16 @@ describe("CaseTrackingPage", () => {
       expect.objectContaining({
         cnr_number: "DLHC010012342026",
         matter_id: "matter-1",
+        metadata: {},
       }),
     );
     await user.click(screen.getAllByText("Example Petitioner v Example Respondent")[1]);
     expect(await screen.findByText("Order dated 26 May 2026")).toBeInTheDocument();
     expect(screen.getAllByText(/lawyer review/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: /Source/i })).toHaveAttribute(
+      "href",
+      "http://localhost:8000/api/case-tracking/bookmarks/bm-1/updates/upd-1/source",
+    );
 
     await user.click(screen.getByRole("button", { name: /Refresh/i }));
     expect(refreshCaseTrackingBookmarkMock.mock.calls[0][0]).toBe("bm-1");
