@@ -46,6 +46,7 @@ from caseops_api.services.saas_billing import (
     sync_checkout,
     usage_report,
 )
+from caseops_api.services.security import require_recent_step_up
 
 router = APIRouter()
 CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
@@ -139,6 +140,7 @@ def get_credit_ledger(
 
 @router.get("/credit-ledger/export")
 def export_credit_ledger(context: BillingAdmin, session: DbSession) -> StreamingResponse:
+    require_recent_step_up(session, context=context, purpose="billing_export")
     content = credit_ledger_csv(session, context=context)
     record_from_context(
         session,
@@ -169,6 +171,7 @@ def download_billing_invoice(
     session: DbSession,
     format: Literal["pdf", "json"] = Query(default="pdf"),
 ) -> Response:
+    require_recent_step_up(session, context=context, purpose="billing_export")
     if format == "json":
         content = invoice_download_json(session, context=context, invoice_id=invoice_id)
         media_type = "application/json"
@@ -194,6 +197,7 @@ def download_billing_invoice(
 
 @router.get("/payments/export")
 def export_payments(context: BillingAdmin, session: DbSession) -> StreamingResponse:
+    require_recent_step_up(session, context=context, purpose="billing_export")
     content = payments_csv(session, context=context)
     record_from_context(
         session,
@@ -215,6 +219,7 @@ def download_billing_statement(
     session: DbSession,
     format: Literal["csv", "pdf"] = Query(default="csv"),
 ) -> Response:
+    require_recent_step_up(session, context=context, purpose="billing_export")
     if format == "pdf":
         content = statement_pdf(session, context=context)
         media_type = "application/pdf"
@@ -252,6 +257,7 @@ def get_spend_report(context: CurrentContext, session: DbSession) -> BillingUsag
 
 @router.get("/reports/spend/export")
 def export_spend_report(context: BillingAdmin, session: DbSession) -> StreamingResponse:
+    require_recent_step_up(session, context=context, purpose="billing_export")
     content = spend_csv(session, context=context)
     record_from_context(
         session,

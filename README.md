@@ -220,6 +220,11 @@ LLM provider settings (optional — defaults to the mock provider):
 CASEOPS_LLM_PROVIDER=mock         # mock | anthropic | gemini
 CASEOPS_LLM_MODEL=claude-opus-4-7 # or gemini-2.5-pro, etc.
 CASEOPS_LLM_API_KEY=              # required for anthropic / gemini
+CASEOPS_MFA_EXISTING_USER_GRACE_DAYS=7
+CASEOPS_MFA_STEP_UP_TTL_MINUTES=15
+CASEOPS_MFA_MAX_FAILURES_PER_5M=5
+CASEOPS_BILLING_COMPANY_GSTIN=09AANCM5923C1ZD
+CASEOPS_BILLING_MINIMUM_GROSS_MARGIN_BPS=7000
 ```
 
 Scheduled tracked-case refresh uses the India window by default:

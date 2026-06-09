@@ -48,6 +48,10 @@ POST /api/mailbox/gmail/webhook
 GET /api/mailbox/imports
 GET /api/mailbox/attachment-candidates
 PATCH /api/mailbox/attachment-candidates/{candidate_id}
+GET /api/case-tracking/support-matrix
+GET /api/platform-admin/case-tracking/support-matrix
+POST /api/platform-admin/case-tracking/support-matrix
+PATCH /api/platform-admin/case-tracking/support-matrix/{row_id}
 ```
 
 `/app/admin/integrations` is the tenant-safe connector registry. It shows
@@ -62,6 +66,45 @@ return credential values.
 Mutation endpoints require an operator reason between 8 and 500 characters.
 The reason is used only to record whether a reason was supplied in audit
 metadata; raw reason text is not exposed in provider-operation list responses.
+
+## Case Tracking Provider Matrix
+
+Founder/platform admins manage the internal support matrix at
+`/app/platform-admin/paid-production` and
+`GET/POST/PATCH /api/platform-admin/case-tracking/support-matrix`.
+
+Required internal fields:
+
+- provider
+- court
+- bench/jurisdiction
+- lookup method
+- refresh cost
+- bulk refresh cost
+- rate limit
+- freshness SLA
+- legal/ToS status
+- failure-code mapping
+- enabled/disabled status
+- tenant visibility
+- evidence/source reference
+
+Tenant users see only the tenant-safe matrix through
+`GET /api/case-tracking/support-matrix` and the case tracking page before they
+track a case. Tenant responses must not include refresh cost, bulk refresh
+cost, internal evidence references, margins, provider fees, or founder notes.
+
+Manual checks:
+
+- A disabled support-matrix row blocks new tracking/bookmark creation for that
+  court/provider.
+- Empty matrix remains backward-compatible for existing disabled/mock setups.
+- Supported rows show tenant-safe court/provider/method/rate/freshness/status
+  information only.
+- Case-refresh usage remains quota/credit-gated; heavy refresh use must not
+  silently bypass plan limits or top-up requirements.
+- Do not add captcha/session-gated court scraping. Use only approved provider,
+  API, or manual workflows.
 
 Stable provider-operation fields:
 

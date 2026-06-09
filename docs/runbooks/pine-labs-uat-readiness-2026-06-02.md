@@ -29,6 +29,18 @@ CaseOps does not yet have production signoff for Plural subscriptions or UPI
 AutoPay. Treat subscription/mandate UAT as provider-readiness validation before
 enabling any live recurring payment feature.
 
+The P0 safety slice now adds founder-only UAT evidence records and a
+paid-production readiness console:
+
+- `POST /api/platform-admin/pine-labs/uat-runs`
+- `GET /api/platform-admin/pine-labs/uat-readiness`
+- `POST /api/platform-admin/pine-labs/uat-evidence`
+- `POST /api/platform-admin/pine-labs/production-activation`
+- `/app/platform-admin/paid-production`
+
+These records are evidence only. They do not enable production payments, change
+Pine Labs settings, or perform live provider calls.
+
 ## Founder/Operator Information Request
 
 Ask Pine Labs or the payment onboarding operator for these items before UAT can
@@ -103,6 +115,16 @@ CASEOPS_PINE_LABS_FIXED_FEE_MINOR=<confirmed>
 
 Set `CASEOPS_PINE_LABS_SUBSCRIPTIONS_ENABLED=true` only after subscription and
 UPI AutoPay UAT gates pass.
+
+Production safety settings added by the P0 slice:
+
+```text
+CASEOPS_BILLING_MINIMUM_GROSS_MARGIN_BPS=7000
+```
+
+Production must remain disabled unless a separate founder-approved deployment
+changes `CASEOPS_PINE_LABS_ENV`. This UAT readiness workflow does not change
+that environment variable.
 
 ## Webhook Registration
 
@@ -305,13 +327,19 @@ Run these on a UAT smoke tenant only.
 
 | Scenario | Expected CaseOps result |
 |---|---|
-| SaaS plan payment link success | Checkout becomes paid; subscription becomes active; credits granted once |
-| SaaS plan payment failure | Checkout/order fail; subscription remains unchanged |
-| SaaS plan pending then paid webhook | Pending first, paid after verified webhook or sync |
-| Duplicate paid webhook | No duplicate credits/items/profit rows |
-| Out-of-order failed after paid | Paid order remains paid; event marked ignored/out-of-order |
-| Add-on AI credit success | Top-up credits granted once with expiry |
-| Recurring add-on success | Subscription item added once |
+| `plan_payment_success` | Checkout becomes paid; subscription becomes active; credits granted once |
+| `top_up_success` | Top-up credits granted once with expiry |
+| `failed_payment` | Checkout/order fail; subscription remains unchanged |
+| `pending_payment` | Pending state does not activate entitlements |
+| `cancelled_expired_payment` | Cancelled/expired state does not activate entitlements |
+| `duplicate_webhook` | No duplicate credits/items/profit rows |
+| `tampered_webhook` | Bad signature is rejected and audited before payload trust |
+| `stale_webhook` | Old timestamp is rejected and audited |
+| `refund_processed` | Refund operational record captured; no silent entitlement rewrite |
+| `refund_failed` | Failed refund operational record captured; no entitlement rewrite |
+| `subscription_charged` | Recurring charge links to subscription/payment history once |
+| `subscription_cancelled` | Cancellation is append-only/auditable and does not erase history |
+| `settlement_report_import` | Settlement row maps to CaseOps payment order or exception |
 | Tenant spend export after usage | Quantities/credits only; no internal cost |
 | Manual invoice offline paid | Platform-admin mark-paid records amount/TDS/reference |
 | Matter invoice payment link success | Matter invoice collection state updates |
@@ -322,6 +350,48 @@ Run these on a UAT smoke tenant only.
 | Callback/redirect without webhook | UI remains provisional until backend sync verifies |
 | Settlement report match | Settlement row maps to CaseOps payment order |
 | Refund event | Operational record captured; no silent subscription downgrade |
+
+## Local-Safe Evidence Harness
+
+Use the mock harness for local evidence shape and webhook-security regression
+only. It must not be used to claim real Pine Labs UAT completion.
+
+```powershell
+uv --directory apps/api run python ..\..\scripts\pine_labs_uat_mock_harness.py
+```
+
+To record mock evidence through the API, provide an authenticated founder
+session or bearer token through environment variables. Do not print the token or
+cookie in terminals, logs, or evidence files.
+
+```powershell
+$env:CASEOPS_SMOKE_API_BASE="http://localhost:8000"
+$env:CASEOPS_SMOKE_BEARER_TOKEN="<founder-token>"
+uv --directory apps/api run python ..\..\scripts\pine_labs_uat_mock_harness.py --record
+```
+
+The harness refuses non-mock/non-UAT-safe mode. Real Pine Labs calls are allowed
+only with explicit UAT credentials, `CASEOPS_PINE_LABS_ENV=uat`, and a base URL
+that is clearly UAT/sandbox/test/staging/local.
+
+## Evidence Fields
+
+For every required scenario, record:
+
+- scenario code
+- result status
+- provider order id, if applicable
+- provider payment id, if applicable
+- webhook id, if applicable
+- webhook timestamp, if applicable
+- observed timestamp
+- redacted payload sample or external payload reference
+- screenshot/attachment reference, if storage exists externally
+- operator notes
+
+Do not store raw signed payloads, customer payment instruments, UPI handles,
+card data, webhook secrets, access tokens, client secrets, or dashboard
+credentials in the repo.
 
 ## Go/No-Go Gates Before Enabling Production Payments
 
@@ -345,6 +415,17 @@ Do not switch production to `uat` or `prod` payment behavior until all gates pas
 | Monitoring | Logs/alerts for webhook errors, failed payments, and provider outages exist |
 | Rollback | Production can return to `CASEOPS_PINE_LABS_ENV=disabled` quickly |
 | Founder approval | Founder signs off UAT evidence and accepts caveats |
+
+Additional CaseOps activation gate:
+
+- `GET /api/platform-admin/pine-labs/uat-readiness` must show
+  `complete=true`.
+- `production_activation_blocked` must remain `true` until all required
+  scenario evidence is `pass` and founder `go` is recorded.
+- `POST /api/platform-admin/pine-labs/production-activation` records only the
+  go/no-go decision. It must not enable live Pine Labs settings.
+- Live payments must still require a separate explicit production deployment
+  decision.
 
 ## Remaining Production Blockers
 

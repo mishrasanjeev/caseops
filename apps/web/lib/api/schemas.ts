@@ -2551,12 +2551,20 @@ export const providerCostProfileRecord = z.object({
   id: z.string(),
   category: z.enum([
     "case_refresh",
+    "bulk_case_refresh",
     "llm",
+    "llm_input",
+    "llm_output",
     "embedding",
     "document_processing",
+    "ocr_page",
     "storage",
+    "bandwidth_export",
     "payment_mdr",
     "payment_fixed_fee",
+    "payment_refund_fee",
+    "payment_chargeback_fee",
+    "email",
     "sms",
     "whatsapp",
     "manual_support",
@@ -2565,10 +2573,21 @@ export const providerCostProfileRecord = z.object({
   currency: z.literal("INR"),
   unit_amount_minor: z.number().int().nullable(),
   unit_amount_bps: z.number().int().nullable(),
+  unit_label: z.string().nullable().optional(),
   effective_from: z.string(),
   effective_until: z.string().nullable(),
   status: z.enum(["active", "inactive"]),
   source: z.string().nullable(),
+  tax_fee_notes: z.string().nullable().optional(),
+  cost_basis: z.enum(["estimated", "actual"]).optional().default("estimated"),
+  confidence_level: z.enum(["low", "medium", "high"]).optional().default("low"),
+  evidence_ref: z.string().nullable().optional(),
+  founder_approval_status: z
+    .enum(["pending", "approved", "rejected"])
+    .optional()
+    .default("pending"),
+  approved_at: z.string().nullable().optional(),
+  approved_by_platform_admin_id: z.string().nullable().optional(),
   notes: z.string().nullable(),
   created_by_platform_admin_id: z.string().nullable(),
   created_at: z.string(),
@@ -2582,16 +2601,168 @@ export const providerCostProfileListResponse = z.object({
 export const marginSimulationRecord = z.object({
   id: z.string(),
   scenario_name: z.string().nullable(),
+  plan_code: z.string().nullable().optional(),
+  scenario_code: z.string().nullable().optional(),
   currency: z.literal("INR"),
   input: z.record(z.string(), z.unknown()),
   result: z.record(z.string(), z.unknown()),
   warnings: z.array(z.record(z.string(), z.unknown())),
+  minimum_gross_margin_bps: z.number().int().optional().default(7000),
+  uses_unapproved_estimated_costs: z.boolean().optional().default(true),
+  readiness_blocked: z.boolean().optional().default(true),
+  founder_approval_status: z
+    .enum(["pending", "approved", "rejected"])
+    .optional()
+    .default("pending"),
+  approved_at: z.string().nullable().optional(),
+  approved_by_platform_admin_id: z.string().nullable().optional(),
   run_by_platform_admin_id: z.string().nullable(),
   created_at: z.string(),
 });
 
 export const marginSimulationListResponse = z.object({
   simulations: z.array(marginSimulationRecord),
+});
+
+export const marginReadinessResponse = z.object({
+  minimum_gross_margin_bps: z.number().int(),
+  blocked: z.boolean(),
+  required_scenarios: z.array(
+    z.object({
+      scenario_code: z.string(),
+      label: z.string(),
+      latest_simulation_id: z.string().nullable(),
+      latest_gross_margin_bps: z.number().int().nullable(),
+      readiness_blocked: z.boolean(),
+      uses_unapproved_estimated_costs: z.boolean(),
+      missing: z.boolean().optional().default(false),
+    }),
+  ),
+});
+
+export const mfaSecurityStatusResponse = z.object({
+  mfa_status: z.enum(["not_enrolled", "pending", "enrolled", "disabled"]),
+  mfa_required: z.boolean(),
+  mfa_enforced_at: z.string().nullable(),
+  grace_period_ends_at: z.string().nullable(),
+  recent_step_up_expires_at: z.string().nullable(),
+  recovery_codes_remaining: z.number().int(),
+  platform_admin_required: z.boolean().optional().default(false),
+  tenant_admin_required: z.boolean().optional().default(false),
+  all_users_required: z.boolean().optional().default(false),
+});
+
+export const mfaEnrollmentStartResponse = z.object({
+  enrollment_id: z.string(),
+  secret: z.string(),
+  otpauth_url: z.string(),
+  qr_svg: z.string(),
+  status: z.literal("pending"),
+});
+
+export const mfaEnrollmentVerifyResponse = z.object({
+  status: z.literal("enrolled"),
+  recovery_codes: z.array(z.string()),
+});
+
+export const mfaStepUpResponse = z.object({
+  status: z.literal("verified"),
+  expires_at: z.string(),
+});
+
+export const pineLabsUatReadinessResponse = z.object({
+  run_id: z.string(),
+  run_status: z.string(),
+  provider_mode: z.string(),
+  environment: z.string(),
+  complete: z.boolean(),
+  missing_required_scenarios: z.array(z.string()),
+  production_activation_blocked: z.boolean(),
+  latest_decision: z.record(z.string(), z.unknown()).nullable(),
+  scenarios: z.array(
+    z.object({
+      scenario_code: z.string(),
+      label: z.string(),
+      required: z.boolean(),
+      result_status: z.string(),
+      provider_order_id: z.string().nullable(),
+      webhook_id: z.string().nullable(),
+      observed_at: z.string().nullable(),
+      operator_notes: z.string().nullable(),
+      attachment_refs: z.array(z.string()),
+    }),
+  ),
+});
+
+export const productionBillingSignoffResponse = z.object({
+  signoff_id: z.string(),
+  status: z.string(),
+  complete: z.boolean(),
+  missing_required_checks: z.array(z.string()),
+  signed_off_at: z.string().nullable(),
+  notes: z.string().nullable(),
+  checks: z.array(
+    z.object({
+      check_code: z.string(),
+      label: z.string(),
+      result_status: z.string(),
+      evidence_ref: z.string().nullable(),
+      operator_notes: z.string().nullable(),
+      recorded_at: z.string().nullable(),
+    }),
+  ),
+});
+
+export const passwordResetReadinessResponse = z.object({
+  reset_link_domain: z.string(),
+  reset_path: z.string(),
+  public_app_url: z.string(),
+  email_provider: z.literal("sendgrid"),
+  provider_configured: z.boolean(),
+  sender_email_configured: z.boolean(),
+  sender_name: z.string(),
+  template_kind: z.literal("employee_password_reset_plain_text"),
+  subject_template: z.string(),
+  token_ttl_minutes: z.number().int(),
+  debug_tokens_allowed: z.boolean(),
+  non_prod_debug_tokens_only: z.boolean(),
+  secrets_exposed: z.literal(false),
+});
+
+export const financeListResponse = z.object({
+  rows: z.array(z.record(z.string(), z.unknown())),
+});
+
+export const caseTrackingSupportMatrixTenantRecord = z.object({
+  id: z.string(),
+  provider: z.string(),
+  court: z.string(),
+  bench_jurisdiction: z.string().nullable(),
+  lookup_method: z.string(),
+  rate_limit: z.string().nullable(),
+  freshness_sla: z.string().nullable(),
+  legal_tos_status: z.string(),
+  failure_code_mapping: z.record(z.string(), z.unknown()).nullable(),
+  enabled: z.boolean(),
+  status_notes: z.string().nullable(),
+});
+
+export const caseTrackingSupportMatrixTenantResponse = z.object({
+  rows: z.array(caseTrackingSupportMatrixTenantRecord),
+});
+
+export const caseTrackingSupportMatrixAdminResponse = z.object({
+  rows: z.array(
+    caseTrackingSupportMatrixTenantRecord.extend({
+      refresh_cost_minor: z.number().int(),
+      bulk_refresh_cost_minor: z.number().int(),
+      currency: z.literal("INR"),
+      tenant_visible: z.boolean(),
+      evidence_ref: z.string().nullable(),
+      created_at: z.string(),
+      updated_at: z.string(),
+    }),
+  ),
 });
 
 export type CalendarEventKind = z.infer<typeof calendarEventKind>;
@@ -2657,6 +2828,25 @@ export type ProviderCostProfileListResponse = z.infer<
 >;
 export type MarginSimulationRecord = z.infer<typeof marginSimulationRecord>;
 export type MarginSimulationListResponse = z.infer<typeof marginSimulationListResponse>;
+export type MarginReadinessResponse = z.infer<typeof marginReadinessResponse>;
+export type MFASecurityStatusResponse = z.infer<typeof mfaSecurityStatusResponse>;
+export type MFAEnrollmentStartResponse = z.infer<typeof mfaEnrollmentStartResponse>;
+export type MFAEnrollmentVerifyResponse = z.infer<typeof mfaEnrollmentVerifyResponse>;
+export type MFAStepUpResponse = z.infer<typeof mfaStepUpResponse>;
+export type PineLabsUatReadinessResponse = z.infer<typeof pineLabsUatReadinessResponse>;
+export type ProductionBillingSignoffResponse = z.infer<
+  typeof productionBillingSignoffResponse
+>;
+export type PasswordResetReadinessResponse = z.infer<
+  typeof passwordResetReadinessResponse
+>;
+export type FinanceListResponse = z.infer<typeof financeListResponse>;
+export type CaseTrackingSupportMatrixTenantResponse = z.infer<
+  typeof caseTrackingSupportMatrixTenantResponse
+>;
+export type CaseTrackingSupportMatrixAdminResponse = z.infer<
+  typeof caseTrackingSupportMatrixAdminResponse
+>;
 
 // Phase B / J12 / M11 — communications log.
 export const communicationDirection = z.enum(["outbound", "inbound"]);

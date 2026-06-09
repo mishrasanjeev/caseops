@@ -74,6 +74,8 @@ PROBLEM_TYPE_MAP: list[tuple[int, str, str]] = [
     (403, "Requires role", "role_required"),
     (403, "Capability", "capability_required"),
     (403, "Managing matter access", "capability_required"),
+    (403, "Complete MFA step-up", "step_up_required"),
+    (403, "MFA is required", "mfa_enrollment_required"),
     # 429.
     (429, "Rate limit", "rate_limited"),
     # 503.

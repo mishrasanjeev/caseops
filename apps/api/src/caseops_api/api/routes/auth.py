@@ -18,6 +18,17 @@ from caseops_api.schemas.employees import (
     PasswordResetStartRequest,
     PasswordResetStartResponse,
 )
+from caseops_api.schemas.security import (
+    MFADisableRequest,
+    MFADisableResponse,
+    MFAEnrollmentStartResponse,
+    MFAEnrollmentVerifyResponse,
+    MFARecoveryCodesResponse,
+    MFASecurityStatusResponse,
+    MFAStepUpRequest,
+    MFAStepUpResponse,
+    MFAVerifyRequest,
+)
 from caseops_api.services.employees import (
     complete_account_setup,
     complete_password_reset,
@@ -29,6 +40,14 @@ from caseops_api.services.identity import (
     authenticate_user,
     build_auth_context,
     refresh_auth_session,
+)
+from caseops_api.services.security import (
+    complete_step_up,
+    disable_mfa,
+    mfa_security_status,
+    regenerate_recovery_codes,
+    start_mfa_enrollment,
+    verify_mfa_enrollment,
 )
 
 router = APIRouter()
@@ -159,6 +178,93 @@ async def password_reset_complete(
 @router.get("/me", response_model=AuthContextResponse, summary="Get the current auth context")
 async def me(context: CurrentContext, session: DbSession) -> AuthContextResponse:
     return build_auth_context(session, context)
+
+
+@router.get(
+    "/security",
+    response_model=MFASecurityStatusResponse,
+    summary="Get account security and MFA status.",
+)
+async def security_status(
+    context: CurrentContext,
+    session: DbSession,
+) -> MFASecurityStatusResponse:
+    return mfa_security_status(session, context=context)
+
+
+@router.post(
+    "/mfa/enroll",
+    response_model=MFAEnrollmentStartResponse,
+    summary="Start TOTP MFA enrollment.",
+)
+async def mfa_enroll(
+    context: CurrentContext,
+    session: DbSession,
+) -> MFAEnrollmentStartResponse:
+    return start_mfa_enrollment(session, context=context)
+
+
+@router.post(
+    "/mfa/enroll/verify",
+    response_model=MFAEnrollmentVerifyResponse,
+    summary="Verify TOTP MFA enrollment and return one-time recovery codes.",
+)
+async def mfa_enroll_verify(
+    payload: MFAVerifyRequest,
+    context: CurrentContext,
+    session: DbSession,
+) -> MFAEnrollmentVerifyResponse:
+    return verify_mfa_enrollment(session, context=context, code=payload.code)
+
+
+@router.post(
+    "/mfa/step-up",
+    response_model=MFAStepUpResponse,
+    summary="Complete MFA step-up for high-risk actions.",
+)
+async def mfa_step_up(
+    payload: MFAStepUpRequest,
+    context: CurrentContext,
+    session: DbSession,
+) -> MFAStepUpResponse:
+    return complete_step_up(
+        session,
+        context=context,
+        code=payload.code,
+        purpose=payload.purpose,
+        method=payload.method,
+    )
+
+
+@router.post(
+    "/mfa/recovery-codes/regenerate",
+    response_model=MFARecoveryCodesResponse,
+    summary="Regenerate single-use MFA recovery codes.",
+)
+async def mfa_recovery_codes_regenerate(
+    context: CurrentContext,
+    session: DbSession,
+) -> MFARecoveryCodesResponse:
+    return regenerate_recovery_codes(session, context=context)
+
+
+@router.post(
+    "/mfa/disable",
+    response_model=MFADisableResponse,
+    summary="Disable MFA after step-up verification.",
+)
+async def mfa_disable(
+    payload: MFADisableRequest,
+    context: CurrentContext,
+    session: DbSession,
+) -> MFADisableResponse:
+    disable_mfa(
+        session,
+        context=context,
+        reason=payload.reason,
+        code=payload.code,
+    )
+    return MFADisableResponse(status="disabled")
 
 
 @router.post(

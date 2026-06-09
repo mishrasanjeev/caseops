@@ -17,6 +17,8 @@ from caseops_api.db.models import (
     ProviderCostProfile,
 )
 from caseops_api.schemas.provider_costs import (
+    MarginReadinessResponse,
+    MarginReadinessScenarioStatus,
     MarginSimulationRecord,
     MarginSimulationRunRequest,
     ProviderCostProfileCreateRequest,
@@ -28,16 +30,32 @@ CATALOG_VERSION = "2026.05.v1"
 CASE_REFRESH_WARNING_MINOR = 10
 MONEY_COST_CATEGORIES = {
     ProviderCostCategory.CASE_REFRESH,
+    ProviderCostCategory.BULK_CASE_REFRESH,
     ProviderCostCategory.LLM,
+    ProviderCostCategory.LLM_INPUT,
+    ProviderCostCategory.LLM_OUTPUT,
     ProviderCostCategory.EMBEDDING,
     ProviderCostCategory.DOCUMENT_PROCESSING,
+    ProviderCostCategory.OCR_PAGE,
     ProviderCostCategory.STORAGE,
+    ProviderCostCategory.BANDWIDTH_EXPORT,
     ProviderCostCategory.PAYMENT_FIXED_FEE,
+    ProviderCostCategory.PAYMENT_REFUND_FEE,
+    ProviderCostCategory.PAYMENT_CHARGEBACK_FEE,
+    ProviderCostCategory.EMAIL,
     ProviderCostCategory.SMS,
     ProviderCostCategory.WHATSAPP,
     ProviderCostCategory.MANUAL_SUPPORT,
 }
 BPS_COST_CATEGORIES = {ProviderCostCategory.PAYMENT_MDR}
+REQUIRED_MARGIN_SCENARIOS: tuple[tuple[str, str], ...] = (
+    ("solo_light_user", "Solo light user"),
+    ("solo_heavy_court_user", "Solo heavy court user"),
+    ("small_law_office_heavy_litigation", "Small law office heavy litigation"),
+    ("large_law_firm_many_tracked_cases", "Large law firm many tracked cases"),
+    ("corporate_gc_heavy_document_workload", "Corporate GC heavy document workload"),
+    ("abusive_usage_pattern", "Abusive usage pattern"),
+)
 
 
 def _now() -> datetime:
@@ -52,10 +70,18 @@ def _profile_record(row: ProviderCostProfile) -> ProviderCostProfileRecord:
         currency=row.currency,  # type: ignore[arg-type]
         unit_amount_minor=row.unit_amount_minor,
         unit_amount_bps=row.unit_amount_bps,
+        unit_label=row.unit_label,
         effective_from=row.effective_from,
         effective_until=row.effective_until,
         status=row.status,  # type: ignore[arg-type]
         source=row.source,
+        tax_fee_notes=row.tax_fee_notes,
+        cost_basis=row.cost_basis,  # type: ignore[arg-type]
+        confidence_level=row.confidence_level,  # type: ignore[arg-type]
+        evidence_ref=row.evidence_ref,
+        founder_approval_status=row.founder_approval_status,  # type: ignore[arg-type]
+        approved_at=row.approved_at,
+        approved_by_platform_admin_id=row.approved_by_platform_admin_id,
         notes=row.notes,
         created_by_platform_admin_id=row.created_by_platform_admin_id,
         created_at=row.created_at,
@@ -118,10 +144,28 @@ def create_provider_cost_profile(
         currency=payload.currency,
         unit_amount_minor=payload.unit_amount_minor,
         unit_amount_bps=payload.unit_amount_bps,
+        unit_label=payload.unit_label,
         effective_from=effective_from,
         effective_until=payload.effective_until,
         status="active",
         source=payload.source,
+        tax_fee_notes=payload.tax_fee_notes,
+        cost_basis=payload.cost_basis,
+        confidence_level=payload.confidence_level,
+        evidence_ref=payload.evidence_ref,
+        founder_approval_status=payload.founder_approval_status,
+        approved_at=(
+            _now()
+            if payload.founder_approval_status == "approved"
+            and payload.cost_basis == "actual"
+            else None
+        ),
+        approved_by_platform_admin_id=(
+            platform_admin.id
+            if payload.founder_approval_status == "approved"
+            and payload.cost_basis == "actual"
+            else None
+        ),
         notes=payload.notes,
         created_by_platform_admin_id=platform_admin.id,
     )
@@ -135,6 +179,7 @@ def update_provider_cost_profile(
     *,
     profile_id: str,
     payload: ProviderCostProfileUpdateRequest,
+    platform_admin: PlatformAdminMembership | None = None,
 ) -> ProviderCostProfileRecord:
     row = session.get(ProviderCostProfile, profile_id)
     if row is None:
@@ -145,6 +190,13 @@ def update_provider_cost_profile(
     update = payload.model_dump(exclude_unset=True)
     for key, value in update.items():
         setattr(row, key, value)
+    if row.founder_approval_status == "approved" and row.cost_basis == "actual":
+        row.approved_at = row.approved_at or _now()
+        if platform_admin is not None:
+            row.approved_by_platform_admin_id = platform_admin.id
+    elif row.founder_approval_status != "approved":
+        row.approved_at = None
+        row.approved_by_platform_admin_id = None
     _validate_profile_payload(
         category=row.category,
         unit_amount_minor=row.unit_amount_minor,
@@ -166,6 +218,22 @@ def _fallback_minor(category: str) -> int:
         return settings.billing_storage_cost_minor_per_gb_month
     if category == ProviderCostCategory.PAYMENT_FIXED_FEE:
         return settings.pine_labs_fixed_fee_minor
+    if category == ProviderCostCategory.BULK_CASE_REFRESH:
+        return settings.billing_case_refresh_cost_minor
+    if category == ProviderCostCategory.OCR_PAGE:
+        return settings.billing_llm_cost_minor_per_credit
+    if category == ProviderCostCategory.LLM_INPUT:
+        return settings.billing_llm_cost_minor_per_credit
+    if category == ProviderCostCategory.LLM_OUTPUT:
+        return settings.billing_llm_cost_minor_per_credit
+    if category == ProviderCostCategory.BANDWIDTH_EXPORT:
+        return 0
+    if category == ProviderCostCategory.EMAIL:
+        return 0
+    if category == ProviderCostCategory.PAYMENT_REFUND_FEE:
+        return 0
+    if category == ProviderCostCategory.PAYMENT_CHARGEBACK_FEE:
+        return 0
     return 0
 
 
@@ -235,6 +303,16 @@ def effective_cost_minor(
     if row is not None and row.unit_amount_minor is not None:
         return int(row.unit_amount_minor), "configured"
     return _fallback_minor(category), "fallback_default"
+
+
+def _cost_readiness(row: ProviderCostProfile | None, source: str) -> tuple[bool, str]:
+    if row is None or source == "fallback_default":
+        return True, "fallback_default"
+    if row.cost_basis != "actual":
+        return True, "estimated_cost"
+    if row.founder_approval_status != "approved":
+        return True, "unapproved_cost"
+    return False, "approved_actual"
 
 
 def effective_cost_bps(
@@ -341,12 +419,19 @@ def _cost_line(
     provider: str = "default",
     currency: str = "INR",
 ) -> dict[str, object]:
-    unit_minor, source = effective_cost_minor(
+    active = _active_profile(
         session,
         category=category,
         provider=provider,
         currency=currency,
     )
+    if active is not None and active.unit_amount_minor is not None:
+        unit_minor = int(active.unit_amount_minor)
+        source = "configured"
+    else:
+        unit_minor = _fallback_minor(category)
+        source = "fallback_default"
+    unapproved, readiness_reason = _cost_readiness(active, source)
     return {
         "category": category,
         "provider": provider,
@@ -354,6 +439,11 @@ def _cost_line(
         "unit_amount_minor": unit_minor,
         "cost_minor": max(units, 0) * unit_minor,
         "source": source,
+        "cost_basis": active.cost_basis if active else "estimated",
+        "confidence_level": active.confidence_level if active else "low",
+        "founder_approval_status": active.founder_approval_status if active else "pending",
+        "readiness_blocking": unapproved,
+        "readiness_reason": readiness_reason,
     }
 
 
@@ -390,6 +480,26 @@ def run_margin_simulation(
         provider="pine_labs_plural",
         currency=payload.currency,
     )
+    payment_mdr_profile = _active_profile(
+        session,
+        category=ProviderCostCategory.PAYMENT_MDR,
+        provider="pine_labs_plural",
+        currency=payload.currency,
+    )
+    payment_fixed_profile = _active_profile(
+        session,
+        category=ProviderCostCategory.PAYMENT_FIXED_FEE,
+        provider="pine_labs_plural",
+        currency=payload.currency,
+    )
+    payment_mdr_unapproved, payment_mdr_readiness = _cost_readiness(
+        payment_mdr_profile,
+        payment_mdr_source,
+    )
+    payment_fixed_unapproved, payment_fixed_readiness = _cost_readiness(
+        payment_fixed_profile,
+        payment_fixed_source,
+    )
     lines = [
         {
             "category": ProviderCostCategory.PAYMENT_MDR,
@@ -398,6 +508,17 @@ def run_margin_simulation(
             "unit_amount_bps": payment_mdr_bps,
             "cost_minor": payment_cost - payment_fixed_minor * payload.payment_count,
             "source": payment_mdr_source,
+            "cost_basis": payment_mdr_profile.cost_basis if payment_mdr_profile else "estimated",
+            "confidence_level": (
+                payment_mdr_profile.confidence_level if payment_mdr_profile else "low"
+            ),
+            "founder_approval_status": (
+                payment_mdr_profile.founder_approval_status
+                if payment_mdr_profile
+                else "pending"
+            ),
+            "readiness_blocking": payment_mdr_unapproved,
+            "readiness_reason": payment_mdr_readiness,
         },
         {
             "category": ProviderCostCategory.PAYMENT_FIXED_FEE,
@@ -406,6 +527,19 @@ def run_margin_simulation(
             "unit_amount_minor": payment_fixed_minor,
             "cost_minor": payment_fixed_minor * payload.payment_count,
             "source": payment_fixed_source,
+            "cost_basis": (
+                payment_fixed_profile.cost_basis if payment_fixed_profile else "estimated"
+            ),
+            "confidence_level": (
+                payment_fixed_profile.confidence_level if payment_fixed_profile else "low"
+            ),
+            "founder_approval_status": (
+                payment_fixed_profile.founder_approval_status
+                if payment_fixed_profile
+                else "pending"
+            ),
+            "readiness_blocking": payment_fixed_unapproved,
+            "readiness_reason": payment_fixed_readiness,
         },
         _cost_line(
             session,
@@ -416,9 +550,30 @@ def run_margin_simulation(
         ),
         _cost_line(
             session,
+            category=ProviderCostCategory.BULK_CASE_REFRESH,
+            provider="case_tracking",
+            units=payload.bulk_case_refreshes,
+            currency=payload.currency,
+        ),
+        _cost_line(
+            session,
             category=ProviderCostCategory.LLM,
             provider="llm",
             units=payload.ai_credits,
+            currency=payload.currency,
+        ),
+        _cost_line(
+            session,
+            category=ProviderCostCategory.LLM_INPUT,
+            provider="llm",
+            units=payload.llm_input_units,
+            currency=payload.currency,
+        ),
+        _cost_line(
+            session,
+            category=ProviderCostCategory.LLM_OUTPUT,
+            provider="llm",
+            units=payload.llm_output_units,
             currency=payload.currency,
         ),
         _cost_line(
@@ -437,9 +592,30 @@ def run_margin_simulation(
         ),
         _cost_line(
             session,
+            category=ProviderCostCategory.OCR_PAGE,
+            provider="ocr",
+            units=payload.ocr_pages,
+            currency=payload.currency,
+        ),
+        _cost_line(
+            session,
             category=ProviderCostCategory.STORAGE,
             provider="storage",
             units=payload.storage_gb_months,
+            currency=payload.currency,
+        ),
+        _cost_line(
+            session,
+            category=ProviderCostCategory.BANDWIDTH_EXPORT,
+            provider="export",
+            units=payload.bandwidth_export_gb,
+            currency=payload.currency,
+        ),
+        _cost_line(
+            session,
+            category=ProviderCostCategory.EMAIL,
+            provider="email",
+            units=payload.email_messages,
             currency=payload.currency,
         ),
         _cost_line(
@@ -468,6 +644,22 @@ def run_margin_simulation(
     gross_profit_minor = revenue_minor - total_cost_minor
     gross_margin_bps = round(gross_profit_minor * 10_000 / revenue_minor) if revenue_minor else None
     warnings: list[dict[str, object]] = case_refresh_guardrail_warnings(session)
+    minimum_gross_margin_bps = (
+        payload.minimum_gross_margin_bps
+        if payload.minimum_gross_margin_bps is not None
+        else get_settings().billing_minimum_gross_margin_bps
+    )
+    uses_unapproved_estimated_costs = any(
+        bool(line.get("readiness_blocking")) for line in lines
+    )
+    if uses_unapproved_estimated_costs:
+        warnings.append(
+            {
+                "type": "unapproved_estimated_costs",
+                "severity": "critical",
+                "message": "Simulation uses fallback, estimated, or unapproved cost inputs.",
+            }
+        )
     if gross_profit_minor < 0:
         warnings.append(
             {
@@ -476,14 +668,17 @@ def run_margin_simulation(
                 "message": "Simulation produces negative gross profit.",
             }
         )
-    elif gross_margin_bps is not None and gross_margin_bps < 4000:
+    elif gross_margin_bps is not None and gross_margin_bps < minimum_gross_margin_bps:
         warnings.append(
             {
                 "type": "low_gross_margin",
                 "severity": "warning",
-                "message": "Simulation gross margin is below 40%.",
+                "message": "Simulation gross margin is below the founder threshold.",
             }
         )
+    readiness_blocked = uses_unapproved_estimated_costs or (
+        gross_margin_bps is not None and gross_margin_bps < minimum_gross_margin_bps
+    )
 
     input_json = payload.model_dump(mode="json")
     result: dict[str, Any] = {
@@ -500,6 +695,12 @@ def run_margin_simulation(
         input_json=input_json,
         result_json=result,
         warnings_json=warnings,
+        plan_code=payload.plan_code,
+        scenario_code=payload.scenario_code,
+        minimum_gross_margin_bps=minimum_gross_margin_bps,
+        uses_unapproved_estimated_costs=uses_unapproved_estimated_costs,
+        readiness_blocked=readiness_blocked,
+        founder_approval_status="pending",
         run_by_platform_admin_id=platform_admin.id,
     )
     session.add(row)
@@ -511,10 +712,18 @@ def _simulation_record(row: BillingMarginSimulation) -> MarginSimulationRecord:
     return MarginSimulationRecord(
         id=row.id,
         scenario_name=row.scenario_name,
+        plan_code=row.plan_code,
+        scenario_code=row.scenario_code,
         currency=row.currency,  # type: ignore[arg-type]
         input=dict(row.input_json or {}),
         result=dict(row.result_json or {}),
         warnings=list(row.warnings_json or []),
+        minimum_gross_margin_bps=row.minimum_gross_margin_bps,
+        uses_unapproved_estimated_costs=row.uses_unapproved_estimated_costs,
+        readiness_blocked=row.readiness_blocked,
+        founder_approval_status=row.founder_approval_status,  # type: ignore[arg-type]
+        approved_at=row.approved_at,
+        approved_by_platform_admin_id=row.approved_by_platform_admin_id,
         run_by_platform_admin_id=row.run_by_platform_admin_id,
         created_at=row.created_at,
     )
@@ -531,3 +740,40 @@ def list_margin_simulations(
         .limit(limit)
     )
     return [_simulation_record(row) for row in rows]
+
+
+def margin_readiness(session: Session) -> MarginReadinessResponse:
+    scenario_statuses: list[MarginReadinessScenarioStatus] = []
+    blocked = False
+    for code, label in REQUIRED_MARGIN_SCENARIOS:
+        row = session.scalar(
+            select(BillingMarginSimulation)
+            .where(BillingMarginSimulation.scenario_code == code)
+            .order_by(BillingMarginSimulation.created_at.desc())
+            .limit(1)
+        )
+        missing = row is None
+        if missing or (row is not None and row.readiness_blocked):
+            blocked = True
+        scenario_statuses.append(
+            MarginReadinessScenarioStatus(
+                scenario_code=code,
+                label=label,
+                latest_simulation_id=row.id if row else None,
+                latest_gross_margin_bps=(
+                    int((row.result_json or {}).get("gross_margin_bps"))
+                    if row and (row.result_json or {}).get("gross_margin_bps") is not None
+                    else None
+                ),
+                readiness_blocked=True if row is None else row.readiness_blocked,
+                uses_unapproved_estimated_costs=(
+                    True if row is None else row.uses_unapproved_estimated_costs
+                ),
+                missing=missing,
+            )
+        )
+    return MarginReadinessResponse(
+        minimum_gross_margin_bps=get_settings().billing_minimum_gross_margin_bps,
+        required_scenarios=scenario_statuses,
+        blocked=blocked,
+    )

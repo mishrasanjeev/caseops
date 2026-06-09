@@ -252,6 +252,10 @@ class Settings(BaseSettings):
     auth_rate_limit_login_per_minute: int = Field(default=20, ge=1)
     auth_rate_limit_bootstrap_per_hour: int = Field(default=10, ge=1)
     auth_rate_limit_enabled: bool = Field(default=True)
+    mfa_existing_user_grace_days: int = Field(default=7, ge=0, le=90)
+    mfa_step_up_ttl_minutes: int = Field(default=15, ge=1, le=480)
+    mfa_max_failures_per_5m: int = Field(default=5, ge=1, le=50)
+    billing_minimum_gross_margin_bps: int = Field(default=7000, ge=0, le=10000)
     # EG-004 (2026-04-23): per-session limit on expensive AI generation
     # routes. 30/min is generous for a partner reviewing a matter and
     # far below what runaway abuse would attempt. Bump cautiously —

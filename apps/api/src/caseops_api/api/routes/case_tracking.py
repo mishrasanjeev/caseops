@@ -17,6 +17,7 @@ from caseops_api.schemas.case_tracking import (
     CaseTrackingSearchResponse,
     CaseTrackingUpdateListResponse,
 )
+from caseops_api.schemas.production_safety import CaseTrackingTenantSupportMatrixResponse
 from caseops_api.services.case_tracking import (
     create_bookmark,
     download_case_tracking_source,
@@ -28,6 +29,10 @@ from caseops_api.services.case_tracking import (
     update_bookmark,
 )
 from caseops_api.services.identity import SessionContext
+from caseops_api.services.production_safety import (
+    list_support_matrix,
+    support_matrix_tenant_record,
+)
 
 router = APIRouter()
 CaseTrackingUser = Annotated[
@@ -47,6 +52,22 @@ def get_case_tracking_status(
 ) -> CaseTrackingProviderStatusResponse:
     _ = (context, session)
     return provider_status_response()
+
+
+@router.get(
+    "/support-matrix",
+    response_model=CaseTrackingTenantSupportMatrixResponse,
+    summary="List tenant-visible court support before a user tracks a case.",
+)
+def get_case_tracking_support_matrix(
+    context: CaseTrackingUser,
+    session: DbSession,
+) -> CaseTrackingTenantSupportMatrixResponse:
+    _ = context
+    rows = list_support_matrix(session, tenant_visible_only=True)
+    return CaseTrackingTenantSupportMatrixResponse(
+        rows=[support_matrix_tenant_record(row) for row in rows]
+    )
 
 
 @router.post(

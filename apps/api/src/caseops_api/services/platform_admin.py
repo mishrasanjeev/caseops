@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -75,12 +75,14 @@ def ensure_configured_platform_super_admin(session: Session) -> PlatformAdminMem
         select(PlatformAdminMembership).where(PlatformAdminMembership.user_id == user.id)
     )
     if row is None:
+        grace_until = now + timedelta(days=get_settings().mfa_existing_user_grace_days)
         row = PlatformAdminMembership(
             user_id=user.id,
             role="super_admin",
             capabilities_json=list(PLATFORM_SUPER_ADMIN_CAPABILITIES),
             status="active",
-            mfa_required=False,
+            mfa_required=True,
+            mfa_enforced_at=grace_until,
             created_at=now,
             updated_at=now,
         )
@@ -89,6 +91,9 @@ def ensure_configured_platform_super_admin(session: Session) -> PlatformAdminMem
         row.role = "super_admin"
         row.capabilities_json = list(PLATFORM_SUPER_ADMIN_CAPABILITIES)
         row.status = "active"
+        row.mfa_required = True
+        if row.mfa_enforced_at is None:
+            row.mfa_enforced_at = now + timedelta(days=get_settings().mfa_existing_user_grace_days)
         row.updated_at = now
 
     # Launch rule: no second active platform admin. Keep historical rows but
@@ -149,6 +154,9 @@ def require_platform_admin(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Founder-only platform administrator access is required.",
         )
+    from caseops_api.services.security import enforce_platform_mfa
+
+    enforce_platform_mfa(session, context=context, platform_admin=row)
     return row
 
 

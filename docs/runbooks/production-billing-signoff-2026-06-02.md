@@ -24,6 +24,9 @@ platform-admin billing visibility, and Pine Labs disabled-state safety.
 | Tenant integrations registry | Smoke pending on designated smoke tenant | Founder/operator |
 | Platform integrations/costs | Founder-only smoke pending | Founder |
 | Margin simulation evidence | Founder-only smoke pending | Founder |
+| Paid-production readiness console | Implemented; evidence pending | Founder |
+| MFA/step-up protection | Implemented with founder grace path | Founder/operator |
+| Password reset readiness metadata | Implemented; delivery evidence pending | Founder/operator |
 | Internal cost/profit leakage | Smoke pending | Founder/operator |
 | Backup/migration/deploy evidence | Pending attachment | Operator |
 
@@ -37,6 +40,14 @@ platform-admin billing visibility, and Pine Labs disabled-state safety.
 - `CASEOPS_PINE_LABS_ENV` is `disabled` in production.
 - No production Pine Labs client secret/webhook secret is enabled for live
   payments.
+- Migration `20260609_0002_p0_paid_production_safety` has run before using the
+  paid-production readiness, MFA, settlement, or support-matrix records.
+- MFA grace settings are deliberate for existing users. Defaults:
+  `CASEOPS_MFA_EXISTING_USER_GRACE_DAYS=7`,
+  `CASEOPS_MFA_STEP_UP_TTL_MINUTES=15`,
+  `CASEOPS_MFA_MAX_FAILURES_PER_5M=5`.
+- The pricing safety floor is deliberate. Default:
+  `CASEOPS_BILLING_MINIMUM_GROSS_MARGIN_BPS=7000`.
 - A designated production smoke tenant exists, or the founder approves creating
   one.
 - A pre-rollout backup or point-in-time recovery marker exists.
@@ -68,6 +79,36 @@ The helper checks only:
 It does not accept credentials, save screenshots, store response bodies, create
 checkout sessions, or make Pine Labs calls.
 
+## Authenticated Smoke Helper
+
+Use the authenticated helper only after the founder has explicitly approved the
+smoke account/session. Pass credentials through environment variables; the
+script must not print secrets, cookies, bearer tokens, or raw payloads.
+
+```powershell
+$env:CASEOPS_SMOKE_API_BASE="https://api.caseops.ai"
+$env:CASEOPS_SMOKE_BEARER_TOKEN="<founder-or-smoke-token>"
+uv --directory apps/api run python ..\..\scripts\prod_billing_authenticated_smoke.py
+```
+
+Cookie mode is also supported:
+
+```powershell
+$env:CASEOPS_SMOKE_API_BASE="https://api.caseops.ai"
+$env:CASEOPS_SMOKE_COOKIE="<session-cookie-header>"
+uv --directory apps/api run python ..\..\scripts\prod_billing_authenticated_smoke.py
+```
+
+Expected authenticated checks:
+
+- founder-only `/api/platform-admin/*` readiness endpoints return `200` for the
+  founder session.
+- tenant billing current, invoice, statement, credit ledger, payment export, and
+  spend export routes are reachable for the smoke tenant session.
+- disabled Pine checkout remains provider-disabled.
+- tenant-facing responses do not contain internal finance/cost/profit field
+  names.
+
 ## Evidence To Record
 
 Record evidence outside this repo if it contains environment IDs, account names,
@@ -80,12 +121,18 @@ screenshots, or operational metadata that should not be committed.
 | Web deploy evidence | Cloud Run/hosting revision and deploy timestamp |
 | Migration evidence | Migration job id/log showing `20260531_0001` success |
 | Cost-profile migration evidence | Migration job id/log showing `20260608_0001` success, if deployed |
+| P0 safety migration evidence | Migration job id/log showing `20260609_0002_p0_paid_production_safety` success |
 | Backup evidence | Snapshot/PITR timestamp before migration/deploy |
 | Rollback evidence | Last known previous revision and DB rollback posture |
 | Smoke tenant | Company slug/id, not customer-sensitive |
 | Founder smoke account | Founder email only if already public/approved |
 | Cost-profile evidence | Source name only, effective date, category, unit minor/BPS; no invoices with secrets |
 | Margin simulation evidence | Scenario name, revenue/cost/margin output, warnings, screenshot/link stored externally |
+| Pine UAT evidence row | Scenario code, status, provider order id, webhook id, timestamp, redacted payload reference, attachment reference |
+| Billing signoff evidence row | Check code, pass/fail/blocked status, evidence reference, operator notes, recorded timestamp |
+| Password reset readiness | Reset link domain, reset path, sender name, template kind, TTL, provider configured boolean |
+| Finance operations evidence | Settlement import id, exception count, export filename/hash, accountant review location |
+| Case support matrix evidence | Provider, court, lookup method, cost source reference, enabled/disabled state |
 
 ## Founder-Only Platform Admin Smoke
 
@@ -104,17 +151,27 @@ screenshots, or operational metadata that should not be committed.
     simulation using founder-approved test quantities.
 12. Confirm case-refresh cost warnings appear when the configured actual cost is
     INR 0.10 or more per tracked-case refresh equivalent.
-13. Sign in as a tenant owner/admin that is not the configured founder.
-14. Open `/app/platform-admin`.
-15. Confirm access denied.
-16. Confirm backend route denial with a non-founder token for at least:
+13. Open `/app/platform-admin/paid-production`.
+14. Confirm Pine Labs UAT evidence, production billing signoff, margin
+    readiness, password reset readiness, reconciliation exceptions, and case
+    support matrix load.
+15. Confirm any go/no-go or evidence mutation requires recent MFA step-up when
+    the founder MFA policy is active.
+16. Sign in as a tenant owner/admin that is not the configured founder.
+17. Open `/app/platform-admin`.
+18. Confirm access denied.
+19. Confirm backend route denial with a non-founder token for at least:
     - `GET /api/platform-admin/overview`
     - `GET /api/platform-admin/integrations`
     - `GET /api/platform-admin/cost-profiles`
     - `GET /api/platform-admin/margin-simulations`
+    - `GET /api/platform-admin/pine-labs/uat-readiness`
+    - `GET /api/platform-admin/billing-signoff`
+    - `GET /api/platform-admin/margin-readiness`
+    - `GET /api/platform-admin/password-reset-readiness`
     - `GET /api/platform-admin/profit/export`
     - `GET /api/platform-admin/provider-events`
-17. Confirm platform access and denials write audit rows.
+20. Confirm platform access and denials write audit rows.
 
 Expected result: only the configured founder has platform-admin access. Tenant
 owner/admin roles alone do not grant platform-admin capabilities.
@@ -176,10 +233,67 @@ Run only as the configured founder/company-owner.
    - `platform.margin_simulation.ran`
 7. Confirm tenant APIs and pages do not expose the cost profile or simulation
    fields.
+8. Call or inspect `GET /api/platform-admin/margin-readiness`.
+9. Confirm readiness is blocked until every required scenario has a dated
+   simulation meeting `CASEOPS_BILLING_MINIMUM_GROSS_MARGIN_BPS` and approved
+   actual costs.
 
 Expected result: configured actual costs are visible only to founder platform
 admin and are used by founder-only calculations, with fallback defaults when no
 actual profile exists.
+
+## Founder Paid-Production Readiness Evidence
+
+Run only as the configured founder/company-owner.
+
+Required Pine Labs UAT evidence fields per scenario:
+
+- scenario code
+- result status: `pending`, `pass`, `fail`, `blocked`, or `not_applicable`
+- provider order id, if applicable
+- provider payment id, if applicable
+- webhook id, if applicable
+- webhook timestamp, if applicable
+- redacted payload sample or external reference
+- screenshot/attachment reference, if stored externally
+- operator notes
+- recorded timestamp
+
+Production activation pass/fail criteria:
+
+- Pass only when all required UAT scenarios are `pass` and the founder records
+  `go`.
+- Fail/block when any required scenario is missing, failed, blocked, or
+  unverified.
+- Recording `go` only records readiness. It must not flip
+  `CASEOPS_PINE_LABS_ENV`, enable subscriptions, or enable live Pine Labs calls.
+
+Required billing signoff evidence fields:
+
+- check code
+- result status
+- evidence reference
+- optional structured evidence with no secrets
+- operator notes
+- recorded timestamp
+
+Billing signoff pass/fail criteria:
+
+- Pass only when every required check is `pass`.
+- Fail/block if tenant access, tenant downloads, disabled checkout behavior, or
+  no-leak checks cannot be verified.
+- Any tenant-facing response or export containing internal cost/profit/provider
+  fee/gross margin fields is a blocker.
+
+Password reset readiness pass/fail criteria:
+
+- `GET /api/platform-admin/password-reset-readiness` shows the expected reset
+  domain, `/account/reset-password` path, sender name, template kind, and TTL.
+- Response does not contain SendGrid API keys, auth secrets, raw reset tokens,
+  webhook secrets, or provider payloads.
+- Production delivery remains pending until
+  `scripts/prod_password_reset_smoke.py` proves a real reset email can be
+  requested and completed by the intended user.
 
 ## Tenant Billing Smoke
 
@@ -225,6 +339,8 @@ Run from `/app/admin/billing` and `/app/admin/billing/usage` on the smoke tenant
 | Invoice JSON | `GET /api/billing/invoices/{invoice_id}/download?format=json` | Downloads tenant invoice JSON if invoice exists |
 
 Expected result: every download is tenant-scoped, authenticated, and audited.
+When MFA policy is active for the actor, export/download routes must return a
+step-up challenge until recent MFA is present.
 
 ## No Internal Cost Or Profit Leakage
 
@@ -315,6 +431,10 @@ customer-sensitive data.
 | No tenant cost/profit leakage | Pending |  |  |
 | Backup/migration/deploy evidence | Pending |  |  |
 | Known caveats accepted | Pending |  |  |
+| MFA/step-up protected founder flows | Pending |  |  |
+| Password reset readiness and delivery smoke | Pending |  |  |
+| Settlement/refund/credit-note/chargeback/TDS exports | Pending |  |  |
+| Case tracking support matrix no-leak check | Pending |  |  |
 
 Production billing is ready for manual founder smoke when all preconditions are
 true. It is signed off only after every gate above is marked pass with evidence.
