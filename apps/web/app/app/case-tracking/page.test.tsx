@@ -8,6 +8,7 @@ const {
   fetchCaseTrackingStatusMock,
   searchTrackedCasesMock,
   createCaseTrackingBookmarkMock,
+  fetchCaseTrackingSupportMatrixMock,
   listCaseTrackingBookmarksMock,
   updateCaseTrackingBookmarkMock,
   refreshCaseTrackingBookmarkMock,
@@ -16,6 +17,7 @@ const {
   fetchCaseTrackingStatusMock: vi.fn(),
   searchTrackedCasesMock: vi.fn(),
   createCaseTrackingBookmarkMock: vi.fn(),
+  fetchCaseTrackingSupportMatrixMock: vi.fn(),
   listCaseTrackingBookmarksMock: vi.fn(),
   updateCaseTrackingBookmarkMock: vi.fn(),
   refreshCaseTrackingBookmarkMock: vi.fn(),
@@ -24,6 +26,7 @@ const {
 
 vi.mock("@/lib/api/endpoints", () => ({
   fetchCaseTrackingStatus: fetchCaseTrackingStatusMock,
+  fetchCaseTrackingSupportMatrix: fetchCaseTrackingSupportMatrixMock,
   searchTrackedCases: searchTrackedCasesMock,
   createCaseTrackingBookmark: createCaseTrackingBookmarkMock,
   listCaseTrackingBookmarks: listCaseTrackingBookmarksMock,
@@ -82,6 +85,7 @@ describe("CaseTrackingPage", () => {
     fetchCaseTrackingStatusMock.mockReset();
     searchTrackedCasesMock.mockReset();
     createCaseTrackingBookmarkMock.mockReset();
+    fetchCaseTrackingSupportMatrixMock.mockReset();
     listCaseTrackingBookmarksMock.mockReset();
     updateCaseTrackingBookmarkMock.mockReset();
     refreshCaseTrackingBookmarkMock.mockReset();
@@ -93,6 +97,23 @@ describe("CaseTrackingPage", () => {
       reason: null,
     });
     listCaseTrackingBookmarksMock.mockResolvedValue({ bookmarks: [] });
+    fetchCaseTrackingSupportMatrixMock.mockResolvedValue({
+      rows: [
+        {
+          id: "support-1",
+          provider: "ecourtsindia",
+          court: "Delhi High Court",
+          bench_jurisdiction: "Delhi",
+          lookup_method: "provider_api",
+          rate_limit: "60/min",
+          freshness_sla: "Daily",
+          legal_tos_status: "approved",
+          failure_code_mapping: {},
+          enabled: true,
+          status_notes: "Supported",
+        },
+      ],
+    });
     listCaseTrackingUpdatesMock.mockResolvedValue({ updates: [] });
     createCaseTrackingBookmarkMock.mockResolvedValue(bookmark);
     refreshCaseTrackingBookmarkMock.mockResolvedValue({
@@ -114,6 +135,8 @@ describe("CaseTrackingPage", () => {
     render(withClient(<CaseTrackingPage />));
 
     expect(await screen.findByTestId("case-tracking-disabled")).toBeInTheDocument();
+    expect(screen.getByText("Delhi High Court / Delhi")).toBeInTheDocument();
+    expect(screen.queryByText(/refresh cost/i)).not.toBeInTheDocument();
     expect(screen.getByText(/No provider calls made/i)).toBeInTheDocument();
     await user.type(screen.getByTestId("case-tracking-query"), "Example Petitioner");
     await user.type(screen.getByTestId("case-tracking-cnr"), "DLHC010012342026");

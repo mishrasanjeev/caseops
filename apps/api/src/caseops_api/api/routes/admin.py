@@ -41,6 +41,10 @@ from caseops_api.schemas.google_workspace import (
     GoogleWorkspaceTenantConfigurationResponse,
     GoogleWorkspaceTenantConfigurationUpdateRequest,
 )
+from caseops_api.schemas.security import (
+    TenantSecurityPolicyRecord,
+    TenantSecurityPolicyUpdateRequest,
+)
 from caseops_api.schemas.storage_governance import (
     FirmStorageQuotaPatchRequest,
     FirmStorageUsageSummary,
@@ -70,6 +74,12 @@ from caseops_api.services.google_workspace import (
     update_google_workspace_tenant_configuration,
 )
 from caseops_api.services.identity import SessionContext
+from caseops_api.services.security import (
+    require_recent_step_up,
+    tenant_security_policy,
+    tenant_security_policy_record,
+    update_tenant_security_policy,
+)
 from caseops_api.services.storage_governance import (
     get_firm_storage_summary,
     update_firm_storage_quota,
@@ -362,6 +372,34 @@ WorkspaceAdmin = Annotated[
 
 
 @router.get(
+    "/security-policy",
+    response_model=TenantSecurityPolicyRecord,
+    summary="Read tenant MFA policy without exposing MFA secrets.",
+)
+def get_security_policy(
+    context: WorkspaceAdmin,
+    session: DbSession,
+) -> TenantSecurityPolicyRecord:
+    row = tenant_security_policy(session, company_id=context.company.id, create=True)
+    assert row is not None
+    session.commit()
+    return tenant_security_policy_record(row)
+
+
+@router.patch(
+    "/security-policy",
+    response_model=TenantSecurityPolicyRecord,
+    summary="Update tenant MFA policy with a grace period for existing users.",
+)
+def patch_security_policy(
+    payload: TenantSecurityPolicyUpdateRequest,
+    context: WorkspaceAdmin,
+    session: DbSession,
+) -> TenantSecurityPolicyRecord:
+    return update_tenant_security_policy(session, context=context, payload=payload)
+
+
+@router.get(
     "/outlook-configuration",
     response_model=OutlookTenantConfigurationResponse,
     summary=(
@@ -389,6 +427,11 @@ def patch_outlook_configuration(
     context: WorkspaceAdmin,
     session: DbSession,
 ) -> OutlookTenantConfigurationResponse:
+    require_recent_step_up(
+        session,
+        context=context,
+        purpose="connector_credential_change",
+    )
     return update_outlook_tenant_configuration(
         session,
         context=context,
@@ -439,6 +482,11 @@ def patch_google_workspace_configuration(
     context: WorkspaceAdmin,
     session: DbSession,
 ) -> GoogleWorkspaceTenantConfigurationResponse:
+    require_recent_step_up(
+        session,
+        context=context,
+        purpose="connector_credential_change",
+    )
     return update_google_workspace_tenant_configuration(
         session,
         context=context,

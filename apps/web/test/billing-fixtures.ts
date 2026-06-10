@@ -606,10 +606,18 @@ export const providerCostProfiles = {
       currency: "INR",
       unit_amount_minor: 10,
       unit_amount_bps: null,
+      unit_label: "refresh",
       effective_from: "2026-06-08T00:00:00Z",
       effective_until: null,
       status: "active",
       source: "provider invoice",
+      tax_fee_notes: "GST and provider fees tracked separately.",
+      cost_basis: "actual",
+      confidence_level: "high",
+      evidence_ref: "invoice-2026-06",
+      founder_approval_status: "approved",
+      approved_at: "2026-06-08T00:00:00Z",
+      approved_by_platform_admin_id: "platform-1",
       notes: "Founder-reviewed refresh cost.",
       created_by_platform_admin_id: "platform-1",
       created_at: "2026-06-08T00:00:00Z",
@@ -632,8 +640,154 @@ export const marginSimulations = {
         gross_margin_bps: 8750,
       },
       warnings: [],
+      minimum_gross_margin_bps: 7000,
+      uses_unapproved_estimated_costs: false,
+      readiness_blocked: false,
+      founder_approval_status: "approved",
+      approved_at: "2026-06-08T00:00:00Z",
+      approved_by_platform_admin_id: "platform-1",
       run_by_platform_admin_id: "platform-1",
       created_at: "2026-06-08T00:05:00Z",
+    },
+  ],
+};
+
+export const marginReadiness = {
+  minimum_gross_margin_bps: 7000,
+  blocked: true,
+  required_scenarios: [
+    {
+      scenario_code: "solo_light_user",
+      label: "Solo light user",
+      latest_simulation_id: "sim-1",
+      latest_gross_margin_bps: 8750,
+      readiness_blocked: false,
+      uses_unapproved_estimated_costs: false,
+      missing: false,
+    },
+    {
+      scenario_code: "abusive_usage_pattern",
+      label: "Abusive usage pattern",
+      latest_simulation_id: null,
+      latest_gross_margin_bps: null,
+      readiness_blocked: true,
+      uses_unapproved_estimated_costs: true,
+      missing: true,
+    },
+  ],
+};
+
+export const pineLabsUatReadiness = {
+  run_id: "uat-run-1",
+  run_status: "in_progress",
+  provider_mode: "disabled",
+  environment: "mock",
+  complete: false,
+  missing_required_scenarios: ["tampered_webhook"],
+  production_activation_blocked: true,
+  latest_decision: null,
+  scenarios: [
+    {
+      scenario_code: "plan_payment_success",
+      label: "Plan payment success",
+      required: true,
+      result_status: "pass",
+      provider_order_id: "pl_order_1",
+      webhook_id: "pl_evt_1",
+      observed_at: "2026-06-08T00:10:00Z",
+      operator_notes: "Recorded in mock harness.",
+      attachment_refs: [],
+    },
+    {
+      scenario_code: "tampered_webhook",
+      label: "Tampered webhook",
+      required: true,
+      result_status: "pending",
+      provider_order_id: null,
+      webhook_id: null,
+      observed_at: null,
+      operator_notes: null,
+      attachment_refs: [],
+    },
+  ],
+};
+
+export const billingSignoff = {
+  signoff_id: "signoff-1",
+  status: "in_progress",
+  complete: false,
+  missing_required_checks: ["tenant_no_leak_checks"],
+  signed_off_at: null,
+  notes: null,
+  checks: [
+    {
+      check_code: "platform_admin",
+      label: "/app/platform-admin",
+      result_status: "pass",
+      evidence_ref: "smoke-1",
+      operator_notes: "Founder verified.",
+      recorded_at: "2026-06-08T00:20:00Z",
+    },
+    {
+      check_code: "tenant_no_leak_checks",
+      label: "tenant no-leak checks",
+      result_status: "pending",
+      evidence_ref: null,
+      operator_notes: null,
+      recorded_at: null,
+    },
+  ],
+};
+
+export const passwordResetReadiness = {
+  reset_link_domain: "app.caseops.ai",
+  reset_path: "/account/reset-password",
+  public_app_url: "https://app.caseops.ai",
+  email_provider: "sendgrid",
+  provider_configured: true,
+  sender_email_configured: true,
+  sender_name: "CaseOps",
+  template_kind: "employee_password_reset_plain_text",
+  subject_template: "Reset your {company_display_name} CaseOps password",
+  token_ttl_minutes: 60,
+  debug_tokens_allowed: false,
+  non_prod_debug_tokens_only: true,
+  secrets_exposed: false,
+};
+
+export const financeExceptions = {
+  rows: [
+    {
+      id: "exception-1",
+      exception_type: "amount_mismatch",
+      severity: "high",
+      status: "open",
+      provider_order_id: "pl_order_2",
+    },
+  ],
+};
+
+export const platformSupportMatrix = {
+  rows: [
+    {
+      id: "support-1",
+      provider: "ecourtsindia",
+      court: "Delhi High Court",
+      bench_jurisdiction: "Delhi",
+      lookup_method: "provider_api",
+      refresh_cost_minor: 10,
+      bulk_refresh_cost_minor: 5,
+      currency: "INR",
+      rate_limit: "60/min",
+      freshness_sla: "Daily",
+      legal_tos_status: "approved",
+      failure_code_mapping: {},
+      enabled: true,
+      tenant_visible: true,
+      status_notes: "Supported",
+      evidence_ref: "court-matrix-2026-06",
+      created_at: "2026-06-08T00:00:00Z",
+      updated_at: "2026-06-08T00:00:00Z",
     },
   ],
 };
@@ -729,6 +883,9 @@ export function mockBillingFetch(fetchMock: ReturnType<typeof vi.fn>) {
       });
     }
     if (url.includes("/api/platform-admin/cost-profiles")) return jsonResponse(providerCostProfiles);
+    if (url.includes("/api/platform-admin/margin-readiness")) {
+      return jsonResponse(marginReadiness);
+    }
     if (url.includes("/api/platform-admin/margin-simulations/run")) {
       return jsonResponse({
         ...marginSimulations.simulations[0],
@@ -737,6 +894,39 @@ export function mockBillingFetch(fetchMock: ReturnType<typeof vi.fn>) {
     }
     if (url.includes("/api/platform-admin/margin-simulations")) {
       return jsonResponse(marginSimulations);
+    }
+    if (url.includes("/api/platform-admin/pine-labs/uat-evidence")) {
+      return jsonResponse({
+        ...pineLabsUatReadiness,
+        missing_required_scenarios: [],
+        complete: true,
+        production_activation_blocked: false,
+      });
+    }
+    if (url.includes("/api/platform-admin/pine-labs/production-activation")) {
+      return jsonResponse({ status: "recorded", production_activation_blocked: true });
+    }
+    if (url.includes("/api/platform-admin/pine-labs/uat-readiness")) {
+      return jsonResponse(pineLabsUatReadiness);
+    }
+    if (url.includes("/api/platform-admin/billing-signoff/evidence")) {
+      return jsonResponse({
+        ...billingSignoff,
+        missing_required_checks: [],
+        complete: true,
+      });
+    }
+    if (url.includes("/api/platform-admin/billing-signoff")) {
+      return jsonResponse(billingSignoff);
+    }
+    if (url.includes("/api/platform-admin/password-reset-readiness")) {
+      return jsonResponse(passwordResetReadiness);
+    }
+    if (url.includes("/api/platform-admin/finance/reconciliation-exceptions")) {
+      return jsonResponse(financeExceptions);
+    }
+    if (url.includes("/api/platform-admin/case-tracking/support-matrix")) {
+      return jsonResponse(platformSupportMatrix);
     }
     if (url.includes("/api/platform-admin/profit/export")) {
       return downloadResponse("caseops-platform-profit.csv");

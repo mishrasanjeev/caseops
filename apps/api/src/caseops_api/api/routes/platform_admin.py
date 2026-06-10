@@ -10,7 +10,26 @@ from sqlalchemy import select
 from caseops_api.api.dependencies import DbSession, get_current_context
 from caseops_api.db.models import BillingEnrollment, PlatformAdminMembership
 from caseops_api.schemas.integrations import ConnectorRegistryResponse
+from caseops_api.schemas.production_safety import (
+    CaseTrackingSupportMatrixCreateRequest,
+    CaseTrackingSupportMatrixResponse,
+    CaseTrackingSupportMatrixUpdateRequest,
+    CreditNoteCreateRequest,
+    FinanceListResponse,
+    FinanceRecordRequest,
+    PasswordResetReadinessResponse,
+    PineLabsActivationDecisionRequest,
+    PineLabsUATEvidenceRequest,
+    PineLabsUATReadinessResponse,
+    PineLabsUATRunCreateRequest,
+    ProductionBillingSignoffEvidenceRequest,
+    ProductionBillingSignoffResponse,
+    SettlementImportRequest,
+    SettlementImportResponse,
+    TDSReconciliationCreateRequest,
+)
 from caseops_api.schemas.provider_costs import (
+    MarginReadinessResponse,
     MarginSimulationListResponse,
     MarginSimulationRecord,
     MarginSimulationRunRequest,
@@ -35,10 +54,31 @@ from caseops_api.services.platform_admin import (
     record_platform_audit,
     require_platform_admin,
 )
+from caseops_api.services.production_safety import (
+    create_chargeback_record,
+    create_credit_note,
+    create_refund_record,
+    create_support_matrix_row,
+    create_tds_row,
+    finance_export_csv,
+    import_settlement_rows,
+    latest_or_create_uat_run,
+    list_finance_rows,
+    list_support_matrix,
+    password_reset_readiness,
+    pine_labs_uat_readiness,
+    production_billing_signoff_status,
+    record_pine_labs_activation_decision,
+    record_pine_labs_uat_evidence,
+    record_production_billing_signoff_evidence,
+    support_matrix_admin_record,
+    update_support_matrix_row,
+)
 from caseops_api.services.provider_costs import (
     create_provider_cost_profile,
     list_margin_simulations,
     list_provider_cost_profiles,
+    margin_readiness,
     run_margin_simulation,
     update_provider_cost_profile,
 )
@@ -59,6 +99,7 @@ from caseops_api.services.saas_billing import (
     platform_set_overage_policy,
     platform_usage_report,
 )
+from caseops_api.services.security import require_recent_step_up
 
 router = APIRouter()
 PlatformContext = Annotated[SessionContext, Depends(get_current_context)]
@@ -211,6 +252,12 @@ def create_platform_cost_profile(
     route_context: PlatformBillingManager,
     session: DbSession,
 ) -> ProviderCostProfileRecord:
+    require_recent_step_up(
+        session,
+        context=route_context.context,
+        purpose="cost_profile_change",
+        platform_admin=route_context.platform_admin,
+    )
     profile = create_provider_cost_profile(
         session,
         payload=payload,
@@ -240,7 +287,18 @@ def patch_platform_cost_profile(
     route_context: PlatformBillingManager,
     session: DbSession,
 ) -> ProviderCostProfileRecord:
-    profile = update_provider_cost_profile(session, profile_id=profile_id, payload=payload)
+    require_recent_step_up(
+        session,
+        context=route_context.context,
+        purpose="cost_profile_change",
+        platform_admin=route_context.platform_admin,
+    )
+    profile = update_provider_cost_profile(
+        session,
+        profile_id=profile_id,
+        payload=payload,
+        platform_admin=route_context.platform_admin,
+    )
     record_platform_audit(
         session,
         context=route_context.context,
@@ -275,6 +333,24 @@ def get_margin_simulations(
     )
     session.commit()
     return MarginSimulationListResponse(simulations=simulations)
+
+
+@router.get("/margin-readiness", response_model=MarginReadinessResponse)
+def get_margin_readiness(
+    route_context: PlatformUsageViewer,
+    session: DbSession,
+) -> MarginReadinessResponse:
+    readiness = margin_readiness(session)
+    record_platform_audit(
+        session,
+        context=route_context.context,
+        platform_admin=route_context.platform_admin,
+        action="platform.margin_readiness.viewed",
+        target_type="billing_margin_simulation",
+        metadata={"blocked": readiness.blocked},
+    )
+    session.commit()
+    return readiness
 
 
 @router.post("/margin-simulations/run", response_model=MarginSimulationRecord)
@@ -596,3 +672,374 @@ def get_margin_alerts(context: PlatformContext, session: DbSession) -> dict[str,
     )
     session.commit()
     return {"alerts": overview.margin_alerts}
+
+
+@router.post("/pine-labs/uat-runs", response_model=PineLabsUATReadinessResponse)
+def create_pine_labs_uat_run(
+    payload: PineLabsUATRunCreateRequest,
+    route_context: PlatformPaymentReconciler,
+    session: DbSession,
+) -> PineLabsUATReadinessResponse:
+    require_recent_step_up(
+        session,
+        context=route_context.context,
+        purpose="payment_activation_change",
+        platform_admin=route_context.platform_admin,
+    )
+    latest_or_create_uat_run(
+        session,
+        platform_admin=route_context.platform_admin,
+        payload=payload,
+    )
+    readiness = pine_labs_uat_readiness(
+        session,
+        platform_admin=route_context.platform_admin,
+    )
+    record_platform_audit(
+        session,
+        context=route_context.context,
+        platform_admin=route_context.platform_admin,
+        action="platform.pine_labs_uat_run.created",
+        target_type="pine_labs_uat_run",
+        target_id=readiness.run_id,
+        metadata={"environment": payload.environment, "provider_mode": payload.provider_mode},
+    )
+    session.commit()
+    return readiness
+
+
+@router.get("/pine-labs/uat-readiness", response_model=PineLabsUATReadinessResponse)
+def get_pine_labs_uat_readiness(
+    route_context: PlatformPaymentReconciler,
+    session: DbSession,
+) -> PineLabsUATReadinessResponse:
+    readiness = pine_labs_uat_readiness(
+        session,
+        platform_admin=route_context.platform_admin,
+    )
+    record_platform_audit(
+        session,
+        context=route_context.context,
+        platform_admin=route_context.platform_admin,
+        action="platform.pine_labs_uat_readiness.viewed",
+        target_type="pine_labs_uat_run",
+        target_id=readiness.run_id,
+        metadata={"complete": readiness.complete},
+    )
+    session.commit()
+    return readiness
+
+
+@router.post("/pine-labs/uat-evidence", response_model=PineLabsUATReadinessResponse)
+def post_pine_labs_uat_evidence(
+    payload: PineLabsUATEvidenceRequest,
+    route_context: PlatformPaymentReconciler,
+    session: DbSession,
+) -> PineLabsUATReadinessResponse:
+    require_recent_step_up(
+        session,
+        context=route_context.context,
+        purpose="payment_activation_change",
+        platform_admin=route_context.platform_admin,
+    )
+    return record_pine_labs_uat_evidence(
+        session,
+        context=route_context.context,
+        platform_admin=route_context.platform_admin,
+        payload=payload,
+    )
+
+
+@router.post("/pine-labs/production-activation")
+def post_pine_labs_production_activation_decision(
+    payload: PineLabsActivationDecisionRequest,
+    route_context: PlatformPaymentReconciler,
+    session: DbSession,
+) -> dict[str, object]:
+    require_recent_step_up(
+        session,
+        context=route_context.context,
+        purpose="payment_activation_change",
+        platform_admin=route_context.platform_admin,
+    )
+    return record_pine_labs_activation_decision(
+        session,
+        context=route_context.context,
+        platform_admin=route_context.platform_admin,
+        payload=payload,
+    )
+
+
+@router.get("/billing-signoff", response_model=ProductionBillingSignoffResponse)
+def get_production_billing_signoff(
+    route_context: PlatformBillingManager,
+    session: DbSession,
+) -> ProductionBillingSignoffResponse:
+    response = production_billing_signoff_status(
+        session,
+        platform_admin=route_context.platform_admin,
+    )
+    record_platform_audit(
+        session,
+        context=route_context.context,
+        platform_admin=route_context.platform_admin,
+        action="platform.production_billing_signoff.viewed",
+        target_type="production_billing_signoff",
+        target_id=response.signoff_id,
+        metadata={"complete": response.complete},
+    )
+    session.commit()
+    return response
+
+
+@router.get("/password-reset-readiness", response_model=PasswordResetReadinessResponse)
+def get_password_reset_readiness(
+    route_context: PlatformBillingManager,
+    session: DbSession,
+) -> PasswordResetReadinessResponse:
+    response = password_reset_readiness()
+    record_platform_audit(
+        session,
+        context=route_context.context,
+        platform_admin=route_context.platform_admin,
+        action="platform.password_reset_readiness.viewed",
+        target_type="password_reset_readiness",
+        metadata={
+            "reset_link_domain": response.reset_link_domain,
+            "provider_configured": response.provider_configured,
+        },
+    )
+    session.commit()
+    return response
+
+
+@router.post("/billing-signoff/evidence", response_model=ProductionBillingSignoffResponse)
+def post_production_billing_signoff_evidence(
+    payload: ProductionBillingSignoffEvidenceRequest,
+    route_context: PlatformBillingManager,
+    session: DbSession,
+) -> ProductionBillingSignoffResponse:
+    require_recent_step_up(
+        session,
+        context=route_context.context,
+        purpose="billing_export",
+        platform_admin=route_context.platform_admin,
+    )
+    return record_production_billing_signoff_evidence(
+        session,
+        context=route_context.context,
+        platform_admin=route_context.platform_admin,
+        payload=payload,
+    )
+
+
+@router.post("/finance/settlement-imports", response_model=SettlementImportResponse)
+def post_settlement_import(
+    payload: SettlementImportRequest,
+    route_context: PlatformPaymentReconciler,
+    session: DbSession,
+) -> SettlementImportResponse:
+    require_recent_step_up(
+        session,
+        context=route_context.context,
+        purpose="billing_export",
+        platform_admin=route_context.platform_admin,
+    )
+    return import_settlement_rows(
+        session,
+        context=route_context.context,
+        platform_admin=route_context.platform_admin,
+        payload=payload,
+    )
+
+
+@router.get("/finance/{report}", response_model=FinanceListResponse)
+def get_finance_report(
+    report: str,
+    route_context: PlatformPaymentReconciler,
+    session: DbSession,
+) -> FinanceListResponse:
+    rows = list_finance_rows(session, kind=report)
+    record_platform_audit(
+        session,
+        context=route_context.context,
+        platform_admin=route_context.platform_admin,
+        action="platform.finance_report.viewed",
+        target_type="billing_finance_report",
+        target_id=report,
+        metadata={"row_count": len(rows)},
+    )
+    session.commit()
+    return FinanceListResponse(rows=rows)
+
+
+@router.get("/finance/{report}/export")
+def export_finance_report(
+    report: str,
+    route_context: PlatformPaymentReconciler,
+    session: DbSession,
+) -> StreamingResponse:
+    require_recent_step_up(
+        session,
+        context=route_context.context,
+        purpose="billing_export",
+        platform_admin=route_context.platform_admin,
+    )
+    content = finance_export_csv(session, report=report)
+    record_platform_audit(
+        session,
+        context=route_context.context,
+        platform_admin=route_context.platform_admin,
+        action="platform.finance_report.exported",
+        target_type="billing_finance_report",
+        target_id=report,
+    )
+    session.commit()
+    return _download_response(content, filename=f"caseops-{report}.csv")
+
+
+@router.post("/finance/refunds")
+def post_refund_record(
+    payload: FinanceRecordRequest,
+    route_context: PlatformPaymentReconciler,
+    session: DbSession,
+) -> dict[str, object]:
+    require_recent_step_up(
+        session,
+        context=route_context.context,
+        purpose="billing_export",
+        platform_admin=route_context.platform_admin,
+    )
+    return create_refund_record(
+        session,
+        context=route_context.context,
+        platform_admin=route_context.platform_admin,
+        payload=payload,
+    )
+
+
+@router.post("/finance/credit-notes")
+def post_credit_note(
+    payload: CreditNoteCreateRequest,
+    route_context: PlatformPaymentReconciler,
+    session: DbSession,
+) -> dict[str, object]:
+    require_recent_step_up(
+        session,
+        context=route_context.context,
+        purpose="billing_export",
+        platform_admin=route_context.platform_admin,
+    )
+    return create_credit_note(
+        session,
+        context=route_context.context,
+        platform_admin=route_context.platform_admin,
+        payload=payload,
+    )
+
+
+@router.post("/finance/chargebacks")
+def post_chargeback_record(
+    payload: FinanceRecordRequest,
+    route_context: PlatformPaymentReconciler,
+    session: DbSession,
+) -> dict[str, object]:
+    require_recent_step_up(
+        session,
+        context=route_context.context,
+        purpose="billing_export",
+        platform_admin=route_context.platform_admin,
+    )
+    return create_chargeback_record(
+        session,
+        context=route_context.context,
+        platform_admin=route_context.platform_admin,
+        payload=payload,
+    )
+
+
+@router.post("/finance/tds")
+def post_tds_reconciliation_row(
+    payload: TDSReconciliationCreateRequest,
+    route_context: PlatformPaymentReconciler,
+    session: DbSession,
+) -> dict[str, object]:
+    require_recent_step_up(
+        session,
+        context=route_context.context,
+        purpose="billing_export",
+        platform_admin=route_context.platform_admin,
+    )
+    return create_tds_row(
+        session,
+        context=route_context.context,
+        platform_admin=route_context.platform_admin,
+        payload=payload,
+    )
+
+
+@router.get("/case-tracking/support-matrix", response_model=CaseTrackingSupportMatrixResponse)
+def get_platform_case_tracking_support_matrix(
+    route_context: PlatformUsageViewer,
+    session: DbSession,
+) -> CaseTrackingSupportMatrixResponse:
+    rows = list_support_matrix(session)
+    record_platform_audit(
+        session,
+        context=route_context.context,
+        platform_admin=route_context.platform_admin,
+        action="platform.case_tracking_support_matrix.viewed",
+        target_type="case_tracking_support_matrix",
+        metadata={"row_count": len(rows)},
+    )
+    session.commit()
+    return CaseTrackingSupportMatrixResponse(
+        rows=[support_matrix_admin_record(row) for row in rows]
+    )
+
+
+@router.post("/case-tracking/support-matrix", response_model=CaseTrackingSupportMatrixResponse)
+def post_platform_case_tracking_support_matrix(
+    payload: CaseTrackingSupportMatrixCreateRequest,
+    route_context: PlatformBillingManager,
+    session: DbSession,
+) -> CaseTrackingSupportMatrixResponse:
+    require_recent_step_up(
+        session,
+        context=route_context.context,
+        purpose="cost_profile_change",
+        platform_admin=route_context.platform_admin,
+    )
+    row = create_support_matrix_row(
+        session,
+        context=route_context.context,
+        platform_admin=route_context.platform_admin,
+        payload=payload,
+    )
+    return CaseTrackingSupportMatrixResponse(rows=[row])
+
+
+@router.patch(
+    "/case-tracking/support-matrix/{row_id}",
+    response_model=CaseTrackingSupportMatrixResponse,
+)
+def patch_platform_case_tracking_support_matrix(
+    row_id: str,
+    payload: CaseTrackingSupportMatrixUpdateRequest,
+    route_context: PlatformBillingManager,
+    session: DbSession,
+) -> CaseTrackingSupportMatrixResponse:
+    require_recent_step_up(
+        session,
+        context=route_context.context,
+        purpose="cost_profile_change",
+        platform_admin=route_context.platform_admin,
+    )
+    row = update_support_matrix_row(
+        session,
+        context=route_context.context,
+        platform_admin=route_context.platform_admin,
+        row_id=row_id,
+        payload=payload,
+    )
+    return CaseTrackingSupportMatrixResponse(rows=[row])

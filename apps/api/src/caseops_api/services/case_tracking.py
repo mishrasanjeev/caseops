@@ -292,6 +292,14 @@ def search_cases(
     )
     try:
         active_provider = provider or get_case_tracking_provider()
+        from caseops_api.services.production_safety import assert_case_tracking_supported
+
+        assert_case_tracking_supported(
+            session,
+            provider=active_provider.provider_key,
+            court_code=payload.court_code,
+            court_name=payload.court_name,
+        )
         snapshots = active_provider.search_cases(query=query)
     except (CaseTrackingProviderUnavailable, CaseTrackingProviderError) as exc:
         raise _safe_provider_error(exc) from exc
@@ -463,6 +471,14 @@ def create_bookmark(
     context: SessionContext,
     payload: CaseTrackingBookmarkCreateRequest,
 ) -> CaseTrackingBookmarkRecord:
+    from caseops_api.services.production_safety import assert_case_tracking_supported
+
+    assert_case_tracking_supported(
+        session,
+        provider=payload.provider,
+        court_code=payload.court_code,
+        court_name=payload.court_name,
+    )
     matter = _matter_or_none(session, context=context, matter_id=payload.matter_id)
     normalized_cnr = normalize_cnr(payload.cnr_number)
     normalized_case = normalize_case_number(payload.case_number)

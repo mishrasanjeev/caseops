@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Download, Loader2 } from "lucide-react";
+import { AlertTriangle, Download, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -23,6 +23,13 @@ import {
 } from "@/lib/api/endpoints";
 import type { BillingUsageBreakdownRow } from "@/lib/api/schemas";
 import { formatBytes, formatLimit, ratioPercent } from "@/lib/billing-format";
+
+function quotaLabel(percent: number): string {
+  if (percent >= 95) return "95% limit warning";
+  if (percent >= 85) return "85% limit warning";
+  if (percent >= 70) return "70% limit warning";
+  return "Within limit";
+}
 
 function BreakdownTable({
   title,
@@ -104,6 +111,23 @@ export default function TenantBillingUsagePage() {
   const creditPct = snapshot
     ? ratioPercent(snapshot.ai_credits_used, snapshot.ai_credits_included ?? null)
     : 0;
+  const trackedPct = snapshot
+    ? ratioPercent(snapshot.tracked_cases_used, snapshot.tracked_cases_limit ?? null)
+    : 0;
+  const manualRefreshPct = snapshot
+    ? ratioPercent(
+        snapshot.manual_refreshes_used_today,
+        snapshot.manual_refreshes_limit_daily ?? null,
+      )
+    : 0;
+  const quotaWarnings = snapshot
+    ? [
+        { label: "AI credits", percent: creditPct },
+        { label: "Tracked cases", percent: trackedPct },
+        { label: "Manual refreshes today", percent: manualRefreshPct },
+        { label: "Storage", percent: storagePct },
+      ].filter((item) => item.percent >= 70)
+    : [];
 
   return (
     <div className="flex flex-col gap-6">
@@ -163,6 +187,46 @@ export default function TenantBillingUsagePage() {
             </div>
           </div>
         </div>
+      ) : null}
+
+      {snapshot ? (
+        <Card>
+          <CardHeader className="flex-row items-start justify-between gap-4">
+            <div>
+              <CardTitle as="h2">Quota warnings</CardTitle>
+              <CardDescription>
+                Usage warnings appear at 70%, 85%, and 95%; exhausted credits require top-up.
+              </CardDescription>
+            </div>
+            <AlertTriangle className="h-5 w-5 text-amber-700" aria-hidden />
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            {quotaWarnings.map((warning) => (
+              <div
+                key={warning.label}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-900"
+              >
+                <span className="font-medium">{warning.label}</span>
+                <span>{quotaLabel(warning.percent)}</span>
+              </div>
+            ))}
+            {snapshot.ai_credits_used >= (snapshot.ai_credits_included ?? 0) ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-900">
+                Included credits are exhausted. Buy credits before additional AI actions run.
+              </div>
+            ) : null}
+            {quotaWarnings.length === 0 &&
+            snapshot.ai_credits_used < (snapshot.ai_credits_included ?? 0) ? (
+              <div className="text-[var(--color-mute)]">No active quota warnings.</div>
+            ) : null}
+            <Link
+              href="/app/admin/billing"
+              className="inline-block font-medium text-[var(--color-brand-700)]"
+            >
+              Buy credits or capacity
+            </Link>
+          </CardContent>
+        </Card>
       ) : null}
 
       {report ? (

@@ -93,6 +93,17 @@ import {
   type TenantConnectorRegistryResponse,
   type MarginSimulationListResponse,
   type MarginSimulationRecord,
+  type MarginReadinessResponse,
+  type MFASecurityStatusResponse,
+  type MFAEnrollmentStartResponse,
+  type MFAEnrollmentVerifyResponse,
+  type MFAStepUpResponse,
+  type PineLabsUatReadinessResponse,
+  type ProductionBillingSignoffResponse,
+  type PasswordResetReadinessResponse,
+  type FinanceListResponse,
+  type CaseTrackingSupportMatrixTenantResponse,
+  type CaseTrackingSupportMatrixAdminResponse,
   type MailboxConnectionRecord,
   type MailboxConnectionStartResponse,
   type GoogleWorkspaceReadinessTestResponse,
@@ -178,6 +189,17 @@ import {
   tenantConnectorRegistryResponse,
   marginSimulationListResponse,
   marginSimulationRecord,
+  marginReadinessResponse,
+  mfaSecurityStatusResponse,
+  mfaEnrollmentStartResponse,
+  mfaEnrollmentVerifyResponse,
+  mfaStepUpResponse,
+  pineLabsUatReadinessResponse,
+  productionBillingSignoffResponse,
+  passwordResetReadinessResponse,
+  financeListResponse,
+  caseTrackingSupportMatrixTenantResponse,
+  caseTrackingSupportMatrixAdminResponse,
   mailboxConnectionRecord,
   mailboxConnectionStartResponse,
   googleWorkspaceReadinessTestResponse,
@@ -238,6 +260,59 @@ export async function bootstrapCompany(input: {
 export async function fetchAuthContext(token?: string | null): Promise<AuthContext> {
   const data = await apiRequest<unknown>("/api/auth/me", { token });
   return authContext.parse(data);
+}
+
+export async function fetchAccountSecurity(): Promise<MFASecurityStatusResponse> {
+  const data = await apiRequest<unknown>("/api/auth/security");
+  return mfaSecurityStatusResponse.parse(data);
+}
+
+export async function startMfaEnrollment(): Promise<MFAEnrollmentStartResponse> {
+  const data = await apiRequest<unknown>("/api/auth/mfa/enroll", {
+    method: "POST",
+    body: {},
+  });
+  return mfaEnrollmentStartResponse.parse(data);
+}
+
+export async function verifyMfaEnrollment(
+  code: string,
+): Promise<MFAEnrollmentVerifyResponse> {
+  const data = await apiRequest<unknown>("/api/auth/mfa/enroll/verify", {
+    method: "POST",
+    body: { code },
+  });
+  return mfaEnrollmentVerifyResponse.parse(data);
+}
+
+export async function completeMfaStepUp(input: {
+  code: string;
+  purpose?: string;
+  method?: "totp" | "recovery_code";
+}): Promise<MFAStepUpResponse> {
+  const data = await apiRequest<unknown>("/api/auth/mfa/step-up", {
+    method: "POST",
+    body: {
+      code: input.code,
+      purpose: input.purpose ?? "step_up",
+      method: input.method ?? "totp",
+    },
+  });
+  return mfaStepUpResponse.parse(data);
+}
+
+export async function regenerateMfaRecoveryCodes(): Promise<{ recovery_codes: string[] }> {
+  return apiRequest("/api/auth/mfa/recovery-codes/regenerate", {
+    method: "POST",
+    body: {},
+  });
+}
+
+export async function disableMfa(input: { code?: string | null; reason: string }): Promise<void> {
+  await apiRequest("/api/auth/mfa/disable", {
+    method: "POST",
+    body: { code: input.code ?? null, reason: input.reason },
+  });
 }
 
 export async function fetchForumCatalog(): Promise<ForumCatalogResponse> {
@@ -3239,6 +3314,11 @@ export type CaseTrackingRefreshResponse = {
 
 export async function fetchCaseTrackingStatus(): Promise<CaseTrackingProviderStatus> {
   return apiRequest("/api/case-tracking/status");
+}
+
+export async function fetchCaseTrackingSupportMatrix(): Promise<CaseTrackingSupportMatrixTenantResponse> {
+  const data = await apiRequest<unknown>("/api/case-tracking/support-matrix");
+  return caseTrackingSupportMatrixTenantResponse.parse(data);
 }
 
 export async function searchTrackedCases(
@@ -6469,19 +6549,33 @@ export async function fetchProviderCostProfiles(): Promise<ProviderCostProfileLi
 export type ProviderCostProfileInput = {
   category:
     | "case_refresh"
+    | "bulk_case_refresh"
     | "llm"
+    | "llm_input"
+    | "llm_output"
     | "embedding"
     | "document_processing"
+    | "ocr_page"
     | "storage"
+    | "bandwidth_export"
     | "payment_mdr"
     | "payment_fixed_fee"
+    | "payment_refund_fee"
+    | "payment_chargeback_fee"
+    | "email"
     | "sms"
     | "whatsapp"
     | "manual_support";
   provider?: string;
   unitAmountMinor?: number | null;
   unitAmountBps?: number | null;
+  unitLabel?: string | null;
   source?: string | null;
+  taxFeeNotes?: string | null;
+  costBasis?: "estimated" | "actual";
+  confidenceLevel?: "low" | "medium" | "high";
+  evidenceRef?: string | null;
+  founderApprovalStatus?: "pending" | "approved" | "rejected";
   notes?: string | null;
 };
 
@@ -6496,7 +6590,13 @@ export async function createProviderCostProfile(
       currency: "INR",
       unit_amount_minor: input.unitAmountMinor ?? null,
       unit_amount_bps: input.unitAmountBps ?? null,
+      unit_label: input.unitLabel ?? null,
       source: input.source ?? null,
+      tax_fee_notes: input.taxFeeNotes ?? null,
+      cost_basis: input.costBasis ?? "estimated",
+      confidence_level: input.confidenceLevel ?? "low",
+      evidence_ref: input.evidenceRef ?? null,
+      founder_approval_status: input.founderApprovalStatus ?? "pending",
       notes: input.notes ?? null,
     },
   });
@@ -6505,24 +6605,37 @@ export async function createProviderCostProfile(
 
 export type MarginSimulationInput = {
   scenarioName?: string | null;
+  scenarioCode?: string | null;
   planCode?: string | null;
   billingInterval?: "month" | "year" | "one_time" | "custom";
   revenueMinor?: number | null;
   paymentAmountMinor?: number | null;
   paymentCount?: number;
   trackedCaseRefreshes?: number;
+  bulkCaseRefreshes?: number;
   aiCredits?: number;
+  llmInputUnits?: number;
+  llmOutputUnits?: number;
   embeddingUnits?: number;
   documentPages?: number;
+  ocrPages?: number;
   storageGbMonths?: number;
+  bandwidthExportGb?: number;
+  emailMessages?: number;
   smsMessages?: number;
   whatsappMessages?: number;
   manualSupportMinutes?: number;
+  minimumGrossMarginBps?: number | null;
 };
 
 export async function fetchMarginSimulations(): Promise<MarginSimulationListResponse> {
   const data = await apiRequest<unknown>("/api/platform-admin/margin-simulations");
   return marginSimulationListResponse.parse(data);
+}
+
+export async function fetchMarginReadiness(): Promise<MarginReadinessResponse> {
+  const data = await apiRequest<unknown>("/api/platform-admin/margin-readiness");
+  return marginReadinessResponse.parse(data);
 }
 
 export async function runMarginSimulation(
@@ -6532,19 +6645,27 @@ export async function runMarginSimulation(
     method: "POST",
     body: {
       scenario_name: input.scenarioName ?? null,
+      scenario_code: input.scenarioCode ?? null,
       plan_code: input.planCode ?? null,
       billing_interval: input.billingInterval ?? "month",
       revenue_minor: input.revenueMinor ?? null,
       payment_amount_minor: input.paymentAmountMinor ?? null,
       payment_count: input.paymentCount ?? 1,
       tracked_case_refreshes: input.trackedCaseRefreshes ?? 0,
+      bulk_case_refreshes: input.bulkCaseRefreshes ?? 0,
       ai_credits: input.aiCredits ?? 0,
+      llm_input_units: input.llmInputUnits ?? 0,
+      llm_output_units: input.llmOutputUnits ?? 0,
       embedding_units: input.embeddingUnits ?? 0,
       document_pages: input.documentPages ?? 0,
+      ocr_pages: input.ocrPages ?? 0,
       storage_gb_months: input.storageGbMonths ?? 0,
+      bandwidth_export_gb: input.bandwidthExportGb ?? 0,
+      email_messages: input.emailMessages ?? 0,
       sms_messages: input.smsMessages ?? 0,
       whatsapp_messages: input.whatsappMessages ?? 0,
       manual_support_minutes: input.manualSupportMinutes ?? 0,
+      minimum_gross_margin_bps: input.minimumGrossMarginBps ?? null,
       currency: "INR",
     },
   });
@@ -6559,4 +6680,88 @@ export async function reprocessPlatformProviderEvent(eventId: string): Promise<u
       body: { reason: "Manual provider event reprocess requested from platform console." },
     },
   );
+}
+
+export async function fetchPineLabsUatReadiness(): Promise<PineLabsUatReadinessResponse> {
+  const data = await apiRequest<unknown>("/api/platform-admin/pine-labs/uat-readiness");
+  return pineLabsUatReadinessResponse.parse(data);
+}
+
+export async function recordPineLabsUatEvidence(input: {
+  runId?: string | null;
+  scenarioCode: string;
+  resultStatus: "pending" | "pass" | "fail" | "blocked" | "not_applicable";
+  providerOrderId?: string | null;
+  webhookId?: string | null;
+  operatorNotes?: string | null;
+}): Promise<PineLabsUatReadinessResponse> {
+  const data = await apiRequest<unknown>("/api/platform-admin/pine-labs/uat-evidence", {
+    method: "POST",
+    body: {
+      run_id: input.runId ?? null,
+      scenario_code: input.scenarioCode,
+      result_status: input.resultStatus,
+      provider_order_id: input.providerOrderId ?? null,
+      webhook_id: input.webhookId ?? null,
+      operator_notes: input.operatorNotes ?? null,
+    },
+  });
+  return pineLabsUatReadinessResponse.parse(data);
+}
+
+export async function recordPineLabsActivationDecision(input: {
+  runId?: string | null;
+  founderGoNoGo: "go" | "no_go";
+  notes: string;
+}): Promise<unknown> {
+  return apiRequest("/api/platform-admin/pine-labs/production-activation", {
+    method: "POST",
+    body: {
+      run_id: input.runId ?? null,
+      founder_go_no_go: input.founderGoNoGo,
+      notes: input.notes,
+    },
+  });
+}
+
+export async function fetchProductionBillingSignoff(): Promise<ProductionBillingSignoffResponse> {
+  const data = await apiRequest<unknown>("/api/platform-admin/billing-signoff");
+  return productionBillingSignoffResponse.parse(data);
+}
+
+export async function fetchPasswordResetReadiness(): Promise<PasswordResetReadinessResponse> {
+  const data = await apiRequest<unknown>("/api/platform-admin/password-reset-readiness");
+  return passwordResetReadinessResponse.parse(data);
+}
+
+export async function recordProductionBillingSignoffEvidence(input: {
+  signoffId?: string | null;
+  checkCode: string;
+  resultStatus: "pending" | "pass" | "fail" | "blocked" | "not_applicable";
+  evidenceRef?: string | null;
+  operatorNotes?: string | null;
+}): Promise<ProductionBillingSignoffResponse> {
+  const data = await apiRequest<unknown>("/api/platform-admin/billing-signoff/evidence", {
+    method: "POST",
+    body: {
+      signoff_id: input.signoffId ?? null,
+      check_code: input.checkCode,
+      result_status: input.resultStatus,
+      evidence_ref: input.evidenceRef ?? null,
+      operator_notes: input.operatorNotes ?? null,
+    },
+  });
+  return productionBillingSignoffResponse.parse(data);
+}
+
+export async function fetchPlatformFinanceReport(report: string): Promise<FinanceListResponse> {
+  const data = await apiRequest<unknown>(
+    `/api/platform-admin/finance/${encodeURIComponent(report)}`,
+  );
+  return financeListResponse.parse(data);
+}
+
+export async function fetchPlatformSupportMatrix(): Promise<CaseTrackingSupportMatrixAdminResponse> {
+  const data = await apiRequest<unknown>("/api/platform-admin/case-tracking/support-matrix");
+  return caseTrackingSupportMatrixAdminResponse.parse(data);
 }

@@ -85,6 +85,7 @@ from caseops_api.services.provider_costs import (
     case_refresh_guardrail_warnings,
     effective_cost_minor,
     estimate_payment_gateway_cost_minor,
+    margin_readiness,
 )
 
 CATALOG_VERSION = "2026.05.v1"
@@ -696,13 +697,24 @@ def provider_readiness() -> dict[str, Any]:
         and (settings.pine_labs_client_id or settings.pine_labs_api_key)
         and (settings.pine_labs_client_secret or settings.pine_labs_api_secret)
     )
-    disabled = not mock and (env in {"disabled", "off", "false"} or not configured)
+    base_url = (settings.pine_labs_api_base_url or "").strip().lower()
+    uat_safe_base_url = any(
+        marker in base_url
+        for marker in ("uat", "sandbox", "test", "staging", "localhost", "127.0.0.1")
+    )
+    uat_configured = env == "uat" and configured and uat_safe_base_url
+    live_mode = env in {"prod", "production", "live"}
+    disabled = not mock and (not uat_configured or env in {"disabled", "off", "false"} or live_mode)
     return {
         "provider": "pine_labs_plural",
         "mode": env,
         "configured": configured,
         "provider_disabled": disabled,
         "mock": mock,
+        "uat_safe": bool(uat_configured),
+        "production_activation_blocked": bool(
+            live_mode or (configured and not mock and not uat_configured)
+        ),
         "subscriptions_enabled": settings.pine_labs_subscriptions_enabled,
     }
 
@@ -836,6 +848,24 @@ def create_checkout(
         order.provider_order_id = provider_order_id
         order.payment_url = checkout.provider_checkout_url
     else:
+        profitability = margin_readiness(session)
+        if profitability.blocked:
+            checkout.status = BillingCheckoutStatus.PROVIDER_DISABLED
+            checkout.metadata_json = {
+                **dict(checkout.metadata_json or {}),
+                "provider_disabled_reason": "margin_readiness_blocked",
+            }
+            session.add_all([checkout, order])
+            record_from_context(
+                session,
+                context,
+                action="billing.checkout.blocked_margin_readiness",
+                target_type="billing_checkout_session",
+                target_id=checkout.id,
+                metadata={"plan_code": plan.plan_code},
+            )
+            session.commit()
+            return checkout_response(checkout)
         result = PineLabsGatewayClient().create_payment_link(
             merchant_order_id=order.merchant_reference,
             amount_minor=checkout.total_amount_minor,

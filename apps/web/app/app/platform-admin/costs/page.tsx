@@ -41,15 +41,32 @@ import { useCapability } from "@/lib/capabilities";
 
 const costCategories: ProviderCostProfileInput["category"][] = [
   "case_refresh",
+  "bulk_case_refresh",
   "llm",
+  "llm_input",
+  "llm_output",
   "embedding",
   "document_processing",
+  "ocr_page",
   "storage",
+  "bandwidth_export",
   "payment_mdr",
   "payment_fixed_fee",
+  "payment_refund_fee",
+  "payment_chargeback_fee",
+  "email",
   "sms",
   "whatsapp",
   "manual_support",
+];
+
+const requiredScenarios = [
+  "solo_light_user",
+  "solo_heavy_court_user",
+  "small_law_office_heavy_litigation",
+  "large_law_firm_many_tracked_cases",
+  "corporate_gc_heavy_document_workload",
+  "abusive_usage_pattern",
 ];
 
 function label(value: string): string {
@@ -77,6 +94,8 @@ function ProfilesTable({ profiles }: { profiles: ProviderCostProfileRecord[] }) 
             <th className="py-2 pr-4">Provider</th>
             <th className="py-2 pr-4">Unit</th>
             <th className="py-2 pr-4">Source</th>
+            <th className="py-2 pr-4">Basis</th>
+            <th className="py-2 pr-4">Approval</th>
             <th className="py-2 pr-4">Status</th>
           </tr>
         </thead>
@@ -92,6 +111,20 @@ function ProfilesTable({ profiles }: { profiles: ProviderCostProfileRecord[] }) 
               </td>
               <td className="py-3 pr-4">{profile.source ?? "manual"}</td>
               <td className="py-3 pr-4">
+                <Badge tone={profile.cost_basis === "actual" ? "success" : "warning"}>
+                  {profile.cost_basis}
+                </Badge>
+              </td>
+              <td className="py-3 pr-4">
+                <Badge
+                  tone={
+                    profile.founder_approval_status === "approved" ? "success" : "warning"
+                  }
+                >
+                  {profile.founder_approval_status}
+                </Badge>
+              </td>
+              <td className="py-3 pr-4">
                 <Badge tone={profile.status === "active" ? "success" : "neutral"}>
                   {profile.status}
                 </Badge>
@@ -100,7 +133,7 @@ function ProfilesTable({ profiles }: { profiles: ProviderCostProfileRecord[] }) 
           ))}
           {profiles.length === 0 ? (
             <tr>
-              <td className="py-4 text-[var(--color-mute)]" colSpan={5}>
+              <td className="py-4 text-[var(--color-mute)]" colSpan={7}>
                 No provider cost profiles yet.
               </td>
             </tr>
@@ -167,9 +200,19 @@ export default function PlatformCostsPage() {
   const [provider, setProvider] = useState("default");
   const [unitMinor, setUnitMinor] = useState("");
   const [unitBps, setUnitBps] = useState("");
+  const [unitLabel, setUnitLabel] = useState("");
   const [source, setSource] = useState("manual");
+  const [taxFeeNotes, setTaxFeeNotes] = useState("");
+  const [costBasis, setCostBasis] =
+    useState<NonNullable<ProviderCostProfileInput["costBasis"]>>("estimated");
+  const [confidenceLevel, setConfidenceLevel] =
+    useState<NonNullable<ProviderCostProfileInput["confidenceLevel"]>>("low");
+  const [approvalStatus, setApprovalStatus] =
+    useState<NonNullable<ProviderCostProfileInput["founderApprovalStatus"]>>("pending");
+  const [evidenceRef, setEvidenceRef] = useState("");
   const [notes, setNotes] = useState("");
   const [scenarioName, setScenarioName] = useState("Founder smoke margin");
+  const [scenarioCode, setScenarioCode] = useState(requiredScenarios[0]);
   const [revenueMinor, setRevenueMinor] = useState("1999900");
   const [trackedRefreshes, setTrackedRefreshes] = useState("1000");
   const [aiCredits, setAiCredits] = useState("1200");
@@ -191,6 +234,7 @@ export default function PlatformCostsPage() {
       toast.success("Cost profile saved.");
       setUnitMinor("");
       setUnitBps("");
+      setEvidenceRef("");
       setNotes("");
       await queryClient.invalidateQueries({ queryKey: ["platform-admin", "cost-profiles"] });
     },
@@ -298,13 +342,87 @@ export default function PlatformCostsPage() {
                   onChange={(event) => setUnitBps(event.target.value)}
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="unit-label">Unit</Label>
+                <Input
+                  id="unit-label"
+                  value={unitLabel}
+                  placeholder="refresh, page, message"
+                  onChange={(event) => setUnitLabel(event.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Basis</Label>
+                <Select
+                  value={costBasis}
+                  onValueChange={(value) => setCostBasis(value as typeof costBasis)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="estimated">estimated</SelectItem>
+                    <SelectItem value="actual">actual</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Confidence</Label>
+                <Select
+                  value={confidenceLevel}
+                  onValueChange={(value) => setConfidenceLevel(value as typeof confidenceLevel)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">low</SelectItem>
+                    <SelectItem value="medium">medium</SelectItem>
+                    <SelectItem value="high">high</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Founder approval</Label>
+                <Select
+                  value={approvalStatus}
+                  onValueChange={(value) => setApprovalStatus(value as typeof approvalStatus)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">pending</SelectItem>
+                    <SelectItem value="approved">approved</SelectItem>
+                    <SelectItem value="rejected">rejected</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="cost-source">Source</Label>
+                <Input
+                  id="cost-source"
+                  value={source}
+                  onChange={(event) => setSource(event.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="evidence-ref">Evidence</Label>
+                <Input
+                  id="evidence-ref"
+                  value={evidenceRef}
+                  onChange={(event) => setEvidenceRef(event.target.value)}
+                />
+              </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="cost-source">Source</Label>
-              <Input
-                id="cost-source"
-                value={source}
-                onChange={(event) => setSource(event.target.value)}
+              <Label htmlFor="tax-fee-notes">Tax and fee notes</Label>
+              <Textarea
+                id="tax-fee-notes"
+                value={taxFeeNotes}
+                onChange={(event) => setTaxFeeNotes(event.target.value)}
               />
             </div>
             <div className="space-y-2">
@@ -324,7 +442,13 @@ export default function PlatformCostsPage() {
                   provider,
                   unitAmountMinor: parseOptionalInt(unitMinor),
                   unitAmountBps: parseOptionalInt(unitBps),
+                  unitLabel: unitLabel.trim() || null,
                   source,
+                  taxFeeNotes: taxFeeNotes.trim() || null,
+                  costBasis,
+                  confidenceLevel,
+                  evidenceRef: evidenceRef.trim() || null,
+                  founderApprovalStatus: approvalStatus,
                   notes,
                 })
               }
@@ -345,12 +469,27 @@ export default function PlatformCostsPage() {
           <CardContent className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="scenario-name">Scenario</Label>
+                <Label htmlFor="scenario-name">Scenario name</Label>
                 <Input
                   id="scenario-name"
                   value={scenarioName}
                   onChange={(event) => setScenarioName(event.target.value)}
                 />
+              </div>
+              <div className="space-y-2">
+                <Label>Required scenario</Label>
+                <Select value={scenarioCode} onValueChange={setScenarioCode}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {requiredScenarios.map((item) => (
+                      <SelectItem key={item} value={item}>
+                        {label(item)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="revenue-minor">Revenue minor</Label>
@@ -386,6 +525,7 @@ export default function PlatformCostsPage() {
               onClick={() =>
                 simulationMutation.mutate({
                   scenarioName,
+                  scenarioCode,
                   revenueMinor: parseOptionalInt(revenueMinor),
                   trackedCaseRefreshes: parseOptionalInt(trackedRefreshes) ?? 0,
                   aiCredits: parseOptionalInt(aiCredits) ?? 0,

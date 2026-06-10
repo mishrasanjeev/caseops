@@ -464,12 +464,20 @@ class BillingCreditLedgerEventType(StrEnum):
 
 class ProviderCostCategory(StrEnum):
     CASE_REFRESH = "case_refresh"
+    BULK_CASE_REFRESH = "bulk_case_refresh"
     LLM = "llm"
+    LLM_INPUT = "llm_input"
+    LLM_OUTPUT = "llm_output"
     EMBEDDING = "embedding"
     DOCUMENT_PROCESSING = "document_processing"
+    OCR_PAGE = "ocr_page"
     STORAGE = "storage"
+    BANDWIDTH_EXPORT = "bandwidth_export"
     PAYMENT_MDR = "payment_mdr"
     PAYMENT_FIXED_FEE = "payment_fixed_fee"
+    PAYMENT_REFUND_FEE = "payment_refund_fee"
+    PAYMENT_CHARGEBACK_FEE = "payment_chargeback_fee"
+    EMAIL = "email"
     SMS = "sms"
     WHATSAPP = "whatsapp"
     MANUAL_SUPPORT = "manual_support"
@@ -6094,6 +6102,688 @@ class PlatformAdminAuditEvent(Base):
     )
 
 
+class UserMFASetting(Base):
+    __tablename__ = "user_mfa_settings"
+    __table_args__ = (UniqueConstraint("user_id", name="uq_user_mfa_settings_user"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="not_enrolled")
+    encrypted_totp_secret: Mapped[str | None] = mapped_column(Text, nullable=True)
+    secret_displayed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    enrolled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_challenge_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    recovery_codes_generated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    user: Mapped[User] = relationship()
+
+
+class UserMFARecoveryCode(Base):
+    __tablename__ = "user_mfa_recovery_codes"
+    __table_args__ = (
+        UniqueConstraint("user_id", "code_hash", name="uq_user_mfa_recovery_code_hash"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    code_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="active", index=True)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+    user: Mapped[User] = relationship()
+
+
+class UserMFAStepUp(Base):
+    __tablename__ = "user_mfa_step_ups"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    membership_id: Mapped[str] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    purpose: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    method: Mapped[str] = mapped_column(String(24), nullable=False)
+    completed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False, index=True
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+    user: Mapped[User] = relationship()
+    membership: Mapped[CompanyMembership] = relationship()
+
+
+class TenantSecurityPolicy(Base):
+    __tablename__ = "tenant_security_policies"
+    __table_args__ = (UniqueConstraint("company_id", name="uq_tenant_security_policy_company"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    tenant_admin_mfa_required: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    all_users_mfa_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    mfa_grace_period_days: Mapped[int] = mapped_column(Integer, nullable=False, default=7)
+    mfa_enforced_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    updated_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    company: Mapped[Company] = relationship()
+    updated_by_membership: Mapped[CompanyMembership | None] = relationship()
+
+
+class PineLabsUATRun(Base):
+    __tablename__ = "pine_labs_uat_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    environment: Mapped[str] = mapped_column(String(24), nullable=False, default="uat", index=True)
+    provider_mode: Mapped[str] = mapped_column(String(40), nullable=False, default="mock")
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="in_progress")
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False, index=True
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    operator_platform_admin_id: Mapped[str | None] = mapped_column(
+        ForeignKey("platform_admin_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    evidence_summary_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    operator_platform_admin: Mapped[PlatformAdminMembership | None] = relationship()
+
+
+class PineLabsUATScenarioEvidence(Base):
+    __tablename__ = "pine_labs_uat_scenario_evidence"
+    __table_args__ = (
+        UniqueConstraint("run_id", "scenario_code", name="uq_pine_labs_uat_run_scenario"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    run_id: Mapped[str] = mapped_column(
+        ForeignKey("pine_labs_uat_runs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    scenario_code: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    result_status: Mapped[str] = mapped_column(String(24), nullable=False, default="pending")
+    provider_order_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    provider_payment_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    webhook_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    webhook_timestamp: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False, index=True
+    )
+    redacted_payload_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    operator_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attachment_refs_json: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    created_by_platform_admin_id: Mapped[str | None] = mapped_column(
+        ForeignKey("platform_admin_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    run: Mapped[PineLabsUATRun] = relationship()
+    created_by_platform_admin: Mapped[PlatformAdminMembership | None] = relationship(
+        foreign_keys=[created_by_platform_admin_id],
+    )
+
+
+class PineLabsProductionActivationDecision(Base):
+    __tablename__ = "pine_labs_production_activation_decisions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    run_id: Mapped[str | None] = mapped_column(
+        ForeignKey("pine_labs_uat_runs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    decision: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
+    blocked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    missing_scenarios_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    founder_go_no_go: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    decided_by_platform_admin_id: Mapped[str | None] = mapped_column(
+        ForeignKey("platform_admin_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    decided_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+    run: Mapped[PineLabsUATRun | None] = relationship()
+    decided_by_platform_admin: Mapped[PlatformAdminMembership | None] = relationship()
+
+
+class ProductionBillingSignoff(Base):
+    __tablename__ = "production_billing_signoffs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="in_progress")
+    signed_off_by_platform_admin_id: Mapped[str | None] = mapped_column(
+        ForeignKey("platform_admin_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    signed_off_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False, index=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    signed_off_by_platform_admin: Mapped[PlatformAdminMembership | None] = relationship()
+
+
+class ProductionBillingSignoffEvidence(Base):
+    __tablename__ = "production_billing_signoff_evidence"
+    __table_args__ = (
+        UniqueConstraint("signoff_id", "check_code", name="uq_prod_billing_signoff_check"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    signoff_id: Mapped[str] = mapped_column(
+        ForeignKey("production_billing_signoffs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    check_code: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    result_status: Mapped[str] = mapped_column(String(24), nullable=False, default="pending")
+    evidence_ref: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    evidence_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    operator_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    recorded_by_platform_admin_id: Mapped[str | None] = mapped_column(
+        ForeignKey("platform_admin_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    signoff: Mapped[ProductionBillingSignoff] = relationship()
+    recorded_by_platform_admin: Mapped[PlatformAdminMembership | None] = relationship()
+
+
+class BillingSettlementImport(Base):
+    __tablename__ = "billing_settlement_imports"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    provider: Mapped[str] = mapped_column(String(40), nullable=False, default="pine_labs_plural")
+    source_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    settlement_period_start: Mapped[date | None] = mapped_column(Date, nullable=True)
+    settlement_period_end: Mapped[date | None] = mapped_column(Date, nullable=True)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="imported", index=True)
+    row_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    matched_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    exception_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    imported_by_platform_admin_id: Mapped[str | None] = mapped_column(
+        ForeignKey("platform_admin_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    imported_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False, index=True
+    )
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+    imported_by_platform_admin: Mapped[PlatformAdminMembership | None] = relationship()
+
+
+class BillingSettlementRow(Base):
+    __tablename__ = "billing_settlement_rows"
+    __table_args__ = (
+        UniqueConstraint("settlement_import_id", "row_hash", name="uq_settlement_import_row_hash"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    settlement_import_id: Mapped[str] = mapped_column(
+        ForeignKey("billing_settlement_imports.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    row_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    provider: Mapped[str] = mapped_column(String(40), nullable=False, default="pine_labs_plural")
+    provider_order_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    provider_payment_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    payment_order_id: Mapped[str | None] = mapped_column(
+        ForeignKey("billing_payment_orders.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    settlement_status: Mapped[str] = mapped_column(String(40), nullable=False, default="received")
+    reconciliation_status: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="unmatched", index=True
+    )
+    amount_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    provider_fee_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    tax_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    net_settlement_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="INR")
+    settled_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    raw_row_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+    settlement_import: Mapped[BillingSettlementImport] = relationship()
+    payment_order: Mapped[BillingPaymentOrder | None] = relationship()
+
+
+class BillingReconciliationException(Base):
+    __tablename__ = "billing_reconciliation_exceptions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    settlement_import_id: Mapped[str | None] = mapped_column(
+        ForeignKey("billing_settlement_imports.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    settlement_row_id: Mapped[str | None] = mapped_column(
+        ForeignKey("billing_settlement_rows.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    payment_order_id: Mapped[str | None] = mapped_column(
+        ForeignKey("billing_payment_orders.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    exception_type: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
+    severity: Mapped[str] = mapped_column(String(24), nullable=False, default="warning")
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="open", index=True)
+    amount_delta_minor: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    details_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    resolved_by_platform_admin_id: Mapped[str | None] = mapped_column(
+        ForeignKey("platform_admin_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False, index=True
+    )
+
+    settlement_import: Mapped[BillingSettlementImport | None] = relationship()
+    settlement_row: Mapped[BillingSettlementRow | None] = relationship()
+    payment_order: Mapped[BillingPaymentOrder | None] = relationship()
+    resolved_by_platform_admin: Mapped[PlatformAdminMembership | None] = relationship()
+
+
+class BillingRefundRecord(Base):
+    __tablename__ = "billing_refund_records"
+    __table_args__ = (
+        UniqueConstraint("provider", "provider_refund_id", name="uq_billing_refund_provider_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    provider: Mapped[str] = mapped_column(String(40), nullable=False, default="pine_labs_plural")
+    provider_refund_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    provider_order_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    payment_order_id: Mapped[str | None] = mapped_column(
+        ForeignKey("billing_payment_orders.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    company_id: Mapped[str | None] = mapped_column(
+        ForeignKey("companies.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    subscription_id: Mapped[str | None] = mapped_column(
+        ForeignKey("billing_subscriptions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="recorded", index=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    amount_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    provider_fee_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    tax_reversal_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="INR")
+    requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    payload_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_by_platform_admin_id: Mapped[str | None] = mapped_column(
+        ForeignKey("platform_admin_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    payment_order: Mapped[BillingPaymentOrder | None] = relationship()
+    company: Mapped[Company | None] = relationship()
+    subscription: Mapped[BillingSubscription | None] = relationship()
+    created_by_platform_admin: Mapped[PlatformAdminMembership | None] = relationship(
+        foreign_keys=[created_by_platform_admin_id],
+    )
+
+
+class BillingCreditNote(Base):
+    __tablename__ = "billing_credit_notes"
+    __table_args__ = (UniqueConstraint("credit_note_number", name="uq_billing_credit_note_number"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    subscription_id: Mapped[str | None] = mapped_column(
+        ForeignKey("billing_subscriptions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    payment_order_id: Mapped[str | None] = mapped_column(
+        ForeignKey("billing_payment_orders.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    refund_record_id: Mapped[str | None] = mapped_column(
+        ForeignKey("billing_refund_records.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    credit_note_number: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="issued", index=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    amount_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    tax_amount_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    tds_adjustment_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="INR")
+    issued_on: Mapped[date] = mapped_column(Date, nullable=False)
+    attachment_storage_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_by_platform_admin_id: Mapped[str | None] = mapped_column(
+        ForeignKey("platform_admin_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    company: Mapped[Company] = relationship()
+    subscription: Mapped[BillingSubscription | None] = relationship()
+    payment_order: Mapped[BillingPaymentOrder | None] = relationship()
+    refund_record: Mapped[BillingRefundRecord | None] = relationship()
+    created_by_platform_admin: Mapped[PlatformAdminMembership | None] = relationship()
+
+
+class BillingChargebackDispute(Base):
+    __tablename__ = "billing_chargeback_disputes"
+    __table_args__ = (
+        UniqueConstraint("provider", "provider_dispute_id", name="uq_billing_dispute_provider_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    provider: Mapped[str] = mapped_column(String(40), nullable=False, default="pine_labs_plural")
+    provider_dispute_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    provider_order_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    payment_order_id: Mapped[str | None] = mapped_column(
+        ForeignKey("billing_payment_orders.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    company_id: Mapped[str | None] = mapped_column(
+        ForeignKey("companies.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="open", index=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    amount_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    provider_fee_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="INR")
+    opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    payload_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_by_platform_admin_id: Mapped[str | None] = mapped_column(
+        ForeignKey("platform_admin_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    payment_order: Mapped[BillingPaymentOrder | None] = relationship()
+    company: Mapped[Company | None] = relationship()
+    created_by_platform_admin: Mapped[PlatformAdminMembership | None] = relationship()
+
+
+class BillingProviderFeeReconciliation(Base):
+    __tablename__ = "billing_provider_fee_reconciliations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    provider: Mapped[str] = mapped_column(String(40), nullable=False, default="pine_labs_plural")
+    settlement_row_id: Mapped[str | None] = mapped_column(
+        ForeignKey("billing_settlement_rows.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    payment_order_id: Mapped[str | None] = mapped_column(
+        ForeignKey("billing_payment_orders.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    expected_fee_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    actual_fee_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    delta_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="INR")
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="open", index=True)
+    evidence_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False, index=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    settlement_row: Mapped[BillingSettlementRow | None] = relationship()
+    payment_order: Mapped[BillingPaymentOrder | None] = relationship()
+
+
+class BillingTDSReconciliationRow(Base):
+    __tablename__ = "billing_tds_reconciliation_rows"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str | None] = mapped_column(
+        ForeignKey("companies.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    subscription_id: Mapped[str | None] = mapped_column(
+        ForeignKey("billing_subscriptions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    invoice_id: Mapped[str | None] = mapped_column(
+        ForeignKey("billing_manual_invoices.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    credit_note_id: Mapped[str | None] = mapped_column(
+        ForeignKey("billing_credit_notes.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    payer_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    payer_pan: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    certificate_number: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    financial_year: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
+    gross_amount_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    tds_deducted_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    tds_deposited_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="INR")
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="open", index=True)
+    evidence_ref: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by_platform_admin_id: Mapped[str | None] = mapped_column(
+        ForeignKey("platform_admin_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False, index=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    company: Mapped[Company | None] = relationship()
+    subscription: Mapped[BillingSubscription | None] = relationship()
+    invoice: Mapped[BillingManualInvoice | None] = relationship()
+    credit_note: Mapped[BillingCreditNote | None] = relationship()
+    created_by_platform_admin: Mapped[PlatformAdminMembership | None] = relationship()
+
+
+class CaseTrackingSupportMatrix(Base):
+    __tablename__ = "case_tracking_support_matrix"
+    __table_args__ = (
+        UniqueConstraint(
+            "provider",
+            "court",
+            "bench_jurisdiction",
+            "lookup_method",
+            name="uq_case_tracking_support_matrix_scope",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    provider: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    court: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    bench_jurisdiction: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    lookup_method: Mapped[str] = mapped_column(String(120), nullable=False)
+    refresh_cost_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    bulk_refresh_cost_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="INR")
+    rate_limit: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    freshness_sla: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    legal_tos_status: Mapped[str] = mapped_column(String(80), nullable=False, default="unknown")
+    failure_code_mapping_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    tenant_visible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+    status_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    evidence_ref: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_by_platform_admin_id: Mapped[str | None] = mapped_column(
+        ForeignKey("platform_admin_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    updated_by_platform_admin_id: Mapped[str | None] = mapped_column(
+        ForeignKey("platform_admin_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False, index=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    created_by_platform_admin: Mapped[PlatformAdminMembership | None] = relationship(
+        foreign_keys=[created_by_platform_admin_id],
+    )
+    updated_by_platform_admin: Mapped[PlatformAdminMembership | None] = relationship(
+        foreign_keys=[updated_by_platform_admin_id],
+    )
+
+
 class BillingOveragePolicy(Base):
     __tablename__ = "billing_overage_policies"
     __table_args__ = (
@@ -6147,12 +6837,26 @@ class ProviderCostProfile(Base):
     currency: Mapped[str] = mapped_column(String(8), nullable=False, default="INR", index=True)
     unit_amount_minor: Mapped[int | None] = mapped_column(Integer, nullable=True)
     unit_amount_bps: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    unit_label: Mapped[str | None] = mapped_column(String(80), nullable=True)
     effective_from: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False, index=True
     )
     effective_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="active", index=True)
     source: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    tax_fee_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cost_basis: Mapped[str] = mapped_column(String(24), nullable=False, default="estimated")
+    confidence_level: Mapped[str] = mapped_column(String(24), nullable=False, default="low")
+    evidence_ref: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    founder_approval_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="pending"
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    approved_by_platform_admin_id: Mapped[str | None] = mapped_column(
+        ForeignKey("platform_admin_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by_platform_admin_id: Mapped[str | None] = mapped_column(
         ForeignKey("platform_admin_memberships.id", ondelete="SET NULL"),
@@ -6166,7 +6870,12 @@ class ProviderCostProfile(Base):
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
     )
 
-    created_by_platform_admin: Mapped[PlatformAdminMembership | None] = relationship()
+    created_by_platform_admin: Mapped[PlatformAdminMembership | None] = relationship(
+        foreign_keys=[created_by_platform_admin_id],
+    )
+    approved_by_platform_admin: Mapped[PlatformAdminMembership | None] = relationship(
+        foreign_keys=[approved_by_platform_admin_id],
+    )
 
 
 class BillingMarginSimulation(Base):
@@ -6174,10 +6883,26 @@ class BillingMarginSimulation(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     scenario_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    plan_code: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    scenario_code: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
     currency: Mapped[str] = mapped_column(String(8), nullable=False, default="INR", index=True)
     input_json: Mapped[dict] = mapped_column(JSON, nullable=False)
     result_json: Mapped[dict] = mapped_column(JSON, nullable=False)
     warnings_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    minimum_gross_margin_bps: Mapped[int] = mapped_column(Integer, nullable=False, default=7000)
+    uses_unapproved_estimated_costs: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
+    readiness_blocked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    founder_approval_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="pending"
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    approved_by_platform_admin_id: Mapped[str | None] = mapped_column(
+        ForeignKey("platform_admin_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     run_by_platform_admin_id: Mapped[str | None] = mapped_column(
         ForeignKey("platform_admin_memberships.id", ondelete="SET NULL"),
         nullable=True,
@@ -6187,7 +6912,12 @@ class BillingMarginSimulation(Base):
         DateTime(timezone=True), default=utcnow, nullable=False, index=True
     )
 
-    run_by_platform_admin: Mapped[PlatformAdminMembership | None] = relationship()
+    run_by_platform_admin: Mapped[PlatformAdminMembership | None] = relationship(
+        foreign_keys=[run_by_platform_admin_id],
+    )
+    approved_by_platform_admin: Mapped[PlatformAdminMembership | None] = relationship(
+        foreign_keys=[approved_by_platform_admin_id],
+    )
 
 
 class ClientType(StrEnum):

@@ -30,6 +30,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { API_BASE_URL, apiErrorMessage } from "@/lib/api/config";
 import {
   createCaseTrackingBookmark,
+  fetchCaseTrackingSupportMatrix,
   fetchCaseTrackingStatus,
   listCaseTrackingBookmarks,
   listCaseTrackingUpdates,
@@ -66,6 +67,11 @@ export default function CaseTrackingPage() {
     queryFn: () => listCaseTrackingUpdates(selectedBookmarkId as string),
     enabled: Boolean(selectedBookmarkId),
     staleTime: 30_000,
+  });
+  const supportMatrix = useQuery({
+    queryKey: ["case-tracking", "support-matrix"],
+    queryFn: fetchCaseTrackingSupportMatrix,
+    staleTime: 300_000,
   });
 
   const searchMutation = useMutation({
@@ -142,6 +148,55 @@ export default function CaseTrackingPage() {
           </CardContent>
         </Card>
       ) : null}
+
+      <Card data-testid="case-tracking-support-matrix">
+        <CardHeader>
+          <CardTitle as="h2" className="text-base">Court support matrix</CardTitle>
+          <CardDescription>
+            Availability, lookup method, freshness, and usage constraints shown before tracking.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {supportMatrix.isPending ? (
+            <Skeleton className="h-24 w-full" />
+          ) : supportMatrix.data?.rows.length ? (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-left text-sm">
+                <thead className="border-b border-[var(--color-line)] text-xs uppercase text-[var(--color-mute)]">
+                  <tr>
+                    <th className="py-2 pr-4">Court</th>
+                    <th className="py-2 pr-4">Provider</th>
+                    <th className="py-2 pr-4">Lookup</th>
+                    <th className="py-2 pr-4">Freshness</th>
+                    <th className="py-2 pr-4">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {supportMatrix.data.rows.map((row) => (
+                    <tr key={row.id} className="border-b border-[var(--color-line-2)]">
+                      <td className="py-3 pr-4 font-medium">
+                        {[row.court, row.bench_jurisdiction].filter(Boolean).join(" / ")}
+                      </td>
+                      <td className="py-3 pr-4">{row.provider}</td>
+                      <td className="py-3 pr-4">{row.lookup_method}</td>
+                      <td className="py-3 pr-4">{row.freshness_sla ?? "-"}</td>
+                      <td className="py-3 pr-4">
+                        <Badge tone={row.enabled ? "success" : "warning"}>
+                          {row.enabled ? "supported" : "disabled"}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-sm text-[var(--color-mute)]">
+              No tenant-visible court support rows are published yet.
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       <Card data-testid="case-tracking-search">
         <CardHeader>

@@ -108,6 +108,9 @@ export default function PlatformAdminPage() {
             <Button href="/app/platform-admin/profit" variant="outline">
               Profit dashboard
             </Button>
+            <Button href="/app/platform-admin/paid-production" variant="outline">
+              Paid safety
+            </Button>
             <Button href="/app/platform-admin/provider-events" variant="outline">
               Provider events
             </Button>
