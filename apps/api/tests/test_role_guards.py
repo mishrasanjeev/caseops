@@ -82,6 +82,12 @@ PUBLIC_MUTATING_ROUTES: set[tuple[str, str]] = {
     # tenant by connected mailbox display_email. Raw payloads are hashed
     # before persistence and no browser session exists for Google.
     ("POST", "/api/mailbox/gmail/webhook"),
+    # Inbound email provider webhook - verified by
+    # CASEOPS_INBOUND_EMAIL_WEBHOOK_SECRET outside mock mode and disabled
+    # by default when CASEOPS_INBOUND_EMAIL_PROVIDER_MODE=disabled. No
+    # browser session exists for provider delivery; accepted events store
+    # metadata only and remain tenant-scoped through matched aliases.
+    ("POST", "/api/mailbox/inbound/webhook"),
     # Phase C-1 (2026-04-24, MOD-TS-014) — portal sign-in surface.
     # request-link is intentionally unauthenticated and returns the
     # same response on hit/miss to defeat email enumeration.

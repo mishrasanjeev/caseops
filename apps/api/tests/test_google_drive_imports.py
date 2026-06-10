@@ -452,26 +452,31 @@ def test_drive_dry_run_blocked_by_ethical_wall(client: TestClient) -> None:
     assert response.status_code == 404, response.text
 
 
-def test_drive_dry_run_does_not_introduce_durable_sync_routes(
+def test_drive_review_first_routes_do_not_introduce_uncontrolled_ingestion(
     client: TestClient,
 ) -> None:
-    # Foundation must not introduce background sync, webhook, or polling
-    # endpoints. The BUG-053 surface adds tenant-controlled OAuth/metadata
-    # browsing, but still no durable provider automation.
+    # Connector readiness now exposes tenant-controlled Drive candidates,
+    # controls, and a metadata sync trigger. It must still avoid webhook,
+    # polling, or commit/import-all routes that would ingest Drive content
+    # without explicit review.
     response = client.get("/openapi.json")
     assert response.status_code == 200, response.text
     paths = set(response.json()["paths"].keys())
     drive_paths = {path for path in paths if "drive" in path.lower()}
     assert drive_paths == {
+        "/api/drive/candidates",
+        "/api/drive/candidates/{candidate_id}",
         "/api/drive/connections/{connection_id}",
         "/api/drive/google/callback",
+        "/api/drive/google/candidates/sync",
+        "/api/drive/google/controls",
         "/api/drive/google/files",
         "/api/drive/google/start",
         "/api/drive/google/status",
         "/api/matters/imports/drive/provider-config",
         "/api/matters/{matter_id}/imports/drive/dry-run",
     }, drive_paths
-    for forbidden_substring in ("sync", "poll", "webhook", "commit"):
+    for forbidden_substring in ("poll", "webhook", "commit", "auto-import", "folders/import"):
         assert not any(
             forbidden_substring in path.lower() for path in drive_paths
         ), (forbidden_substring, drive_paths)
