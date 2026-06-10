@@ -12,7 +12,7 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
 
-from caseops_api.db.models import Matter
+from caseops_api.db.models import DriveFileCandidate, InboundEmailEvent, Matter
 from caseops_api.db.session import get_session_factory
 from tests.test_legalworkspace_calendar_sync import (
     _auth,
@@ -43,6 +43,9 @@ def test_connector_health_is_durable_and_token_safe(client: TestClient) -> None:
     assert checked.status_code == 200, checked.text
     assert len(checked.json()["health"]) == len(body["health"])
     assert "refresh_token" not in checked.text
+
+    platform = client.get("/api/platform-admin/integrations/health", headers=_auth(token))
+    assert platform.status_code == 403, platform.text
 
 
 def test_microsoft365_configuration_masks_secret_and_reports_blocked_readiness(
@@ -166,6 +169,66 @@ def test_drive_controls_never_enable_auto_import(client: TestClient) -> None:
     assert body["blocked_folders"] == ["Personal"]
 
 
+def test_drive_candidate_queue_is_review_first_and_metadata_only(
+    client: TestClient,
+) -> None:
+    bootstrap = _bootstrap_company(
+        client,
+        slug="drive-candidates",
+        email="owner@drive-candidates.example",
+    )
+    token = str(bootstrap["access_token"])
+    matter = _create_matter(client, token, "DRIVE-CAND-1")
+
+    sync = client.post(
+        "/api/drive/google/candidates/sync",
+        headers=_auth(token),
+        json={"limit": 10},
+    )
+    assert sync.status_code == 409, sync.text
+    assert "not connected" in sync.text.lower()
+
+    factory = get_session_factory()
+    with factory() as session:
+        candidate = DriveFileCandidate(
+            company_id=str(bootstrap["company"]["id"]),
+            provider="google_drive",
+            provider_file_id="drive-candidate-1",
+            provider_version="metadata-v1",
+            name="Pleadings bundle.pdf",
+            mime_type="application/pdf",
+            size_bytes=2048,
+            owner_display="Client",
+            modified_time=datetime.now(UTC),
+            folder_path="Legal Intake",
+            suggested_matter_id=str(matter["id"]),
+            confidence=0.92,
+            provenance_json={
+                "provider": "google_drive",
+                "provider_file_id": "drive-candidate-1",
+                "content_imported": False,
+            },
+        )
+        session.add(candidate)
+        session.commit()
+        candidate_id = candidate.id
+
+    listed = client.get("/api/drive/candidates?status=new", headers=_auth(token))
+    assert listed.status_code == 200, listed.text
+    assert listed.json()["pending_count"] == 1
+    assert listed.json()["candidates"][0]["name"] == "Pleadings bundle.pdf"
+    assert "raw_body" not in listed.text
+
+    reviewed = client.patch(
+        f"/api/drive/candidates/{candidate_id}",
+        headers=_auth(token),
+        json={"action": "link_metadata", "matter_id": matter["id"]},
+    )
+    assert reviewed.status_code == 200, reviewed.text
+    assert reviewed.json()["candidate"]["status"] == "linked_metadata"
+    assert reviewed.json()["candidate"]["imported_attachment_id"] is None
+
+
 def test_calendar_candidate_respects_manual_locked_hearing(
     client: TestClient,
 ) -> None:
@@ -240,6 +303,86 @@ def test_inbound_email_webhook_is_disabled_without_verified_provider(
     assert "Metadata only" not in response.text
 
 
+def test_inbound_email_alias_and_event_review_stay_metadata_only(
+    client: TestClient,
+) -> None:
+    bootstrap = _bootstrap_company(
+        client,
+        slug="inbound-aliases",
+        email="owner@inbound-aliases.example",
+    )
+    token = str(bootstrap["access_token"])
+
+    created = client.post(
+        "/api/mailbox/inbound-aliases",
+        headers=_auth(token),
+        json={
+            "status": "disabled",
+            "allowed_domains": ["client.example"],
+            "retention_days": 90,
+        },
+    )
+    assert created.status_code == 200, created.text
+    alias = created.json()
+    assert alias["status"] == "disabled"
+
+    listed_aliases = client.get("/api/mailbox/inbound-aliases", headers=_auth(token))
+    assert listed_aliases.status_code == 200, listed_aliases.text
+    assert listed_aliases.json()["aliases"][0]["alias_address"] == alias["alias_address"]
+
+    updated_alias = client.patch(
+        f"/api/mailbox/inbound-aliases/{alias['id']}",
+        headers=_auth(token),
+        json={"status": "enabled", "allowed_senders": ["client@client.example"]},
+    )
+    assert updated_alias.status_code == 200, updated_alias.text
+    assert updated_alias.json()["status"] == "enabled"
+
+    factory = get_session_factory()
+    with factory() as session:
+        event = InboundEmailEvent(
+            company_id=str(bootstrap["company"]["id"]),
+            alias_id=alias["id"],
+            provider="local_safe",
+            provider_message_id="inbound-review-1",
+            from_address_hash="sha256:redacted",
+            from_display="Client",
+            to_addresses_json=[alias["alias_address"]],
+            cc_addresses_json=[],
+            subject="Potential new matter",
+            received_at=datetime.now(UTC),
+            snippet="Metadata snippet only",
+            attachment_metadata_json=[
+                {
+                    "filename": "notice.pdf",
+                    "mime_type": "application/pdf",
+                    "size_bytes": 1234,
+                    "scan_status": "pending_review",
+                }
+            ],
+            status="new",
+            provenance_json={"provider": "local_safe", "body_imported": False},
+        )
+        session.add(event)
+        session.commit()
+        event_id = event.id
+
+    listed_events = client.get("/api/mailbox/inbound-events", headers=_auth(token))
+    assert listed_events.status_code == 200, listed_events.text
+    assert listed_events.json()["pending_count"] == 1
+    assert listed_events.json()["events"][0]["subject"] == "Potential new matter"
+    assert "raw_body" not in listed_events.text
+
+    reviewed_event = client.patch(
+        f"/api/mailbox/inbound-events/{event_id}",
+        headers=_auth(token),
+        json={"action": "ignore"},
+    )
+    assert reviewed_event.status_code == 200, reviewed_event.text
+    assert reviewed_event.json()["event"]["status"] == "ignored"
+    assert "client@client.example" not in reviewed_event.text
+
+
 def test_notification_preferences_keep_external_delivery_disabled(
     client: TestClient,
 ) -> None:
@@ -249,6 +392,21 @@ def test_notification_preferences_keep_external_delivery_disabled(
         email="owner@notification-prefs.example",
     )
     token = str(bootstrap["access_token"])
+
+    admin_current = client.get("/api/admin/notification-preferences", headers=_auth(token))
+    assert admin_current.status_code == 200, admin_current.text
+
+    admin_updated = client.patch(
+        "/api/admin/notification-preferences",
+        headers=_auth(token),
+        json={
+            "channels": {"email": True, "sms": True, "whatsapp": True},
+            "event_categories": {"connector_failures": True},
+            "external_delivery_policy": "disabled_until_configured",
+        },
+    )
+    assert admin_updated.status_code == 200, admin_updated.text
+    assert admin_updated.json()["external_delivery_enabled"] is False
 
     updated = client.patch(
         "/api/notification-preferences",
