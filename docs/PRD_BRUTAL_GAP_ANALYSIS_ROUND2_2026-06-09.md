@@ -566,6 +566,18 @@ Acceptance criteria:
 - Users can connect Gmail/Calendar/Drive with approved scopes.
 - Failures are visible and redacted.
 
+Implementation status on 2026-06-10:
+
+- Partially closed by branch `codex/connector-automation-readiness-2026-06-10`.
+- Tenant admins now get active, durable connector-health rows for Google
+  Workspace services, including required/granted/missing scopes, token-refresh
+  status labels, webhook/polling status, redacted error category, last
+  success/failure, next retry, setup actions, and provider-operations links.
+- Existing Google Workspace setup/test flow now feeds that health model without
+  exposing OAuth secrets, access tokens, refresh tokens, or raw provider errors.
+- Still blocked by external production OAuth app approval, Google Cloud redirect
+  proof, live UAT accounts, and tenant consent verification.
+
 ### BGA2-010: Gmail Is Metadata/Review-First, Not Full Mailbox Ingestion
 
 Severity: P1
@@ -601,6 +613,20 @@ Acceptance criteria:
 - Duplicate imports are prevented.
 - No raw bodies are stored unless policy permits it.
 
+Implementation status on 2026-06-10:
+
+- Partially closed. Gmail imports are now surfaced as a user review queue at
+  `/app/mailbox` with filters, safe bulk ignore, link-metadata, note/task
+  creation, and explicit content-import request states.
+- The backend stores metadata/snippets only by default and keeps idempotency by
+  provider message and attachment IDs. Attachment imports still require explicit
+  user action and reuse the existing storage/security/OCR/document-processing
+  path when bytes are fetched.
+- Tests now cover review-first behavior, tenant isolation, no token leak, and no
+  raw body import without approval.
+- Full thread UX, advanced label/search policy, and production Gmail Pub/Sub UAT
+  remain pending.
+
 ### BGA2-011: Google Drive Is Metadata Listing, Not Document Sync
 
 Severity: P1
@@ -627,6 +653,19 @@ Acceptance criteria:
 - User can import a Drive file into a matter through review queue.
 - Imported file appears in matter documents with source provenance.
 - Duplicate/version changes are handled.
+
+Implementation status on 2026-06-10:
+
+- Partially closed. Google Drive now has tenant controls for allowed/blocked
+  folders, max size, MIME types, and review-import mode; auto-import remains
+  forced off.
+- A Drive candidate queue at `/app/drive` supports metadata review, linking,
+  explicit file import, ignore, and retry. Candidate records preserve provider
+  file ID, modified-time/version provenance, suggested matter, and status.
+- Content import is never automatic and must pass the existing upload,
+  storage-security, OCR, and document-processing rules.
+- Live Drive content import still requires provider credentials/UAT and explicit
+  tenant approval; uncontrolled folder-wide ingestion remains out of scope.
 
 ### BGA2-012: Google Calendar Needs Two-Way Sync And Conflict Review
 
@@ -655,6 +694,18 @@ Acceptance criteria:
 - Locked CaseOps hearing is not overwritten.
 - Conflicts enter review queue.
 
+Implementation status on 2026-06-10:
+
+- Partially closed. Provider calendar event candidates now support
+  Google/Outlook-to-CaseOps suggestions, idempotent provider-event mapping,
+  provenance, sync history, accept/reject/ignore actions, and conflict status.
+- `/app/calendar/conflicts` lets users review pending suggestions and explicitly
+  override manual locks only when intended.
+- Locked/manual hearing dates are not overwritten by default, and provider
+  deletion/cancellation does not delete CaseOps hearings without review.
+- Durable provider webhooks/change notifications and live two-way UAT remain
+  pending.
+
 ### BGA2-013: Outlook/Microsoft 365 Is Behind Google
 
 Severity: P1
@@ -678,6 +729,22 @@ Acceptance criteria:
 
 - Microsoft 365 has parity with Gmail/Google Calendar for review-first workflows.
 - Corporate GC prospects can use Microsoft 365 without weaker functionality than Google.
+
+Implementation status on 2026-06-10:
+
+- Partially closed. Tenant Microsoft 365/Graph configuration and readiness
+  status now exist under `/app/admin/microsoft365`, including admin-consent and
+  scope-approval state without echoing client secrets.
+- Outlook Mail has a metadata-only review-candidate path matching the Gmail
+  safety model. Outlook Calendar shares the provider-event candidate/conflict
+  workflow. OneDrive/SharePoint is modeled in health, schema, and review states;
+  content import remains blocked until Graph provider credentials and consent
+  are configured.
+- Graph scopes, admin consent, token health labels, polling/webhook readiness,
+  and provider-operation visibility are represented in the connector-health
+  model.
+- Live Graph OAuth, change notifications, and OneDrive/SharePoint content UAT
+  remain external blockers.
 
 ### BGA2-014: Connector Registry Needs Active Health, Not Just Readiness
 
@@ -719,6 +786,20 @@ Acceptance criteria:
 - Founder can diagnose without secrets.
 - Health probe jobs do not mutate provider data.
 
+Implementation status on 2026-06-10:
+
+- Closed for local durable health tracking; provider-backed live probes remain
+  gated. `connector_health_records` now persist per tenant/provider/account.
+- Tenant admins can query/check `/api/admin/integrations/health`; founder
+  platform admins can query `/api/platform-admin/integrations/health` across
+  tenants with redacted failure categories and operational alerts.
+- Health records include configured/connected state, last success/failure,
+  required/granted/missing scopes, token expiry/refresh labels, webhook/polling
+  status, rate-limit status, next retry, disabled reason, setup actions, and
+  provider-operation links.
+- The health model is tenant-scoped, auditable, and secret-free. It does not
+  mutate provider data or perform uncontrolled provider calls.
+
 ### BGA2-015: External Notifications And Preferences Are Partial
 
 Severity: P1
@@ -755,6 +836,21 @@ Acceptance criteria:
 - Disabled provider never attempts external delivery.
 - External delivery costs are metered.
 
+Implementation status on 2026-06-10:
+
+- Partially closed. Tenant and user notification preference rows now support
+  in-app, email, SMS, WhatsApp, digest frequency, quiet hours, event categories,
+  escalation rules, opt-out categories, and tenant/user APIs/UI.
+- `/app/notification-preferences` exposes user controls, while admin endpoints
+  manage tenant defaults. Event categories include hearing updates, tracked case
+  changes, compliance deadlines, billing/credit warnings, connector failures,
+  document processing failures, and provider-operation failures.
+- External channels remain disabled unless provider configuration and
+  tenant/user policy allow delivery. Tests verify disabled providers do not send
+  external messages.
+- Template governance, provider cost attribution, bounce/suppression UAT, and
+  live SMS/WhatsApp approval remain pending.
+
 ### BGA2-016: Inbound Email Alias Is Missing
 
 Severity: P1
@@ -780,6 +876,21 @@ Acceptance criteria:
 - User can forward email to CaseOps and review/import into matter.
 - Unsafe attachments are blocked.
 - Misrouted email does not silently attach to wrong matter.
+
+Implementation status on 2026-06-10:
+
+- Partially closed as production-disabled readiness. Tenant and matter inbound
+  aliases now exist with enabled/disabled status, allowed senders/domains,
+  retention days, and spam/security status.
+- Inbound email event records store provider message ID, from/to/cc, subject,
+  received time, attachment metadata, matched tenant/matter, status, provenance,
+  and redacted failure reason. Review actions support link, note/task creation,
+  attachment-import request, ignore, and reject.
+- The webhook skeleton supports `disabled`, `mock`, and HMAC-verified
+  `production` modes. Production mode rejects unauthenticated/spoofable inbound
+  email unless a verified provider secret is configured.
+- Real inbound provider selection, DNS/SPF/DKIM/DMARC proof, malware-scan UAT,
+  and attachment byte import remain pending.
 
 ### BGA2-017: Agent Identity And Grantex-Equivalent Trust Plane Are Missing
 

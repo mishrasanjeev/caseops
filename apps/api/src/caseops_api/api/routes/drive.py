@@ -6,6 +6,13 @@ from fastapi import APIRouter, Depends, Query
 
 from caseops_api.api.dependencies import DbSession, require_capability
 from caseops_api.schemas.drive import (
+    DriveCandidateListResponse,
+    DriveCandidateReviewRequest,
+    DriveCandidateReviewResponse,
+    DriveCandidateSyncRequest,
+    DriveCandidateSyncResponse,
+    DriveSyncControlRecord,
+    DriveSyncControlUpdateRequest,
     GoogleDriveConnectionCallbackResponse,
     GoogleDriveConnectionRecord,
     GoogleDriveConnectionStartResponse,
@@ -14,15 +21,21 @@ from caseops_api.schemas.drive import (
 )
 from caseops_api.services.drive_sync import (
     complete_google_drive_connection,
+    get_drive_sync_control,
+    list_drive_candidates,
     list_google_drive_files,
     list_google_drive_status,
+    review_drive_candidate,
     revoke_google_drive_connection,
     start_google_drive_connection,
+    sync_google_drive_candidates,
+    update_drive_sync_control,
 )
 from caseops_api.services.identity import SessionContext
 
 router = APIRouter()
 DriveViewer = Annotated[SessionContext, Depends(require_capability("documents:upload"))]
+WorkspaceAdmin = Annotated[SessionContext, Depends(require_capability("workspace:admin"))]
 
 
 @router.get(
@@ -96,3 +109,85 @@ async def get_google_drive_files(
     limit: Annotated[int, Query(ge=1, le=100)] = 25,
 ) -> GoogleDriveFileListResponse:
     return list_google_drive_files(session, context=context, limit=limit)
+
+
+@router.get(
+    "/google/controls",
+    response_model=DriveSyncControlRecord,
+    summary="Read tenant Google Drive review/import controls.",
+)
+async def get_google_drive_controls(
+    context: WorkspaceAdmin,
+    session: DbSession,
+) -> DriveSyncControlRecord:
+    return get_drive_sync_control(session, context=context)
+
+
+@router.patch(
+    "/google/controls",
+    response_model=DriveSyncControlRecord,
+    summary="Update tenant Google Drive controls without enabling auto-import.",
+)
+async def patch_google_drive_controls(
+    payload: DriveSyncControlUpdateRequest,
+    context: WorkspaceAdmin,
+    session: DbSession,
+) -> DriveSyncControlRecord:
+    return update_drive_sync_control(session, context=context, payload=payload)
+
+
+@router.post(
+    "/google/candidates/sync",
+    response_model=DriveCandidateSyncResponse,
+    summary="Sync Google Drive file metadata into a review-first queue.",
+)
+async def post_google_drive_candidate_sync(
+    payload: DriveCandidateSyncRequest,
+    context: DriveViewer,
+    session: DbSession,
+) -> DriveCandidateSyncResponse:
+    return sync_google_drive_candidates(session, context=context, payload=payload)
+
+
+@router.get(
+    "/candidates",
+    response_model=DriveCandidateListResponse,
+    summary="List tenant-safe Drive file candidates.",
+)
+async def get_drive_candidates(
+    context: DriveViewer,
+    session: DbSession,
+    provider: str | None = Query(default=None),
+    matter_id: str | None = Query(default=None),
+    status_filter: str | None = Query(default=None, alias="status"),
+    q: str | None = Query(default=None, max_length=120),
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> DriveCandidateListResponse:
+    return list_drive_candidates(
+        session,
+        context=context,
+        provider=provider,
+        matter_id=matter_id,
+        status_filter=status_filter,
+        q=q,
+        limit=limit,
+    )
+
+
+@router.patch(
+    "/candidates/{candidate_id}",
+    response_model=DriveCandidateReviewResponse,
+    summary="Review one Drive candidate and optionally import its content.",
+)
+async def patch_drive_candidate(
+    candidate_id: str,
+    payload: DriveCandidateReviewRequest,
+    context: DriveViewer,
+    session: DbSession,
+) -> DriveCandidateReviewResponse:
+    return review_drive_candidate(
+        session,
+        context=context,
+        candidate_id=candidate_id,
+        payload=payload,
+    )

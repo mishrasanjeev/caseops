@@ -33,8 +33,10 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import {
+  checkTenantConnectorHealth,
   fetchGoogleDriveStatus,
   fetchGoogleWorkspaceTenantConfiguration,
+  fetchTenantConnectorHealth,
   fetchTenantIntegrations,
   listGoogleDriveFiles,
   revokeGoogleDriveConnection,
@@ -45,6 +47,7 @@ import {
 } from "@/lib/api/endpoints";
 import { apiErrorMessage } from "@/lib/api/config";
 import type {
+  ConnectorHealthRecord,
   GoogleDriveFileRecord,
   GoogleWorkspaceReadinessTestResponse,
   GoogleWorkspaceTenantConfigurationResponse,
@@ -166,6 +169,50 @@ function ConnectorTile({ connector }: { connector: TenantConnectorRecord }) {
           {connector.scopes.length > 4 ? ` +${connector.scopes.length - 4}` : ""}
         </div>
       ) : null}
+      {connector.missing_scopes.length ? (
+        <div className="mt-2 text-xs text-amber-800">
+          Missing scopes: {connector.missing_scopes.slice(0, 3).join(", ")}
+        </div>
+      ) : null}
+      {connector.error_category ? (
+        <div className="mt-2 text-xs text-amber-800">
+          {connector.error_category}
+        </div>
+      ) : null}
+      {connector.provider_operations_link ? (
+        <Button
+          href={connector.provider_operations_link}
+          variant="ghost"
+          size="sm"
+          className="mt-3"
+        >
+          Provider operations
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function HealthRow({ row }: { row: ConnectorHealthRecord }) {
+  return (
+    <div className="grid gap-2 border-b border-[var(--color-line)] px-4 py-3 last:border-b-0 md:grid-cols-[1fr_1fr_auto]">
+      <div>
+        <div className="font-medium text-[var(--color-ink)]">{row.provider}</div>
+        <div className="text-xs text-[var(--color-mute)]">
+          checked {formatWhen(row.last_checked_at)}
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        <Badge tone={toneForStatus(row.configured_state)}>
+          {row.configured_state.replaceAll("_", " ")}
+        </Badge>
+        <Badge tone={toneForStatus(row.connected_state)}>
+          {row.connected_state.replaceAll("_", " ")}
+        </Badge>
+      </div>
+      <div className="text-xs text-[var(--color-mute)] md:text-right">
+        {row.error_category ?? row.disabled_reason ?? "No alert"}
+      </div>
     </div>
   );
 }
@@ -799,6 +846,11 @@ export default function TenantIntegrationsPage() {
     queryFn: fetchTenantIntegrations,
     enabled: canAdmin,
   });
+  const healthQuery = useQuery({
+    queryKey: ["admin", "integrations", "health"],
+    queryFn: fetchTenantConnectorHealth,
+    enabled: canAdmin,
+  });
   const googleWorkspaceQuery = useQuery({
     queryKey: ["admin", "google-workspace-configuration"],
     queryFn: fetchGoogleWorkspaceTenantConfiguration,
@@ -910,6 +962,17 @@ export default function TenantIntegrationsPage() {
     },
     onError: (error) => setDriveMessage(String(error)),
   });
+  const checkHealthMutation = useMutation({
+    mutationFn: checkTenantConnectorHealth,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["admin", "integrations"] });
+      await queryClient.invalidateQueries({
+        queryKey: ["admin", "integrations", "health"],
+      });
+      toast.success("Connector health checked.");
+    },
+    onError: (error) => toast.error(apiErrorMessage(error, "Could not check health.")),
+  });
 
   if (!canAdmin) {
     return (
@@ -945,9 +1008,24 @@ export default function TenantIntegrationsPage() {
         title="Integrations"
         description="Readiness, configuration names, and delivery gates for workspace connectors."
         actions={
-          <Button href="/app/admin/provider-operations" variant="outline">
-            Provider operations
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={checkHealthMutation.isPending}
+              onClick={() => checkHealthMutation.mutate()}
+            >
+              {checkHealthMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              ) : (
+                <CheckCircle2 className="h-4 w-4" aria-hidden />
+              )}
+              Check health
+            </Button>
+            <Button href="/app/admin/provider-operations" variant="outline">
+              Provider operations
+            </Button>
+          </div>
         }
       />
 
@@ -970,6 +1048,34 @@ export default function TenantIntegrationsPage() {
           saving={saveGoogleMutation.isPending}
           testing={testGoogleMutation.isPending}
         />
+      ) : null}
+
+      {healthQuery.isPending ? (
+        <Card>
+          <CardContent>
+            <Skeleton className="h-24 w-full" />
+          </CardContent>
+        </Card>
+      ) : healthQuery.isError ? (
+        <QueryErrorState
+          title="Could not load connector health"
+          error={healthQuery.error}
+          onRetry={healthQuery.refetch}
+        />
+      ) : healthQuery.data?.health.length ? (
+        <Card>
+          <CardHeader>
+            <CardTitle as="h2">Active health</CardTitle>
+            <CardDescription>
+              Tenant-scoped health records persist beyond process restarts.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            {healthQuery.data.health.slice(0, 12).map((row) => (
+              <HealthRow key={row.id} row={row} />
+            ))}
+          </CardContent>
+        </Card>
       ) : null}
 
       {integrationsQuery.isPending ? (

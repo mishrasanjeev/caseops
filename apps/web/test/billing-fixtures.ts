@@ -473,6 +473,63 @@ export const tenantIntegrations = {
   ],
 };
 
+export const tenantIntegrationHealth = {
+  health: [
+    {
+      id: "health-gmail",
+      company_id: "company-1",
+      provider: "gmail",
+      configured_state: "missing_config",
+      connected_state: "missing_config",
+      last_success_at: null,
+      last_failure_at: "2026-06-10T00:00:00Z",
+      error_category: "missing_config",
+      required_scopes: ["https://www.googleapis.com/auth/gmail.metadata"],
+      granted_scopes: [],
+      missing_scopes: ["https://www.googleapis.com/auth/gmail.metadata"],
+      token_expires_at: null,
+      token_refresh_status: "not_available",
+      webhook_status: "missing",
+      polling_status: "ready",
+      rate_limit_status: "ok",
+      next_retry_at: null,
+      disabled_reason: null,
+      last_checked_at: "2026-06-10T00:00:00Z",
+      operational_alerts: ["missing_config"],
+      setup_actions: ["Configure Gmail OAuth"],
+      provider_operations_link: "/app/admin/provider-operations",
+      created_at: "2026-06-10T00:00:00Z",
+      updated_at: "2026-06-10T00:00:00Z",
+    },
+    {
+      id: "health-drive",
+      company_id: "company-1",
+      provider: "google_drive",
+      configured_state: "configured",
+      connected_state: "connected",
+      last_success_at: "2026-06-10T00:00:00Z",
+      last_failure_at: null,
+      error_category: null,
+      required_scopes: ["https://www.googleapis.com/auth/drive.readonly"],
+      granted_scopes: ["https://www.googleapis.com/auth/drive.readonly"],
+      missing_scopes: [],
+      token_expires_at: null,
+      token_refresh_status: "refresh_available",
+      webhook_status: "disabled",
+      polling_status: "ready",
+      rate_limit_status: "ok",
+      next_retry_at: null,
+      disabled_reason: null,
+      last_checked_at: "2026-06-10T00:00:00Z",
+      operational_alerts: [],
+      setup_actions: [],
+      provider_operations_link: "/app/admin/provider-operations",
+      created_at: "2026-06-10T00:00:00Z",
+      updated_at: "2026-06-10T00:00:00Z",
+    },
+  ],
+};
+
 export const platformIntegrations = {
   connectors: tenantIntegrations.connectors.map((connector) => ({
     ...connector,
@@ -485,6 +542,10 @@ export const platformIntegrations = {
         ? ["Do not enable live payments until founder UAT go/no-go."]
         : ["Webhook events must remain signature verified."],
   })),
+};
+
+export const platformIntegrationHealth = {
+  health: tenantIntegrationHealth.health,
 };
 
 export const googleDriveStatus = {
@@ -858,6 +919,15 @@ export function mockBillingFetch(fetchMock: ReturnType<typeof vi.fn>) {
     if (url.includes("/api/admin/google-workspace-configuration")) {
       return jsonResponse(googleWorkspaceConfiguration);
     }
+    if (url.includes("/api/admin/integrations/health/check")) {
+      return jsonResponse({
+        checked_at: "2026-06-10T00:00:00Z",
+        health: tenantIntegrationHealth.health,
+      });
+    }
+    if (url.includes("/api/admin/integrations/health")) {
+      return jsonResponse(tenantIntegrationHealth);
+    }
     if (url.includes("/api/admin/integrations")) return jsonResponse(tenantIntegrations);
     if (url.includes("/api/drive/google/status")) return jsonResponse(googleDriveStatus);
     if (url.includes("/api/drive/google/files")) return jsonResponse(googleDriveFiles);
@@ -874,6 +944,9 @@ export function mockBillingFetch(fetchMock: ReturnType<typeof vi.fn>) {
         auth_url: null,
         unavailable_reason: null,
       });
+    }
+    if (url.includes("/api/platform-admin/integrations/health")) {
+      return jsonResponse(platformIntegrationHealth);
     }
     if (url.includes("/api/platform-admin/integrations")) return jsonResponse(platformIntegrations);
     if (url.includes("/api/platform-admin/cost-profiles") && init?.method === "POST") {

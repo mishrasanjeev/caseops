@@ -436,17 +436,37 @@ The following boundaries apply after the ADP-20 and ADP-24 foundations:
 - ADP-20 implements readiness-gated CaseOps-to-Outlook hearing sync only.
   Broad two-way Outlook automation, Outlook-to-CaseOps import, task/deadline
   sync, mailbox ingestion, and provider webhooks remain out of scope.
+- Connector Automation and Communication Readiness (2026-06-10) adds
+  review-first Outlook Mail metadata candidates, Microsoft 365 setup/readiness,
+  and calendar provider-event suggestions. These are manual review workflows,
+  not autonomous Graph mailbox or calendar automation.
 - ADP-24 implements an admin provider-operations surface for failed/blocked
   durable jobs, redacted errors, and audited replay/ignore/resolve actions.
   Replay reschedules existing idempotent rows; it does not bypass provider
   readiness gates or make immediate provider calls.
-- Durable Google Drive sync remains pending under ADP-21.
-- Durable email provider ingestion remains pending under ADP-22.
+- Durable Google Drive sync remains pending under ADP-21, but a review-first
+  Drive candidate queue now exists. Users can review metadata and explicitly
+  import selected files through the existing document security/OCR pipeline when
+  provider credentials and tenant policy allow it. Auto-import remains off.
+- Durable email provider ingestion remains pending under ADP-22, but Gmail and
+  Outlook Mail metadata review queues now support link, note/task, request
+  import, and ignore actions. Raw email bodies and attachment bytes are not
+  imported automatically.
+- Inbound email aliases now exist as disabled-by-default readiness. Production
+  inbound email remains disabled until a real provider is configured with
+  signature verification and DNS/security proof.
 - Judgment/legal-update external digest delivery remains pending under ADP-23.
 - Background mailbox polling remains disabled.
 - Provider webhooks for calendar/email ingestion remain disabled.
 - External notification delivery by email, SMS, WhatsApp, push, or digest
-  remains provider-gated and disabled unless explicitly configured and tested.
+  remains provider-gated and disabled unless explicitly configured, preferred by
+  the tenant/user, and tested. User and tenant preference screens now exist for
+  in-app, email, SMS, WhatsApp, digest frequency, quiet hours, categories, and
+  opt-outs.
+- Tenant admins can use `/app/admin/integrations` for active connector health,
+  `/app/admin/microsoft365` for Graph setup/readiness, and
+  `/app/admin/inbound-email` for alias readiness. Founder/platform admins can
+  use `/app/platform-admin/integrations` for cross-tenant redacted health.
 - Legal outcome prediction or success probability.
 - Judge, bench, court, or counsel scoring.
 

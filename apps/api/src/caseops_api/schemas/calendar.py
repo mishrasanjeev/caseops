@@ -48,6 +48,19 @@ CalendarEmailInvitationCandidateLiteral = Literal[
 ]
 CalendarConflictTypeLiteral = Literal["duplicate_provider_event_id"]
 CalendarConflictSeverityLiteral = Literal["review"]
+CalendarProviderEventCandidateStatusLiteral = Literal[
+    "new",
+    "conflict",
+    "accepted",
+    "rejected",
+    "ignored",
+    "failed",
+]
+CalendarProviderEventCandidateReviewActionLiteral = Literal[
+    "accept",
+    "reject",
+    "ignore",
+]
 EmailInvitationCandidateStatusLiteral = Literal[
     "needs_review",
     "approved_created",
@@ -255,6 +268,63 @@ class CalendarSyncStatusResponse(BaseModel):
     conflict_candidates: list[CalendarSyncConflictCandidate]
     connections: list[CalendarConnectionRecord]
     syncs: list[CalendarEventSyncRecord]
+
+
+class CalendarProviderEventCandidateRecord(BaseModel):
+    id: str
+    company_id: str
+    provider: CalendarProviderLiteral
+    provider_event_id: str
+    i_cal_uid: str | None = None
+    title: str
+    starts_at: datetime
+    ends_at: datetime | None = None
+    location: str | None = None
+    organizer_display: str | None = None
+    provider_status: str | None = None
+    suggested_matter_id: str | None = None
+    linked_matter_id: str | None = None
+    linked_hearing_id: str | None = None
+    confidence: float | None = None
+    status: CalendarProviderEventCandidateStatusLiteral
+    conflict_reason: str | None = None
+    provenance: dict | None = None
+    sync_history: list[dict] = Field(default_factory=list)
+    reviewed_by_membership_id: str | None = None
+    reviewed_at: datetime | None = None
+    last_error_redacted: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class CalendarProviderEventCandidateListResponse(BaseModel):
+    candidates: list[CalendarProviderEventCandidateRecord]
+    pending_count: int = Field(ge=0)
+    conflict_count: int = Field(ge=0)
+
+
+class CalendarProviderEventCandidateCreateRequest(BaseModel):
+    provider: CalendarProviderLiteral
+    provider_event_id: str = Field(min_length=1, max_length=255)
+    i_cal_uid: str | None = Field(default=None, max_length=255)
+    title: str = Field(min_length=1, max_length=500)
+    starts_at: datetime
+    ends_at: datetime | None = None
+    location: str | None = Field(default=None, max_length=500)
+    organizer_display: str | None = Field(default=None, max_length=255)
+    provider_status: str | None = Field(default=None, max_length=40)
+    suggested_matter_id: str | None = Field(default=None, max_length=36)
+
+
+class CalendarProviderEventCandidateReviewRequest(BaseModel):
+    action: CalendarProviderEventCandidateReviewActionLiteral
+    matter_id: str | None = Field(default=None, min_length=1, max_length=36)
+    force_overwrite_locked: bool = False
+
+
+class CalendarProviderEventCandidateReviewResponse(BaseModel):
+    candidate: CalendarProviderEventCandidateRecord
+    hearing_id: str | None = None
 
 
 class OutlookConfigurationItemStatus(BaseModel):

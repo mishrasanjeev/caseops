@@ -3,6 +3,7 @@
 Right now: audit-export only. As §10.1/§10.2/§10.5 land they all hang
 off this module under the `admin` tag.
 """
+
 from __future__ import annotations
 
 import csv
@@ -41,6 +42,11 @@ from caseops_api.schemas.google_workspace import (
     GoogleWorkspaceTenantConfigurationResponse,
     GoogleWorkspaceTenantConfigurationUpdateRequest,
 )
+from caseops_api.schemas.microsoft365 import (
+    Microsoft365ReadinessTestResponse,
+    Microsoft365TenantConfigurationResponse,
+    Microsoft365TenantConfigurationUpdateRequest,
+)
 from caseops_api.schemas.security import (
     TenantSecurityPolicyRecord,
     TenantSecurityPolicyUpdateRequest,
@@ -74,6 +80,11 @@ from caseops_api.services.google_workspace import (
     update_google_workspace_tenant_configuration,
 )
 from caseops_api.services.identity import SessionContext
+from caseops_api.services.microsoft365 import (
+    microsoft365_tenant_configuration_status,
+    test_microsoft365_tenant_configuration,
+    update_microsoft365_tenant_configuration,
+)
 from caseops_api.services.security import (
     require_recent_step_up,
     tenant_security_policy,
@@ -133,9 +144,7 @@ def _event_row(event: AuditEvent) -> dict[str, object]:
         "target_type": event.target_type,
         "target_id": event.target_id,
         "result": event.result,
-        "metadata": (
-            json.loads(event.metadata_json) if event.metadata_json else None
-        ),
+        "metadata": (json.loads(event.metadata_json) if event.metadata_json else None),
         "request_id": event.request_id,
     }
 
@@ -199,6 +208,7 @@ def export_audit_trail(
     filename_base = f"audit-{context.company.slug}-{stamp}"
 
     if format == "csv":
+
         def iter_csv():
             buffer = io.StringIO()
             writer = csv.DictWriter(buffer, fieldnames=_AUDIT_COLUMNS)
@@ -219,23 +229,17 @@ def export_audit_trail(
         return StreamingResponse(
             iter_csv(),
             media_type="text/csv",
-            headers={
-                "Content-Disposition": f'attachment; filename="{filename_base}.csv"'
-            },
+            headers={"Content-Disposition": f'attachment; filename="{filename_base}.csv"'},
         )
 
     def iter_jsonl():
         for event in events:
-            yield (
-                json.dumps(_event_row(event), separators=(",", ":")) + "\n"
-            ).encode("utf-8")
+            yield (json.dumps(_event_row(event), separators=(",", ":")) + "\n").encode("utf-8")
 
     return StreamingResponse(
         iter_jsonl(),
         media_type="application/x-ndjson",
-        headers={
-            "Content-Disposition": f'attachment; filename="{filename_base}.jsonl"'
-        },
+        headers={"Content-Disposition": f'attachment; filename="{filename_base}.jsonl"'},
     )
 
 
@@ -366,9 +370,7 @@ from pydantic import BaseModel  # noqa: E402
 
 from caseops_api.db.models import TenantAIPolicy  # noqa: E402
 
-WorkspaceAdmin = Annotated[
-    SessionContext, Depends(require_capability("workspace:admin"))
-]
+WorkspaceAdmin = Annotated[SessionContext, Depends(require_capability("workspace:admin"))]
 
 
 @router.get(
@@ -402,10 +404,7 @@ def patch_security_policy(
 @router.get(
     "/outlook-configuration",
     response_model=OutlookTenantConfigurationResponse,
-    summary=(
-        "Read the tenant Outlook provider readiness gate without exposing "
-        "credential values."
-    ),
+    summary=("Read the tenant Outlook provider readiness gate without exposing credential values."),
 )
 def get_outlook_configuration(
     context: WorkspaceAdmin,
@@ -442,10 +441,7 @@ def patch_outlook_configuration(
 @router.post(
     "/outlook-configuration/test",
     response_model=OutlookReadinessTestResponse,
-    summary=(
-        "Run a safe Outlook provider readiness probe for the current "
-        "workspace admin."
-    ),
+    summary=("Run a safe Outlook provider readiness probe for the current workspace admin."),
 )
 def post_outlook_configuration_test(
     context: WorkspaceAdmin,
@@ -457,10 +453,7 @@ def post_outlook_configuration_test(
 @router.get(
     "/google-workspace-configuration",
     response_model=GoogleWorkspaceTenantConfigurationResponse,
-    summary=(
-        "Read the tenant Google Workspace readiness gate without exposing "
-        "OAuth values."
-    ),
+    summary=("Read the tenant Google Workspace readiness gate without exposing OAuth values."),
 )
 def get_google_workspace_configuration(
     context: WorkspaceAdmin,
@@ -498,8 +491,7 @@ def patch_google_workspace_configuration(
     "/google-workspace-configuration/test",
     response_model=GoogleWorkspaceReadinessTestResponse,
     summary=(
-        "Run a safe tenant Google Workspace readiness probe without calling "
-        "Google providers."
+        "Run a safe tenant Google Workspace readiness probe without calling Google providers."
     ),
 )
 def post_google_workspace_configuration_test(
@@ -507,6 +499,52 @@ def post_google_workspace_configuration_test(
     session: DbSession,
 ) -> GoogleWorkspaceReadinessTestResponse:
     return test_google_workspace_tenant_configuration(session, context=context)
+
+
+@router.get(
+    "/microsoft365-configuration",
+    response_model=Microsoft365TenantConfigurationResponse,
+    summary="Read tenant Microsoft 365 readiness without exposing OAuth values.",
+)
+def get_microsoft365_configuration(
+    context: WorkspaceAdmin,
+    session: DbSession,
+) -> Microsoft365TenantConfigurationResponse:
+    return microsoft365_tenant_configuration_status(session, context=context)
+
+
+@router.patch(
+    "/microsoft365-configuration",
+    response_model=Microsoft365TenantConfigurationResponse,
+    summary="Configure tenant Microsoft 365 Graph OAuth values without echoing secrets.",
+)
+def patch_microsoft365_configuration(
+    payload: Microsoft365TenantConfigurationUpdateRequest,
+    context: WorkspaceAdmin,
+    session: DbSession,
+) -> Microsoft365TenantConfigurationResponse:
+    require_recent_step_up(
+        session,
+        context=context,
+        purpose="connector_credential_change",
+    )
+    return update_microsoft365_tenant_configuration(
+        session,
+        context=context,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/microsoft365-configuration/test",
+    response_model=Microsoft365ReadinessTestResponse,
+    summary="Run a safe Microsoft 365 readiness probe without calling Graph.",
+)
+def post_microsoft365_configuration_test(
+    context: WorkspaceAdmin,
+    session: DbSession,
+) -> Microsoft365ReadinessTestResponse:
+    return test_microsoft365_tenant_configuration(session, context=context)
 
 
 @router.post(
@@ -669,9 +707,7 @@ class TenantAIPolicyPatchRequest(BaseModel):
 
 
 def _ensure_policy_row(session, company_id: str) -> TenantAIPolicy:
-    row = session.scalar(
-        select(TenantAIPolicy).where(TenantAIPolicy.company_id == company_id)
-    )
+    row = session.scalar(select(TenantAIPolicy).where(TenantAIPolicy.company_id == company_id))
     if row is None:
         row = TenantAIPolicy(company_id=company_id)
         session.add(row)
@@ -688,9 +724,7 @@ def _parse_disabled_templates(raw: str | None) -> list[str]:
         parsed = json.loads(raw)
     except json.JSONDecodeError:
         return []
-    return [
-        str(x) for x in parsed if isinstance(x, str)
-    ] if isinstance(parsed, list) else []
+    return [str(x) for x in parsed if isinstance(x, str)] if isinstance(parsed, list) else []
 
 
 @router.get(
@@ -734,18 +768,14 @@ def patch_tenant_ai_policy(
 
     if payload.predictive_bench_strategy_enabled is not None:
         before = bool(getattr(row, "predictive_bench_strategy_enabled", False))
-        row.predictive_bench_strategy_enabled = bool(
-            payload.predictive_bench_strategy_enabled
-        )
+        row.predictive_bench_strategy_enabled = bool(payload.predictive_bench_strategy_enabled)
         audit_metadata["predictive_bench_strategy_enabled"] = {
             "before": before,
             "after": bool(payload.predictive_bench_strategy_enabled),
         }
 
     if payload.disabled_template_types is not None:
-        before_list = _parse_disabled_templates(
-            getattr(row, "disabled_template_types_json", None)
-        )
+        before_list = _parse_disabled_templates(getattr(row, "disabled_template_types_json", None))
         # Validate each value against the canonical DraftTemplateType set
         # so a typo can't silently disable nothing.
         from caseops_api.schemas.drafting_templates import DraftTemplateType
@@ -774,9 +804,7 @@ def patch_tenant_ai_policy(
     session.commit()
     return TenantAIPolicyResponse(
         company_id=row.company_id,
-        predictive_bench_strategy_enabled=bool(
-            row.predictive_bench_strategy_enabled
-        ),
+        predictive_bench_strategy_enabled=bool(row.predictive_bench_strategy_enabled),
         disabled_template_types=_parse_disabled_templates(
             getattr(row, "disabled_template_types_json", None)
         ),

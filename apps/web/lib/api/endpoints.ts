@@ -16,7 +16,10 @@ import {
   type CalendarEventListResponse,
   type CalendarEventSyncResponse,
   type CalendarSyncStatusResponse,
+  type CalendarProviderEventCandidateListResponse,
+  type CalendarProviderEventCandidateRecord,
   type ConnectorRegistryResponse,
+  type ConnectorHealthListResponse,
   type OutlookReadinessTestResponse,
   type OutlookBulkSyncResponse,
   type OutlookTenantConfigurationResponse,
@@ -112,6 +115,15 @@ import {
   type GoogleDriveConnectionStartResponse,
   type GoogleDriveFileListResponse,
   type GoogleDriveStatusResponse,
+  type DriveCandidateListResponse,
+  type DriveCandidateSyncResponse,
+  type DriveSyncControlRecord,
+  type InboundEmailAliasListResponse,
+  type InboundEmailAliasRecord,
+  type InboundEmailEventListResponse,
+  type MailboxMessageReviewResponse,
+  type Microsoft365TenantConfigurationResponse,
+  type NotificationPreferenceResponse,
   type MailboxImportResponse,
   type MailboxStatusResponse,
   type MailboxWatchResponse,
@@ -130,7 +142,10 @@ import {
   calendarEventListResponse,
   calendarEventSyncResponse,
   calendarSyncStatusResponse,
+  calendarProviderEventCandidateListResponse,
+  calendarProviderEventCandidateRecord,
   connectorRegistryResponse,
+  connectorHealthListResponse,
   outlookReadinessTestResponse,
   outlookBulkSyncResponse,
   outlookTenantConfigurationResponse,
@@ -208,6 +223,15 @@ import {
   googleDriveConnectionStartResponse,
   googleDriveFileListResponse,
   googleDriveStatusResponse,
+  driveCandidateListResponse,
+  driveCandidateSyncResponse,
+  driveSyncControlRecord,
+  inboundEmailAliasListResponse,
+  inboundEmailAliasRecord,
+  inboundEmailEventListResponse,
+  mailboxMessageReviewResponse,
+  microsoft365TenantConfigurationResponse,
+  notificationPreferenceResponse,
   mailboxImportResponse,
   mailboxStatusResponse,
   mailboxWatchResponse,
@@ -5704,6 +5728,52 @@ export async function importRecentGmailMessages(input?: {
   return mailboxImportResponse.parse(data);
 }
 
+export async function fetchMailboxImports(input?: {
+  provider?: "gmail" | "outlook_mail";
+  matterId?: string | null;
+  status?: string | null;
+  q?: string | null;
+  limit?: number;
+}): Promise<MailboxImportResponse> {
+  const qs = new URLSearchParams();
+  if (input?.provider) qs.set("provider", input.provider);
+  if (input?.matterId) qs.set("matter_id", input.matterId);
+  if (input?.status) qs.set("status", input.status);
+  if (input?.q) qs.set("q", input.q);
+  qs.set("limit", String(input?.limit ?? 50));
+  const data = await apiRequest<unknown>(`/api/mailbox/imports?${qs.toString()}`);
+  return mailboxImportResponse.parse(data);
+}
+
+export async function reviewMailboxImport(input: {
+  importId: string;
+  action:
+    | "link_metadata"
+    | "create_note"
+    | "create_task"
+    | "request_content_import"
+    | "ignore";
+  matterId?: string | null;
+  noteBody?: string | null;
+  taskTitle?: string | null;
+  taskDescription?: string | null;
+}): Promise<MailboxMessageReviewResponse> {
+  const data = await apiRequest<unknown>(
+    `/api/mailbox/imports/${input.importId}`,
+    {
+      method: "PATCH",
+      body: {
+        action: input.action,
+        matter_id: input.matterId ?? null,
+        note_body: input.noteBody ?? null,
+        task_title: input.taskTitle ?? null,
+        task_description: input.taskDescription ?? null,
+      },
+    },
+  );
+  return mailboxMessageReviewResponse.parse(data);
+}
+
 export async function startGmailWatch(): Promise<MailboxWatchResponse> {
   const data = await apiRequest<unknown>("/api/mailbox/gmail/watch", {
     method: "POST",
@@ -5746,9 +5816,119 @@ export async function listGoogleDriveFiles(input?: {
   return googleDriveFileListResponse.parse(data);
 }
 
+export async function fetchGoogleDriveControls(): Promise<DriveSyncControlRecord> {
+  const data = await apiRequest<unknown>("/api/drive/google/controls");
+  return driveSyncControlRecord.parse(data);
+}
+
+export async function updateGoogleDriveControls(input: {
+  allowedFolders?: string[];
+  blockedFolders?: string[];
+  maxFileSizeBytes?: number;
+  allowedMimeTypes?: string[];
+  mode?: "auto_suggest" | "review_import";
+  autoImportEnabled?: boolean;
+}): Promise<DriveSyncControlRecord> {
+  const data = await apiRequest<unknown>("/api/drive/google/controls", {
+    method: "PATCH",
+    body: {
+      allowed_folders: input.allowedFolders,
+      blocked_folders: input.blockedFolders,
+      max_file_size_bytes: input.maxFileSizeBytes,
+      allowed_mime_types: input.allowedMimeTypes,
+      mode: input.mode,
+      auto_import_enabled: input.autoImportEnabled,
+    },
+  });
+  return driveSyncControlRecord.parse(data);
+}
+
+export async function syncGoogleDriveCandidates(input?: {
+  limit?: number;
+}): Promise<DriveCandidateSyncResponse> {
+  const data = await apiRequest<unknown>("/api/drive/google/candidates/sync", {
+    method: "POST",
+    body: { limit: input?.limit ?? 25 },
+  });
+  return driveCandidateSyncResponse.parse(data);
+}
+
+export async function fetchDriveCandidates(input?: {
+  provider?: "google_drive" | "onedrive_sharepoint";
+  matterId?: string | null;
+  status?: string | null;
+  q?: string | null;
+  limit?: number;
+}): Promise<DriveCandidateListResponse> {
+  const qs = new URLSearchParams();
+  if (input?.provider) qs.set("provider", input.provider);
+  if (input?.matterId) qs.set("matter_id", input.matterId);
+  if (input?.status) qs.set("status", input.status);
+  if (input?.q) qs.set("q", input.q);
+  qs.set("limit", String(input?.limit ?? 50));
+  const data = await apiRequest<unknown>(`/api/drive/candidates?${qs.toString()}`);
+  return driveCandidateListResponse.parse(data);
+}
+
+export async function reviewDriveCandidate(input: {
+  candidateId: string;
+  action: "link_metadata" | "import_file" | "ignore" | "retry";
+  matterId?: string | null;
+}): Promise<DriveCandidateSyncResponse["candidates"][number]> {
+  const data = await apiRequest<unknown>(
+    `/api/drive/candidates/${input.candidateId}`,
+    {
+      method: "PATCH",
+      body: { action: input.action, matter_id: input.matterId ?? null },
+    },
+  );
+  return driveCandidateSyncResponse.shape.candidates.element.parse(
+    (data as { candidate?: unknown }).candidate,
+  );
+}
+
 export async function fetchCalendarSyncStatus(): Promise<CalendarSyncStatusResponse> {
   const data = await apiRequest<unknown>("/api/calendar/sync-status");
   return calendarSyncStatusResponse.parse(data);
+}
+
+export async function fetchCalendarProviderEventCandidates(input?: {
+  provider?: "outlook" | "google_calendar";
+  matterId?: string | null;
+  status?: string | null;
+  limit?: number;
+}): Promise<CalendarProviderEventCandidateListResponse> {
+  const qs = new URLSearchParams();
+  if (input?.provider) qs.set("provider", input.provider);
+  if (input?.matterId) qs.set("matter_id", input.matterId);
+  if (input?.status) qs.set("status", input.status);
+  qs.set("limit", String(input?.limit ?? 50));
+  const data = await apiRequest<unknown>(
+    `/api/calendar/provider-event-candidates?${qs.toString()}`,
+  );
+  return calendarProviderEventCandidateListResponse.parse(data);
+}
+
+export async function reviewCalendarProviderEventCandidate(input: {
+  candidateId: string;
+  action: "accept" | "reject" | "ignore";
+  matterId?: string | null;
+  forceOverwriteLocked?: boolean;
+}): Promise<CalendarProviderEventCandidateRecord> {
+  const data = await apiRequest<unknown>(
+    `/api/calendar/provider-event-candidates/${input.candidateId}`,
+    {
+      method: "PATCH",
+      body: {
+        action: input.action,
+        matter_id: input.matterId ?? null,
+        force_overwrite_locked: input.forceOverwriteLocked ?? false,
+      },
+    },
+  );
+  return calendarProviderEventCandidateRecord.parse(
+    (data as { candidate?: unknown }).candidate,
+  );
 }
 
 // BUG-039 (Hari 2026-05-09) — bounded manual bulk Outlook sync.
@@ -5865,6 +6045,55 @@ export async function testGoogleWorkspaceTenantConfiguration(): Promise<GoogleWo
   return googleWorkspaceReadinessTestResponse.parse(data);
 }
 
+export type Microsoft365TenantConfigurationInput = {
+  clientId?: string | null;
+  clientSecret?: string | null;
+  tenantId?: string | null;
+  redirectUri?: string | null;
+  scopes?: string[] | null;
+  adminConsentApproved: boolean;
+  scopesApproved: boolean;
+  mailEnabled: boolean;
+  calendarEnabled: boolean;
+  driveEnabled: boolean;
+  enabled: boolean;
+};
+
+export async function fetchMicrosoft365TenantConfiguration(): Promise<Microsoft365TenantConfigurationResponse> {
+  const data = await apiRequest<unknown>("/api/admin/microsoft365-configuration");
+  return microsoft365TenantConfigurationResponse.parse(data);
+}
+
+export async function updateMicrosoft365TenantConfiguration(
+  input: Microsoft365TenantConfigurationInput,
+): Promise<Microsoft365TenantConfigurationResponse> {
+  const data = await apiRequest<unknown>("/api/admin/microsoft365-configuration", {
+    method: "PATCH",
+    body: {
+      client_id: input.clientId || null,
+      client_secret: input.clientSecret || null,
+      tenant_id: input.tenantId || null,
+      redirect_uri: input.redirectUri || null,
+      scopes: input.scopes,
+      admin_consent_approved: input.adminConsentApproved,
+      scopes_approved: input.scopesApproved,
+      mail_enabled: input.mailEnabled,
+      calendar_enabled: input.calendarEnabled,
+      drive_enabled: input.driveEnabled,
+      enabled: input.enabled,
+    },
+  });
+  return microsoft365TenantConfigurationResponse.parse(data);
+}
+
+export async function testMicrosoft365TenantConfiguration(): Promise<Microsoft365TenantConfigurationResponse> {
+  await apiRequest<unknown>("/api/admin/microsoft365-configuration/test", {
+    method: "POST",
+    body: {},
+  });
+  return fetchMicrosoft365TenantConfiguration();
+}
+
 export async function listProviderOperations(input?: {
   includeResolved?: boolean;
   limit?: number;
@@ -5887,6 +6116,123 @@ export async function fetchProviderReadiness(): Promise<ProviderReadinessListRes
 export async function fetchTenantIntegrations(): Promise<TenantConnectorRegistryResponse> {
   const data = await apiRequest<unknown>("/api/admin/integrations");
   return tenantConnectorRegistryResponse.parse(data);
+}
+
+export async function fetchTenantConnectorHealth(): Promise<ConnectorHealthListResponse> {
+  const data = await apiRequest<unknown>("/api/admin/integrations/health");
+  return connectorHealthListResponse.parse(data);
+}
+
+export async function checkTenantConnectorHealth(): Promise<ConnectorHealthListResponse> {
+  const data = await apiRequest<unknown>("/api/admin/integrations/health/check", {
+    method: "POST",
+    body: {},
+  });
+  return connectorHealthListResponse.parse({ health: (data as { health?: unknown }).health });
+}
+
+export async function fetchInboundEmailAliases(): Promise<InboundEmailAliasListResponse> {
+  const data = await apiRequest<unknown>("/api/mailbox/inbound-aliases");
+  return inboundEmailAliasListResponse.parse(data);
+}
+
+export async function createInboundEmailAlias(input?: {
+  matterId?: string | null;
+  status?: "enabled" | "disabled";
+  allowedSenders?: string[];
+  allowedDomains?: string[];
+  retentionDays?: number;
+}): Promise<InboundEmailAliasRecord> {
+  const data = await apiRequest<unknown>("/api/mailbox/inbound-aliases", {
+    method: "POST",
+    body: {
+      matter_id: input?.matterId ?? null,
+      status: input?.status ?? "disabled",
+      allowed_senders: input?.allowedSenders ?? [],
+      allowed_domains: input?.allowedDomains ?? [],
+      retention_days: input?.retentionDays ?? 30,
+    },
+  });
+  return inboundEmailAliasRecord.parse(data);
+}
+
+export async function updateInboundEmailAlias(input: {
+  aliasId: string;
+  status?: "enabled" | "disabled";
+  allowedSenders?: string[];
+  allowedDomains?: string[];
+  retentionDays?: number;
+}): Promise<InboundEmailAliasRecord> {
+  const data = await apiRequest<unknown>(
+    `/api/mailbox/inbound-aliases/${input.aliasId}`,
+    {
+      method: "PATCH",
+      body: {
+        status: input.status,
+        allowed_senders: input.allowedSenders,
+        allowed_domains: input.allowedDomains,
+        retention_days: input.retentionDays,
+      },
+    },
+  );
+  return inboundEmailAliasRecord.parse(data);
+}
+
+export async function fetchInboundEmailEvents(input?: {
+  status?: string | null;
+  matterId?: string | null;
+  limit?: number;
+}): Promise<InboundEmailEventListResponse> {
+  const qs = new URLSearchParams();
+  if (input?.status) qs.set("status", input.status);
+  if (input?.matterId) qs.set("matter_id", input.matterId);
+  qs.set("limit", String(input?.limit ?? 50));
+  const data = await apiRequest<unknown>(`/api/mailbox/inbound-events?${qs.toString()}`);
+  return inboundEmailEventListResponse.parse(data);
+}
+
+export async function fetchNotificationPreferences(): Promise<NotificationPreferenceResponse> {
+  const data = await apiRequest<unknown>("/api/notification-preferences");
+  return notificationPreferenceResponse.parse(data);
+}
+
+export async function updateUserNotificationPreferences(input: {
+  channels?: Record<string, boolean>;
+  eventCategories?: Record<string, boolean>;
+  digestFrequency?: "immediate" | "daily" | "weekly" | "disabled";
+  optOutCategories?: string[];
+}): Promise<NotificationPreferenceResponse> {
+  const data = await apiRequest<unknown>("/api/notification-preferences", {
+    method: "PATCH",
+    body: {
+      channels: input.channels,
+      event_categories: input.eventCategories,
+      digest_frequency: input.digestFrequency,
+      opt_out_categories: input.optOutCategories,
+    },
+  });
+  return notificationPreferenceResponse.parse(data);
+}
+
+export async function fetchTenantNotificationPreferences(): Promise<NotificationPreferenceResponse> {
+  const data = await apiRequest<unknown>("/api/admin/notification-preferences");
+  return notificationPreferenceResponse.parse(data);
+}
+
+export async function updateTenantNotificationPreferences(input: {
+  channels?: Record<string, boolean>;
+  eventCategories?: Record<string, boolean>;
+  digestFrequency?: "immediate" | "daily" | "weekly" | "disabled";
+}): Promise<NotificationPreferenceResponse> {
+  const data = await apiRequest<unknown>("/api/admin/notification-preferences", {
+    method: "PATCH",
+    body: {
+      channels: input.channels,
+      event_categories: input.eventCategories,
+      digest_frequency: input.digestFrequency,
+    },
+  });
+  return notificationPreferenceResponse.parse(data);
 }
 
 async function mutateProviderOperation(
@@ -6539,6 +6885,11 @@ export async function fetchPlatformMarginAlerts(): Promise<PlatformMarginAlertsR
 export async function fetchPlatformIntegrations(): Promise<ConnectorRegistryResponse> {
   const data = await apiRequest<unknown>("/api/platform-admin/integrations");
   return connectorRegistryResponse.parse(data);
+}
+
+export async function fetchPlatformConnectorHealth(): Promise<ConnectorHealthListResponse> {
+  const data = await apiRequest<unknown>("/api/platform-admin/integrations/health");
+  return connectorHealthListResponse.parse(data);
 }
 
 export async function fetchProviderCostProfiles(): Promise<ProviderCostProfileListResponse> {

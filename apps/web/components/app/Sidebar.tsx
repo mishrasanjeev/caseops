@@ -10,6 +10,7 @@ import {
   CreditCard,
   FileSignature,
   Gavel,
+  HardDrive,
   Inbox,
   LayoutDashboard,
   ListChecks,
@@ -66,6 +67,14 @@ const NAV: NavItem[] = [
   // Phase B / J08 / M08 — unified view across hearings + tasks +
   // matter_deadlines. Closes BUG-029.
   { href: "/app/calendar", label: "Calendar", icon: CalendarDays, section: "work" },
+  { href: "/app/mailbox", label: "Mailbox", icon: Inbox, section: "work" },
+  { href: "/app/drive", label: "Drive", icon: HardDrive, section: "work" },
+  {
+    href: "/app/notification-preferences",
+    label: "Notifications",
+    icon: ListTodo,
+    section: "work",
+  },
   { href: "/app/research", label: "Research", icon: LibraryBig, section: "intel" },
   { href: "/app/drafting", label: "Drafting", icon: FileSignature, section: "intel" },
   {
@@ -116,6 +125,20 @@ const NAV: NavItem[] = [
     href: "/app/admin/integrations",
     label: "Integrations",
     icon: PlugZap,
+    section: "admin",
+    requiresCapability: "workspace:admin",
+  },
+  {
+    href: "/app/admin/microsoft365",
+    label: "Microsoft 365",
+    icon: PlugZap,
+    section: "admin",
+    requiresCapability: "workspace:admin",
+  },
+  {
+    href: "/app/admin/inbound-email",
+    label: "Inbound email",
+    icon: Inbox,
     section: "admin",
     requiresCapability: "workspace:admin",
   },

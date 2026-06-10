@@ -4,6 +4,7 @@ The connector imports Gmail metadata into CaseOps review surfaces. It does not
 store raw provider payloads or message bodies, and attachment bytes are fetched
 only after a tenant user explicitly approves a candidate.
 """
+
 from __future__ import annotations
 
 import base64
@@ -38,6 +39,10 @@ from caseops_api.db.models import (
     MailboxWebhookEvent,
     MailboxWebhookStatus,
     Matter,
+    MatterNote,
+    MatterTask,
+    MatterTaskPriority,
+    MatterTaskStatus,
     UserMailboxConnection,
 )
 from caseops_api.schemas.mailbox import (
@@ -52,9 +57,12 @@ from caseops_api.schemas.mailbox import (
     MailboxImportResponse,
     MailboxImportSummary,
     MailboxMessageImportRecord,
+    MailboxMessageReviewRequest,
+    MailboxMessageReviewResponse,
     MailboxStatusResponse,
     MailboxWatchResponse,
     MailboxWebhookIngestResponse,
+    OutlookMailCandidateCreateRequest,
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.calendar_sync import (
@@ -493,6 +501,7 @@ def _message_record(row: MailboxMessageImport) -> MailboxMessageImportRecord:
         id=row.id,
         company_id=row.company_id,
         mailbox_connection_id=row.mailbox_connection_id,
+        provider=row.connection.provider,  # type: ignore[arg-type]
         matter_id=row.matter_id,
         communication_id=row.communication_id,
         provider_message_id=row.provider_message_id,
@@ -927,12 +936,27 @@ def list_message_imports(
     *,
     context: SessionContext,
     limit: int = 50,
+    provider: str | None = None,
+    matter_id: str | None = None,
+    status_filter: str | None = None,
+    q: str | None = None,
 ) -> MailboxImportResponse:
+    filters = [MailboxMessageImport.company_id == context.company.id]
+    if provider:
+        filters.append(UserMailboxConnection.provider == provider)
+    if matter_id:
+        filters.append(MailboxMessageImport.matter_id == matter_id)
+    if status_filter:
+        filters.append(MailboxMessageImport.status == status_filter)
+    if q:
+        like = f"%{q.strip()}%"
+        filters.append(MailboxMessageImport.subject.ilike(like))
     rows = list(
         session.scalars(
             select(MailboxMessageImport)
             .options(joinedload(MailboxMessageImport.connection))
-            .where(MailboxMessageImport.company_id == context.company.id)
+            .join(UserMailboxConnection)
+            .where(*filters)
             .order_by(MailboxMessageImport.updated_at.desc())
             .limit(max(1, min(limit, 100)))
         )
@@ -957,6 +981,302 @@ def list_message_imports(
     )
 
 
+def _load_message_import_for_review(
+    session: Session,
+    *,
+    context: SessionContext,
+    import_id: str,
+) -> MailboxMessageImport:
+    row = session.scalar(
+        select(MailboxMessageImport)
+        .options(joinedload(MailboxMessageImport.connection))
+        .where(
+            MailboxMessageImport.id == import_id,
+            MailboxMessageImport.company_id == context.company.id,
+        )
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Mailbox import not found.")
+    if row.matter_id is None:
+        if row.connection.membership_id != context.membership.id:
+            raise HTTPException(status_code=404, detail="Mailbox import not found.")
+        return row
+    matter = session.get(Matter, row.matter_id)
+    if matter is None:
+        raise HTTPException(status_code=404, detail="Matter not found.")
+    assert_access(session, context=context, matter=matter)
+    return row
+
+
+def _matter_for_review(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str | None,
+) -> Matter:
+    if not matter_id:
+        raise HTTPException(status_code=400, detail="matter_id is required.")
+    matter = session.get(Matter, matter_id)
+    if matter is None or matter.company_id != context.company.id:
+        raise HTTPException(status_code=404, detail="Matter not found.")
+    assert_access(session, context=context, matter=matter)
+    return matter
+
+
+def _ensure_metadata_communication(
+    session: Session,
+    *,
+    context: SessionContext,
+    row: MailboxMessageImport,
+    matter: Matter,
+) -> Communication:
+    if row.communication_id:
+        existing = session.get(Communication, row.communication_id)
+        if existing is not None:
+            return existing
+    provider = str(row.connection.provider)
+    communication = Communication(
+        company_id=context.company.id,
+        matter_id=matter.id,
+        direction=CommunicationDirection.INBOUND,
+        channel=CommunicationChannel.EMAIL,
+        subject=(row.subject or "").strip()[:500] or None,
+        body=(row.snippet or "")[:_MAX_SNIPPET_CHARS] or None,
+        recipient_name=row.sender_name,
+        recipient_email=None,
+        status=CommunicationStatus.LOGGED,
+        occurred_at=row.occurred_at or datetime.now(UTC),
+        external_message_id=f"{provider}:{row.provider_message_id}",
+        created_by_membership_id=context.membership.id,
+        metadata_json={
+            "source": "mailbox_metadata_review",
+            "provider": provider,
+            "provider_message_id_hash": _hash(row.provider_message_id),
+            "provider_thread_id_hash": _hash(row.provider_thread_id),
+            "body_preview_chars": len(row.snippet or ""),
+            "automation_mode": "review_first_metadata_only",
+        },
+    )
+    session.add(communication)
+    session.flush()
+    row.communication_id = communication.id
+    return communication
+
+
+def review_message_import(
+    session: Session,
+    *,
+    context: SessionContext,
+    import_id: str,
+    payload: MailboxMessageReviewRequest,
+) -> MailboxMessageReviewResponse:
+    row = _load_message_import_for_review(session, context=context, import_id=import_id)
+    matter: Matter | None = None
+    communication: Communication | None = None
+    note: MatterNote | None = None
+    task: MatterTask | None = None
+    content_import_queued = False
+
+    if payload.action == "ignore":
+        row.status = MailboxImportStatus.IGNORED
+        session.add(row)
+        record_from_context(
+            session,
+            context,
+            action="mailbox.message.ignored",
+            target_type="mailbox_message_import",
+            target_id=row.id,
+            metadata={"provider": row.connection.provider},
+        )
+        session.commit()
+        return MailboxMessageReviewResponse(import_record=_message_record(row))
+
+    if payload.action in {"link_metadata", "create_note", "create_task"}:
+        matter = _matter_for_review(
+            session,
+            context=context,
+            matter_id=payload.matter_id or row.matter_id,
+        )
+        communication = _ensure_metadata_communication(
+            session,
+            context=context,
+            row=row,
+            matter=matter,
+        )
+        row.matter_id = matter.id
+        row.status = MailboxImportStatus.LINKED_METADATA
+        for candidate in row.attachment_candidates:
+            candidate.matter_id = matter.id
+            session.add(candidate)
+        if payload.action == "create_note":
+            body = payload.note_body or _default_note_body(row)
+            note = MatterNote(
+                matter_id=matter.id,
+                author_membership_id=context.membership.id,
+                body=body,
+            )
+            session.add(note)
+            session.flush()
+        if payload.action == "create_task":
+            task = MatterTask(
+                matter_id=matter.id,
+                created_by_membership_id=context.membership.id,
+                owner_membership_id=context.membership.id,
+                title=(payload.task_title or row.subject or "Review linked email")[:255],
+                description=payload.task_description or row.snippet,
+                status=MatterTaskStatus.TODO,
+                priority=MatterTaskPriority.MEDIUM,
+            )
+            session.add(task)
+            session.flush()
+        session.add(row)
+        record_from_context(
+            session,
+            context,
+            action=f"mailbox.message.{payload.action}",
+            target_type="mailbox_message_import",
+            target_id=row.id,
+            matter_id=matter.id,
+            metadata={
+                "provider": row.connection.provider,
+                "communication_id": redact_identifier(communication.id),
+                "note_id": redact_identifier(note.id) if note else None,
+                "task_id": redact_identifier(task.id) if task else None,
+            },
+        )
+        session.commit()
+        return MailboxMessageReviewResponse(
+            import_record=_message_record(row),
+            matter_id=matter.id,
+            communication_id=communication.id,
+            note_id=note.id if note else None,
+            task_id=task.id if task else None,
+        )
+
+    if payload.action == "request_content_import":
+        if row.matter_id is None:
+            matter = _matter_for_review(session, context=context, matter_id=payload.matter_id)
+            row.matter_id = matter.id
+        else:
+            matter = _matter_for_review(session, context=context, matter_id=row.matter_id)
+        row.status = MailboxImportStatus.CONTENT_IMPORT_REQUESTED
+        session.add(row)
+        record_from_context(
+            session,
+            context,
+            action="mailbox.message.content_import_requested",
+            target_type="mailbox_message_import",
+            target_id=row.id,
+            matter_id=matter.id,
+            metadata={
+                "provider": row.connection.provider,
+                "raw_body_imported": False,
+                "attachment_count": row.attachment_count,
+            },
+        )
+        session.commit()
+        content_import_queued = True
+        return MailboxMessageReviewResponse(
+            import_record=_message_record(row),
+            matter_id=matter.id,
+            communication_id=row.communication_id,
+            content_import_queued=content_import_queued,
+        )
+
+    raise HTTPException(status_code=400, detail="Unsupported mailbox review action.")
+
+
+def _default_note_body(row: MailboxMessageImport) -> str:
+    lines = ["Linked email metadata"]
+    if row.subject:
+        lines.append(f"Subject: {row.subject}")
+    if row.sender_name:
+        lines.append(f"Sender: {row.sender_name}")
+    if row.occurred_at:
+        lines.append(f"Date: {row.occurred_at.isoformat()}")
+    if row.snippet:
+        lines.append("")
+        lines.append(row.snippet)
+    return "\n".join(lines)[:4000]
+
+
+def create_outlook_mail_candidate(
+    session: Session,
+    *,
+    context: SessionContext,
+    payload: OutlookMailCandidateCreateRequest,
+) -> MailboxMessageImportRecord:
+    matter: Matter | None = None
+    if payload.suggested_matter_id:
+        matter = _matter_for_review(
+            session,
+            context=context,
+            matter_id=payload.suggested_matter_id,
+        )
+    connection = session.scalar(
+        select(UserMailboxConnection).where(
+            UserMailboxConnection.company_id == context.company.id,
+            UserMailboxConnection.membership_id == context.membership.id,
+            UserMailboxConnection.provider == MailboxProvider.OUTLOOK_MAIL,
+        )
+    )
+    if connection is None:
+        connection = UserMailboxConnection(
+            company_id=context.company.id,
+            membership_id=context.membership.id,
+            provider=MailboxProvider.OUTLOOK_MAIL,
+            provider_account_id="local-safe-review",
+            display_email=None,
+            status=MailboxConnectionStatus.ERROR,
+            scopes_json=["Mail.ReadBasic"],
+        )
+        session.add(connection)
+        session.flush()
+    existing = session.scalar(
+        select(MailboxMessageImport)
+        .options(joinedload(MailboxMessageImport.connection))
+        .where(
+            MailboxMessageImport.mailbox_connection_id == connection.id,
+            MailboxMessageImport.provider_message_id == payload.provider_message_id,
+        )
+    )
+    if existing is not None:
+        return _message_record(existing)
+    row = MailboxMessageImport(
+        company_id=context.company.id,
+        mailbox_connection_id=connection.id,
+        matter_id=matter.id if matter else None,
+        provider_message_id=payload.provider_message_id,
+        provider_thread_id=payload.provider_thread_id,
+        subject=(payload.subject or "")[:500] or None,
+        sender_email_hash=_hash(payload.sender_email),
+        sender_name=payload.sender_name,
+        occurred_at=payload.occurred_at,
+        snippet=(payload.snippet or "")[:_MAX_SNIPPET_CHARS] or None,
+        labels_json=list(payload.labels),
+        attachment_count=payload.attachment_count,
+        status=MailboxImportStatus.NEW,
+    )
+    session.add(row)
+    session.flush()
+    row.connection = connection
+    record_from_context(
+        session,
+        context,
+        action="mailbox.outlook_candidate.created",
+        target_type="mailbox_message_import",
+        target_id=row.id,
+        matter_id=matter.id if matter else None,
+        metadata={
+            "provider": MailboxProvider.OUTLOOK_MAIL,
+            "raw_body_imported": False,
+            "provider_message_id_hash": _hash(payload.provider_message_id),
+        },
+    )
+    session.commit()
+    return _message_record(row)
+
+
 def list_attachment_candidates(
     session: Session,
     *,
@@ -972,8 +1292,7 @@ def list_attachment_candidates(
             )
             .where(
                 MailboxAttachmentCandidate.company_id == context.company.id,
-                MailboxAttachmentCandidate.status
-                == MailboxAttachmentCandidateStatus.NEEDS_REVIEW,
+                MailboxAttachmentCandidate.status == MailboxAttachmentCandidateStatus.NEEDS_REVIEW,
             )
             .order_by(MailboxAttachmentCandidate.created_at.asc())
             .limit(max(1, min(limit, 100)))
@@ -1201,9 +1520,7 @@ def ingest_gmail_webhook(
             select(UserMailboxConnection)
             .options(
                 joinedload(UserMailboxConnection.company),
-                joinedload(UserMailboxConnection.membership).joinedload(
-                    CompanyMembership.user
-                ),
+                joinedload(UserMailboxConnection.membership).joinedload(CompanyMembership.user),
             )
             .where(
                 func.lower(UserMailboxConnection.display_email) == email_address,

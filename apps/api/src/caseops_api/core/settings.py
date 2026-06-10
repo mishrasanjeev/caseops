@@ -200,6 +200,16 @@ class Settings(BaseSettings):
     google_drive_client_secret: str | None = Field(default=None)
     google_drive_redirect_uri: str | None = Field(default=None)
 
+    # Inbound email-to-matter aliases. Production mode must provide a
+    # webhook secret; disabled mode rejects all inbound provider posts.
+    inbound_email_provider_mode: str = Field(
+        default="disabled",
+        pattern="^(disabled|mock|production)$",
+    )
+    inbound_email_domain: str = Field(default="inbound.disabled.caseops.local")
+    inbound_email_webhook_secret: str | None = Field(default=None)
+    inbound_email_signature_header: str = Field(default="x-caseops-inbound-signature")
+
     # Legal update source ingestion. Deployment-scheduled jobs no-op
     # until explicitly enabled; admin-triggered syncs remain explicit.
     legal_update_sync_enabled: bool = Field(default=False)

@@ -11,7 +11,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-MailboxProviderLiteral = Literal["gmail"]
+MailboxProviderLiteral = Literal["gmail", "outlook_mail"]
 MailboxConnectionStatusLiteral = Literal["connected", "revoked", "error"]
 MailboxImportStatusLiteral = Literal[
     "queued",
@@ -22,6 +22,10 @@ MailboxImportStatusLiteral = Literal[
     "dead_letter",
     "ignored",
     "resolved",
+    "new",
+    "linked_metadata",
+    "content_import_requested",
+    "content_imported",
 ]
 MailboxAttachmentCandidateStatusLiteral = Literal[
     "needs_review",
@@ -31,6 +35,13 @@ MailboxAttachmentCandidateStatusLiteral = Literal[
 ]
 MailboxWebhookStatusLiteral = Literal["queued", "processed", "failed", "dead_letter"]
 MailboxReviewActionLiteral = Literal["approve_import", "reject"]
+MailboxMessageReviewActionLiteral = Literal[
+    "link_metadata",
+    "create_note",
+    "create_task",
+    "request_content_import",
+    "ignore",
+]
 
 
 class MailboxConnectionRecord(BaseModel):
@@ -114,6 +125,23 @@ class MailboxImportResponse(BaseModel):
     imports: list[MailboxMessageImportRecord]
 
 
+class MailboxMessageReviewRequest(BaseModel):
+    action: MailboxMessageReviewActionLiteral
+    matter_id: str | None = Field(default=None, min_length=1, max_length=36)
+    note_body: str | None = Field(default=None, max_length=4000)
+    task_title: str | None = Field(default=None, max_length=255)
+    task_description: str | None = Field(default=None, max_length=2000)
+
+
+class MailboxMessageReviewResponse(BaseModel):
+    import_record: MailboxMessageImportRecord
+    matter_id: str | None = None
+    communication_id: str | None = None
+    note_id: str | None = None
+    task_id: str | None = None
+    content_import_queued: bool = False
+
+
 class MailboxAttachmentCandidateRecord(BaseModel):
     id: str
     company_id: str
@@ -155,4 +183,17 @@ class MailboxWebhookIngestResponse(BaseModel):
     accepted: bool
     status: MailboxWebhookStatusLiteral
     event_id: str | None = None
+
+
+class OutlookMailCandidateCreateRequest(BaseModel):
+    provider_message_id: str = Field(min_length=1, max_length=255)
+    provider_thread_id: str | None = Field(default=None, max_length=255)
+    subject: str | None = Field(default=None, max_length=500)
+    sender_email: str | None = Field(default=None, max_length=320)
+    sender_name: str | None = Field(default=None, max_length=255)
+    occurred_at: datetime | None = None
+    snippet: str | None = Field(default=None, max_length=1000)
+    labels: list[str] = Field(default_factory=list)
+    attachment_count: int = Field(default=0, ge=0, le=1000)
+    suggested_matter_id: str | None = Field(default=None, max_length=36)
 

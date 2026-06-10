@@ -9,6 +9,7 @@ Two endpoints:
 - ``GET /api/admin/notifications`` — tenancy-scoped paged list of
   reminder rows for the matter-ops / admin dashboard.
 """
+
 from __future__ import annotations
 
 import json
@@ -33,11 +34,20 @@ from caseops_api.schemas.calendar import (
     NotificationRuleRecord,
     NotificationRuleUpdateRequest,
 )
+from caseops_api.schemas.notification_preferences import (
+    NotificationPreferenceResponse,
+    NotificationPreferenceUpdateRequest,
+)
 from caseops_api.services.communications import (
     apply_sendgrid_communication_event,
 )
 from caseops_api.services.hearing_reminders import apply_sendgrid_event
 from caseops_api.services.identity import SessionContext
+from caseops_api.services.notification_preferences import (
+    notification_preferences,
+    update_tenant_notification_preferences,
+    update_user_notification_preferences,
+)
 from caseops_api.services.notification_rules import (
     create_notification_rule,
     delete_notification_rule,
@@ -51,10 +61,10 @@ logger = logging.getLogger(__name__)
 webhook_router = APIRouter()
 admin_router = APIRouter()
 rules_router = APIRouter()
+preferences_router = APIRouter()
 
-AdminContext = Annotated[
-    SessionContext, Depends(require_capability("notifications:manage"))
-]
+AdminContext = Annotated[SessionContext, Depends(require_capability("notifications:manage"))]
+PreferenceContext = Annotated[SessionContext, Depends(require_capability("calendar:view"))]
 
 
 class HearingReminderRecord(BaseModel):
@@ -68,7 +78,11 @@ class HearingReminderRecord(BaseModel):
     channel: str
     scheduled_for: datetime
     status: Literal[
-        "queued", "sent", "delivered", "failed", "cancelled",
+        "queued",
+        "sent",
+        "delivered",
+        "failed",
+        "cancelled",
     ]
     provider: str | None
     provider_message_id: str | None
@@ -140,9 +154,7 @@ def _verify_sendgrid_signature(
             "SendGrid webhook signature key MISSING in non-local env — "
             "rejecting webhook to prevent silent fail-open.",
         )
-        raise WebhookConfigError(
-            "SendGrid webhook public key is not configured."
-        )
+        raise WebhookConfigError("SendGrid webhook public key is not configured.")
     if not signature or not timestamp:
         return False
     try:
@@ -154,8 +166,7 @@ def _verify_sendgrid_signature(
     except ImportError as exc:
         if local:
             logger.warning(
-                "cryptography lib unavailable in local env; "
-                "skipping sig check",
+                "cryptography lib unavailable in local env; skipping sig check",
             )
             return True
         logger.error(
@@ -191,7 +202,10 @@ async def sendgrid_events(
     settings = get_settings()
     try:
         valid = _verify_sendgrid_signature(
-            body, signature, timestamp, settings.sendgrid_webhook_public_key,
+            body,
+            signature,
+            timestamp,
+            settings.sendgrid_webhook_public_key,
         )
     except WebhookConfigError as exc:
         # P0-004: fail closed when prod isn't configured to verify.
@@ -232,7 +246,8 @@ async def sendgrid_events(
         # Phase B M11 slice 2 (FT-048).
         hit_reminder = apply_sendgrid_event(session, event=ev)
         hit_communication = apply_sendgrid_communication_event(
-            session, event=ev,
+            session,
+            event=ev,
         )
         if hit_reminder or hit_communication:
             matched += 1
@@ -278,8 +293,7 @@ async def list_admin_notifications(
     # count is bounded (hearings * offsets * users).
     all_rows = list(
         session.scalars(
-            select(HearingReminder)
-            .where(HearingReminder.company_id == context.company.id)
+            select(HearingReminder).where(HearingReminder.company_id == context.company.id)
         )
     )
     totals = {
@@ -298,6 +312,64 @@ async def list_admin_notifications(
         total_sent=totals["sent"],
         total_delivered=totals["delivered"],
         total_failed=totals["failed"],
+    )
+
+
+@admin_router.get(
+    "/notification-preferences",
+    response_model=NotificationPreferenceResponse,
+    summary="Read tenant and current-user notification preferences.",
+)
+async def get_admin_notification_preferences(
+    context: AdminContext,
+    session: DbSession,
+) -> NotificationPreferenceResponse:
+    return notification_preferences(session, context=context)
+
+
+@admin_router.patch(
+    "/notification-preferences",
+    response_model=NotificationPreferenceResponse,
+    summary="Update tenant-level notification defaults and policy.",
+)
+async def patch_admin_notification_preferences(
+    context: AdminContext,
+    session: DbSession,
+    payload: NotificationPreferenceUpdateRequest,
+) -> NotificationPreferenceResponse:
+    return update_tenant_notification_preferences(
+        session,
+        context=context,
+        payload=payload,
+    )
+
+
+@preferences_router.get(
+    "",
+    response_model=NotificationPreferenceResponse,
+    summary="Read current user's notification preferences.",
+)
+async def get_notification_preferences(
+    context: PreferenceContext,
+    session: DbSession,
+) -> NotificationPreferenceResponse:
+    return notification_preferences(session, context=context)
+
+
+@preferences_router.patch(
+    "",
+    response_model=NotificationPreferenceResponse,
+    summary="Update current user's notification opt-in/opt-out preferences.",
+)
+async def patch_notification_preferences(
+    context: PreferenceContext,
+    session: DbSession,
+    payload: NotificationPreferenceUpdateRequest,
+) -> NotificationPreferenceResponse:
+    return update_user_notification_preferences(
+        session,
+        context=context,
+        payload=payload,
     )
 
 

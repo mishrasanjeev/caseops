@@ -31,12 +31,21 @@ POST /api/admin/provider-operations/jobs/{operation_id}/replay
 POST /api/admin/provider-operations/jobs/{operation_id}/ignore
 POST /api/admin/provider-operations/jobs/{operation_id}/mark-resolved
 GET /api/admin/integrations
+GET /api/admin/integrations/health
+POST /api/admin/integrations/health/check
+GET /api/platform-admin/integrations/health
+GET /api/admin/microsoft365-configuration
+PATCH /api/admin/microsoft365-configuration
+POST /api/admin/microsoft365-configuration/test
 POST /api/calendar/connections/google-calendar/start
 GET /api/calendar/connections/google-calendar/callback
 POST /api/calendar/sync/google-calendar/hearings/{hearing_id}
 POST /api/calendar/sync/google-calendar/tasks/{task_id}
 POST /api/calendar/sync/google-calendar/deadlines/{deadline_id}
 POST /api/calendar/sync/google-calendar
+GET /api/calendar/provider-event-candidates
+POST /api/calendar/provider-event-candidates
+PATCH /api/calendar/provider-event-candidates/{candidate_id}
 POST /api/admin/google-calendar-sync/replay
 GET /api/mailbox/gmail/status
 POST /api/mailbox/gmail/start
@@ -46,8 +55,25 @@ POST /api/mailbox/gmail/import
 POST /api/mailbox/gmail/watch
 POST /api/mailbox/gmail/webhook
 GET /api/mailbox/imports
+PATCH /api/mailbox/imports/{import_id}
+POST /api/mailbox/outlook/candidates
 GET /api/mailbox/attachment-candidates
 PATCH /api/mailbox/attachment-candidates/{candidate_id}
+GET /api/mailbox/inbound-aliases
+POST /api/mailbox/inbound-aliases
+PATCH /api/mailbox/inbound-aliases/{alias_id}
+POST /api/mailbox/inbound/webhook
+GET /api/mailbox/inbound-events
+PATCH /api/mailbox/inbound-events/{event_id}
+GET /api/drive/google/controls
+PATCH /api/drive/google/controls
+POST /api/drive/google/candidates/sync
+GET /api/drive/candidates
+PATCH /api/drive/candidates/{candidate_id}
+GET /api/notification-preferences
+PATCH /api/notification-preferences
+GET /api/admin/notification-preferences
+PATCH /api/admin/notification-preferences
 GET /api/case-tracking/support-matrix
 GET /api/platform-admin/case-tracking/support-matrix
 POST /api/platform-admin/case-tracking/support-matrix
@@ -62,6 +88,64 @@ profit, gross margin, or platform-only notes.
 
 The readiness response reports config names and approval keys only. It must not
 return credential values.
+
+## Connector Health And Review-First Automation - 2026-06-10
+
+Current state:
+
+- Durable connector-health records exist per tenant/provider/account for:
+  Google Workspace, Gmail, Google Drive, Google Calendar, Microsoft 365,
+  Outlook Mail, Outlook Calendar, OneDrive/SharePoint, email delivery, SMS, and
+  WhatsApp.
+- Tenant admins use `/app/admin/integrations` and
+  `GET/POST /api/admin/integrations/health(/check)` to see configured state,
+  connected state, last success/failure, redacted error category, required and
+  granted scopes, missing scopes, token expiry/refresh labels, webhook/polling
+  status, provider rate-limit status, next retry, disabled reason, setup
+  actions, and provider-operations links.
+- Founder/platform admins use `/app/platform-admin/integrations` and
+  `GET /api/platform-admin/integrations/health` for cross-tenant status. The
+  founder view may show operational alerts and redacted categories; it must not
+  show OAuth tokens, client secrets, refresh tokens, raw provider payloads, raw
+  provider errors, tenant documents, or internal cost/profit fields to tenants.
+- Health checks derive from local durable state and safe configuration checks.
+  They do not mutate provider data or perform uncontrolled provider calls.
+
+Review-first queues:
+
+- `/app/mailbox` lists Gmail and Outlook Mail metadata candidates. Users can
+  link metadata, create matter notes/tasks, request content import, ignore, and
+  safely bulk-ignore. Raw email bodies are not imported automatically.
+- `/app/drive` lists Google Drive and OneDrive/SharePoint candidates. Users can
+  link metadata, explicitly import selected content, ignore, and retry. File
+  imports must pass the existing storage/security/OCR/document-processing path.
+  Auto-import is forced off.
+- `/app/calendar/conflicts` lists provider calendar event candidates and
+  conflicts. Accept/reject/ignore actions are manual. Manual-locked CaseOps
+  hearings require explicit override and provider deletion does not delete
+  CaseOps hearings without review.
+- `/app/admin/microsoft365` stores tenant Microsoft 365 setup/readiness state.
+  Client secrets are accepted only as input and are not returned.
+- `/app/admin/inbound-email` manages disabled-by-default tenant/matter aliases
+  and inbound metadata events. Production inbound webhook mode requires provider
+  signature verification; disabled mode rejects inbound email.
+- `/app/notification-preferences` and admin notification preference APIs manage
+  channel/category preferences. External email/SMS/WhatsApp delivery remains
+  disabled unless provider configuration and tenant/user preference allow it.
+
+Operational checks:
+
+- Duplicate Gmail/Outlook messages must be idempotent by provider message ID.
+- Duplicate Drive/OneDrive files must be idempotent by provider file ID and
+  version/modified time.
+- Review/import/ignore actions must emit audit events.
+- Provider-operation rows for connector health, Drive candidates, calendar
+  candidates, and inbound email are visibility-only unless a replay path is
+  explicitly implemented and safe.
+- Tenant-facing UI and exports must never include OAuth tokens, refresh tokens,
+  encrypted token references, client secrets, raw provider errors, raw provider
+  payloads, raw email bodies, raw Drive/OneDrive files, internal costs, gross
+  profit, or cross-tenant metadata.
 
 Mutation endpoints require an operator reason between 8 and 500 characters.
 The reason is used only to record whether a reason was supplied in audit

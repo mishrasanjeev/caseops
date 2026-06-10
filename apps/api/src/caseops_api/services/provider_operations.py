@@ -10,8 +10,13 @@ from sqlalchemy.orm import Session
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     AuditResult,
+    CalendarEventCandidate,
+    CalendarEventCandidateStatus,
     CalendarEventSync,
     CalendarEventSyncStatus,
+    ConnectorHealthRecord,
+    DriveFileCandidate,
+    InboundEmailEvent,
     MailboxImportStatus,
     MailboxMessageImport,
     MailboxWebhookEvent,
@@ -84,13 +89,17 @@ def _split_operation_id(operation_id: str) -> tuple[str, str]:
             detail="Provider operation not found.",
         )
     kind, row_id = operation_id.split(":", 1)
-    if kind not in {
-        "calendar_sync",
-        "notification_delivery",
-        "case_tracking_poll",
-        "mailbox_message_import",
-        "mailbox_webhook",
-    } or not row_id:
+    if (
+        kind
+        not in {
+            "calendar_sync",
+            "notification_delivery",
+            "case_tracking_poll",
+            "mailbox_message_import",
+            "mailbox_webhook",
+        }
+        or not row_id
+    ):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Provider operation not found.",
@@ -98,7 +107,9 @@ def _split_operation_id(operation_id: str) -> tuple[str, str]:
     return kind, row_id
 
 
-def _operator_state(dead_letter_reason: str | None) -> Literal[
+def _operator_state(
+    dead_letter_reason: str | None,
+) -> Literal[
     "open",
     "ignored",
     "resolved",
@@ -129,9 +140,7 @@ def _calendar_record(row: CalendarEventSync) -> ProviderOperationRecord:
         provider_item_ref=redact_identifier(row.provider_event_id),
         status=status_value,
         operator_state=operator_state,
-        error_redacted=redact_provider_error(row.last_error)
-        if row.last_error
-        else None,
+        error_redacted=redact_provider_error(row.last_error) if row.last_error else None,
         dead_letter_reason=redact_provider_error(row.dead_letter_reason)
         if row.dead_letter_reason
         else None,
@@ -158,10 +167,7 @@ def _notification_record(row: NotificationDeliveryIntent) -> ProviderOperationRe
         and row.channel == NotificationDeliveryChannel.IN_APP
     )
     open_action = row.status != NotificationDeliveryStatus.DELIVERED
-    notes = [
-        "Replay uses the existing idempotency key and cannot create a second "
-        "delivery intent."
-    ]
+    notes = ["Replay uses the existing idempotency key and cannot create a second delivery intent."]
     if is_external:
         notes.append(
             "External delivery remains blocked until provider policy and "
@@ -290,8 +296,7 @@ def _mailbox_import_record(row: MailboxMessageImport) -> ProviderOperationRecord
 def _mailbox_webhook_record(row: MailboxWebhookEvent) -> ProviderOperationRecord:
     operator_state = _operator_state(row.last_error_redacted)
     replayable = (
-        row.status in _MAILBOX_WEBHOOK_OPEN_STATUSES
-        and row.mailbox_connection_id is not None
+        row.status in _MAILBOX_WEBHOOK_OPEN_STATUSES and row.mailbox_connection_id is not None
     )
     return ProviderOperationRecord(
         id=_operation_id("mailbox_webhook", row.id),
@@ -317,9 +322,122 @@ def _mailbox_webhook_record(row: MailboxWebhookEvent) -> ProviderOperationRecord
         ignore_available=row.status != MailboxWebhookStatus.PROCESSED and operator_state == "open",
         mark_resolved_available=row.status != MailboxWebhookStatus.PROCESSED
         and operator_state == "open",
+        notes=["Webhook payloads are hashed only; raw Pub/Sub data is not exposed."],
+    )
+
+
+def _drive_candidate_record(row: DriveFileCandidate) -> ProviderOperationRecord:
+    return ProviderOperationRecord(
+        id=_operation_id("drive_file_candidate", row.id),
+        job_kind="drive_file_candidate",
+        provider=str(row.provider),
+        company_id=row.company_id,
+        matter_id=row.linked_matter_id or row.suggested_matter_id,
+        source_type="drive_file_metadata",
+        source_ref=redact_identifier(row.provider_file_id),
+        provider_item_ref=redact_identifier(row.provider_version),
+        status=str(row.status),
+        operator_state="open",
+        error_redacted=redact_provider_error(row.last_error_redacted)
+        if row.last_error_redacted
+        else None,
+        dead_letter_reason=None,
+        attempts=1,
+        max_attempts=1,
+        next_attempt_at=None,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+        replay_available=False,
+        ignore_available=False,
+        mark_resolved_available=False,
+        notes=["Drive file candidates require explicit user review before content import."],
+    )
+
+
+def _calendar_candidate_record(row: CalendarEventCandidate) -> ProviderOperationRecord:
+    return ProviderOperationRecord(
+        id=_operation_id("calendar_event_candidate", row.id),
+        job_kind="calendar_event_candidate",
+        provider=str(row.provider),
+        company_id=row.company_id,
+        matter_id=row.linked_matter_id or row.suggested_matter_id,
+        source_type="provider_calendar_event",
+        source_ref=redact_identifier(row.provider_event_id),
+        provider_item_ref=redact_identifier(row.i_cal_uid),
+        status=str(row.status),
+        operator_state="open",
+        error_redacted=redact_provider_error(row.last_error_redacted or row.conflict_reason)
+        if (row.last_error_redacted or row.conflict_reason)
+        else None,
+        dead_letter_reason=None,
+        attempts=1,
+        max_attempts=1,
+        next_attempt_at=None,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+        replay_available=False,
+        ignore_available=False,
+        mark_resolved_available=False,
+        notes=["Calendar provider candidates are resolved from the calendar conflict queue."],
+    )
+
+
+def _inbound_email_event_record(row: InboundEmailEvent) -> ProviderOperationRecord:
+    return ProviderOperationRecord(
+        id=_operation_id("inbound_email_event", row.id),
+        job_kind="inbound_email_event",
+        provider=str(row.provider),
+        company_id=row.company_id,
+        matter_id=row.linked_matter_id or row.matched_matter_id,
+        source_type="inbound_email_alias",
+        source_ref=redact_identifier(row.provider_message_id),
+        provider_item_ref=redact_identifier(row.alias_id),
+        status=str(row.status),
+        operator_state="open",
+        error_redacted=redact_provider_error(row.redacted_failure_reason)
+        if row.redacted_failure_reason
+        else None,
+        dead_letter_reason=None,
+        attempts=1,
+        max_attempts=1,
+        next_attempt_at=None,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+        replay_available=False,
+        ignore_available=False,
+        mark_resolved_available=False,
         notes=[
-            "Webhook payloads are hashed only; raw Pub/Sub data is not exposed."
+            "Inbound email events store metadata only; raw body and "
+            "attachment bytes are not imported."
         ],
+    )
+
+
+def _connector_health_record(row: ConnectorHealthRecord) -> ProviderOperationRecord:
+    return ProviderOperationRecord(
+        id=_operation_id("connector_health", row.id),
+        job_kind="connector_health",
+        provider=str(row.provider),
+        company_id=row.company_id,
+        matter_id=None,
+        source_type="connector_health",
+        source_ref=redact_identifier(row.account_ref_hash),
+        provider_item_ref=None,
+        status=str(row.connected_state),
+        operator_state="open",
+        error_redacted=redact_provider_error(row.error_category or row.disabled_reason)
+        if (row.error_category or row.disabled_reason)
+        else None,
+        dead_letter_reason=None,
+        attempts=1,
+        max_attempts=1,
+        next_attempt_at=row.next_retry_at,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+        replay_available=False,
+        ignore_available=False,
+        mark_resolved_available=False,
+        notes=["Connector health checks are refreshed from /admin/integrations/health/check."],
     )
 
 
@@ -350,20 +468,22 @@ def list_provider_operations(
             select(NotificationDeliveryIntent)
             .where(
                 NotificationDeliveryIntent.company_id == context.company.id,
-                NotificationDeliveryIntent.status.in_(
-                    tuple(_NOTIFICATION_OPEN_STATUSES)
-                ),
+                NotificationDeliveryIntent.status.in_(tuple(_NOTIFICATION_OPEN_STATUSES)),
             )
             .order_by(NotificationDeliveryIntent.updated_at.desc())
             .limit(limit)
         )
     )
-    poll_statuses = ("blocked", "skipped", "partial", "failed") if not include_resolved else (
-        "blocked",
-        "skipped",
-        "partial",
-        "failed",
-        "completed",
+    poll_statuses = (
+        ("blocked", "skipped", "partial", "failed")
+        if not include_resolved
+        else (
+            "blocked",
+            "skipped",
+            "partial",
+            "failed",
+            "completed",
+        )
     )
     case_tracking_rows = list(
         session.scalars(
@@ -398,12 +518,74 @@ def list_provider_operations(
             .limit(limit)
         )
     )
+    drive_candidate_rows = list(
+        session.scalars(
+            select(DriveFileCandidate)
+            .where(
+                DriveFileCandidate.company_id == context.company.id,
+                DriveFileCandidate.status == "failed",
+            )
+            .order_by(DriveFileCandidate.updated_at.desc())
+            .limit(limit)
+        )
+    )
+    calendar_candidate_rows = list(
+        session.scalars(
+            select(CalendarEventCandidate)
+            .where(
+                CalendarEventCandidate.company_id == context.company.id,
+                CalendarEventCandidate.status.in_(
+                    (
+                        CalendarEventCandidateStatus.CONFLICT,
+                        CalendarEventCandidateStatus.FAILED,
+                    )
+                ),
+            )
+            .order_by(CalendarEventCandidate.updated_at.desc())
+            .limit(limit)
+        )
+    )
+    inbound_email_event_rows = list(
+        session.scalars(
+            select(InboundEmailEvent)
+            .where(
+                InboundEmailEvent.company_id == context.company.id,
+                InboundEmailEvent.status.in_(("failed", "rejected")),
+            )
+            .order_by(InboundEmailEvent.updated_at.desc())
+            .limit(limit)
+        )
+    )
+    connector_health_rows = list(
+        session.scalars(
+            select(ConnectorHealthRecord)
+            .where(
+                ConnectorHealthRecord.company_id == context.company.id,
+                ConnectorHealthRecord.connected_state.in_(
+                    (
+                        "degraded",
+                        "token_expired",
+                        "scope_missing",
+                        "rate_limited",
+                        "provider_outage",
+                        "blocked_by_policy",
+                    )
+                ),
+            )
+            .order_by(ConnectorHealthRecord.updated_at.desc())
+            .limit(limit)
+        )
+    )
     records = [
         *(_calendar_record(row) for row in calendar_rows),
         *(_notification_record(row) for row in notification_rows),
         *(_case_tracking_poll_record(row) for row in case_tracking_rows),
         *(_mailbox_import_record(row) for row in mailbox_import_rows),
         *(_mailbox_webhook_record(row) for row in mailbox_webhook_rows),
+        *(_drive_candidate_record(row) for row in drive_candidate_rows),
+        *(_calendar_candidate_record(row) for row in calendar_candidate_rows),
+        *(_inbound_email_event_record(row) for row in inbound_email_event_rows),
+        *(_connector_health_record(row) for row in connector_health_rows),
     ]
     if not include_resolved:
         records = [row for row in records if row.operator_state == "open"]
@@ -757,8 +939,7 @@ def replay_provider_operation(
         action="replay",
         changed=changed,
         message=(
-            "Notification intent was queued for in-app replay using its "
-            "existing idempotency key."
+            "Notification intent was queued for in-app replay using its existing idempotency key."
         )
         if changed
         else "Notification intent was already outside a replayable state.",
@@ -781,10 +962,14 @@ def update_provider_operation_state(
     if kind == "calendar_sync":
         row = _load_calendar_operation(session, context=context, row_id=row_id)
         previous_status = str(row.sync_status)
-        changed = row.sync_status not in {
-            CalendarEventSyncStatus.SYNCED,
-            CalendarEventSyncStatus.DELETED,
-        } and row.dead_letter_reason != marker
+        changed = (
+            row.sync_status
+            not in {
+                CalendarEventSyncStatus.SYNCED,
+                CalendarEventSyncStatus.DELETED,
+            }
+            and row.dead_letter_reason != marker
+        )
         if changed:
             row.sync_status = CalendarEventSyncStatus.DEAD_LETTER
             row.dead_letter_reason = marker
@@ -853,9 +1038,7 @@ def update_provider_operation_state(
         }
         if changed:
             row.status = (
-                MailboxImportStatus.IGNORED
-                if action == "ignore"
-                else MailboxImportStatus.RESOLVED
+                MailboxImportStatus.IGNORED if action == "ignore" else MailboxImportStatus.RESOLVED
             )
             row.dead_letter_reason = marker
             row.next_attempt_at = None
@@ -922,8 +1105,7 @@ def update_provider_operation_state(
     row = _load_notification_operation(session, context=context, row_id=row_id)
     previous_status = str(row.status)
     changed = (
-        row.status != NotificationDeliveryStatus.DELIVERED
-        and row.dead_letter_reason != marker
+        row.status != NotificationDeliveryStatus.DELIVERED and row.dead_letter_reason != marker
     )
     if changed:
         row.status = NotificationDeliveryStatus.DEAD_LETTER
@@ -1107,9 +1289,9 @@ def provider_readiness_status(
                 required_config_names=email_required_config,
                 missing_config_names=email_missing_config,
                 required_approval_keys=["review_first_mailbox_ingestion_approved"],
-                missing_approval_keys=[] if not email_missing_config else [
-                    "review_first_mailbox_ingestion_approved"
-                ],
+                missing_approval_keys=[]
+                if not email_missing_config
+                else ["review_first_mailbox_ingestion_approved"],
                 endpoint_paths=[
                     "/api/mailbox/gmail/status",
                     "/api/mailbox/gmail/start",

@@ -4,6 +4,7 @@ GET /api/calendar/events — aggregates hearings, tasks, and deadlines
 for the caller's company in one call, returning a date-sorted list
 the cockpit calendar grid renders directly.
 """
+
 from __future__ import annotations
 
 from datetime import date, timedelta
@@ -21,6 +22,11 @@ from caseops_api.schemas.calendar import (
     CalendarEventKind,
     CalendarEventListResponse,
     CalendarEventSyncResponse,
+    CalendarProviderEventCandidateCreateRequest,
+    CalendarProviderEventCandidateListResponse,
+    CalendarProviderEventCandidateRecord,
+    CalendarProviderEventCandidateReviewRequest,
+    CalendarProviderEventCandidateReviewResponse,
     CalendarSyncStatusResponse,
     EmailInvitationCandidateExtractRequest,
     EmailInvitationCandidateExtractResponse,
@@ -33,6 +39,11 @@ from caseops_api.schemas.calendar import (
 from caseops_api.services.calendar import (
     aggregate_calendar_events,
     render_events_as_ical,
+)
+from caseops_api.services.calendar_event_candidates import (
+    create_calendar_event_candidate,
+    list_calendar_event_candidates,
+    review_calendar_event_candidate,
 )
 from caseops_api.services.calendar_sync import (
     complete_google_calendar_connection,
@@ -122,8 +133,7 @@ async def list_calendar_events(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
-                f"Calendar range is capped at {_MAX_RANGE_DAYS} days. "
-                "Request a narrower window."
+                f"Calendar range is capped at {_MAX_RANGE_DAYS} days. Request a narrower window."
             ),
         )
     events = aggregate_calendar_events(
@@ -168,8 +178,7 @@ async def list_calendar_events_ical(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
-                f"Calendar range is capped at {_MAX_RANGE_DAYS} days. "
-                "Request a narrower window."
+                f"Calendar range is capped at {_MAX_RANGE_DAYS} days. Request a narrower window."
             ),
         )
     events = aggregate_calendar_events(
@@ -180,7 +189,8 @@ async def list_calendar_events_ical(
         kinds=kinds,
     )
     body = render_events_as_ical(
-        events, calendar_name=f"CaseOps — {context.company.name}",
+        events,
+        calendar_name=f"CaseOps — {context.company.name}",
     )
     return ICalendarResponse(
         content=body,
@@ -424,6 +434,61 @@ async def get_calendar_sync_status(
     session: DbSession,
 ) -> CalendarSyncStatusResponse:
     return sync_status(session, context=context)
+
+
+@router.get(
+    "/provider-event-candidates",
+    response_model=CalendarProviderEventCandidateListResponse,
+    summary="List provider calendar event candidates and conflicts.",
+)
+async def get_provider_event_candidates(
+    context: CalendarViewer,
+    session: DbSession,
+    provider: str | None = Query(default=None),
+    matter_id: str | None = Query(default=None),
+    status_filter: str | None = Query(default=None, alias="status"),
+    limit: int = Query(default=50, ge=1, le=100),
+) -> CalendarProviderEventCandidateListResponse:
+    return list_calendar_event_candidates(
+        session,
+        context=context,
+        provider=provider,
+        matter_id=matter_id,
+        status_filter=status_filter,
+        limit=limit,
+    )
+
+
+@router.post(
+    "/provider-event-candidates",
+    response_model=CalendarProviderEventCandidateRecord,
+    summary="Create a local-safe provider calendar event candidate.",
+)
+async def post_provider_event_candidate(
+    payload: CalendarProviderEventCandidateCreateRequest,
+    context: CalendarSyncer,
+    session: DbSession,
+) -> CalendarProviderEventCandidateRecord:
+    return create_calendar_event_candidate(session, context=context, payload=payload)
+
+
+@router.patch(
+    "/provider-event-candidates/{candidate_id}",
+    response_model=CalendarProviderEventCandidateReviewResponse,
+    summary="Review one provider calendar event candidate.",
+)
+async def patch_provider_event_candidate(
+    candidate_id: str,
+    payload: CalendarProviderEventCandidateReviewRequest,
+    context: CalendarSyncer,
+    session: DbSession,
+) -> CalendarProviderEventCandidateReviewResponse:
+    return review_calendar_event_candidate(
+        session,
+        context=context,
+        candidate_id=candidate_id,
+        payload=payload,
+    )
 
 
 @router.get(

@@ -625,6 +625,7 @@ class AuthorityCitationTreatment(StrEnum):
                           Default fallback when cues are weak.
     - ``neutral``       — no cue verb detected; pure citation reference.
     """
+
     FOLLOWED = "followed"
     DISTINGUISHED = "distinguished"
     OVERRULED = "overruled"
@@ -670,9 +671,7 @@ class Company(Base):
     # on team membership (plus existing ethical-wall + grant rules).
     # Default false means teams are metadata-only; flipping this on is
     # a deliberate governance decision per-tenant.
-    team_scoping_enabled: Mapped[bool] = mapped_column(
-        Boolean, default=False, nullable=False
-    )
+    team_scoping_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
@@ -842,15 +841,13 @@ class CompanyMembership(Base):
         back_populates="requested_by_membership",
         foreign_keys="DocumentProcessingJob.requested_by_membership_id",
     )
-    created_outside_counsel_assignments: Mapped[
-        list[MatterOutsideCounselAssignment]
-    ] = relationship(
-        back_populates="assigned_by_membership",
-        foreign_keys="MatterOutsideCounselAssignment.assigned_by_membership_id",
+    created_outside_counsel_assignments: Mapped[list[MatterOutsideCounselAssignment]] = (
+        relationship(
+            back_populates="assigned_by_membership",
+            foreign_keys="MatterOutsideCounselAssignment.assigned_by_membership_id",
+        )
     )
-    recorded_outside_counsel_spend_records: Mapped[
-        list[OutsideCounselSpendRecord]
-    ] = relationship(
+    recorded_outside_counsel_spend_records: Mapped[list[OutsideCounselSpendRecord]] = relationship(
         back_populates="recorded_by_membership",
         foreign_keys="OutsideCounselSpendRecord.recorded_by_membership_id",
     )
@@ -869,13 +866,9 @@ class CustomRole(Base):
     """Tenant-scoped custom role template over approved server capabilities."""
 
     __tablename__ = "custom_roles"
-    __table_args__ = (
-        UniqueConstraint("company_id", "slug", name="uq_custom_roles_company_slug"),
-    )
+    __table_args__ = (UniqueConstraint("company_id", "slug", name="uq_custom_roles_company_slug"),)
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
         ForeignKey("companies.id", ondelete="CASCADE"),
         nullable=False,
@@ -952,9 +945,7 @@ class EmployeeProfile(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
         ForeignKey("companies.id", ondelete="CASCADE"),
         nullable=False,
@@ -1033,9 +1024,7 @@ class AccountSetupToken(Base):
 
     __tablename__ = "account_setup_tokens"
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
         ForeignKey("companies.id", ondelete="CASCADE"),
         nullable=False,
@@ -1092,9 +1081,7 @@ class EmployeeBulkImportJob(Base):
 
     __tablename__ = "employee_bulk_import_jobs"
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
         ForeignKey("companies.id", ondelete="CASCADE"),
         nullable=False,
@@ -1161,9 +1148,7 @@ class EmployeeBulkImportRow(Base):
 
     __tablename__ = "employee_bulk_import_rows"
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
         ForeignKey("companies.id", ondelete="CASCADE"),
         nullable=False,
@@ -1247,10 +1232,12 @@ class Matter(Base):
         server_default=MatterNextHearingSource.UNKNOWN,
     )
     next_hearing_source_ref_type: Mapped[str | None] = mapped_column(
-        String(40), nullable=True,
+        String(40),
+        nullable=True,
     )
     next_hearing_source_ref_id: Mapped[str | None] = mapped_column(
-        String(64), nullable=True,
+        String(64),
+        nullable=True,
     )
     next_hearing_updated_by_membership_id: Mapped[str | None] = mapped_column(
         ForeignKey("company_memberships.id", ondelete="SET NULL"),
@@ -1273,9 +1260,7 @@ class Matter(Base):
         index=True,
     )
     claim_amount_minor: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-    claim_currency: Mapped[str] = mapped_column(
-        String(3), nullable=False, default="INR"
-    )
+    claim_currency: Mapped[str] = mapped_column(String(3), nullable=False, default="INR")
     claim_amount_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
     # PRD §13.4 / §5.6: when True, only explicit matter_access_grants
@@ -1289,7 +1274,10 @@ class Matter(Base):
     # matter sees every other OC's submissions. Internal users (firm
     # side) always see everything regardless of this flag.
     oc_cross_visibility_enabled: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False, server_default=false(),
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=false(),
     )
     # PRD §7.1: nullable FK to the master Court table. `court_name`
     # stays as the freeform fallback for courts we haven't catalogued
@@ -1430,8 +1418,7 @@ class Matter(Base):
         back_populates="matter",
         cascade="all, delete-orphan",
         order_by=(
-            "MatterComplianceItem.due_on.asc().nulls_last(), "
-            "MatterComplianceItem.created_at.desc()"
+            "MatterComplianceItem.due_on.asc().nulls_last(), MatterComplianceItem.created_at.desc()"
         ),
     )
     next_hearing_history: Mapped[list[MatterNextHearingHistory]] = relationship(
@@ -1470,9 +1457,7 @@ class Matter(Base):
 
 class MatterTag(Base):
     __tablename__ = "matter_tags"
-    __table_args__ = (
-        UniqueConstraint("company_id", "slug", name="uq_matter_tags_company_slug"),
-    )
+    __table_args__ = (UniqueConstraint("company_id", "slug", name="uq_matter_tags_company_slug"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
@@ -1510,9 +1495,7 @@ class MatterTag(Base):
 
 class MatterTagAssignment(Base):
     __tablename__ = "matter_tag_assignments"
-    __table_args__ = (
-        UniqueConstraint("matter_id", "tag_id", name="uq_matter_tag_assignment"),
-    )
+    __table_args__ = (UniqueConstraint("matter_id", "tag_id", name="uq_matter_tag_assignment"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
@@ -1724,12 +1707,8 @@ class MatterConflictCheck(Base):
         nullable=True,
     )
     opposing_party_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    related_party_names_json: Mapped[str] = mapped_column(
-        Text, nullable=False, default="[]"
-    )
-    candidates_json: Mapped[str] = mapped_column(
-        Text, nullable=False, default="[]"
-    )
+    related_party_names_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    candidates_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     status: Mapped[str] = mapped_column(
         String(24),
         nullable=False,
@@ -1740,9 +1719,7 @@ class MatterConflictCheck(Base):
         ForeignKey("company_memberships.id", ondelete="SET NULL"),
         nullable=True,
     )
-    resolved_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ran_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
@@ -1845,10 +1822,12 @@ class CalendarEventSyncStatus(StrEnum):
 
 class MailboxProvider(StrEnum):
     GMAIL = "gmail"
+    OUTLOOK_MAIL = "outlook_mail"
 
 
 class DriveProvider(StrEnum):
     GOOGLE_DRIVE = "google_drive"
+    ONEDRIVE_SHAREPOINT = "onedrive_sharepoint"
 
 
 class MailboxConnectionStatus(StrEnum):
@@ -1865,6 +1844,7 @@ class DriveConnectionStatus(StrEnum):
 
 class MailboxImportStatus(StrEnum):
     QUEUED = "queued"
+    NEW = "new"
     IMPORTED = "imported"
     UNMATCHED = "unmatched"
     DUPLICATE = "duplicate"
@@ -1872,6 +1852,9 @@ class MailboxImportStatus(StrEnum):
     DEAD_LETTER = "dead_letter"
     IGNORED = "ignored"
     RESOLVED = "resolved"
+    LINKED_METADATA = "linked_metadata"
+    CONTENT_IMPORT_REQUESTED = "content_import_requested"
+    CONTENT_IMPORTED = "content_imported"
 
 
 class MailboxAttachmentCandidateStatus(StrEnum):
@@ -1886,6 +1869,74 @@ class MailboxWebhookStatus(StrEnum):
     PROCESSED = "processed"
     FAILED = "failed"
     DEAD_LETTER = "dead_letter"
+
+
+class ConnectorHealthProvider(StrEnum):
+    GOOGLE_WORKSPACE = "google_workspace"
+    GMAIL = "gmail"
+    GOOGLE_DRIVE = "google_drive"
+    GOOGLE_CALENDAR = "google_calendar"
+    MICROSOFT_365 = "microsoft_365"
+    OUTLOOK_MAIL = "outlook_mail"
+    OUTLOOK_CALENDAR = "outlook_calendar"
+    ONEDRIVE_SHAREPOINT = "onedrive_sharepoint"
+    EMAIL_DELIVERY = "email_delivery"
+    SMS = "sms"
+    WHATSAPP = "whatsapp"
+
+
+class ConnectorHealthStatus(StrEnum):
+    DISABLED = "disabled"
+    MISSING_CONFIG = "missing_config"
+    CONFIGURED = "configured"
+    CONNECTED = "connected"
+    HEALTHY = "healthy"
+    DEGRADED = "degraded"
+    TOKEN_EXPIRED = "token_expired"
+    SCOPE_MISSING = "scope_missing"
+    RATE_LIMITED = "rate_limited"
+    PROVIDER_OUTAGE = "provider_outage"
+    BLOCKED_BY_POLICY = "blocked_by_policy"
+
+
+class ReviewCandidateStatus(StrEnum):
+    NEW = "new"
+    IGNORED = "ignored"
+    LINKED_METADATA = "linked_metadata"
+    CONTENT_IMPORT_REQUESTED = "content_import_requested"
+    CONTENT_IMPORTED = "content_imported"
+    FAILED = "failed"
+
+
+class CalendarEventCandidateStatus(StrEnum):
+    NEW = "new"
+    CONFLICT = "conflict"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+    IGNORED = "ignored"
+    FAILED = "failed"
+
+
+class InboundEmailAliasStatus(StrEnum):
+    ENABLED = "enabled"
+    DISABLED = "disabled"
+
+
+class InboundEmailEventStatus(StrEnum):
+    NEW = "new"
+    LINKED_METADATA = "linked_metadata"
+    CONTENT_IMPORT_REQUESTED = "content_import_requested"
+    CONTENT_IMPORTED = "content_imported"
+    IGNORED = "ignored"
+    REJECTED = "rejected"
+    FAILED = "failed"
+
+
+class NotificationDigestFrequency(StrEnum):
+    IMMEDIATE = "immediate"
+    DAILY = "daily"
+    WEEKLY = "weekly"
+    DISABLED = "disabled"
 
 
 class NotificationRuleScopeType(StrEnum):
@@ -1937,10 +1988,13 @@ class HearingReminder(Base):
     shape we want — reminders the user CAN'T yet receive are still
     reminders the system intends to send.
     """
+
     __tablename__ = "hearing_reminders"
     __table_args__ = (
         UniqueConstraint(
-            "hearing_id", "channel", "scheduled_for",
+            "hearing_id",
+            "channel",
+            "scheduled_for",
             name="uq_hearing_reminders_channel_time",
         ),
     )
@@ -2051,9 +2105,7 @@ class EmailSuppression(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
         ForeignKey("companies.id", ondelete="CASCADE"),
         nullable=False,
@@ -2061,9 +2113,7 @@ class EmailSuppression(Base):
     )
     # Stored lowercase to match SendGrid event payloads; the upsert
     # path normalises before insert/lookup.
-    recipient_email: Mapped[str] = mapped_column(
-        String(320), nullable=False, index=True
-    )
+    recipient_email: Mapped[str] = mapped_column(String(320), nullable=False, index=True)
     reason: Mapped[str] = mapped_column(String(24), nullable=False)
     # Free-text excerpt of the SendGrid `reason` / `response` fields
     # so an admin tool can show "why" without reaching into raw event
@@ -2071,9 +2121,7 @@ class EmailSuppression(Base):
     detail: Mapped[str | None] = mapped_column(String(500), nullable=True)
     # `sg_message_id` of the event that introduced the suppression.
     # Useful for audit + dedupe; nullable for `manual` insertions.
-    source_message_id: Mapped[str | None] = mapped_column(
-        String(120), nullable=True
-    )
+    source_message_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
     last_event_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )
@@ -2151,9 +2199,7 @@ class TenantOutlookConfiguration(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
         ForeignKey("companies.id", ondelete="CASCADE"),
         nullable=False,
@@ -2165,9 +2211,7 @@ class TenantOutlookConfiguration(Base):
         default=CalendarProvider.OUTLOOK,
     )
     client_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    encrypted_client_secret_ref: Mapped[str | None] = mapped_column(
-        Text, nullable=True
-    )
+    encrypted_client_secret_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
     tenant_id: Mapped[str] = mapped_column(
         String(255),
         nullable=False,
@@ -2178,27 +2222,17 @@ class TenantOutlookConfiguration(Base):
     oauth_consent_model_approved: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
-    scopes_approved: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False
-    )
-    durable_runbook_approved: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False
-    )
-    rollback_approved: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False
-    )
-    redaction_rules_approved: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False
-    )
+    scopes_approved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    durable_runbook_approved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    rollback_approved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    redaction_rules_approved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     last_test_status: Mapped[str] = mapped_column(
         String(24),
         nullable=False,
         default="not_run",
     )
-    last_tested_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    last_tested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error_redacted: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by_membership_id: Mapped[str | None] = mapped_column(
         ForeignKey("company_memberships.id", ondelete="SET NULL"),
@@ -2243,38 +2277,24 @@ class TenantGoogleWorkspaceConfiguration(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
         ForeignKey("companies.id", ondelete="CASCADE"),
         nullable=False,
     )
     client_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    encrypted_client_secret_ref: Mapped[str | None] = mapped_column(
-        Text, nullable=True
-    )
-    calendar_redirect_uri: Mapped[str | None] = mapped_column(
-        String(500), nullable=True
-    )
+    encrypted_client_secret_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
+    calendar_redirect_uri: Mapped[str | None] = mapped_column(String(500), nullable=True)
     gmail_redirect_uri: Mapped[str | None] = mapped_column(String(500), nullable=True)
     drive_redirect_uri: Mapped[str | None] = mapped_column(String(500), nullable=True)
     scopes_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     oauth_consent_model_approved: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
-    scopes_approved: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False
-    )
-    webhook_runbook_approved: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False
-    )
-    redaction_rules_approved: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False
-    )
-    calendar_enabled: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True
-    )
+    scopes_approved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    webhook_runbook_approved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    redaction_rules_approved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    calendar_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     gmail_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     drive_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -2283,9 +2303,7 @@ class TenantGoogleWorkspaceConfiguration(Base):
         nullable=False,
         default="not_run",
     )
-    last_tested_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    last_tested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error_redacted: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by_membership_id: Mapped[str | None] = mapped_column(
         ForeignKey("company_memberships.id", ondelete="SET NULL"),
@@ -2351,12 +2369,8 @@ class CalendarEventSync(Base):
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
-    next_attempt_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    dead_letter_reason: Mapped[str | None] = mapped_column(
-        String(120), nullable=True
-    )
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    dead_letter_reason: Mapped[str | None] = mapped_column(String(120), nullable=True)
     durable_last_attempt_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -2597,9 +2611,7 @@ class MailboxAttachmentCandidate(Base):
         index=True,
     )
     provider_attachment_ref_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    encrypted_provider_attachment_ref: Mapped[str | None] = mapped_column(
-        Text, nullable=True
-    )
+    encrypted_provider_attachment_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
     filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
     content_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
     size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -2689,6 +2701,532 @@ class MailboxWebhookEvent(Base):
 
     company: Mapped[Company | None] = relationship()
     connection: Mapped[UserMailboxConnection | None] = relationship()
+
+
+class ConnectorHealthRecord(Base):
+    __tablename__ = "connector_health_records"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            "provider",
+            "account_ref_hash",
+            name="uq_connector_health_tenant_provider_account",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    provider: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    account_ref_hash: Mapped[str] = mapped_column(String(64), nullable=False, default="tenant")
+    account_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    configured_state: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=ConnectorHealthStatus.MISSING_CONFIG,
+        index=True,
+    )
+    connected_state: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=ConnectorHealthStatus.DISABLED,
+        index=True,
+    )
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_failure_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_category: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    required_scopes_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    granted_scopes_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    token_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    token_refresh_status: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    webhook_status: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    polling_status: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    rate_limit_status: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    next_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    disabled_reason: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    operational_alerts_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    setup_actions_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship()
+
+
+class TenantMicrosoft365Configuration(Base):
+    __tablename__ = "tenant_microsoft365_configurations"
+    __table_args__ = (UniqueConstraint("company_id", name="uq_tenant_microsoft365_config_company"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    client_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    encrypted_client_secret_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tenant_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    redirect_uri: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    scopes_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    admin_consent_approved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    scopes_approved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    mail_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    calendar_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    drive_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    last_test_status: Mapped[str] = mapped_column(String(24), nullable=False, default="not_run")
+    last_tested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error_redacted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship()
+    created_by_membership: Mapped[CompanyMembership | None] = relationship()
+
+
+class DriveSyncControl(Base):
+    __tablename__ = "drive_sync_controls"
+    __table_args__ = (
+        UniqueConstraint("company_id", "provider", name="uq_drive_sync_controls_tenant_provider"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    provider: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=DriveProvider.GOOGLE_DRIVE,
+        index=True,
+    )
+    allowed_folders_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    blocked_folders_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    max_file_size_bytes: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=25 * 1024 * 1024
+    )
+    allowed_mime_types_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    mode: Mapped[str] = mapped_column(String(32), nullable=False, default="review_import")
+    auto_import_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship()
+
+
+class DriveFileCandidate(Base):
+    __tablename__ = "drive_file_candidates"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            "provider",
+            "provider_file_id",
+            "provider_version",
+            name="uq_drive_file_candidates_provider_version",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    drive_connection_id: Mapped[str | None] = mapped_column(
+        ForeignKey("user_drive_connections.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    provider: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=DriveProvider.GOOGLE_DRIVE,
+        index=True,
+    )
+    provider_file_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    provider_version: Mapped[str] = mapped_column(String(120), nullable=False, default="metadata")
+    name: Mapped[str] = mapped_column(String(500), nullable=False)
+    mime_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    owner_display: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    modified_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    folder_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    web_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    suggested_matter_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matters.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=ReviewCandidateStatus.NEW,
+        index=True,
+    )
+    imported_attachment_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matter_attachments.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    linked_matter_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matters.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    provenance_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    last_error_redacted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship()
+    connection: Mapped[UserDriveConnection | None] = relationship()
+    suggested_matter: Mapped[Matter | None] = relationship(foreign_keys=[suggested_matter_id])
+    linked_matter: Mapped[Matter | None] = relationship(foreign_keys=[linked_matter_id])
+    imported_attachment: Mapped[MatterAttachment | None] = relationship()
+
+
+class CalendarEventCandidate(Base):
+    __tablename__ = "calendar_event_candidates"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            "provider",
+            "provider_event_id",
+            name="uq_calendar_event_candidates_provider_event",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    calendar_connection_id: Mapped[str | None] = mapped_column(
+        ForeignKey("user_calendar_connections.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    provider: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    provider_event_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    i_cal_uid: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    location: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    organizer_display: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    provider_status: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    suggested_matter_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matters.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    linked_matter_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matters.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    linked_hearing_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matter_hearings.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=CalendarEventCandidateStatus.NEW,
+        index=True,
+    )
+    conflict_reason: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    provenance_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    sync_history_json: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
+    reviewed_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error_redacted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship()
+    connection: Mapped[UserCalendarConnection | None] = relationship()
+    suggested_matter: Mapped[Matter | None] = relationship(foreign_keys=[suggested_matter_id])
+    linked_matter: Mapped[Matter | None] = relationship(foreign_keys=[linked_matter_id])
+    linked_hearing: Mapped[MatterHearing | None] = relationship()
+    reviewed_by_membership: Mapped[CompanyMembership | None] = relationship()
+
+
+class InboundEmailAlias(Base):
+    __tablename__ = "inbound_email_aliases"
+    __table_args__ = (
+        UniqueConstraint("company_id", "alias_address", name="uq_inbound_alias_tenant_address"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    alias_type: Mapped[str] = mapped_column(String(24), nullable=False, default="tenant")
+    alias_address: Mapped[str] = mapped_column(String(320), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=InboundEmailAliasStatus.DISABLED,
+        index=True,
+    )
+    allowed_senders_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    allowed_domains_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    retention_days: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
+    spam_security_status: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="provider_unverified"
+    )
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship()
+    matter: Mapped[Matter | None] = relationship()
+    created_by_membership: Mapped[CompanyMembership | None] = relationship()
+
+
+class InboundEmailEvent(Base):
+    __tablename__ = "inbound_email_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            "provider_message_id",
+            name="uq_inbound_email_event_tenant_provider_message",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    alias_id: Mapped[str | None] = mapped_column(
+        ForeignKey("inbound_email_aliases.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    matched_matter_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matters.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    provider: Mapped[str] = mapped_column(String(40), nullable=False, default="local_safe")
+    provider_message_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    from_address_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    from_display: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    to_addresses_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    cc_addresses_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    subject: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    snippet: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    attachment_metadata_json: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=InboundEmailEventStatus.NEW,
+        index=True,
+    )
+    redacted_failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    linked_matter_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matters.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    communication_id: Mapped[str | None] = mapped_column(
+        ForeignKey("communications.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    provenance_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship()
+    alias: Mapped[InboundEmailAlias | None] = relationship()
+    matched_matter: Mapped[Matter | None] = relationship(foreign_keys=[matched_matter_id])
+    linked_matter: Mapped[Matter | None] = relationship(foreign_keys=[linked_matter_id])
+    communication: Mapped[Communication | None] = relationship()
+
+
+class TenantNotificationPreference(Base):
+    __tablename__ = "tenant_notification_preferences"
+    __table_args__ = (
+        UniqueConstraint("company_id", name="uq_tenant_notification_preferences_company"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    channels_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    event_categories_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    digest_frequency: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=NotificationDigestFrequency.IMMEDIATE,
+    )
+    quiet_hours_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    escalation_rules_json: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
+    external_delivery_policy: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="disabled_until_configured"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship()
+
+
+class UserNotificationPreference(Base):
+    __tablename__ = "user_notification_preferences"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            "membership_id",
+            name="uq_user_notification_preferences_membership",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    membership_id: Mapped[str] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    channels_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    event_categories_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    digest_frequency: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=NotificationDigestFrequency.IMMEDIATE,
+    )
+    quiet_hours_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    escalation_rules_json: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
+    opt_out_categories_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    company: Mapped[Company] = relationship()
+    membership: Mapped[CompanyMembership] = relationship()
 
 
 class NotificationRule(Base):
@@ -3102,9 +3640,7 @@ class LegalUpdateAlert(Base):
 
     company: Mapped[Company] = relationship()
     watchlist: Mapped[LegalUpdateWatchlist] = relationship(back_populates="alerts")
-    source_record: Mapped[LegalUpdateSourceRecord | None] = relationship(
-        "LegalUpdateSourceRecord"
-    )
+    source_record: Mapped[LegalUpdateSourceRecord | None] = relationship("LegalUpdateSourceRecord")
     statute: Mapped[Statute | None] = relationship("Statute")
     statute_section: Mapped[StatuteSection | None] = relationship("StatuteSection")
     authority_document: Mapped[AuthorityDocument | None] = relationship("AuthorityDocument")
@@ -3237,9 +3773,7 @@ class StatuteChangeEvent(Base):
     )
 
     statute: Mapped[Statute] = relationship("Statute")
-    source_record: Mapped[LegalUpdateSourceRecord] = relationship(
-        "LegalUpdateSourceRecord"
-    )
+    source_record: Mapped[LegalUpdateSourceRecord] = relationship("LegalUpdateSourceRecord")
 
 
 class TrackedCase(Base):
@@ -3519,9 +4053,7 @@ class MatterCauseListEntry(Base):
     )
 
     matter: Mapped[Matter] = relationship(back_populates="cause_list_entries")
-    sync_run: Mapped[MatterCourtSyncRun | None] = relationship(
-        back_populates="cause_list_entries"
-    )
+    sync_run: Mapped[MatterCourtSyncRun | None] = relationship(back_populates="cause_list_entries")
 
 
 class MatterCourtOrder(Base):
@@ -5418,9 +5950,7 @@ class BillingSubscription(Base):
             "company_id",
             unique=True,
             sqlite_where=text("status IN ('active', 'trialing', 'grace', 'manual_active')"),
-            postgresql_where=text(
-                "status IN ('active', 'trialing', 'grace', 'manual_active')"
-            ),
+            postgresql_where=text("status IN ('active', 'trialing', 'grace', 'manual_active')"),
         ),
     )
 
@@ -6198,14 +6728,10 @@ class TenantSecurityPolicy(Base):
         nullable=False,
         index=True,
     )
-    tenant_admin_mfa_required: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False
-    )
+    tenant_admin_mfa_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     all_users_mfa_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     mfa_grace_period_days: Mapped[int] = mapped_column(Integer, nullable=False, default=7)
-    mfa_enforced_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    mfa_enforced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     updated_by_membership_id: Mapped[str | None] = mapped_column(
         ForeignKey("company_memberships.id", ondelete="SET NULL"),
         nullable=True,
@@ -6786,9 +7312,7 @@ class CaseTrackingSupportMatrix(Base):
 
 class BillingOveragePolicy(Base):
     __tablename__ = "billing_overage_policies"
-    __table_args__ = (
-        UniqueConstraint("company_id", name="uq_billing_overage_policies_company"),
-    )
+    __table_args__ = (UniqueConstraint("company_id", name="uq_billing_overage_policies_company"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
@@ -6947,10 +7471,13 @@ class Client(Base):
     by itself — the cockpit renders the linked client if present,
     falling back to the free-text name.
     """
+
     __tablename__ = "clients"
     __table_args__ = (
         UniqueConstraint(
-            "company_id", "name", "client_type",
+            "company_id",
+            "name",
+            "client_type",
             name="uq_clients_tenant_name_type",
         ),
     )
@@ -6994,10 +7521,12 @@ class Client(Base):
     # WHEN. Documents stored as JSON so a later "secure storage URL
     # per doc" extension does not need another migration.
     kyc_submitted_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True,
+        DateTime(timezone=True),
+        nullable=True,
     )
     kyc_verified_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True,
+        DateTime(timezone=True),
+        nullable=True,
     )
     kyc_verified_by_membership_id: Mapped[str | None] = mapped_column(
         ForeignKey("company_memberships.id", ondelete="SET NULL"),
@@ -7035,10 +7564,12 @@ class MatterClientAssignment(Base):
     link N clients — hence a full N-N association rather than a
     direct FK on ``Matter``. Role captures whether the client is the
     plaintiff / respondent / etc. on that matter."""
+
     __tablename__ = "matter_client_assignments"
     __table_args__ = (
         UniqueConstraint(
-            "matter_id", "client_id",
+            "matter_id",
+            "client_id",
             name="uq_matter_client_assignment",
         ),
     )
@@ -7776,9 +8307,7 @@ class AuthorityDocument(Base):
     # Nullable as of the corpus-quality fix: when the PDF text has no
     # parseable date we store NULL rather than synthesising Jan 1 of
     # the S3-prefix year (which produced 73% fake dates before).
-    decision_date: Mapped[date | None] = mapped_column(
-        Date, nullable=True, index=True
-    )
+    decision_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
     canonical_key: Mapped[str] = mapped_column(String(255), nullable=False)
     source_reference: Mapped[str | None] = mapped_column(String(500), nullable=True, index=True)
     summary: Mapped[str] = mapped_column(Text, nullable=False)
@@ -7794,9 +8323,7 @@ class AuthorityDocument(Base):
     advocates_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     sections_cited_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     outcome_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
-    structured_version: Mapped[int | None] = mapped_column(
-        Integer, nullable=True
-    )
+    structured_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     ingested_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
@@ -7921,13 +8448,16 @@ class AuthorityCitation(Base):
         index=True,
     )
     treatment_evidence_text: Mapped[str | None] = mapped_column(
-        String(500), nullable=True,
+        String(500),
+        nullable=True,
     )
     treatment_confidence: Mapped[float | None] = mapped_column(
-        Numeric(4, 3), nullable=True,
+        Numeric(4, 3),
+        nullable=True,
     )
     treatment_classified_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True,
+        DateTime(timezone=True),
+        nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -8096,28 +8626,35 @@ class JudgeDecisionIndex(Base):
     __tablename__ = "judge_decision_index"
     __table_args__ = (
         UniqueConstraint(
-            "judge_id", "authority_document_id",
+            "judge_id",
+            "authority_document_id",
             name="uq_judge_decision_index_unique",
         ),
     )
 
     id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4()),
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid4()),
     )
     judge_id: Mapped[str] = mapped_column(
         ForeignKey("judges.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        nullable=False,
+        index=True,
     )
     authority_document_id: Mapped[str] = mapped_column(
         ForeignKey("authority_documents.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        nullable=False,
+        index=True,
     )
     role: Mapped[str] = mapped_column(String(24), default="sat_on", nullable=False)
     year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     matched_alias: Mapped[str | None] = mapped_column(String(255), nullable=True)
     match_confidence: Mapped[str | None] = mapped_column(String(24), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, nullable=False,
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
     )
 
 
@@ -8131,21 +8668,26 @@ class JudgeAuthorityAffinity(Base):
     __tablename__ = "judge_authority_affinity"
     __table_args__ = (
         UniqueConstraint(
-            "judge_id", "cited_authority_document_id",
+            "judge_id",
+            "cited_authority_document_id",
             name="uq_judge_authority_affinity_unique",
         ),
     )
 
     id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4()),
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid4()),
     )
     judge_id: Mapped[str] = mapped_column(
         ForeignKey("judges.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        nullable=False,
+        index=True,
     )
     cited_authority_document_id: Mapped[str] = mapped_column(
         ForeignKey("authority_documents.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        nullable=False,
+        index=True,
     )
     citation_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     last_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -8154,7 +8696,9 @@ class JudgeAuthorityAffinity(Base):
         nullable=True,
     )
     refreshed_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, nullable=False,
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
     )
 
 
@@ -8167,21 +8711,26 @@ class JudgeStatuteFocus(Base):
     __tablename__ = "judge_statute_focus"
     __table_args__ = (
         UniqueConstraint(
-            "judge_id", "statute_section_id",
+            "judge_id",
+            "statute_section_id",
             name="uq_judge_statute_focus_unique",
         ),
     )
 
     id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4()),
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid4()),
     )
     judge_id: Mapped[str] = mapped_column(
         ForeignKey("judges.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        nullable=False,
+        index=True,
     )
     statute_section_id: Mapped[str] = mapped_column(
         ForeignKey("statute_sections.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        nullable=False,
+        index=True,
     )
     citation_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     last_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -8190,7 +8739,9 @@ class JudgeStatuteFocus(Base):
         nullable=True,
     )
     refreshed_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, nullable=False,
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
     )
 
 
@@ -8227,10 +8778,15 @@ class PredictiveSignalRun(Base):
     disclaimer: Mapped[str] = mapped_column(Text, nullable=False)
     limitation_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, nullable=False,
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False,
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
     )
 
     items: Mapped[list[PredictiveSignalItem]] = relationship(
@@ -8278,7 +8834,9 @@ class PredictiveSignalItem(Base):
     features_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     missing_data_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, nullable=False,
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
     )
 
     run: Mapped[PredictiveSignalRun] = relationship(back_populates="items")
@@ -8323,7 +8881,9 @@ class PredictiveSignalEvidence(Base):
     source_date: Mapped[str | None] = mapped_column(String(32), nullable=True)
     weight: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, nullable=False,
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
     )
 
     run: Mapped[PredictiveSignalRun] = relationship(back_populates="evidence_rows")
@@ -8374,7 +8934,10 @@ class PredictiveOutcomeClassification(Base):
     rationale_snippet: Mapped[str | None] = mapped_column(Text, nullable=True)
     method: Mapped[str] = mapped_column(String(40), nullable=False, default="deterministic")
     status: Mapped[str] = mapped_column(
-        String(32), nullable=False, default="classified", index=True,
+        String(32),
+        nullable=False,
+        default="classified",
+        index=True,
     )
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     model_run_id: Mapped[str | None] = mapped_column(
@@ -8384,10 +8947,15 @@ class PredictiveOutcomeClassification(Base):
     )
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, nullable=False,
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False,
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
     )
 
 
@@ -8429,20 +8997,30 @@ class PredictiveOutcomeAggregateSnapshot(Base):
     neutral_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     consistency: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     confidence_label: Mapped[str] = mapped_column(
-        String(32), nullable=False, default="insufficient",
+        String(32),
+        nullable=False,
+        default="insufficient",
     )
     confidence_band_low: Mapped[float | None] = mapped_column(Float, nullable=True)
     confidence_band_high: Mapped[float | None] = mapped_column(Float, nullable=True)
     evidence_source_ids_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     feature_summary_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     status: Mapped[str] = mapped_column(
-        String(32), nullable=False, default="insufficient_evidence", index=True,
+        String(32),
+        nullable=False,
+        default="insufficient_evidence",
+        index=True,
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, nullable=False,
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
     )
     refreshed_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False,
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
     )
 
 
@@ -8485,9 +9063,7 @@ class Recommendation(Base):
     # for this recommendation. UI computes cited-vs-considered by
     # intersecting with options[*].supporting_citations. Empty by
     # default for legacy rows that pre-date PG-109.
-    retrieved_authorities_json: Mapped[str] = mapped_column(
-        Text, nullable=False, default="[]"
-    )
+    retrieved_authorities_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     # MOD-LSE-1 (2026-05-03) — litigation strategy payload. Populated
     # only for rows where ``type='litigation_strategy'``; null on every
     # other recommendation row. Holds the JSON-serialised
@@ -8495,9 +9071,7 @@ class Recommendation(Base):
     # drafts, limitation flags, etc.). The Pydantic schema on the
     # strategy service validates the shape on read/write — the column
     # itself is opaque JSON to the database.
-    strategy_payload_json: Mapped[str | None] = mapped_column(
-        Text, nullable=True
-    )
+    strategy_payload_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     analysis_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -8890,9 +9464,7 @@ class DraftingDataExtractionField(Base):
 
 class DraftVersion(Base):
     __tablename__ = "draft_versions"
-    __table_args__ = (
-        UniqueConstraint("draft_id", "revision", name="uq_draft_versions_revision"),
-    )
+    __table_args__ = (UniqueConstraint("draft_id", "revision", name="uq_draft_versions_revision"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     draft_id: Mapped[str] = mapped_column(
@@ -9248,13 +9820,16 @@ class JudgeAlias(Base):
     __tablename__ = "judge_aliases"
     __table_args__ = (
         UniqueConstraint(
-            "judge_id", "alias_normalised",
+            "judge_id",
+            "alias_normalised",
             name="uq_judge_aliases_unique",
         ),
     )
 
     id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4()),
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid4()),
     )
     judge_id: Mapped[str] = mapped_column(
         ForeignKey("judges.id", ondelete="CASCADE"),
@@ -9263,7 +9838,9 @@ class JudgeAlias(Base):
     )
     alias_text: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     alias_normalised: Mapped[str] = mapped_column(
-        String(255), nullable=False, index=True,
+        String(255),
+        nullable=False,
+        index=True,
     )
     # One of: sci_gov_in, hc_scrape, manual, auto_extract.
     source: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -9302,7 +9879,9 @@ class JudgeAppointment(Base):
     )
 
     id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4()),
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid4()),
     )
     judge_id: Mapped[str] = mapped_column(
         ForeignKey("judges.id", ondelete="CASCADE"),
@@ -9354,10 +9933,15 @@ class Statute(Base):
     source_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, nullable=False,
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False,
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
     )
 
 
@@ -9369,29 +9953,38 @@ class StatuteSection(Base):
     __tablename__ = "statute_sections"
     __table_args__ = (
         UniqueConstraint(
-            "statute_id", "section_number",
+            "statute_id",
+            "section_number",
             name="uq_statute_sections_unique",
         ),
     )
 
     id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4()),
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid4()),
     )
     statute_id: Mapped[str] = mapped_column(
         ForeignKey("statutes.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        nullable=False,
+        index=True,
     )
     section_number: Mapped[str] = mapped_column(String(64), nullable=False)
     section_label: Mapped[str | None] = mapped_column(String(500), nullable=True)
     section_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     section_text_source: Mapped[str | None] = mapped_column(
-        String(32), nullable=True,
+        String(32),
+        nullable=True,
     )
     section_text_fetched_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True,
+        DateTime(timezone=True),
+        nullable=True,
     )
     is_provisional: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False, server_default=false(),
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=false(),
     )
     section_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     parent_section_id: Mapped[str | None] = mapped_column(
@@ -9401,10 +9994,15 @@ class StatuteSection(Base):
     ordinal: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, nullable=False,
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False,
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
     )
 
 
@@ -9414,21 +10012,27 @@ class MatterStatuteReference(Base):
     __tablename__ = "matter_statute_references"
     __table_args__ = (
         UniqueConstraint(
-            "matter_id", "section_id", "relevance",
+            "matter_id",
+            "section_id",
+            "relevance",
             name="uq_matter_statute_references_unique",
         ),
     )
 
     id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4()),
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid4()),
     )
     matter_id: Mapped[str] = mapped_column(
         ForeignKey("matters.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        nullable=False,
+        index=True,
     )
     section_id: Mapped[str] = mapped_column(
         ForeignKey("statute_sections.id", ondelete="RESTRICT"),
-        nullable=False, index=True,
+        nullable=False,
+        index=True,
     )
     # 'cited' (we rely on it) | 'opposing' (other side relies on it)
     # | 'context' (in scope but not load-bearing). Free string so we
@@ -9440,10 +10044,15 @@ class MatterStatuteReference(Base):
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, nullable=False,
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False,
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
     )
 
 
@@ -9455,29 +10064,39 @@ class AuthorityStatuteReference(Base):
     __tablename__ = "authority_statute_references"
     __table_args__ = (
         UniqueConstraint(
-            "authority_id", "section_id",
+            "authority_id",
+            "section_id",
             name="uq_authority_statute_references_unique",
         ),
     )
 
     id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4()),
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid4()),
     )
     authority_id: Mapped[str] = mapped_column(
         ForeignKey("authority_documents.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        nullable=False,
+        index=True,
     )
     section_id: Mapped[str] = mapped_column(
         ForeignKey("statute_sections.id", ondelete="RESTRICT"),
-        nullable=False, index=True,
+        nullable=False,
+        index=True,
     )
     occurrence_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     source: Mapped[str] = mapped_column(String(64), nullable=False, default="layer2_extract")
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, nullable=False,
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False,
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
     )
 
 
@@ -9500,9 +10119,7 @@ class EvaluationRun(Base):
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
-    completed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
@@ -9516,9 +10133,7 @@ class EvaluationRun(Base):
 
 class EvaluationCase(Base):
     __tablename__ = "evaluation_cases"
-    __table_args__ = (
-        UniqueConstraint("run_id", "case_key", name="uq_eval_case_key_per_run"),
-    )
+    __table_args__ = (UniqueConstraint("run_id", "case_key", name="uq_eval_case_key_per_run"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     run_id: Mapped[str] = mapped_column(
@@ -9575,12 +10190,8 @@ class AuditExportJob(Base):
         String(24), nullable=False, default=AuditExportJobStatus.PENDING
     )
     format: Mapped[str] = mapped_column(String(16), nullable=False, default="jsonl")
-    since: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    until: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     action_filter: Mapped[str | None] = mapped_column(String(120), nullable=True)
     row_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
     storage_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -9590,12 +10201,8 @@ class AuditExportJob(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
-    started_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    completed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class AuthorityAnnotationKind(StrEnum):
@@ -9683,9 +10290,7 @@ class MatterAttachmentAnnotation(Base):
 
     __tablename__ = "matter_attachment_annotations"
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
         ForeignKey("companies.id", ondelete="CASCADE"),
         nullable=False,
@@ -9716,9 +10321,7 @@ class MatterAttachmentAnnotation(Base):
     quoted_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     body: Mapped[str | None] = mapped_column(Text, nullable=True)
     color: Mapped[str | None] = mapped_column(String(24), nullable=True)
-    is_archived: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False
-    )
+    is_archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
@@ -9747,9 +10350,7 @@ class MatterDeadline(Base):
 
     __tablename__ = "matter_deadlines"
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     matter_id: Mapped[str] = mapped_column(
         ForeignKey("matters.id", ondelete="CASCADE"),
         nullable=False,
@@ -9783,9 +10384,7 @@ class MatterDeadline(Base):
         default=utcnow,
         onupdate=utcnow,
     )
-    completed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class TenantAIPolicy(Base):
@@ -9799,44 +10398,30 @@ class TenantAIPolicy(Base):
     """
 
     __tablename__ = "tenant_ai_policies"
-    __table_args__ = (
-        UniqueConstraint("company_id", name="uq_tenant_ai_policy_company"),
-    )
+    __table_args__ = (UniqueConstraint("company_id", name="uq_tenant_ai_policy_company"),)
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
         ForeignKey("companies.id", ondelete="CASCADE"),
         nullable=False,
     )
-    allowed_models_drafting_json: Mapped[str] = mapped_column(
-        Text, nullable=False, default="[]"
-    )
+    allowed_models_drafting_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     allowed_models_recommendations_json: Mapped[str] = mapped_column(
         Text, nullable=False, default="[]"
     )
     allowed_models_hearing_pack_json: Mapped[str] = mapped_column(
         Text, nullable=False, default="[]"
     )
-    max_tokens_per_session: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=16384
-    )
-    monthly_token_budget: Mapped[int | None] = mapped_column(
-        Integer, nullable=True
-    )
-    user_monthly_token_budget: Mapped[int | None] = mapped_column(
-        Integer, nullable=True
-    )
+    max_tokens_per_session: Mapped[int] = mapped_column(Integer, nullable=False, default=16384)
+    monthly_token_budget: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    user_monthly_token_budget: Mapped[int | None] = mapped_column(Integer, nullable=True)
     token_warning_threshold_percent: Mapped[int] = mapped_column(
         Integer, nullable=False, default=90
     )
     external_share_requires_approval: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True
     )
-    training_opt_in: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False
-    )
+    training_opt_in: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # PG-107 (2026-05-01) / LI-S7A (2026-05-11) — opt-in controlled
     # predictive bench/litigation intelligence. Default false:
     # evidence-only output. Owner/admin can flip per workspace; source
@@ -9851,9 +10436,7 @@ class TenantAIPolicy(Base):
     # The /api/drafting/templates endpoint filters its response on this
     # list; the recommender matrix also drops disabled types from its
     # output. Default empty = every template visible.
-    disabled_template_types_json: Mapped[str] = mapped_column(
-        Text, nullable=False, default="[]"
-    )
+    disabled_template_types_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
@@ -9928,9 +10511,7 @@ class MatterIntakeRequest(Base):
     assigned_to: Mapped[CompanyMembership | None] = relationship(
         foreign_keys=[assigned_to_membership_id]
     )
-    linked_matter: Mapped[Matter | None] = relationship(
-        foreign_keys=[linked_matter_id]
-    )
+    linked_matter: Mapped[Matter | None] = relationship(foreign_keys=[linked_matter_id])
 
 
 # ---------------------------------------------------------------------------
@@ -9949,9 +10530,7 @@ class TeamKind(StrEnum):
 
 class Team(Base):
     __tablename__ = "teams"
-    __table_args__ = (
-        UniqueConstraint("company_id", "slug", name="uq_team_company_slug"),
-    )
+    __table_args__ = (UniqueConstraint("company_id", "slug", name="uq_team_company_slug"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
@@ -9962,9 +10541,7 @@ class Team(Base):
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     slug: Mapped[str] = mapped_column(String(80), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    kind: Mapped[str] = mapped_column(
-        String(24), nullable=False, default=TeamKind.TEAM
-    )
+    kind: Mapped[str] = mapped_column(String(24), nullable=False, default=TeamKind.TEAM)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(
@@ -9982,11 +10559,7 @@ class Team(Base):
 
 class TeamMembership(Base):
     __tablename__ = "team_memberships"
-    __table_args__ = (
-        UniqueConstraint(
-            "team_id", "membership_id", name="uq_team_membership"
-        ),
-    )
+    __table_args__ = (UniqueConstraint("team_id", "membership_id", name="uq_team_membership"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     team_id: Mapped[str] = mapped_column(
@@ -10056,23 +10629,26 @@ class Communication(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
         ForeignKey("companies.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        nullable=False,
+        index=True,
     )
     matter_id: Mapped[str | None] = mapped_column(
         ForeignKey("matters.id", ondelete="CASCADE"),
-        nullable=True, index=True,
+        nullable=True,
+        index=True,
     )
     client_id: Mapped[str | None] = mapped_column(
         ForeignKey("clients.id", ondelete="SET NULL"),
-        nullable=True, index=True,
+        nullable=True,
+        index=True,
     )
     direction: Mapped[str] = mapped_column(
-        String(12), nullable=False, default=CommunicationDirection.OUTBOUND,
+        String(12),
+        nullable=False,
+        default=CommunicationDirection.OUTBOUND,
     )
     channel: Mapped[str] = mapped_column(String(20), nullable=False)
     subject: Mapped[str | None] = mapped_column(String(400), nullable=True)
@@ -10081,30 +10657,43 @@ class Communication(Base):
     recipient_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     recipient_phone: Mapped[str | None] = mapped_column(String(64), nullable=True)
     status: Mapped[str] = mapped_column(
-        String(24), nullable=False, default=CommunicationStatus.LOGGED,
+        String(24),
+        nullable=False,
+        default=CommunicationStatus.LOGGED,
     )
     occurred_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=utcnow,
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
     )
     delivered_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True,
+        DateTime(timezone=True),
+        nullable=True,
     )
     opened_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True,
+        DateTime(timezone=True),
+        nullable=True,
     )
     external_message_id: Mapped[str | None] = mapped_column(
-        String(120), nullable=True,
+        String(120),
+        nullable=True,
     )
     metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_by_membership_id: Mapped[str | None] = mapped_column(
         ForeignKey("company_memberships.id", ondelete="SET NULL"),
-        nullable=True, index=True,
+        nullable=True,
+        index=True,
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, nullable=False,
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False,
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
     )
 
 
@@ -10134,9 +10723,7 @@ class EmailCalendarCandidate(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
         ForeignKey("companies.id", ondelete="CASCADE"),
         nullable=False,
@@ -10195,10 +10782,15 @@ class EmailCalendarCandidate(Base):
         nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, nullable=False,
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False,
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
     )
 
 
@@ -10220,12 +10812,11 @@ class EmailTemplate(Base):
 
     __tablename__ = "email_templates"
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
         ForeignKey("companies.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        nullable=False,
+        index=True,
     )
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     kind: Mapped[str] = mapped_column(String(40), nullable=False)
@@ -10234,23 +10825,31 @@ class EmailTemplate(Base):
     body_template: Mapped[str] = mapped_column(Text, nullable=False)
     variables_json: Mapped[list | None] = mapped_column(JSON, nullable=True)
     is_active: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True,
+        Boolean,
+        nullable=False,
+        default=True,
     )
     created_by_membership_id: Mapped[str | None] = mapped_column(
         ForeignKey("company_memberships.id", ondelete="SET NULL"),
-        nullable=True, index=True,
+        nullable=True,
+        index=True,
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, nullable=False,
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, onupdate=utcnow,
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
         nullable=False,
     )
 
     __table_args__ = (
         UniqueConstraint(
-            "company_id", "name",
+            "company_id",
+            "name",
             name="uq_email_templates_company_name",
         ),
     )
@@ -10277,43 +10876,56 @@ class PortalUser(Base):
     __tablename__ = "portal_users"
     __table_args__ = (
         UniqueConstraint(
-            "company_id", "email", name="uq_portal_user_company_email",
+            "company_id",
+            "email",
+            name="uq_portal_user_company_email",
         ),
     )
 
     id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4()),
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid4()),
     )
     company_id: Mapped[str] = mapped_column(
         ForeignKey("companies.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        nullable=False,
+        index=True,
     )
     email: Mapped[str] = mapped_column(String(320), nullable=False)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(32), nullable=False)
     is_active: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True,
+        Boolean,
+        nullable=False,
+        default=True,
     )
     sessions_valid_after: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True,
+        DateTime(timezone=True),
+        nullable=True,
     )
     invited_by_membership_id: Mapped[str | None] = mapped_column(
         ForeignKey("company_memberships.id", ondelete="SET NULL"),
         nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, nullable=False,
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
     )
     last_signed_in_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True,
+        DateTime(timezone=True),
+        nullable=True,
     )
 
     company: Mapped[Company] = relationship()
     magic_links: Mapped[list[PortalMagicLink]] = relationship(
-        back_populates="portal_user", cascade="all, delete-orphan",
+        back_populates="portal_user",
+        cascade="all, delete-orphan",
     )
     grants: Mapped[list[MatterPortalGrant]] = relationship(
-        back_populates="portal_user", cascade="all, delete-orphan",
+        back_populates="portal_user",
+        cascade="all, delete-orphan",
     )
 
 
@@ -10328,29 +10940,41 @@ class PortalMagicLink(Base):
     __tablename__ = "portal_magic_links"
 
     id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4()),
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid4()),
     )
     portal_user_id: Mapped[str] = mapped_column(
         ForeignKey("portal_users.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        nullable=False,
+        index=True,
     )
     token_hash: Mapped[str] = mapped_column(
-        String(64), nullable=False, unique=True,
+        String(64),
+        nullable=False,
+        unique=True,
     )
     expires_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, index=True,
+        DateTime(timezone=True),
+        nullable=False,
+        index=True,
     )
     consumed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True,
+        DateTime(timezone=True),
+        nullable=True,
     )
     requested_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, nullable=False,
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
     )
     requested_ip: Mapped[str | None] = mapped_column(
-        String(64), nullable=True,
+        String(64),
+        nullable=True,
     )
     requested_user_agent: Mapped[str | None] = mapped_column(
-        String(255), nullable=True,
+        String(255),
+        nullable=True,
     )
 
     portal_user: Mapped[PortalUser] = relationship(back_populates="magic_links")
@@ -10368,21 +10992,26 @@ class MatterPortalGrant(Base):
     __tablename__ = "matter_portal_grants"
     __table_args__ = (
         UniqueConstraint(
-            "portal_user_id", "matter_id",
+            "portal_user_id",
+            "matter_id",
             name="uq_matter_portal_grant_user_matter",
         ),
     )
 
     id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4()),
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid4()),
     )
     portal_user_id: Mapped[str] = mapped_column(
         ForeignKey("portal_users.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        nullable=False,
+        index=True,
     )
     matter_id: Mapped[str] = mapped_column(
         ForeignKey("matters.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        nullable=False,
+        index=True,
     )
     role: Mapped[str] = mapped_column(String(32), nullable=False)
     scope_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
@@ -10391,10 +11020,13 @@ class MatterPortalGrant(Base):
         nullable=True,
     )
     granted_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, nullable=False,
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
     )
     revoked_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True,
+        DateTime(timezone=True),
+        nullable=True,
     )
 
     portal_user: Mapped[PortalUser] = relationship(back_populates="grants")
@@ -10412,12 +11044,16 @@ class TenantContractPlaybook(Base):
     __tablename__ = "tenant_contract_playbooks"
     __table_args__ = (
         UniqueConstraint(
-            "company_id", "name", name="uq_tenant_contract_playbook_company_name",
+            "company_id",
+            "name",
+            name="uq_tenant_contract_playbook_company_name",
         ),
     )
 
     id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4()),
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid4()),
     )
     company_id: Mapped[str] = mapped_column(
         ForeignKey("companies.id", ondelete="CASCADE"),
@@ -10435,10 +11071,15 @@ class TenantContractPlaybook(Base):
         nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, nullable=False,
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False,
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
     )
 
     rules: Mapped[list[TenantContractPlaybookRule]] = relationship(
@@ -10452,7 +11093,9 @@ class TenantContractPlaybookRule(Base):
     __tablename__ = "tenant_contract_playbook_rules"
 
     id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4()),
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid4()),
     )
     playbook_id: Mapped[str] = mapped_column(
         ForeignKey("tenant_contract_playbooks.id", ondelete="CASCADE"),
@@ -10476,10 +11119,15 @@ class TenantContractPlaybookRule(Base):
         nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, nullable=False,
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False,
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
     )
 
     playbook: Mapped[TenantContractPlaybook] = relationship(back_populates="rules")
