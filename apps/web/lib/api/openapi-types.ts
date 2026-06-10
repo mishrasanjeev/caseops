@@ -233,6 +233,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/integrations/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Admin Integrations Health */
+        get: operations["get_admin_integrations_health_api_admin_integrations_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/integrations/health/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Admin Integrations Health Check */
+        post: operations["post_admin_integrations_health_check_api_admin_integrations_health_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/matter-billing": {
         parameters: {
             query?: never;
@@ -300,6 +334,59 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/admin/microsoft365-configuration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read tenant Microsoft 365 readiness without exposing OAuth values. */
+        get: operations["get_microsoft365_configuration_api_admin_microsoft365_configuration_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Configure tenant Microsoft 365 Graph OAuth values without echoing secrets. */
+        patch: operations["patch_microsoft365_configuration_api_admin_microsoft365_configuration_patch"];
+        trace?: never;
+    };
+    "/api/admin/microsoft365-configuration/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run a safe Microsoft 365 readiness probe without calling Graph. */
+        post: operations["post_microsoft365_configuration_test_api_admin_microsoft365_configuration_test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/notification-preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read tenant and current-user notification preferences. */
+        get: operations["get_admin_notification_preferences_api_admin_notification_preferences_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update tenant-level notification defaults and policy. */
+        patch: operations["patch_admin_notification_preferences_api_admin_notification_preferences_patch"];
         trace?: never;
     };
     "/api/admin/notifications": {
@@ -1796,6 +1883,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/calendar/provider-event-candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List provider calendar event candidates and conflicts. */
+        get: operations["get_provider_event_candidates_api_calendar_provider_event_candidates_get"];
+        put?: never;
+        /** Create a local-safe provider calendar event candidate. */
+        post: operations["post_provider_event_candidate_api_calendar_provider_event_candidates_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/calendar/provider-event-candidates/{candidate_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Review one provider calendar event candidate. */
+        patch: operations["patch_provider_event_candidate_api_calendar_provider_event_candidates__candidate_id__patch"];
+        trace?: never;
+    };
     "/api/calendar/sync-status": {
         parameters: {
             query?: never;
@@ -3177,6 +3299,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/drive/candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List tenant-safe Drive file candidates. */
+        get: operations["get_drive_candidates_api_drive_candidates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/drive/candidates/{candidate_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Review one Drive candidate and optionally import its content. */
+        patch: operations["patch_drive_candidate_api_drive_candidates__candidate_id__patch"];
+        trace?: never;
+    };
     "/api/drive/connections/{connection_id}": {
         parameters: {
             query?: never;
@@ -3209,6 +3365,41 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/drive/google/candidates/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sync Google Drive file metadata into a review-first queue. */
+        post: operations["post_google_drive_candidate_sync_api_drive_google_candidates_sync_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/drive/google/controls": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read tenant Google Drive review/import controls. */
+        get: operations["get_google_drive_controls_api_drive_google_controls_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update tenant Google Drive controls without enabling auto-import. */
+        patch: operations["patch_google_drive_controls_api_drive_google_controls_patch"];
         trace?: never;
     };
     "/api/drive/google/files": {
@@ -3521,6 +3712,126 @@ export interface paths {
         get: operations["get_imports_api_mailbox_imports_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mailbox/imports/{import_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Review one mailbox metadata candidate without importing raw bodies. */
+        patch: operations["patch_message_import_api_mailbox_imports__import_id__patch"];
+        trace?: never;
+    };
+    "/api/mailbox/inbound-aliases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List tenant/matter inbound email aliases. */
+        get: operations["get_inbound_email_aliases_api_mailbox_inbound_aliases_get"];
+        put?: never;
+        /** Create a disabled-by-default inbound email alias. */
+        post: operations["post_inbound_email_alias_api_mailbox_inbound_aliases_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mailbox/inbound-aliases/{alias_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update inbound email alias controls. */
+        patch: operations["patch_inbound_email_alias_api_mailbox_inbound_aliases__alias_id__patch"];
+        trace?: never;
+    };
+    "/api/mailbox/inbound-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List inbound email alias review events. */
+        get: operations["get_inbound_email_events_api_mailbox_inbound_events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mailbox/inbound-events/{event_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Review one inbound email event without importing raw bodies. */
+        patch: operations["patch_inbound_email_event_api_mailbox_inbound_events__event_id__patch"];
+        trace?: never;
+    };
+    "/api/mailbox/inbound/webhook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ingest a provider-verified inbound email metadata event. */
+        post: operations["post_inbound_email_webhook_api_mailbox_inbound_webhook_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mailbox/outlook/candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create a local-safe Outlook Mail metadata review candidate. */
+        post: operations["post_outlook_mail_candidate_api_mailbox_outlook_candidates_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5436,6 +5747,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/notification-preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read current user's notification preferences. */
+        get: operations["get_notification_preferences_api_notification_preferences_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update current user's notification opt-in/opt-out preferences. */
+        patch: operations["patch_notification_preferences_api_notification_preferences_patch"];
+        trace?: never;
+    };
     "/api/notification-rules": {
         parameters: {
             query?: never;
@@ -6045,6 +6374,23 @@ export interface paths {
         };
         /** Get Platform Integrations */
         get: operations["get_platform_integrations_api_platform_admin_integrations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/integrations/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Platform Integrations Health */
+        get: operations["get_platform_integrations_health_api_platform_admin_integrations_health_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -8874,6 +9220,135 @@ export interface components {
              */
             provider: "outlook" | "google_calendar";
         };
+        /** CalendarProviderEventCandidateCreateRequest */
+        CalendarProviderEventCandidateCreateRequest: {
+            /** Ends At */
+            ends_at?: string | null;
+            /** I Cal Uid */
+            i_cal_uid?: string | null;
+            /** Location */
+            location?: string | null;
+            /** Organizer Display */
+            organizer_display?: string | null;
+            /**
+             * Provider
+             * @enum {string}
+             */
+            provider: "outlook" | "google_calendar";
+            /** Provider Event Id */
+            provider_event_id: string;
+            /** Provider Status */
+            provider_status?: string | null;
+            /**
+             * Starts At
+             * Format: date-time
+             */
+            starts_at: string;
+            /** Suggested Matter Id */
+            suggested_matter_id?: string | null;
+            /** Title */
+            title: string;
+        };
+        /** CalendarProviderEventCandidateListResponse */
+        CalendarProviderEventCandidateListResponse: {
+            /** Candidates */
+            candidates: components["schemas"]["CalendarProviderEventCandidateRecord"][];
+            /** Conflict Count */
+            conflict_count: number;
+            /** Pending Count */
+            pending_count: number;
+        };
+        /** CalendarProviderEventCandidateRecord */
+        CalendarProviderEventCandidateRecord: {
+            /** Company Id */
+            company_id: string;
+            /** Confidence */
+            confidence?: number | null;
+            /** Conflict Reason */
+            conflict_reason?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Ends At */
+            ends_at?: string | null;
+            /** I Cal Uid */
+            i_cal_uid?: string | null;
+            /** Id */
+            id: string;
+            /** Last Error Redacted */
+            last_error_redacted?: string | null;
+            /** Linked Hearing Id */
+            linked_hearing_id?: string | null;
+            /** Linked Matter Id */
+            linked_matter_id?: string | null;
+            /** Location */
+            location?: string | null;
+            /** Organizer Display */
+            organizer_display?: string | null;
+            /** Provenance */
+            provenance?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Provider
+             * @enum {string}
+             */
+            provider: "outlook" | "google_calendar";
+            /** Provider Event Id */
+            provider_event_id: string;
+            /** Provider Status */
+            provider_status?: string | null;
+            /** Reviewed At */
+            reviewed_at?: string | null;
+            /** Reviewed By Membership Id */
+            reviewed_by_membership_id?: string | null;
+            /**
+             * Starts At
+             * Format: date-time
+             */
+            starts_at: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "new" | "conflict" | "accepted" | "rejected" | "ignored" | "failed";
+            /** Suggested Matter Id */
+            suggested_matter_id?: string | null;
+            /** Sync History */
+            sync_history?: {
+                [key: string]: unknown;
+            }[];
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** CalendarProviderEventCandidateReviewRequest */
+        CalendarProviderEventCandidateReviewRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "accept" | "reject" | "ignore";
+            /**
+             * Force Overwrite Locked
+             * @default false
+             */
+            force_overwrite_locked: boolean;
+            /** Matter Id */
+            matter_id?: string | null;
+        };
+        /** CalendarProviderEventCandidateReviewResponse */
+        CalendarProviderEventCandidateReviewResponse: {
+            candidate: components["schemas"]["CalendarProviderEventCandidateRecord"];
+            /** Hearing Id */
+            hearing_id?: string | null;
+        };
         /** CalendarSyncCapabilityStatus */
         CalendarSyncCapabilityStatus: {
             /**
@@ -10337,6 +10812,84 @@ export interface components {
             /** Related Party Names */
             related_party_names?: string[];
         };
+        /** ConnectorHealthCheckResponse */
+        ConnectorHealthCheckResponse: {
+            /**
+             * Checked At
+             * Format: date-time
+             */
+            checked_at: string;
+            /** Health */
+            health: components["schemas"]["ConnectorHealthRecord"][];
+        };
+        /** ConnectorHealthListResponse */
+        ConnectorHealthListResponse: {
+            /** Health */
+            health: components["schemas"]["ConnectorHealthRecord"][];
+        };
+        /** ConnectorHealthRecord */
+        ConnectorHealthRecord: {
+            /** Company Id */
+            company_id: string;
+            /**
+             * Configured State
+             * @enum {string}
+             */
+            configured_state: "healthy" | "degraded" | "blocked" | "disabled" | "configured" | "missing_config" | "connected" | "token_expired" | "scope_missing" | "rate_limited" | "provider_outage" | "blocked_by_policy";
+            /**
+             * Connected State
+             * @enum {string}
+             */
+            connected_state: "healthy" | "degraded" | "blocked" | "disabled" | "configured" | "missing_config" | "connected" | "token_expired" | "scope_missing" | "rate_limited" | "provider_outage" | "blocked_by_policy";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Disabled Reason */
+            disabled_reason?: string | null;
+            /** Error Category */
+            error_category?: string | null;
+            /** Granted Scopes */
+            granted_scopes?: string[];
+            /** Id */
+            id: string;
+            /** Last Checked At */
+            last_checked_at?: string | null;
+            /** Last Failure At */
+            last_failure_at?: string | null;
+            /** Last Success At */
+            last_success_at?: string | null;
+            /** Missing Scopes */
+            missing_scopes?: string[];
+            /** Next Retry At */
+            next_retry_at?: string | null;
+            /** Operational Alerts */
+            operational_alerts?: string[];
+            /** Polling Status */
+            polling_status?: string | null;
+            /** Provider */
+            provider: string;
+            /** Provider Operations Link */
+            provider_operations_link?: string | null;
+            /** Rate Limit Status */
+            rate_limit_status?: string | null;
+            /** Required Scopes */
+            required_scopes?: string[];
+            /** Setup Actions */
+            setup_actions?: string[];
+            /** Token Expires At */
+            token_expires_at?: string | null;
+            /** Token Refresh Status */
+            token_refresh_status?: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Webhook Status */
+            webhook_status?: string | null;
+        };
         /** ConnectorRecord */
         ConnectorRecord: {
             /** Blocked */
@@ -10347,43 +10900,65 @@ export interface components {
             configured: boolean;
             /** Degraded */
             degraded: boolean;
+            /** Disabled Reason */
+            disabled_reason?: string | null;
             /** Enabled */
             enabled: boolean;
+            /** Error Category */
+            error_category?: string | null;
+            /** Granted Scopes */
+            granted_scopes?: string[];
             /** Healthy */
             healthy: boolean;
             /** Internal Cost Label */
             internal_cost_label?: string | null;
             /** Key */
             key: string;
+            /** Last Checked At */
+            last_checked_at?: string | null;
             /** Last Failure */
             last_failure?: string | null;
             /** Last Success */
             last_success?: string | null;
+            /** Missing Scopes */
+            missing_scopes?: string[];
             /** Name */
             name: string;
             /** Next Run */
             next_run?: string | null;
+            /** Operational Alerts */
+            operational_alerts?: string[];
             /** Platform Notes */
             platform_notes?: string[];
+            /** Polling Status */
+            polling_status?: string | null;
             /** Provider */
             provider: string;
             /** Provider Operations Link */
             provider_operations_link?: string | null;
+            /** Rate Limit Status */
+            rate_limit_status?: string | null;
             /** Required Config Names */
             required_config_names?: string[];
+            /** Required Scopes */
+            required_scopes?: string[];
             /** Risk Label */
             risk_label?: string | null;
             /** Runbook Link */
             runbook_link?: string | null;
             /** Scopes */
             scopes?: string[];
+            /** Setup Actions */
+            setup_actions?: string[];
             /**
              * Status
              * @enum {string}
              */
-            status: "healthy" | "degraded" | "blocked" | "disabled" | "configured";
+            status: "healthy" | "degraded" | "blocked" | "disabled" | "configured" | "missing_config" | "connected" | "token_expired" | "scope_missing" | "rate_limited" | "provider_outage" | "blocked_by_policy";
             /** Token Expiry */
             token_expiry?: string | null;
+            /** Token Refresh Status */
+            token_refresh_status?: string | null;
             /** Webhook Status */
             webhook_status?: string | null;
         };
@@ -11809,6 +12384,168 @@ export interface components {
              */
             step_group: string;
         };
+        /** DriveCandidateListResponse */
+        DriveCandidateListResponse: {
+            /** Candidates */
+            candidates: components["schemas"]["DriveCandidateRecord"][];
+            /** Pending Count */
+            pending_count: number;
+        };
+        /** DriveCandidateRecord */
+        DriveCandidateRecord: {
+            /** Company Id */
+            company_id: string;
+            /** Confidence */
+            confidence?: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Folder Path */
+            folder_path?: string | null;
+            /** Id */
+            id: string;
+            /** Imported Attachment Id */
+            imported_attachment_id?: string | null;
+            /** Last Error Redacted */
+            last_error_redacted?: string | null;
+            /** Linked Matter Id */
+            linked_matter_id?: string | null;
+            /** Mime Type */
+            mime_type?: string | null;
+            /** Modified Time */
+            modified_time?: string | null;
+            /** Name */
+            name: string;
+            /** Owner Display */
+            owner_display?: string | null;
+            /** Provenance */
+            provenance?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Provider
+             * @enum {string}
+             */
+            provider: "google_drive" | "onedrive_sharepoint";
+            /** Provider File Id */
+            provider_file_id: string;
+            /** Provider Version */
+            provider_version: string;
+            /** Size Bytes */
+            size_bytes?: number | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "new" | "ignored" | "linked_metadata" | "content_import_requested" | "content_imported" | "failed";
+            /** Suggested Matter Id */
+            suggested_matter_id?: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Web Url */
+            web_url?: string | null;
+        };
+        /** DriveCandidateReviewRequest */
+        DriveCandidateReviewRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "link_metadata" | "import_file" | "ignore" | "retry";
+            /** Matter Id */
+            matter_id?: string | null;
+        };
+        /** DriveCandidateReviewResponse */
+        DriveCandidateReviewResponse: {
+            candidate: components["schemas"]["DriveCandidateRecord"];
+            /** Imported Attachment Id */
+            imported_attachment_id?: string | null;
+        };
+        /** DriveCandidateSyncRequest */
+        DriveCandidateSyncRequest: {
+            /**
+             * Limit
+             * @default 25
+             */
+            limit: number;
+        };
+        /** DriveCandidateSyncResponse */
+        DriveCandidateSyncResponse: {
+            /** Candidates */
+            candidates: components["schemas"]["DriveCandidateRecord"][];
+            /** Created Count */
+            created_count: number;
+            /** Duplicate Count */
+            duplicate_count: number;
+            /** Examined Count */
+            examined_count: number;
+            /**
+             * Provider
+             * @enum {string}
+             */
+            provider: "google_drive" | "onedrive_sharepoint";
+        };
+        /** DriveSyncControlRecord */
+        DriveSyncControlRecord: {
+            /** Allowed Folders */
+            allowed_folders?: string[];
+            /** Allowed Mime Types */
+            allowed_mime_types?: string[];
+            /**
+             * Auto Import Enabled
+             * @default false
+             */
+            auto_import_enabled: boolean;
+            /** Blocked Folders */
+            blocked_folders?: string[];
+            /** Company Id */
+            company_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Max File Size Bytes */
+            max_file_size_bytes: number;
+            /**
+             * Mode
+             * @default review_import
+             * @enum {string}
+             */
+            mode: "auto_suggest" | "review_import";
+            /**
+             * Provider
+             * @enum {string}
+             */
+            provider: "google_drive" | "onedrive_sharepoint";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** DriveSyncControlUpdateRequest */
+        DriveSyncControlUpdateRequest: {
+            /** Allowed Folders */
+            allowed_folders?: string[] | null;
+            /** Allowed Mime Types */
+            allowed_mime_types?: string[] | null;
+            /** Auto Import Enabled */
+            auto_import_enabled?: boolean | null;
+            /** Blocked Folders */
+            blocked_folders?: string[] | null;
+            /** Max File Size Bytes */
+            max_file_size_bytes?: number | null;
+            /** Mode */
+            mode?: ("auto_suggest" | "review_import") | null;
+        };
         /** EmailInvitationCandidateExtractRequest */
         EmailInvitationCandidateExtractRequest: {
             /**
@@ -12655,9 +13392,9 @@ export interface components {
             /**
              * Provider
              * @default google_drive
-             * @constant
+             * @enum {string}
              */
-            provider: "google_drive";
+            provider: "google_drive" | "onedrive_sharepoint";
         };
         /** GoogleDriveConnectionRecord */
         GoogleDriveConnectionRecord: {
@@ -12681,9 +13418,9 @@ export interface components {
             /**
              * Provider
              * @default google_drive
-             * @constant
+             * @enum {string}
              */
-            provider: "google_drive";
+            provider: "google_drive" | "onedrive_sharepoint";
             /** Provider Account Id */
             provider_account_id: string | null;
             /** Scopes */
@@ -12706,9 +13443,9 @@ export interface components {
             /**
              * Provider
              * @default google_drive
-             * @constant
+             * @enum {string}
              */
-            provider: "google_drive";
+            provider: "google_drive" | "onedrive_sharepoint";
             /** Provider Available */
             provider_available: boolean;
             /** Unavailable Reason */
@@ -12723,9 +13460,9 @@ export interface components {
             /**
              * Provider
              * @default google_drive
-             * @constant
+             * @enum {string}
              */
-            provider: "google_drive";
+            provider: "google_drive" | "onedrive_sharepoint";
         };
         /** GoogleDriveFileMetadata */
         GoogleDriveFileMetadata: {
@@ -12870,9 +13607,9 @@ export interface components {
             /**
              * Provider
              * @default google_drive
-             * @constant
+             * @enum {string}
              */
-            provider: "google_drive";
+            provider: "google_drive" | "onedrive_sharepoint";
         };
         /** GoogleWorkspaceApprovalItemStatus */
         GoogleWorkspaceApprovalItemStatus: {
@@ -13355,6 +14092,81 @@ export interface components {
              */
             updated_at: string;
         };
+        /** InboundEmailAliasCreateRequest */
+        InboundEmailAliasCreateRequest: {
+            /** Allowed Domains */
+            allowed_domains?: string[];
+            /** Allowed Senders */
+            allowed_senders?: string[];
+            /** Matter Id */
+            matter_id?: string | null;
+            /**
+             * Retention Days
+             * @default 30
+             */
+            retention_days: number;
+            /**
+             * Status
+             * @default disabled
+             * @enum {string}
+             */
+            status: "enabled" | "disabled";
+        };
+        /** InboundEmailAliasListResponse */
+        InboundEmailAliasListResponse: {
+            /** Aliases */
+            aliases: components["schemas"]["InboundEmailAliasRecord"][];
+        };
+        /** InboundEmailAliasRecord */
+        InboundEmailAliasRecord: {
+            /** Alias Address */
+            alias_address: string;
+            /**
+             * Alias Type
+             * @enum {string}
+             */
+            alias_type: "tenant" | "matter";
+            /** Allowed Domains */
+            allowed_domains?: string[];
+            /** Allowed Senders */
+            allowed_senders?: string[];
+            /** Company Id */
+            company_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Matter Id */
+            matter_id?: string | null;
+            /** Retention Days */
+            retention_days: number;
+            /** Spam Security Status */
+            spam_security_status: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "enabled" | "disabled";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** InboundEmailAliasUpdateRequest */
+        InboundEmailAliasUpdateRequest: {
+            /** Allowed Domains */
+            allowed_domains?: string[] | null;
+            /** Allowed Senders */
+            allowed_senders?: string[] | null;
+            /** Retention Days */
+            retention_days?: number | null;
+            /** Status */
+            status?: ("enabled" | "disabled") | null;
+        };
         /**
          * InboundEmailAttachmentImport
          * @description One attachment from a manually selected inbound email.
@@ -13370,6 +14182,108 @@ export interface components {
             content_type?: string | null;
             /** Filename */
             filename: string;
+        };
+        /** InboundEmailAttachmentMetadata */
+        InboundEmailAttachmentMetadata: {
+            /** Filename */
+            filename?: string | null;
+            /** Mime Type */
+            mime_type?: string | null;
+            /**
+             * Scan Status
+             * @default pending_review
+             */
+            scan_status: string;
+            /** Size Bytes */
+            size_bytes?: number | null;
+        };
+        /** InboundEmailEventListResponse */
+        InboundEmailEventListResponse: {
+            /** Events */
+            events: components["schemas"]["InboundEmailEventRecord"][];
+            /** Pending Count */
+            pending_count: number;
+        };
+        /** InboundEmailEventRecord */
+        InboundEmailEventRecord: {
+            /** Alias Id */
+            alias_id?: string | null;
+            /** Attachment Metadata */
+            attachment_metadata?: components["schemas"]["InboundEmailAttachmentMetadata"][];
+            /** Cc Addresses */
+            cc_addresses?: string[];
+            /** Communication Id */
+            communication_id?: string | null;
+            /** Company Id */
+            company_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** From Display */
+            from_display?: string | null;
+            /** Id */
+            id: string;
+            /** Linked Matter Id */
+            linked_matter_id?: string | null;
+            /** Matched Matter Id */
+            matched_matter_id?: string | null;
+            /** Provenance */
+            provenance?: {
+                [key: string]: unknown;
+            } | null;
+            /** Provider */
+            provider: string;
+            /** Provider Message Id */
+            provider_message_id: string;
+            /**
+             * Received At
+             * Format: date-time
+             */
+            received_at: string;
+            /** Redacted Failure Reason */
+            redacted_failure_reason?: string | null;
+            /** Snippet */
+            snippet?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "new" | "linked_metadata" | "content_import_requested" | "content_imported" | "ignored" | "rejected" | "failed";
+            /** Subject */
+            subject?: string | null;
+            /** To Addresses */
+            to_addresses?: string[];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** InboundEmailEventReviewRequest */
+        InboundEmailEventReviewRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "link_to_matter" | "create_note" | "create_task" | "request_attachment_import" | "ignore" | "reject";
+            /** Matter Id */
+            matter_id?: string | null;
+            /** Note Body */
+            note_body?: string | null;
+            /** Task Description */
+            task_description?: string | null;
+            /** Task Title */
+            task_title?: string | null;
+        };
+        /** InboundEmailEventReviewResponse */
+        InboundEmailEventReviewResponse: {
+            event: components["schemas"]["InboundEmailEventRecord"];
+            /** Note Id */
+            note_id?: string | null;
+            /** Task Id */
+            task_id?: string | null;
         };
         /**
          * InboundEmailImportRequest
@@ -13433,6 +14347,41 @@ export interface components {
             matter_id: string;
             /** Processing Job Ids */
             processing_job_ids: string[];
+        };
+        /** InboundEmailWebhookRequest */
+        InboundEmailWebhookRequest: {
+            /** Attachments */
+            attachments?: components["schemas"]["InboundEmailAttachmentMetadata"][];
+            /** Cc Addresses */
+            cc_addresses?: string[];
+            /** From Display */
+            from_display?: string | null;
+            /** From Email */
+            from_email?: string | null;
+            /**
+             * Provider
+             * @default local_safe
+             */
+            provider: string;
+            /** Provider Message Id */
+            provider_message_id: string;
+            /** Received At */
+            received_at?: string | null;
+            /** Snippet */
+            snippet?: string | null;
+            /** Subject */
+            subject?: string | null;
+            /** To Addresses */
+            to_addresses?: string[];
+        };
+        /** InboundEmailWebhookResponse */
+        InboundEmailWebhookResponse: {
+            /** Accepted */
+            accepted: boolean;
+            /** Event Id */
+            event_id?: string | null;
+            /** Status */
+            status: ("new" | "linked_metadata" | "content_import_requested" | "content_imported" | "ignored" | "rejected" | "failed") | "rejected";
         };
         /** IntakeRequestCreateRequest */
         IntakeRequestCreateRequest: {
@@ -15064,9 +16013,9 @@ export interface components {
             /**
              * Provider
              * @default gmail
-             * @constant
+             * @enum {string}
              */
-            provider: "gmail";
+            provider: "gmail" | "outlook_mail";
         };
         /** MailboxConnectionRecord */
         MailboxConnectionRecord: {
@@ -15091,9 +16040,9 @@ export interface components {
             membership_id: string;
             /**
              * Provider
-             * @constant
+             * @enum {string}
              */
-            provider: "gmail";
+            provider: "gmail" | "outlook_mail";
             /** Provider Account Id */
             provider_account_id: string | null;
             /** Scopes */
@@ -15118,9 +16067,9 @@ export interface components {
             /**
              * Provider
              * @default gmail
-             * @constant
+             * @enum {string}
              */
-            provider: "gmail";
+            provider: "gmail" | "outlook_mail";
             /** Provider Available */
             provider_available: boolean;
             /** Unavailable Reason */
@@ -15189,9 +16138,9 @@ export interface components {
             /**
              * Provider
              * @default gmail
-             * @constant
+             * @enum {string}
              */
-            provider: "gmail";
+            provider: "gmail" | "outlook_mail";
             /** Provider Message Id */
             provider_message_id: string;
             /** Provider Thread Id */
@@ -15204,7 +16153,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "queued" | "imported" | "unmatched" | "duplicate" | "failed" | "dead_letter" | "ignored" | "resolved";
+            status: "queued" | "imported" | "unmatched" | "duplicate" | "failed" | "dead_letter" | "ignored" | "resolved" | "new" | "linked_metadata" | "content_import_requested" | "content_imported";
             /** Subject */
             subject: string | null;
             /**
@@ -15212,6 +16161,39 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /** MailboxMessageReviewRequest */
+        MailboxMessageReviewRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "link_metadata" | "create_note" | "create_task" | "request_content_import" | "ignore";
+            /** Matter Id */
+            matter_id?: string | null;
+            /** Note Body */
+            note_body?: string | null;
+            /** Task Description */
+            task_description?: string | null;
+            /** Task Title */
+            task_title?: string | null;
+        };
+        /** MailboxMessageReviewResponse */
+        MailboxMessageReviewResponse: {
+            /** Communication Id */
+            communication_id?: string | null;
+            /**
+             * Content Import Queued
+             * @default false
+             */
+            content_import_queued: boolean;
+            import_record: components["schemas"]["MailboxMessageImportRecord"];
+            /** Matter Id */
+            matter_id?: string | null;
+            /** Note Id */
+            note_id?: string | null;
+            /** Task Id */
+            task_id?: string | null;
         };
         /** MailboxStatusResponse */
         MailboxStatusResponse: {
@@ -15226,9 +16208,9 @@ export interface components {
             /**
              * Provider
              * @default gmail
-             * @constant
+             * @enum {string}
              */
-            provider: "gmail";
+            provider: "gmail" | "outlook_mail";
             /** Webhook Configured */
             webhook_configured: boolean;
         };
@@ -15241,9 +16223,9 @@ export interface components {
             /**
              * Provider
              * @default gmail
-             * @constant
+             * @enum {string}
              */
-            provider: "gmail";
+            provider: "gmail" | "outlook_mail";
             /** Watch Expires At */
             watch_expires_at?: string | null;
             /** Watch Started */
@@ -15260,9 +16242,9 @@ export interface components {
             /**
              * Provider
              * @default gmail
-             * @constant
+             * @enum {string}
              */
-            provider: "gmail";
+            provider: "gmail" | "outlook_mail";
             /**
              * Status
              * @enum {string}
@@ -17708,6 +18690,153 @@ export interface components {
             /** Role */
             role: string;
         };
+        /** Microsoft365ApprovalItemStatus */
+        Microsoft365ApprovalItemStatus: {
+            /** Approved */
+            approved: boolean;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+        };
+        /** Microsoft365ConfigurationItemStatus */
+        Microsoft365ConfigurationItemStatus: {
+            /** Configured */
+            configured: boolean;
+            /** Name */
+            name: string;
+        };
+        /** Microsoft365ReadinessCheckResult */
+        Microsoft365ReadinessCheckResult: {
+            /** Detail */
+            detail?: string | null;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "passed" | "blocked" | "not_run";
+        };
+        /** Microsoft365ReadinessTestResponse */
+        Microsoft365ReadinessTestResponse: {
+            /** Checks */
+            checks: components["schemas"]["Microsoft365ReadinessCheckResult"][];
+            /**
+             * Provider
+             * @default microsoft_365
+             * @constant
+             */
+            provider: "microsoft_365";
+            /**
+             * Readiness
+             * @enum {string}
+             */
+            readiness: "blocked_pending_admin_configuration" | "ready_for_review_first_workflows";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "passed" | "blocked" | "not_run";
+            /**
+             * Tested At
+             * Format: date-time
+             */
+            tested_at: string;
+        };
+        /** Microsoft365TenantConfigurationResponse */
+        Microsoft365TenantConfigurationResponse: {
+            /** Approved Scopes */
+            approved_scopes?: string[];
+            /** Calendar Enabled */
+            calendar_enabled: boolean;
+            /** Configured */
+            configured: boolean;
+            /** Connected Account Count */
+            connected_account_count: number;
+            /** Connection Count */
+            connection_count: number;
+            /** Drive Enabled */
+            drive_enabled: boolean;
+            /** Enabled */
+            enabled: boolean;
+            /** Last Error Redacted */
+            last_error_redacted?: string | null;
+            /**
+             * Last Test Status
+             * @default not_run
+             * @enum {string}
+             */
+            last_test_status: "passed" | "blocked" | "not_run";
+            /** Last Tested At */
+            last_tested_at?: string | null;
+            /** Mail Enabled */
+            mail_enabled: boolean;
+            /** Missing Approval Keys */
+            missing_approval_keys?: string[];
+            /** Missing Config Names */
+            missing_config_names?: string[];
+            /**
+             * Provider
+             * @default microsoft_365
+             * @constant
+             */
+            provider: "microsoft_365";
+            /**
+             * Readiness
+             * @enum {string}
+             */
+            readiness: "blocked_pending_admin_configuration" | "ready_for_review_first_workflows";
+            /** Required Approvals */
+            required_approvals: components["schemas"]["Microsoft365ApprovalItemStatus"][];
+            /** Required Config */
+            required_config: components["schemas"]["Microsoft365ConfigurationItemStatus"][];
+        };
+        /** Microsoft365TenantConfigurationUpdateRequest */
+        Microsoft365TenantConfigurationUpdateRequest: {
+            /**
+             * Admin Consent Approved
+             * @default false
+             */
+            admin_consent_approved: boolean;
+            /**
+             * Calendar Enabled
+             * @default true
+             */
+            calendar_enabled: boolean;
+            /** Client Id */
+            client_id?: string | null;
+            /** Client Secret */
+            client_secret?: string | null;
+            /**
+             * Drive Enabled
+             * @default true
+             */
+            drive_enabled: boolean;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Mail Enabled
+             * @default true
+             */
+            mail_enabled: boolean;
+            /** Redirect Uri */
+            redirect_uri?: string | null;
+            /** Scopes */
+            scopes?: string[] | null;
+            /**
+             * Scopes Approved
+             * @default false
+             */
+            scopes_approved: boolean;
+            /** Tenant Id */
+            tenant_id?: string | null;
+        };
         /** MockHearingListResponse */
         MockHearingListResponse: {
             /** Disclaimer */
@@ -17983,6 +19112,124 @@ export interface components {
              */
             unverified: boolean;
         };
+        /** NotificationChannelPreference */
+        NotificationChannelPreference: {
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * External Delivery Enabled
+             * @default false
+             */
+            external_delivery_enabled: boolean;
+            /**
+             * Provider Configured
+             * @default false
+             */
+            provider_configured: boolean;
+        };
+        /** NotificationPreferenceRecord */
+        NotificationPreferenceRecord: {
+            /** Channels */
+            channels: {
+                [key: string]: components["schemas"]["NotificationChannelPreference"];
+            };
+            /** Company Id */
+            company_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Digest Frequency
+             * @enum {string}
+             */
+            digest_frequency: "immediate" | "daily" | "weekly" | "disabled";
+            /** Escalation Rules */
+            escalation_rules?: {
+                [key: string]: unknown;
+            }[];
+            /** Event Categories */
+            event_categories: {
+                [key: string]: boolean;
+            };
+            /**
+             * External Delivery Policy
+             * @default disabled_until_configured
+             */
+            external_delivery_policy: string;
+            /** Id */
+            id: string;
+            /** Membership Id */
+            membership_id?: string | null;
+            /** Opt Out Categories */
+            opt_out_categories?: ("hearing_updates" | "tracked_case_changes" | "compliance_deadlines" | "billing_credit_warnings" | "connector_failures" | "document_processing_failures" | "provider_operation_failures")[];
+            quiet_hours: components["schemas"]["NotificationQuietHours"];
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "tenant" | "user";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** NotificationPreferenceResponse */
+        NotificationPreferenceResponse: {
+            /**
+             * External Delivery Enabled
+             * @default false
+             */
+            external_delivery_enabled: boolean;
+            /** Provider Configured */
+            provider_configured: {
+                [key: string]: boolean;
+            };
+            tenant: components["schemas"]["NotificationPreferenceRecord"];
+            user: components["schemas"]["NotificationPreferenceRecord"];
+        };
+        /** NotificationPreferenceUpdateRequest */
+        NotificationPreferenceUpdateRequest: {
+            /** Channels */
+            channels?: {
+                [key: string]: boolean;
+            } | null;
+            /** Digest Frequency */
+            digest_frequency?: ("immediate" | "daily" | "weekly" | "disabled") | null;
+            /** Escalation Rules */
+            escalation_rules?: {
+                [key: string]: unknown;
+            }[] | null;
+            /** Event Categories */
+            event_categories?: {
+                [key: string]: boolean;
+            } | null;
+            /** Opt Out Categories */
+            opt_out_categories?: ("hearing_updates" | "tracked_case_changes" | "compliance_deadlines" | "billing_credit_warnings" | "connector_failures" | "document_processing_failures" | "provider_operation_failures")[] | null;
+            quiet_hours?: components["schemas"]["NotificationQuietHours"] | null;
+        };
+        /** NotificationQuietHours */
+        NotificationQuietHours: {
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+            /** End */
+            end?: string | null;
+            /** Start */
+            start?: string | null;
+            /**
+             * Timezone
+             * @default Asia/Kolkata
+             */
+            timezone: string;
+        };
         /** NotificationRuleCreateRequest */
         NotificationRuleCreateRequest: {
             /** Channels */
@@ -18251,6 +19498,32 @@ export interface components {
             status: "processed" | "blocked";
             /** Synced */
             synced: number;
+        };
+        /** OutlookMailCandidateCreateRequest */
+        OutlookMailCandidateCreateRequest: {
+            /**
+             * Attachment Count
+             * @default 0
+             */
+            attachment_count: number;
+            /** Labels */
+            labels?: string[];
+            /** Occurred At */
+            occurred_at?: string | null;
+            /** Provider Message Id */
+            provider_message_id: string;
+            /** Provider Thread Id */
+            provider_thread_id?: string | null;
+            /** Sender Email */
+            sender_email?: string | null;
+            /** Sender Name */
+            sender_name?: string | null;
+            /** Snippet */
+            snippet?: string | null;
+            /** Subject */
+            subject?: string | null;
+            /** Suggested Matter Id */
+            suggested_matter_id?: string | null;
         };
         /** OutlookReadinessCheckResult */
         OutlookReadinessCheckResult: {
@@ -21158,37 +22431,59 @@ export interface components {
             configured: boolean;
             /** Degraded */
             degraded: boolean;
+            /** Disabled Reason */
+            disabled_reason?: string | null;
             /** Enabled */
             enabled: boolean;
+            /** Error Category */
+            error_category?: string | null;
+            /** Granted Scopes */
+            granted_scopes?: string[];
             /** Healthy */
             healthy: boolean;
             /** Key */
             key: string;
+            /** Last Checked At */
+            last_checked_at?: string | null;
             /** Last Failure */
             last_failure?: string | null;
             /** Last Success */
             last_success?: string | null;
+            /** Missing Scopes */
+            missing_scopes?: string[];
             /** Name */
             name: string;
             /** Next Run */
             next_run?: string | null;
+            /** Operational Alerts */
+            operational_alerts?: string[];
+            /** Polling Status */
+            polling_status?: string | null;
             /** Provider */
             provider: string;
             /** Provider Operations Link */
             provider_operations_link?: string | null;
+            /** Rate Limit Status */
+            rate_limit_status?: string | null;
             /** Required Config Names */
             required_config_names?: string[];
+            /** Required Scopes */
+            required_scopes?: string[];
             /** Runbook Link */
             runbook_link?: string | null;
             /** Scopes */
             scopes?: string[];
+            /** Setup Actions */
+            setup_actions?: string[];
             /**
              * Status
              * @enum {string}
              */
-            status: "healthy" | "degraded" | "blocked" | "disabled" | "configured";
+            status: "healthy" | "degraded" | "blocked" | "disabled" | "configured" | "missing_config" | "connected" | "token_expired" | "scope_missing" | "rate_limited" | "provider_outage" | "blocked_by_policy";
             /** Token Expiry */
             token_expiry?: string | null;
+            /** Token Refresh Status */
+            token_refresh_status?: string | null;
             /** Webhook Status */
             webhook_status?: string | null;
         };
@@ -22316,6 +23611,46 @@ export interface operations {
             };
         };
     };
+    get_admin_integrations_health_api_admin_integrations_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectorHealthListResponse"];
+                };
+            };
+        };
+    };
+    post_admin_integrations_health_check_api_admin_integrations_health_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectorHealthCheckResponse"];
+                };
+            };
+        };
+    };
     get_matter_billing_profiles_api_admin_matter_billing_get: {
         parameters: {
             query?: never;
@@ -22457,6 +23792,132 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MatterBillingRateRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_microsoft365_configuration_api_admin_microsoft365_configuration_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Microsoft365TenantConfigurationResponse"];
+                };
+            };
+        };
+    };
+    patch_microsoft365_configuration_api_admin_microsoft365_configuration_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Microsoft365TenantConfigurationUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Microsoft365TenantConfigurationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_microsoft365_configuration_test_api_admin_microsoft365_configuration_test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Microsoft365ReadinessTestResponse"];
+                };
+            };
+        };
+    };
+    get_admin_notification_preferences_api_admin_notification_preferences_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPreferenceResponse"];
+                };
+            };
+        };
+    };
+    patch_admin_notification_preferences_api_admin_notification_preferences_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationPreferenceUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPreferenceResponse"];
                 };
             };
             /** @description Validation Error */
@@ -25101,6 +26562,108 @@ export interface operations {
                 };
                 content: {
                     "text/calendar; charset=utf-8": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_provider_event_candidates_api_calendar_provider_event_candidates_get: {
+        parameters: {
+            query?: {
+                provider?: string | null;
+                matter_id?: string | null;
+                status?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarProviderEventCandidateListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_provider_event_candidate_api_calendar_provider_event_candidates_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CalendarProviderEventCandidateCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarProviderEventCandidateRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_provider_event_candidate_api_calendar_provider_event_candidates__candidate_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                candidate_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CalendarProviderEventCandidateReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarProviderEventCandidateReviewResponse"];
                 };
             };
             /** @description Validation Error */
@@ -28138,6 +29701,76 @@ export interface operations {
             };
         };
     };
+    get_drive_candidates_api_drive_candidates_get: {
+        parameters: {
+            query?: {
+                provider?: string | null;
+                matter_id?: string | null;
+                status?: string | null;
+                q?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DriveCandidateListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_drive_candidate_api_drive_candidates__candidate_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                candidate_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DriveCandidateReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DriveCandidateReviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     revoke_google_drive_api_drive_connections__connection_id__delete: {
         parameters: {
             query?: never;
@@ -28188,6 +29821,92 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GoogleDriveConnectionCallbackResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_google_drive_candidate_sync_api_drive_google_candidates_sync_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DriveCandidateSyncRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DriveCandidateSyncResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_google_drive_controls_api_drive_google_controls_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DriveSyncControlRecord"];
+                };
+            };
+        };
+    };
+    patch_google_drive_controls_api_drive_google_controls_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DriveSyncControlUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DriveSyncControlRecord"];
                 };
             };
             /** @description Validation Error */
@@ -28714,6 +30433,10 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: number;
+                provider?: string | null;
+                matter_id?: string | null;
+                status?: string | null;
+                q?: string | null;
             };
             header?: never;
             path?: never;
@@ -28728,6 +30451,265 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MailboxImportResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_message_import_api_mailbox_imports__import_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                import_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MailboxMessageReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailboxMessageReviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_inbound_email_aliases_api_mailbox_inbound_aliases_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboundEmailAliasListResponse"];
+                };
+            };
+        };
+    };
+    post_inbound_email_alias_api_mailbox_inbound_aliases_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InboundEmailAliasCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboundEmailAliasRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_inbound_email_alias_api_mailbox_inbound_aliases__alias_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InboundEmailAliasUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboundEmailAliasRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_inbound_email_events_api_mailbox_inbound_events_get: {
+        parameters: {
+            query?: {
+                status?: string | null;
+                matter_id?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboundEmailEventListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_inbound_email_event_api_mailbox_inbound_events__event_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InboundEmailEventReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboundEmailEventReviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_inbound_email_webhook_api_mailbox_inbound_webhook_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CaseOps-Inbound-Signature"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InboundEmailWebhookRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboundEmailWebhookResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_outlook_mail_candidate_api_mailbox_outlook_candidates_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OutlookMailCandidateCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MailboxMessageImportRecord"];
                 };
             };
             /** @description Validation Error */
@@ -32856,6 +34838,59 @@ export interface operations {
             };
         };
     };
+    get_notification_preferences_api_notification_preferences_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPreferenceResponse"];
+                };
+            };
+        };
+    };
+    patch_notification_preferences_api_notification_preferences_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationPreferenceUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPreferenceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_rules_api_notification_rules_get: {
         parameters: {
             query?: never;
@@ -34102,6 +36137,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConnectorRegistryResponse"];
+                };
+            };
+        };
+    };
+    get_platform_integrations_health_api_platform_admin_integrations_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectorHealthListResponse"];
                 };
             };
         };
