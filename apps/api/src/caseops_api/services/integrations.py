@@ -70,7 +70,18 @@ def _record(
     last_failure: datetime | None = None,
     next_run: datetime | None = None,
     webhook_status: str | None = None,
+    polling_status: str | None = None,
+    rate_limit_status: str | None = None,
     token_expiry: datetime | None = None,
+    token_refresh_status: str | None = None,
+    required_scopes: list[str] | None = None,
+    granted_scopes: list[str] | None = None,
+    missing_scopes: list[str] | None = None,
+    error_category: str | None = None,
+    disabled_reason: str | None = None,
+    last_checked_at: datetime | None = None,
+    operational_alerts: list[str] | None = None,
+    setup_actions: list[str] | None = None,
     required_config_names: list[str] | None = None,
     scopes: list[str] | None = None,
     runbook_link: str | None = None,
@@ -101,7 +112,18 @@ def _record(
         last_failure=last_failure,
         next_run=next_run,
         webhook_status=webhook_status,
+        polling_status=polling_status,
+        rate_limit_status=rate_limit_status,
         token_expiry=token_expiry,
+        token_refresh_status=token_refresh_status,
+        required_scopes=required_scopes or [],
+        granted_scopes=granted_scopes or [],
+        missing_scopes=missing_scopes or [],
+        error_category=error_category,
+        disabled_reason=disabled_reason,
+        last_checked_at=last_checked_at,
+        operational_alerts=operational_alerts or [],
+        setup_actions=setup_actions or [],
         required_config_names=required_config_names or [],
         scopes=scopes or [],
         runbook_link=runbook_link,
@@ -383,6 +405,17 @@ def connector_registry(
             "GOOGLE_WORKSPACE_CLIENT_SECRET",
             "GOOGLE_DRIVE_REDIRECT_URI",
         ]
+        google_workspace_missing = sorted(
+            {
+                *google_calendar_missing,
+                *gmail_missing,
+                *google_workspace_connector_missing_config_names(
+                    session,
+                    context=context,
+                    connector="drive",
+                ),
+            }
+        )
     else:
         drive_status = google_drive_provider_config_status()
         google_calendar_missing = _config_missing(
@@ -416,6 +449,9 @@ def connector_registry(
             "GOOGLE_DRIVE_CLIENT_SECRET",
             "GOOGLE_DRIVE_REDIRECT_URI",
         ]
+        google_workspace_missing = sorted(
+            {*google_calendar_missing, *gmail_missing, *drive_status.missing_config_names}
+        )
     gmail_webhook_missing = _gmail_webhook_missing()
     gmail_webhook_configured = not gmail_webhook_missing
     sendgrid_missing = _sendgrid_missing()
@@ -459,6 +495,41 @@ def connector_registry(
     clam_enabled = bool(clam_host) or clam_required_flag in {"1", "true", "yes", "on"}
 
     connectors = [
+        _record(
+            key="google_workspace",
+            name="Google Workspace",
+            category="workspace",
+            provider="google",
+            enabled=not google_workspace_missing,
+            configured=not google_workspace_missing,
+            blocked=bool(google_workspace_missing),
+            webhook_status="gmail_configured" if gmail_webhook_configured else "gmail_missing",
+            polling_status="manual_check",
+            required_config_names=[
+                "GOOGLE_WORKSPACE_CLIENT_ID",
+                "GOOGLE_WORKSPACE_CLIENT_SECRET",
+                "GOOGLE_CALENDAR_REDIRECT_URI",
+                "GMAIL_REDIRECT_URI",
+                "GOOGLE_DRIVE_REDIRECT_URI",
+            ],
+            scopes=[
+                *GOOGLE_CALENDAR_SCOPES,
+                *GOOGLE_WORKSPACE_GMAIL_SCOPES,
+                *GOOGLE_WORKSPACE_DRIVE_SCOPES,
+            ],
+            required_scopes=[
+                *GOOGLE_CALENDAR_SCOPES,
+                *GOOGLE_WORKSPACE_GMAIL_SCOPES,
+                *GOOGLE_WORKSPACE_DRIVE_SCOPES,
+            ],
+            runbook_link="docs/runbooks/provider-operations-readiness-2026-06-02.md",
+            internal_cost_label="workspace connector shared OAuth",
+            risk_label="OAuth consent/scope drift risk",
+            platform_notes=[
+                "Parent Google Workspace readiness row; service-specific health is below.",
+            ],
+            platform=platform,
+        ),
         _record(
             key="outlook_calendar",
             name="Outlook calendar",
@@ -769,6 +840,14 @@ def connector_registry(
             platform=platform,
         ),
     ]
+    if context is not None and not platform:
+        from caseops_api.services.connector_health import (
+            apply_health_to_connector_records,
+            refresh_connector_health_records,
+        )
+
+        health = refresh_connector_health_records(session, context=context)
+        connectors = apply_health_to_connector_records(connectors, health)
     return connectors
 
 

@@ -43,9 +43,29 @@ describe("SidebarBody resolved capability navigation", () => {
       "href",
       "/app/admin",
     );
+    expect(screen.getByRole("link", { name: "Mailbox" })).toHaveAttribute(
+      "href",
+      "/app/mailbox",
+    );
+    expect(screen.getByRole("link", { name: "Drive" })).toHaveAttribute(
+      "href",
+      "/app/drive",
+    );
+    expect(screen.getByRole("link", { name: "Notifications" })).toHaveAttribute(
+      "href",
+      "/app/notification-preferences",
+    );
     expect(screen.getByRole("link", { name: "Billing" })).toHaveAttribute(
       "href",
       "/app/admin/billing",
+    );
+    expect(screen.getByRole("link", { name: "Microsoft 365" })).toHaveAttribute(
+      "href",
+      "/app/admin/microsoft365",
+    );
+    expect(screen.getByRole("link", { name: "Inbound email" })).toHaveAttribute(
+      "href",
+      "/app/admin/inbound-email",
     );
     expect(screen.queryByRole("link", { name: "Platform admin" })).not.toBeInTheDocument();
   });

@@ -2423,7 +2423,7 @@ export const mailboxMessageImportRecord = z.object({
   id: z.string(),
   company_id: z.string(),
   mailbox_connection_id: z.string(),
-  provider: z.literal("gmail").default("gmail"),
+  provider: z.enum(["gmail", "outlook_mail"]).default("gmail"),
   matter_id: z.string().nullable(),
   communication_id: z.string().nullable(),
   provider_message_id: z.string(),
@@ -2443,6 +2443,10 @@ export const mailboxMessageImportRecord = z.object({
     "dead_letter",
     "ignored",
     "resolved",
+    "new",
+    "linked_metadata",
+    "content_import_requested",
+    "content_imported",
   ]),
   last_error_redacted: z.string().nullable(),
   attempts: z.number().int().min(0),
@@ -2471,7 +2475,7 @@ export const googleDriveConnectionRecord = z.object({
   id: z.string(),
   company_id: z.string(),
   membership_id: z.string(),
-  provider: z.literal("google_drive").default("google_drive"),
+  provider: z.enum(["google_drive", "onedrive_sharepoint"]).default("google_drive"),
   provider_account_id: z.string().nullable(),
   display_email: z.string().nullable(),
   status: z.enum(["connected", "revoked", "error"]),
@@ -2506,9 +2510,76 @@ export const googleDriveFileRecord = z.object({
 });
 
 export const googleDriveFileListResponse = z.object({
-  provider: z.literal("google_drive").default("google_drive"),
+  provider: z.enum(["google_drive", "onedrive_sharepoint"]).default("google_drive"),
   connection_id: z.string(),
   files: z.array(googleDriveFileRecord),
+});
+
+export const mailboxMessageReviewResponse = z.object({
+  import_record: mailboxMessageImportRecord,
+  matter_id: z.string().nullable().optional(),
+  communication_id: z.string().nullable().optional(),
+  note_id: z.string().nullable().optional(),
+  task_id: z.string().nullable().optional(),
+  content_import_queued: z.boolean().default(false),
+});
+
+export const driveSyncControlRecord = z.object({
+  id: z.string(),
+  company_id: z.string(),
+  provider: z.enum(["google_drive", "onedrive_sharepoint"]),
+  allowed_folders: z.array(z.string()).default([]),
+  blocked_folders: z.array(z.string()).default([]),
+  max_file_size_bytes: z.number().int().positive(),
+  allowed_mime_types: z.array(z.string()).default([]),
+  mode: z.enum(["auto_suggest", "review_import"]).default("review_import"),
+  auto_import_enabled: z.boolean().default(false),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const driveCandidateRecord = z.object({
+  id: z.string(),
+  company_id: z.string(),
+  provider: z.enum(["google_drive", "onedrive_sharepoint"]),
+  provider_file_id: z.string(),
+  provider_version: z.string(),
+  name: z.string(),
+  mime_type: z.string().nullable().optional(),
+  size_bytes: z.number().int().nonnegative().nullable().optional(),
+  owner_display: z.string().nullable().optional(),
+  modified_time: z.string().nullable().optional(),
+  folder_path: z.string().nullable().optional(),
+  web_url: z.string().nullable().optional(),
+  suggested_matter_id: z.string().nullable().optional(),
+  linked_matter_id: z.string().nullable().optional(),
+  confidence: z.number().nullable().optional(),
+  status: z.enum([
+    "new",
+    "ignored",
+    "linked_metadata",
+    "content_import_requested",
+    "content_imported",
+    "failed",
+  ]),
+  imported_attachment_id: z.string().nullable().optional(),
+  provenance: z.record(z.string(), z.unknown()).nullable().optional(),
+  last_error_redacted: z.string().nullable().optional(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const driveCandidateListResponse = z.object({
+  candidates: z.array(driveCandidateRecord),
+  pending_count: z.number().int().min(0),
+});
+
+export const driveCandidateSyncResponse = z.object({
+  provider: z.enum(["google_drive", "onedrive_sharepoint"]),
+  examined_count: z.number().int().min(0),
+  created_count: z.number().int().min(0),
+  duplicate_count: z.number().int().min(0),
+  candidates: z.array(driveCandidateRecord),
 });
 
 export const tenantConnectorRecord = z.object({
@@ -2516,7 +2587,20 @@ export const tenantConnectorRecord = z.object({
   name: z.string(),
   category: z.string(),
   provider: z.string(),
-  status: z.enum(["healthy", "degraded", "blocked", "disabled", "configured"]),
+  status: z.enum([
+    "healthy",
+    "degraded",
+    "blocked",
+    "disabled",
+    "configured",
+    "missing_config",
+    "connected",
+    "token_expired",
+    "scope_missing",
+    "rate_limited",
+    "provider_outage",
+    "blocked_by_policy",
+  ]),
   enabled: z.boolean(),
   configured: z.boolean(),
   blocked: z.boolean(),
@@ -2526,7 +2610,18 @@ export const tenantConnectorRecord = z.object({
   last_failure: z.string().nullable(),
   next_run: z.string().nullable(),
   webhook_status: z.string().nullable(),
+  polling_status: z.string().nullable().optional(),
+  rate_limit_status: z.string().nullable().optional(),
   token_expiry: z.string().nullable(),
+  token_refresh_status: z.string().nullable().optional(),
+  required_scopes: z.array(z.string()).default([]),
+  granted_scopes: z.array(z.string()).default([]),
+  missing_scopes: z.array(z.string()).default([]),
+  error_category: z.string().nullable().optional(),
+  disabled_reason: z.string().nullable().optional(),
+  last_checked_at: z.string().nullable().optional(),
+  operational_alerts: z.array(z.string()).default([]),
+  setup_actions: z.array(z.string()).default([]),
   required_config_names: z.array(z.string()).default([]),
   scopes: z.array(z.string()).default([]),
   runbook_link: z.string().nullable(),
@@ -2545,6 +2640,185 @@ export const tenantConnectorRegistryResponse = z.object({
 
 export const connectorRegistryResponse = z.object({
   connectors: z.array(connectorRecord),
+});
+
+export const connectorHealthRecord = z.object({
+  id: z.string(),
+  company_id: z.string(),
+  provider: z.string(),
+  configured_state: tenantConnectorRecord.shape.status,
+  connected_state: tenantConnectorRecord.shape.status,
+  last_success_at: z.string().nullable(),
+  last_failure_at: z.string().nullable(),
+  error_category: z.string().nullable(),
+  required_scopes: z.array(z.string()).default([]),
+  granted_scopes: z.array(z.string()).default([]),
+  missing_scopes: z.array(z.string()).default([]),
+  token_expires_at: z.string().nullable(),
+  token_refresh_status: z.string().nullable(),
+  webhook_status: z.string().nullable(),
+  polling_status: z.string().nullable(),
+  rate_limit_status: z.string().nullable(),
+  next_retry_at: z.string().nullable(),
+  disabled_reason: z.string().nullable(),
+  last_checked_at: z.string().nullable(),
+  operational_alerts: z.array(z.string()).default([]),
+  setup_actions: z.array(z.string()).default([]),
+  provider_operations_link: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const connectorHealthListResponse = z.object({
+  health: z.array(connectorHealthRecord),
+});
+
+export const calendarProviderEventCandidateRecord = z.object({
+  id: z.string(),
+  company_id: z.string(),
+  provider: z.enum(["outlook", "google_calendar"]),
+  provider_event_id: z.string(),
+  i_cal_uid: z.string().nullable().optional(),
+  title: z.string(),
+  starts_at: z.string(),
+  ends_at: z.string().nullable().optional(),
+  location: z.string().nullable().optional(),
+  organizer_display: z.string().nullable().optional(),
+  provider_status: z.string().nullable().optional(),
+  suggested_matter_id: z.string().nullable().optional(),
+  linked_matter_id: z.string().nullable().optional(),
+  linked_hearing_id: z.string().nullable().optional(),
+  confidence: z.number().nullable().optional(),
+  status: z.enum(["new", "conflict", "accepted", "rejected", "ignored", "failed"]),
+  conflict_reason: z.string().nullable().optional(),
+  provenance: z.record(z.string(), z.unknown()).nullable().optional(),
+  sync_history: z.array(z.record(z.string(), z.unknown())).default([]),
+  reviewed_by_membership_id: z.string().nullable().optional(),
+  reviewed_at: z.string().nullable().optional(),
+  last_error_redacted: z.string().nullable().optional(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const calendarProviderEventCandidateListResponse = z.object({
+  candidates: z.array(calendarProviderEventCandidateRecord),
+  pending_count: z.number().int().min(0),
+  conflict_count: z.number().int().min(0),
+});
+
+export const inboundEmailAliasRecord = z.object({
+  id: z.string(),
+  company_id: z.string(),
+  matter_id: z.string().nullable().optional(),
+  alias_type: z.enum(["tenant", "matter"]),
+  alias_address: z.string(),
+  status: z.enum(["enabled", "disabled"]),
+  allowed_senders: z.array(z.string()).default([]),
+  allowed_domains: z.array(z.string()).default([]),
+  retention_days: z.number().int().positive(),
+  spam_security_status: z.string(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const inboundEmailAliasListResponse = z.object({
+  aliases: z.array(inboundEmailAliasRecord),
+});
+
+export const inboundEmailEventRecord = z.object({
+  id: z.string(),
+  company_id: z.string(),
+  alias_id: z.string().nullable().optional(),
+  matched_matter_id: z.string().nullable().optional(),
+  linked_matter_id: z.string().nullable().optional(),
+  communication_id: z.string().nullable().optional(),
+  provider: z.string(),
+  provider_message_id: z.string(),
+  from_display: z.string().nullable().optional(),
+  to_addresses: z.array(z.string()).default([]),
+  cc_addresses: z.array(z.string()).default([]),
+  subject: z.string().nullable().optional(),
+  received_at: z.string(),
+  snippet: z.string().nullable().optional(),
+  attachment_metadata: z.array(z.record(z.string(), z.unknown())).default([]),
+  status: z.enum([
+    "new",
+    "linked_metadata",
+    "content_import_requested",
+    "content_imported",
+    "ignored",
+    "rejected",
+    "failed",
+  ]),
+  redacted_failure_reason: z.string().nullable().optional(),
+  provenance: z.record(z.string(), z.unknown()).nullable().optional(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const inboundEmailEventListResponse = z.object({
+  events: z.array(inboundEmailEventRecord),
+  pending_count: z.number().int().min(0),
+});
+
+export const notificationPreferenceRecord = z.object({
+  id: z.string(),
+  company_id: z.string(),
+  membership_id: z.string().nullable().optional(),
+  scope: z.enum(["tenant", "user"]),
+  channels: z.record(
+    z.string(),
+    z.object({
+      enabled: z.boolean(),
+      provider_configured: z.boolean(),
+      external_delivery_enabled: z.boolean(),
+    }),
+  ),
+  event_categories: z.record(z.string(), z.boolean()),
+  digest_frequency: z.enum(["immediate", "daily", "weekly", "disabled"]),
+  quiet_hours: z.object({
+    enabled: z.boolean(),
+    start: z.string().nullable().optional(),
+    end: z.string().nullable().optional(),
+    timezone: z.string(),
+  }),
+  escalation_rules: z.array(z.record(z.string(), z.unknown())).default([]),
+  opt_out_categories: z.array(z.string()).default([]),
+  external_delivery_policy: z.string(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const notificationPreferenceResponse = z.object({
+  tenant: notificationPreferenceRecord,
+  user: notificationPreferenceRecord,
+  external_delivery_enabled: z.boolean(),
+  provider_configured: z.record(z.string(), z.boolean()),
+});
+
+export const microsoft365TenantConfigurationResponse = z.object({
+  provider: z.literal("microsoft_365").default("microsoft_365"),
+  configured: z.boolean(),
+  enabled: z.boolean(),
+  required_config: z.array(z.object({ name: z.string(), configured: z.boolean() })),
+  required_approvals: z.array(
+    z.object({ key: z.string(), label: z.string(), approved: z.boolean() }),
+  ),
+  approved_scopes: z.array(z.string()).default([]),
+  missing_config_names: z.array(z.string()).default([]),
+  missing_approval_keys: z.array(z.string()).default([]),
+  mail_enabled: z.boolean(),
+  calendar_enabled: z.boolean(),
+  drive_enabled: z.boolean(),
+  connection_count: z.number().int().min(0),
+  connected_account_count: z.number().int().min(0),
+  last_test_status: z.enum(["passed", "blocked", "not_run"]),
+  last_tested_at: z.string().nullable(),
+  last_error_redacted: z.string().nullable(),
+  readiness: z.enum([
+    "blocked_pending_admin_configuration",
+    "ready_for_review_first_workflows",
+  ]),
 });
 
 export const providerCostProfileRecord = z.object({
@@ -2806,6 +3080,8 @@ export type MailboxConnectionStartResponse = z.infer<
   typeof mailboxConnectionStartResponse
 >;
 export type MailboxImportResponse = z.infer<typeof mailboxImportResponse>;
+export type MailboxMessageImportRecord = z.infer<typeof mailboxMessageImportRecord>;
+export type MailboxMessageReviewResponse = z.infer<typeof mailboxMessageReviewResponse>;
 export type MailboxWatchResponse = z.infer<typeof mailboxWatchResponse>;
 export type GoogleDriveConnectionRecord = z.infer<typeof googleDriveConnectionRecord>;
 export type GoogleDriveStatusResponse = z.infer<typeof googleDriveStatusResponse>;
@@ -2814,6 +3090,29 @@ export type GoogleDriveConnectionStartResponse = z.infer<
 >;
 export type GoogleDriveFileRecord = z.infer<typeof googleDriveFileRecord>;
 export type GoogleDriveFileListResponse = z.infer<typeof googleDriveFileListResponse>;
+export type DriveSyncControlRecord = z.infer<typeof driveSyncControlRecord>;
+export type DriveCandidateRecord = z.infer<typeof driveCandidateRecord>;
+export type DriveCandidateListResponse = z.infer<typeof driveCandidateListResponse>;
+export type DriveCandidateSyncResponse = z.infer<typeof driveCandidateSyncResponse>;
+export type ConnectorHealthRecord = z.infer<typeof connectorHealthRecord>;
+export type ConnectorHealthListResponse = z.infer<typeof connectorHealthListResponse>;
+export type CalendarProviderEventCandidateRecord = z.infer<
+  typeof calendarProviderEventCandidateRecord
+>;
+export type CalendarProviderEventCandidateListResponse = z.infer<
+  typeof calendarProviderEventCandidateListResponse
+>;
+export type InboundEmailAliasRecord = z.infer<typeof inboundEmailAliasRecord>;
+export type InboundEmailAliasListResponse =
+  z.infer<typeof inboundEmailAliasListResponse>;
+export type InboundEmailEventRecord = z.infer<typeof inboundEmailEventRecord>;
+export type InboundEmailEventListResponse =
+  z.infer<typeof inboundEmailEventListResponse>;
+export type NotificationPreferenceResponse =
+  z.infer<typeof notificationPreferenceResponse>;
+export type Microsoft365TenantConfigurationResponse = z.infer<
+  typeof microsoft365TenantConfigurationResponse
+>;
 export type NotificationRuleRecord = z.infer<typeof notificationRuleRecord>;
 export type NotificationRuleListResponse = z.infer<typeof notificationRuleListResponse>;
 export type TenantConnectorRecord = z.infer<typeof tenantConnectorRecord>;

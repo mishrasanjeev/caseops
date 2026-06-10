@@ -124,6 +124,11 @@ api_router.include_router(
     tags=["notification-rules"],
 )
 api_router.include_router(
+    notifications.preferences_router,
+    prefix="/notification-preferences",
+    tags=["notification-preferences"],
+)
+api_router.include_router(
     notifications.webhook_router, prefix="/webhooks", tags=["webhooks"],
 )
 # Phase C-1 (2026-04-24, MOD-TS-014) - portal scaffold.

@@ -9,7 +9,10 @@ from sqlalchemy import select
 
 from caseops_api.api.dependencies import DbSession, get_current_context
 from caseops_api.db.models import BillingEnrollment, PlatformAdminMembership
-from caseops_api.schemas.integrations import ConnectorRegistryResponse
+from caseops_api.schemas.integrations import (
+    ConnectorHealthListResponse,
+    ConnectorRegistryResponse,
+)
 from caseops_api.schemas.production_safety import (
     CaseTrackingSupportMatrixCreateRequest,
     CaseTrackingSupportMatrixResponse,
@@ -48,6 +51,7 @@ from caseops_api.schemas.saas_billing import (
     PlatformReasonRequest,
     PlatformSubscriptionMutation,
 )
+from caseops_api.services.connector_health import list_platform_connector_health
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.integrations import connector_registry
 from caseops_api.services.platform_admin import (
@@ -225,6 +229,25 @@ def get_platform_integrations(
     )
     session.commit()
     return ConnectorRegistryResponse(connectors=connectors)
+
+
+@router.get("/integrations/health", response_model=ConnectorHealthListResponse)
+def get_platform_integrations_health(
+    context: PlatformContext,
+    session: DbSession,
+) -> ConnectorHealthListResponse:
+    platform_admin = require_platform_admin(session, context, capability="platform:usage_view")
+    response = list_platform_connector_health(session)
+    record_platform_audit(
+        session,
+        context=context,
+        platform_admin=platform_admin,
+        action="platform.integrations.health_viewed",
+        target_type="connector_health",
+        metadata={"record_count": len(response.health)},
+    )
+    session.commit()
+    return response
 
 
 @router.get("/cost-profiles", response_model=ProviderCostProfileListResponse)

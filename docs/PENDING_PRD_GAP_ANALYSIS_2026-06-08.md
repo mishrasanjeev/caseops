@@ -36,15 +36,15 @@ The product has moved well beyond the older PRD baseline. The following foundati
 
 The largest pending areas are:
 
-1. Gmail/Google Workspace is partially closed. Gmail mailbox V1, Google Calendar V1, and Google Drive metadata V1 now exist with OAuth gates, encrypted token storage, safe UI states, provider-operation visibility, metadata-only Gmail import, review-first attachment candidates, Google hearing/task/deadline sync, cancelled-hearing provider-event delete, and per-user Drive metadata listing. Production Google activation, Google-to-CaseOps imports, Drive file-content import/sync, and always-on durable provider automation remain pending.
-2. Durable email/mailbox ingestion is partially closed for Gmail V1 metadata and webhook foundations. Microsoft 365 mailbox ingestion, autonomous polling, raw body storage, inbound alias intake, and automatic document/matter mutation remain pending.
-3. Google Drive is partially closed for per-user OAuth and recent metadata listing. Durable OAuth-backed Drive file-content ingestion, folder mapping, webhook/polling, and commit path remain pending.
+1. Gmail/Google Workspace is partially closed. Gmail mailbox V1, Google Calendar V1, and Google Drive metadata V1 now exist with OAuth gates, encrypted token storage, safe UI states, provider-operation visibility, metadata-only Gmail import, review-first attachment candidates, Google hearing/task/deadline sync, cancelled-hearing provider-event delete, and per-user Drive metadata listing. The 2026-06-10 connector readiness slice adds durable connector health, Gmail/Outlook review queues, Drive candidate review/import controls, and calendar provider-event conflict review. Production Google activation, live provider UAT, and always-on durable provider automation remain pending.
+2. Durable email/mailbox ingestion is partially closed for Gmail V1 metadata and webhook foundations. The 2026-06-10 slice adds Outlook Mail metadata candidates, inbound alias readiness, and explicit content-import request states. Autonomous polling, raw body storage, and automatic document/matter mutation remain pending by design.
+3. Google Drive is partially closed for per-user OAuth, recent metadata listing, and review-first Drive candidate import controls. Durable provider-backed Drive sync, folder picker UAT, webhook/polling, and broad commit automation remain pending.
 4. Outlook is not complete as a two-way automation product. The current implementation is bounded/manual or readiness-gated CaseOps-to-Outlook hearing sync only.
 5. Pine Labs Plural code is present, but live payment acceptance remains blocked by UAT credentials, webhook registration, endpoint schemas, product enablement, MDR/settlement details, and founder go/no-go.
 6. Provider cost assumptions still need calibration before aggressive law-firm onboarding. Case refresh cost is modeled by default, but real provider fee per refresh/case/court is not known.
 7. MFA and OIDC/SAML SSO are not implemented as end-to-end auth flows. There are platform-admin MFA fields/readiness, but no actual enrollment/enforcement.
 8. Grantex or equivalent agent identity is absent. No `AgentGrant`, `AgentExecution`, `AgentToolCall`, budgeted scoped delegation, revocation, or human approval gate exists.
-9. External notification delivery and digests remain fail-closed or partial. In-app is safe; email/SMS/WhatsApp digest delivery and user preferences remain pending.
+9. External notification delivery and digests remain fail-closed or partial. The 2026-06-10 slice adds tenant/user notification preference rows and UI for in-app, email, SMS, WhatsApp, quiet hours, digest frequency, categories, escalation rules, and opt-outs. External email/SMS/WhatsApp delivery still remains disabled unless provider config and tenant/user preferences allow it.
 10. AI evaluation has a foundation, but not full per-workflow CI-gated release control.
 11. Court/source coverage is safe but incomplete. Selected court feeds/adapters exist; captcha/session-gated eCourts district/session workflows remain blocked until lawful provider/API access exists.
 12. GBA core implementation is done, but exact client UAT inputs are still needed: sample PDF format, logo/header assets, final cause-list field mapping, provider/court list, and UAT signoff.
@@ -99,6 +99,16 @@ Recommended next slice:
 - Keep Drive as a separate read/import/review slice.
 - Keep provider disabled/fail-closed until credentials, scopes, provider terms, and tenant approval are configured.
 
+2026-06-10 update:
+
+- Connector Automation and Communication Readiness adds durable connector
+  health, Gmail/Outlook metadata review actions, Drive review-import controls,
+  calendar provider-event suggestions, Microsoft 365 readiness, inbound aliases,
+  and notification preferences.
+- This closes the "entirely missing" portions of the workflow. Remaining work is
+  live provider UAT, production OAuth/Graph approval, full thread UX, advanced
+  label/search policy, and durable provider webhooks/polling.
+
 ### GAP-002 - Durable Mailbox Ingestion Is Partial
 
 Priority: P1  
@@ -137,6 +147,13 @@ Recommended next slice:
 - Store provider IDs, headers/metadata, small safe snippets, attachment metadata, and encrypted raw body storage only if explicitly approved.
 - Add matter-match suggestions, user review, audit events, and replay/dead-letter handling.
 - Add provider webhooks only after token/secret storage and tenant approvals are in place.
+
+2026-06-10 update:
+
+- Gmail and Outlook metadata candidates now share a review-first action model.
+  Inbound alias readiness exists with production disabled by default.
+- Raw bodies, attachment bytes, and automatic document/matter mutation still
+  require explicit review and provider/tenant approval.
 
 ### GAP-003 - Google Calendar Connector Foundation Is Partial
 
@@ -261,6 +278,13 @@ Recommended next slice:
   document processing jobs, dedupe, and audit.
 - Keep destructive operations out of scope; CaseOps should read/import, not delete or rewrite Drive files.
 
+2026-06-10 update:
+
+- Drive candidate records, review queue UI, tenant controls, provenance, and
+  explicit import actions now exist. Auto-import remains forced off.
+- Live provider-backed content import, folder picker UX, and durable
+  webhook/polling still need provider credentials and tenant approval.
+
 ### GAP-006 - Unified Connector Health Dashboard Is Not Complete
 
 Priority: P2  
@@ -299,6 +323,15 @@ Recommended next slice:
 - Add provider-backed health probes only after each connector has safe
   credential storage, provider-call budgets, redaction rules, and tenant
   approval.
+
+2026-06-10 update:
+
+- Durable connector health records now exist for Google, Gmail, Drive, Calendar,
+  Microsoft 365, Outlook Mail/Calendar, OneDrive/SharePoint, email delivery,
+  SMS, and WhatsApp.
+- Tenant admins and founder/platform admins have active health APIs/UI with
+  redacted failure categories and provider-operation links. Live provider probes
+  remain gated behind provider credentials and tenant approval.
 
 ### GAP-007 - Pine Labs Plural Live Payment Acceptance Is Not Ready
 

@@ -16,8 +16,11 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { fetchPlatformIntegrations } from "@/lib/api/endpoints";
-import type { ConnectorRecord } from "@/lib/api/schemas";
+import {
+  fetchPlatformConnectorHealth,
+  fetchPlatformIntegrations,
+} from "@/lib/api/endpoints";
+import type { ConnectorHealthRecord, ConnectorRecord } from "@/lib/api/schemas";
 import { useCapability } from "@/lib/capabilities";
 
 function toneForStatus(status: ConnectorRecord["status"]) {
@@ -124,11 +127,38 @@ function PlatformConnectorTile({ connector }: { connector: ConnectorRecord }) {
   );
 }
 
+function PlatformHealthRow({ row }: { row: ConnectorHealthRecord }) {
+  return (
+    <div className="grid gap-2 border-b border-[var(--color-line)] px-4 py-3 last:border-b-0 lg:grid-cols-[1fr_1fr_1fr]">
+      <div>
+        <div className="font-medium text-[var(--color-ink)]">{row.provider}</div>
+        <div className="text-xs text-[var(--color-mute)]">{row.company_id}</div>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        <Badge tone={toneForStatus(row.configured_state)}>
+          {row.configured_state.replaceAll("_", " ")}
+        </Badge>
+        <Badge tone={toneForStatus(row.connected_state)}>
+          {row.connected_state.replaceAll("_", " ")}
+        </Badge>
+      </div>
+      <div className="text-xs text-[var(--color-mute)]">
+        {row.error_category ?? row.disabled_reason ?? "No alert"}
+      </div>
+    </div>
+  );
+}
+
 export default function PlatformIntegrationsPage() {
   const canPlatform = useCapability("platform:admin");
   const integrationsQuery = useQuery({
     queryKey: ["platform-admin", "integrations"],
     queryFn: fetchPlatformIntegrations,
+    enabled: canPlatform,
+  });
+  const healthQuery = useQuery({
+    queryKey: ["platform-admin", "integrations", "health"],
+    queryFn: fetchPlatformConnectorHealth,
     enabled: canPlatform,
   });
 
@@ -206,6 +236,34 @@ export default function PlatformIntegrationsPage() {
           </CardContent>
         </Card>
       )}
+
+      {healthQuery.isPending ? (
+        <Card>
+          <CardContent>
+            <Skeleton className="h-24 w-full" />
+          </CardContent>
+        </Card>
+      ) : healthQuery.isError ? (
+        <QueryErrorState
+          title="Could not load connector health"
+          error={healthQuery.error}
+          onRetry={healthQuery.refetch}
+        />
+      ) : healthQuery.data?.health.length ? (
+        <Card>
+          <CardHeader>
+            <CardTitle as="h2">Tenant health</CardTitle>
+            <CardDescription>
+              Cross-tenant status with redacted failure categories.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            {healthQuery.data.health.slice(0, 50).map((row) => (
+              <PlatformHealthRow key={row.id} row={row} />
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }
