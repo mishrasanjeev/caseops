@@ -52,6 +52,12 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
+def _bounded_text(value: str | None, max_length: int) -> str | None:
+    if value is None or len(value) <= max_length:
+        return value
+    return value[: max_length - 3].rstrip() + "..."
+
+
 def _hash_ref(value: str | None) -> str:
     if not value:
         return _TENANT_ACCOUNT
@@ -142,15 +148,18 @@ def _update_health(
     row.granted_scopes_json = list(granted_scopes or [])
     row.last_success_at = last_success_at
     row.last_failure_at = last_failure_at
-    row.error_category = redact_provider_error(error_category) if error_category else None
+    row.error_category = _bounded_text(
+        redact_provider_error(error_category) if error_category else None,
+        80,
+    )
     row.token_expires_at = token_expires_at
-    row.token_refresh_status = token_refresh_status
-    row.webhook_status = webhook_status
-    row.polling_status = polling_status
-    row.rate_limit_status = rate_limit_status or "not_reported"
+    row.token_refresh_status = _bounded_text(token_refresh_status, 40)
+    row.webhook_status = _bounded_text(webhook_status, 40)
+    row.polling_status = _bounded_text(polling_status, 40)
+    row.rate_limit_status = _bounded_text(rate_limit_status or "not_reported", 40)
     row.next_retry_at = next_retry_at
-    row.disabled_reason = disabled_reason
-    row.account_label = account_label
+    row.disabled_reason = _bounded_text(disabled_reason, 160)
+    row.account_label = _bounded_text(account_label, 120)
     row.operational_alerts_json = list(operational_alerts or [])
     row.setup_actions_json = list(setup_actions or [])
     row.last_checked_at = _now()
