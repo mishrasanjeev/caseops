@@ -35,6 +35,10 @@ def test_connector_health_is_durable_and_token_safe(client: TestClient) -> None:
     body = response.json()
     providers = {row["provider"] for row in body["health"]}
     assert {"gmail", "google_drive", "google_calendar", "microsoft_365"} <= providers
+    assert all(
+        row["disabled_reason"] is None or len(row["disabled_reason"]) <= 160
+        for row in body["health"]
+    )
     assert "access_token" not in response.text
     assert "refresh_token" not in response.text
     assert "client_secret" not in response.text
