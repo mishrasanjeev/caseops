@@ -17,6 +17,19 @@ Fix:
 - Keep the gitleaks finding unsuppressed until rotation is confirmed.
 - Done in this pass: `.codex/` is now ignored to prevent recurrence.
 
+2026-06-13 implementation update:
+- Founder-only evidence fields now exist in
+  `connector_secret_rotation_evidence` and are exposed through
+  `GET /api/platform-admin/secret-rotation-readiness` and
+  `POST /api/platform-admin/secret-rotation-readiness/evidence`.
+- The paid-production console shows provider/app, credential label, rotation
+  status, old-credential revocation proof, validation proof, last evidence
+  timestamp, and residual risk.
+- The evidence API rejects obvious credential values and has no field for a
+  secret value. Store only external ticket/artifact references.
+- Status remains provider/UAT blocked until the external issuer confirms
+  rotation and old credential revocation.
+
 ## P1 - Secret Scanner Noise Masking Real Findings
 
 Status: fixed, except for the intentionally unsuppressed rotated-secret

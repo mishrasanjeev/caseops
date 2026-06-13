@@ -5,6 +5,27 @@
 **Currency:** INR only. Monetary values are stored in minor units (paisa).
 **Payment rail:** Pine Labs Plural V2, currently safe by configuration when `pine_labs_env=disabled`.
 
+## 2026-06-13 Readiness Update
+
+Status labels for billing:
+
+- Tenant subscription billing, plan usage, included quota, overages, add-on
+  credits, invoices, downloads, statements, and spend reports are `live` or
+  `review-first` where human confirmation is required.
+- Platform revenue, provider cost, gross margin, credits, refunds,
+  chargebacks, settlement mismatch, TDS/GST, and tenant profitability reports
+  are `founder-only`.
+- Pine Labs production payment acceptance is `disabled until UAT`.
+- Settlement, refund, credit note, chargeback, GST/TDS, idempotency, webhook,
+  and founder activation evidence is readiness scaffolding and does not enable
+  live money movement.
+- Any plan, add-on, or overage policy that can become loss-making must be
+  blocked by margin readiness or explicitly marked with a founder-only warning.
+
+Tenant-facing APIs/UI must never expose provider fees, internal costs, gross
+profit, margin, platform-only notes, raw provider payloads, OAuth tokens, or
+webhook secrets.
+
 Operational source of truth:
 
 - Catalog seed and grandfathering: `apps/api/alembic/versions/20260531_0001_pricing_billing_plural_platform_admin.py`
@@ -97,7 +118,9 @@ review.
 | `gc_enterprise` | GC Enterprise | Custom | Unlimited | Unlimited | Unlimited | Unlimited | Unlimited | Unlimited | custom |
 
 `gc_professional` includes API access and SSO readiness. `gc_enterprise`
-includes API and full SSO by contract.
+includes API and SSO readiness by contract; full OIDC/SAML SSO and SCIM remain
+planned until tenant IdP UAT, metadata validation, and lifecycle evidence are
+complete.
 
 ### Add-ons
 

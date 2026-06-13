@@ -1,6 +1,6 @@
 # GBA Law Office User Guide
 
-Updated: 2026-06-07
+Updated: 2026-06-13
 
 This guide documents the GBA Law Office workflows implemented in CaseOps:
 matter status terminology, tracked case refresh, court-order compliance
@@ -9,6 +9,26 @@ provenance, and date-wise cause-list PDFs.
 
 This is product documentation, not tax or legal advice. Configuration should be
 reviewed by the tenant's responsible lawyers and finance/accounting team.
+
+## 2026-06-13 Status Labels
+
+GBA Law Office workflows use the public CaseOps labels:
+
+- `live`: Dispose/disposed matter status, manual order upload states,
+  review-first compliance extraction, next-hearing provenance/manual lock,
+  matter billing profiles, GST/TDS invoice fields, cause-list preview/PDF, and
+  download audit.
+- `review-first`: compliance extraction, draft/task activation, hearing/date
+  suggestions, and connector-derived intelligence require lawyer confirmation
+  before becoming active legal work.
+- `provider-gated`: tracked case refresh, court adapters, Google Workspace,
+  Microsoft 365, inbound email, and external notifications require lawful
+  provider/source access, admin consent, webhook signing, or UAT evidence.
+- `founder-only`: provider costs, margin/profitability, production signoff, and
+  historical secret rotation evidence.
+- `disabled until UAT`: Pine Labs production payments.
+- `planned`: OIDC/SAML SSO, SCIM, private enterprise deployment, and autonomous
+  scoped-agent execution.
 
 ## 1. Matter Status: Dispose / Disposed
 
@@ -316,4 +336,3 @@ The following public surfaces should describe these workflows consistently:
 - `/llms.txt`
 - `/llms-full.txt`
 - landing page feature, workflow, trust, and FAQ sections
-

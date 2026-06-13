@@ -113,6 +113,43 @@ describe("AdminPage audit export (P0-001 cookie-auth regression)", () => {
           ],
         });
       }
+      if (url.includes("/api/admin/enterprise-readiness")) {
+        return jsonResponse({
+          enterprise_identity: {
+            provider: "enterprise_identity",
+            readiness_classification: "planned",
+            oidc_status: "disabled",
+            saml_status: "planned",
+            scim_status: "planned",
+            sso_enforcement_status: "disabled",
+            enabled: false,
+            not_enabled_reason:
+              "SSO, SAML, and SCIM are readiness-only until an IdP UAT pass is recorded.",
+            last_test_status: "not_run",
+            last_tested_at: null,
+            required_evidence: ["IdP metadata validated"],
+          },
+          agent_trust_plane: {
+            provider: "agent_trust_plane",
+            readiness_classification: "planned",
+            autonomous_execution_enabled: false,
+            grant_count: 0,
+            active_grant_count: 0,
+            execution_count: 0,
+            blocked_execution_count: 0,
+            not_enabled_reason: "Autonomous scoped-agent execution is not live.",
+          },
+          ai_governance: {
+            provider: "ai_governance",
+            readiness_classification: "review-first",
+            approved_policy_count: 0,
+            pending_policy_count: 0,
+            blocked_policy_count: 0,
+            legal_disclaimer_required: true,
+            regression_gates_required: true,
+          },
+        });
+      }
       if (url.includes("/api/admin/storage-governance")) {
         const body = typeof init?.body === "string" ? JSON.parse(init.body) : {};
         return jsonResponse({
@@ -228,6 +265,8 @@ describe("AdminPage audit export (P0-001 cookie-auth regression)", () => {
       "href",
       "/app/admin/roles",
     );
+    expect(await screen.findByText("Enterprise readiness")).toBeInTheDocument();
+    expect(screen.getByText(/autonomous scoped-agent execution is not live/i)).toBeInTheDocument();
     await user.click(screen.getByTestId("download-audit-export"));
     await waitFor(() =>
       expect(

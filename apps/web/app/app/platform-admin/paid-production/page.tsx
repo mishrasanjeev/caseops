@@ -28,8 +28,11 @@ import {
   fetchPasswordResetReadiness,
   fetchPineLabsUatReadiness,
   fetchPlatformFinanceReport,
+  fetchPlatformProductionReadiness,
   fetchPlatformSupportMatrix,
+  fetchSecretRotationReadiness,
   fetchProductionBillingSignoff,
+  recordSecretRotationEvidence,
   recordPineLabsActivationDecision,
   recordPineLabsUatEvidence,
   recordProductionBillingSignoffEvidence,
@@ -39,7 +42,9 @@ import type {
   MarginReadinessResponse,
   PasswordResetReadinessResponse,
   PineLabsUatReadinessResponse,
+  PlatformProductionReadinessResponse,
   ProductionBillingSignoffResponse,
+  SecretRotationEvidenceListResponse,
 } from "@/lib/api/schemas";
 import { formatMoneyMinor } from "@/lib/billing-format";
 import { useCapability } from "@/lib/capabilities";
@@ -63,6 +68,158 @@ function valueToString(value: unknown): string {
     return String(value);
   }
   return JSON.stringify(value);
+}
+
+function formatTimestamp(value: string | null | undefined): string {
+  if (!value) return "-";
+  return value.replace("T", " ").replace("Z", " UTC");
+}
+
+function UnifiedProductionGates({
+  readiness,
+}: {
+  readiness: PlatformProductionReadinessResponse | undefined;
+}) {
+  return (
+    <Card>
+      <CardHeader className="flex-row items-start justify-between gap-4">
+        <div>
+          <CardTitle as="h2">Unified production signoff</CardTitle>
+          <CardDescription>
+            Billing, Pine Labs, provider, finance, backup/restore, docs, and security gates.
+          </CardDescription>
+        </div>
+        <Badge tone={readiness?.ready ? "success" : "warning"}>
+          {readiness?.ready ? "production ready" : "not production ready"}
+        </Badge>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {(readiness?.not_ready_reasons ?? []).length > 0 ? (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+            <div className="font-semibold">Not production ready reasons</div>
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              {readiness?.not_ready_reasons.map((reason) => (
+                <li key={reason}>{reason}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-left text-sm">
+            <thead className="border-b border-[var(--color-line)] text-xs uppercase text-[var(--color-mute)]">
+              <tr>
+                <th className="py-2 pr-4">Gate</th>
+                <th className="py-2 pr-4">Area</th>
+                <th className="py-2 pr-4">Class</th>
+                <th className="py-2 pr-4">Status</th>
+                <th className="py-2 pr-4">Evidence</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(readiness?.gates ?? []).map((gate) => (
+                <tr key={`${gate.category}-${gate.gate_code}`} className="border-b border-[var(--color-line-2)]">
+                  <td className="py-3 pr-4">
+                    <div className="font-medium text-[var(--color-ink)]">{gate.label}</div>
+                    {gate.not_ready_reason ? (
+                      <div className="mt-1 max-w-xl text-xs text-amber-800">
+                        {gate.not_ready_reason}
+                      </div>
+                    ) : null}
+                  </td>
+                  <td className="py-3 pr-4">{label(gate.category)}</td>
+                  <td className="py-3 pr-4">{gate.readiness_classification}</td>
+                  <td className="py-3 pr-4">
+                    <Badge tone={gate.ready ? "success" : "warning"}>
+                      {gate.ready ? "ready" : gate.status}
+                    </Badge>
+                  </td>
+                  <td className="py-3 pr-4">{gate.evidence_ref ?? "-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function SecretRotationReadiness({
+  readiness,
+  busy,
+  onRecordBlocked,
+}: {
+  readiness: SecretRotationEvidenceListResponse | undefined;
+  busy: boolean;
+  onRecordBlocked: () => void;
+}) {
+  return (
+    <Card>
+      <CardHeader className="flex-row items-start justify-between gap-4">
+        <div>
+          <CardTitle as="h2">Historical secret rotation</CardTitle>
+          <CardDescription>
+            Founder-only proof ledger for external provider rotation. Credential values are never stored.
+          </CardDescription>
+        </div>
+        <Badge tone={readiness?.complete ? "success" : "warning"}>
+          {readiness?.complete ? "complete" : "provider/UAT blocked"}
+        </Badge>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {(readiness?.not_ready_reasons ?? []).length > 0 ? (
+          <div className="rounded-lg border border-[var(--color-line)] bg-[var(--color-bg-subtle)] p-3 text-sm text-[var(--color-ink-2)]">
+            {readiness?.not_ready_reasons.join(" ")}
+          </div>
+        ) : null}
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-left text-sm">
+            <thead className="border-b border-[var(--color-line)] text-xs uppercase text-[var(--color-mute)]">
+              <tr>
+                <th className="py-2 pr-4">Provider</th>
+                <th className="py-2 pr-4">App</th>
+                <th className="py-2 pr-4">Credential</th>
+                <th className="py-2 pr-4">Status</th>
+                <th className="py-2 pr-4">Last evidence</th>
+                <th className="py-2 pr-4">Residual risk</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(readiness?.records ?? []).map((record) => (
+                <tr key={record.id} className="border-b border-[var(--color-line-2)]">
+                  <td className="py-3 pr-4 font-medium">{record.provider}</td>
+                  <td className="py-3 pr-4">{record.affected_app}</td>
+                  <td className="py-3 pr-4">{record.credential_label}</td>
+                  <td className="py-3 pr-4">
+                    <Badge tone={record.status === "validated" ? "success" : "warning"}>
+                      {record.status}
+                    </Badge>
+                    <div className="mt-1 text-xs text-[var(--color-mute)]">
+                      revoked {record.old_credential_revoked ? "yes" : "no"} / validated{" "}
+                      {record.validation_performed ? "yes" : "no"}
+                    </div>
+                  </td>
+                  <td className="py-3 pr-4">{formatTimestamp(record.last_evidence_at)}</td>
+                  <td className="py-3 pr-4">{record.residual_risk ?? "-"}</td>
+                </tr>
+              ))}
+              {(readiness?.records ?? []).length === 0 ? (
+                <tr>
+                  <td className="py-4 text-[var(--color-mute)]" colSpan={6}>
+                    No external rotation proof has been recorded.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+        <Button type="button" variant="outline" disabled={busy} onClick={onRecordBlocked}>
+          <ShieldAlert className="h-4 w-4" aria-hidden />
+          Record blocked placeholder
+        </Button>
+      </CardContent>
+    </Card>
+  );
 }
 
 function ReadinessSummary({
@@ -146,6 +303,16 @@ function PineEvidenceTable({
           <Badge tone="neutral">mode {readiness?.provider_mode ?? "unknown"}</Badge>
           <Badge tone="neutral">env {readiness?.environment ?? "unknown"}</Badge>
         </div>
+        {(readiness?.activation_blockers ?? []).length > 0 ? (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+            <div className="font-semibold">Activation blockers</div>
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              {readiness?.activation_blockers.map((blocker) => (
+                <li key={blocker}>{blocker}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-sm">
             <thead className="border-b border-[var(--color-line)] text-xs uppercase text-[var(--color-mute)]">
@@ -516,6 +683,16 @@ export default function PaidProductionReadinessPage() {
     queryFn: fetchPasswordResetReadiness,
     enabled: canPlatform,
   });
+  const productionReadinessQuery = useQuery({
+    queryKey: ["platform-admin", "production-readiness"],
+    queryFn: fetchPlatformProductionReadiness,
+    enabled: canPlatform,
+  });
+  const secretRotationQuery = useQuery({
+    queryKey: ["platform-admin", "secret-rotation-readiness"],
+    queryFn: fetchSecretRotationReadiness,
+    enabled: canPlatform,
+  });
   const exceptionsQuery = useQuery({
     queryKey: ["platform-admin", "finance", "reconciliation-exceptions"],
     queryFn: () => fetchPlatformFinanceReport("reconciliation-exceptions"),
@@ -534,6 +711,9 @@ export default function PaidProductionReadinessPage() {
       await queryClient.invalidateQueries({
         queryKey: ["platform-admin", "pine-labs", "uat-readiness"],
       });
+      await queryClient.invalidateQueries({
+        queryKey: ["platform-admin", "production-readiness"],
+      });
     },
     onError: (error) => toast.error(apiErrorMessage(error, "Could not record UAT evidence.")),
   });
@@ -543,6 +723,9 @@ export default function PaidProductionReadinessPage() {
       toast.success("Activation decision recorded.");
       await queryClient.invalidateQueries({
         queryKey: ["platform-admin", "pine-labs", "uat-readiness"],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["platform-admin", "production-readiness"],
       });
     },
     onError: (error) => toast.error(apiErrorMessage(error, "Could not record decision.")),
@@ -554,8 +737,25 @@ export default function PaidProductionReadinessPage() {
       await queryClient.invalidateQueries({
         queryKey: ["platform-admin", "billing-signoff"],
       });
+      await queryClient.invalidateQueries({
+        queryKey: ["platform-admin", "production-readiness"],
+      });
     },
     onError: (error) => toast.error(apiErrorMessage(error, "Could not record signoff evidence.")),
+  });
+  const secretRotationMutation = useMutation({
+    mutationFn: recordSecretRotationEvidence,
+    onSuccess: async () => {
+      toast.success("Secret rotation blocker recorded.");
+      await queryClient.invalidateQueries({
+        queryKey: ["platform-admin", "secret-rotation-readiness"],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["platform-admin", "production-readiness"],
+      });
+    },
+    onError: (error) =>
+      toast.error(apiErrorMessage(error, "Could not record secret rotation evidence.")),
   });
 
   if (!canPlatform) {
@@ -575,6 +775,8 @@ export default function PaidProductionReadinessPage() {
     signoffQuery.isPending ||
     marginQuery.isPending ||
     resetQuery.isPending ||
+    productionReadinessQuery.isPending ||
+    secretRotationQuery.isPending ||
     exceptionsQuery.isPending ||
     supportQuery.isPending;
 
@@ -609,6 +811,25 @@ export default function PaidProductionReadinessPage() {
         pine={pineQuery.data}
         signoff={signoffQuery.data}
         margin={marginQuery.data}
+      />
+
+      <UnifiedProductionGates readiness={productionReadinessQuery.data} />
+
+      <SecretRotationReadiness
+        readiness={secretRotationQuery.data ?? productionReadinessQuery.data?.secret_rotation}
+        busy={secretRotationMutation.isPending}
+        onRecordBlocked={() =>
+          secretRotationMutation.mutate({
+            provider: "historical_connector_secret",
+            affectedApp: "caseops-api",
+            credentialLabel: "external provider credential",
+            status: "blocked",
+            oldCredentialRevoked: false,
+            validationPerformed: false,
+            residualRisk: "Provider/UAT blocked until external rotation evidence is uploaded.",
+            operatorNotes: "No credential value stored.",
+          })
+        }
       />
 
       <PineEvidenceTable

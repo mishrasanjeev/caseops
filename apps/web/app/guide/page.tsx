@@ -22,6 +22,7 @@ export const metadata: Metadata = {
 
 const sections: { id: string; title: string }[] = [
   { id: "getting-started", title: "Getting started" },
+  { id: "status-labels", title: "Product status labels" },
   { id: "workspace", title: "Workspace and roles" },
   { id: "matters", title: "Opening and running a matter" },
   { id: "documents", title: "Documents and indexing" },
@@ -149,7 +150,7 @@ export default function GuidePage() {
               </span>
               <span>
                 <span className="font-mono text-[var(--color-mute-2)]">Updated</span>{" "}
-                7 June 2026
+                13 June 2026
               </span>
             </div>
           </Container>
@@ -247,6 +248,29 @@ export default function GuidePage() {
                     activity all hang off a matter. You do not keep drafts in a folder and
                     hearings in a calendar — the matter is the folder <em>and</em> the
                     calendar.
+                  </Callout>
+                </Section>
+
+                <Section id="status-labels" title="Product status labels">
+                  <p>
+                    Public CaseOps claims use six labels. <strong>Live</strong> means the
+                    capability is available in the product. <strong>Review-first</strong>{" "}
+                    means the system proposes or drafts, but a human must approve the
+                    substantive result. <strong>Provider-gated</strong> means CaseOps has
+                    internal readiness but needs external provider credentials, consent,
+                    or UAT evidence. <strong>Founder-only</strong> means the surface is
+                    restricted to the platform super-admin. <strong>Disabled until UAT</strong>{" "}
+                    means code and evidence scaffolding exist but production activation
+                    is intentionally blocked. <strong>Planned</strong> means the public
+                    claim is roadmap/readiness only.
+                  </p>
+                  <Callout tone="warn" title="Current gated claims">
+                    Pine Labs production payments are disabled until UAT and founder
+                    go/no-go. OIDC/SAML SSO, SCIM, private enterprise deployment, and
+                    autonomous scoped-agent execution are planned/readiness-only.
+                    Google Workspace, Microsoft 365, inbound email, SMS, WhatsApp, and
+                    court-provider automation stay provider-gated where external
+                    credentials, admin consent, or legal source proof is missing.
                   </Callout>
                 </Section>
 

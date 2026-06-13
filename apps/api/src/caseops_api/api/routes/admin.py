@@ -47,6 +47,7 @@ from caseops_api.schemas.microsoft365 import (
     Microsoft365TenantConfigurationResponse,
     Microsoft365TenantConfigurationUpdateRequest,
 )
+from caseops_api.schemas.production_safety import TenantEnterpriseReadinessResponse
 from caseops_api.schemas.security import (
     TenantSecurityPolicyRecord,
     TenantSecurityPolicyUpdateRequest,
@@ -85,6 +86,7 @@ from caseops_api.services.microsoft365 import (
     test_microsoft365_tenant_configuration,
     update_microsoft365_tenant_configuration,
 )
+from caseops_api.services.production_safety import tenant_enterprise_readiness
 from caseops_api.services.security import (
     require_recent_step_up,
     tenant_security_policy,
@@ -399,6 +401,18 @@ def patch_security_policy(
     session: DbSession,
 ) -> TenantSecurityPolicyRecord:
     return update_tenant_security_policy(session, context=context, payload=payload)
+
+
+@router.get(
+    "/enterprise-readiness",
+    response_model=TenantEnterpriseReadinessResponse,
+    summary="Read enterprise identity, agent trust-plane, and AI governance readiness.",
+)
+def get_enterprise_readiness(
+    context: WorkspaceAdmin,
+    session: DbSession,
+) -> TenantEnterpriseReadinessResponse:
+    return tenant_enterprise_readiness(session, context=context)
 
 
 @router.get(

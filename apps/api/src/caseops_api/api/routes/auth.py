@@ -39,11 +39,13 @@ from caseops_api.services.identity import (
     SessionContext,
     authenticate_user,
     build_auth_context,
+    get_session_context,
     refresh_auth_session,
 )
 from caseops_api.services.security import (
     complete_step_up,
     disable_mfa,
+    login_mfa_challenge_state,
     mfa_security_status,
     regenerate_recovery_codes,
     start_mfa_enrollment,
@@ -97,6 +99,16 @@ async def login(
     # DB session (record_employee_login_async opens one via
     # get_session_factory) — never the request session.
     background.add_task(record_employee_login_async, auth.membership.id)
+    context = get_session_context(session, auth.membership.id)
+    mfa_state = login_mfa_challenge_state(session, context=context)
+    auth.mfa_required = bool(mfa_state["mfa_required"])
+    auth.mfa_challenge_required = bool(mfa_state["mfa_challenge_required"])
+    auth.mfa_enrollment_required = bool(mfa_state["mfa_enrollment_required"])
+    auth.mfa_challenge_reason = (
+        str(mfa_state["mfa_challenge_reason"])
+        if mfa_state["mfa_challenge_reason"] is not None
+        else None
+    )
     # EG-001: set the HttpOnly session cookie + JS-readable CSRF
     # cookie. The body still carries access_token for one release so
     # SDKs / automation that already use Bearer auth keep working

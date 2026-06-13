@@ -53,8 +53,14 @@ describe("PaidProductionReadinessPage", () => {
     renderWithQuery(<PaidProductionReadinessPage />);
 
     expect(await screen.findByText("Pine Labs UAT evidence")).toBeInTheDocument();
+    expect(await screen.findByText("Unified production signoff")).toBeInTheDocument();
+    expect(screen.getByText("Historical secret rotation")).toBeInTheDocument();
+    expect(screen.getAllByText("Production billing signoff").length).toBeGreaterThan(0);
+    expect(screen.getByText("webhook secret")).toBeInTheDocument();
     expect(await screen.findByText("Tampered webhook")).toBeInTheDocument();
     expect(screen.getByText("activation blocked")).toBeInTheDocument();
+    expect(screen.getByText("Activation blockers")).toBeInTheDocument();
+    expect(screen.getAllByText(/production payments are not enabled/i).length).toBeGreaterThan(0);
     expect(screen.getByText("Password reset readiness")).toBeInTheDocument();
     expect(screen.getByText("app.caseops.ai")).toBeInTheDocument();
     expect(screen.getByText("amount_mismatch")).toBeInTheDocument();
@@ -64,6 +70,7 @@ describe("PaidProductionReadinessPage", () => {
     await user.click(passButtons[1]);
     await user.click(screen.getByRole("button", { name: /record no-go/i }));
     await user.click(passButtons[3]);
+    await user.click(screen.getByRole("button", { name: /record blocked placeholder/i }));
 
     await waitFor(() => {
       expect(
@@ -89,6 +96,15 @@ describe("PaidProductionReadinessPage", () => {
           const url = String(input);
           return (
             url.includes("/api/platform-admin/billing-signoff/evidence") &&
+            init?.method === "POST"
+          );
+        }),
+      ).toBe(true);
+      expect(
+        fetchMock.mock.calls.some(([input, init]) => {
+          const url = String(input);
+          return (
+            url.includes("/api/platform-admin/secret-rotation-readiness/evidence") &&
             init?.method === "POST"
           );
         }),

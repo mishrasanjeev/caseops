@@ -3,12 +3,15 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import io
 import secrets
 import struct
 import time
 from datetime import UTC, datetime, timedelta
 from urllib.parse import quote
 
+import qrcode
+import qrcode.image.svg
 from cryptography.fernet import Fernet, InvalidToken
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
@@ -116,24 +119,18 @@ def _verify_totp(secret: str, code: str, *, at: int | None = None) -> bool:
     )
 
 
-def _svg_qr_placeholder(otpauth_url: str) -> str:
-    escaped = (
-        otpauth_url.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
+def _svg_qr(otpauth_url: str) -> str:
+    qr = qrcode.QRCode(
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        border=4,
+        box_size=8,
     )
-    return (
-        '<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" '
-        'viewBox="0 0 240 240" role="img" aria-label="TOTP enrollment">'
-        '<rect width="240" height="240" fill="#fff"/>'
-        '<rect x="16" y="16" width="52" height="52" fill="#111"/>'
-        '<rect x="172" y="16" width="52" height="52" fill="#111"/>'
-        '<rect x="16" y="172" width="52" height="52" fill="#111"/>'
-        '<text x="120" y="118" text-anchor="middle" font-size="10" '
-        'font-family="monospace">Use secret below</text>'
-        f'<desc>{escaped}</desc></svg>'
-    )
+    qr.add_data(otpauth_url)
+    qr.make(fit=True)
+    image = qr.make_image(image_factory=qrcode.image.svg.SvgPathImage)
+    buffer = io.BytesIO()
+    image.save(buffer)
+    return buffer.getvalue().decode("utf-8")
 
 
 def _setting(session: Session, *, user_id: str, create: bool = False) -> UserMFASetting | None:
@@ -274,19 +271,15 @@ def _policy_requires_mfa(
         policy_enforced_at = _as_aware(policy.mfa_enforced_at)
         if policy.all_users_mfa_required:
             flags["all_users_required"] = True
-            enforced_at = max(
-                enforced_at or policy_enforced_at or _now(),
-                policy_enforced_at or _now(),
-            )
+            candidate = policy_enforced_at or _now()
+            enforced_at = min(enforced_at, candidate) if enforced_at else candidate
         if (
             policy.tenant_admin_mfa_required
             and context.membership.role in {MembershipRole.OWNER, MembershipRole.ADMIN}
         ):
             flags["tenant_admin_required"] = True
-            enforced_at = max(
-                enforced_at or policy_enforced_at or _now(),
-                policy_enforced_at or _now(),
-            )
+            candidate = policy_enforced_at or _now()
+            enforced_at = min(enforced_at, candidate) if enforced_at else candidate
     return any(flags.values()), enforced_at, flags
 
 
@@ -335,6 +328,85 @@ def mfa_security_status(
     )
 
 
+def login_mfa_challenge_state(
+    session: Session,
+    *,
+    context: SessionContext,
+) -> dict[str, object]:
+    platform_admin = session.scalar(
+        select(PlatformAdminMembership).where(
+            PlatformAdminMembership.user_id == context.user.id,
+            PlatformAdminMembership.status == "active",
+        )
+    )
+    required, enforced_at, flags = _policy_requires_mfa(
+        session,
+        context,
+        platform_admin=platform_admin,
+    )
+    enforced_at = _as_aware(enforced_at)
+    if not required or enforced_at is None or enforced_at > _now():
+        return {
+            "mfa_required": required,
+            "mfa_challenge_required": False,
+            "mfa_enrollment_required": False,
+            "mfa_challenge_reason": None,
+            **flags,
+        }
+    setting = _setting(session, user_id=context.user.id)
+    if setting is None or setting.status != "enrolled":
+        return {
+            "mfa_required": True,
+            "mfa_challenge_required": True,
+            "mfa_enrollment_required": True,
+            "mfa_challenge_reason": "MFA enrollment is required before workspace access.",
+            **flags,
+        }
+    if recent_step_up_expires_at(session, context=context):
+        return {
+            "mfa_required": True,
+            "mfa_challenge_required": False,
+            "mfa_enrollment_required": False,
+            "mfa_challenge_reason": None,
+            **flags,
+        }
+    return {
+        "mfa_required": True,
+        "mfa_challenge_required": True,
+        "mfa_enrollment_required": False,
+        "mfa_challenge_reason": "Complete MFA step-up before workspace access.",
+        **flags,
+    }
+
+
+def enforce_login_mfa_if_required(
+    session: Session,
+    *,
+    context: SessionContext,
+    path: str,
+) -> None:
+    allowed_prefixes = (
+        "/api/auth/security",
+        "/api/auth/mfa/",
+        "/api/auth/logout",
+        "/api/auth/refresh",
+    )
+    if any(path.startswith(prefix) for prefix in allowed_prefixes):
+        return
+    state = login_mfa_challenge_state(session, context=context)
+    if not state.get("mfa_challenge_required"):
+        return
+    if state.get("mfa_enrollment_required"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="MFA is required before workspace access.",
+        )
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Complete MFA step-up before workspace access.",
+    )
+
+
 def start_mfa_enrollment(
     session: Session,
     *,
@@ -361,7 +433,7 @@ def start_mfa_enrollment(
         enrollment_id=setting.id,
         secret=secret,
         otpauth_url=otpauth_url,
-        qr_svg=_svg_qr_placeholder(otpauth_url),
+        qr_svg=_svg_qr(otpauth_url),
         status="pending",
     )
 

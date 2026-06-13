@@ -10,11 +10,14 @@ from typing import Any
 from urllib.parse import urlparse
 
 from fastapi import HTTPException, status
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
+    AgentExecution,
+    AgentGrant,
+    AIGovernanceApproval,
     BillingChargebackDispute,
     BillingCreditNote,
     BillingPaymentOrder,
@@ -25,19 +28,25 @@ from caseops_api.db.models import (
     BillingSettlementRow,
     BillingTDSReconciliationRow,
     CaseTrackingSupportMatrix,
+    ConnectorSecretRotationEvidence,
     PineLabsProductionActivationDecision,
     PineLabsUATRun,
     PineLabsUATScenarioEvidence,
     PlatformAdminMembership,
+    PlatformOperationalReadinessEvidence,
     ProductionBillingSignoff,
     ProductionBillingSignoffEvidence,
+    TenantEnterpriseIdentityConfiguration,
 )
 from caseops_api.schemas.production_safety import (
+    AgentTrustReadinessResponse,
+    AIGovernanceReadinessResponse,
     CaseTrackingSupportMatrixAdminRecord,
     CaseTrackingSupportMatrixCreateRequest,
     CaseTrackingSupportMatrixTenantRecord,
     CaseTrackingSupportMatrixUpdateRequest,
     CreditNoteCreateRequest,
+    EnterpriseIdentityReadinessResponse,
     FinanceRecordRequest,
     PasswordResetReadinessResponse,
     PineLabsActivationDecisionRequest,
@@ -45,12 +54,20 @@ from caseops_api.schemas.production_safety import (
     PineLabsUATReadinessResponse,
     PineLabsUATRunCreateRequest,
     PineLabsUATScenarioStatus,
+    PlatformOperationalReadinessEvidenceRequest,
+    PlatformOperationalReadinessRecord,
+    PlatformProductionReadinessGate,
+    PlatformProductionReadinessResponse,
     ProductionBillingSignoffCheckStatus,
     ProductionBillingSignoffEvidenceRequest,
     ProductionBillingSignoffResponse,
+    SecretRotationEvidenceListResponse,
+    SecretRotationEvidenceRecord,
+    SecretRotationEvidenceRequest,
     SettlementImportRequest,
     SettlementImportResponse,
     TDSReconciliationCreateRequest,
+    TenantEnterpriseReadinessResponse,
 )
 from caseops_api.services.identity import SessionContext
 from caseops_api.services.pine_labs import redact_provider_payload
@@ -93,6 +110,63 @@ PRODUCTION_BILLING_CHECK_CODES = tuple(code for code, _ in PRODUCTION_BILLING_CH
 PASSWORD_RESET_PATH = "/account/reset-password"
 PASSWORD_RESET_TTL_MINUTES = 60
 
+PLATFORM_OPERATIONAL_GATES: tuple[dict[str, str], ...] = (
+    {
+        "category": "provider",
+        "gate_code": "provider_operations_dead_letter_replay",
+        "label": "Provider operations dead-letter replay and redacted-error workflow",
+        "readiness_classification": "founder-only",
+        "default_reason": (
+            "Provider dead-letter replay, ignore, and mark-resolved evidence is missing."
+        ),
+    },
+    {
+        "category": "finance",
+        "gate_code": "finance_reconciliation_exports",
+        "label": (
+            "Finance reconciliation exports for refunds, chargebacks, credit notes, GST, and TDS"
+        ),
+        "readiness_classification": "founder-only",
+        "default_reason": "Finance export/reconciliation signoff evidence is missing.",
+    },
+    {
+        "category": "backup_restore",
+        "gate_code": "backup_success_and_restore_drill",
+        "label": "Backup success evidence and restore drill proof",
+        "readiness_classification": "founder-only",
+        "default_reason": "Backup proof or restore drill evidence is missing.",
+    },
+    {
+        "category": "docs",
+        "gate_code": "public_claims_reviewed",
+        "label": "Public claims, runbooks, guides, and machine-readable docs reviewed",
+        "readiness_classification": "founder-only",
+        "default_reason": "Public claim alignment evidence is missing.",
+    },
+    {
+        "category": "security",
+        "gate_code": "mfa_password_reset_and_secret_rotation",
+        "label": "MFA, password reset, and historical secret rotation reviewed",
+        "readiness_classification": "founder-only",
+        "default_reason": "Security gate evidence is missing.",
+    },
+)
+
+SECRET_VALUE_MARKERS = (
+    "-----BEGIN",
+    "Bearer ",
+    "bearer ",
+    "fernet:",
+    "ghp_",
+    "glpat-",
+    "AKIA",
+    "sk_live",
+    "sk_test",
+    "xoxb-",
+    "xoxp-",
+    "AIza",
+)
+
 
 def _now() -> datetime:
     return datetime.now(UTC)
@@ -110,6 +184,283 @@ def _csv_bytes(headers: list[str], rows: Iterable[Iterable[Any]]) -> bytes:
 def _hash_json(value: object) -> str:
     blob = json.dumps(value, sort_keys=True, default=str, separators=(",", ":"))
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _looks_like_secret_value(value: str) -> bool:
+    stripped = value.strip()
+    if not stripped:
+        return False
+    lowered = stripped.lower()
+    if any(marker.lower() in lowered for marker in SECRET_VALUE_MARKERS):
+        return True
+    compact = stripped.replace("-", "").replace("_", "").replace(".", "")
+    if len(compact) < 36 or any(ch.isspace() for ch in stripped):
+        return False
+    alphabet = set(compact)
+    if len(alphabet) < 12:
+        return False
+    return compact.isalnum()
+
+
+def _assert_no_secret_material(value: object, *, path: str = "evidence") -> None:
+    if value is None or isinstance(value, (bool, int, float)):
+        return
+    if isinstance(value, str):
+        if _looks_like_secret_value(value):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"{path} appears to contain a credential value; "
+                    "store an evidence reference instead."
+                ),
+            )
+        return
+    if isinstance(value, dict):
+        for key, item in value.items():
+            key_text = str(key).lower()
+            if key_text in {
+                "secret",
+                "secret_value",
+                "token",
+                "access_token",
+                "refresh_token",
+                "password",
+                "api_key",
+                "client_secret",
+                "webhook_secret",
+                "private_key",
+                "authorization",
+                "raw_body",
+                "raw_webhook_body",
+                "raw_provider_payload",
+                "provider_payload",
+            }:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"{path}.{key} must not store credential values.",
+                )
+            _assert_no_secret_material(item, path=f"{path}.{key}")
+        return
+    if isinstance(value, (list, tuple, set)):
+        for index, item in enumerate(value):
+            _assert_no_secret_material(item, path=f"{path}[{index}]")
+
+
+def _secret_rotation_record(row: ConnectorSecretRotationEvidence) -> SecretRotationEvidenceRecord:
+    return SecretRotationEvidenceRecord(
+        id=row.id,
+        provider=row.provider,
+        affected_app=row.affected_app,
+        credential_label=row.credential_label,
+        status=row.status,  # type: ignore[arg-type]
+        old_credential_revoked=row.old_credential_revoked,
+        validation_performed=row.validation_performed,
+        rotation_completed_at=row.rotation_completed_at,
+        evidence_ref=row.evidence_ref,
+        residual_risk=row.residual_risk,
+        operator_notes=row.operator_notes,
+        last_evidence_at=row.last_evidence_at,
+        recorded_by_platform_admin_id=row.recorded_by_platform_admin_id,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+def _secret_rotation_response(
+    rows: list[ConnectorSecretRotationEvidence],
+) -> SecretRotationEvidenceListResponse:
+    not_ready: list[str] = []
+    if not rows:
+        not_ready.append(
+            "No secret rotation proof is recorded for historical connector secrets."
+        )
+    for row in rows:
+        if row.status not in {"rotated", "revoked", "validated", "not_applicable"}:
+            not_ready.append(
+                f"{row.provider}/{row.affected_app}/{row.credential_label} is {row.status}."
+            )
+        if row.status != "not_applicable" and not row.old_credential_revoked:
+            not_ready.append(
+                f"{row.provider}/{row.affected_app}/{row.credential_label} "
+                "lacks old-credential revocation proof."
+            )
+        if row.status != "not_applicable" and not row.validation_performed:
+            not_ready.append(
+                f"{row.provider}/{row.affected_app}/{row.credential_label} "
+                "lacks post-rotation validation proof."
+            )
+    return SecretRotationEvidenceListResponse(
+        complete=not not_ready,
+        not_ready_reasons=not_ready,
+        records=[_secret_rotation_record(row) for row in rows],
+    )
+
+
+def list_secret_rotation_evidence(session: Session) -> SecretRotationEvidenceListResponse:
+    rows = list(
+        session.scalars(
+            select(ConnectorSecretRotationEvidence).order_by(
+                ConnectorSecretRotationEvidence.provider.asc(),
+                ConnectorSecretRotationEvidence.affected_app.asc(),
+                ConnectorSecretRotationEvidence.credential_label.asc(),
+            )
+        )
+    )
+    return _secret_rotation_response(rows)
+
+
+def record_secret_rotation_evidence(
+    session: Session,
+    *,
+    context: SessionContext,
+    platform_admin: PlatformAdminMembership,
+    payload: SecretRotationEvidenceRequest,
+) -> SecretRotationEvidenceListResponse:
+    for field_name in ("evidence_ref", "residual_risk", "operator_notes"):
+        _assert_no_secret_material(getattr(payload, field_name), path=field_name)
+    row = session.scalar(
+        select(ConnectorSecretRotationEvidence).where(
+            ConnectorSecretRotationEvidence.provider == payload.provider.strip().lower(),
+            ConnectorSecretRotationEvidence.affected_app == payload.affected_app.strip(),
+            ConnectorSecretRotationEvidence.credential_label == payload.credential_label.strip(),
+        )
+    )
+    row = row or ConnectorSecretRotationEvidence(
+        provider=payload.provider.strip().lower(),
+        affected_app=payload.affected_app.strip(),
+        credential_label=payload.credential_label.strip(),
+    )
+    row.status = payload.status
+    row.old_credential_revoked = payload.old_credential_revoked
+    row.validation_performed = payload.validation_performed
+    row.rotation_completed_at = payload.rotation_completed_at
+    row.evidence_ref = payload.evidence_ref
+    row.residual_risk = payload.residual_risk
+    row.operator_notes = payload.operator_notes
+    row.last_evidence_at = _now()
+    row.recorded_by_platform_admin_id = platform_admin.id
+    session.add(row)
+    record_platform_audit(
+        session,
+        context=context,
+        platform_admin=platform_admin,
+        action="platform.secret_rotation_evidence.recorded",
+        target_type="connector_secret_rotation_evidence",
+        target_id=row.id,
+        metadata={
+            "provider": row.provider,
+            "affected_app": row.affected_app,
+            "credential_label": row.credential_label,
+            "status": row.status,
+        },
+    )
+    session.commit()
+    return list_secret_rotation_evidence(session)
+
+
+def _operational_record(
+    row: PlatformOperationalReadinessEvidence | None,
+    *,
+    default: dict[str, str] | None = None,
+) -> PlatformOperationalReadinessRecord:
+    if row is None:
+        assert default is not None
+        return PlatformOperationalReadinessRecord(
+            id=None,
+            category=default["category"],
+            gate_code=default["gate_code"],
+            label=default["label"],
+            status="pending",
+            readiness_classification=default["readiness_classification"],  # type: ignore[arg-type]
+            blocker_reason=default["default_reason"],
+            evidence_ref=None,
+            evidence=None,
+            last_evidence_at=None,
+            owner_label=None,
+        )
+    return PlatformOperationalReadinessRecord(
+        id=row.id,
+        category=row.category,
+        gate_code=row.gate_code,
+        label=row.label,
+        status=row.status,  # type: ignore[arg-type]
+        readiness_classification=row.readiness_classification,  # type: ignore[arg-type]
+        blocker_reason=row.blocker_reason,
+        evidence_ref=row.evidence_ref,
+        evidence=row.evidence_json,
+        last_evidence_at=row.last_evidence_at,
+        owner_label=row.owner_label,
+    )
+
+
+def list_operational_readiness_evidence(
+    session: Session,
+) -> list[PlatformOperationalReadinessRecord]:
+    rows = {
+        (row.category, row.gate_code): row
+        for row in session.scalars(select(PlatformOperationalReadinessEvidence))
+    }
+    records = [
+        _operational_record(rows.get((gate["category"], gate["gate_code"])), default=gate)
+        for gate in PLATFORM_OPERATIONAL_GATES
+    ]
+    extra_keys = {
+        (gate["category"], gate["gate_code"]) for gate in PLATFORM_OPERATIONAL_GATES
+    }
+    extras = [
+        _operational_record(row)
+        for key, row in sorted(rows.items(), key=lambda item: item[0])
+        if key not in extra_keys
+    ]
+    return records + extras
+
+
+def record_operational_readiness_evidence(
+    session: Session,
+    *,
+    context: SessionContext,
+    platform_admin: PlatformAdminMembership,
+    payload: PlatformOperationalReadinessEvidenceRequest,
+) -> list[PlatformOperationalReadinessRecord]:
+    _assert_no_secret_material(payload.evidence, path="evidence")
+    for field_name in ("blocker_reason", "evidence_ref", "owner_label"):
+        _assert_no_secret_material(getattr(payload, field_name), path=field_name)
+    row = session.scalar(
+        select(PlatformOperationalReadinessEvidence).where(
+            PlatformOperationalReadinessEvidence.category == payload.category.strip().lower(),
+            PlatformOperationalReadinessEvidence.gate_code == payload.gate_code.strip().lower(),
+        )
+    )
+    row = row or PlatformOperationalReadinessEvidence(
+        category=payload.category.strip().lower(),
+        gate_code=payload.gate_code.strip().lower(),
+        label=payload.label.strip(),
+    )
+    row.label = payload.label.strip()
+    row.status = payload.status
+    row.readiness_classification = payload.readiness_classification
+    row.blocker_reason = payload.blocker_reason
+    row.evidence_ref = payload.evidence_ref
+    row.evidence_json = payload.evidence
+    row.last_evidence_at = _now()
+    row.owner_label = payload.owner_label
+    row.recorded_by_platform_admin_id = platform_admin.id
+    session.add(row)
+    record_platform_audit(
+        session,
+        context=context,
+        platform_admin=platform_admin,
+        action="platform.operational_readiness_evidence.recorded",
+        target_type="platform_operational_readiness_evidence",
+        target_id=row.id,
+        metadata={
+            "category": row.category,
+            "gate_code": row.gate_code,
+            "status": row.status,
+        },
+    )
+    session.commit()
+    return list_operational_readiness_evidence(session)
 
 
 def password_reset_readiness() -> PasswordResetReadinessResponse:
@@ -219,6 +570,25 @@ def pine_labs_uat_readiness(
         .order_by(PineLabsProductionActivationDecision.decided_at.desc())
         .limit(1)
     )
+    settings = get_settings()
+    pine_env = (settings.pine_labs_env or "").strip().lower()
+    activation_blockers: list[str] = []
+    if missing:
+        activation_blockers.append(
+            "Missing required Pine Labs UAT scenarios: " + ", ".join(missing)
+        )
+    if decision is None:
+        activation_blockers.append("Founder Pine Labs go/no-go decision is not recorded.")
+    elif decision.blocked or decision.founder_go_no_go != "go":
+        activation_blockers.append("Founder Pine Labs decision is no-go or blocked.")
+    if pine_env in {"", "disabled", "mock", "test"}:
+        activation_blockers.append(
+            "Pine Labs runtime mode is disabled/mock/test; production payments are not enabled."
+        )
+    elif pine_env not in {"production", "prod", "live"}:
+        activation_blockers.append(
+            f"Pine Labs runtime mode {pine_env!r} is not an approved production mode."
+        )
     return PineLabsUATReadinessResponse(
         run_id=run.id,
         run_status=run.status,
@@ -227,10 +597,8 @@ def pine_labs_uat_readiness(
         scenarios=scenarios,
         complete=complete,
         missing_required_scenarios=missing,  # type: ignore[arg-type]
-        production_activation_blocked=not complete
-        or decision is None
-        or decision.blocked
-        or decision.founder_go_no_go != "go",
+        production_activation_blocked=bool(activation_blockers),
+        activation_blockers=activation_blockers,
         latest_decision=(
             {
                 "id": decision.id,
@@ -263,6 +631,12 @@ def record_pine_labs_uat_evidence(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Pine Labs UAT run not found.",
         )
+    redacted_payload = redact_provider_payload(payload.redacted_payload or {})
+    if redacted_payload:
+        _assert_no_secret_material(redacted_payload, path="redacted_payload")
+    for field_name in ("provider_order_id", "provider_payment_id", "webhook_id", "operator_notes"):
+        _assert_no_secret_material(getattr(payload, field_name), path=field_name)
+    _assert_no_secret_material(payload.attachment_refs, path="attachment_refs")
     existing = session.scalar(
         select(PineLabsUATScenarioEvidence).where(
             PineLabsUATScenarioEvidence.run_id == run.id,
@@ -279,9 +653,7 @@ def record_pine_labs_uat_evidence(
     row.webhook_id = payload.webhook_id
     row.webhook_timestamp = payload.webhook_timestamp
     row.observed_at = _now()
-    row.redacted_payload_json = (
-        redact_provider_payload(payload.redacted_payload) if payload.redacted_payload else None
-    )
+    row.redacted_payload_json = redacted_payload or None
     row.operator_notes = payload.operator_notes
     row.attachment_refs_json = list(payload.attachment_refs or [])
     row.created_by_platform_admin_id = platform_admin.id
@@ -320,12 +692,19 @@ def record_pine_labs_activation_decision(
         )
     readiness = pine_labs_uat_readiness(session, platform_admin=platform_admin)
     missing = list(readiness.missing_required_scenarios)
-    blocked = bool(missing or payload.founder_go_no_go != "go")
+    settings = get_settings()
+    pine_env = (settings.pine_labs_env or "").strip().lower()
+    config_blockers = [
+        blocker
+        for blocker in readiness.activation_blockers
+        if "runtime mode" in blocker or "production payments are not enabled" in blocker
+    ]
+    blocked = bool(missing or payload.founder_go_no_go != "go" or config_blockers)
     row = PineLabsProductionActivationDecision(
         run_id=run.id,
         decision="blocked" if blocked else "ready",
         blocked=blocked,
-        missing_scenarios_json=missing,
+        missing_scenarios_json=missing + config_blockers,
         founder_go_no_go=payload.founder_go_no_go,
         notes=payload.notes,
         decided_by_platform_admin_id=platform_admin.id,
@@ -346,8 +725,8 @@ def record_pine_labs_activation_decision(
         "id": row.id,
         "decision": row.decision,
         "blocked": row.blocked,
-        "missing_scenarios": missing,
-        "provider_mode_unchanged": get_settings().pine_labs_env,
+        "missing_scenarios": missing + config_blockers,
+        "provider_mode_unchanged": pine_env,
     }
 
 
@@ -435,6 +814,9 @@ def record_production_billing_signoff_evidence(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Billing signoff not found.",
         )
+    _assert_no_secret_material(payload.evidence, path="evidence")
+    for field_name in ("evidence_ref", "operator_notes"):
+        _assert_no_secret_material(getattr(payload, field_name), path=field_name)
     row = session.scalar(
         select(ProductionBillingSignoffEvidence).where(
             ProductionBillingSignoffEvidence.signoff_id == signoff.id,
@@ -464,6 +846,147 @@ def record_production_billing_signoff_evidence(
     status_response = production_billing_signoff_status(session, platform_admin=platform_admin)
     session.commit()
     return status_response
+
+
+def _readiness_gate(
+    *,
+    category: str,
+    gate_code: str,
+    label: str,
+    ready: bool,
+    reason: str | None,
+    readiness_classification: str = "founder-only",
+    evidence_ref: str | None = None,
+    last_evidence_at: datetime | None = None,
+) -> PlatformProductionReadinessGate:
+    return PlatformProductionReadinessGate(
+        category=category,
+        gate_code=gate_code,
+        label=label,
+        status="pass" if ready else "blocked",
+        readiness_classification=readiness_classification,  # type: ignore[arg-type]
+        ready=ready,
+        not_ready_reason=None if ready else reason,
+        evidence_ref=evidence_ref,
+        last_evidence_at=last_evidence_at,
+    )
+
+
+def production_readiness_status(
+    session: Session,
+    *,
+    platform_admin: PlatformAdminMembership,
+) -> PlatformProductionReadinessResponse:
+    from caseops_api.services.provider_costs import margin_readiness
+
+    pine = pine_labs_uat_readiness(session, platform_admin=platform_admin)
+    billing = production_billing_signoff_status(session, platform_admin=platform_admin)
+    margin = margin_readiness(session)
+    password = password_reset_readiness()
+    secret_rotation = list_secret_rotation_evidence(session)
+    operational = list_operational_readiness_evidence(session)
+
+    gates: list[PlatformProductionReadinessGate] = []
+    gates.append(
+        _readiness_gate(
+            category="billing",
+            gate_code="production_billing_signoff",
+            label="Production billing signoff",
+            ready=billing.complete,
+            reason=(
+                "Billing signoff is missing required checks: "
+                + ", ".join(billing.missing_required_checks)
+                if billing.missing_required_checks
+                else None
+            ),
+        )
+    )
+    gates.append(
+        _readiness_gate(
+            category="pine_labs",
+            gate_code="pine_labs_uat_and_founder_go",
+            label="Pine Labs UAT evidence and founder go/no-go",
+            ready=not pine.production_activation_blocked,
+            reason=(
+                "Pine Labs production activation remains blocked: "
+                + "; ".join(pine.activation_blockers)
+                if pine.production_activation_blocked
+                else None
+            ),
+            readiness_classification="disabled until UAT",
+        )
+    )
+    gates.append(
+        _readiness_gate(
+            category="finance",
+            gate_code="margin_and_profitability",
+            label="Margin/profitability guardrails",
+            ready=not margin.blocked,
+            reason=(
+                "Margin readiness is blocked by missing, loss-making, "
+                "or unapproved estimated scenarios."
+                if margin.blocked
+                else None
+            ),
+        )
+    )
+    gates.append(
+        _readiness_gate(
+            category="security",
+            gate_code="password_reset",
+            label="Password reset delivery and token safety",
+            ready=password.provider_configured
+            and password.sender_email_configured
+            and password.secrets_exposed is False,
+            reason=(
+                "Password reset email provider or sender is not configured for production."
+                if not (password.provider_configured and password.sender_email_configured)
+                else None
+            ),
+        )
+    )
+    gates.append(
+        _readiness_gate(
+            category="security",
+            gate_code="historical_secret_rotation",
+            label="Historical connector secret rotation proof",
+            ready=secret_rotation.complete,
+            reason=(
+                "; ".join(secret_rotation.not_ready_reasons)
+                if secret_rotation.not_ready_reasons
+                else None
+            ),
+        )
+    )
+
+    for record in operational:
+        ready = record.status in {"pass", "not_applicable"}
+        gates.append(
+            PlatformProductionReadinessGate(
+                category=record.category,
+                gate_code=record.gate_code,
+                label=record.label,
+                status=record.status,
+                readiness_classification=record.readiness_classification,
+                ready=ready,
+                not_ready_reason=None if ready else record.blocker_reason,
+                evidence_ref=record.evidence_ref,
+                last_evidence_at=record.last_evidence_at,
+            )
+        )
+
+    not_ready_reasons = [
+        gate.not_ready_reason or f"{gate.label} is not production ready."
+        for gate in gates
+        if not gate.ready
+    ]
+    return PlatformProductionReadinessResponse(
+        ready=not not_ready_reasons,
+        not_ready_reasons=not_ready_reasons,
+        gates=gates,
+        secret_rotation=secret_rotation,
+        operational_evidence=operational,
+    )
 
 
 def _load_payment_order(
@@ -874,6 +1397,121 @@ def finance_export_csv(session: Session, *, report: str) -> bytes:
         return _csv_bytes(["empty"], [])
     headers = sorted({key for row in rows for key in row})
     return _csv_bytes(headers, ([row.get(header) for header in headers] for row in rows))
+
+
+def tenant_enterprise_readiness(
+    session: Session,
+    *,
+    context: SessionContext,
+) -> TenantEnterpriseReadinessResponse:
+    identity = session.scalar(
+        select(TenantEnterpriseIdentityConfiguration).where(
+            TenantEnterpriseIdentityConfiguration.company_id == context.company.id
+        )
+    )
+    if identity is None:
+        identity = TenantEnterpriseIdentityConfiguration(
+            company_id=context.company.id,
+            required_evidence_json=[
+                "IdP metadata validated",
+                "OIDC/SAML UAT pass",
+                "SCIM provisioning UAT pass",
+                "Founder or workspace-owner enforcement approval",
+            ],
+        )
+        session.add(identity)
+        session.flush()
+
+    grant_count = int(
+        session.scalar(
+            select(func.count(AgentGrant.id)).where(AgentGrant.company_id == context.company.id)
+        )
+        or 0
+    )
+    active_grant_count = int(
+        session.scalar(
+            select(func.count(AgentGrant.id)).where(
+                AgentGrant.company_id == context.company.id,
+                AgentGrant.status == "active",
+            )
+        )
+        or 0
+    )
+    execution_count = int(
+        session.scalar(
+            select(func.count(AgentExecution.id)).where(
+                AgentExecution.company_id == context.company.id
+            )
+        )
+        or 0
+    )
+    blocked_execution_count = int(
+        session.scalar(
+            select(func.count(AgentExecution.id)).where(
+                AgentExecution.company_id == context.company.id,
+                AgentExecution.status.in_(["blocked", "disabled"]),
+            )
+        )
+        or 0
+    )
+    approved_policy_count = int(
+        session.scalar(
+            select(func.count(AIGovernanceApproval.id)).where(
+                AIGovernanceApproval.company_id == context.company.id,
+                AIGovernanceApproval.status == "approved",
+            )
+        )
+        or 0
+    )
+    pending_policy_count = int(
+        session.scalar(
+            select(func.count(AIGovernanceApproval.id)).where(
+                AIGovernanceApproval.company_id == context.company.id,
+                AIGovernanceApproval.status.in_(["pending", "in_review"]),
+            )
+        )
+        or 0
+    )
+    blocked_policy_count = int(
+        session.scalar(
+            select(func.count(AIGovernanceApproval.id)).where(
+                AIGovernanceApproval.company_id == context.company.id,
+                AIGovernanceApproval.status.in_(["blocked", "rejected"]),
+            )
+        )
+        or 0
+    )
+    session.commit()
+    return TenantEnterpriseReadinessResponse(
+        enterprise_identity=EnterpriseIdentityReadinessResponse(
+            oidc_status=identity.oidc_status,
+            saml_status=identity.saml_status,
+            scim_status=identity.scim_status,
+            sso_enforcement_status=identity.sso_enforcement_status,
+            enabled=False,
+            not_enabled_reason=identity.not_enabled_reason,
+            last_test_status=identity.last_test_status,
+            last_tested_at=identity.last_tested_at,
+            required_evidence=[str(item) for item in identity.required_evidence_json or []],
+        ),
+        agent_trust_plane=AgentTrustReadinessResponse(
+            grant_count=grant_count,
+            active_grant_count=active_grant_count,
+            execution_count=execution_count,
+            blocked_execution_count=blocked_execution_count,
+            not_enabled_reason=(
+                "Autonomous scoped-agent execution is disabled until grant activation, "
+                "approval workflows, execution audit, and revocation evidence are complete."
+            ),
+        ),
+        ai_governance=AIGovernanceReadinessResponse(
+            approved_policy_count=approved_policy_count,
+            pending_policy_count=pending_policy_count,
+            blocked_policy_count=blocked_policy_count,
+            legal_disclaimer_required=True,
+            regression_gates_required=True,
+        ),
+    )
 
 
 def support_matrix_admin_record(

@@ -16,6 +16,10 @@ CaseOps is a matter-native legal operating system built for Indian legal practic
 
 It supports Indian litigation and legal-operations workflows: BNS, BNSS, BSA, CrPC, CPC, Arbitration Act, Companies Act and other Indian sources; Supreme Court, High Courts, lower courts, tribunals and forums where lawful source access and source-quality proof exist; and Indian billing fields for law-firm invoices.
 
+## Product status labels
+
+Every public claim is classified as one of: live, review-first, provider-gated, founder-only, disabled until UAT, or planned. Pine Labs production payments are disabled until UAT evidence and founder go/no-go are complete. OIDC/SAML SSO, SCIM, private enterprise deployment, and autonomous scoped-agent execution are planned/readiness-only. Google Workspace, Microsoft 365, inbound email, SMS, WhatsApp, and court-provider automation are provider-gated where credentials, admin consent, webhook signing, or legal source proof is missing.
+
 ## Who it is for
 
 - **Indian law firms**: solo to mid-size litigation teams that need matter management, tracked case updates, court-order compliance review, drafting, hearing prep, cause lists, and matter billing.
@@ -127,7 +131,9 @@ It supports Indian litigation and legal-operations workflows: BNS, BNSS, BSA, Cr
 - No captcha/session-gated court-source bypass
 - No unapproved external provider calls
 - No live court/provider calls unless configured safe mode or approved provider configuration exists
-- No external email/SMS/WhatsApp notifications unless provider delivery is explicitly configured
+- No Pine Labs production payment activation until UAT evidence and founder go/no-go are complete
+- No autonomous scoped-agent tool execution; agent grants, execution audit, and revocation are readiness scaffolding until activated
+- No external email/SMS/WhatsApp notifications unless provider delivery is explicitly configured, template/DLT approvals are complete where applicable, and UAT evidence is recorded
 - Durable in-app notification intents are the safe default
 - Strict tenant isolation applies to every route, query, and write
 - Auditability is preserved for user, admin, and system actions

@@ -39,11 +39,11 @@ const faqs = [
   },
   {
     q: "How is tenant data isolated?",
-    a: "Every record, document, embedding, and audit event carries a tenant_id and is filtered at the query and storage layer. Matter-level ethical walls override broad role access. Agents run with scoped grants, not user credentials. Tenant-facing surfaces do not expose provider tokens, raw provider payloads, raw prompts, raw LLM responses, internal costs, or unauthorized tenant-private data.",
+    a: "Every record, document, embedding, and audit event carries a tenant_id and is filtered at the query and storage layer. Matter-level ethical walls override broad role access. Agent grant and execution-audit records are readiness scaffolding; autonomous scoped-agent execution is not live. Tenant-facing surfaces do not expose provider tokens, raw provider payloads, raw prompts, raw LLM responses, internal costs, or unauthorized tenant-private data.",
   },
   {
     q: "Can we self-host or run in a private VPC?",
-    a: "Yes, on the Enterprise tier. CaseOps ships a packaged private inference stack that deploys in dedicated tenant environments, with a path to on-prem for qualifying customers.",
+    a: "Enterprise deployment is planned and readiness-scaffolded, but not marketed as live. Private VPC, on-prem inference, OIDC/SAML SSO, SCIM, and dedicated connectors require security review, provider/UAT evidence, and a separate implementation signoff.",
   },
   {
     q: "Who owns the data used to fine-tune models?",

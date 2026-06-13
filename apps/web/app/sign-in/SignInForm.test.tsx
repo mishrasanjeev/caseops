@@ -7,9 +7,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // vi.mock factories are hoisted above `const` declarations, so use
 // vi.hoisted() to keep the stubs accessible from both the factory and
 // the tests below.
-const { signInMock, storeSessionMock, toastSuccess, toastError } = vi.hoisted(
+const { signInMock, completeMfaLoginChallengeMock, storeSessionMock, toastSuccess, toastError } = vi.hoisted(
   () => ({
     signInMock: vi.fn(),
+    completeMfaLoginChallengeMock: vi.fn(),
     storeSessionMock: vi.fn(),
     toastSuccess: vi.fn(),
     toastError: vi.fn(),
@@ -18,6 +19,7 @@ const { signInMock, storeSessionMock, toastSuccess, toastError } = vi.hoisted(
 
 vi.mock("@/lib/api/auth", () => ({
   signIn: signInMock,
+  completeMfaLoginChallenge: completeMfaLoginChallengeMock,
 }));
 
 vi.mock("@/lib/session", () => ({
@@ -40,6 +42,7 @@ function withClient(children: ReactNode) {
 describe("SignInForm", () => {
   beforeEach(() => {
     signInMock.mockReset();
+    completeMfaLoginChallengeMock.mockReset();
     storeSessionMock.mockReset();
     toastSuccess.mockReset();
     toastError.mockReset();
@@ -113,6 +116,49 @@ describe("SignInForm", () => {
     });
     await waitFor(() => expect(storeSessionMock).toHaveBeenCalledTimes(1));
     expect(toastSuccess).toHaveBeenCalled();
+  });
+
+  it("requires MFA code before storing a policy-challenged session", async () => {
+    const user = userEvent.setup();
+    signInMock.mockResolvedValue({
+      access_token: "t",
+      token_type: "bearer",
+      user: { id: "u1", full_name: "Asha Legal", email: "asha@ex.com", is_active: true, created_at: "" },
+      company: {
+        id: "c1",
+        name: "Aster",
+        slug: "aster",
+        company_type: "law_firm",
+        tenant_key: "k",
+        is_active: true,
+        created_at: "",
+      },
+      membership: { id: "m1", role: "owner", is_active: true, created_at: "" },
+      mfa_required: true,
+      mfa_challenge_required: true,
+      mfa_enrollment_required: false,
+      mfa_challenge_reason: "Complete MFA step-up before workspace access.",
+    });
+    completeMfaLoginChallengeMock.mockResolvedValue({
+      status: "verified",
+      expires_at: "2026-06-13T12:00:00Z",
+    });
+
+    render(withClient(<SignInForm />));
+    await user.type(screen.getByLabelText("Company slug"), "aster");
+    await user.type(screen.getByLabelText("Work email"), "asha@ex.com");
+    await user.type(screen.getByLabelText("Password"), "correcthorse");
+    await user.click(screen.getByRole("button", { name: /^Sign in$/ }));
+
+    expect(await screen.findByRole("form", { name: /MFA challenge/i })).toBeInTheDocument();
+    expect(storeSessionMock).not.toHaveBeenCalled();
+    await user.type(screen.getByLabelText("MFA code"), "123456");
+    await user.click(screen.getByRole("button", { name: /Verify MFA/i }));
+
+    await waitFor(() =>
+      expect(completeMfaLoginChallengeMock).toHaveBeenCalledWith({ code: "123456" }),
+    );
+    await waitFor(() => expect(storeSessionMock).toHaveBeenCalledTimes(1));
   });
 
   it("shows a forgot-password link and preserves typed slug and email", async () => {

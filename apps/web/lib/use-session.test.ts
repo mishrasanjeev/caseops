@@ -36,6 +36,10 @@ function buildSession() {
       is_active: true,
       created_at: "2026-04-01T00:00:00Z",
     },
+    mfa_required: false,
+    mfa_challenge_required: false,
+    mfa_enrollment_required: false,
+    mfa_challenge_reason: null,
   };
 }
 

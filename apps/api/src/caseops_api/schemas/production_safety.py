@@ -6,6 +6,22 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
 EvidenceStatusLiteral = Literal["pending", "pass", "fail", "blocked", "not_applicable"]
+ReadinessClassificationLiteral = Literal[
+    "live",
+    "review-first",
+    "provider-gated",
+    "founder-only",
+    "disabled until UAT",
+    "planned",
+]
+SecretRotationStatusLiteral = Literal[
+    "pending",
+    "blocked",
+    "rotated",
+    "revoked",
+    "validated",
+    "not_applicable",
+]
 
 PineLabsUATScenarioLiteral = Literal[
     "plan_payment_success",
@@ -61,6 +77,7 @@ class PineLabsUATReadinessResponse(BaseModel):
     complete: bool
     missing_required_scenarios: list[PineLabsUATScenarioLiteral]
     production_activation_blocked: bool
+    activation_blockers: list[str] = Field(default_factory=list)
     latest_decision: dict[str, object] | None = None
 
 
@@ -131,6 +148,130 @@ class PasswordResetReadinessResponse(BaseModel):
     debug_tokens_allowed: bool
     non_prod_debug_tokens_only: bool
     secrets_exposed: Literal[False] = False
+
+
+class SecretRotationEvidenceRecord(BaseModel):
+    id: str
+    provider: str
+    affected_app: str
+    credential_label: str
+    status: SecretRotationStatusLiteral
+    old_credential_revoked: bool
+    validation_performed: bool
+    rotation_completed_at: datetime | None = None
+    evidence_ref: str | None = None
+    residual_risk: str | None = None
+    operator_notes: str | None = None
+    last_evidence_at: datetime
+    recorded_by_platform_admin_id: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class SecretRotationEvidenceRequest(BaseModel):
+    provider: str = Field(min_length=2, max_length=120)
+    affected_app: str = Field(min_length=2, max_length=160)
+    credential_label: str = Field(min_length=2, max_length=160)
+    status: SecretRotationStatusLiteral = "pending"
+    old_credential_revoked: bool = False
+    validation_performed: bool = False
+    rotation_completed_at: datetime | None = None
+    evidence_ref: str | None = Field(default=None, max_length=500)
+    residual_risk: str | None = Field(default=None, max_length=4000)
+    operator_notes: str | None = Field(default=None, max_length=4000)
+
+
+class SecretRotationEvidenceListResponse(BaseModel):
+    complete: bool
+    not_ready_reasons: list[str] = Field(default_factory=list)
+    records: list[SecretRotationEvidenceRecord]
+
+
+class PlatformOperationalReadinessRecord(BaseModel):
+    id: str | None = None
+    category: str
+    gate_code: str
+    label: str
+    status: EvidenceStatusLiteral
+    readiness_classification: ReadinessClassificationLiteral
+    blocker_reason: str | None = None
+    evidence_ref: str | None = None
+    evidence: dict[str, object] | None = None
+    last_evidence_at: datetime | None = None
+    owner_label: str | None = None
+
+
+class PlatformOperationalReadinessEvidenceRequest(BaseModel):
+    category: str = Field(min_length=2, max_length=80)
+    gate_code: str = Field(min_length=2, max_length=120)
+    label: str = Field(min_length=2, max_length=255)
+    status: EvidenceStatusLiteral = "pending"
+    readiness_classification: ReadinessClassificationLiteral = "founder-only"
+    blocker_reason: str | None = Field(default=None, max_length=4000)
+    evidence_ref: str | None = Field(default=None, max_length=500)
+    evidence: dict[str, object] | None = None
+    owner_label: str | None = Field(default=None, max_length=160)
+
+
+class PlatformProductionReadinessGate(BaseModel):
+    category: str
+    gate_code: str
+    label: str
+    status: EvidenceStatusLiteral
+    readiness_classification: ReadinessClassificationLiteral
+    ready: bool
+    not_ready_reason: str | None = None
+    evidence_ref: str | None = None
+    last_evidence_at: datetime | None = None
+
+
+class PlatformProductionReadinessResponse(BaseModel):
+    ready: bool
+    not_ready_reasons: list[str]
+    gates: list[PlatformProductionReadinessGate]
+    secret_rotation: SecretRotationEvidenceListResponse
+    operational_evidence: list[PlatformOperationalReadinessRecord]
+
+
+class EnterpriseIdentityReadinessResponse(BaseModel):
+    provider: Literal["enterprise_identity"] = "enterprise_identity"
+    readiness_classification: ReadinessClassificationLiteral = "planned"
+    oidc_status: str
+    saml_status: str
+    scim_status: str
+    sso_enforcement_status: str
+    enabled: bool
+    not_enabled_reason: str
+    last_test_status: str
+    last_tested_at: datetime | None = None
+    required_evidence: list[str] = Field(default_factory=list)
+
+
+class AgentTrustReadinessResponse(BaseModel):
+    provider: Literal["agent_trust_plane"] = "agent_trust_plane"
+    readiness_classification: ReadinessClassificationLiteral = "planned"
+    autonomous_execution_enabled: Literal[False] = False
+    grant_count: int
+    active_grant_count: int
+    execution_count: int
+    blocked_execution_count: int
+    not_enabled_reason: str
+
+
+class AIGovernanceReadinessResponse(BaseModel):
+    provider: Literal["ai_governance"] = "ai_governance"
+    readiness_classification: ReadinessClassificationLiteral = "review-first"
+    approved_policy_count: int
+    pending_policy_count: int
+    blocked_policy_count: int
+    legal_disclaimer_required: bool
+    regression_gates_required: bool
+
+
+class TenantEnterpriseReadinessResponse(BaseModel):
+    enterprise_identity: EnterpriseIdentityReadinessResponse
+    agent_trust_plane: AgentTrustReadinessResponse
+    ai_governance: AIGovernanceReadinessResponse
 
 
 class SettlementImportRowRequest(BaseModel):

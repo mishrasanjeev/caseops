@@ -1,6 +1,6 @@
 # Backup and restore runbook
 
-**Owner:** platform oncall · **Last reviewed:** 2026-04-18 · **Maps to:** BG-043
+**Owner:** platform oncall · **Last reviewed:** 2026-06-13 · **Maps to:** BG-043
 
 This runbook covers the two things the business actually needs to
 survive: recovery from accidental data loss, and proof-to-auditor
@@ -19,6 +19,47 @@ CaseOps persists three classes of data that need protection:
 Local / founder-stage deployments use `docker-compose` Postgres on host
 port `15432` and a local filesystem for documents. The runbook below
 applies to both; the prod-only GCP steps are called out explicitly.
+
+## 2026-06-13 readiness evidence
+
+Backup/restore is now an explicit founder-only production readiness gate. Record
+evidence through:
+
+```text
+POST /api/platform-admin/production-readiness/evidence
+```
+
+Use category `backup_restore` and gate code
+`backup_success_and_restore_drill`. Evidence must reference an external artifact
+or ticket; do not paste database dumps, credentials, tenant document contents,
+raw audit exports, or internal cost/profit data.
+
+Required proof before launch:
+
+- latest automated backup/PITR status;
+- restore drill timestamp, operator, source backup, target environment, and
+  checksum/count validation;
+- tenant export readiness and audit trail proof;
+- tenant purge readiness, retention exception process, and legal-hold handling;
+- DPDP consent, subprocessor, retention, and audit-retention evidence.
+
+If tenant export or purge scripts are missing or not exercised against a safe
+throwaway tenant, mark this gate `blocked` with exact next steps.
+
+Current tenant export/purge status: `readiness-only`. Do not mark production
+ready until all of the following are complete:
+
+1. Build a tenant export dry-run command that writes only tenant-visible data,
+   excludes platform cost/profit/provider-fee fields, and produces an audit row.
+2. Build a tenant purge dry-run command that reports candidate rows and object
+   keys without deleting anything.
+3. Add a separate purge execute mode gated by founder approval, legal-hold
+   checks, retention exceptions, and a signed change ticket.
+4. Exercise both dry-run paths against a throwaway tenant and attach row counts,
+   object counts, checksum/manifest IDs, and audit event IDs to the platform
+   operational evidence gate.
+5. Document DPDP consent, DPA/subprocessor, retention, and audit-retention
+   evidence references in the same gate before release signoff.
 
 ## Backups
 

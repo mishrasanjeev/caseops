@@ -174,10 +174,9 @@ export default function GeneralCounselsPage() {
               </div>
               <div className="rounded-xl border border-[var(--color-line)] bg-[var(--color-bg)] p-4 text-[13.5px] leading-relaxed text-[var(--color-mute)]">
                 <span className="font-semibold text-[var(--color-ink-2)]">Agentic posture:</span>{" "}
-                AI does the watching and the stitching — cause-list reconciliation,
-                obligation-due watchers, intake triage. Humans accept substantive legal
-                output. No filings, payments or client communications are sent without a
-                recorded human approval. Cross-tenant training is off by default.
+                AI assistance is review-first: cause-list candidates, obligation-due
+                suggestions, and intake triage stay behind human approval. Autonomous
+                scoped-agent execution is planned, not live. Cross-tenant training is off by default.
               </div>
             </div>
           </div>
@@ -306,7 +305,7 @@ export default function GeneralCounselsPage() {
           tone="ink"
           eyebrow="Risk, audit and AI posture"
           title="Control is built in, not bolted on."
-          description="The standard a GC should expect — all shipped: tenant isolation by construction, matter-level ethical walls, audit on every sensitive action, AI policy enforcement at runtime, ClamAV malware scanning fail-closed in prod, every sensitive env in Secret Manager with a documented rotation runbook. Overall enterprise verdict: GO."
+          description="The standard a GC should expect: tenant isolation by construction, matter-level ethical walls, audit on sensitive actions, AI policy enforcement, malware-scan guardrails, and documented rotation runbooks. Enterprise SSO/SCIM, autonomous agents, and dedicated provider connectors remain planned or provider-gated until readiness evidence is complete."
         >
           <div className="grid gap-5 md:grid-cols-2">
             <div className="grid gap-3">

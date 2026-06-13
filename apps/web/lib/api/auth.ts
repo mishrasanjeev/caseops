@@ -77,6 +77,20 @@ export async function startPasswordReset(input: {
   });
 }
 
+export async function completeMfaLoginChallenge(input: {
+  code: string;
+  method?: "totp" | "recovery_code";
+}): Promise<{ status: "verified"; expires_at: string }> {
+  return apiRequest<{ status: "verified"; expires_at: string }>("/api/auth/mfa/step-up", {
+    method: "POST",
+    body: {
+      code: input.code,
+      purpose: "step_up",
+      method: input.method ?? "totp",
+    },
+  });
+}
+
 // BUG-033 (Hari 2026-05-09): consume an `account-setup` token issued
 // by the employee onboarding mailer. Wire identical to ``signIn`` —
 // the backend issues the same session cookies on success, so the

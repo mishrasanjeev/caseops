@@ -34,6 +34,10 @@ export const authSession = z.object({
   user: userSummary,
   membership: membershipSummary,
   capabilities: z.array(z.string()).optional(),
+  mfa_required: z.boolean().optional().default(false),
+  mfa_challenge_required: z.boolean().optional().default(false),
+  mfa_enrollment_required: z.boolean().optional().default(false),
+  mfa_challenge_reason: z.string().nullable().optional(),
 });
 
 export const authContext = z.object({
@@ -2952,6 +2956,7 @@ export const pineLabsUatReadinessResponse = z.object({
   complete: z.boolean(),
   missing_required_scenarios: z.array(z.string()),
   production_activation_blocked: z.boolean(),
+  activation_blockers: z.array(z.string()).default([]),
   latest_decision: z.record(z.string(), z.unknown()).nullable(),
   scenarios: z.array(
     z.object({
@@ -3001,6 +3006,116 @@ export const passwordResetReadinessResponse = z.object({
   debug_tokens_allowed: z.boolean(),
   non_prod_debug_tokens_only: z.boolean(),
   secrets_exposed: z.literal(false),
+});
+
+export const readinessClassification = z.enum([
+  "live",
+  "review-first",
+  "provider-gated",
+  "founder-only",
+  "disabled until UAT",
+  "planned",
+]);
+
+export const evidenceStatus = z.enum([
+  "pending",
+  "pass",
+  "fail",
+  "blocked",
+  "not_applicable",
+]);
+
+export const secretRotationEvidenceRecord = z.object({
+  id: z.string(),
+  provider: z.string(),
+  affected_app: z.string(),
+  credential_label: z.string(),
+  status: z.enum(["pending", "blocked", "rotated", "revoked", "validated", "not_applicable"]),
+  old_credential_revoked: z.boolean(),
+  validation_performed: z.boolean(),
+  rotation_completed_at: z.string().nullable(),
+  evidence_ref: z.string().nullable(),
+  residual_risk: z.string().nullable(),
+  operator_notes: z.string().nullable(),
+  last_evidence_at: z.string(),
+  recorded_by_platform_admin_id: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const secretRotationEvidenceListResponse = z.object({
+  complete: z.boolean(),
+  not_ready_reasons: z.array(z.string()),
+  records: z.array(secretRotationEvidenceRecord),
+});
+
+export const platformOperationalReadinessRecord = z.object({
+  id: z.string().nullable(),
+  category: z.string(),
+  gate_code: z.string(),
+  label: z.string(),
+  status: evidenceStatus,
+  readiness_classification: readinessClassification,
+  blocker_reason: z.string().nullable(),
+  evidence_ref: z.string().nullable(),
+  evidence: z.record(z.string(), z.unknown()).nullable(),
+  last_evidence_at: z.string().nullable(),
+  owner_label: z.string().nullable(),
+});
+
+export const platformProductionReadinessGate = z.object({
+  category: z.string(),
+  gate_code: z.string(),
+  label: z.string(),
+  status: evidenceStatus,
+  readiness_classification: readinessClassification,
+  ready: z.boolean(),
+  not_ready_reason: z.string().nullable(),
+  evidence_ref: z.string().nullable(),
+  last_evidence_at: z.string().nullable(),
+});
+
+export const platformProductionReadinessResponse = z.object({
+  ready: z.boolean(),
+  not_ready_reasons: z.array(z.string()),
+  gates: z.array(platformProductionReadinessGate),
+  secret_rotation: secretRotationEvidenceListResponse,
+  operational_evidence: z.array(platformOperationalReadinessRecord),
+});
+
+export const tenantEnterpriseReadinessResponse = z.object({
+  enterprise_identity: z.object({
+    provider: z.literal("enterprise_identity"),
+    readiness_classification: readinessClassification,
+    oidc_status: z.string(),
+    saml_status: z.string(),
+    scim_status: z.string(),
+    sso_enforcement_status: z.string(),
+    enabled: z.boolean(),
+    not_enabled_reason: z.string(),
+    last_test_status: z.string(),
+    last_tested_at: z.string().nullable(),
+    required_evidence: z.array(z.string()),
+  }),
+  agent_trust_plane: z.object({
+    provider: z.literal("agent_trust_plane"),
+    readiness_classification: readinessClassification,
+    autonomous_execution_enabled: z.literal(false),
+    grant_count: z.number().int(),
+    active_grant_count: z.number().int(),
+    execution_count: z.number().int(),
+    blocked_execution_count: z.number().int(),
+    not_enabled_reason: z.string(),
+  }),
+  ai_governance: z.object({
+    provider: z.literal("ai_governance"),
+    readiness_classification: readinessClassification,
+    approved_policy_count: z.number().int(),
+    pending_policy_count: z.number().int(),
+    blocked_policy_count: z.number().int(),
+    legal_disclaimer_required: z.boolean(),
+    regression_gates_required: z.boolean(),
+  }),
 });
 
 export const financeListResponse = z.object({
@@ -3138,6 +3253,18 @@ export type ProductionBillingSignoffResponse = z.infer<
 >;
 export type PasswordResetReadinessResponse = z.infer<
   typeof passwordResetReadinessResponse
+>;
+export type SecretRotationEvidenceListResponse = z.infer<
+  typeof secretRotationEvidenceListResponse
+>;
+export type PlatformOperationalReadinessRecord = z.infer<
+  typeof platformOperationalReadinessRecord
+>;
+export type PlatformProductionReadinessResponse = z.infer<
+  typeof platformProductionReadinessResponse
+>;
+export type TenantEnterpriseReadinessResponse = z.infer<
+  typeof tenantEnterpriseReadinessResponse
 >;
 export type FinanceListResponse = z.infer<typeof financeListResponse>;
 export type CaseTrackingSupportMatrixTenantResponse = z.infer<

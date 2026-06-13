@@ -29,6 +29,8 @@ platform-admin billing visibility, and Pine Labs disabled-state safety.
 | Password reset readiness metadata | Implemented; delivery evidence pending | Founder/operator |
 | Internal cost/profit leakage | Smoke pending | Founder/operator |
 | Backup/migration/deploy evidence | Pending attachment | Operator |
+| Unified production readiness gate | Implemented; incomplete gates show explicit not-ready reasons | Founder |
+| Historical connector secret rotation proof | Provider/UAT blocked until external revocation proof is attached | Founder/operator |
 
 ## Preconditions
 
@@ -42,6 +44,9 @@ platform-admin billing visibility, and Pine Labs disabled-state safety.
   payments.
 - Migration `20260609_0002_p0_paid_production_safety` has run before using the
   paid-production readiness, MFA, settlement, or support-matrix records.
+- Migration `20260613_0001_brutal_gap_readiness` has run before using the
+  unified production readiness, historical secret rotation, enterprise
+  identity, agent trust-plane, or AI governance readiness records.
 - MFA grace settings are deliberate for existing users. Defaults:
   `CASEOPS_MFA_EXISTING_USER_GRACE_DAYS=7`,
   `CASEOPS_MFA_STEP_UP_TTL_MINUTES=15`,
@@ -51,6 +56,35 @@ platform-admin billing visibility, and Pine Labs disabled-state safety.
 - A designated production smoke tenant exists, or the founder approves creating
   one.
 - A pre-rollout backup or point-in-time recovery marker exists.
+
+## 2026-06-13 Unified Gate Update
+
+Founder signoff now has one aggregate endpoint:
+
+```text
+GET /api/platform-admin/production-readiness
+```
+
+It combines billing signoff, Pine Labs UAT/founder go-no-go, margin
+readiness, password reset readiness, historical secret rotation proof, provider
+operations evidence, finance reconciliation evidence, backup/restore evidence,
+docs evidence, and security evidence. A production launch is not ready while
+any gate returns a `not_ready_reason`.
+
+Evidence-only endpoints:
+
+```text
+GET /api/platform-admin/secret-rotation-readiness
+POST /api/platform-admin/secret-rotation-readiness/evidence
+GET /api/platform-admin/production-readiness/evidence
+POST /api/platform-admin/production-readiness/evidence
+GET /api/admin/enterprise-readiness
+```
+
+Do not paste secret values, OAuth tokens, raw webhook payloads, internal cost
+exports, gross profit, margin, or platform-only notes into tenant-facing UI or
+tenant-facing APIs. Platform-only cost/profit/readiness evidence stays under
+`/api/platform-admin/*`.
 
 ## Public Safe Smoke Helper
 

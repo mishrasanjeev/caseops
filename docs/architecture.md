@@ -55,7 +55,8 @@ caseops/
 - primary UI for law firms and GCs
 - server-rendered and client-enhanced dashboards
 - email/password auth first
-- SSO-ready boundaries from the beginning
+- OIDC/SAML SSO and SCIM readiness boundaries from the beginning; not live until
+  tenant IdP/provider UAT is complete
 
 ### API App
 
@@ -69,7 +70,8 @@ caseops/
 These are intentionally lightweight at the moment, but the architecture expects them:
 
 - workflow service using `Temporal`
-- agent trust integration through `Grantex`
+- agent trust integration after readiness evidence for grants, revocation, budgets,
+  execution audit, and tenant policy enforcement
 - document worker service for OCR, parsing, and reindex jobs
 - search and retrieval service
 - recommendation service
@@ -131,12 +133,15 @@ These are intentionally lightweight at the moment, but the architecture expects 
 ### Human Identity
 
 - email/password first
-- SSO-ready design for future OIDC/SAML integration
+- readiness scaffolding for future OIDC/SAML SSO and SCIM integration
 - role-based access controls by tenant
 
 ### Agent Identity
 
-- `Grantex` governs agent identity, scoped grants, revocation, budgets, and audit
+- Internal `AgentGrant`, `AgentExecution`, and `AgentToolCall` readiness models
+  define the intended grant, revocation, budget, and audit boundaries.
+  Autonomous scoped-agent tool execution is planned, not live, until governed
+  execution, tenant policy, and provider UAT evidence are complete.
 
 ### Tenant Isolation
 
@@ -171,5 +176,5 @@ This keeps the local topology close enough to the cloud architecture without int
 1. add authentication and tenant bootstrap flows
 2. add database migrations and first domain tables
 3. add matter and company management endpoints
-4. integrate Pine Labs fee collection workflows
-5. introduce Temporal and Grantex into the running skeleton
+4. keep Pine Labs fee collection disabled until UAT and founder go/no-go are complete
+5. continue Temporal and agent-trust readiness work before autonomous execution
