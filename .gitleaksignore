@@ -1,1 +1,17 @@
 9bb22e11112afffc706ecb961b4f7b9aafd3e520:.mcp.json:generic-api-key:12
+
+# 2026-06-13 brutal vulnerability audit:
+# exact false positives on release build IDs / image tags and MFQ test
+# scenario labels. Deliberately do not suppress the historical
+# .codex/config.toml X-Client-Secret finding; that requires credential
+# rotation before it can be marked resolved.
+b4e697376b76bbba4a5c0a4364faee27f10d1b27:docs/RELEASE_SIGNOFF_2026-05-20.md:generic-api-key:70
+b4e697376b76bbba4a5c0a4364faee27f10d1b27:docs/RELEASE_SIGNOFF_2026-05-20.md:generic-api-key:72
+b4e697376b76bbba4a5c0a4364faee27f10d1b27:docs/RELEASE_SIGNOFF_2026-05-20.md:generic-api-key:88
+docs/RELEASE_SIGNOFF_2026-05-20.md:generic-api-key:70
+docs/RELEASE_SIGNOFF_2026-05-20.md:generic-api-key:72
+docs/RELEASE_SIGNOFF_2026-05-20.md:generic-api-key:88
+86e760ca18f42c660c7f47d8a7e4fae80ea10c6a:docs/RELEASE_SIGNOFF_2026-05-14.md:generic-api-key:20
+24c6ebf73f57605c964a908f78dfce686c68be1f:apps/api/tests/test_matter_file_qa.py:generic-api-key:244
+24c6ebf73f57605c964a908f78dfce686c68be1f:apps/api/tests/test_matter_file_qa.py:generic-api-key:444
+24c6ebf73f57605c964a908f78dfce686c68be1f:apps/api/tests/test_matter_file_qa.py:generic-api-key:540

@@ -138,9 +138,10 @@ export default function AccountSecurityPage() {
           </Button>
           {enroll.data ? (
             <div className="grid gap-4 md:grid-cols-[240px_1fr]">
-              <div
+              <img
+                alt="TOTP enrollment QR code"
                 className="h-60 w-60 overflow-hidden rounded border border-[var(--color-line)] bg-white"
-                dangerouslySetInnerHTML={{ __html: enroll.data.qr_svg }}
+                src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(enroll.data.qr_svg)}`}
               />
               <div className="space-y-3">
                 <div className="font-mono text-sm">{enroll.data.secret}</div>

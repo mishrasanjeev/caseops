@@ -17,6 +17,11 @@
 .claude/sessions/
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+.claude/worktrees/
+# Codex/plugin local config can contain connector headers or client secrets.
+.codex/
+# Extracted CI/browser traces frequently contain session cookies/JWTs.
+.ci-artifact-debug/
 .tmp/
 .tmp-sweep/
 tmp/
@@ -72,6 +77,7 @@ htmlcov/
 *.pyd
 *.sqlite3
 apps/api/.venv/
+apps/api/.uv-cache/
 apps/web/.next/
 apps/web/node_modules/
 apps/web/coverage/
