@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 
 import { CTA } from "@/components/marketing/CTA";
 import { FAQ } from "@/components/marketing/FAQ";
@@ -78,10 +79,12 @@ const faqJsonLd = {
   ],
 };
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <>
       <script
+        nonce={nonce}
         type="application/ld+json"
         // eslint-disable-next-line react/no-danger
         dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}

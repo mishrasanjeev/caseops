@@ -33,6 +33,19 @@ useDefault = true
 [allowlist]
 description = "Skip known non-secret test identifiers that look like API keys"
 paths = [
+    '''(^|[\\/])\.claude[\\/]worktrees[\\/]''',
+    '''(^|[\\/])\.tmp[\\/]''',
+    '''(^|[\\/])tmp[\\/]''',
+    '''(^|[\\/])node_modules[\\/]''',
+    '''(^|[\\/])\.venv[\\/]''',
+    '''(^|[\\/])venv[\\/]''',
+    '''(^|[\\/])\.uv-cache[\\/]''',
+    '''(^|[\\/])\.next[\\/]''',
+    '''(^|[\\/])coverage[\\/]''',
+    '''(^|[\\/])playwright-report[\\/]''',
+    '''(^|[\\/])test-results[\\/]''',
+    '''(^|[\\/])\.pytest[^\\/]*[\\/]''',
+    '''(^|[\\/])pytest-(basetemp|cache-files)[^\\/]*[\\/]''',
     '''apps/api/src/caseops_api/scripts/eval_citations\.py''',
     '''apps/api/src/caseops_api/scripts/eval_drafting\.py''',
     '''apps/api/src/caseops_api/scripts/eval_recommendations\.py''',
@@ -42,6 +55,8 @@ paths = [
 regexes = [
     '''LW-S10-NOTIFY''',
     '''CTR-LW9-UNGROUNDED''',
+    '''API build ID: `?[0-9a-f]{32,}`?''',
+    '''caseops-api:[0-9a-f]{32,}`?''',
     # CI-test placeholder for the Postgres validation job's
     # CASEOPS_AUTH_SECRET env. Hard-coded literal in
     # `.github/workflows/ci.yml` and unchanged across history.

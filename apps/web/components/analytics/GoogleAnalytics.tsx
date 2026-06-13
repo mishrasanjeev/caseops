@@ -14,16 +14,17 @@ import Script from "next/script";
 // real customer data, wire a consent banner + gate GA load on
 // user opt-in (for DPDP / GDPR compliance). See the domain
 // runbook's "Consent and PII" section.
-export function GoogleAnalytics() {
+export function GoogleAnalytics({ nonce }: { nonce?: string }) {
   const id = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
   if (!id) return null;
   return (
     <>
       <Script
+        nonce={nonce}
         src={`https://www.googletagmanager.com/gtag/js?id=${id}`}
         strategy="afterInteractive"
       />
-      <Script id="ga-init" strategy="afterInteractive">
+      <Script id="ga-init" nonce={nonce} strategy="afterInteractive">
         {`
           window.dataLayer = window.dataLayer || [];
           function gtag(){dataLayer.push(arguments);}

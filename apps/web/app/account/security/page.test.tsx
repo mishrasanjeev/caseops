@@ -91,6 +91,10 @@ describe("AccountSecurityPage", () => {
 
     await user.click(screen.getByRole("button", { name: /start enrollment/i }));
     expect(await screen.findByText("JBSWY3DPEHPK3PXP")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /totp enrollment qr code/i })).toHaveAttribute(
+      "src",
+      expect.stringMatching(/^data:image\/svg\+xml;charset=utf-8,/),
+    );
     await user.type(screen.getByLabelText("MFA verification code"), "123456");
     await user.click(screen.getByRole("button", { name: /^verify$/i }));
     expect(await screen.findByText("caseops-111111")).toBeInTheDocument();
