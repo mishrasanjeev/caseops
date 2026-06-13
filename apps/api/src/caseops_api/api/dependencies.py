@@ -23,6 +23,7 @@ from caseops_api.services.capabilities import (
     membership_has_capability,
 )
 from caseops_api.services.identity import SessionContext, get_session_context
+from caseops_api.services.security import enforce_login_mfa_if_required
 
 bearer_scheme = HTTPBearer(auto_error=False)
 DbSession = Annotated[Session, Depends(get_db_session)]
@@ -62,6 +63,7 @@ def get_current_context(
         claims["membership_id"],
         token_issued_at=float(claims["issued_at_precise"]),
     )
+    enforce_login_mfa_if_required(session, context=context, path=request.url.path)
     # Plant tenant identifiers into the request's logging context so
     # every downstream log line (services, worker background tasks
     # spawned within the request, DB query logs) auto-inherits them.

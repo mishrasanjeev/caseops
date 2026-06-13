@@ -25,8 +25,13 @@ from caseops_api.schemas.production_safety import (
     PineLabsUATEvidenceRequest,
     PineLabsUATReadinessResponse,
     PineLabsUATRunCreateRequest,
+    PlatformOperationalReadinessEvidenceRequest,
+    PlatformOperationalReadinessRecord,
+    PlatformProductionReadinessResponse,
     ProductionBillingSignoffEvidenceRequest,
     ProductionBillingSignoffResponse,
+    SecretRotationEvidenceListResponse,
+    SecretRotationEvidenceRequest,
     SettlementImportRequest,
     SettlementImportResponse,
     TDSReconciliationCreateRequest,
@@ -68,13 +73,18 @@ from caseops_api.services.production_safety import (
     import_settlement_rows,
     latest_or_create_uat_run,
     list_finance_rows,
+    list_operational_readiness_evidence,
+    list_secret_rotation_evidence,
     list_support_matrix,
     password_reset_readiness,
     pine_labs_uat_readiness,
     production_billing_signoff_status,
+    production_readiness_status,
+    record_operational_readiness_evidence,
     record_pine_labs_activation_decision,
     record_pine_labs_uat_evidence,
     record_production_billing_signoff_evidence,
+    record_secret_rotation_evidence,
     support_matrix_admin_record,
     update_support_matrix_row,
 )
@@ -834,6 +844,115 @@ def get_password_reset_readiness(
     )
     session.commit()
     return response
+
+
+@router.get("/production-readiness", response_model=PlatformProductionReadinessResponse)
+def get_platform_production_readiness(
+    route_context: PlatformBillingManager,
+    session: DbSession,
+) -> PlatformProductionReadinessResponse:
+    response = production_readiness_status(
+        session,
+        platform_admin=route_context.platform_admin,
+    )
+    record_platform_audit(
+        session,
+        context=route_context.context,
+        platform_admin=route_context.platform_admin,
+        action="platform.production_readiness.viewed",
+        target_type="platform_production_readiness",
+        metadata={"ready": response.ready, "not_ready_count": len(response.not_ready_reasons)},
+    )
+    session.commit()
+    return response
+
+
+@router.get(
+    "/secret-rotation-readiness",
+    response_model=SecretRotationEvidenceListResponse,
+)
+def get_secret_rotation_readiness(
+    route_context: PlatformBillingManager,
+    session: DbSession,
+) -> SecretRotationEvidenceListResponse:
+    response = list_secret_rotation_evidence(session)
+    record_platform_audit(
+        session,
+        context=route_context.context,
+        platform_admin=route_context.platform_admin,
+        action="platform.secret_rotation_readiness.viewed",
+        target_type="connector_secret_rotation_evidence",
+        metadata={"complete": response.complete, "record_count": len(response.records)},
+    )
+    session.commit()
+    return response
+
+
+@router.post(
+    "/secret-rotation-readiness/evidence",
+    response_model=SecretRotationEvidenceListResponse,
+)
+def post_secret_rotation_readiness_evidence(
+    payload: SecretRotationEvidenceRequest,
+    route_context: PlatformBillingManager,
+    session: DbSession,
+) -> SecretRotationEvidenceListResponse:
+    require_recent_step_up(
+        session,
+        context=route_context.context,
+        purpose="connector_credential_change",
+        platform_admin=route_context.platform_admin,
+    )
+    return record_secret_rotation_evidence(
+        session,
+        context=route_context.context,
+        platform_admin=route_context.platform_admin,
+        payload=payload,
+    )
+
+
+@router.get(
+    "/production-readiness/evidence",
+    response_model=list[PlatformOperationalReadinessRecord],
+)
+def get_platform_operational_readiness_evidence(
+    route_context: PlatformBillingManager,
+    session: DbSession,
+) -> list[PlatformOperationalReadinessRecord]:
+    rows = list_operational_readiness_evidence(session)
+    record_platform_audit(
+        session,
+        context=route_context.context,
+        platform_admin=route_context.platform_admin,
+        action="platform.operational_readiness_evidence.viewed",
+        target_type="platform_operational_readiness_evidence",
+        metadata={"record_count": len(rows)},
+    )
+    session.commit()
+    return rows
+
+
+@router.post(
+    "/production-readiness/evidence",
+    response_model=list[PlatformOperationalReadinessRecord],
+)
+def post_platform_operational_readiness_evidence(
+    payload: PlatformOperationalReadinessEvidenceRequest,
+    route_context: PlatformBillingManager,
+    session: DbSession,
+) -> list[PlatformOperationalReadinessRecord]:
+    require_recent_step_up(
+        session,
+        context=route_context.context,
+        purpose="billing_export",
+        platform_admin=route_context.platform_admin,
+    )
+    return record_operational_readiness_evidence(
+        session,
+        context=route_context.context,
+        platform_admin=route_context.platform_admin,
+        payload=payload,
+    )
 
 
 @router.post("/billing-signoff/evidence", response_model=ProductionBillingSignoffResponse)

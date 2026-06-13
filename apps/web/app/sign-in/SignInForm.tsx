@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
-import { signIn } from "@/lib/api/auth";
+import { completeMfaLoginChallenge, signIn } from "@/lib/api/auth";
 import { apiErrorMessage } from "@/lib/api/config";
 import { storeSession } from "@/lib/session";
 
@@ -41,6 +41,9 @@ export function SignInForm() {
   const nextPath = params.get("next") ?? "/app";
   const initialTab = params.get("tab") === "new" ? "new" : "signin";
   const [tab, setTab] = useState<"signin" | "new">(initialTab);
+  const [pendingSession, setPendingSession] =
+    useState<Awaited<ReturnType<typeof signIn>> | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -61,6 +64,17 @@ export function SignInForm() {
         companySlug: values.companySlug,
       }),
     onSuccess: (session) => {
+      if (session.mfa_enrollment_required) {
+        storeSession(session);
+        toast.success("MFA enrollment is required before workspace access.");
+        router.replace(`/account/security?next=${encodeURIComponent(nextPath)}`);
+        return;
+      }
+      if (session.mfa_challenge_required) {
+        setPendingSession(session);
+        toast.success("Complete MFA to continue.");
+        return;
+      }
       storeSession(session);
       toast.success(`Welcome back, ${session.user.full_name.split(" ")[0]}`);
       router.replace(nextPath);
@@ -69,6 +83,18 @@ export function SignInForm() {
       const message =
         apiErrorMessage(err, "We could not sign you in. Please try again.");
       toast.error(message);
+    },
+  });
+  const mfaMutation = useMutation({
+    mutationFn: () => completeMfaLoginChallenge({ code: mfaCode }),
+    onSuccess: () => {
+      if (!pendingSession) return;
+      storeSession(pendingSession);
+      toast.success(`Welcome back, ${pendingSession.user.full_name.split(" ")[0]}`);
+      router.replace(nextPath);
+    },
+    onError: (err) => {
+      toast.error(apiErrorMessage(err, "Could not verify MFA code."));
     },
   });
 
@@ -110,6 +136,58 @@ export function SignInForm() {
               </TabsList>
 
               <TabsContent value="signin">
+                {pendingSession ? (
+                  <form
+                    className="flex flex-col gap-4"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      mfaMutation.mutate();
+                    }}
+                    aria-label="MFA challenge"
+                  >
+                    <div className="rounded-md border border-[var(--color-line)] bg-[var(--color-bg-2)] px-3 py-2 text-sm text-[var(--color-ink-2)]">
+                      {pendingSession.mfa_challenge_reason ??
+                        "Enter your authenticator code to finish signing in."}
+                    </div>
+                    <FieldGroup id="mfa-code" label="MFA code">
+                      {({ describedBy }) => (
+                        <Input
+                          id="mfa-code"
+                          inputMode="numeric"
+                          autoComplete="one-time-code"
+                          placeholder="123456"
+                          aria-describedby={describedBy}
+                          value={mfaCode}
+                          onChange={(event) => setMfaCode(event.target.value)}
+                        />
+                      )}
+                    </FieldGroup>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          setPendingSession(null);
+                          setMfaCode("");
+                        }}
+                      >
+                        Use a different account
+                      </Button>
+                      <Button
+                        type="submit"
+                        disabled={mfaMutation.isPending || mfaCode.trim().length < 6}
+                      >
+                        {mfaMutation.isPending ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" /> Verifying...
+                          </>
+                        ) : (
+                          "Verify MFA"
+                        )}
+                      </Button>
+                    </div>
+                  </form>
+                ) : (
                 <form
                   className="flex flex-col gap-4"
                   onSubmit={form.handleSubmit((values) => mutation.mutate(values))}
@@ -189,6 +267,7 @@ export function SignInForm() {
                     )}
                   </Button>
                 </form>
+                )}
               </TabsContent>
 
               <TabsContent value="new">

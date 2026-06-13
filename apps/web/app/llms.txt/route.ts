@@ -20,6 +20,7 @@ const body = `# CaseOps - Indian legal operating system
 ## What the product does
 
 - **Matter management**: intake, matter workspaces, documents, hearings, tasks, notes, Dispose status, next-hearing provenance, ethical walls, and audit
+- **Status vocabulary**: every public claim is one of live, review-first, provider-gated, founder-only, disabled until UAT, or planned
 - **Case tracking**: explicitly tracked/bookmarked cases refresh in the configured 4 PM-6 PM IST window; disabled or misconfigured providers make no external calls and record blocked/skipped state
 - **Court-order compliance**: deterministic extraction first, AI only when tenant policy allows, schema validation, source snippets, confidence labels, review-required compliance items, and lawyer confirmation before activation by default
 - **Cause lists**: date-wise preview and server-rendered PDF with serial number, file number, court, case number, case title, judge, court number, item number, lawyers appearing, hearing date, missing-field warnings, overrides, and download audit
@@ -34,6 +35,9 @@ const body = `# CaseOps - Indian legal operating system
 
 - CaseOps does not bypass captcha, login, or session-gated court sources.
 - CaseOps does not make unapproved external provider calls.
+- Pine Labs production payments are disabled until UAT evidence and founder go/no-go are complete.
+- OIDC/SAML SSO, SCIM, private enterprise deployment, and autonomous scoped-agent execution are planned/readiness-only, not live.
+- Google Workspace, Microsoft 365, inbound email, SMS, WhatsApp, and court-provider automation are provider-gated where credentials, consent, webhook signing, template/DLT approval, or legal source proof is missing.
 - Email, SMS, and WhatsApp are not sent unless an approved delivery provider is explicitly configured; otherwise durable in-app notification intents are used.
 - Tenant-facing surfaces do not expose provider tokens, raw provider payloads, raw prompts, raw LLM responses, internal costs, or unauthorized tenant-private data.
 - Customer data is not used for cross-tenant training by default.

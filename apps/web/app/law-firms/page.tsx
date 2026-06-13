@@ -215,7 +215,7 @@ export default function LawFirmPitchPage() {
               <PitchCard
                 icon={Wallet}
                 title="Billing and recovery"
-                body="Time, invoice approval and payment links tied back to the same matter economics."
+                body="Time, invoice approval, payment state, and provider-gated payment readiness tied back to the same matter economics."
                 className="md:-translate-y-10"
                 inverse
               />
@@ -447,7 +447,7 @@ export default function LawFirmPitchPage() {
                     Billing path
                   </div>
                   <h3 className="mt-3 font-display text-3xl font-normal tracking-tight text-white">
-                    Time -&gt; invoice -&gt; payment link -&gt; recovery
+                    Time -&gt; invoice -&gt; payment state -&gt; recovery
                   </h3>
                 </div>
                 <Wallet className="h-10 w-10 text-white/80" />
@@ -455,7 +455,7 @@ export default function LawFirmPitchPage() {
               <div className="mt-8 grid gap-4 md:grid-cols-3">
                 <MetricCard label="Capture" value="Time + expense" inverse />
                 <MetricCard label="Dispatch" value="Invoice workflow" inverse />
-                <MetricCard label="Settlement" value="Pine Labs link" inverse />
+                <MetricCard label="Settlement" value="UAT gated" inverse />
               </div>
             </div>
             <div className="grid gap-4">
@@ -577,10 +577,11 @@ export default function LawFirmPitchPage() {
               <div className="rounded-xl border border-[var(--color-line)] bg-[var(--color-bg)] p-4 text-[13.5px] leading-relaxed text-[var(--color-mute)]">
                 <span className="font-semibold text-[var(--color-ink-2)]">Agentic scope:</span>{" "}
                 today, four narrow agents — cause-list watcher, corpus ingest, structured
-                extraction, document retry. Coming in Sprint I: Grantex trust plane +
-                Temporal-durable filing-deadline, obligation, and intake-triage agents.
+                extraction, document retry. Agent grant, revocation, budget, and execution-audit
+                records are readiness-only; Temporal-durable filing-deadline, obligation, and
+                intake-triage execution remains planned until UAT and founder go/no-go.
                 Substantive legal judgment is always a human step. Outbound actions
-                (filings, payments, client communications) default to human approval.
+                (filings, payments, client communications) require human approval.
               </div>
             </div>
           </div>

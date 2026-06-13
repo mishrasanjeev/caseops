@@ -5,8 +5,9 @@
 CaseOps unifies matter management, legal research, AI-assisted drafting, hearing preparation,
 tracked case refresh, court-order compliance review, date-wise cause-list PDFs, contract
 workflows, outside-counsel management, and India-ready matter billing into one
-citation-grounded workspace - with tenant isolation, scoped agent grants, and audit by
-default.
+citation-grounded workspace - with tenant isolation, review-first AI assistance, founder-only
+production gates, and audit by default. Autonomous scoped-agent execution is readiness-only
+until the agent trust plane is activated.
 
 > Founder-stage monorepo. **Pre-alpha.** The backend foundation (matters, documents,
 > contracts, billing, authority ingestion) is working and hardened; the AI core is actively
@@ -26,6 +27,7 @@ default.
 | Document worker | Production (Cloud Run Job) | `apps/api/src/caseops_api/workers/` |
 | Hearing reminders worker | Production (Cloud Run Job + Scheduler `*/5 * * * *` Asia/Kolkata, SendGrid sender `hearings@caseops.ai`) | `apps/api/src/caseops_api/scripts/send_hearing_reminders.py` |
 | GBA Law Office operations pack: Dispose matter status, tracked-only case refresh, review-first compliance extraction, next-hearing provenance, cause-list PDF generation, India-ready matter billing/invoice PDFs | Implemented (2026-06-07) | [`docs/GBA_LAW_OFFICE_USER_GUIDE_2026-06-07.md`](./docs/GBA_LAW_OFFICE_USER_GUIDE_2026-06-07.md), [`docs/PRD_GBA_LAW_OFFICE_REQUIREMENTS_2026-06-06.md`](./docs/PRD_GBA_LAW_OFFICE_REQUIREMENTS_2026-06-06.md), `/guide` |
+| Production readiness, Pine Labs UAT evidence, secret-rotation proof, margin/profit gates, MFA login challenge, enterprise readiness scaffolding | Founder-only / disabled until UAT / planned as labelled | `/app/platform-admin/paid-production`, `/api/platform-admin/production-readiness`, `/api/admin/enterprise-readiness` |
 | Mobile responsive | Hamburger nav + responsive forms verified on Pixel-5 viewport | Playwright `app-mobile` project |
 | PRD | Stable | [`docs/PRD.md`](./docs/PRD.md) |
 | Architecture | Stable | [`docs/architecture.md`](./docs/architecture.md) |
@@ -42,6 +44,40 @@ default.
 - Detailed GBA Law Office guide: [`docs/GBA_LAW_OFFICE_USER_GUIDE_2026-06-07.md`](./docs/GBA_LAW_OFFICE_USER_GUIDE_2026-06-07.md).
 - Source PRD: [`docs/PRD_GBA_LAW_OFFICE_REQUIREMENTS_2026-06-06.md`](./docs/PRD_GBA_LAW_OFFICE_REQUIREMENTS_2026-06-06.md).
 - Machine-readable public summaries: `/llms.txt` and `/llms-full.txt`.
+
+---
+
+## Readiness status labels
+
+Public product claims use these labels: `live`, `review-first`, `provider-gated`,
+`founder-only`, `disabled until UAT`, or `planned`.
+
+- Pine Labs production payments are `disabled until UAT`; internal evidence, webhook, settlement,
+  refund, chargeback, GST/TDS, idempotency, and founder go/no-go scaffolding exists, but live
+  payment activation remains blocked.
+- Google Workspace, Microsoft 365, inbound email, SMS/WhatsApp, and court-provider automation are
+  `provider-gated` where external credentials, admin consent, webhook signing, or legal source
+  proof is missing.
+- OIDC/SAML SSO, SCIM, private enterprise deployment, and autonomous scoped-agent execution are
+  `planned` or readiness-only until UAT, approval, and audit evidence are complete.
+- Platform profit, provider cost, secret rotation, and production signoff surfaces are
+  `founder-only` and must not be exposed to tenants.
+
+## Documentation changelog - 2026-06-13
+
+- Added founder-only production readiness gates for billing, Pine Labs, provider operations,
+  finance/margin, backup/restore, docs, security, and historical connector secret rotation proof.
+- Kept Pine Labs live payments disabled while expanding UAT evidence coverage for checkout,
+  links, subscriptions, webhooks, settlement, refunds, credit notes, chargebacks, GST/TDS, and
+  founder activation decisions.
+- Updated billing/profitability readiness: platform-admin reports include revenue, costs, margin,
+  credits, add-ons, refunds, chargebacks, settlement exceptions, TDS/GST, and loss-making warnings;
+  tenant billing stays cost/profit-blind.
+- Hardened MFA/password reset documentation around login challenge, QR provisioning, recovery
+  codes, step-up for sensitive actions, and anti-enumeration reset flows.
+- Reclassified GBA Law Office, connector readiness, provider operations, public guide, and
+  machine-readable docs using `live`, `review-first`, `provider-gated`, `founder-only`,
+  `disabled until UAT`, and `planned`.
 
 ---
 
@@ -70,8 +106,9 @@ caseops/
   self-hosted Gemma 4 for enterprise tenants that need private inference.
 - **Data** — PostgreSQL 17 with `pgvector`, Valkey cache, GCS (or local FS) for documents.
 - **Workflow** — custom polling worker today; Temporal is the declared target (work plan §5.1).
-- **Payments** — optional Pine Labs integration with HMAC webhook verification,
-  idempotency, and cross-tenant guards when explicitly configured.
+- **Payments** — Pine Labs production payments are disabled until UAT and founder go/no-go.
+  HMAC webhook verification, idempotency, settlement/refund/dispute evidence, and cross-tenant
+  guards are present for readiness and safe testing.
 - **Matter billing** - separate from CaseOps SaaS subscription billing; supports firm/client
   billing fields, rates, fixed fees, milestones, GST split fields, TDS adjustments, double
   billing prevention, and server-rendered invoice PDFs.
@@ -802,7 +839,8 @@ CaseOps follows a few non-negotiable rules. Read in full in [`CLAUDE.md`](./CLAU
 - Matter-native, not chatbot. Every workflow lives on a matter graph.
 - Citation-grounded AI. No substantive answer without a source.
 - Tenant isolation by default. Ethical walls override broad role access.
-- Agents run with scoped grants, expiry, budgets, revocation, and audit.
+- Agent grant, execution, revocation, and audit records exist for readiness; autonomous
+  scoped-agent tool execution remains planned until the trust plane is activated.
 - Latest stable versions; permissive licenses (MIT, Apache-2.0, BSD, PostgreSQL) only.
 
 ---

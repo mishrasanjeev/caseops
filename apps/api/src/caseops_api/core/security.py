@@ -40,7 +40,13 @@ def verify_password(password: str, encoded_password: str) -> bool:
     return hmac.compare_digest(candidate_key, expected_key)
 
 
-def create_access_token(*, user_id: str, company_id: str, membership_id: str, role: str) -> str:
+def create_access_token(
+    *,
+    user_id: str,
+    company_id: str,
+    membership_id: str,
+    role: str,
+) -> str:
     settings = get_settings()
     issued_at = datetime.now(UTC)
     payload = {

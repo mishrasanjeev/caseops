@@ -11,8 +11,8 @@ const pillars = [
   },
   {
     icon: KeyRound,
-    title: "Scoped agent identity",
-    body: "Agents run with expiring grants, budgets, and revocation. No provider call happens without an explicit, auditable scope and tenant policy.",
+    title: "Agent trust readiness",
+    body: "Agent grants, budgets, revocation, and execution audit records exist as readiness scaffolding. Autonomous provider or tool execution remains planned until tenant policy, UAT evidence, and founder go/no-go are complete.",
   },
   {
     icon: ScrollText,
@@ -27,12 +27,12 @@ const pillars = [
   {
     icon: Fingerprint,
     title: "Notification guardrails",
-    body: "Job failures and review events create durable in-app notification intents. Email, SMS, and WhatsApp are sent only when an approved provider is configured.",
+    body: "Job failures and review events create durable in-app notification intents. External email, SMS, and WhatsApp delivery stays provider-gated until configuration, template/DLT approval, and UAT evidence are complete.",
   },
   {
     icon: Server,
-    title: "Private inference on request",
-    body: "Shared SaaS today; dedicated and on-prem inference packaged for enterprise tenants that need it.",
+    title: "Private inference planning",
+    body: "Shared SaaS is the live path today. Dedicated, VPC, and on-prem inference are planned enterprise deployment options that require separate security and implementation signoff.",
   },
 ] as const;
 
@@ -43,7 +43,7 @@ export function Security() {
         <SectionHeader
           eyebrow="Trust"
           title="Built to pass a vendor security review."
-          description="CaseOps is enterprise-shaped from day one. Multi-tenant, auditable, and safe for agents — before it is convenient."
+          description="CaseOps is enterprise-shaped from day one. Multi-tenant, auditable, and explicit about which controls are live, review-first, provider-gated, or planned."
         />
 
         <div className="mt-16 grid gap-5 md:grid-cols-2 lg:grid-cols-3">

@@ -1,7 +1,7 @@
 # Secret Rotation Runbook
 
 **Owner:** mishra.sanjeev@gmail.com.
-**Last drilled:** 2026-04-25 (rotated `caseops-pine-labs-api-key` v1 → v2 against prod, verified `/api/health` green; see §5 for the evidence trail).
+**Last drilled:** 2026-04-25 (rotated `caseops-pine-labs-api-key` v1 to v2 against prod, verified `/api/health` green, and recorded no secret values; see Section 5 for the evidence trail).
 **Next due:** 2026-07-25 (90-day cadence).
 
 This runbook closes EG-007 in
@@ -36,6 +36,14 @@ reference them via `valueFrom.secretKeyRef.name=<secret-name>:latest`.
 - `caseops-pinelabs-api-secret` (no dash)
 - `caseops-pinelabs-merchant-id`
 - `caseops-pinelabs-webhook-secret`
+
+**2026-06-13 historical connector secret issue:** proof of external revocation,
+provider-side rotation, app re-authorization, residual-risk acceptance, and last
+evidence timestamp is tracked in the founder-only production readiness console
+and `connector_secret_rotation_evidence`. Evidence records must name the affected
+provider/app and evidence reference, but must never include secret values, OAuth
+tokens, webhook bodies, signed payloads, customer payment instruments, or raw
+provider credentials.
 
 ---
 
@@ -89,7 +97,7 @@ After step 4 above, prove the NEW credential is in use:
 | OpenAI fallback | Force-set `CASEOPS_LLM_PROVIDER=openai` env and run `python -m caseops_api.scripts.eval_drafting -k smoke` against prod-equivalent |
 | Voyage | `python -m caseops_api.scripts.eval_hnsw_recall` — check the embedding latency stat is non-zero (key gates fetch) |
 | SendGrid | Send a portal-invitation magic link to a test email; confirm receipt |
-| Pine Labs | Issue a test payment link via `POST /api/matters/{id}/invoices/{invoice_id}/payment-link` (UAT) — confirm Pine Labs returns a real link |
+| Pine Labs | In UAT-safe mode only, issue a test payment link via `POST /api/matters/{id}/invoices/{invoice_id}/payment-link`; record redacted provider evidence and keep production payments disabled |
 | Cloud SQL | `caseops-migrate-job` execute — uses `caseops-database-url` |
 | SMTP (web demo form) | Submit `https://caseops.ai/?demo=test` and confirm the demo-notification email arrives |
 
@@ -134,8 +142,12 @@ $ curl -fsS https://api.caseops.ai/api/health
 
 Verdict: **rotation procedure works end-to-end.** The new revision
 picks up `:latest` correctly; service stays healthy through the swap.
-Pine Labs UAT side: real key value preserved (drill rotated to a
-copy of the same value); production payment links continue to issue.
+This drill is not proof of current Pine Labs UAT completion or historical
+connector-secret remediation. Do not preserve, copy, paste, store, or display
+the credential value in evidence. Current external rotation proof must be
+attached through the founder-only readiness evidence workflow and remains
+provider/UAT blocked until the provider-side revocation and re-authorization
+proof is available.
 
 ---
 

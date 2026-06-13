@@ -30,6 +30,10 @@
 | Web root | `https://...` | pass/fail | |
 | Auth-gated endpoint | `https://...` | pass/fail | |
 | Billing or provider-dependent proof | `manual / automated path` | pass/fail/skipped | |
+| Public claim classification | landing / pricing / guide / README / llms | pass/fail | Every claim is live, review-first, provider-gated, founder-only, disabled until UAT, or planned |
+| Production readiness gate | `/api/platform-admin/production-readiness` | pass/fail/skipped | Founder-only; list not-ready reasons |
+| Secret rotation proof | `/api/platform-admin/secret-rotation-readiness` | pass/fail/skipped | No secret values stored or displayed |
+| Provider/UAT blockers | Pine Labs / connectors / notifications | pass/fail/skipped | Explicitly blocked, provider-gated, or disabled until UAT |
 
 ## Caveats
 

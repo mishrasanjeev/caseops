@@ -63,7 +63,7 @@ const features = [
   {
     icon: ShieldCheck,
     title: "Trust Plane",
-    body: "Tenant isolation, matter-level ethical walls, scoped agent grants, and audit on every action — by default.",
+    body: "Tenant isolation, matter-level ethical walls, audit on every action, and agent grant readiness. Autonomous scoped-agent execution is planned, not live.",
   },
 ] as const;
 

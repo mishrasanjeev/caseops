@@ -164,6 +164,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/enterprise-readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read enterprise identity, agent trust-plane, and AI governance readiness. */
+        get: operations["get_enterprise_readiness_api_admin_enterprise_readiness_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/google-calendar-sync/replay": {
         parameters: {
             query?: never;
@@ -6603,6 +6620,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/platform-admin/production-readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Platform Production Readiness */
+        get: operations["get_platform_production_readiness_api_platform_admin_production_readiness_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/production-readiness/evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Platform Operational Readiness Evidence */
+        get: operations["get_platform_operational_readiness_evidence_api_platform_admin_production_readiness_evidence_get"];
+        put?: never;
+        /** Post Platform Operational Readiness Evidence */
+        post: operations["post_platform_operational_readiness_evidence_api_platform_admin_production_readiness_evidence_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/platform-admin/profit-report": {
         parameters: {
             query?: never;
@@ -6682,6 +6734,40 @@ export interface paths {
         get: operations["export_platform_revenue_api_platform_admin_revenue_export_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/secret-rotation-readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Secret Rotation Readiness */
+        get: operations["get_secret_rotation_readiness_api_platform_admin_secret_rotation_readiness_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/secret-rotation-readiness/evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Secret Rotation Readiness Evidence */
+        post: operations["post_secret_rotation_readiness_evidence_api_platform_admin_secret_rotation_readiness_evidence_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7314,6 +7400,31 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AIGovernanceReadinessResponse */
+        AIGovernanceReadinessResponse: {
+            /** Approved Policy Count */
+            approved_policy_count: number;
+            /** Blocked Policy Count */
+            blocked_policy_count: number;
+            /** Legal Disclaimer Required */
+            legal_disclaimer_required: boolean;
+            /** Pending Policy Count */
+            pending_policy_count: number;
+            /**
+             * Provider
+             * @default ai_governance
+             * @constant
+             */
+            provider: "ai_governance";
+            /**
+             * Readiness Classification
+             * @default review-first
+             * @enum {string}
+             */
+            readiness_classification: "live" | "review-first" | "provider-gated" | "founder-only" | "disabled until UAT" | "planned";
+            /** Regression Gates Required */
+            regression_gates_required: boolean;
+        };
         /** AITokenGovernancePatchRequest */
         AITokenGovernancePatchRequest: {
             /** Firm Quota Tokens */
@@ -7583,6 +7694,37 @@ export interface components {
              */
             updated_at: string;
         };
+        /** AgentTrustReadinessResponse */
+        AgentTrustReadinessResponse: {
+            /** Active Grant Count */
+            active_grant_count: number;
+            /**
+             * Autonomous Execution Enabled
+             * @default false
+             * @constant
+             */
+            autonomous_execution_enabled: false;
+            /** Blocked Execution Count */
+            blocked_execution_count: number;
+            /** Execution Count */
+            execution_count: number;
+            /** Grant Count */
+            grant_count: number;
+            /** Not Enabled Reason */
+            not_enabled_reason: string;
+            /**
+             * Provider
+             * @default agent_trust_plane
+             * @constant
+             */
+            provider: "agent_trust_plane";
+            /**
+             * Readiness Classification
+             * @default planned
+             * @enum {string}
+             */
+            readiness_classification: "live" | "review-first" | "provider-gated" | "founder-only" | "disabled until UAT" | "planned";
+        };
         /** AnalyticsCount */
         AnalyticsCount: {
             /** Count */
@@ -7776,6 +7918,23 @@ export interface components {
             capabilities: string[];
             company: components["schemas"]["CompanySummary"];
             membership: components["schemas"]["MembershipSummary"];
+            /** Mfa Challenge Reason */
+            mfa_challenge_reason?: string | null;
+            /**
+             * Mfa Challenge Required
+             * @default false
+             */
+            mfa_challenge_required: boolean;
+            /**
+             * Mfa Enrollment Required
+             * @default false
+             */
+            mfa_enrollment_required: boolean;
+            /**
+             * Mfa Required
+             * @default false
+             */
+            mfa_required: boolean;
             /**
              * Token Type
              * @constant
@@ -13127,6 +13286,39 @@ export interface components {
             mobile?: string | null;
             /** Role */
             role?: ("admin" | "partner" | "member" | "paralegal" | "viewer") | null;
+        };
+        /** EnterpriseIdentityReadinessResponse */
+        EnterpriseIdentityReadinessResponse: {
+            /** Enabled */
+            enabled: boolean;
+            /** Last Test Status */
+            last_test_status: string;
+            /** Last Tested At */
+            last_tested_at?: string | null;
+            /** Not Enabled Reason */
+            not_enabled_reason: string;
+            /** Oidc Status */
+            oidc_status: string;
+            /**
+             * Provider
+             * @default enterprise_identity
+             * @constant
+             */
+            provider: "enterprise_identity";
+            /**
+             * Readiness Classification
+             * @default planned
+             * @enum {string}
+             */
+            readiness_classification: "live" | "review-first" | "provider-gated" | "founder-only" | "disabled until UAT" | "planned";
+            /** Required Evidence */
+            required_evidence?: string[];
+            /** Saml Status */
+            saml_status: string;
+            /** Scim Status */
+            scim_status: string;
+            /** Sso Enforcement Status */
+            sso_enforcement_status: string;
         };
         /** EthicalWallCreateRequest */
         EthicalWallCreateRequest: {
@@ -20335,6 +20527,8 @@ export interface components {
         };
         /** PineLabsUATReadinessResponse */
         PineLabsUATReadinessResponse: {
+            /** Activation Blockers */
+            activation_blockers?: string[];
             /** Complete */
             complete: boolean;
             /** Environment */
@@ -20477,6 +20671,70 @@ export interface components {
              */
             tds_deducted_minor: number;
         };
+        /** PlatformOperationalReadinessEvidenceRequest */
+        PlatformOperationalReadinessEvidenceRequest: {
+            /** Blocker Reason */
+            blocker_reason?: string | null;
+            /** Category */
+            category: string;
+            /** Evidence */
+            evidence?: {
+                [key: string]: unknown;
+            } | null;
+            /** Evidence Ref */
+            evidence_ref?: string | null;
+            /** Gate Code */
+            gate_code: string;
+            /** Label */
+            label: string;
+            /** Owner Label */
+            owner_label?: string | null;
+            /**
+             * Readiness Classification
+             * @default founder-only
+             * @enum {string}
+             */
+            readiness_classification: "live" | "review-first" | "provider-gated" | "founder-only" | "disabled until UAT" | "planned";
+            /**
+             * Status
+             * @default pending
+             * @enum {string}
+             */
+            status: "pending" | "pass" | "fail" | "blocked" | "not_applicable";
+        };
+        /** PlatformOperationalReadinessRecord */
+        PlatformOperationalReadinessRecord: {
+            /** Blocker Reason */
+            blocker_reason?: string | null;
+            /** Category */
+            category: string;
+            /** Evidence */
+            evidence?: {
+                [key: string]: unknown;
+            } | null;
+            /** Evidence Ref */
+            evidence_ref?: string | null;
+            /** Gate Code */
+            gate_code: string;
+            /** Id */
+            id?: string | null;
+            /** Label */
+            label: string;
+            /** Last Evidence At */
+            last_evidence_at?: string | null;
+            /** Owner Label */
+            owner_label?: string | null;
+            /**
+             * Readiness Classification
+             * @enum {string}
+             */
+            readiness_classification: "live" | "review-first" | "provider-gated" | "founder-only" | "disabled until UAT" | "planned";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "pass" | "fail" | "blocked" | "not_applicable";
+        };
         /** PlatformOveragePolicyRequest */
         PlatformOveragePolicyRequest: {
             /** Cap Amount Minor */
@@ -20518,6 +20776,45 @@ export interface components {
             total_variable_cost_minor: number;
             /** Trial Count */
             trial_count: number;
+        };
+        /** PlatformProductionReadinessGate */
+        PlatformProductionReadinessGate: {
+            /** Category */
+            category: string;
+            /** Evidence Ref */
+            evidence_ref?: string | null;
+            /** Gate Code */
+            gate_code: string;
+            /** Label */
+            label: string;
+            /** Last Evidence At */
+            last_evidence_at?: string | null;
+            /** Not Ready Reason */
+            not_ready_reason?: string | null;
+            /**
+             * Readiness Classification
+             * @enum {string}
+             */
+            readiness_classification: "live" | "review-first" | "provider-gated" | "founder-only" | "disabled until UAT" | "planned";
+            /** Ready */
+            ready: boolean;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "pass" | "fail" | "blocked" | "not_applicable";
+        };
+        /** PlatformProductionReadinessResponse */
+        PlatformProductionReadinessResponse: {
+            /** Gates */
+            gates: components["schemas"]["PlatformProductionReadinessGate"][];
+            /** Not Ready Reasons */
+            not_ready_reasons: string[];
+            /** Operational Evidence */
+            operational_evidence: components["schemas"]["PlatformOperationalReadinessRecord"][];
+            /** Ready */
+            ready: boolean;
+            secret_rotation: components["schemas"]["SecretRotationEvidenceListResponse"];
         };
         /** PlatformReasonRequest */
         PlatformReasonRequest: {
@@ -21854,6 +22151,93 @@ export interface components {
              */
             updated_at: string;
         };
+        /** SecretRotationEvidenceListResponse */
+        SecretRotationEvidenceListResponse: {
+            /** Complete */
+            complete: boolean;
+            /** Not Ready Reasons */
+            not_ready_reasons?: string[];
+            /** Records */
+            records: components["schemas"]["SecretRotationEvidenceRecord"][];
+        };
+        /** SecretRotationEvidenceRecord */
+        SecretRotationEvidenceRecord: {
+            /** Affected App */
+            affected_app: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Credential Label */
+            credential_label: string;
+            /** Evidence Ref */
+            evidence_ref?: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Last Evidence At
+             * Format: date-time
+             */
+            last_evidence_at: string;
+            /** Old Credential Revoked */
+            old_credential_revoked: boolean;
+            /** Operator Notes */
+            operator_notes?: string | null;
+            /** Provider */
+            provider: string;
+            /** Recorded By Platform Admin Id */
+            recorded_by_platform_admin_id?: string | null;
+            /** Residual Risk */
+            residual_risk?: string | null;
+            /** Rotation Completed At */
+            rotation_completed_at?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "blocked" | "rotated" | "revoked" | "validated" | "not_applicable";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Validation Performed */
+            validation_performed: boolean;
+        };
+        /** SecretRotationEvidenceRequest */
+        SecretRotationEvidenceRequest: {
+            /** Affected App */
+            affected_app: string;
+            /** Credential Label */
+            credential_label: string;
+            /** Evidence Ref */
+            evidence_ref?: string | null;
+            /**
+             * Old Credential Revoked
+             * @default false
+             */
+            old_credential_revoked: boolean;
+            /** Operator Notes */
+            operator_notes?: string | null;
+            /** Provider */
+            provider: string;
+            /** Residual Risk */
+            residual_risk?: string | null;
+            /** Rotation Completed At */
+            rotation_completed_at?: string | null;
+            /**
+             * Status
+             * @default pending
+             * @enum {string}
+             */
+            status: "pending" | "blocked" | "rotated" | "revoked" | "validated" | "not_applicable";
+            /**
+             * Validation Performed
+             * @default false
+             */
+            validation_performed: boolean;
+        };
         /** SettlementImportRequest */
         SettlementImportRequest: {
             /** Notes */
@@ -22491,6 +22875,12 @@ export interface components {
         TenantConnectorRegistryResponse: {
             /** Connectors */
             connectors: components["schemas"]["TenantConnectorRecord"][];
+        };
+        /** TenantEnterpriseReadinessResponse */
+        TenantEnterpriseReadinessResponse: {
+            agent_trust_plane: components["schemas"]["AgentTrustReadinessResponse"];
+            ai_governance: components["schemas"]["AIGovernanceReadinessResponse"];
+            enterprise_identity: components["schemas"]["EnterpriseIdentityReadinessResponse"];
         };
         /** TenantPlaybookCompareFinding */
         TenantPlaybookCompareFinding: {
@@ -23481,6 +23871,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_enterprise_readiness_api_admin_enterprise_readiness_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantEnterpriseReadinessResponse"];
                 };
             };
         };
@@ -36489,6 +36899,79 @@ export interface operations {
             };
         };
     };
+    get_platform_production_readiness_api_platform_admin_production_readiness_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformProductionReadinessResponse"];
+                };
+            };
+        };
+    };
+    get_platform_operational_readiness_evidence_api_platform_admin_production_readiness_evidence_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformOperationalReadinessRecord"][];
+                };
+            };
+        };
+    };
+    post_platform_operational_readiness_evidence_api_platform_admin_production_readiness_evidence_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlatformOperationalReadinessEvidenceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformOperationalReadinessRecord"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_platform_profit_report_api_platform_admin_profit_report_get: {
         parameters: {
             query?: never;
@@ -36617,6 +37100,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_secret_rotation_readiness_api_platform_admin_secret_rotation_readiness_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecretRotationEvidenceListResponse"];
+                };
+            };
+        };
+    };
+    post_secret_rotation_readiness_evidence_api_platform_admin_secret_rotation_readiness_evidence_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SecretRotationEvidenceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecretRotationEvidenceListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

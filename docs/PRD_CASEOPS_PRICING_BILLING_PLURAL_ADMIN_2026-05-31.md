@@ -254,7 +254,7 @@ Prices are annual and exclusive of GST by default.
 | `gc_monitoring` | Litigation Monitoring Only | Rs 1,50,000/yr | 3 legal | 25 | 500 | 5,000 | 1,000 | 50 GB | Case tracking, alerts, monthly MIS |
 | `gc_starter` | GC Starter | Rs 3,00,000/yr | 5 legal | 25 | 1,000 | 5,000 | 10,000 | 250 GB | Matter workflows, updates, MIS |
 | `gc_professional` | GC Professional | Rs 8,00,000/yr | 15 legal | 100 | 10,000 | 25,000 | 30,000 | 1 TB | Counsel workflows, analytics, security pack |
-| `gc_enterprise` | GC Enterprise | Rs 18,00,000-36,00,000/yr | Custom | Custom | Custom | Custom | Custom | Custom | SSO, API, SLA, CSM, procurement support |
+| `gc_enterprise` | GC Enterprise | Rs 18,00,000-36,00,000/yr | Custom | Custom | Custom | Custom | Custom | Custom | SSO readiness, API, SLA, CSM, procurement support |
 
 Notes:
 
@@ -266,7 +266,7 @@ Notes:
 
 The first implementation must seed this matrix alongside the plan catalog. If final business pricing changes, Codex should update seed data only, not entitlement code.
 
-| Plan Code | Internal Users | Viewers | Active Matters | Tracked Cases | AI Credits/Mo | Storage | Manual Refreshes/Day | Refresh Cadence | API | Audit Export | SSO |
+| Plan Code | Internal Users | Viewers | Active Matters | Tracked Cases | AI Credits/Mo | Storage | Manual Refreshes/Day | Refresh Cadence | API | Audit Export | SSO readiness |
 |---|---:|---:|---:|---:|---:|---:|---:|---|---|---|---|
 | `trial` | 2 | 0 | 10 | 10 | 25 total | 500 MB | 2 | weekday_daily | No | No | No |
 | `solo_core` | 2 | 0 | 50 | 50 | 100 | 2 GB | 5 | weekday_daily | No | No | No |
@@ -278,7 +278,7 @@ The first implementation must seed this matrix alongside the plan catalog. If fi
 | `gc_monitoring` | 3 | 25 | 500 | 5,000 | 1,000 | 50 GB | 100 | daily | No | Yes | No |
 | `gc_starter` | 5 | 25 | 1,000 | 5,000 | 10,000 | 250 GB | 150 | daily | Add-on | Yes | No |
 | `gc_professional` | 15 | 100 | 10,000 | 25,000 | 30,000 | 1 TB | 500 | priority_daily | Yes | Yes | Ready |
-| `gc_enterprise` | Custom | Custom | Custom | Custom | Custom | Custom | Custom | SLA/custom | Yes | Yes | Yes |
+| `gc_enterprise` | Custom | Custom | Custom | Custom | Custom | Custom | Custom | SLA/custom | Yes | Yes | Ready; OIDC/SAML/SCIM still planned until IdP UAT |
 
 Seed add-ons must increment these entitlement values through subscription items, not by mutating the base plan version.
 

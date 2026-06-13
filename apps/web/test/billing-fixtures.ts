@@ -746,6 +746,11 @@ export const pineLabsUatReadiness = {
   complete: false,
   missing_required_scenarios: ["tampered_webhook"],
   production_activation_blocked: true,
+  activation_blockers: [
+    "Missing required Pine Labs UAT scenarios: tampered_webhook",
+    "Founder Pine Labs go/no-go decision is not recorded.",
+    "Pine Labs runtime mode is disabled/mock/test; production payments are not enabled.",
+  ],
   latest_decision: null,
   scenarios: [
     {
@@ -814,6 +819,81 @@ export const passwordResetReadiness = {
   debug_tokens_allowed: false,
   non_prod_debug_tokens_only: true,
   secrets_exposed: false,
+};
+
+export const secretRotationReadiness = {
+  complete: false,
+  not_ready_reasons: [
+    "pine_labs_plural/caseops-api/webhook secret lacks old-credential revocation proof.",
+  ],
+  records: [
+    {
+      id: "rotation-1",
+      provider: "pine_labs_plural",
+      affected_app: "caseops-api",
+      credential_label: "webhook secret",
+      status: "blocked",
+      old_credential_revoked: false,
+      validation_performed: false,
+      rotation_completed_at: null,
+      evidence_ref: "provider-ticket-uat-pending",
+      residual_risk: "Provider/UAT blocked until Pine Labs confirms rotation.",
+      operator_notes: "No credential value stored.",
+      last_evidence_at: "2026-06-13T00:00:00Z",
+      recorded_by_platform_admin_id: "platform-1",
+      created_at: "2026-06-13T00:00:00Z",
+      updated_at: "2026-06-13T00:00:00Z",
+    },
+  ],
+};
+
+export const productionReadiness = {
+  ready: false,
+  not_ready_reasons: [
+    "Pine Labs production activation remains blocked: Missing required Pine Labs UAT scenarios: tampered_webhook; Founder Pine Labs go/no-go decision is not recorded.; Pine Labs runtime mode is disabled/mock/test; production payments are not enabled.",
+    "Historical connector secret rotation proof is incomplete.",
+  ],
+  gates: [
+    {
+      category: "billing",
+      gate_code: "production_billing_signoff",
+      label: "Production billing signoff",
+      status: "blocked",
+      readiness_classification: "founder-only",
+      ready: false,
+      not_ready_reason: "Billing signoff is missing required checks: tenant_no_leak_checks",
+      evidence_ref: null,
+      last_evidence_at: null,
+    },
+    {
+      category: "pine_labs",
+      gate_code: "pine_labs_uat_and_founder_go",
+      label: "Pine Labs UAT evidence and founder go/no-go",
+      status: "blocked",
+      readiness_classification: "disabled until UAT",
+      ready: false,
+      not_ready_reason:
+        "Pine Labs production activation remains blocked: Missing required Pine Labs UAT scenarios: tampered_webhook; Founder Pine Labs go/no-go decision is not recorded.; Pine Labs runtime mode is disabled/mock/test; production payments are not enabled.",
+      evidence_ref: null,
+      last_evidence_at: null,
+    },
+  ],
+  secret_rotation: secretRotationReadiness,
+  operational_evidence: [
+    {
+      id: null,
+      category: "backup_restore",
+      gate_code: "backup_success_and_restore_drill",
+      label: "Backup success evidence and restore drill proof",
+      status: "pending",
+      readiness_classification: "founder-only",
+      blocker_reason: "Backup proof or restore drill evidence is missing.",
+      evidence_ref: null,
+      evidence: null,
+      last_evidence_at: null,
+      owner_label: null,
+    },
+  ],
 };
 
 export const financeExceptions = {
@@ -973,7 +1053,11 @@ export function mockBillingFetch(fetchMock: ReturnType<typeof vi.fn>) {
         ...pineLabsUatReadiness,
         missing_required_scenarios: [],
         complete: true,
-        production_activation_blocked: false,
+        production_activation_blocked: true,
+        activation_blockers: [
+          "Founder Pine Labs go/no-go decision is not recorded.",
+          "Pine Labs runtime mode is disabled/mock/test; production payments are not enabled.",
+        ],
       });
     }
     if (url.includes("/api/platform-admin/pine-labs/production-activation")) {
@@ -994,6 +1078,24 @@ export function mockBillingFetch(fetchMock: ReturnType<typeof vi.fn>) {
     }
     if (url.includes("/api/platform-admin/password-reset-readiness")) {
       return jsonResponse(passwordResetReadiness);
+    }
+    if (url.includes("/api/platform-admin/production-readiness")) {
+      return jsonResponse(productionReadiness);
+    }
+    if (url.includes("/api/platform-admin/secret-rotation-readiness/evidence")) {
+      return jsonResponse({
+        ...secretRotationReadiness,
+        records: [
+          {
+            ...secretRotationReadiness.records[0],
+            id: "rotation-blocked",
+            last_evidence_at: "2026-06-13T00:10:00Z",
+          },
+        ],
+      });
+    }
+    if (url.includes("/api/platform-admin/secret-rotation-readiness")) {
+      return jsonResponse(secretRotationReadiness);
     }
     if (url.includes("/api/platform-admin/finance/reconciliation-exceptions")) {
       return jsonResponse(financeExceptions);

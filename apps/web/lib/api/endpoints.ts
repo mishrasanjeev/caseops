@@ -104,9 +104,12 @@ import {
   type PineLabsUatReadinessResponse,
   type ProductionBillingSignoffResponse,
   type PasswordResetReadinessResponse,
+  type SecretRotationEvidenceListResponse,
+  type PlatformProductionReadinessResponse,
   type FinanceListResponse,
   type CaseTrackingSupportMatrixTenantResponse,
   type CaseTrackingSupportMatrixAdminResponse,
+  type TenantEnterpriseReadinessResponse,
   type MailboxConnectionRecord,
   type MailboxConnectionStartResponse,
   type GoogleWorkspaceReadinessTestResponse,
@@ -212,9 +215,12 @@ import {
   pineLabsUatReadinessResponse,
   productionBillingSignoffResponse,
   passwordResetReadinessResponse,
+  secretRotationEvidenceListResponse,
+  platformProductionReadinessResponse,
   financeListResponse,
   caseTrackingSupportMatrixTenantResponse,
   caseTrackingSupportMatrixAdminResponse,
+  tenantEnterpriseReadinessResponse,
   mailboxConnectionRecord,
   mailboxConnectionStartResponse,
   googleWorkspaceReadinessTestResponse,
@@ -2454,7 +2460,7 @@ export async function deleteMatterAttachmentAnnotation(input: {
   );
 }
 
-// --- Billing: invoices + time entries + Pine Labs payment links ---
+// --- Billing: invoices + time entries + provider-gated Pine Labs payment links ---
 // The backend gates these on invoices:issue, invoices:send_payment_link,
 // and time_entries:write respectively. The UI's useCapability guards
 // mirror that; the server remains the source of truth.
@@ -7085,6 +7091,49 @@ export async function fetchPasswordResetReadiness(): Promise<PasswordResetReadin
   return passwordResetReadinessResponse.parse(data);
 }
 
+export async function fetchPlatformProductionReadiness(): Promise<PlatformProductionReadinessResponse> {
+  const data = await apiRequest<unknown>("/api/platform-admin/production-readiness");
+  return platformProductionReadinessResponse.parse(data);
+}
+
+export async function fetchSecretRotationReadiness(): Promise<SecretRotationEvidenceListResponse> {
+  const data = await apiRequest<unknown>("/api/platform-admin/secret-rotation-readiness");
+  return secretRotationEvidenceListResponse.parse(data);
+}
+
+export async function recordSecretRotationEvidence(input: {
+  provider: string;
+  affectedApp: string;
+  credentialLabel: string;
+  status: "pending" | "blocked" | "rotated" | "revoked" | "validated" | "not_applicable";
+  oldCredentialRevoked?: boolean;
+  validationPerformed?: boolean;
+  rotationCompletedAt?: string | null;
+  evidenceRef?: string | null;
+  residualRisk?: string | null;
+  operatorNotes?: string | null;
+}): Promise<SecretRotationEvidenceListResponse> {
+  const data = await apiRequest<unknown>(
+    "/api/platform-admin/secret-rotation-readiness/evidence",
+    {
+      method: "POST",
+      body: {
+        provider: input.provider,
+        affected_app: input.affectedApp,
+        credential_label: input.credentialLabel,
+        status: input.status,
+        old_credential_revoked: input.oldCredentialRevoked ?? false,
+        validation_performed: input.validationPerformed ?? false,
+        rotation_completed_at: input.rotationCompletedAt ?? null,
+        evidence_ref: input.evidenceRef ?? null,
+        residual_risk: input.residualRisk ?? null,
+        operator_notes: input.operatorNotes ?? null,
+      },
+    },
+  );
+  return secretRotationEvidenceListResponse.parse(data);
+}
+
 export async function recordProductionBillingSignoffEvidence(input: {
   signoffId?: string | null;
   checkCode: string;
@@ -7115,4 +7164,9 @@ export async function fetchPlatformFinanceReport(report: string): Promise<Financ
 export async function fetchPlatformSupportMatrix(): Promise<CaseTrackingSupportMatrixAdminResponse> {
   const data = await apiRequest<unknown>("/api/platform-admin/case-tracking/support-matrix");
   return caseTrackingSupportMatrixAdminResponse.parse(data);
+}
+
+export async function fetchTenantEnterpriseReadiness(): Promise<TenantEnterpriseReadinessResponse> {
+  const data = await apiRequest<unknown>("/api/admin/enterprise-readiness");
+  return tenantEnterpriseReadinessResponse.parse(data);
 }

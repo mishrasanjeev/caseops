@@ -78,7 +78,27 @@ GET /api/case-tracking/support-matrix
 GET /api/platform-admin/case-tracking/support-matrix
 POST /api/platform-admin/case-tracking/support-matrix
 PATCH /api/platform-admin/case-tracking/support-matrix/{row_id}
+GET /api/platform-admin/production-readiness
+GET /api/platform-admin/production-readiness/evidence
+POST /api/platform-admin/production-readiness/evidence
 ```
+
+## 2026-06-13 Platform Evidence Gate
+
+Provider operations are part of the founder-only production readiness gate.
+Before launch, attach evidence for:
+
+- dead-letter queue visibility;
+- replay, ignore, and mark-resolved actions;
+- redacted provider errors only, never raw payloads or OAuth tokens;
+- tenant scoping on provider operation rows;
+- idempotent/resumable connector, case-refresh, notification, and billing jobs;
+- explicit blocked states where external credentials, admin consent, webhook
+  signatures, DLT/template approvals, or lawful source access are missing.
+
+If external vendor credentials or approvals are unavailable, mark the gate
+`provider-gated` or `disabled until UAT` instead of simulating live provider
+success.
 
 `/app/admin/integrations` is the tenant-safe connector registry. It shows
 connector keys, names, categories, providers, status, safe config names, scopes,

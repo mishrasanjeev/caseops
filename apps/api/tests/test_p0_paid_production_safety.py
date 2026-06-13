@@ -10,6 +10,7 @@ from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     BillingProviderEvent,
     CaseTrackingSupportMatrix,
+    ConnectorSecretRotationEvidence,
     PlatformAdminMembership,
     UserMFAStepUp,
 )
@@ -33,6 +34,10 @@ NEW_P0_ROUTE_REFERENCES = (
     "/api/platform-admin/billing-signoff",
     "/api/platform-admin/billing-signoff/evidence",
     "/api/platform-admin/password-reset-readiness",
+    "/api/platform-admin/production-readiness",
+    "/api/platform-admin/production-readiness/evidence",
+    "/api/platform-admin/secret-rotation-readiness",
+    "/api/platform-admin/secret-rotation-readiness/evidence",
     "/api/platform-admin/finance/settlement-imports",
     "/api/platform-admin/finance/reconciliation-exceptions",
     "/api/platform-admin/finance/reconciliation-exceptions/export",
@@ -42,6 +47,7 @@ NEW_P0_ROUTE_REFERENCES = (
     "/api/platform-admin/finance/tds",
     "/api/platform-admin/case-tracking/support-matrix",
     "/api/platform-admin/case-tracking/support-matrix/{row_id}",
+    "/api/admin/enterprise-readiness",
     "/api/case-tracking/support-matrix",
 )
 
@@ -101,6 +107,8 @@ def test_pine_labs_uat_activation_blocker_and_billing_signoff(
         headers=auth_headers(token),
     )
     assert ready.json()["complete"] is True
+    assert ready.json()["production_activation_blocked"] is True
+    assert any("runtime mode" in blocker for blocker in ready.json()["activation_blockers"])
 
     go = client.post(
         "/api/platform-admin/pine-labs/production-activation",
@@ -112,7 +120,8 @@ def test_pine_labs_uat_activation_blocker_and_billing_signoff(
         },
     )
     assert go.status_code == 200, go.text
-    assert go.json()["blocked"] is False
+    assert go.json()["blocked"] is True
+    assert any("runtime mode" in blocker for blocker in go.json()["missing_scenarios"])
     assert go.json()["provider_mode_unchanged"] != "production"
 
     signoff = client.get("/api/platform-admin/billing-signoff", headers=auth_headers(token))
@@ -133,6 +142,98 @@ def test_pine_labs_uat_activation_blocker_and_billing_signoff(
         assert recorded.status_code == 200, recorded.text
     complete = client.get("/api/platform-admin/billing-signoff", headers=auth_headers(token))
     assert complete.json()["complete"] is True
+
+
+def test_unified_readiness_and_secret_rotation_evidence_are_founder_only_and_secret_safe(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    token = _founder_token(client, monkeypatch)
+
+    readiness = client.get(
+        "/api/platform-admin/production-readiness",
+        headers=auth_headers(token),
+    )
+    assert readiness.status_code == 200, readiness.text
+    payload = readiness.json()
+    assert payload["ready"] is False
+    assert any("secret rotation" in reason.lower() for reason in payload["not_ready_reasons"])
+    assert any(gate["gate_code"] == "historical_secret_rotation" for gate in payload["gates"])
+
+    enterprise = client.get("/api/admin/enterprise-readiness", headers=auth_headers(token))
+    assert enterprise.status_code == 200, enterprise.text
+    enterprise_payload = enterprise.json()
+    assert enterprise_payload["enterprise_identity"]["enabled"] is False
+    assert enterprise_payload["enterprise_identity"]["readiness_classification"] == "planned"
+    assert (
+        enterprise_payload["agent_trust_plane"]["autonomous_execution_enabled"] is False
+    )
+
+    rejected = client.post(
+        "/api/platform-admin/secret-rotation-readiness/evidence",
+        headers=auth_headers(token),
+        json={
+            "provider": "pine_labs_plural",
+            "affected_app": "caseops-api",
+            "credential_label": "webhook secret",
+            "status": "blocked",
+            "operator_notes": "Bearer this-must-not-be-stored",
+        },
+    )
+    assert rejected.status_code == 400
+
+    rejected_github_token = client.post(
+        "/api/platform-admin/secret-rotation-readiness/evidence",
+        headers=auth_headers(token),
+        json={
+            "provider": "github",
+            "affected_app": "connector",
+            "credential_label": "oauth client",
+            "status": "blocked",
+            "operator_notes": "Abcdefghijklmnopqrstuvwxyz1234567890ABCD",
+        },
+    )
+    assert rejected_github_token.status_code == 400
+
+    rejected_signoff_secret = client.post(
+        "/api/platform-admin/billing-signoff/evidence",
+        headers=auth_headers(token),
+        json={
+            "check_code": "tenant_no_leak_checks",
+            "result_status": "pass",
+            "evidence": {"client_secret": "do-not-store"},
+        },
+    )
+    assert rejected_signoff_secret.status_code == 400
+
+    recorded = client.post(
+        "/api/platform-admin/secret-rotation-readiness/evidence",
+        headers=auth_headers(token),
+        json={
+            "provider": "pine_labs_plural",
+            "affected_app": "caseops-api",
+            "credential_label": "webhook secret",
+            "status": "validated",
+            "old_credential_revoked": True,
+            "validation_performed": True,
+            "evidence_ref": "provider-ticket://pine-labs-rotation-proof",
+            "residual_risk": "None after external proof is attached.",
+            "operator_notes": "External evidence reference only; no credential value stored.",
+        },
+    )
+    assert recorded.status_code == 200, recorded.text
+    body = recorded.json()
+    assert body["complete"] is True
+    assert "Bearer" not in recorded.text
+    assert "this-must-not-be-stored" not in recorded.text
+
+    with get_session_factory()() as session:
+        row = session.scalar(select(ConnectorSecretRotationEvidence))
+        assert row is not None
+        assert row.status == "validated"
+        assert "Bearer" not in (row.operator_notes or "")
+        assert row.old_credential_revoked is True
+        assert row.validation_performed is True
 
 
 def test_finance_support_matrix_and_tenant_no_leak_paths(
@@ -290,6 +391,86 @@ def test_mfa_step_up_recovery_codes_and_platform_grace(
         },
     )
     assert reused.status_code == 403
+
+
+def test_login_mfa_challenge_blocks_workspace_until_policy_requirement_is_met(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    token = _founder_token(client, monkeypatch)
+    policy = client.patch(
+        "/api/admin/security-policy",
+        headers=auth_headers(token),
+        json={
+            "all_users_mfa_required": True,
+            "mfa_grace_period_days": 0,
+            "reason": "Enable enforced login challenge in smoke test.",
+        },
+    )
+    assert policy.status_code == 200, policy.text
+    assert policy.json()["all_users_mfa_required"] is True
+
+    login = client.post(
+        "/api/auth/login",
+        json={
+            "email": "owner@asterlegal.in",
+            "password": "FoundersPass123!",
+            "company_slug": "aster-legal",
+        },
+    )
+    assert login.status_code == 200, login.text
+    login_payload = login.json()
+    assert login_payload["mfa_required"] is True
+    assert login_payload["mfa_challenge_required"] is True
+    assert login_payload["mfa_enrollment_required"] is True
+
+    challenge_token = str(login_payload["access_token"])
+    blocked = client.get("/api/matters/", headers=auth_headers(challenge_token))
+    assert blocked.status_code == 403
+    assert blocked.json()["type"] == "mfa_enrollment_required"
+
+    security_status = client.get("/api/auth/security", headers=auth_headers(challenge_token))
+    assert security_status.status_code == 200, security_status.text
+
+    start = client.post("/api/auth/mfa/enroll", headers=auth_headers(challenge_token))
+    assert start.status_code == 200, start.text
+    assert "<svg" in start.json()["qr_svg"]
+    assert "Use secret below" not in start.json()["qr_svg"]
+    secret = start.json()["secret"]
+    verify = client.post(
+        "/api/auth/mfa/enroll/verify",
+        headers=auth_headers(challenge_token),
+        json={"code": _current_totp(secret)},
+    )
+    assert verify.status_code == 200, verify.text
+
+    with get_session_factory()() as session:
+        session.execute(delete(UserMFAStepUp))
+        session.commit()
+
+    login_enrolled = client.post(
+        "/api/auth/login",
+        json={
+            "email": "owner@asterlegal.in",
+            "password": "FoundersPass123!",
+            "company_slug": "aster-legal",
+        },
+    )
+    assert login_enrolled.status_code == 200, login_enrolled.text
+    enrolled_payload = login_enrolled.json()
+    assert enrolled_payload["mfa_required"] is True
+    assert enrolled_payload["mfa_challenge_required"] is True
+    assert enrolled_payload["mfa_enrollment_required"] is False
+
+    enrolled_token = str(enrolled_payload["access_token"])
+    step_up = client.post(
+        "/api/auth/mfa/step-up",
+        headers=auth_headers(enrolled_token),
+        json={"code": _current_totp(secret), "purpose": "step_up"},
+    )
+    assert step_up.status_code == 200, step_up.text
+    matters = client.get("/api/matters/", headers=auth_headers(enrolled_token))
+    assert matters.status_code == 200, matters.text
 
 
 def test_margin_readiness_and_password_reset_production_smoke_support(

@@ -130,7 +130,7 @@ def _record(
         provider_operations_link=provider_operations_link,
         internal_cost_label=internal_cost_label if platform else None,
         risk_label=risk_label if platform else None,
-        platform_notes=platform_notes or [],
+        platform_notes=platform_notes if platform else [],
     )
 
 

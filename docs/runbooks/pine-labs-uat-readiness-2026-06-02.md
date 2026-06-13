@@ -41,6 +41,19 @@ paid-production readiness console:
 These records are evidence only. They do not enable production payments, change
 Pine Labs settings, or perform live provider calls.
 
+2026-06-13 evidence update:
+- The founder console and API now track hosted checkout, payment links,
+  subscriptions, failed/pending/expired payments, duplicate/tampered/stale
+  webhook handling, settlement import, refunds, credit notes, chargebacks,
+  provider fees, GST/TDS fields, and activation decision audit as readiness
+  evidence.
+- `POST /api/platform-admin/pine-labs/production-activation` records founder
+  go/no-go only. It does not change `CASEOPS_PINE_LABS_ENV`, secrets, products,
+  webhook registration, or any live payment setting.
+- Production remains `disabled until UAT` until Pine Labs UAT credentials,
+  webhook signing proof, endpoint/schema confirmation, settlement/refund/dispute
+  proof, MDR/GST/TDS evidence, and founder go/no-go are all attached.
+
 ## Founder/Operator Information Request
 
 Ask Pine Labs or the payment onboarding operator for these items before UAT can

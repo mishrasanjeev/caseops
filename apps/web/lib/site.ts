@@ -23,7 +23,7 @@ export const siteConfig = {
     "general counsel software",
     "litigation management",
     "outside counsel management",
-    "Pine Labs legal billing",
+    "Pine Labs UAT readiness",
     "legal AI India",
     "case management software",
   ],

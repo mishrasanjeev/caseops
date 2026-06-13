@@ -30,7 +30,7 @@ import { siteConfig } from "@/lib/site";
 export const metadata: Metadata = {
   title: "CaseOps for solo lawyers",
   description:
-    "Operate like a 20-lawyer practice without hiring one. Case diary, drafting with citations, research, billing and Pine Labs payment links in one workspace for solo advocates.",
+    "Operate like a 20-lawyer practice without hiring one. Case diary, drafting with citations, research, matter billing, and provider-gated payment readiness in one workspace for solo advocates.",
   alternates: { canonical: "/solo-lawyers" },
   openGraph: {
     type: "article",
@@ -72,7 +72,7 @@ export default function SoloLawyersPage() {
             <div className="grid gap-3 sm:grid-cols-3">
               <MetricCard inverse value="1" label="Workspace" note="Replaces case diary, research, drafting and billing." />
               <MetricCard inverse value="< 60s" label="Hearing pack" note="Compiled from the matter record when you open it." />
-              <MetricCard inverse value="Pine Labs" label="Payments" note="UPI + cards on every invoice." />
+              <MetricCard inverse value="UAT gated" label="Payments" note="Invoice PDFs and payment tracking are live; Pine Labs is disabled until UAT." />
             </div>
             <div className="flex flex-col gap-3 lg:items-end">
               <PersonaSwitch active="solos" />
@@ -318,8 +318,8 @@ export default function SoloLawyersPage() {
           index="08"
           tone="ink"
           eyebrow="Billing + recoveries"
-          title="The payment link goes out with the invoice."
-          description="Pine Labs payment links land on every invoice today — UPI and cards. Automatic paid-state writeback from settlement callbacks ships in a near-term release; for now, you mark invoices paid when reconciling, and the payment link itself already converts faster than a polite reminder."
+          title="The invoice goes out with payment tracking."
+          description="Matter invoice PDFs, GST/TDS adjustments, partial payments, write-offs, and audit are live. Pine Labs payment collection remains disabled until UAT credentials, webhook evidence, settlement/refund/dispute proof, and founder go/no-go are complete."
         >
           <div className="grid gap-5 md:grid-cols-2">
             <div className="grid gap-3">
@@ -347,9 +347,9 @@ export default function SoloLawyersPage() {
                 The practical win
               </div>
               <p className="mt-3 text-[15px] leading-relaxed text-white/85">
-                Solos using CaseOps typically collect 8–15 days earlier than their previous
-                cycle. The link in the invoice converts intention to paid faster than any
-                polite reminder ever did.
+                Solos get a cleaner recovery workflow: invoice, payment state, write-off,
+                and audit are in the matter record. External payment links remain
+                provider-gated until UAT evidence is complete.
               </p>
             </div>
           </div>
@@ -385,7 +385,7 @@ export default function SoloLawyersPage() {
                 </li>
                 <li className="flex gap-2">
                   <span aria-hidden className="mt-[8px] h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-brand-500)]" />
-                  Pine Labs payment collection
+                  Provider-gated Pine Labs readiness, disabled until UAT
                 </li>
                 <li className="flex gap-2">
                   <span aria-hidden className="mt-[8px] h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-brand-500)]" />

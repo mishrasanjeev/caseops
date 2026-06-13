@@ -44,6 +44,10 @@ class AuthSessionResponse(BaseModel):
     user: UserSummary
     membership: MembershipSummary
     capabilities: list[str]
+    mfa_required: bool = False
+    mfa_challenge_required: bool = False
+    mfa_enrollment_required: bool = False
+    mfa_challenge_reason: str | None = None
 
 
 class AuthContextResponse(BaseModel):

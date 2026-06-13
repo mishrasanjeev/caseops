@@ -6632,6 +6632,84 @@ class PlatformAdminAuditEvent(Base):
     )
 
 
+class ConnectorSecretRotationEvidence(Base):
+    __tablename__ = "connector_secret_rotation_evidence"
+    __table_args__ = (
+        UniqueConstraint(
+            "provider",
+            "affected_app",
+            "credential_label",
+            name="uq_connector_secret_rotation_scope",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    provider: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    affected_app: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    credential_label: Mapped[str] = mapped_column(String(160), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="blocked", index=True)
+    old_credential_revoked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    validation_performed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    rotation_completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    evidence_ref: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    residual_risk: Mapped[str | None] = mapped_column(Text, nullable=True)
+    operator_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_evidence_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False, index=True
+    )
+    recorded_by_platform_admin_id: Mapped[str | None] = mapped_column(
+        ForeignKey("platform_admin_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    recorded_by_platform_admin: Mapped[PlatformAdminMembership | None] = relationship()
+
+
+class PlatformOperationalReadinessEvidence(Base):
+    __tablename__ = "platform_operational_readiness_evidence"
+    __table_args__ = (
+        UniqueConstraint("category", "gate_code", name="uq_platform_readiness_gate"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    category: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    gate_code: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    label: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="blocked", index=True)
+    readiness_classification: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="founder-only"
+    )
+    blocker_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    evidence_ref: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    evidence_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    last_evidence_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    owner_label: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    recorded_by_platform_admin_id: Mapped[str | None] = mapped_column(
+        ForeignKey("platform_admin_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    recorded_by_platform_admin: Mapped[PlatformAdminMembership | None] = relationship()
+
+
 class UserMFASetting(Base):
     __tablename__ = "user_mfa_settings"
     __table_args__ = (UniqueConstraint("user_id", name="uq_user_mfa_settings_user"),)
@@ -6746,6 +6824,195 @@ class TenantSecurityPolicy(Base):
 
     company: Mapped[Company] = relationship()
     updated_by_membership: Mapped[CompanyMembership | None] = relationship()
+
+
+class TenantEnterpriseIdentityConfiguration(Base):
+    __tablename__ = "tenant_enterprise_identity_configurations"
+    __table_args__ = (
+        UniqueConstraint("company_id", name="uq_tenant_enterprise_identity_company"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    idp_label: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    oidc_status: Mapped[str] = mapped_column(String(32), nullable=False, default="disabled")
+    saml_status: Mapped[str] = mapped_column(String(32), nullable=False, default="planned")
+    scim_status: Mapped[str] = mapped_column(String(32), nullable=False, default="planned")
+    sso_enforcement_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="disabled"
+    )
+    domains_json: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    required_evidence_json: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    last_test_status: Mapped[str] = mapped_column(String(32), nullable=False, default="not_run")
+    last_tested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    not_enabled_reason: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="SSO, SAML, and SCIM are readiness-only until an IdP UAT pass is recorded.",
+    )
+    updated_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    company: Mapped[Company] = relationship()
+    updated_by_membership: Mapped[CompanyMembership | None] = relationship()
+
+
+class AgentGrant(Base):
+    __tablename__ = "agent_grants"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    principal_type: Mapped[str] = mapped_column(String(32), nullable=False, default="user")
+    principal_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    scopes_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    tool_budget_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    token_budget: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    human_approval_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="disabled", index=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    company: Mapped[Company] = relationship()
+    principal_membership: Mapped[CompanyMembership | None] = relationship(
+        foreign_keys=[principal_membership_id]
+    )
+    created_by_membership: Mapped[CompanyMembership | None] = relationship(
+        foreign_keys=[created_by_membership_id]
+    )
+
+
+class AgentExecution(Base):
+    __tablename__ = "agent_executions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    grant_id: Mapped[str | None] = mapped_column(
+        ForeignKey("agent_grants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    workflow_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="blocked", index=True)
+    blocked_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    audit_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+    grant: Mapped[AgentGrant | None] = relationship()
+    started_by_membership: Mapped[CompanyMembership | None] = relationship()
+
+
+class AgentToolCall(Base):
+    __tablename__ = "agent_tool_calls"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    execution_id: Mapped[str] = mapped_column(
+        ForeignKey("agent_executions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    tool_name: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    scope: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="blocked", index=True)
+    approval_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="required"
+    )
+    redacted_input_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    redacted_output_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+    execution: Mapped[AgentExecution] = relationship()
+
+
+class AIGovernanceApproval(Base):
+    __tablename__ = "ai_governance_approvals"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    workflow_key: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    artifact_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    artifact_ref: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending", index=True)
+    eval_run_id: Mapped[str | None] = mapped_column(
+        ForeignKey("evaluation_runs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    regression_gate_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="not_run"
+    )
+    safety_gate_status: Mapped[str] = mapped_column(String(32), nullable=False, default="not_run")
+    hallucination_gate_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="not_run"
+    )
+    legal_disclaimer_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    approved_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    company: Mapped[Company] = relationship()
+    eval_run: Mapped[EvaluationRun | None] = relationship()
+    approved_by_membership: Mapped[CompanyMembership | None] = relationship()
 
 
 class PineLabsUATRun(Base):

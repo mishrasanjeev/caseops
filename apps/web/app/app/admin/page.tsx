@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { RoadmapStub } from "@/components/app/RoadmapStub";
 import { TenantAIPolicyCard } from "@/components/app/TenantAIPolicyCard";
 import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
 import {
   Card,
   CardContent,
@@ -33,6 +34,7 @@ import { Label } from "@/components/ui/Label";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { API_BASE_URL, apiErrorMessage } from "@/lib/api/config";
 import {
+  fetchTenantEnterpriseReadiness,
   getStorageGovernance,
   listMatters,
   updateStorageGovernance,
@@ -42,6 +44,7 @@ import {
   invitePortalUser,
   type PortalUserRole,
 } from "@/lib/api/portal";
+import type { TenantEnterpriseReadinessResponse } from "@/lib/api/schemas";
 import { useCapability } from "@/lib/capabilities";
 
 function sinceIsoOrNull(local: string): string | null {
@@ -97,6 +100,73 @@ function storageStateLabel(state: string): string {
   return "OK";
 }
 
+function EnterpriseReadinessCard({
+  readiness,
+}: {
+  readiness: TenantEnterpriseReadinessResponse | undefined;
+}) {
+  const identity = readiness?.enterprise_identity;
+  const agents = readiness?.agent_trust_plane;
+  const ai = readiness?.ai_governance;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle as="h2">Enterprise readiness</CardTitle>
+        <CardDescription>
+          SSO/SCIM, agent trust, and AI governance status without implying unavailable features are live.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="rounded-lg border border-[var(--color-line)] bg-[var(--color-bg)] p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-sm font-semibold text-[var(--color-ink)]">SSO / SCIM</div>
+              <Badge tone="neutral">{identity?.readiness_classification ?? "planned"}</Badge>
+            </div>
+            <p className="mt-2 text-sm leading-relaxed text-[var(--color-mute)]">
+              {identity?.not_enabled_reason ??
+                "OIDC, SAML, and SCIM are not enabled until IdP UAT evidence is recorded."}
+            </p>
+            <dl className="mt-3 grid grid-cols-2 gap-2 text-xs text-[var(--color-ink-2)]">
+              <div>OIDC: {identity?.oidc_status ?? "disabled"}</div>
+              <div>SAML: {identity?.saml_status ?? "planned"}</div>
+              <div>SCIM: {identity?.scim_status ?? "planned"}</div>
+              <div>Enforce: {identity?.sso_enforcement_status ?? "disabled"}</div>
+            </dl>
+          </div>
+          <div className="rounded-lg border border-[var(--color-line)] bg-[var(--color-bg)] p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-sm font-semibold text-[var(--color-ink)]">Agent trust</div>
+              <Badge tone="warning">{agents?.readiness_classification ?? "planned"}</Badge>
+            </div>
+            <p className="mt-2 text-sm leading-relaxed text-[var(--color-mute)]">
+              {agents?.not_enabled_reason ??
+                "Autonomous scoped-agent execution is not live."}
+            </p>
+            <div className="mt-3 text-xs text-[var(--color-ink-2)]">
+              Grants {agents?.grant_count ?? 0} / active {agents?.active_grant_count ?? 0};
+              executions {agents?.execution_count ?? 0}
+            </div>
+          </div>
+          <div className="rounded-lg border border-[var(--color-line)] bg-[var(--color-bg)] p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-sm font-semibold text-[var(--color-ink)]">AI governance</div>
+              <Badge tone="brand">{ai?.readiness_classification ?? "review-first"}</Badge>
+            </div>
+            <p className="mt-2 text-sm leading-relaxed text-[var(--color-mute)]">
+              Prompt/model approvals, regression evidence, legal disclaimers, and audit gates remain required for AI workflows.
+            </p>
+            <div className="mt-3 text-xs text-[var(--color-ink-2)]">
+              Approved {ai?.approved_policy_count ?? 0}; pending {ai?.pending_policy_count ?? 0};
+              blocked {ai?.blocked_policy_count ?? 0}
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AdminPage() {
   const queryClient = useQueryClient();
   const canAdmin = useCapability("workspace:admin");
@@ -122,6 +192,11 @@ export default function AdminPage() {
   const storageQuery = useQuery({
     queryKey: ["admin", "storage-governance"],
     queryFn: getStorageGovernance,
+    enabled: canAdmin,
+  });
+  const enterpriseReadinessQuery = useQuery({
+    queryKey: ["admin", "enterprise-readiness"],
+    queryFn: fetchTenantEnterpriseReadiness,
     enabled: canAdmin,
   });
 
@@ -251,7 +326,7 @@ export default function AdminPage() {
       <PageHeader
         eyebrow="Workspace"
         title="Admin & governance"
-        description="Audit trail export is live. Tenant profile, SSO, AI policy, and plan management follow in §10.1–§10.3."
+        description="Audit trail export, storage governance, security policy, AI policy, and enterprise-readiness status for this workspace."
         actions={
           <div className="flex items-center gap-2">
             {canManageNotifications ? (
@@ -319,6 +394,8 @@ export default function AdminPage() {
           </div>
         }
       />
+
+      {canAdmin ? <EnterpriseReadinessCard readiness={enterpriseReadinessQuery.data} /> : null}
 
       <Card>
         <CardHeader className="flex-row items-start justify-between gap-4">
@@ -705,11 +782,11 @@ export default function AdminPage() {
         icon={Wrench}
         eyebrow="Coming soon"
         title="More admin controls on the way"
-        description="Ethical walls UI, SSO, tenant AI policy, and plan management are next."
+        description="Ethical walls UI, enterprise identity readiness, tenant AI policy, and plan management continue behind explicit status gates."
         prdSection="§10.9"
         bullets={[
           "Ethical walls are wired on the API today and will surface here next.",
-          "OIDC / SAML with JIT provisioning and role mapping.",
+          "OIDC / SAML with JIT provisioning and role mapping is planned until IdP UAT evidence exists.",
           "Tenant AI policy — allowed models, prompt audit, external-share approvals.",
           "Plan entitlements — seat limits, matter limits, feature flags.",
         ]}
