@@ -57,7 +57,7 @@ from caseops_api.services.bench_matcher import (
     BenchSuggestion,
     suggest_bench,
 )
-from caseops_api.services.identity import SessionContext
+from caseops_api.services.session_context import SessionContext
 from caseops_api.services.tenant_ai_policy import ResolvedAIPolicy
 
 # Honorific stripper duplicated from `api/routes/courts.py` so this

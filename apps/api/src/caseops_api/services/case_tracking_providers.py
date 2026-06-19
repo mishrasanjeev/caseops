@@ -70,11 +70,17 @@ class ProviderBulkRefreshResult:
 class CaseTrackingProvider(Protocol):
     provider_key: str
 
-    def search_cases(self, *, query: CaseSearchQuery) -> list[ProviderCaseSnapshot]: ...
+    def search_cases(self, *, query: CaseSearchQuery) -> list[ProviderCaseSnapshot]:
 
-    def get_case_by_cnr(self, *, cnr: str) -> ProviderCaseSnapshot: ...
+        raise NotImplementedError
 
-    def refresh_cases(self, *, cnrs: list[str]) -> ProviderBulkRefreshResult: ...
+    def get_case_by_cnr(self, *, cnr: str) -> ProviderCaseSnapshot:
+
+        raise NotImplementedError
+
+    def refresh_cases(self, *, cnrs: list[str]) -> ProviderBulkRefreshResult:
+
+        raise NotImplementedError
 
 
 def _compact(value: object, *, limit: int = 500) -> str | None:

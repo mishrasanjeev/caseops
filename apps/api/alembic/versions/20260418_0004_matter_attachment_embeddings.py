@@ -27,6 +27,7 @@ revision = "20260418_0004"
 down_revision = "20260418_0003"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
+__all__ = ("revision", "down_revision", "branch_labels", "depends_on", "upgrade", "downgrade")
 
 # Keep dimension in sync with authority_document_chunks so a single
 # embedding provider can populate both without per-caller math.

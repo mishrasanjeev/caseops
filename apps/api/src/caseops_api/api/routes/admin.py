@@ -80,7 +80,6 @@ from caseops_api.services.google_workspace import (
     test_google_workspace_tenant_configuration,
     update_google_workspace_tenant_configuration,
 )
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.microsoft365 import (
     microsoft365_tenant_configuration_status,
     test_microsoft365_tenant_configuration,
@@ -93,6 +92,7 @@ from caseops_api.services.security import (
     tenant_security_policy_record,
     update_tenant_security_policy,
 )
+from caseops_api.services.session_context import SessionContext
 from caseops_api.services.storage_governance import (
     get_firm_storage_summary,
     update_firm_storage_quota,
@@ -730,8 +730,6 @@ def _ensure_policy_row(session, company_id: str) -> TenantAIPolicy:
 
 
 def _parse_disabled_templates(raw: str | None) -> list[str]:
-    import json
-
     if not raw:
         return []
     try:
@@ -775,8 +773,6 @@ def patch_tenant_ai_policy(
     context: WorkspaceAdmin,
     session: DbSession,
 ) -> TenantAIPolicyResponse:
-    import json
-
     row = _ensure_policy_row(session, context.company.id)
     audit_metadata: dict = {}
 

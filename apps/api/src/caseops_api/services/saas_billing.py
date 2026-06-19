@@ -74,19 +74,19 @@ from caseops_api.schemas.saas_billing import (
     TrialStartRequest,
 )
 from caseops_api.services.audit import record_from_context
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.pine_labs import (
     PineLabsGatewayClient,
     PineLabsPaymentStatusResult,
     redact_provider_payload,
 )
-from caseops_api.services.platform_admin import record_platform_audit
+from caseops_api.services.platform_audit import record_platform_audit
 from caseops_api.services.provider_costs import (
     case_refresh_guardrail_warnings,
     effective_cost_minor,
     estimate_payment_gateway_cost_minor,
     margin_readiness,
 )
+from caseops_api.services.session_context import SessionContext
 
 CATALOG_VERSION = "2026.05.v1"
 GRANDFATHERED_PLAN_CODE = "grandfathered_free"

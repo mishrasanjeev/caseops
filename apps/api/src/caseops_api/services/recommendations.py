@@ -65,7 +65,6 @@ from caseops_api.services.citations import (
     VerificationReport,
     verify_citations,
 )
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.llm import (
     PURPOSE_RECOMMENDATIONS,
     LLMCallContext,
@@ -78,6 +77,7 @@ from caseops_api.services.llm import (
     generate_structured,
 )
 from caseops_api.services.llm_http import provider_failure_http_exception
+from caseops_api.services.session_context import SessionContext
 
 logger = logging.getLogger(__name__)
 
@@ -228,6 +228,12 @@ _UNSAFE_OUTPUT_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
         ),
     ),
 )
+
+_LOG_CONTROL_CHARS = re.compile(r"[\r\n\t]+")
+
+
+def _safe_log_value(value: object, *, limit: int = 160) -> str:
+    return _LOG_CONTROL_CHARS.sub(" ", str(value))[:limit]
 
 
 class _LLMOption(BaseModel):
@@ -1487,7 +1493,10 @@ def generate_recommendation(
         logger.warning(
             "BUG015_TIMING %s rec_type=%s matter_id=%s stage=%s "
             "stage_ms=%.0f total_ms=%.0f",
-            "[generate_recommendation]", rec_type, matter_id, name,
+            "[generate_recommendation]",
+            _safe_log_value(rec_type),
+            _safe_log_value(matter_id),
+            _safe_log_value(name),
             (now - _t) * 1000, (now - _t0) * 1000,
         )
         _t = now
@@ -1604,9 +1613,9 @@ def generate_recommendation(
         logger.warning(
             "recommendation %s: primary LLM %s returned malformed JSON; "
             "retrying once. detail=%s",
-            rec_type,
-            getattr(llm, "model", "<unknown>"),
-            str(exc)[:300],
+            _safe_log_value(rec_type),
+            _safe_log_value(getattr(llm, "model", "<unknown>")),
+            _safe_log_value(exc, limit=300),
         )
         try:
             parsed, completion = _invoke(llm)
@@ -1614,9 +1623,9 @@ def generate_recommendation(
         except LLMProviderError as retry_exc:
             logger.warning(
                 "recommendation %s: retry on %s also failed (%s)",
-                rec_type,
-                getattr(llm, "model", "<unknown>"),
-                type(retry_exc).__name__,
+                _safe_log_value(rec_type),
+                _safe_log_value(getattr(llm, "model", "<unknown>")),
+                _safe_log_value(type(retry_exc).__name__),
             )
             raise provider_failure_http_exception(
                 noun="recommendation",
@@ -1625,9 +1634,9 @@ def generate_recommendation(
     except LLMProviderError as exc:
         logger.warning(
             "recommendation %s: primary LLM %s failed (%s)",
-            rec_type,
-            getattr(llm, "model", "<unknown>"),
-            type(exc).__name__,
+            _safe_log_value(rec_type),
+            _safe_log_value(getattr(llm, "model", "<unknown>")),
+            _safe_log_value(type(exc).__name__),
         )
         raise provider_failure_http_exception(
             noun="recommendation",

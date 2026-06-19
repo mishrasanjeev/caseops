@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
@@ -20,13 +19,7 @@ from caseops_api.schemas.companies import (
     CompanyUsersResponse,
     CompanyUserUpdateRequest,
 )
-
-
-@dataclass
-class SessionContext:
-    company: Company
-    user: User
-    membership: CompanyMembership
+from caseops_api.services.session_context import SessionContext
 
 
 def _raise_conflict(message: str) -> None:

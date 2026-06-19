@@ -1,7 +1,6 @@
 "use client";
 
-import { ClipboardList, Gavel, MessageSquareText, ScrollText } from "lucide-react";
-import Link from "next/link";
+import { ClipboardList, MessageSquareText } from "lucide-react";
 import { useParams } from "next/navigation";
 
 import { CounselRecommendationsCard } from "@/components/app/CounselRecommendationsCard";

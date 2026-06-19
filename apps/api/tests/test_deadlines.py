@@ -21,7 +21,7 @@ from caseops_api.services.deadlines import (
     list_deadlines,
     transition_deadline,
 )
-from caseops_api.services.identity import SessionContext
+from caseops_api.services.session_context import SessionContext
 from tests.test_auth_company import bootstrap_company
 
 

@@ -23,7 +23,7 @@ from caseops_api.schemas.saas_billing import (
     TrialStartRequest,
 )
 from caseops_api.services.audit import record_from_context
-from caseops_api.services.identity import SessionContext, register_company_owner
+from caseops_api.services.identity import register_company_owner
 from caseops_api.services.saas_billing import (
     assert_trial_start_allowed,
     cancel_subscription,
@@ -47,6 +47,7 @@ from caseops_api.services.saas_billing import (
     usage_report,
 )
 from caseops_api.services.security import require_recent_step_up
+from caseops_api.services.session_context import SessionContext
 
 router = APIRouter()
 CurrentContext = Annotated[SessionContext, Depends(get_current_context)]

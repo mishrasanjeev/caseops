@@ -93,7 +93,6 @@ export default function OutsideCounselPage() {
   );
 
   const summary = data?.summary;
-  const totalSpend = summary?.total_spend_minor ?? 0;
   const approved = summary?.approved_spend_minor ?? 0;
   const paid = summary?.total_paid_minor ?? 0;
   const pending = summary?.total_pending_minor ?? 0;

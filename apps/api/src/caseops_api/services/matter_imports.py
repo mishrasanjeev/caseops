@@ -26,8 +26,8 @@ from caseops_api.schemas.matter_imports import (
 )
 from caseops_api.schemas.matters import MatterCreateRequest
 from caseops_api.services.audit import record_from_context
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import visible_matters_filter
+from caseops_api.services.session_context import SessionContext
 
 MATTER_IMPORT_MAPPING_MAX_BYTES = 2 * 1024 * 1024
 MATTER_IMPORT_DOCUMENT_MANIFEST_MAX_BYTES = 512 * 1024
@@ -760,9 +760,9 @@ def dry_run_bulk_matter_import(
         summary=summary,
         rows=row_plans,
         limitations=[
-            "Dry-run only: no matters, attachments, storage objects, OCR, corpus jobs, "
+            "Dry-run only: no matters, attachments, storage objects, OCR, corpus jobs, " +
             "or embeddings are created.",
-            "Commit execution, persistent import jobs, and Google Drive import are "
+            "Commit execution, persistent import jobs, and Google Drive import are " +
             "separate follow-up milestones.",
         ],
     )

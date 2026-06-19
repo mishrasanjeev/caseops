@@ -30,8 +30,8 @@ from caseops_api.schemas.affidavit_intelligence import (
     AffidavitStatementRecord,
 )
 from caseops_api.services.audit import record_from_context
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import assert_access
+from caseops_api.services.session_context import SessionContext
 
 PARSER_VERSION = "caseops-affidavit-deterministic-v1"
 MIN_SOURCE_TEXT_CHARS = 80

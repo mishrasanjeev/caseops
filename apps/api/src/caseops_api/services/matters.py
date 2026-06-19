@@ -93,7 +93,6 @@ from caseops_api.services.document_storage import (
     resolve_storage_path,
     sanitize_filename,
 )
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import (
     assert_access,
     can_access,
@@ -108,6 +107,7 @@ from caseops_api.services.matter_billing import (
 )
 from caseops_api.services.matter_tags import slugify_tag
 from caseops_api.services.next_hearing import apply_next_hearing_update, clear_next_hearing
+from caseops_api.services.session_context import SessionContext
 from caseops_api.services.storage_governance import (
     StorageQuotaExceeded,
     assert_storage_quota_allows_upload,
@@ -2854,6 +2854,7 @@ def create_matter_attachment(
             try:
                 delete_stored_document(stored.storage_key)
             except Exception:
+                # Best-effort cleanup; preserve the original scan failure.
                 pass
             raise
         attachment.storage_key = stored.storage_key

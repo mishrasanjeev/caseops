@@ -54,9 +54,12 @@ def _sign(body: bytes, secret: bytes = WEBHOOK_SECRET) -> str:
 def _setup_invoice_with_attempt(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> tuple[str, str, str]:
+    def gateway_factory() -> FakeGateway:
+        return FakeGateway()
+
     monkeypatch.setattr(
         "caseops_api.services.payments._get_gateway_client",
-        lambda: FakeGateway(),
+        gateway_factory,
     )
 
     bootstrap_payload = bootstrap_company(client)

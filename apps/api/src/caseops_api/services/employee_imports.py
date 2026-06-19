@@ -38,7 +38,7 @@ from caseops_api.services.employees import (
     _create_employee_without_commit,
     _employee_record,
 )
-from caseops_api.services.identity import SessionContext
+from caseops_api.services.session_context import SessionContext
 
 EMPLOYEE_IMPORT_MAX_BYTES = 2 * 1024 * 1024
 EMPLOYEE_IMPORT_MAX_ROWS = 1000
@@ -250,6 +250,7 @@ def _detect_upload_kind(filename: str, content_type: str | None) -> Literal["csv
             _raise_bad_request("Unsupported employee import MIME type.")
         return "xlsx"
     _raise_bad_request("Unsupported employee import file type. Upload CSV or XLSX.")
+    return "csv"
 
 
 def _normalise_raw_row(raw: dict[str, str]) -> dict[str, str]:

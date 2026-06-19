@@ -16,13 +16,13 @@ from caseops_api.schemas.matter_tags import (
     MatterTagRecord,
     MatterTagUpdateRequest,
 )
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_tags import (
     create_tag,
     delete_tag,
     list_tags,
     update_tag,
 )
+from caseops_api.services.session_context import SessionContext
 
 router = APIRouter()
 CurrentContext = Annotated[SessionContext, Depends(get_current_context)]

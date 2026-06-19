@@ -15,8 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      issues: write
-      pull-requests: write
+      pull-requests: read
     outputs:
       enabled: ${{ steps.guard.outputs.enabled }}
       final_message: ${{ steps.run_codex.outputs.final-message }}
@@ -49,7 +48,7 @@ jobs:
       - name: Run Codex review
         if: steps.guard.outputs.enabled == 'true'
         id: run_codex
-        uses: openai/codex-action@v1
+        uses: openai/codex-action@e0fdf01220eb9a88167c4898839d273e3f2609d1
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           prompt-file: .github/codex/prompts/review.md

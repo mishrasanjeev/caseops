@@ -32,7 +32,7 @@ from sqlalchemy.orm import Session
 
 from caseops_api.db.models import DraftVersion
 from caseops_api.services.drafting import _load_draft, _load_matter
-from caseops_api.services.identity import SessionContext
+from caseops_api.services.session_context import SessionContext
 
 DiffLineKind = Literal["equal", "insert", "delete", "replace"]
 

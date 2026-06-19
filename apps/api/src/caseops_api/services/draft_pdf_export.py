@@ -30,7 +30,7 @@ from caseops_api.services.court_format_profiles import (
     validate_required_fields,
 )
 from caseops_api.services.drafting import _load_draft, _load_matter
-from caseops_api.services.identity import SessionContext
+from caseops_api.services.session_context import SessionContext
 
 
 def render_version_pdf(

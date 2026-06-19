@@ -44,7 +44,6 @@ from sqlalchemy.orm import Session
 from caseops_api.db.models import ModelRun
 from caseops_api.schemas.drafting_templates import DraftTemplateType
 from caseops_api.services.drafting_prompts import get_prompt_parts
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.llm import (
     LLMCompletion,
     LLMMessage,
@@ -52,6 +51,7 @@ from caseops_api.services.llm import (
     LLMProviderError,
     build_provider,
 )
+from caseops_api.services.session_context import SessionContext
 
 logger = logging.getLogger(__name__)
 

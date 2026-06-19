@@ -26,8 +26,8 @@ from caseops_api.schemas.matter_tags import (
     MatterTagUpdateRequest,
 )
 from caseops_api.services.audit import record_from_context
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import assert_access, visible_matters_filter
+from caseops_api.services.session_context import SessionContext
 
 
 def slugify_tag(value: str) -> str:

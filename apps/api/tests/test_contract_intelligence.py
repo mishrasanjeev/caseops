@@ -166,8 +166,8 @@ def test_extract_clauses_success_path_persists_rows(
     )
     from caseops_api.db.session import get_session_factory
     from caseops_api.services.contract_intelligence import extract_clauses
-    from caseops_api.services.identity import SessionContext
     from caseops_api.services.llm import LLMCompletion, LLMMessage
+    from caseops_api.services.session_context import SessionContext
 
     session_data = _bootstrap(client)
     token = session_data["access_token"]
@@ -315,8 +315,8 @@ def test_extract_obligations_success_path_persists_rows(
     )
     from caseops_api.db.session import get_session_factory
     from caseops_api.services.contract_intelligence import extract_obligations
-    from caseops_api.services.identity import SessionContext
     from caseops_api.services.llm import LLMCompletion, LLMMessage
+    from caseops_api.services.session_context import SessionContext
 
     session_data = _bootstrap(client)
     token = session_data["access_token"]

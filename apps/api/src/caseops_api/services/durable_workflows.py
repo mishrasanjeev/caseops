@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from caseops_api.core.settings import Settings, get_settings
 from caseops_api.db.models import AuditResult
 from caseops_api.services.audit import record_from_context
-from caseops_api.services.identity import SessionContext
+from caseops_api.services.session_context import SessionContext
 from caseops_api.workflows.notification_intent_contracts import (
     ACTIVITY_TYPE,
     DEFAULT_ACTIVITY_SCHEDULE_TO_CLOSE_TIMEOUT,

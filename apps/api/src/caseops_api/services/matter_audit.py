@@ -10,8 +10,8 @@ from sqlalchemy.orm import Session
 
 from caseops_api.db.models import AuditEvent, Matter
 from caseops_api.schemas.audit import MatterAuditEventRecord, MatterAuditListResponse
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import assert_access
+from caseops_api.services.session_context import SessionContext
 
 
 def _load_visible_matter(

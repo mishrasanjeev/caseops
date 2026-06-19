@@ -22,7 +22,6 @@ from caseops_api.schemas.outside_counsel import (
     OutsideCounselUpdateRequest,
     OutsideCounselWorkspaceResponse,
 )
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.outside_counsel import (
     create_outside_counsel_assignment,
     create_outside_counsel_profile,
@@ -32,6 +31,7 @@ from caseops_api.services.outside_counsel import (
     update_outside_counsel_profile,
     update_outside_counsel_spend_record,
 )
+from caseops_api.services.session_context import SessionContext
 
 router = APIRouter()
 CurrentContext = Annotated[SessionContext, Depends(get_current_context)]

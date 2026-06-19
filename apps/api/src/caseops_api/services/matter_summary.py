@@ -50,7 +50,6 @@ from caseops_api.db.models import (
     MatterHearing,
     ModelRun,
 )
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.llm import (
     LLMCallContext,
     LLMMessage,
@@ -60,6 +59,7 @@ from caseops_api.services.llm import (
     generate_structured,
 )
 from caseops_api.services.matters import _get_matter_model
+from caseops_api.services.session_context import SessionContext
 
 logger = logging.getLogger(__name__)
 

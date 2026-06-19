@@ -56,7 +56,6 @@ from caseops_api.schemas.calendar import (
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.durable_workflows import redact_identifier
 from caseops_api.services.google_workspace import google_workspace_oauth_config
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import (
     assert_access,
     visible_matters_filter,
@@ -65,6 +64,7 @@ from caseops_api.services.notification_delivery import (
     redact_provider_error,
     retry_delay_for_attempt,
 )
+from caseops_api.services.session_context import SessionContext
 
 OUTLOOK_SCOPES = ["offline_access", "User.Read", "Calendars.ReadWrite"]
 GOOGLE_CALENDAR_SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
@@ -134,14 +134,18 @@ class CalendarSourcePayload:
 
 class OutlookProvider(Protocol):
     @property
-    def configured(self) -> bool: ...
+    def configured(self) -> bool:
+        raise NotImplementedError
 
     @property
-    def unavailable_reason(self) -> str | None: ...
+    def unavailable_reason(self) -> str | None:
+        raise NotImplementedError
 
-    def authorization_url(self, *, state: str) -> str: ...
+    def authorization_url(self, *, state: str) -> str:
+        raise NotImplementedError
 
-    def exchange_code(self, *, code: str) -> dict[str, Any]: ...
+    def exchange_code(self, *, code: str) -> dict[str, Any]:
+        raise NotImplementedError
 
     def upsert_hearing_event(
         self,
@@ -150,7 +154,8 @@ class OutlookProvider(Protocol):
         hearing: MatterHearing,
         matter: Matter,
         existing_provider_event_id: str | None,
-    ) -> str: ...
+    ) -> str:
+        raise NotImplementedError
 
     def upsert_calendar_item(
         self,
@@ -158,16 +163,19 @@ class OutlookProvider(Protocol):
         token_payload: dict[str, Any],
         item: CalendarSourcePayload,
         existing_provider_event_id: str | None,
-    ) -> str: ...
+    ) -> str:
+        raise NotImplementedError
 
-    def validate_connection(self, *, token_payload: dict[str, Any]) -> dict[str, Any]: ...
+    def validate_connection(self, *, token_payload: dict[str, Any]) -> dict[str, Any]:
+        raise NotImplementedError
 
     def delete_event(
         self,
         *,
         token_payload: dict[str, Any],
         provider_event_id: str,
-    ) -> None: ...
+    ) -> None:
+        raise NotImplementedError
 
 
 class MicrosoftGraphOutlookProvider:

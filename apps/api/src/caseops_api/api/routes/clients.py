@@ -38,7 +38,7 @@ from caseops_api.services.clients import (
     update_matter_client_verification,
     verify_client_kyc,
 )
-from caseops_api.services.identity import SessionContext
+from caseops_api.services.session_context import SessionContext
 
 router = APIRouter()
 

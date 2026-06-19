@@ -49,12 +49,14 @@ from sqlalchemy.orm import Session, selectinload
 
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
+    AuthorityDocument,
     Matter,
     MatterAttachment,
     MatterCauseListEntry,
     MatterCourtOrder,
     MatterHearing,
     MatterStatuteReference,
+    ModelRun,
     Recommendation,
     RecommendationOption,
     Statute,
@@ -76,13 +78,13 @@ from caseops_api.schemas.litigation_strategy import (
     assert_no_probability_language,
 )
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.authorities import search_authority_catalog
 from caseops_api.services.citations import (
     Claim,
     SourceDoc,
     VerificationReport,
     verify_citations,
 )
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.llm import (
     PURPOSE_RECOMMENDATIONS,
     LLMCallContext,
@@ -95,21 +97,62 @@ from caseops_api.services.llm import (
     generate_structured,
 )
 from caseops_api.services.llm_http import provider_failure_http_exception
-from caseops_api.services.recommendations import (
-    CONFIDENCE_LEVELS,
-    RetrievedAuthority,
-    _build_retrieval_query,
-    _cap_confidence,
-    _gather_authorities,
-    _load_matter,
-    _write_model_run,
-)
+from caseops_api.services.session_context import SessionContext
 from caseops_api.services.template_recommender import (
     TemplateRecommendation,
     recommend_templates,
 )
 
 logger = logging.getLogger(__name__)
+
+CONFIDENCE_LEVELS = ("low", "medium", "high")
+
+
+@dataclass
+class RetrievedAuthority:
+    identifier: str
+    text: str
+    aliases: tuple[str, ...] = ()
+
+
+_OUTCOME_BIAS: dict[str, dict[str, tuple[str, ...]]] = {
+    "criminal": {
+        "preferred": ("allowed", "granted", "quashed", "acquitted"),
+        "against": ("dismissed", "rejected", "denied", "convicted"),
+    },
+    "bail": {
+        "preferred": ("granted", "allowed", "bail allowed"),
+        "against": ("denied", "dismissed", "rejected"),
+    },
+    "civil": {
+        "preferred": ("allowed", "decreed", "partly allowed"),
+        "against": ("dismissed",),
+    },
+    "commercial": {
+        "preferred": ("allowed", "decreed", "partly allowed"),
+        "against": ("dismissed",),
+    },
+    "employment": {
+        "preferred": ("allowed", "granted", "reinstated"),
+        "against": ("dismissed", "rejected"),
+    },
+    "family": {
+        "preferred": ("allowed", "granted", "decreed"),
+        "against": ("dismissed", "rejected"),
+    },
+    "intellectual_property": {
+        "preferred": ("allowed", "granted", "injunction granted"),
+        "against": ("dismissed", "rejected"),
+    },
+    "real_estate": {
+        "preferred": ("allowed", "decreed", "specific performance"),
+        "against": ("dismissed",),
+    },
+    "constitutional": {
+        "preferred": ("allowed", "struck down", "directions issued"),
+        "against": ("dismissed",),
+    },
+}
 
 
 # ---------------------------------------------------------------
@@ -674,6 +717,161 @@ def _available_templates_block() -> str:
 def _prompt_hash(messages: list[LLMMessage]) -> str:
     joined = "\n".join(f"{m.role}::{m.content}" for m in messages)
     return hashlib.sha256(joined.encode("utf-8")).hexdigest()
+
+
+def _cap_confidence(current: str, verified_count: int) -> str:
+    current = current if current in CONFIDENCE_LEVELS else "low"
+    if verified_count == 0:
+        return "low"
+    if verified_count < 2 and current == "high":
+        return "medium"
+    return current
+
+
+def _write_model_run(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str | None,
+    purpose: str,
+    completion: LLMCompletion,
+    prompt_hash: str,
+    status_label: str = "ok",
+    error: str | None = None,
+) -> ModelRun:
+    run = ModelRun(
+        company_id=context.company.id,
+        matter_id=matter_id,
+        actor_membership_id=context.membership.id,
+        purpose=purpose,
+        provider=completion.provider,
+        model=completion.model,
+        prompt_hash=prompt_hash,
+        prompt_tokens=completion.prompt_tokens,
+        completion_tokens=completion.completion_tokens,
+        latency_ms=completion.latency_ms,
+        status=status_label,
+        error=error,
+    )
+    session.add(run)
+    session.flush()
+    return run
+
+
+def _load_matter(session: Session, *, context: SessionContext, matter_id: str) -> Matter:
+    from caseops_api.services.matter_access import assert_access
+
+    matter = session.scalar(
+        select(Matter).where(
+            Matter.id == matter_id,
+            Matter.company_id == context.company.id,
+        )
+    )
+    if not matter:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Matter not found.",
+        )
+    assert_access(session, context=context, matter=matter)
+    return matter
+
+
+def _rerank_by_outcome_bias(session: Session, results, *, matter: Matter) -> list:
+    if not results:
+        return results
+    practice = (matter.practice_area or "").lower()
+    bias = _OUTCOME_BIAS.get(practice)
+    if not bias:
+        return list(results)
+
+    doc_ids = [r.authority_document_id for r in results]
+    rows = session.execute(
+        select(AuthorityDocument.id, AuthorityDocument.outcome_label).where(
+            AuthorityDocument.id.in_(doc_ids)
+        )
+    ).all()
+    outcome_by_id = {row.id: (row.outcome_label or "").lower() for row in rows}
+    preferred = bias["preferred"]
+    against = bias["against"]
+
+    def score(result) -> int:
+        label = outcome_by_id.get(result.authority_document_id, "")
+        if any(token in label for token in preferred):
+            return 1
+        if any(token in label for token in against):
+            return -1
+        return 0
+
+    return sorted(results, key=score, reverse=True)
+
+
+def _gather_authorities(
+    session: Session,
+    *,
+    query: str,
+    forum_level: str | None,
+    matter: Matter | None = None,
+    limit: int = 6,
+) -> list[RetrievedAuthority]:
+    filter_forum = forum_level if forum_level == "supreme_court" else None
+    fetch_limit = max(limit * 3, limit)
+    try:
+        results = search_authority_catalog(
+            session,
+            query=query,
+            limit=fetch_limit,
+            forum_level=filter_forum,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Authority retrieval failed - refusing to proceed.")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "Authority retrieval is temporarily unavailable. Strategy "
+                "generation is refused until retrieval recovers."
+            ),
+        ) from exc
+
+    if matter is not None:
+        results = _rerank_by_outcome_bias(session, results, matter=matter)
+
+    picked: list[RetrievedAuthority] = []
+    for result in results[:limit]:
+        identifier = result.case_reference or result.title or result.authority_document_id
+        text = "\n".join(
+            part for part in [result.title, result.summary, result.snippet] if part
+        )
+        aliases: list[str] = []
+        if result.title and result.title != identifier:
+            aliases.append(result.title)
+        if result.source_reference and result.source_reference != identifier:
+            aliases.append(result.source_reference)
+        picked.append(
+            RetrievedAuthority(
+                identifier=identifier,
+                text=text,
+                aliases=tuple(dict.fromkeys(aliases)),
+            )
+        )
+    return picked
+
+
+def _build_retrieval_query(matter: Matter, rec_type: str) -> str:
+    parts = [matter.title]
+    if matter.practice_area:
+        parts.append(matter.practice_area)
+    if matter.description:
+        parts.append(matter.description[:400])
+    if rec_type == "litigation_strategy":
+        parts.append(
+            "litigation strategy escalation forum sequence "
+            "appeal special leave petition Article 136 review "
+            "Article 137 curative limitation condonation interim "
+            "stay status quo"
+        )
+    return " ".join(p for p in parts if p)
 
 
 # ---------------------------------------------------------------

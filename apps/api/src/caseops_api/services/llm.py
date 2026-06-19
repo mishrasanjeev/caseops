@@ -20,92 +20,24 @@ import hashlib
 import json
 import logging
 import time
-from collections.abc import Callable
-from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
 from caseops_api.core.settings import get_settings
+from caseops_api.services.llm_types import (
+    LLMCallContext,
+    LLMCompletion,
+    LLMDailyCapReachedError,
+    LLMMessage,
+    LLMProvider,
+    LLMProviderError,
+    LLMQuotaExhaustedError,
+    LLMResponseFormatError,
+    ModelRunWriter,
+)
 
 logger = logging.getLogger(__name__)
-
-
-class LLMProviderError(RuntimeError):
-    """Raised when a provider call cannot be completed."""
-
-
-class LLMResponseFormatError(LLMProviderError):
-    """Raised when the provider returned text but it did not validate."""
-
-
-class LLMQuotaExhaustedError(LLMProviderError):
-    """Raised when the upstream provider rejects the call because the
-    account has run out of credits / paid quota (Anthropic 402
-    "credit balance is too low", OpenAI 429 "insufficient_quota").
-
-    The drafting / recommendations / hearing-pack / matter-summary
-    services treat this as a hard signal to cut over to a different
-    provider entirely — retrying on the same provider's cheaper model
-    (Haiku) would hit the same wall."""
-
-
-class LLMDailyCapReachedError(LLMProviderError):
-    """Raised by ``ensure_daily_cap_not_exceeded`` when the
-    operator-configured daily spend ceiling
-    (``CASEOPS_LAYER2_DAILY_CAP_USD``) has been reached for today's
-    ``metadata_extract`` calls.
-
-    Distinct from ``LLMQuotaExhaustedError`` (upstream provider hard
-    stop) but treated identically by the Layer-2 backfill driver:
-    BOTH are stop signals that should drain in-flight workers and
-    exit cleanly without marking docs as ordinary failures. A typed
-    subclass beats string-matching the exception message — the
-    message text is operator-facing and may be reworded later."""
-
-
-@dataclass(frozen=True)
-class LLMMessage:
-    role: str  # "system" | "user" | "assistant"
-    content: str
-
-
-@dataclass
-class LLMCompletion:
-    text: str
-    provider: str
-    model: str
-    prompt_tokens: int
-    completion_tokens: int
-    latency_ms: int
-    raw: Any = None
-
-
-@dataclass
-class LLMCallContext:
-    """Metadata captured alongside every call for auditing."""
-
-    tenant_id: str | None = None
-    matter_id: str | None = None
-    actor_membership_id: str | None = None
-    purpose: str = "unspecified"
-    metadata: dict[str, Any] = field(default_factory=dict)
-
-
-ModelRunWriter = Callable[[LLMCompletion, LLMCallContext, list[LLMMessage]], None]
-
-
-class LLMProvider(Protocol):
-    name: str
-    model: str
-
-    def generate(
-        self,
-        messages: list[LLMMessage],
-        *,
-        temperature: float = 0.2,
-        max_tokens: int = 1024,
-    ) -> LLMCompletion: ...
 
 
 class MockProvider:

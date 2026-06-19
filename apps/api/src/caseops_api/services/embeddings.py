@@ -24,7 +24,6 @@ light — callers opt in via ``CASEOPS_EMBEDDING_PROVIDER``.
 from __future__ import annotations
 
 import hashlib
-import logging
 import math
 import time
 from collections.abc import Iterable
@@ -33,8 +32,6 @@ from typing import Protocol
 
 from caseops_api.core.settings import get_settings
 from caseops_api.services import voyage_usage as _voyage_usage
-
-logger = logging.getLogger(__name__)
 
 
 class EmbeddingProviderError(RuntimeError):
@@ -59,7 +56,8 @@ class EmbeddingProvider(Protocol):
         texts: list[str],
         *,
         input_type: str = "document",
-    ) -> EmbeddingResult: ...
+    ) -> EmbeddingResult:
+        raise NotImplementedError
 
 
 # ---------------------------------------------------------------------------

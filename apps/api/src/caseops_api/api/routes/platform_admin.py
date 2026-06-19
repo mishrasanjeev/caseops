@@ -57,12 +57,9 @@ from caseops_api.schemas.saas_billing import (
     PlatformSubscriptionMutation,
 )
 from caseops_api.services.connector_health import list_platform_connector_health
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.integrations import connector_registry
-from caseops_api.services.platform_admin import (
-    record_platform_audit,
-    require_platform_admin,
-)
+from caseops_api.services.platform_admin import require_platform_admin
+from caseops_api.services.platform_audit import record_platform_audit
 from caseops_api.services.production_safety import (
     create_chargeback_record,
     create_credit_note,
@@ -114,6 +111,7 @@ from caseops_api.services.saas_billing import (
     platform_usage_report,
 )
 from caseops_api.services.security import require_recent_step_up
+from caseops_api.services.session_context import SessionContext
 
 router = APIRouter()
 PlatformContext = Annotated[SessionContext, Depends(get_current_context)]

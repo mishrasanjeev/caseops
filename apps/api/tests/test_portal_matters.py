@@ -142,7 +142,7 @@ def test_portal_user_lists_only_granted_matters(client: TestClient) -> None:
     company_id = boot["company"]["id"]
     token = str(boot["access_token"])
     granted_id = _seed_matter(company_id, code="C2-GRANTED")
-    _ungranted_id = _seed_matter(company_id, code="C2-UNGRANTED")
+    _seed_matter(company_id, code="C2-UNGRANTED")
 
     _, debug = _invite_client_portal_user(client, token, granted_id)
     _verify_and_session(client, debug)

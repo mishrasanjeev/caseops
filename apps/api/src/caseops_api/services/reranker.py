@@ -63,7 +63,8 @@ class RerankerProvider(Protocol):
         candidates: list[RerankerCandidate],
         *,
         top_k: int,
-    ) -> list[RerankerCandidate]: ...
+    ) -> list[RerankerCandidate]:
+        raise NotImplementedError
 
 
 class MockReranker:

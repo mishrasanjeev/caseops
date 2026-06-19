@@ -29,9 +29,9 @@ from caseops_api.db.models import (
     User,
 )
 from caseops_api.db.session import get_session_factory
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.pine_labs import verify_pine_labs_plural_signature
 from caseops_api.services.platform_admin import require_platform_admin
+from caseops_api.services.session_context import SessionContext
 from tests.test_auth_company import auth_headers, bootstrap_company
 
 

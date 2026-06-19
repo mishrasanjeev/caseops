@@ -26,6 +26,7 @@ revision = "20260417_0003"
 down_revision = "20260417_0002"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
+__all__ = ("revision", "down_revision", "branch_labels", "depends_on", "upgrade", "downgrade")
 
 # Default embedding dimension. The production model we target (BAAI/bge-base-en-v1.5)
 # emits 768-dim vectors; Voyage's voyage-3-law emits 1024. We pick 1024 here

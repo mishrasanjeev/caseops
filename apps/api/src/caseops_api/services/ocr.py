@@ -59,7 +59,9 @@ class OcrResult:
 class _OcrBackend(Protocol):
     name: str
 
-    def ocr_pages(self, images: list[object], languages: str) -> list[OcrPageResult]: ...
+    def ocr_pages(self, images: list[object], languages: str) -> list[OcrPageResult]:
+
+        raise NotImplementedError
 
 
 def _render_pdf_pages(

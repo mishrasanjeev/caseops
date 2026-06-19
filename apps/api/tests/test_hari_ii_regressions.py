@@ -181,9 +181,8 @@ def test_pine_labs_not_configured_returns_user_facing_503(
 
     from caseops_api.services.pine_labs import PineLabsGatewayClient
 
-    monkeypatch.setattr(
-        "caseops_api.services.pine_labs.get_settings",
-        lambda: type("S", (), {
+    def settings_factory():
+        return type("S", (), {
             "pine_labs_api_base_url": None,
             "pine_labs_payment_link_path": None,
             "pine_labs_payment_status_path": None,
@@ -191,7 +190,11 @@ def test_pine_labs_not_configured_returns_user_facing_503(
             "pine_labs_api_key": None,
             "pine_labs_api_secret": None,
             "pine_labs_request_timeout_seconds": 30,
-        })(),
+        })()
+
+    monkeypatch.setattr(
+        "caseops_api.services.pine_labs.get_settings",
+        settings_factory,
     )
     client = PineLabsGatewayClient()
     with pytest.raises(HTTPException) as exc_info:

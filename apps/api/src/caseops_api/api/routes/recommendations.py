@@ -4,12 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
-from caseops_api.api.dependencies import (
-    CAPABILITY_ROLES,
-    DbSession,
-    get_current_context,
-    require_capability,
-)
+from caseops_api.api.dependencies import DbSession, get_current_context, require_capability
 from caseops_api.core.rate_limit import (
     ai_route_rate_limit,
     limiter,
@@ -30,7 +25,7 @@ from caseops_api.schemas.recommendations import (
     RecommendationRecord,
 )
 from caseops_api.services.capabilities import membership_has_capability
-from caseops_api.services.identity import SessionContext
+from caseops_api.services.capability_catalog import CAPABILITY_ROLES
 from caseops_api.services.recommendations import (
     generate_recommendation,
     list_matter_recommendations,
@@ -38,6 +33,7 @@ from caseops_api.services.recommendations import (
     parse_citations,
     record_recommendation_decision,
 )
+from caseops_api.services.session_context import SessionContext
 from caseops_api.services.strategy_entries import (
     create_strategy_entry,
     delete_strategy_entry,

@@ -53,9 +53,9 @@ from caseops_api.services.court_sync_sources import (
 )
 from caseops_api.services.document_processing import _chunk_text
 from caseops_api.services.embeddings import EmbeddingProviderError, build_provider
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.retrieval import RetrievalCandidate, rank_candidates
 from caseops_api.services.retrieval_normalisers import build_query_variants
+from caseops_api.services.session_context import SessionContext
 
 # P4 (Sprint P, 2026-04-25). Forum-aware precedent boost. Indian
 # court hierarchy (highest precedential weight first):

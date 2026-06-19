@@ -41,8 +41,8 @@ from caseops_api.schemas.outside_counsel import (
     OutsideCounselSpendRecord as OutsideCounselSpendRecordResponse,
 )
 from caseops_api.services.audit import record_from_context
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import assert_access, visible_matters_filter
+from caseops_api.services.session_context import SessionContext
 
 
 def _now() -> datetime:

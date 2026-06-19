@@ -122,6 +122,7 @@ def _validate_docx_container(stream: BinaryIO, *, max_uncompressed_bytes: int) -
         try:
             stream.seek(0)
         except (AttributeError, OSError):
+            # Non-seekable streams cannot be rewound; caller will handle position.
             pass
 
     if len(infos) > 5000:

@@ -29,9 +29,9 @@ from caseops_api.schemas.proceeding_intelligence import (
     ProceedingSignalRecord,
 )
 from caseops_api.services.audit import record_audit, record_from_context
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import assert_access
 from caseops_api.services.next_hearing import apply_next_hearing_update
+from caseops_api.services.session_context import SessionContext
 
 PARSER_VERSION = "caseops-proceeding-deterministic-v1"
 MIN_SOURCE_TEXT_CHARS = 24

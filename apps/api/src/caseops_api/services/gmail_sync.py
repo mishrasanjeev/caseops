@@ -72,9 +72,9 @@ from caseops_api.services.calendar_sync import (
 )
 from caseops_api.services.durable_workflows import redact_identifier
 from caseops_api.services.google_workspace import google_workspace_oauth_config
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import assert_access, visible_matters_filter
 from caseops_api.services.notification_delivery import redact_provider_error
+from caseops_api.services.session_context import SessionContext
 
 GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 _STATE_KIND = "gmail_mailbox_oauth"
@@ -127,24 +127,30 @@ class GmailMessageMetadata:
 
 class GmailProvider(Protocol):
     @property
-    def configured(self) -> bool: ...
+    def configured(self) -> bool:
+        raise NotImplementedError
 
     @property
-    def webhook_configured(self) -> bool: ...
+    def webhook_configured(self) -> bool:
+        raise NotImplementedError
 
     @property
-    def unavailable_reason(self) -> str | None: ...
+    def unavailable_reason(self) -> str | None:
+        raise NotImplementedError
 
-    def authorization_url(self, *, state: str) -> str: ...
+    def authorization_url(self, *, state: str) -> str:
+        raise NotImplementedError
 
-    def exchange_code(self, *, code: str) -> dict[str, Any]: ...
+    def exchange_code(self, *, code: str) -> dict[str, Any]:
+        raise NotImplementedError
 
     def list_recent_messages(
         self,
         *,
         token_payload: dict[str, Any],
         limit: int,
-    ) -> list[GmailMessageMetadata]: ...
+    ) -> list[GmailMessageMetadata]:
+        raise NotImplementedError
 
     def list_history_messages(
         self,
@@ -152,9 +158,11 @@ class GmailProvider(Protocol):
         token_payload: dict[str, Any],
         start_history_id: str,
         limit: int,
-    ) -> list[GmailMessageMetadata]: ...
+    ) -> list[GmailMessageMetadata]:
+        raise NotImplementedError
 
-    def start_watch(self, *, token_payload: dict[str, Any]) -> dict[str, Any]: ...
+    def start_watch(self, *, token_payload: dict[str, Any]) -> dict[str, Any]:
+        raise NotImplementedError
 
     def fetch_attachment(
         self,
@@ -162,7 +170,8 @@ class GmailProvider(Protocol):
         token_payload: dict[str, Any],
         message_id: str,
         attachment_id: str,
-    ) -> bytes: ...
+    ) -> bytes:
+        raise NotImplementedError
 
 
 class GoogleGmailProvider:

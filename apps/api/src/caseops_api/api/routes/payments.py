@@ -16,12 +16,12 @@ from caseops_api.schemas.billing import (
     PaymentLinkCreateRequest,
     PaymentWebhookAckResponse,
 )
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.payments import (
     create_invoice_payment_link,
     handle_pine_labs_webhook,
     sync_invoice_payment_link,
 )
+from caseops_api.services.session_context import SessionContext
 
 
 class PaymentConfigResponse(BaseModel):

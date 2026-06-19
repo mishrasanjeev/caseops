@@ -48,7 +48,6 @@ from caseops_api.schemas.legal_updates import (
     LegalUpdateWatchlistUpdateRequest,
     StatuteAmendmentHistoryResponse,
 )
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.legal_update_sources import (
     list_source_records,
     list_statute_amendment_history,
@@ -64,6 +63,7 @@ from caseops_api.services.legal_updates import (
     update_legal_update,
     update_legal_update_watchlist,
 )
+from caseops_api.services.session_context import SessionContext
 
 router = APIRouter()
 matter_scoped_router = APIRouter()

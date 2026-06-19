@@ -28,7 +28,7 @@ from caseops_api.db.models import (
     JudgeAppointment,
     Matter,
 )
-from caseops_api.services.identity import SessionContext
+from caseops_api.services.session_context import SessionContext
 
 router = APIRouter()
 CurrentContext = Annotated[SessionContext, Depends(get_current_context)]

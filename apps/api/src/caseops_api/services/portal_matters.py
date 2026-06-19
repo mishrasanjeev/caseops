@@ -104,7 +104,7 @@ def list_granted_matters(
 def get_granted_matter(
     session: Session, *, portal_user: PortalUser, matter_id: str
 ) -> Matter:
-    matter, _grant = _assert_grant(
+    matter, _ = _assert_grant(
         session, portal_user=portal_user, matter_id=matter_id, role="client",
     )
     return matter
@@ -117,7 +117,7 @@ def list_matter_clients_for_portal(
     picker for multi-client matters. Returns every Client linked to
     the matter that the portal user is granted on; same 404 shape on
     missing grant so listing never leaks existence."""
-    _matter, _grant = _assert_grant(
+    _assert_grant(
         session, portal_user=portal_user, matter_id=matter_id, role="client",
     )
     from caseops_api.db.models import MatterClientAssignment
@@ -153,7 +153,7 @@ def list_matter_communications(
     ``portal_visible=False`` excludes a row, so legacy comms
     without metadata stay readable.
     """
-    _matter, _grant = _assert_grant(
+    _assert_grant(
         session, portal_user=portal_user, matter_id=matter_id, role="client",
     )
     rows = list(
@@ -263,7 +263,7 @@ def list_matter_hearings_for_portal(
     matter. Includes upcoming + recent past (last 30 days). The
     portal user CANNOT add / edit / cancel hearings — that's a
     firm-side operation."""
-    _matter, _grant = _assert_grant(
+    _assert_grant(
         session, portal_user=portal_user, matter_id=matter_id, role="client",
     )
     return list(
@@ -305,7 +305,7 @@ def submit_matter_kyc(
     client_id (foreign matter, foreign tenant, unlinked) returns
     404 — same shape as missing-grant so a probe cannot enumerate.
     """
-    matter, _grant = _assert_grant(
+    matter, _ = _assert_grant(
         session, portal_user=portal_user, matter_id=matter_id, role="client",
     )
     from caseops_api.db.models import MatterClientAssignment
@@ -375,7 +375,9 @@ def submit_matter_kyc(
 
 
 __all__ = [
+    "PortalRoleLiteral",
     "PortalReplyOutOfScope",
+    "_HearingStatusLiteral",
     "get_granted_matter",
     "list_granted_matters",
     "list_matter_clients_for_portal",

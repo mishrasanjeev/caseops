@@ -25,7 +25,7 @@ from caseops_api.services.employee_imports import (
     EMPLOYEE_IMPORT_MAX_BYTES,
     EMPLOYEE_IMPORT_MAX_ROWS,
 )
-from caseops_api.services.identity import SessionContext
+from caseops_api.services.session_context import SessionContext
 from tests.test_auth_company import auth_headers
 from tests.test_legalworkspace_employee_admin import (
     _audit_actions,

@@ -106,6 +106,7 @@ _HALT_FLAG = threading.Event()
 _CAP_CHECK_EVERY_N = 50
 _processed_since_cap_check = 0
 _cap_check_lock = threading.Lock()
+__all__ = ["_processed_since_cap_check"]
 
 
 def _layer2_daily_cap_usd() -> float:

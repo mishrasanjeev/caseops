@@ -16,6 +16,7 @@ revision = "20260417_0001"
 down_revision = "20260416_0015"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
+__all__ = ("revision", "down_revision", "branch_labels", "depends_on", "upgrade", "downgrade")
 
 
 def upgrade() -> None:

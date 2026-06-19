@@ -8,8 +8,11 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from caseops_api.core.settings import get_settings
-from caseops_api.db import models  # noqa: F401
+from caseops_api.db import models
 from caseops_api.db.base import Base
+
+if models.__name__ != "caseops_api.db.models":
+    raise RuntimeError("caseops_api.db.models did not import correctly")
 
 # Cache key includes pool settings so that an env change between
 # tests / processes produces a fresh engine instead of returning the

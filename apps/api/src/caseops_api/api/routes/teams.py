@@ -19,7 +19,7 @@ from caseops_api.schemas.teams import (
     TeamScopingUpdateRequest,
     TeamUpdateRequest,
 )
-from caseops_api.services.identity import SessionContext
+from caseops_api.services.session_context import SessionContext
 from caseops_api.services.teams import (
     add_team_member,
     create_team,

@@ -54,7 +54,6 @@ from caseops_api.services.authority_annotations import (
 from caseops_api.services.authority_treatments import (
     summarize_treatments,
 )
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.judgment_alerts import (
     create_judgment_alert_rule,
     list_judgment_alert_rules,
@@ -64,6 +63,7 @@ from caseops_api.services.judgment_alerts import (
     update_judgment_alert,
     update_judgment_alert_rule,
 )
+from caseops_api.services.session_context import SessionContext
 
 router = APIRouter()
 CurrentContext = Annotated[SessionContext, Depends(get_current_context)]

@@ -35,7 +35,7 @@ from caseops_api.services.drafting_suggestions import (
     TemplateSuggestions,
     get_template_suggestions,
 )
-from caseops_api.services.identity import SessionContext
+from caseops_api.services.session_context import SessionContext
 from caseops_api.services.template_recommender import recommend_templates
 
 router = APIRouter()

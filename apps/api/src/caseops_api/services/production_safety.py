@@ -69,10 +69,10 @@ from caseops_api.schemas.production_safety import (
     TDSReconciliationCreateRequest,
     TenantEnterpriseReadinessResponse,
 )
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.pine_labs import redact_provider_payload
-from caseops_api.services.platform_admin import record_platform_audit
+from caseops_api.services.platform_audit import record_platform_audit
 from caseops_api.services.provider_costs import estimate_payment_gateway_cost_minor
+from caseops_api.services.session_context import SessionContext
 
 PINE_LABS_UAT_SCENARIOS: tuple[tuple[str, str], ...] = (
     ("plan_payment_success", "Plan payment success"),

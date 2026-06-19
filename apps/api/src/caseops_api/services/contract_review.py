@@ -5,8 +5,8 @@ from datetime import UTC, datetime
 
 from caseops_api.schemas.ai import ContractReviewGenerateRequest, ContractReviewResponse
 from caseops_api.services.contracts import _get_contract_model, get_contract_workspace
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.retrieval import RetrievalCandidate, rank_candidates
+from caseops_api.services.session_context import SessionContext
 
 CLAUSE_PATTERNS: list[tuple[str, tuple[str, ...]]] = [
     ("termination", ("terminate", "termination", "notice period")),

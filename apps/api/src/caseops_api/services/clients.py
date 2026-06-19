@@ -35,8 +35,8 @@ from caseops_api.schemas.clients import (
     MatterClientVerificationRecord,
 )
 from caseops_api.services.audit import record_from_context
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import assert_access
+from caseops_api.services.session_context import SessionContext
 
 _ALLOWED_TYPES = {t.value for t in ClientType}
 _ALLOWED_KYC = {s.value for s in ClientKycStatus}

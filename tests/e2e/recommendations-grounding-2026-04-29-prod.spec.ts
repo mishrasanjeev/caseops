@@ -166,7 +166,6 @@ test.describe("Recommendations grounding fix (2026-04-29) — prod verification"
     await page.goto(`${PROD_BASE_URL}/app`, { waitUntil: "networkidle" });
     expect(page.url()).toContain("/app");
 
-    const cookie = await cookieHeader(page);
     const csrf = await csrfToken(page);
     expect(csrf, "caseops_csrf cookie should be present after sign-in").toBeTruthy();
 

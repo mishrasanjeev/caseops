@@ -322,13 +322,16 @@ def test_client_cross_tenant_404s(client: TestClient) -> None:
     token_b = str(token_b_resp.json()["access_token"])
 
     # Tenant B tries to GET / PATCH / DELETE Tenant A's client.
-    assert client.get(f"/api/clients/{a_id}", headers=auth_headers(token_b)).status_code == 404
-    assert client.patch(
+    get_response = client.get(f"/api/clients/{a_id}", headers=auth_headers(token_b))
+    patch_response = client.patch(
         f"/api/clients/{a_id}", headers=auth_headers(token_b), json={"name": "hacked"},
-    ).status_code == 404
-    assert client.delete(
+    )
+    delete_response = client.delete(
         f"/api/clients/{a_id}", headers=auth_headers(token_b),
-    ).status_code == 404
+    )
+    assert get_response.status_code == 404
+    assert patch_response.status_code == 404
+    assert delete_response.status_code == 404
 
 
 # ---------------------------------------------------------------

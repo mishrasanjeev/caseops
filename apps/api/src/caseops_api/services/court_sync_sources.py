@@ -67,7 +67,7 @@ COURTROOM_PATTERN = re.compile(
 )
 ITEM_NUMBER_PATTERN = re.compile(r"\b(?:item|itm)\s*[-:]?\s*(\d+[A-Za-z]?)\b", re.IGNORECASE)
 BENCH_PATTERN = re.compile(
-    r"(justice\s+[A-Za-z.\s]+?)(?=\s+(?:in\s+court|item|\d|$))",
+    r"(justice\s+[A-Za-z.\s]+?)(?=\s+(?:in\s+court|item|\d)|$)",
     re.IGNORECASE,
 )
 CASE_NUMBER_PATTERN = re.compile(
@@ -930,6 +930,7 @@ def _pull_bombay_high_court_live(
                     snippet = order_snippet
                     combined_score += order_score * 3
             except Exception:
+                # PDF enrichment is optional; keep the HTML candidate if it fails.
                 pass
             enriched_candidates.append(
                 (combined_score, candidate, resolved_href, snippet, order_text)

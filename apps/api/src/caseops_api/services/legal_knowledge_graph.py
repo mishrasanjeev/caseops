@@ -33,8 +33,8 @@ from caseops_api.schemas.legal_knowledge_graph import (
     LegalKnowledgeGraphSummary,
 )
 from caseops_api.services.audit import record_from_context
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import assert_access
+from caseops_api.services.session_context import SessionContext
 
 DISCLAIMER = (
     "Legal knowledge graph materialization is source-backed decision support, "

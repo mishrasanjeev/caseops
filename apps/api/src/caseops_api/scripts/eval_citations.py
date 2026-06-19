@@ -59,7 +59,7 @@ from caseops_api.services.evaluation import (
     open_run,
     record_case,
 )
-from caseops_api.services.identity import SessionContext
+from caseops_api.services.session_context import SessionContext
 
 logger = logging.getLogger("caseops.eval.citations")
 

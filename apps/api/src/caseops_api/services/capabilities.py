@@ -28,7 +28,7 @@ _OWNER_DELEGABLE_ADMIN_CAPABILITIES: frozenset[str] = frozenset(
 
 
 def _catalog() -> dict[str, frozenset[MembershipRole]]:
-    from caseops_api.api.dependencies import CAPABILITY_ROLES
+    from caseops_api.services.capability_catalog import CAPABILITY_ROLES
 
     return CAPABILITY_ROLES
 

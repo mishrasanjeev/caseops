@@ -33,7 +33,12 @@ import threading
 from dataclasses import asdict
 from pathlib import Path
 
-from caseops_api.services.llm import LLMCompletion, LLMMessage, LLMProvider, LLMProviderError
+from caseops_api.services.llm_types import (
+    LLMCompletion,
+    LLMMessage,
+    LLMProvider,
+    LLMProviderError,
+)
 
 logger = logging.getLogger(__name__)
 

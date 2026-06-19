@@ -20,8 +20,8 @@ from caseops_api.services.court_sync_sources import (
     list_supported_court_sync_sources,
     resolve_source_for_court,
 )
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.matters import _get_matter_model, _persist_court_sync_import
+from caseops_api.services.session_context import SessionContext
 
 
 def _job_record(job: MatterCourtSyncJob) -> MatterCourtSyncJobRecord:

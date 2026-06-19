@@ -48,7 +48,7 @@ from caseops_api.services.bench_strategy_context import (
     BenchStrategyContext,
     build_bench_strategy_context,
 )
-from caseops_api.services.identity import SessionContext
+from caseops_api.services.session_context import SessionContext
 from caseops_api.services.tenant_ai_policy import ResolvedAIPolicy
 
 # Hard rule: every string this module ever emits in `suggestions` /
@@ -678,5 +678,6 @@ __all__ = [
     "AppealStrengthReport",
     "AuthorityRef",
     "GroundAssessment",
+    "_FORBIDDEN_PHRASES",
     "analyze_appeal_strength",
 ]

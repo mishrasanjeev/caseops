@@ -20,7 +20,7 @@ from caseops_api.services.conflict_checks import (
     resolve_conflict_check,
     run_conflict_check,
 )
-from caseops_api.services.identity import SessionContext
+from caseops_api.services.session_context import SessionContext
 
 router = APIRouter()
 ConflictRunner = Annotated[

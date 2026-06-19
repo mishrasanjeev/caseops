@@ -24,12 +24,12 @@ from caseops_api.schemas.calendar import (
     NotificationRuleUpdateRequest,
 )
 from caseops_api.services.audit import record_from_context
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import assert_access, can_access
 from caseops_api.services.notification_delivery import (
     enqueue_notification_delivery_intent,
     process_notification_delivery_intent,
 )
+from caseops_api.services.session_context import SessionContext
 
 _CHANNELS = {"in_app", "email", "sms", "whatsapp"}
 

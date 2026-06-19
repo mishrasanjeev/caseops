@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Any
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
@@ -16,7 +15,7 @@ from caseops_api.db.models import (
 from caseops_api.db.models import (
     PlatformAdminAuditEvent as PlatformAuditRow,
 )
-from caseops_api.services.identity import SessionContext
+from caseops_api.services.session_context import SessionContext
 
 PLATFORM_SUPER_ADMIN_CAPABILITIES = [
     "platform:admin",
@@ -158,36 +157,6 @@ def require_platform_admin(
 
     enforce_platform_mfa(session, context=context, platform_admin=row)
     return row
-
-
-def record_platform_audit(
-    session: Session,
-    *,
-    context: SessionContext,
-    platform_admin: PlatformAdminMembership | None,
-    action: str,
-    target_type: str,
-    target_id: str | None = None,
-    company_id: str | None = None,
-    result: str = "success",
-    reason: str | None = None,
-    metadata: dict[str, Any] | None = None,
-) -> PlatformAuditRow:
-    event = PlatformAuditRow(
-        platform_admin_id=platform_admin.id if platform_admin else None,
-        actor_user_id=context.user.id if context.user else None,
-        actor_membership_id=context.membership.id,
-        company_id=company_id,
-        action=action,
-        target_type=target_type,
-        target_id=target_id,
-        result=result,
-        reason=reason,
-        metadata_json=metadata,
-    )
-    session.add(event)
-    session.flush()
-    return event
 
 
 def platform_admin_summary(row: PlatformAdminMembership) -> dict[str, object]:

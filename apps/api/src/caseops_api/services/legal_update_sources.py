@@ -35,7 +35,6 @@ from caseops_api.schemas.legal_updates import (
     StatuteChangeEventRecord,
 )
 from caseops_api.services.audit import record_from_context
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.legal_updates import run_legal_update_watchlist
 from caseops_api.services.llm import (
     LLMCallContext,
@@ -45,6 +44,7 @@ from caseops_api.services.llm import (
     build_provider,
     generate_structured,
 )
+from caseops_api.services.session_context import SessionContext
 
 logger = logging.getLogger(__name__)
 

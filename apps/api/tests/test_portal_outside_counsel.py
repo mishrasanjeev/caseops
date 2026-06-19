@@ -86,7 +86,7 @@ def test_oc_lists_only_assigned_matters(client: TestClient) -> None:
     company_id = boot["company"]["id"]
     token = str(boot["access_token"])
     granted = _seed_matter(company_id, code="C3-OC-1")
-    _ungranted = _seed_matter(company_id, code="C3-OC-2")
+    _seed_matter(company_id, code="C3-OC-2")
     _, debug = _invite_oc_portal_user(client, token, granted)
     _verify_and_session(client, debug)
 

@@ -41,8 +41,8 @@ from caseops_api.services.google_workspace import (
     google_workspace_connector_configured,
     google_workspace_connector_missing_config_names,
 )
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.notification_delivery import redact_provider_error
+from caseops_api.services.session_context import SessionContext
 
 _TENANT_ACCOUNT = "tenant"
 _PROVIDER_OPERATIONS_LINK = "/app/admin/provider-operations"

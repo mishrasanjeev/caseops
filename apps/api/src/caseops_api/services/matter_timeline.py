@@ -32,8 +32,8 @@ from caseops_api.schemas.matters import (
     MatterTimelineLinkRecord,
     MatterTimelineResponse,
 )
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import assert_access
+from caseops_api.services.session_context import SessionContext
 
 TimelineEventKind = Literal[
     "hearing",
@@ -45,7 +45,6 @@ TimelineEventKind = Literal[
 ]
 TimelineSort = Literal["asc", "desc"]
 
-ACTIVE_STAY_STATUSES = {"granted", "continued", "modified"}
 TIMELINE_MAX_PAGE_SIZE = 500
 TIMELINE_MAX_SOURCE_EVENTS = 500
 ALL_TIMELINE_TYPES: set[str] = {

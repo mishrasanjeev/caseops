@@ -14,7 +14,6 @@ from caseops_api.schemas.matter_billing import (
     MatterBillingRateCreateRequest,
     MatterBillingRateRecord,
 )
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_billing import (
     add_billing_rate,
     create_billing_profile,
@@ -22,6 +21,7 @@ from caseops_api.services.matter_billing import (
     preview_invoice_number,
     update_billing_profile,
 )
+from caseops_api.services.session_context import SessionContext
 
 router = APIRouter()
 BillingAdmin = Annotated[SessionContext, Depends(require_capability("workspace:admin"))]

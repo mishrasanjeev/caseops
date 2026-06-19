@@ -66,7 +66,7 @@ from caseops_api.services.email_calendar_candidates import (
     list_email_invitation_candidates,
     review_email_invitation_candidate,
 )
-from caseops_api.services.identity import SessionContext
+from caseops_api.services.session_context import SessionContext
 
 
 class ICalendarResponse(Response):

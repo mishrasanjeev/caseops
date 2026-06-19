@@ -15,7 +15,7 @@ from caseops_api.services.cause_lists import (
     preview_cause_list,
     render_cause_list_pdf,
 )
-from caseops_api.services.identity import SessionContext
+from caseops_api.services.session_context import SessionContext
 
 router = APIRouter()
 CauseListViewer = Annotated[SessionContext, Depends(require_capability("calendar:view"))]

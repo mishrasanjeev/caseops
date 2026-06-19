@@ -28,7 +28,7 @@ import {
 import { EmptyState } from "@/components/ui/EmptyState";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { apiErrorMessage, isApiErrorShape } from "@/lib/api/config";
+import { isApiErrorShape } from "@/lib/api/config";
 import { fetchPredictiveIntelligence } from "@/lib/api/endpoints";
 import type {
   BenchContextSummary,

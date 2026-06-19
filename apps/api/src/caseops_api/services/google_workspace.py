@@ -33,7 +33,7 @@ from caseops_api.schemas.google_workspace import (
     GoogleWorkspaceTenantConfigurationUpdateRequest,
 )
 from caseops_api.services.audit import record_from_context
-from caseops_api.services.identity import SessionContext
+from caseops_api.services.session_context import SessionContext
 
 GoogleWorkspaceConnector = Literal["calendar", "gmail", "drive"]
 

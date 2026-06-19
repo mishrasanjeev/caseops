@@ -27,8 +27,8 @@ from caseops_api.schemas.calendar import (
     EmailInvitationCandidateReviewRequest,
 )
 from caseops_api.services.audit import record_from_context
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import assert_access, visible_matters_filter
+from caseops_api.services.session_context import SessionContext
 
 _MAX_PREVIEW_CHARS = 280
 _MAX_SCAN_ROWS = 500

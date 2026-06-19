@@ -43,7 +43,6 @@ from caseops_api.schemas.compliance import (
     ComplianceItemRecord,
 )
 from caseops_api.services.audit import record_audit, record_from_context
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.llm import (
     LLMCallContext,
     LLMMessage,
@@ -61,6 +60,7 @@ from caseops_api.services.proceeding_intelligence import (
     extract_imported_order_proceeding_intelligence,
     extract_order_signals_from_text,
 )
+from caseops_api.services.session_context import SessionContext
 from caseops_api.services.tenant_ai_policy import (
     is_model_allowed,
     resolve_tenant_policy,

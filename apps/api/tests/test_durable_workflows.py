@@ -33,13 +33,13 @@ from caseops_api.services.durable_workflows import (
     redact_identifier,
     temporal_runtime_defaults,
 )
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.notification_delivery import (
     enqueue_notification_delivery_intent,
     process_notification_delivery_intent,
     record_notification_delivery_failure,
     redact_provider_error,
 )
+from caseops_api.services.session_context import SessionContext
 from caseops_api.workers import notification_workflows
 from caseops_api.workflows.notification_intent_contracts import (
     DEFAULT_WORKFLOW_EXECUTION_TIMEOUT,

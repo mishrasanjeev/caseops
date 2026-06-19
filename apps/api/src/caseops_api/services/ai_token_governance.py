@@ -23,7 +23,7 @@ from caseops_api.schemas.ai_token_governance import (
     AITokenUserUsage,
 )
 from caseops_api.services.audit import record_audit, record_from_context
-from caseops_api.services.identity import SessionContext
+from caseops_api.services.session_context import SessionContext
 
 DEFAULT_WARNING_THRESHOLD_PERCENT = 90
 

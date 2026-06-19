@@ -19,8 +19,8 @@ from caseops_api.db.models import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.durable_workflows import redact_identifier
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import can_access
+from caseops_api.services.session_context import SessionContext
 from caseops_api.workflows.notification_intent_contracts import (
     DEFAULT_RETRY_INITIAL_INTERVAL,
     DEFAULT_RETRY_MAXIMUM_ATTEMPTS,

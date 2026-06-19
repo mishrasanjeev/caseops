@@ -65,7 +65,7 @@ from caseops_api.services.contracts import (
     update_contract_metadata,
 )
 from caseops_api.services.document_jobs import run_document_processing_job
-from caseops_api.services.identity import SessionContext
+from caseops_api.services.session_context import SessionContext
 from caseops_api.services.tenant_contract_playbooks import (
     compare_contract_to_tenant_playbook,
     create_tenant_playbook,

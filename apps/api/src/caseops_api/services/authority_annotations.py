@@ -19,7 +19,7 @@ from caseops_api.db.models import (
     AuthorityDocument,
 )
 from caseops_api.services.audit import record_from_context
-from caseops_api.services.identity import SessionContext
+from caseops_api.services.session_context import SessionContext
 
 _KIND_VALUES: set[str] = {k.value for k in AuthorityAnnotationKind}
 

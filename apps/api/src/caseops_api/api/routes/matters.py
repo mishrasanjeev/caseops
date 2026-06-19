@@ -199,7 +199,6 @@ from caseops_api.services.hearing_packs import (
 from caseops_api.services.hearing_reminders import (
     list_reminders_for_matter,
 )
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import (
     add_access_grant,
     add_ethical_wall,
@@ -277,6 +276,7 @@ from caseops_api.services.next_hearing import (
     decide_next_hearing_suggestion,
     list_next_hearing_history,
 )
+from caseops_api.services.session_context import SessionContext
 from caseops_api.services.today_view import build_matter_next_action
 
 router = APIRouter()

@@ -10,9 +10,9 @@ from caseops_api.schemas.ai import (
     MatterDocumentSearchResponse,
     MatterDocumentSearchResult,
 )
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.matters import _get_matter_model, get_matter_workspace
 from caseops_api.services.retrieval import RetrievalCandidate, rank_candidates
+from caseops_api.services.session_context import SessionContext
 
 DATE_PATTERN = re.compile(
     r"\b(?:\d{4}-\d{2}-\d{2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|"
