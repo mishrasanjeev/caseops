@@ -35,15 +35,7 @@ jobs:
         if: steps.guard.outputs.enabled == 'true'
         uses: actions/checkout@v4
         with:
-          ref: refs/pull/${{ github.event.pull_request.number }}/merge
-
-      - name: Pre-fetch base and head refs
-        if: steps.guard.outputs.enabled == 'true'
-        shell: bash
-        run: |
-          git fetch --no-tags origin \
-            ${{ github.event.pull_request.base.ref }} \
-            +refs/pull/${{ github.event.pull_request.number }}/head
+          persist-credentials: false
 
       - name: Run Codex review
         if: steps.guard.outputs.enabled == 'true'

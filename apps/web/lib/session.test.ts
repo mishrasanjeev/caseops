@@ -161,7 +161,7 @@ describe("subscribeSession", () => {
 
     // The browser fires a "storage" event when another tab mutates
     // localStorage. Simulate that so we know cross-tab logout works.
-    const event = new StorageEvent("storage");
+    const event = new Event("storage") as StorageEvent;
     Object.defineProperty(event, "key", { value: TOKEN_KEY });
     window.dispatchEvent(event);
     expect(handler).toHaveBeenCalledTimes(1);
