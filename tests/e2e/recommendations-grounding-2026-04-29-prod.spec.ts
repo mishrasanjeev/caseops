@@ -170,6 +170,7 @@ test.describe("Recommendations grounding fix (2026-04-29) — prod verification"
     expect(csrf, "caseops_csrf cookie should be present after sign-in").toBeTruthy();
 
     const matterId = await createFreshMatter(page, csrf!);
+    const cookie = await cookieHeader(page);
 
     const resp = await page.context().request.post(
       `${PROD_API_BASE_URL}/api/matters/${matterId}/recommendations`,
