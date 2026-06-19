@@ -82,7 +82,7 @@ BOMBAY_BENCH_LOCATION_PATTERN = re.compile(
 BOMBAY_ROW_DATE_PATTERN = re.compile(r"(?P<date>\d{2}/\d{2}/\d{4})\s*\[(?P<kind>[JO])\]")
 BOMBAY_CORAM_PATTERN = re.compile(
     r"(?P<coram>(?:HON'?BLE\s+)?(?:THE\s+CHIEF\s+JUSTICE|JUSTICE)\s+.+?)"
-    r"(?=\s+\d{2}/\d{2}/\d{4}\s*\[[JO]\]|\s*$)",
+    r"(?=\s+\d{2}/\d{2}/\d{4}\s*\[[JO]\]|\s*\Z)",
     re.IGNORECASE,
 )
 TELANGANA_STATUS_DATE_PATTERN = re.compile(

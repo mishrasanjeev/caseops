@@ -55,6 +55,3 @@ def chunk_text(text: str, *, target_size: int = 900, max_size: int = 4000) -> li
     if buffer:
         chunks.append("\n\n".join(buffer))
     return chunks
-
-
-_chunk_text = chunk_text

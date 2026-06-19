@@ -1487,16 +1487,25 @@ def generate_recommendation(
     # LLM call? citation verification? DB persist?).
     _t0 = time.perf_counter()
     _t = _t0
+    timing_stages = {
+        "validate_type",
+        "load_matter",
+        "resolve_objective",
+        "gather_authorities",
+        "record_bench_rerank",
+        "build_matter_intelligence_context",
+        "build_prompt",
+        "llm_primary",
+        "llm_retry",
+        "filter_and_verify",
+    }
     def _stage(name: str) -> None:
         nonlocal _t
         now = time.perf_counter()
+        stage_name = name if name in timing_stages else "other"
         logger.warning(
-            "BUG015_TIMING %s rec_type=%s matter_id=%s stage=%s "
-            "stage_ms=%.0f total_ms=%.0f",
-            "[generate_recommendation]",
-            _safe_log_value(rec_type),
-            _safe_log_value(matter_id),
-            _safe_log_value(name),
+            "BUG015_TIMING generate_recommendation stage=%s stage_ms=%.0f total_ms=%.0f",
+            stage_name,
             (now - _t) * 1000, (now - _t0) * 1000,
         )
         _t = now
@@ -1608,24 +1617,17 @@ def generate_recommendation(
     # immediately (retry won't help upstream outages).
     try:
         parsed, completion = _invoke(llm)
-        _stage(f"llm_primary({getattr(llm, 'model', '?')})")
-    except LLMResponseFormatError as exc:
+        _stage("llm_primary")
+    except LLMResponseFormatError:
         logger.warning(
-            "recommendation %s: primary LLM %s returned malformed JSON; "
-            "retrying once. detail=%s",
-            _safe_log_value(rec_type),
-            _safe_log_value(getattr(llm, "model", "<unknown>")),
-            _safe_log_value(exc, limit=300),
+            "recommendation generation: primary LLM returned malformed JSON; retrying once"
         )
         try:
             parsed, completion = _invoke(llm)
-            _stage(f"llm_retry({getattr(llm, 'model', '?')})")
+            _stage("llm_retry")
         except LLMProviderError as retry_exc:
             logger.warning(
-                "recommendation %s: retry on %s also failed (%s)",
-                _safe_log_value(rec_type),
-                _safe_log_value(getattr(llm, "model", "<unknown>")),
-                _safe_log_value(type(retry_exc).__name__),
+                "recommendation generation: retry after malformed JSON failed"
             )
             raise provider_failure_http_exception(
                 noun="recommendation",
@@ -1633,10 +1635,7 @@ def generate_recommendation(
             ) from retry_exc
     except LLMProviderError as exc:
         logger.warning(
-            "recommendation %s: primary LLM %s failed (%s)",
-            _safe_log_value(rec_type),
-            _safe_log_value(getattr(llm, "model", "<unknown>")),
-            _safe_log_value(type(exc).__name__),
+            "recommendation generation: primary LLM failed"
         )
         raise provider_failure_http_exception(
             noun="recommendation",

@@ -1,7 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { clearSession, storeSession } from "./session";
+import { storeSession } from "./session";
 import { useSession } from "./use-session";
 
 const refreshAccessToken = vi.fn(() => Promise.resolve("new-token"));
