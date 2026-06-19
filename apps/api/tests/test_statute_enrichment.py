@@ -18,7 +18,6 @@ from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 
-from caseops_api.core.settings import get_settings
 from caseops_api.db.models import Statute, StatuteSection
 from caseops_api.db.session import get_session_factory
 from caseops_api.services import statute_enrichment as se
@@ -104,7 +103,6 @@ def test_scrape_ambiguous_falls_through_to_haiku(
     """When the act page contains multiple matches for the same
     section number (e.g. heading + sub-section reference), the scraper
     refuses to guess and the Haiku path takes over."""
-    factory = get_settings  # silence unused
     factory = get_session_factory()
     with factory() as session:
         st, sec = _seed_statute_and_section(session, sec_no="300")

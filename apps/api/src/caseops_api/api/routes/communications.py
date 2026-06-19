@@ -32,7 +32,7 @@ from caseops_api.services.communications import (
     list_matter_communications,
     send_matter_email,
 )
-from caseops_api.services.identity import SessionContext
+from caseops_api.services.session_context import SessionContext
 
 router = APIRouter()
 

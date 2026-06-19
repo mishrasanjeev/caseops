@@ -46,11 +46,11 @@ from caseops_api.services.authority_sources import (
     get_legal_source_registry_entry,
     list_legal_source_registry_entries,
 )
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import assert_access
 from caseops_api.services.notification_delivery import (
     enqueue_notification_delivery_intent,
 )
+from caseops_api.services.session_context import SessionContext
 
 _ALLOWED_UPDATE_TYPES = {
     "act",

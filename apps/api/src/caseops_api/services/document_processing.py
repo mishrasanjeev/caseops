@@ -22,6 +22,7 @@ from caseops_api.db.models import (
     utcnow,
 )
 from caseops_api.services.document_storage import resolve_storage_path
+from caseops_api.services.text_chunking import chunk_text as _chunk_text
 
 logger = logging.getLogger(__name__)
 
@@ -187,71 +188,6 @@ def _extract_scanned_pdf_text_via_tesseract(path: Path) -> str:
     finally:
         document.close()
     return "\n\n".join(page_texts)
-
-
-def _chunk_text(
-    text: str, *, target_size: int = 900, max_size: int = 4000
-) -> list[str]:
-    """Split text into chunks sized around ``target_size`` characters,
-    never exceeding ``max_size``.
-
-    A single long paragraph used to pass through untouched — producing
-    38K-token chunks that voyage-4-large silently truncated at its 32K
-    context. ``max_size`` is the hard ceiling; oversized paragraphs are
-    split at sentence boundaries, with a final hard slice if sentences
-    themselves are longer than the cap.
-    """
-    paragraphs = [part.strip() for part in re.split(r"\n\s*\n+", text) if part.strip()]
-    if not paragraphs:
-        paragraphs = [part.strip() for part in re.split(r"(?<=[.!?])\s+", text) if part.strip()]
-
-    # Split any single paragraph that exceeds max_size into sentence-level
-    # sub-paragraphs so the downstream packer can't build an oversized
-    # chunk from a single unit.
-    sized: list[str] = []
-    for paragraph in paragraphs:
-        if len(paragraph) <= max_size:
-            sized.append(paragraph)
-            continue
-        sentences = re.split(r"(?<=[.!?])\s+", paragraph)
-        pending: list[str] = []
-        pending_len = 0
-        for sentence in sentences:
-            if not sentence:
-                continue
-            if len(sentence) > max_size:
-                # Flush what we have, then hard-slice the too-long
-                # sentence into max_size-sized pieces.
-                if pending:
-                    sized.append(" ".join(pending))
-                    pending, pending_len = [], 0
-                for i in range(0, len(sentence), max_size):
-                    sized.append(sentence[i : i + max_size])
-                continue
-            if pending_len + len(sentence) + 1 > max_size and pending:
-                sized.append(" ".join(pending))
-                pending, pending_len = [sentence], len(sentence)
-            else:
-                pending.append(sentence)
-                pending_len += len(sentence) + 1
-        if pending:
-            sized.append(" ".join(pending))
-
-    chunks: list[str] = []
-    buffer: list[str] = []
-    current_size = 0
-    for paragraph in sized:
-        paragraph_size = len(paragraph)
-        if buffer and current_size + paragraph_size + 1 > target_size:
-            chunks.append("\n\n".join(buffer))
-            buffer = [paragraph]
-            current_size = paragraph_size
-            continue
-        buffer.append(paragraph)
-        current_size += paragraph_size + 1
-    if buffer:
-        chunks.append("\n\n".join(buffer))
-    return chunks
 
 
 def parse_attachment(storage_key: str, content_type: str | None) -> ParsedDocument:

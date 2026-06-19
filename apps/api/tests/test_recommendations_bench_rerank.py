@@ -21,7 +21,6 @@ from caseops_api.db.models import (
 )
 from caseops_api.db.session import get_session_factory
 from caseops_api.schemas.authorities import AuthoritySearchResult
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.llm import LLMCompletion, LLMMessage
 from caseops_api.services.recommendations import (
     _BENCH_RERANK_PURPOSE,
@@ -31,6 +30,7 @@ from caseops_api.services.recommendations import (
     _record_bench_citation_rerank,
     generate_recommendation,
 )
+from caseops_api.services.session_context import SessionContext
 from tests.test_auth_company import bootstrap_company
 
 

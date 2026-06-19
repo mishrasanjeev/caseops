@@ -65,7 +65,7 @@ from caseops_api.services.evaluation import (
     open_run,
     record_case,
 )
-from caseops_api.services.identity import SessionContext
+from caseops_api.services.session_context import SessionContext
 
 logger = logging.getLogger("caseops.eval")
 
@@ -588,8 +588,9 @@ def _format_report(run, cases: Iterable) -> str:  # noqa: ANN001
                 f"avg verified citations: {m.get('avg_verified_citations', 0):.1f} · "
                 f"total blockers: {m.get('total_blockers', 0)} · "
                 f"total warnings: {m.get('total_warnings', 0)}"
-            )
+        )
         except json.JSONDecodeError:
+            # Corrupt metrics JSON should not prevent rendering the rest of the report.
             pass
     lines.append("")
     lines.append("## Case results\n")
@@ -614,6 +615,7 @@ def _format_report(run, cases: Iterable) -> str:  # noqa: ANN001
                         f"  - `[{f['severity']}] {f['code']}` {f['message']}"
                     )
             except json.JSONDecodeError:
+                # Corrupt per-case findings are reported via the case error field.
                 pass
         lines.append("")
     return "\n".join(lines)

@@ -28,7 +28,7 @@ from caseops_api.schemas.matter_billing import (
     MatterBillingRateRecord,
 )
 from caseops_api.services.audit import record_from_context
-from caseops_api.services.identity import SessionContext
+from caseops_api.services.session_context import SessionContext
 
 PDF_TEMPLATE_VERSION = "caseops-matter-invoice-receipt-v2"
 

@@ -1,8 +1,6 @@
 """Teams / departments service (Sprint 8c BG-026)."""
 from __future__ import annotations
 
-import logging
-
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -23,9 +21,7 @@ from caseops_api.schemas.teams import (
     TeamUpdateRequest,
 )
 from caseops_api.services.audit import record_from_context
-from caseops_api.services.identity import SessionContext
-
-logger = logging.getLogger(__name__)
+from caseops_api.services.session_context import SessionContext
 
 
 def _load_team(

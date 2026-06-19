@@ -23,6 +23,7 @@ revision = "20260531_0001"
 down_revision = "20260526_0006"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
+__all__ = ("revision", "down_revision", "branch_labels", "depends_on", "upgrade", "downgrade")
 
 CATALOG_VERSION = "2026.05.v1"
 GST_BPS = 1800

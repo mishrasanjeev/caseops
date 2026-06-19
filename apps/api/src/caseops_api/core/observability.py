@@ -266,6 +266,7 @@ def configure_tracing(application: Any = None) -> None:
 __all__ = [
     "JsonLogFormatter",
     "TextLogFormatter",
+    "_otel_configured",
     "clear_context",
     "configure_logging",
     "configure_tracing",

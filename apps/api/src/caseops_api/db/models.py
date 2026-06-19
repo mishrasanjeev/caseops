@@ -42,7 +42,7 @@ class MembershipRole(StrEnum):
     # let firms map real-world responsibilities without either
     # over-provisioning (everyone is admin) or under-provisioning
     # (everyone is member with no read-only option). Capability mapping
-    # lives in api/dependencies.CAPABILITY_ROLES; the frontend mirror
+    # lives in services/capability_catalog.CAPABILITY_ROLES; the frontend mirror
     # is in apps/web/lib/capabilities.ts.
     OWNER = "owner"
     ADMIN = "admin"

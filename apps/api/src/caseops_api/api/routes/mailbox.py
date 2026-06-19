@@ -53,7 +53,6 @@ from caseops_api.services.gmail_sync import (
     start_gmail_connection,
     start_gmail_watch,
 )
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.inbound_email import (
     create_inbound_email_alias,
     ingest_inbound_email_webhook,
@@ -62,6 +61,7 @@ from caseops_api.services.inbound_email import (
     review_inbound_email_event,
     update_inbound_email_alias,
 )
+from caseops_api.services.session_context import SessionContext
 
 router = APIRouter()
 MailboxViewer = Annotated[SessionContext, Depends(require_capability("calendar:view"))]

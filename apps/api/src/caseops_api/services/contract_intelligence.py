@@ -57,7 +57,6 @@ from caseops_api.schemas.contracts import (
     PartyClauseSourceEvidence,
 )
 from caseops_api.services.audit import record_from_context
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.llm import (
     PURPOSE_METADATA_EXTRACT,
     PURPOSE_RECOMMENDATIONS,
@@ -69,6 +68,7 @@ from caseops_api.services.llm import (
     generate_structured,
 )
 from caseops_api.services.llm_http import provider_failure_http_exception
+from caseops_api.services.session_context import SessionContext
 
 logger = logging.getLogger(__name__)
 

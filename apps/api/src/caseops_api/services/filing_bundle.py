@@ -63,7 +63,7 @@ from caseops_api.services.court_format_profiles import (
 from caseops_api.services.document_storage import resolve_storage_path
 from caseops_api.services.draft_pdf_export import _ascii_safe, render_pdf_bytes
 from caseops_api.services.drafting import _load_draft, _load_matter
-from caseops_api.services.identity import SessionContext
+from caseops_api.services.session_context import SessionContext
 
 
 @dataclass(frozen=True)

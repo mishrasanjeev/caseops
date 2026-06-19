@@ -25,7 +25,7 @@ from caseops_api.db.models import (
     MatterAttachmentAnnotation,
     MatterAttachmentAnnotationKind,
 )
-from caseops_api.services.identity import SessionContext
+from caseops_api.services.session_context import SessionContext
 
 AnnotationKindLiteral = Literal["highlight", "note", "flag"]
 

@@ -22,15 +22,12 @@ The response ``Content-Type`` is ``application/problem+json`` per spec.
 """
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-
-logger = logging.getLogger(__name__)
 
 PROBLEM_CONTENT_TYPE = "application/problem+json"
 

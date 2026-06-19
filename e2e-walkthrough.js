@@ -222,7 +222,6 @@ async function main() {
 
     // Actually fetch the DOCX bytes via the API to confirm the endpoint
     // streams a real Word doc (the UI button just navigates to this URL).
-    const cookies = await ctx.cookies();
     const authToken = await page.evaluate(() =>
       window.localStorage.getItem("caseops.session.token"),
     );

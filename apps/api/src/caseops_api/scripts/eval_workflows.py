@@ -65,11 +65,11 @@ from caseops_api.services.evaluation import (
     record_case,
 )
 from caseops_api.services.hearing_packs import generate_hearing_pack
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.recommendations import (
     SUPPORTED_TYPES,
     generate_recommendation,
 )
+from caseops_api.services.session_context import SessionContext
 
 logger = logging.getLogger("caseops.eval.workflows")
 

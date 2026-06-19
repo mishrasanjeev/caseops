@@ -46,11 +46,11 @@ from caseops_api.schemas.predictive_intelligence import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.authority_sources import is_source_allowed_for_predictive_aggregates
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import assert_access
 from caseops_api.services.predictive_outcomes import (
     load_predictive_aggregate_snapshots_for_matter,
 )
+from caseops_api.services.session_context import SessionContext
 from caseops_api.services.tenant_ai_policy import resolve_tenant_policy
 
 DISCLAIMER = (

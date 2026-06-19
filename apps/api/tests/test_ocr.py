@@ -379,10 +379,14 @@ def test_detect_tesseract_lang_bengali_falls_back_not_installed() -> None:
 # ---------------------------------------------------------------
 
 
-class _StubRapidOcrBackend(ocr_module._RapidOcrBackend):
+class _StubRapidOcrBackend:
     """Bypass the real rapidocr import; drive the retry branch with a
     scripted engine so the test covers the control flow, not the ONNX
     runtime."""
+
+    name = "rapidocr"
+    _run_engine = ocr_module._RapidOcrBackend._run_engine
+    ocr_pages = ocr_module._RapidOcrBackend.ocr_pages
 
     def __init__(self, scripts: list[object]) -> None:  # noqa: D401
         self._scripts = list(scripts)

@@ -225,6 +225,8 @@ _STRUCTURE_HEADINGS_BY_TEMPLATE: dict[str, list[tuple[str, list[str]]]] = {
 
 _STRUCTURE_HEADINGS = _PLEADING_RUBRIC  # Back-compat for any external readers.
 
+__all__ = ["_STRUCTURE_HEADINGS"]
+
 
 # ---------------------------------------------------------------
 # Data shapes
@@ -947,7 +949,8 @@ def _write_report(
         lines.append(f"Scenarios queued: {len(results)}")
         for r in results:
             lines.append(f"- `{r.template_type}` / `{r.key}`")
-        return _finalise_report(lines, report_path)
+        _finalise_report(lines, report_path)
+        return
     lines.append(f"# Drafting quality eval — overall {summary['overall_rating']}/5")
     lines.append("")
     lines.append(

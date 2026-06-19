@@ -41,7 +41,7 @@ from caseops_api.schemas.contracts import (
     TenantPlaybookUpdateRequest,
 )
 from caseops_api.services.audit import record_from_context
-from caseops_api.services.identity import SessionContext
+from caseops_api.services.session_context import SessionContext
 
 _COMPARE_SNIPPET_MAX_CHARS = 280
 

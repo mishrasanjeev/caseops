@@ -11,13 +11,13 @@ from caseops_api.schemas.provider_operations import (
     ProviderOperationListResponse,
     ProviderReadinessListResponse,
 )
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.provider_operations import (
     list_provider_operations,
     provider_readiness_status,
     replay_provider_operation,
     update_provider_operation_state,
 )
+from caseops_api.services.session_context import SessionContext
 
 router = APIRouter()
 WorkspaceAdmin = Annotated[

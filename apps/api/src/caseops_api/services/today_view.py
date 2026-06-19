@@ -51,8 +51,8 @@ from caseops_api.db.models import (
     MatterTask,
     MatterTaskStatus,
 )
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import visible_matters_filter
+from caseops_api.services.session_context import SessionContext
 
 
 @dataclass(frozen=True)

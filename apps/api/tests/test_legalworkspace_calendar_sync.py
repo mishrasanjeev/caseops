@@ -25,7 +25,7 @@ from caseops_api.services.calendar_sync import (
     process_durable_outlook_sync,
     set_outlook_provider_for_tests,
 )
-from caseops_api.services.identity import SessionContext
+from caseops_api.services.session_context import SessionContext
 from tests.test_auth_company import auth_headers, bootstrap_company
 
 

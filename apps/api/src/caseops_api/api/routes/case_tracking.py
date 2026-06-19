@@ -28,11 +28,11 @@ from caseops_api.services.case_tracking import (
     search_cases,
     update_bookmark,
 )
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.production_safety import (
     list_support_matrix,
     support_matrix_tenant_record,
 )
+from caseops_api.services.session_context import SessionContext
 
 router = APIRouter()
 CaseTrackingUser = Annotated[

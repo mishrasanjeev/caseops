@@ -17,8 +17,8 @@ from caseops_api.schemas.storage_governance import (
     StorageUploadPolicy,
 )
 from caseops_api.services.audit import record_from_context
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import visible_matters_filter
+from caseops_api.services.session_context import SessionContext
 
 WARNING_THRESHOLD_PERCENT = 90
 

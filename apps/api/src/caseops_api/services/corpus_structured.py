@@ -370,7 +370,6 @@ ChunkRole = Literal[
     "other",
 ]
 
-
 class _Parties(BaseModel):
     appellant: str | None = Field(default=None, max_length=400)
     respondents: list[str] = Field(default_factory=list, max_length=30)
@@ -830,6 +829,7 @@ def extract_and_persist_structured(
 
 
 __all__ = [
+    "ChunkRole",
     "HAIKU_VERSION",
     "SONNET_VERSION",
     "STRUCTURED_VERSION",

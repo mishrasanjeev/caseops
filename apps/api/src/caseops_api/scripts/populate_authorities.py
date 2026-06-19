@@ -18,7 +18,8 @@ from caseops_api.schemas.authorities import AuthorityIngestionRequest
 from caseops_api.schemas.companies import BootstrapCompanyRequest
 from caseops_api.services.authorities import ingest_authority_source
 from caseops_api.services.authority_sources import list_supported_authority_sources
-from caseops_api.services.identity import SessionContext, register_company_owner
+from caseops_api.services.identity import register_company_owner
+from caseops_api.services.session_context import SessionContext
 
 DEFAULT_SOURCES = [
     "supreme_court_latest_orders",

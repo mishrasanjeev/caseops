@@ -42,7 +42,7 @@ from caseops_api.db.models import (
     Judge,
     Matter,
 )
-from caseops_api.services.identity import SessionContext
+from caseops_api.services.session_context import SessionContext
 
 # Bench-size values. Kept as string literals (not an enum) because they
 # ship straight through the API to the web, and clients already read

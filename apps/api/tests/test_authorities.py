@@ -6,7 +6,6 @@ from datetime import date
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-import caseops_api.services.authority_sources as authority_sources
 from caseops_api.db.models import (
     AuditEvent,
     AuthorityDocument,
@@ -21,6 +20,8 @@ from caseops_api.db.models import (
 from caseops_api.db.session import get_session_factory
 from caseops_api.services.authority_sources import (
     ADAPTERS,
+    LEGAL_SOURCE_REGISTRY_BY_KEY,
+    LEGAL_SOURCE_REGISTRY_ENTRIES,
     SOURCE_CATEGORY_HIGH_COURT,
     SOURCE_PROOF_VERIFIED,
     SOURCE_READINESS_INGEST_READY,
@@ -176,11 +177,10 @@ def _register_ingest_ready_test_source(monkeypatch, source_key: str) -> None:
         readiness_status=SOURCE_READINESS_INGEST_READY,
         proof_status=SOURCE_PROOF_VERIFIED,
     )
-    monkeypatch.setitem(authority_sources.LEGAL_SOURCE_REGISTRY_BY_KEY, source_key, entry)
+    monkeypatch.setitem(LEGAL_SOURCE_REGISTRY_BY_KEY, source_key, entry)
     monkeypatch.setattr(
-        authority_sources,
-        "LEGAL_SOURCE_REGISTRY_ENTRIES",
-        (*authority_sources.LEGAL_SOURCE_REGISTRY_ENTRIES, entry),
+        "caseops_api.services.authority_sources.LEGAL_SOURCE_REGISTRY_ENTRIES",
+        (*LEGAL_SOURCE_REGISTRY_ENTRIES, entry),
     )
 
 

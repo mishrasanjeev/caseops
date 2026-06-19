@@ -37,7 +37,7 @@ from caseops_api.services.bench_strategy_context import (
     BenchStrategyContext,
     build_bench_strategy_context,
 )
-from caseops_api.services.identity import SessionContext
+from caseops_api.services.session_context import SessionContext
 
 
 def bootstrap_company(client: TestClient, *, slug_seed: str) -> dict:

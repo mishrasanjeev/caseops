@@ -30,8 +30,8 @@ from caseops_api.schemas.drafting_data import (
     DraftingDataStatusCounts,
 )
 from caseops_api.services.audit import record_from_context
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import assert_access
+from caseops_api.services.session_context import SessionContext
 
 MAX_SCAN_CHARS_PER_ATTACHMENT = 80_000
 MAX_SOURCE_SNIPPET_CHARS = 280

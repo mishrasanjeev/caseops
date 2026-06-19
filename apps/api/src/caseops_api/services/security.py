@@ -39,8 +39,8 @@ from caseops_api.schemas.security import (
     TenantSecurityPolicyUpdateRequest,
 )
 from caseops_api.services.audit import record_from_context
-from caseops_api.services.identity import SessionContext
-from caseops_api.services.platform_admin import record_platform_audit
+from caseops_api.services.platform_audit import record_platform_audit
+from caseops_api.services.session_context import SessionContext
 
 TOTP_PERIOD_SECONDS = 30
 TOTP_DIGITS = 6

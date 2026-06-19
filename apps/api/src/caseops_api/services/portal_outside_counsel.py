@@ -204,6 +204,7 @@ def upload_oc_work_product(
             try:
                 delete_stored_document(stored.storage_key)
             except Exception:
+                # Best-effort cleanup; preserve the original scan failure.
                 pass
             raise
         attachment.storage_key = stored.storage_key

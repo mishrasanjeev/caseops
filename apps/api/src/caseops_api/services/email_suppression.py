@@ -9,15 +9,11 @@ is not bolted onto the SendGrid send helper.
 """
 from __future__ import annotations
 
-import logging
-
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import EmailSuppression, EmailSuppressionReason
-
-logger = logging.getLogger(__name__)
 
 # SendGrid event names that translate to a suppression entry. Anything
 # not in this map is left to the per-row event handlers (delivered /

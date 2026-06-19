@@ -43,9 +43,9 @@ from caseops_api.schemas.drive import (
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.calendar_sync import _decrypt_token_payload, _encrypt_token_payload
 from caseops_api.services.google_workspace import google_workspace_oauth_config
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import assert_access, visible_matters_filter
 from caseops_api.services.notification_delivery import redact_provider_error
+from caseops_api.services.session_context import SessionContext
 
 GOOGLE_DRIVE_SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 _STATE_KIND = "google_drive_oauth"
@@ -81,28 +81,36 @@ class GoogleDriveFileMetadata:
 
 class GoogleDriveProviderProtocol(Protocol):
     @property
-    def configured(self) -> bool: ...
+    def configured(self) -> bool:
+        raise NotImplementedError
 
     @property
-    def unavailable_reason(self) -> str | None: ...
+    def unavailable_reason(self) -> str | None:
+        raise NotImplementedError
 
-    def authorization_url(self, *, state: str) -> str: ...
+    def authorization_url(self, *, state: str) -> str:
 
-    def exchange_code(self, *, code: str) -> dict[str, Any]: ...
+        raise NotImplementedError
+
+    def exchange_code(self, *, code: str) -> dict[str, Any]:
+
+        raise NotImplementedError
 
     def list_files(
         self,
         *,
         token_payload: dict[str, Any],
         limit: int,
-    ) -> list[GoogleDriveFileMetadata]: ...
+    ) -> list[GoogleDriveFileMetadata]:
+        raise NotImplementedError
 
     def fetch_file(
         self,
         *,
         token_payload: dict[str, Any],
         file_id: str,
-    ) -> bytes: ...
+    ) -> bytes:
+        raise NotImplementedError
 
 
 class GoogleDriveProvider:

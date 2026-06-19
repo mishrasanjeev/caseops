@@ -48,8 +48,8 @@ from caseops_api.services.google_workspace import (
     google_workspace_connector_missing_config_names,
     google_workspace_oauth_config,
 )
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.notification_delivery import redact_provider_error
+from caseops_api.services.session_context import SessionContext
 
 _CALENDAR_OPEN_STATUSES = {
     CalendarEventSyncStatus.FAILED,
@@ -1271,9 +1271,9 @@ def provider_readiness_status(
                     "persisted provider jobs; Drive durable jobs remain gated."
                 ),
                 limitations=[
-                    "Manual bounded dry-run only; no OAuth tokens or Drive file "
+                    "Manual bounded dry-run only; no OAuth tokens or Drive file " +
                     "contents are stored.",
-                    "Durable sync must remain disabled until tenant approval and "
+                    "Durable sync must remain disabled until tenant approval and " +
                     "provider credentials are supplied.",
                 ],
             ),
@@ -1315,7 +1315,7 @@ def provider_readiness_status(
                     "intents; inbound mailbox provider jobs remain gated."
                 ),
                 limitations=[
-                    "Gmail imports store metadata/snippets only; raw provider payloads "
+                    "Gmail imports store metadata/snippets only; raw provider payloads " +
                     "and OAuth tokens are never returned by APIs.",
                     "Attachment bytes are fetched only after explicit tenant review.",
                     "Matter association remains matter-code/review-first.",
@@ -1362,9 +1362,9 @@ def provider_readiness_status(
                     "dead-letter handling; external digest delivery is blocked."
                 ),
                 limitations=[
-                    "In-app previews are available; email/SMS/WhatsApp delivery "
+                    "In-app previews are available; email/SMS/WhatsApp delivery " +
                     "requires provider approval.",
-                    "Tenant email suppression exists for SendGrid-backed sends, "
+                    "Tenant email suppression exists for SendGrid-backed sends, " +
                     "but digest sending is not enabled.",
                 ],
             ),

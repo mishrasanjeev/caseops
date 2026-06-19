@@ -25,7 +25,7 @@ from caseops_api.services.email_templates import (
     render_template,
     update_email_template,
 )
-from caseops_api.services.identity import SessionContext
+from caseops_api.services.session_context import SessionContext
 
 router = APIRouter()
 

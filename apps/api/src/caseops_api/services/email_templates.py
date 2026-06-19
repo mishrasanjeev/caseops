@@ -25,7 +25,7 @@ from caseops_api.schemas.email_templates import (
     EmailTemplateRecord,
     EmailTemplateUpdateRequest,
 )
-from caseops_api.services.identity import SessionContext
+from caseops_api.services.session_context import SessionContext
 
 # {{var_name}} — alphanumeric + underscore only. Whitespace inside
 # the braces is tolerated so admins can write {{ client_name }}

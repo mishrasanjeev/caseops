@@ -37,8 +37,8 @@ from caseops_api.schemas.conflicts import (
     ConflictCheckRunRequest,
 )
 from caseops_api.services.audit import record_from_context
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import assert_access
+from caseops_api.services.session_context import SessionContext
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 _GATE_ALLOWED_STATUSES = {

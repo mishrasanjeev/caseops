@@ -7,7 +7,10 @@ from sqlalchemy import engine_from_config, pool
 
 from caseops_api.core.settings import get_settings
 from caseops_api.db.base import Base
-from caseops_api.db import models  # noqa: F401
+from caseops_api.db import models
+
+if models.__name__ != "caseops_api.db.models":
+    raise RuntimeError("caseops_api.db.models did not import correctly")
 
 config = context.config
 

@@ -68,7 +68,6 @@ from caseops_api.services.draft_validators import (
     run_validators,
 )
 from caseops_api.services.drafting_data_extraction import reviewed_fields_for_prompt
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.llm import (
     PURPOSE_DRAFTING,
     LLMCallContext,
@@ -84,6 +83,7 @@ from caseops_api.services.llm import (
 )
 from caseops_api.services.llm_http import provider_failure_http_exception
 from caseops_api.services.matter_access import assert_access
+from caseops_api.services.session_context import SessionContext
 
 logger = logging.getLogger(__name__)
 

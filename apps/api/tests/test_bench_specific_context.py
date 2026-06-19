@@ -31,8 +31,8 @@ from caseops_api.services.bench_resolver import resolve_listing_bench
 from caseops_api.services.bench_strategy_context import (
     build_bench_strategy_context,
 )
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.judge_aliases import backfill_canonical_aliases
+from caseops_api.services.session_context import SessionContext
 from tests.test_auth_company import bootstrap_company
 
 # Reuse the same forbidden-token regex pattern from MOD-TS-001-A.

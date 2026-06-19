@@ -42,11 +42,11 @@ from caseops_api.db.models import (
     AuthorityIngestionRun,
     AuthorityIngestionStatus,
 )
-from caseops_api.services.document_processing import _chunk_text
 from caseops_api.services.embeddings import (
     EmbeddingProvider,
     build_provider,
 )
+from caseops_api.services.text_chunking import chunk_text as _chunk_text
 
 if TYPE_CHECKING:
     from mypy_boto3_s3.client import S3Client  # pragma: no cover
@@ -959,6 +959,12 @@ def ingest_sc_from_s3(
                 overall.errors.append(f"extract:{key}: {exc}")
                 continue
             tar_path.unlink(missing_ok=True)
+            if _dir_size_mb(workdir) > max_workdir_mb:
+                overall.failed_files += 1
+                overall.errors.append(
+                    f"extract:{key}: workdir exceeded {max_workdir_mb} MB"
+                )
+                continue
 
             batch_summary = ingest_local_directory(
                 session,

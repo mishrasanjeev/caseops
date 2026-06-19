@@ -63,7 +63,7 @@ from caseops_api.services.document_storage import (
     resolve_storage_path,
     sanitize_filename,
 )
-from caseops_api.services.identity import SessionContext
+from caseops_api.services.session_context import SessionContext
 
 
 def _normalize_contract_type_label(value: str | None) -> str:
@@ -1698,6 +1698,7 @@ def create_contract_attachment(
             try:
                 delete_stored_document(stored.storage_key)
             except Exception:
+                # Best-effort cleanup; preserve the original scan failure.
                 pass
             raise
         attachment.storage_key = stored.storage_key

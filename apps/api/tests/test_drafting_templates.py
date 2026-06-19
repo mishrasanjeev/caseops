@@ -234,7 +234,7 @@ def test_writ_facts_accepts_realistic_mandamus_fixture() -> None:
         fundamental_rights_invoked=["Article 14", "Article 21"],
         statutory_violations=["Prevention of Corruption Act, 1988 s.19(1)"],
         prayer_clauses=[
-            "Direct the respondent to dispose of the petitioner's "
+            "Direct the respondent to dispose of the petitioner's " +
             "representation within four weeks.",
             "Pass any other order this Hon'ble Court deems fit."
         ],

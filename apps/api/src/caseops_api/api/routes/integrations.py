@@ -15,8 +15,8 @@ from caseops_api.services.connector_health import (
     check_tenant_connector_health,
     list_tenant_connector_health,
 )
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.integrations import tenant_connector_registry
+from caseops_api.services.session_context import SessionContext
 
 router = APIRouter()
 WorkspaceAdmin = Annotated[SessionContext, Depends(require_capability("workspace:admin"))]

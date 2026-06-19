@@ -42,7 +42,6 @@ from caseops_api.services.communications import (
     apply_sendgrid_communication_event,
 )
 from caseops_api.services.hearing_reminders import apply_sendgrid_event
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.notification_preferences import (
     notification_preferences,
     update_tenant_notification_preferences,
@@ -54,6 +53,7 @@ from caseops_api.services.notification_rules import (
     list_notification_rules,
     update_notification_rule,
 )
+from caseops_api.services.session_context import SessionContext
 
 logger = logging.getLogger(__name__)
 

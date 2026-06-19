@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-from json import JSONDecodeError
 
 from fastapi import HTTPException, Request, status
 from sqlalchemy import select
@@ -24,7 +23,6 @@ from caseops_api.schemas.billing import (
     PaymentWebhookAckResponse,
 )
 from caseops_api.services.audit import record_from_context
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.matters import _append_activity
 from caseops_api.services.pine_labs import (
     PineLabsGatewayClient,
@@ -36,6 +34,7 @@ from caseops_api.services.pine_labs import (
     verify_pine_labs_signature,
 )
 from caseops_api.services.saas_billing import handle_billing_provider_event
+from caseops_api.services.session_context import SessionContext
 
 
 def _payment_attempt_record(attempt: MatterInvoicePaymentAttempt) -> InvoicePaymentAttemptRecord:
@@ -423,7 +422,7 @@ async def handle_pine_labs_webhook(
             )
         try:
             payload = json.loads(raw_body.decode("utf-8"))
-        except (JSONDecodeError, ValueError) as exc:
+        except (json.JSONDecodeError, ValueError) as exc:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Webhook payload must be valid JSON.",
@@ -476,7 +475,7 @@ async def handle_pine_labs_webhook(
         signature = legacy_signature
         try:
             payload = json.loads(raw_body.decode("utf-8"))
-        except (JSONDecodeError, ValueError) as exc:
+        except (json.JSONDecodeError, ValueError) as exc:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Webhook payload must be valid JSON.",

@@ -20,8 +20,8 @@ from caseops_api.schemas.cause_lists import (
     CauseListRow,
 )
 from caseops_api.services.audit import record_from_context
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import visible_matters_filter
+from caseops_api.services.session_context import SessionContext
 
 PDF_TEMPLATE_VERSION = "caseops-cause-list-v1"
 _MISSING = "Not available"

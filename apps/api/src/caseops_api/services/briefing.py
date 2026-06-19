@@ -7,9 +7,9 @@ from caseops_api.services.authorities import (
     search_authority_catalog,
     summarize_authority_relationships,
 )
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.matters import _get_matter_model, get_matter_workspace
 from caseops_api.services.retrieval import RetrievalCandidate, rank_candidates
+from caseops_api.services.session_context import SessionContext
 
 
 def _format_currency_minor(amount_minor: int, currency: str = "INR") -> str:

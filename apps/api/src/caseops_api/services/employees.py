@@ -60,7 +60,7 @@ from caseops_api.schemas.employees import (
 )
 from caseops_api.services.audit import record_audit, record_from_context
 from caseops_api.services.employee_mailer import send_employee_account_link
-from caseops_api.services.identity import SessionContext
+from caseops_api.services.session_context import SessionContext
 
 logger = logging.getLogger(__name__)
 

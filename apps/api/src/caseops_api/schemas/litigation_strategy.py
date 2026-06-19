@@ -389,6 +389,7 @@ def assert_no_probability_language(payload: LitigationStrategyPayload) -> None:
 __all__ = [
     "FORBIDDEN_OUTCOME_PHRASES",
     "FORBIDDEN_PROBABILITY_PATTERNS",
+    "_PROBABILITY_SCAN_FIELDS",
     "ForumStep",
     "ForumStepLevel",
     "LimitationFlag",

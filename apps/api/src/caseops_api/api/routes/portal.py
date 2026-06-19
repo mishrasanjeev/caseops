@@ -48,7 +48,6 @@ from caseops_api.core.security import (
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import AuditActorType, AuditResult, PortalUser
 from caseops_api.services.audit import record_audit, record_from_context
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.portal_auth import (
     invite_portal_user,
     list_active_grants,
@@ -78,6 +77,7 @@ from caseops_api.services.portal_outside_counsel import (
     submit_oc_time_entry,
     upload_oc_work_product,
 )
+from caseops_api.services.session_context import SessionContext
 
 router = APIRouter()
 admin_router = APIRouter()
@@ -432,6 +432,7 @@ async def post_portal_logout(
                     commit=True,
                 )
         except TokenValidationError:
+            # Invalid/expired portal session: logout should still clear the cookie.
             pass
     clear_portal_session_cookie(response, env=get_settings().env)
 

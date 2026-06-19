@@ -6,7 +6,6 @@ triaged, and what the intake became.
 """
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -30,9 +29,7 @@ from caseops_api.schemas.intake import (
     IntakeRequestUpdateRequest,
 )
 from caseops_api.services.audit import record_from_context
-from caseops_api.services.identity import SessionContext
-
-logger = logging.getLogger(__name__)
+from caseops_api.services.session_context import SessionContext
 
 
 def _load_request(

@@ -45,7 +45,7 @@ from caseops_api.services.document_storage import (
     persist_workspace_attachment,
     resolve_storage_path,
 )
-from caseops_api.services.identity import SessionContext
+from caseops_api.services.session_context import SessionContext
 
 logger = logging.getLogger(__name__)
 

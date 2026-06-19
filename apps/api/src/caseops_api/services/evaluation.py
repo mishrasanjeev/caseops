@@ -20,7 +20,6 @@ in practice.
 from __future__ import annotations
 
 import json
-import logging
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -30,8 +29,6 @@ from sqlalchemy.orm import Session
 
 from caseops_api.db.models import EvaluationCase, EvaluationRun
 from caseops_api.services.draft_validators import DraftFinding
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass

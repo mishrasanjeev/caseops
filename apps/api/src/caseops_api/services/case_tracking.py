@@ -54,7 +54,6 @@ from caseops_api.services.case_tracking_providers import (
     get_case_tracking_provider,
     provider_status,
 )
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.llm import (
     LLMCallContext,
     LLMMessage,
@@ -69,6 +68,7 @@ from caseops_api.services.notification_delivery import (
     enqueue_notification_delivery_intent,
     redact_provider_error,
 )
+from caseops_api.services.session_context import SessionContext
 
 _MAX_BODY_LENGTH = 500
 _TENANT_METADATA_BLOCKLIST = (

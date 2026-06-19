@@ -48,7 +48,6 @@ from caseops_api.services.contract_intelligence import (
     install_default_playbook_rules,
 )
 from caseops_api.services.contract_review import generate_contract_review
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_file_qa import (
     ask_matter_file_question,
     export_matter_file_qa_note,
@@ -58,6 +57,7 @@ from caseops_api.services.matter_review import (
     generate_matter_document_review,
     search_matter_documents,
 )
+from caseops_api.services.session_context import SessionContext
 
 router = APIRouter()
 CurrentContext = Annotated[SessionContext, Depends(get_current_context)]

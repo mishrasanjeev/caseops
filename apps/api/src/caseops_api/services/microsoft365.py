@@ -24,8 +24,8 @@ from caseops_api.schemas.microsoft365 import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.calendar_sync import _encrypt_secret
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.notification_delivery import redact_provider_error
+from caseops_api.services.session_context import SessionContext
 
 MICROSOFT365_SCOPES = [
     "offline_access",

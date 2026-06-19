@@ -5,8 +5,6 @@ Revises: 20260416_0008
 Create Date: 2026-04-16 19:10:00
 """
 
-from collections.abc import Sequence
-
 from alembic import op
 import sqlalchemy as sa
 

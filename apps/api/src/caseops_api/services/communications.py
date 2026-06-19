@@ -64,8 +64,8 @@ from caseops_api.services.document_storage import (
     sanitize_filename,
 )
 from caseops_api.services.email_templates import render_template
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import assert_access
+from caseops_api.services.session_context import SessionContext
 from caseops_api.services.storage_governance import (
     StorageQuotaExceeded,
     assert_storage_quota_allows_upload,

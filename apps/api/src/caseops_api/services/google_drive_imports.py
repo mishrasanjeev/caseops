@@ -18,8 +18,8 @@ from caseops_api.schemas.google_drive_imports import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.google_workspace import google_workspace_oauth_config
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import _load_matter_or_404, assert_access
+from caseops_api.services.session_context import SessionContext
 
 GOOGLE_DRIVE_IMPORT_MAX_FILES = 200
 GOOGLE_DRIVE_IMPORT_MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024
@@ -301,13 +301,13 @@ def dry_run_google_drive_import(
         summary=summary,
         files=plans,
         limitations=[
-            "Dry-run only: no attachments, storage objects, OCR jobs, corpus "
+            "Dry-run only: no attachments, storage objects, OCR jobs, corpus " +
             "jobs, or embeddings are created.",
-            "No external Google Drive API call is made; the planner validates "
+            "No external Google Drive API call is made; the planner validates " +
             "user-supplied Drive metadata only.",
-            "Durable Drive sync, webhook ingestion, OAuth token storage, and "
+            "Durable Drive sync, webhook ingestion, OAuth token storage, and " +
             "commit execution are deferred to ADP-21 / future milestones.",
-            "Cross-import provider_file_id idempotency requires persisted "
+            "Cross-import provider_file_id idempotency requires persisted " +
             "attachments and is not enforced in this foundation.",
         ],
     )

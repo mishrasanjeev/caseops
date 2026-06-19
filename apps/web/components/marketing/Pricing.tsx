@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { cn } from "@/lib/cn";
-import { siteConfig } from "@/lib/site";
 
 const tiers = [
   {

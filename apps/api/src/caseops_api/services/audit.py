@@ -16,16 +16,13 @@ Invariants:
 from __future__ import annotations
 
 import json
-import logging
 from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import AuditActorType, AuditEvent, AuditResult
-from caseops_api.services.identity import SessionContext
-
-logger = logging.getLogger(__name__)
+from caseops_api.services.session_context import SessionContext
 
 
 def record_audit(

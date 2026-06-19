@@ -41,7 +41,6 @@ from caseops_api.db.models import (
     ModelRun,
 )
 from caseops_api.services.audit import record_from_context
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.llm import (
     PURPOSE_HEARING_PACK,
     LLMCallContext,
@@ -57,6 +56,7 @@ from caseops_api.services.llm import (
 )
 from caseops_api.services.llm_http import provider_failure_http_exception
 from caseops_api.services.matter_access import assert_access
+from caseops_api.services.session_context import SessionContext
 
 logger = logging.getLogger(__name__)
 

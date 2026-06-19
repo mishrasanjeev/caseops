@@ -12,13 +12,10 @@ a cleaned DOCX" flow; for now the UI just displays what's there.
 """
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
-
-logger = logging.getLogger(__name__)
 
 _W_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 
@@ -125,6 +122,7 @@ def parse_redline_docx(
                     parsed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
                     timestamp = parsed.isoformat()
                 except ValueError:
+                    # Preserve the original Word timestamp when it is not ISO-like.
                     pass
 
             before, after = _context_window(paragraph_text, text)

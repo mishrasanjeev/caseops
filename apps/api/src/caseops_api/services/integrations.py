@@ -30,8 +30,8 @@ from caseops_api.services.google_workspace import (
     google_workspace_connector_configured,
     google_workspace_connector_missing_config_names,
 )
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.saas_billing import provider_readiness as billing_provider_readiness
+from caseops_api.services.session_context import SessionContext
 
 TENANT_FORBIDDEN_PLATFORM_FIELDS = {
     "internal_cost_label",

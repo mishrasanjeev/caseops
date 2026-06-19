@@ -93,6 +93,8 @@ _HC_TRAILING_DATE_RE = re.compile(r"_(\d{4})-\d{2}-\d{2}(?:\.pdf)?$", re.IGNOREC
 # Legacy alias retained so any external import doesn't break.
 _YEAR_RE = _SC_FILENAME_YEAR_RE
 
+__all__ = ["_YEAR_RE"]
+
 YearSource = Literal[
     "sc_filename", "hc_trailing_date", "decision_date", "unparseable",
 ]
@@ -320,6 +322,7 @@ def _emit_budget_snapshot(totals: dict) -> None:
             json.dumps(totals, indent=2, default=str), encoding="utf-8"
         )
     except OSError:
+        # Budget telemetry is best-effort and must not stop the backfill.
         pass
 
 

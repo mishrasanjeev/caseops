@@ -35,8 +35,8 @@ from caseops_api.schemas.calendar import (
     CalendarEventKind,
     CalendarEventRecord,
 )
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import visible_matters_filter
+from caseops_api.services.session_context import SessionContext
 
 
 def aggregate_calendar_events(
@@ -217,8 +217,6 @@ def render_events_as_ical(
     ]
     for event in events:
         start = event.occurs_on.strftime("%Y%m%d")
-        end = (event.occurs_on.replace(day=event.occurs_on.day)  # same day
-               ).strftime("%Y%m%d")
         # Non-floating all-day event — DTEND is the day after DTSTART
         # per iCal convention so the slot fills a single calendar cell.
         from datetime import timedelta as _td

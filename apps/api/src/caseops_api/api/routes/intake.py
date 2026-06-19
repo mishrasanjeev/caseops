@@ -17,13 +17,13 @@ from caseops_api.schemas.intake import (
     IntakeRequestRecord,
     IntakeRequestUpdateRequest,
 )
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.intake import (
     create_intake_request,
     list_intake_requests,
     promote_intake_request,
     update_intake_request,
 )
+from caseops_api.services.session_context import SessionContext
 
 router = APIRouter()
 CurrentContext = Annotated[SessionContext, Depends(get_current_context)]

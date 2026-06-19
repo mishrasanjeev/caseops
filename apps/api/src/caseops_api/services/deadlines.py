@@ -26,8 +26,8 @@ from caseops_api.db.models import (
 )
 from caseops_api.schemas.matters import MatterDeadlineRecord, MatterDeadlineUpdateRequest
 from caseops_api.services.audit import record_from_context
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.matter_access import assert_access, can_access
+from caseops_api.services.session_context import SessionContext
 
 _VALID_SOURCES = {"hearing", "draft", "contract", "intake", "custom", "followup"}
 

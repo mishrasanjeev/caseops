@@ -34,7 +34,6 @@ from caseops_api.schemas.matter_file_qa import (
     MatterFileQATranslationStatus,
 )
 from caseops_api.services.audit import record_from_context
-from caseops_api.services.identity import SessionContext
 from caseops_api.services.llm import (
     LLMCallContext,
     LLMCompletion,
@@ -47,6 +46,7 @@ from caseops_api.services.llm import (
 from caseops_api.services.llm_http import provider_failure_http_exception
 from caseops_api.services.matters import _append_activity, _get_matter_model
 from caseops_api.services.retrieval import RetrievalCandidate, rank_candidates
+from caseops_api.services.session_context import SessionContext
 
 PURPOSE = "matter_file_qa"
 PROVIDER_LABEL = "caseops-matter-file-qa-v1"

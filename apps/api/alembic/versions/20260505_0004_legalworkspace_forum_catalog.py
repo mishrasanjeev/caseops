@@ -17,6 +17,7 @@ revision = "20260505_0004"
 down_revision = "20260505_0003"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
+__all__ = ("revision", "down_revision", "branch_labels", "depends_on", "upgrade", "downgrade")
 
 
 _SOURCE_NAME = "CaseOps LW-S4 baseline forum catalog"

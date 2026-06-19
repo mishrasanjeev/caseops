@@ -25,7 +25,7 @@ from caseops_api.services.capabilities import (
     owner_only_capabilities,
     validate_custom_role_permissions,
 )
-from caseops_api.services.identity import SessionContext
+from caseops_api.services.session_context import SessionContext
 
 _GROUP_LABELS: dict[str, str] = {
     "matters": "Matters",

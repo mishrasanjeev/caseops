@@ -31,7 +31,7 @@ from caseops_api.services.drive_sync import (
     sync_google_drive_candidates,
     update_drive_sync_control,
 )
-from caseops_api.services.identity import SessionContext
+from caseops_api.services.session_context import SessionContext
 
 router = APIRouter()
 DriveViewer = Annotated[SessionContext, Depends(require_capability("documents:upload"))]
