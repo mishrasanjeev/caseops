@@ -98,6 +98,11 @@ function byOrder(left: ForumCatalogEntry, right: ForumCatalogEntry) {
   );
 }
 
+function forumPlaceLabel(entry: ForumCatalogEntry) {
+  const place = [entry.district, entry.city].filter(Boolean).join(" / ");
+  return place ? `${entry.name} (${place})` : entry.name;
+}
+
 export function forumSelectionFromEntry(entry: ForumCatalogEntry): ForumSelection {
   return {
     forum_category: entry.forum_type as ForumCategory,
@@ -313,7 +318,7 @@ export function ForumSelector({
             >
               {districtOptions.map((entry) => (
                 <option key={entry.id} value={entry.id}>
-                  {[entry.district, entry.city].filter(Boolean).join(" / ")}
+                  {forumPlaceLabel(entry)}
                 </option>
               ))}
             </select>
@@ -390,7 +395,7 @@ export function ForumSelector({
               >
                 {consumerDistrictOptions.map((entry) => (
                   <option key={entry.id} value={entry.id}>
-                    {[entry.district, entry.city].filter(Boolean).join(" / ")}
+                    {forumPlaceLabel(entry)}
                   </option>
                 ))}
               </select>

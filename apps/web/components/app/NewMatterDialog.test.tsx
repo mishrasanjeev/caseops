@@ -77,6 +77,22 @@ describe("NewMatterDialog", () => {
           lineage: "High Court > Delhi > Delhi High Court",
           display_order: 24,
         },
+        {
+          id: "district:delhi:dwarka",
+          parent_id: null,
+          court_id: null,
+          name: "Dwarka Courts Complex",
+          forum_type: "district_court",
+          forum_level: "lower_court",
+          state: "Delhi",
+          district: "South-West",
+          city: "Dwarka",
+          consumer_level: null,
+          source_name: "CaseOps LW-S4 baseline forum catalog",
+          source_url: null,
+          lineage: "District Court > Delhi > South-West > Dwarka",
+          display_order: 104,
+        },
       ],
     });
     toastSuccess.mockReset();
@@ -238,6 +254,41 @@ describe("NewMatterDialog", () => {
     expect(createMatterMock).toHaveBeenCalledWith(
       expect.objectContaining({
         status: "disposed",
+      }),
+    );
+  });
+
+  it("can create a matter against a previously missing Delhi District Court entry", async () => {
+    const user = userEvent.setup();
+    createMatterMock.mockResolvedValue({
+      id: "m-dwarka",
+      matter_code: "DL-DWARKA-001",
+      title: "Dwarka matter",
+      created_at: "2026-06-23T10:00:00Z",
+      status: "intake",
+    });
+    render(withClient(<NewMatterDialog />));
+
+    await openDialog(user);
+    await fillRequiredMatterFields(user);
+    await user.selectOptions(screen.getByTestId("new-matter-forum-category"), "district_court");
+    await waitFor(() =>
+      expect(screen.getByTestId("new-matter-forum-district")).toHaveValue(
+        "district:delhi:dwarka",
+      ),
+    );
+    await user.click(screen.getByRole("button", { name: /Create matter/i }));
+
+    await waitFor(() => expect(createMatterMock).toHaveBeenCalledTimes(1));
+    expect(createMatterMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        forum_level: "lower_court",
+        court_id: null,
+        court_name: "Dwarka Courts Complex",
+        forum_catalog_entry_id: "district:delhi:dwarka",
+        forum_state: "Delhi",
+        forum_district: "South-West",
+        forum_city: "Dwarka",
       }),
     );
   });
