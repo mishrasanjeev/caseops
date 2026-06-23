@@ -76,7 +76,31 @@ def test_lw_s4_forum_catalog_returns_public_hierarchy(
     assert entries["hc:delhi"]["forum_type"] == "high_court"
     assert entries["hc:delhi"]["state"] == "Delhi"
     assert entries["district:delhi:central"]["forum_level"] == "lower_court"
-    assert entries["district:delhi:central"]["district"] == "Central"
+    assert entries["district:delhi:central"]["name"] == "Tis Hazari Courts Complex"
+    assert entries["district:delhi:central"]["district"] == "Central & West"
+    delhi_districts = [
+        entry
+        for entry in entries.values()
+        if entry["forum_type"] == "district_court" and entry["state"] == "Delhi"
+    ]
+    assert [entry["id"] for entry in delhi_districts] == [
+        "district:delhi:central",
+        "district:delhi:new-delhi",
+        "district:delhi:karkardooma",
+        "district:delhi:rohini",
+        "district:delhi:dwarka",
+        "district:delhi:south",
+        "district:delhi:rouse-avenue",
+    ]
+    assert {entry["name"] for entry in delhi_districts} == {
+        "Tis Hazari Courts Complex",
+        "Patiala House Courts Complex",
+        "Karkardooma Courts Complex",
+        "Rohini Courts Complex",
+        "Dwarka Courts Complex",
+        "Saket Courts Complex",
+        "Rouse Avenue Courts Complex",
+    }
     assert entries["consumer:ncdrc"]["consumer_level"] == "national"
     assert entries["consumer:scdrc:delhi"]["consumer_level"] == "state"
     assert entries["consumer:dcdrc:central-delhi"]["consumer_level"] == "district"
@@ -142,13 +166,14 @@ def test_lw_s4_catalog_supports_required_forum_shapes(
         token,
         code="LW-S4-DIST",
         forum_level="lower_court",
-        forum_catalog_entry_id="district:delhi:central",
+        forum_catalog_entry_id="district:delhi:dwarka",
     )
     assert district["forum_level"] == "lower_court"
     assert district["court_id"] is None
     assert district["forum_state"] == "Delhi"
-    assert district["forum_district"] == "Central"
-    assert district["forum_city"] == "New Delhi"
+    assert district["court_name"] == "Dwarka Courts Complex"
+    assert district["forum_district"] == "South-West"
+    assert district["forum_city"] == "Dwarka"
 
     consumer = _create_matter(
         client,
