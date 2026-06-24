@@ -691,3 +691,33 @@ Full writeup + runbook: `docs/BUG_FIX_HARI_2026-05-31.md`.
   all cloudrun secretKeyRefs; no app/app page-level mutation lacks an error surface
   after this batch. Proof: vitest (3 new), Playwright `hari-2026-05-31-bugs.spec.ts`
   (4, PASSED), backend test_case_tracking.py + test_statutes_routes.py (42 PASSED).
+
+---
+
+## Hari 2026-06-24 batch
+
+Source workbook: `C:\Users\mishr\Downloads\CaseOps Bugs_Hari24Jun2026.xlsx`.
+
+| ID | Severity | Verdict | Area | Notes |
+|----|----------|---------|------|-------|
+| BUG-001 | P1 High | Partially fixed | Matters / Add Matters / District Court forum selector | Valid reopened bug. District Court no longer depends on seed rows for state availability; the selector exposes the complete eCourts state/UT jurisdiction list and provides an explicit uncatalogued district-court fallback requiring typed district and court name. Strict verdict remains `Partially fixed` until the deployed production Playwright spec passes on the shipped commit. |
+
+Regression evidence added:
+
+- `apps/web/components/matters/ForumSelector.test.tsx` - all district jurisdictions plus uncatalogued Assam fallback.
+- `apps/web/components/app/NewMatterDialog.test.tsx` - New Matter creates uncatalogued Assam lower-court metadata only after district and court names are supplied.
+- `apps/web/components/matters/MatterForumCard.test.tsx` - edit path preserves no-catalog lower-court state/district/court metadata.
+- `apps/api/tests/test_legalworkspace_forum_selector.py` - backend accepts and preserves uncatalogued lower-court metadata.
+- `tests/e2e/hari-2026-06-24-bugs.spec.ts` - browser workflow for all jurisdictions and Assam fallback.
+- `tests/e2e/hari-2026-06-23-bugs.spec.ts` - prior Delhi complex regression updated for the explicit fallback option.
+
+Local verification on 2026-06-24:
+
+- `npm run test:web -- ForumSelector.test.tsx NewMatterDialog.test.tsx MatterForumCard.test.tsx` - PASS 16/16.
+- `uv --directory apps/api run pytest tests/test_legalworkspace_forum_selector.py` - PASS 4/4.
+- `npm run typecheck:web` - PASS.
+- `npm run build:web` - PASS.
+- `npx playwright test --config playwright.app.config.ts tests/e2e/hari-2026-06-24-bugs.spec.ts --project app-chromium` - PASS 1/1.
+- `npx playwright test --config playwright.app.config.ts tests/e2e/hari-2026-06-23-bugs.spec.ts --project app-chromium` - PASS 1/1.
+
+Reopen learning: `docs/BUG_REOPEN_LEARNINGS_2026-06-24_HARI.md`.

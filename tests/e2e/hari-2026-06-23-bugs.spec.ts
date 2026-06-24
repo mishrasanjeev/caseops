@@ -20,6 +20,7 @@ const DELHI_DISTRICT_COMPLEXES = [
   "Dwarka Courts Complex (South-West / Dwarka)",
   "Saket Courts Complex (South & South-East / Saket)",
   "Rouse Avenue Courts Complex (Special Courts / Central / Rouse Avenue)",
+  "Other district court in Delhi",
 ];
 
 function unique(prefix: string): string {

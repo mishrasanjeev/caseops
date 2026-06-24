@@ -282,12 +282,90 @@ describe("ForumSelector", () => {
       "Dwarka Courts Complex (South-West / Dwarka)",
       "Saket Courts Complex (South & South-East / Saket)",
       "Rouse Avenue Courts Complex (Special Courts / Central / Rouse Avenue)",
+      "Other district court in Delhi",
     ]);
     expect(
       screen.getByText(/District Court > Delhi > Central & West/i),
     ).toBeInTheDocument();
   });
 
+  it("keeps every eCourts district state jurisdiction selectable and falls back for uncatalogued states", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await user.selectOptions(screen.getByTestId("test-forum-category"), "district_court");
+
+    const stateSelect = screen.getByTestId(
+      "test-forum-district-state",
+    ) as HTMLSelectElement;
+    const states = Array.from(stateSelect.options).map(
+      (option) => option.textContent,
+    );
+    expect(states).toEqual(
+      [
+        "Andaman and Nicobar",
+        "Andhra Pradesh",
+        "Arunachal Pradesh",
+        "Assam",
+        "Bihar",
+        "Chandigarh",
+        "Chhattisgarh",
+        "Delhi",
+        "Goa",
+        "Gujarat",
+        "Haryana",
+        "Himachal Pradesh",
+        "Jammu and Kashmir",
+        "Jharkhand",
+        "Karnataka",
+        "Kerala",
+        "Ladakh",
+        "Lakshadweep",
+        "Madhya Pradesh",
+        "Maharashtra",
+        "Manipur",
+        "Meghalaya",
+        "Mizoram",
+        "Nagaland",
+        "Odisha",
+        "Puducherry",
+        "Punjab",
+        "Rajasthan",
+        "Sikkim",
+        "Tamil Nadu",
+        "Telangana",
+        "The Dadra And Nagar Haveli And Daman And Diu",
+        "Tripura",
+        "Uttarakhand",
+        "Uttar Pradesh",
+        "West Bengal",
+      ].sort((left, right) => left.localeCompare(right)),
+    );
+
+    await user.selectOptions(stateSelect, "Assam");
+
+    await waitFor(() => expect(stateSelect).toHaveValue("Assam"));
+    const districtSelect = screen.getByTestId(
+      "test-forum-district",
+    ) as HTMLSelectElement;
+    expect(districtSelect).toHaveValue("__uncatalogued_district_court__");
+    expect(Array.from(districtSelect.options).map((option) => option.textContent)).toEqual([
+      "Other district court in Assam",
+    ]);
+    expect(screen.getByTestId("test-forum-district-name")).toHaveValue("");
+    expect(screen.getByTestId("test-forum-district-court")).toHaveValue("");
+
+    await user.type(screen.getByTestId("test-forum-district-name"), "Kamrup Metro");
+    await user.type(
+      screen.getByTestId("test-forum-district-court"),
+      "Kamrup Metro District Court",
+    );
+
+    expect(screen.getByTestId("test-forum-district-name")).toHaveValue("Kamrup Metro");
+    expect(screen.getByTestId("test-forum-district-court")).toHaveValue(
+      "Kamrup Metro District Court",
+    );
+  });
   it("supports national, state, and district consumer forum levels", async () => {
     const user = userEvent.setup();
     render(<Harness initial={EMPTY_FORUM_SELECTION} />);

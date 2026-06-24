@@ -258,6 +258,56 @@ describe("NewMatterDialog", () => {
     );
   });
 
+  it("can create a district court matter for a state missing from the catalog", async () => {
+    const user = userEvent.setup();
+    createMatterMock.mockResolvedValue({
+      id: "m-assam",
+      matter_code: "ASM-001",
+      title: "Assam district matter",
+      created_at: "2026-06-24T10:00:00Z",
+      status: "intake",
+    });
+    render(withClient(<NewMatterDialog />));
+
+    await openDialog(user);
+    await fillRequiredMatterFields(user);
+    await waitFor(() =>
+      expect(screen.getByTestId("new-matter-forum-state")).toHaveValue("Delhi"),
+    );
+    await user.selectOptions(screen.getByTestId("new-matter-forum-category"), "district_court");
+    await user.selectOptions(screen.getByTestId("new-matter-forum-district-state"), "Assam");
+
+    await waitFor(() =>
+      expect(screen.getByTestId("new-matter-forum-district-state")).toHaveValue("Assam"),
+    );
+    expect(screen.getByTestId("new-matter-forum-district")).toHaveValue(
+      "__uncatalogued_district_court__",
+    );
+    expect(screen.getByRole("button", { name: /Create matter/i })).toBeDisabled();
+
+    await user.type(screen.getByTestId("new-matter-forum-district-name"), "Kamrup Metro");
+    expect(screen.getByRole("button", { name: /Create matter/i })).toBeDisabled();
+
+    await user.type(
+      screen.getByTestId("new-matter-forum-district-court"),
+      "Kamrup Metro District Court",
+    );
+    await user.click(screen.getByRole("button", { name: /Create matter/i }));
+
+    await waitFor(() => expect(createMatterMock).toHaveBeenCalledTimes(1));
+    expect(createMatterMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        forum_level: "lower_court",
+        court_id: null,
+        court_name: "Kamrup Metro District Court",
+        forum_catalog_entry_id: null,
+        forum_state: "Assam",
+        forum_district: "Kamrup Metro",
+        forum_city: null,
+        forum_consumer_level: null,
+      }),
+    );
+  });
   it("can create a matter against a previously missing Delhi District Court entry", async () => {
     const user = userEvent.setup();
     createMatterMock.mockResolvedValue({

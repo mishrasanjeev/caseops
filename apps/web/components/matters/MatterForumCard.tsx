@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import {
   ForumSelector,
+  isDistrictFallbackForumSelection,
   isLegacyForumSelection,
   type ForumSelection,
 } from "@/components/matters/ForumSelector";
@@ -25,7 +26,11 @@ import type { WorkspaceMatter } from "@/lib/api/workspace-types";
 
 function selectionFromMatter(matter: WorkspaceMatter): ForumSelection {
   return {
-    forum_category: matter.forum_catalog_entry_id ? undefined : "legacy",
+    forum_category: matter.forum_catalog_entry_id
+      ? undefined
+      : matter.forum_level === "lower_court" && matter.forum_state
+        ? "district_court"
+        : "legacy",
     forum_level: matter.forum_level ?? "high_court",
     court_id: matter.court_id ?? null,
     court_name: matter.court_name ?? null,
@@ -99,10 +104,14 @@ export function MatterForumCard({ matter }: { matter: WorkspaceMatter }) {
   const legacyFallbackSelected = isLegacyForumSelection(selection);
   const legacyFallbackIncomplete =
     catalogUnavailable && legacyFallbackSelected && !selection.court_name?.trim();
+  const districtFallbackIncomplete =
+    isDistrictFallbackForumSelection(selection) &&
+    (!selection.forum_district?.trim() || !selection.court_name?.trim());
   const forumSaveBlocked =
     catalogQuery.isPending ||
     (catalogUnavailable && !legacyFallbackSelected) ||
-    legacyFallbackIncomplete;
+    legacyFallbackIncomplete ||
+    districtFallbackIncomplete;
   const catalogStatusMessage = catalogQuery.isPending
     ? "Loading forum catalog before editing."
     : catalogFailed

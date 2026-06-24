@@ -59,6 +59,11 @@ not upgrade the verdict.
 - Mobile or responsive bugs:
   - verify on an actual mobile viewport, not desktop only
 
+- Catalog-backed selector bugs:
+  - assert the complete user-facing invariant, not only seeded examples
+  - provide a fail-open path when catalog completeness can block workflow completion
+  - audit every consumer of the shared selector or catalog endpoint
+  - inspect defaulting and hydration effects that can overwrite a fallback selection
 ## Forbidden Closure Patterns
 
 - "Fixed" because the copy improved.

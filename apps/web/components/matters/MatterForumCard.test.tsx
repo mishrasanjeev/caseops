@@ -138,6 +138,72 @@ describe("MatterForumCard", () => {
     await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("Forum updated."));
   });
 
+  it("edits an uncatalogued district court matter without dropping its state metadata", async () => {
+    const user = userEvent.setup();
+    render(
+      withClient(
+        <MatterForumCard
+          matter={
+            {
+              id: "m-assam",
+              matter_code: "ASM-001",
+              title: "Assam district matter",
+              status: "active",
+              practice_area: "Commercial",
+              forum_level: "lower_court",
+              court_id: null,
+              court_name: "Kamrup Metro District Court",
+              forum_catalog_entry_id: null,
+              forum_state: "Assam",
+              forum_district: "Kamrup Metro",
+              forum_city: null,
+              created_at: "2026-06-24T00:00:00Z",
+            } as WorkspaceMatter
+          }
+        />,
+      ),
+    );
+
+    await user.click(screen.getByTestId("matter-forum-edit"));
+    await waitFor(() => expect(fetchForumCatalogMock).toHaveBeenCalledTimes(1));
+
+    expect(screen.getByTestId("matter-edit-forum-category")).toHaveValue(
+      "district_court",
+    );
+    expect(screen.getByTestId("matter-edit-forum-district-state")).toHaveValue(
+      "Assam",
+    );
+    expect(screen.getByTestId("matter-edit-forum-district")).toHaveValue(
+      "__uncatalogued_district_court__",
+    );
+    expect(screen.getByTestId("matter-edit-forum-district-name")).toHaveValue(
+      "Kamrup Metro",
+    );
+    expect(screen.getByTestId("matter-edit-forum-district-court")).toHaveValue(
+      "Kamrup Metro District Court",
+    );
+
+    await user.clear(screen.getByTestId("matter-edit-forum-district-court"));
+    expect(screen.getByTestId("matter-forum-save")).toBeDisabled();
+    await user.type(
+      screen.getByTestId("matter-edit-forum-district-court"),
+      "Kamrup Metro Civil Court",
+    );
+    await user.click(screen.getByTestId("matter-forum-save"));
+
+    await waitFor(() => expect(updateMatterMock).toHaveBeenCalledTimes(1));
+    expect(updateMatterMock).toHaveBeenCalledWith({
+      matterId: "m-assam",
+      forum_level: "lower_court",
+      court_id: null,
+      court_name: "Kamrup Metro Civil Court",
+      forum_catalog_entry_id: null,
+      forum_state: "Assam",
+      forum_district: "Kamrup Metro",
+      forum_city: null,
+      forum_consumer_level: null,
+    });
+  });
   it("shows a catalog error and blocks unsafe structured saves while editing", async () => {
     const user = userEvent.setup();
     fetchForumCatalogMock.mockRejectedValue(new Error("catalog down"));
