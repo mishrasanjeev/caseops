@@ -40,6 +40,9 @@ def _create_matter(
     forum_catalog_entry_id: str | None = None,
     court_id: str | None = None,
     court_name: str | None = None,
+    forum_state: str | None = None,
+    forum_district: str | None = None,
+    forum_city: str | None = None,
 ) -> dict:
     payload: dict[str, object] = {
         "title": f"Forum selector {code}",
@@ -56,6 +59,12 @@ def _create_matter(
         payload["court_id"] = court_id
     if court_name is not None:
         payload["court_name"] = court_name
+    if forum_state is not None:
+        payload["forum_state"] = forum_state
+    if forum_district is not None:
+        payload["forum_district"] = forum_district
+    if forum_city is not None:
+        payload["forum_city"] = forum_city
     response = client.post("/api/matters/", headers=auth_headers(token), json=payload)
     assert response.status_code == 200, response.text
     return response.json()
@@ -175,6 +184,21 @@ def test_lw_s4_catalog_supports_required_forum_shapes(
     assert district["forum_district"] == "South-West"
     assert district["forum_city"] == "Dwarka"
 
+    uncatalogued_district = _create_matter(
+        client,
+        token,
+        code="LW-S4-DIST-FALLBACK",
+        forum_level="lower_court",
+        court_name="Kamrup Metro District Court",
+        forum_state="Assam",
+        forum_district="Kamrup Metro",
+    )
+    assert uncatalogued_district["forum_level"] == "lower_court"
+    assert uncatalogued_district["court_id"] is None
+    assert uncatalogued_district["forum_catalog_entry_id"] is None
+    assert uncatalogued_district["court_name"] == "Kamrup Metro District Court"
+    assert uncatalogued_district["forum_state"] == "Assam"
+    assert uncatalogued_district["forum_district"] == "Kamrup Metro"
     consumer = _create_matter(
         client,
         token,

@@ -32,6 +32,7 @@ import {
   EMPTY_FORUM_SELECTION,
   ForumSelector,
   forumSelectionFromEntry,
+  isDistrictFallbackForumSelection,
   isLegacyForumSelection,
   type ForumSelection,
 } from "@/components/matters/ForumSelector";
@@ -92,10 +93,14 @@ export function NewMatterDialog() {
     forumCatalogUnavailable &&
     legacyFallbackSelected &&
     !forumSelection.court_name?.trim();
+  const districtFallbackIncomplete =
+    isDistrictFallbackForumSelection(forumSelection) &&
+    (!forumSelection.forum_district?.trim() || !forumSelection.court_name?.trim());
   const forumSubmissionBlocked =
     forumCatalogQuery.isPending ||
     (forumCatalogUnavailable && !legacyFallbackSelected) ||
-    legacyFallbackIncomplete;
+    legacyFallbackIncomplete ||
+    districtFallbackIncomplete;
   const forumCatalogStatusMessage = forumCatalogQuery.isPending
     ? "Loading forum catalog before matter creation."
     : forumCatalogFailed
@@ -108,16 +113,26 @@ export function NewMatterDialog() {
     : forumCatalogEmpty
       ? "warning"
       : "info";
+  const shouldApplyDefaultForumSelection =
+    forumSelection.forum_category === "high_court" &&
+    forumSelection.forum_level === "high_court" &&
+    !forumSelection.forum_catalog_entry_id &&
+    !forumSelection.court_id &&
+    !forumSelection.court_name &&
+    !forumSelection.forum_state &&
+    !forumSelection.forum_district &&
+    !forumSelection.forum_city &&
+    !forumSelection.forum_consumer_level;
 
   useEffect(() => {
-    if (!open || forumSelection.forum_catalog_entry_id) return;
+    if (!open || !shouldApplyDefaultForumSelection) return;
     const entries = forumCatalogQuery.data?.entries ?? [];
     const defaultEntry =
       entries.find((entry) => entry.id === "hc:delhi") ??
       entries.find((entry) => entry.forum_type === "high_court") ??
       entries[0];
     if (defaultEntry) setForumSelection(forumSelectionFromEntry(defaultEntry));
-  }, [forumCatalogQuery.data?.entries, forumSelection.forum_catalog_entry_id, open]);
+  }, [forumCatalogQuery.data?.entries, open, shouldApplyDefaultForumSelection]);
 
   const mutation = useMutation({
     mutationFn: (values: FormValues) =>
