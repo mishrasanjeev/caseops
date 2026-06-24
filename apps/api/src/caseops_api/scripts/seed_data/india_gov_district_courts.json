@@ -1,0 +1,4721 @@
+{
+  "source_name": "India.gov.in District Courts Contact Directory",
+  "source_url": "https://www.india.gov.in/directory/contact-directory/district-courts",
+  "scraped_at_utc": "2026-06-24T12:37:18.210Z",
+  "state_count": 36,
+  "unfiltered_total": 724,
+  "per_state_total": 724,
+  "unique_court_total": 723,
+  "validation": {
+    "missing_from_state_count": 0,
+    "extra_in_state_count": 0,
+    "missing_from_state": [],
+    "extra_in_state": []
+  },
+  "states": [
+    {
+      "state_name": "Andaman and Nicobar Islands",
+      "state_id": "AN",
+      "state_or_ut": "U",
+      "state_lgd_code": "35",
+      "source_url": "https://andamannicobar.gov.in",
+      "total": 1,
+      "courts": [
+        {
+          "title": "District and Sessions Court, South Andaman",
+          "district_name": "South Andaman",
+          "lgd_short_name": "SAS",
+          "site_url": "https://southandaman.dcourts.gov.in"
+        }
+      ]
+    },
+    {
+      "state_name": "Andhra Pradesh",
+      "state_id": "AP",
+      "state_or_ut": "S",
+      "state_lgd_code": "28",
+      "source_url": "https://www.ap.gov.in",
+      "total": 13,
+      "courts": [
+        {
+          "title": "Ananthapuramu District Court",
+          "district_name": "Ananthapur",
+          "lgd_short_name": "ANT",
+          "site_url": "https://anantapur.dcourts.gov.in"
+        },
+        {
+          "title": "Chittoor District Court",
+          "district_name": "Chittoor",
+          "lgd_short_name": "CHI",
+          "site_url": "https://chittoor.dcourts.gov.in"
+        },
+        {
+          "title": "East Godavari District Court",
+          "district_name": "East Godavari",
+          "lgd_short_name": "EGI",
+          "site_url": "https://eastgodavari.dcourts.gov.in"
+        },
+        {
+          "title": "Guntur District Court",
+          "district_name": "Guntur",
+          "lgd_short_name": "GNT",
+          "site_url": "https://guntur.dcourts.gov.in"
+        },
+        {
+          "title": "Kadapa District Court",
+          "district_name": "YSR",
+          "lgd_short_name": "CUD",
+          "site_url": "https://kadapa.dcourts.gov.in"
+        },
+        {
+          "title": "Krishna District Court",
+          "district_name": "Krishna",
+          "lgd_short_name": "KRS",
+          "site_url": "https://krishna.dcourts.gov.in"
+        },
+        {
+          "title": "Kurnool District Court",
+          "district_name": "Kurnool",
+          "lgd_short_name": "KUR",
+          "site_url": "https://kurnool.dcourts.gov.in"
+        },
+        {
+          "title": "Prakasam District Court",
+          "district_name": "Prakasam",
+          "lgd_short_name": "PRA",
+          "site_url": "https://prakasam.dcourts.gov.in"
+        },
+        {
+          "title": "SPSR Nellore District Court",
+          "district_name": "Sri Potti Sriramulu Nellore",
+          "lgd_short_name": "NEL",
+          "site_url": "https://spsrnellore.dcourts.gov.in"
+        },
+        {
+          "title": "Srikakulam District Court",
+          "district_name": "Srikakulam",
+          "lgd_short_name": "SRK",
+          "site_url": "https://srikakulam.dcourts.gov.in"
+        },
+        {
+          "title": "Visakhapatnam District Court",
+          "district_name": "Visakhapatnam",
+          "lgd_short_name": "VSK",
+          "site_url": "https://visakhapatnam.dcourts.gov.in"
+        },
+        {
+          "title": "Vizianagaram District Court",
+          "district_name": "Vizianagaram",
+          "lgd_short_name": "VNG",
+          "site_url": "https://vizianagaram.dcourts.gov.in"
+        },
+        {
+          "title": "West Godavari District Court",
+          "district_name": "West Godavari",
+          "lgd_short_name": "WGI",
+          "site_url": "https://westgodavari.dcourts.gov.in"
+        }
+      ]
+    },
+    {
+      "state_name": "Arunachal Pradesh",
+      "state_id": "AR",
+      "state_or_ut": "S",
+      "state_lgd_code": "12",
+      "source_url": "https://arunachalpradesh.gov.in",
+      "total": 21,
+      "courts": [
+        {
+          "title": "Chief Judicial Magistrate-cum-Civil Court, Lower Dibang Valley District",
+          "district_name": "Lower Dibang Valley",
+          "lgd_short_name": "LDV",
+          "site_url": "https://roing.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Upper Subansiri",
+          "district_name": "Upper Subansiri",
+          "lgd_short_name": "USI",
+          "site_url": "https://daporijo.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Changlang",
+          "district_name": "Changlang",
+          "lgd_short_name": "CHG",
+          "site_url": "https://changlang.dcourts.gov.in"
+        },
+        {
+          "title": "District Court,Ziro",
+          "district_name": "Lower Subansir",
+          "lgd_short_name": "LSI",
+          "site_url": "https://ziro.dcourts.gov.in"
+        },
+        {
+          "title": "District Judicary, Kradaadi District",
+          "district_name": "Kra Daadi",
+          "lgd_short_name": "KRD",
+          "site_url": "https://palin.dcourts.gov.in"
+        },
+        {
+          "title": "District Judiciary, LepaRada",
+          "district_name": "Lepa Rada",
+          "lgd_short_name": "LPR",
+          "site_url": "https://basar.dcourts.gov.in"
+        },
+        {
+          "title": "District Judiciary, Lohit District",
+          "district_name": "Lohit",
+          "lgd_short_name": "LHT",
+          "site_url": "https://tezu.dcourts.gov.in"
+        },
+        {
+          "title": "District Judiciary, Tirap",
+          "district_name": "Tirap",
+          "lgd_short_name": "TRP",
+          "site_url": "https://khonsa.dcourts.gov.in"
+        },
+        {
+          "title": "District Judiciary, West Kameng",
+          "district_name": "West Kameng",
+          "lgd_short_name": "WKG",
+          "site_url": "https://bomdila.dcourts.gov.in"
+        },
+        {
+          "title": "District Judiciary, West Siang",
+          "district_name": "West Siang",
+          "lgd_short_name": "WSG",
+          "site_url": "https://aalo.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court, Pasighat",
+          "district_name": "East Siang",
+          "lgd_short_name": "ESG",
+          "site_url": "https://pasighat.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court, Yupia, Papum Pare District",
+          "district_name": "Papum Pare",
+          "lgd_short_name": "PPM",
+          "site_url": "https://yupia.dcourts.gov.in"
+        },
+        {
+          "title": "East Kameng District Judiciary",
+          "district_name": "East Kameng",
+          "lgd_short_name": "EKG",
+          "site_url": "https://seppa.dcourts.gov.in"
+        },
+        {
+          "title": "JMFC cum Civil Judge (Jr. Div.) Yingkiong",
+          "district_name": "Upper Siang",
+          "lgd_short_name": "USG",
+          "site_url": "https://yingkiong.dcourts.gov.in"
+        },
+        {
+          "title": "Judicial Magistrate First Class cum Civil Judge Court, Longding District",
+          "district_name": "Longding",
+          "lgd_short_name": "LDG",
+          "site_url": "https://longding.dcourts.gov.in"
+        },
+        {
+          "title": "Judicial Magistrate First Class-cum-Civil Court (Junior Division), Tawang District",
+          "district_name": "Tawang",
+          "lgd_short_name": "TWN",
+          "site_url": "https://tawang.dcourts.gov.in"
+        },
+        {
+          "title": "Judicial Magistrate First Class-cum-Civil Court, Anjaw District",
+          "district_name": "Anjaw",
+          "lgd_short_name": "ANJ",
+          "site_url": "https://hawai.dcourts.gov.in"
+        },
+        {
+          "title": "Judicial Magistrate First Class-cum-Civil Court, Dibang Valley District",
+          "district_name": "Dibang Valley",
+          "lgd_short_name": "DBN",
+          "site_url": "https://anini.dcourts.gov.in"
+        },
+        {
+          "title": "Judicial Magistrate First Class-cum-Civil Court, Namsai District",
+          "district_name": "Namsai",
+          "lgd_short_name": "NMS",
+          "site_url": "https://namsai.dcourts.gov.in"
+        },
+        {
+          "title": "Judicial Magistrate First Class-cum-Civil Judge(Jr. Div.)",
+          "district_name": "Siang",
+          "lgd_short_name": "SAN",
+          "site_url": "https://pangin.dcourts.gov.in"
+        },
+        {
+          "title": "Judicial Magistratre First Class Magistratre",
+          "district_name": "Kurung Kumey",
+          "lgd_short_name": "KKY",
+          "site_url": "https://koloriang.dcourts.gov.in"
+        }
+      ]
+    },
+    {
+      "state_name": "Assam",
+      "state_id": "AS",
+      "state_or_ut": "S",
+      "state_lgd_code": "18",
+      "source_url": "https://assam.gov.in",
+      "total": 34,
+      "courts": [
+        {
+          "title": "Bajali District Judiciary",
+          "district_name": "Bajali",
+          "lgd_short_name": "BJL",
+          "site_url": "https://bajali.dcourts.gov.in"
+        },
+        {
+          "title": "Baksa District Judiciary",
+          "district_name": "Baksa",
+          "lgd_short_name": "BAK",
+          "site_url": "https://baksa.dcourts.gov.in"
+        },
+        {
+          "title": "Barpeta District Judiciary",
+          "district_name": "Barpeta",
+          "lgd_short_name": "BAR",
+          "site_url": "https://barpeta.dcourts.gov.in"
+        },
+        {
+          "title": "Biswanath District Judiciary",
+          "district_name": "Sonitpur",
+          "lgd_short_name": "SON",
+          "site_url": "https://biswanath.dcourts.gov.in"
+        },
+        {
+          "title": "Bongaigaon District Judiciary",
+          "district_name": "Bongaigaon",
+          "lgd_short_name": "BNG",
+          "site_url": "https://bongaigaon.dcourts.gov.in"
+        },
+        {
+          "title": "Cachar District Judiciary",
+          "district_name": "Cachar",
+          "lgd_short_name": "CCH",
+          "site_url": "https://cachar.dcourts.gov.in"
+        },
+        {
+          "title": "Chirang District Judiciary",
+          "district_name": "Chirang",
+          "lgd_short_name": "CRG",
+          "site_url": "https://chirang.dcourts.gov.in"
+        },
+        {
+          "title": "Darrang District Judiciary",
+          "district_name": "Darrang",
+          "lgd_short_name": "DRR",
+          "site_url": "https://darrang.dcourts.gov.in"
+        },
+        {
+          "title": "Dhemaji District Judiciary",
+          "district_name": "Dhemaji",
+          "lgd_short_name": "DHM",
+          "site_url": "https://dhemaji.dcourts.gov.in"
+        },
+        {
+          "title": "Dhubri District Judiciary",
+          "district_name": "Dhubri",
+          "lgd_short_name": "DHB",
+          "site_url": "https://dhubri.dcourts.gov.in"
+        },
+        {
+          "title": "Dibrugarh District Judiciary",
+          "district_name": "Dibrugarh",
+          "lgd_short_name": "DBR",
+          "site_url": "https://dibrugarh.dcourts.gov.in"
+        },
+        {
+          "title": "Dima Hasao District Judiciary",
+          "district_name": "Dima Hasao",
+          "lgd_short_name": "DHO",
+          "site_url": "https://dimahasao.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Charaideo",
+          "district_name": "Charaideo",
+          "lgd_short_name": "CID",
+          "site_url": "https://charaideo.dcourts.gov.in"
+        },
+        {
+          "title": "District Judiciary Hojai",
+          "district_name": "Nagaon",
+          "lgd_short_name": "NGN",
+          "site_url": "https://hojai.dcourts.gov.in"
+        },
+        {
+          "title": "Goalpara District Judiciary",
+          "district_name": "Goalpara",
+          "lgd_short_name": "GLP",
+          "site_url": "https://goalpara.dcourts.gov.in"
+        },
+        {
+          "title": "Golaghat District Judiciary",
+          "district_name": "Golaghat",
+          "lgd_short_name": "GLG",
+          "site_url": "https://golaghat.dcourts.gov.in"
+        },
+        {
+          "title": "Hailakandi District Judiciary",
+          "district_name": "Hailakandi",
+          "lgd_short_name": "HLK",
+          "site_url": "https://hailakandi.dcourts.gov.in"
+        },
+        {
+          "title": "Jorhat District Judiciary",
+          "district_name": "Jorhat",
+          "lgd_short_name": "JRH",
+          "site_url": "https://jorhat.dcourts.gov.in"
+        },
+        {
+          "title": "Kamrup Metro District Judiciary",
+          "district_name": "Kamrup",
+          "lgd_short_name": "KMP",
+          "site_url": "https://kamrupmetro.dcourts.gov.in"
+        },
+        {
+          "title": "Kamrup, Amingaon District Judiciary",
+          "district_name": "Kamrup",
+          "lgd_short_name": "KMP",
+          "site_url": "https://kamrup.dcourts.gov.in"
+        },
+        {
+          "title": "Karbi Anglong District Judiciary",
+          "district_name": "Karbi Anglong",
+          "lgd_short_name": "KAG",
+          "site_url": "https://karbianglong.dcourts.gov.in"
+        },
+        {
+          "title": "Karimganj District Judiciary",
+          "district_name": "Karimganj",
+          "lgd_short_name": "KGJ",
+          "site_url": "https://karimganj.dcourts.gov.in"
+        },
+        {
+          "title": "Kokrajhar District Judiciary",
+          "district_name": "Kokrajhar",
+          "lgd_short_name": "KKR",
+          "site_url": "https://kokrajhar.dcourts.gov.in"
+        },
+        {
+          "title": "Lakhimpur District Judiciary",
+          "district_name": "Lakhimpur",
+          "lgd_short_name": "LKP",
+          "site_url": "https://lakhimpur.dcourts.gov.in"
+        },
+        {
+          "title": "Majuli District Judiciary",
+          "district_name": "Majuli",
+          "lgd_short_name": "MJL",
+          "site_url": "https://majuli.dcourts.gov.in"
+        },
+        {
+          "title": "Morigaon District Judiciary",
+          "district_name": "Marigaon",
+          "lgd_short_name": "MGN",
+          "site_url": "https://morigaon.dcourts.gov.in"
+        },
+        {
+          "title": "Nagaon District Judiciary",
+          "district_name": "Nagaon",
+          "lgd_short_name": "NGN",
+          "site_url": "https://nagaon.dcourts.gov.in"
+        },
+        {
+          "title": "Nalbari District Judiciary",
+          "district_name": "Nalbari",
+          "lgd_short_name": "NLB",
+          "site_url": "https://nalbari.dcourts.gov.in"
+        },
+        {
+          "title": "Sivasagar District Judiciary",
+          "district_name": "Sivasagar",
+          "lgd_short_name": "SVS",
+          "site_url": "https://sivasagar.dcourts.gov.in"
+        },
+        {
+          "title": "Sonitpur District Judiciary",
+          "district_name": "Sonitpur",
+          "lgd_short_name": "SON",
+          "site_url": "https://sonitpur.dcourts.gov.in"
+        },
+        {
+          "title": "South Salmara-Mankachar District Judiciary",
+          "district_name": "South Salmara Mancachar",
+          "lgd_short_name": "STH",
+          "site_url": "https://southsalmara.dcourts.gov.in"
+        },
+        {
+          "title": "Tinsukia District Judiciary",
+          "district_name": "Tinsukia",
+          "lgd_short_name": "TIN",
+          "site_url": "https://tinsukia.dcourts.gov.in"
+        },
+        {
+          "title": "Udalguri District Court",
+          "district_name": "Udalguri",
+          "lgd_short_name": "UDA",
+          "site_url": "https://udalguri.dcourts.gov.in"
+        },
+        {
+          "title": "West Karbi Anglong District Judiciary",
+          "district_name": "West Karbi Anglong",
+          "lgd_short_name": "WST",
+          "site_url": "https://westkarbianglong.dcourts.gov.in"
+        }
+      ]
+    },
+    {
+      "state_name": "Bihar",
+      "state_id": "BR",
+      "state_or_ut": "S",
+      "state_lgd_code": "10",
+      "source_url": "https://state.bihar.gov.in",
+      "total": 38,
+      "courts": [
+        {
+          "title": "District Court Sheikhpura",
+          "district_name": "Sheikhpura",
+          "lgd_short_name": "SHK",
+          "site_url": "https://sheikhpura.dcourts.gov.in"
+        },
+        {
+          "title": "Banka District Court",
+          "district_name": "Banka",
+          "lgd_short_name": "BNK",
+          "site_url": "https://banka.dcourts.gov.in"
+        },
+        {
+          "title": "Civil Court Rohtas (Sasaram)",
+          "district_name": "Rohtas",
+          "lgd_short_name": "RTS",
+          "site_url": "https://rohtas.dcourts.gov.in"
+        },
+        {
+          "title": "Civil Court, Kaimur(Bhabhua)",
+          "district_name": "Kaimur (Bhabua)",
+          "lgd_short_name": "KMR",
+          "site_url": "https://bhabua.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Araria",
+          "district_name": "Araria",
+          "lgd_short_name": "ARA",
+          "site_url": "https://araria.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Aurangabad",
+          "district_name": "Aurangabad(BH)",
+          "lgd_short_name": "AGB",
+          "site_url": "https://aurangabad.bih.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Begusarai",
+          "district_name": "Begusarai",
+          "lgd_short_name": "BSR",
+          "site_url": "https://begusarai.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Bhagalpur",
+          "district_name": "Bhagalpur",
+          "lgd_short_name": "BGO",
+          "site_url": "https://bhagalpur.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Bhojpur",
+          "district_name": "Bhojpur",
+          "lgd_short_name": "BJP",
+          "site_url": "https://bhojpur.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Buxar",
+          "district_name": "Buxar",
+          "lgd_short_name": "BUX",
+          "site_url": "https://buxar.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Darbhanga",
+          "district_name": "Darbhanga",
+          "lgd_short_name": "DBG",
+          "site_url": "https://darbhanga.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Gaya",
+          "district_name": "Gaya",
+          "lgd_short_name": "GAY",
+          "site_url": "https://gaya.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Gopalganj",
+          "district_name": "Gopalganj",
+          "lgd_short_name": "GPG",
+          "site_url": "https://gopalganj.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Jamui",
+          "district_name": "Jamui",
+          "lgd_short_name": "JAM",
+          "site_url": "https://jamui.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Jehanabad",
+          "district_name": "Jehanabad",
+          "lgd_short_name": "JHB",
+          "site_url": "https://jehanabad.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Katihar",
+          "district_name": "Katihar",
+          "lgd_short_name": "KTR",
+          "site_url": "https://katihar.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Lakhisarai",
+          "district_name": "Lakhisarai",
+          "lgd_short_name": "LSR",
+          "site_url": "https://lakhisarai.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Madhepura",
+          "district_name": "Madhepura",
+          "lgd_short_name": "MDP",
+          "site_url": "https://madhepura.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Munger",
+          "district_name": "Munger",
+          "lgd_short_name": "MNG",
+          "site_url": "https://munger.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Muzaffarpur",
+          "district_name": "Muzaffarpur",
+          "lgd_short_name": "MUZ",
+          "site_url": "https://muzaffarpur.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Nalanda",
+          "district_name": "Nalanda",
+          "lgd_short_name": "NLD",
+          "site_url": "https://nalanda.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Saharsa",
+          "district_name": "Saharsa",
+          "lgd_short_name": "SHS",
+          "site_url": "https://saharsa.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Samastipur",
+          "district_name": "Samastipur",
+          "lgd_short_name": "SMS",
+          "site_url": "https://samastipur.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Sheikhpura",
+          "district_name": "Sheikhpura",
+          "lgd_short_name": "SHK",
+          "site_url": "https://sheikhpura.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Sitamarhi",
+          "district_name": "Sitamarhi",
+          "lgd_short_name": "STM",
+          "site_url": "https://sitamarhi.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Siwan",
+          "district_name": "Siwan",
+          "lgd_short_name": "SWN",
+          "site_url": "https://siwan.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Supaul",
+          "district_name": "Supaul",
+          "lgd_short_name": "SPL",
+          "site_url": "https://supaul.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Vaishali",
+          "district_name": "Vaishali",
+          "lgd_short_name": "VSH",
+          "site_url": "https://vaishali.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Madhubani",
+          "district_name": "Madhubani",
+          "lgd_short_name": "MDB",
+          "site_url": "https://madhubani.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Motihari",
+          "district_name": "East Champaran",
+          "lgd_short_name": "PRC",
+          "site_url": "https://motihari.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Patna",
+          "district_name": "Patna",
+          "lgd_short_name": "PTN",
+          "site_url": "https://patna.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Saran at chapra",
+          "district_name": "Saran",
+          "lgd_short_name": "SAR",
+          "site_url": "https://saran.dcourts.gov.in"
+        },
+        {
+          "title": "District Court,Nawada",
+          "district_name": "Nawada",
+          "lgd_short_name": "NAW",
+          "site_url": "https://nawada.dcourts.gov.in"
+        },
+        {
+          "title": "Khagaria District Court",
+          "district_name": "Khagaria",
+          "lgd_short_name": "KGR",
+          "site_url": "https://khagaria.dcourts.gov.in"
+        },
+        {
+          "title": "Kishanganj District Court",
+          "district_name": "Kishanganj",
+          "lgd_short_name": "KSG",
+          "site_url": "https://kishanganj.dcourts.gov.in"
+        },
+        {
+          "title": "Purnea District Court",
+          "district_name": "Purnia",
+          "lgd_short_name": "PRN",
+          "site_url": "https://purnea.dcourts.gov.in"
+        },
+        {
+          "title": "Sheohar District Court",
+          "district_name": "Sheohar",
+          "lgd_short_name": "SHH",
+          "site_url": "https://sheohar.dcourts.gov.in"
+        },
+        {
+          "title": "West Champaran",
+          "district_name": "West Champaran",
+          "lgd_short_name": "PSC",
+          "site_url": "https://bettiah.dcourts.gov.in"
+        }
+      ]
+    },
+    {
+      "state_name": "Chandigarh",
+      "state_id": "CH",
+      "state_or_ut": "U",
+      "state_lgd_code": "4",
+      "source_url": "https://chandigarh.gov.in",
+      "total": 1,
+      "courts": [
+        {
+          "title": "District Court Chandigarh",
+          "district_name": "Chandigarh",
+          "lgd_short_name": "CHD",
+          "site_url": "https://chandigarh.dcourts.gov.in"
+        }
+      ]
+    },
+    {
+      "state_name": "Chhattisgarh",
+      "state_id": "CG",
+      "state_or_ut": "S",
+      "state_lgd_code": "22",
+      "source_url": "https://www.cgstate.gov.in",
+      "total": 23,
+      "courts": [
+        {
+          "title": "DISTRICT AND SESSION COURT KABIRDHAM (KAWARDHA)",
+          "district_name": "Kabeerdham",
+          "lgd_short_name": "KDM",
+          "site_url": "https://kabirdham.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Raipur",
+          "district_name": "Raipur",
+          "lgd_short_name": "RPR",
+          "site_url": "https://raipur.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court, Durg",
+          "district_name": "Durg",
+          "lgd_short_name": "DRG",
+          "site_url": "https://durg.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court Bilaspur",
+          "district_name": "Bilaspur(CGH)",
+          "lgd_short_name": "BLP",
+          "site_url": "https://bilaspur.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court Dhamtari",
+          "district_name": "Dhamtari",
+          "lgd_short_name": "DMT",
+          "site_url": "https://dhamtari.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court Korba",
+          "district_name": "Korba",
+          "lgd_short_name": "KRB",
+          "site_url": "https://korba.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court Raigarh",
+          "district_name": "Raigarh",
+          "lgd_short_name": "RGR",
+          "site_url": "https://raigarh.dcourts.gov.in"
+        },
+        {
+          "title": "District And Sessions Court,Kanker",
+          "district_name": "Kanker",
+          "lgd_short_name": "KNK",
+          "site_url": "https://kanker.dcourts.gov.in"
+        },
+        {
+          "title": "District and Session Court Janjgir-Champa",
+          "district_name": "Janjgir champa",
+          "lgd_short_name": "JCH",
+          "site_url": "https://janjgir.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Balodabazar",
+          "district_name": "Balodabazar-Bhatapara",
+          "lgd_short_name": "BLB",
+          "site_url": "https://balodabazar.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Bastar",
+          "district_name": "Bastar",
+          "lgd_short_name": "BAS",
+          "site_url": "https://bastar.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Bemetara",
+          "district_name": "Bemetara",
+          "lgd_short_name": "BEM",
+          "site_url": "https://bemetara.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Kondagaon",
+          "district_name": "Kondagaon",
+          "lgd_short_name": "SWG",
+          "site_url": "https://kondagaon.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Mahasamund",
+          "district_name": "Mahasamund",
+          "lgd_short_name": "MHS",
+          "site_url": "https://mahasamund.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Surajpur",
+          "district_name": "Surajpur",
+          "lgd_short_name": "SRJ",
+          "site_url": "https://surajpur.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Surguja",
+          "district_name": "Surguja",
+          "lgd_short_name": "SRG",
+          "site_url": "https://surguja.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court, Balod",
+          "district_name": "Balod",
+          "lgd_short_name": "BLD",
+          "site_url": "https://balod.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court, Balrampur-Ramanujganj",
+          "district_name": "Balrampur Ramanujganj",
+          "lgd_short_name": "BLM",
+          "site_url": "https://balrampur.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court, Jashpur",
+          "district_name": "Jashpur",
+          "lgd_short_name": "JSH",
+          "site_url": "https://jashpur.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court, Korea",
+          "district_name": "Korea",
+          "lgd_short_name": "KOR",
+          "site_url": "https://korea.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court, Mungeli",
+          "district_name": "Mungeli",
+          "lgd_short_name": "MUN",
+          "site_url": "https://mungeli.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court, Rajnandgaon",
+          "district_name": "Rajnandgaon",
+          "lgd_short_name": "RJN",
+          "site_url": "https://rajnandgaon.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court, South Bastar Dantewada",
+          "district_name": "Dantewada",
+          "lgd_short_name": "DNT",
+          "site_url": "https://dantewada.dcourts.gov.in"
+        }
+      ]
+    },
+    {
+      "state_name": "Dadra and Nagar Haveli and Daman and Diu",
+      "state_id": "ND",
+      "state_or_ut": "U",
+      "state_lgd_code": "38",
+      "source_url": "https://ddd.gov.in",
+      "total": 3,
+      "courts": [
+        {
+          "title": "District & Sessions Court, Dadra and Nagar Haveli at Silvassa",
+          "district_name": "Dadra & Nagar Haveli",
+          "lgd_short_name": "DNH",
+          "site_url": "https://silvassa.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Daman",
+          "district_name": "Daman",
+          "lgd_short_name": "DMN",
+          "site_url": "https://daman.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Diu",
+          "district_name": "Diu",
+          "lgd_short_name": "DIU",
+          "site_url": "https://diu.dcourts.gov.in"
+        }
+      ]
+    },
+    {
+      "state_name": "Delhi",
+      "state_id": "DL",
+      "state_or_ut": "U",
+      "state_lgd_code": "7",
+      "source_url": "https://delhi.gov.in",
+      "total": 11,
+      "courts": [
+        {
+          "title": "Central District Court, Delhi",
+          "district_name": "Central Delhi",
+          "lgd_short_name": "CNT",
+          "site_url": "https://centraldelhi.dcourts.gov.in"
+        },
+        {
+          "title": "District Court North Delhi",
+          "district_name": "North Delhi",
+          "lgd_short_name": "NRD",
+          "site_url": "https://northdelhi.dcourts.gov.in"
+        },
+        {
+          "title": "District Court North West Delhi",
+          "district_name": "North West Delhi",
+          "lgd_short_name": "NWD",
+          "site_url": "https://rohini.dcourts.gov.in"
+        },
+        {
+          "title": "Dwarka Court South West Delhi | India",
+          "district_name": "South West Delhi",
+          "lgd_short_name": "SWD",
+          "site_url": "https://southwestdelhi.dcourts.gov.in"
+        },
+        {
+          "title": "East District Court, Delhi",
+          "district_name": "East Delhi",
+          "lgd_short_name": "EST",
+          "site_url": "https://eastdelhi.dcourts.gov.in"
+        },
+        {
+          "title": "New Delhi District Court, Delhi",
+          "district_name": "New Delhi",
+          "lgd_short_name": "NDL",
+          "site_url": "https://newdelhi.dcourts.gov.in"
+        },
+        {
+          "title": "North East District Court, Delhi",
+          "district_name": "North East Delhi",
+          "lgd_short_name": "NED",
+          "site_url": "https://northeast.dcourts.gov.in"
+        },
+        {
+          "title": "Shahdara District Court, Delhi",
+          "district_name": "Shahdara",
+          "lgd_short_name": "HHD",
+          "site_url": "https://shahdara.dcourts.gov.in"
+        },
+        {
+          "title": "South District Court, New Delhi",
+          "district_name": "South Delhi",
+          "lgd_short_name": "SDL",
+          "site_url": "https://southdelhi.dcourts.gov.in"
+        },
+        {
+          "title": "South-East District Court, New Delhi",
+          "district_name": "South East",
+          "lgd_short_name": "STS",
+          "site_url": "https://southeastdelhi.dcourts.gov.in"
+        },
+        {
+          "title": "West District Court, Delhi",
+          "district_name": "West Delhi",
+          "lgd_short_name": "WSD",
+          "site_url": "https://westdelhi.dcourts.gov.in"
+        }
+      ]
+    },
+    {
+      "state_name": "Goa",
+      "state_id": "GA",
+      "state_or_ut": "S",
+      "state_lgd_code": "30",
+      "source_url": "https://www.goa.gov.in",
+      "total": 2,
+      "courts": [
+        {
+          "title": "District & Sessions Court, North Goa",
+          "district_name": "North Goa",
+          "lgd_short_name": "NGO",
+          "site_url": "https://dcngoa.dcourts.gov.in"
+        },
+        {
+          "title": "District Court South Goa",
+          "district_name": "South Goa",
+          "lgd_short_name": "SGO",
+          "site_url": "https://dcsgoa.dcourts.gov.in"
+        }
+      ]
+    },
+    {
+      "state_name": "Gujarat",
+      "state_id": "GJ",
+      "state_or_ut": "S",
+      "state_lgd_code": "24",
+      "source_url": "https://gujaratindia.gov.in",
+      "total": 35,
+      "courts": [
+        {
+          "title": "City Civil & Sessions Court Ahmedabad - Gujarat",
+          "district_name": "Ahmedabad CCC",
+          "lgd_short_name": "AHM",
+          "site_url": "https://ahmedabad-ccc.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Ahmedabad Rural - Gujarat",
+          "district_name": "Ahmedabad Rural",
+          "lgd_short_name": "AHM",
+          "site_url": "https://ahmedabad-rural.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Amreli - Gujarat",
+          "district_name": "Amreli",
+          "lgd_short_name": "ARL",
+          "site_url": "https://amreli.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Anand - Gujarat",
+          "district_name": "Anand",
+          "lgd_short_name": "ANA",
+          "site_url": "https://anand.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Aravalli - Gujarat",
+          "district_name": "Arvalli",
+          "lgd_short_name": "RVL",
+          "site_url": "https://aravalli.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Banaskantha - Gujarat",
+          "district_name": "Banaskantha",
+          "lgd_short_name": "BKT",
+          "site_url": "https://banaskantha.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Bharuch - Gujarat",
+          "district_name": "Bharuch",
+          "lgd_short_name": "BRC",
+          "site_url": "https://bharuch.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Bhavnagar - Gujarat",
+          "district_name": "Bhavnagar",
+          "lgd_short_name": "BHV",
+          "site_url": "https://bhavnagar.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Bhuj Kachchh - Gujarat",
+          "district_name": "Kachchh",
+          "lgd_short_name": "KCH",
+          "site_url": "https://kachchh.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Botad-Gujarat",
+          "district_name": "Botad",
+          "lgd_short_name": "BTD",
+          "site_url": "https://botad.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Chhotaudepur - Gujarat",
+          "district_name": "Chhotaudepur",
+          "lgd_short_name": "CUP",
+          "site_url": "https://chhotaudepur.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Dahod - Gujarat",
+          "district_name": "Dahod",
+          "lgd_short_name": "DHD",
+          "site_url": "https://dahod.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Devbhumi Dwarka - Gujarat",
+          "district_name": "Devbhumi Dwarka",
+          "lgd_short_name": "DVB",
+          "site_url": "https://devbhumidwarka.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Gandhinagar - Gujarat",
+          "district_name": "Gandhi Nagar",
+          "lgd_short_name": "GNR",
+          "site_url": "https://gandhinagar.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Gir Somnath - Gujarat",
+          "district_name": "Gir Somnath",
+          "lgd_short_name": "GRS",
+          "site_url": "https://girsomnath.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Jamnagar - Gujarat",
+          "district_name": "Jamnagar",
+          "lgd_short_name": "JMN",
+          "site_url": "https://jamnagar.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Junagadh - Gujarat",
+          "district_name": "Junagadh",
+          "lgd_short_name": "JNG",
+          "site_url": "https://junagadh.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Kheda - Gujarat",
+          "district_name": "Kheda",
+          "lgd_short_name": "KHE",
+          "site_url": "https://kheda.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Mahesana - Gujarat",
+          "district_name": "Mahesana",
+          "lgd_short_name": "MHN",
+          "site_url": "https://mahesana.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Mahisagar At Lunawada-Gujarat",
+          "district_name": "Mahisagar",
+          "lgd_short_name": "MSG",
+          "site_url": "https://mahisagar.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Morbi - Gujarat",
+          "district_name": "Morbi",
+          "lgd_short_name": "MRI",
+          "site_url": "https://morbi.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Narmada-Gujarat",
+          "district_name": "Narmada",
+          "lgd_short_name": "NRM",
+          "site_url": "https://narmada.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Navsari - Gujarat",
+          "district_name": "Navsari",
+          "lgd_short_name": "NVS",
+          "site_url": "https://navsari.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Panchmahals Godhra - Gujarat",
+          "district_name": "Panch Mahals",
+          "lgd_short_name": "PMS",
+          "site_url": "https://panchmahals.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Patan - Gujarat",
+          "district_name": "Patan",
+          "lgd_short_name": "PAT",
+          "site_url": "https://patan.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Porbandar -Gujarat",
+          "district_name": "Porbandar",
+          "lgd_short_name": "PRB",
+          "site_url": "https://porbandar.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Rajkot - Gujarat",
+          "district_name": "Rajkot",
+          "lgd_short_name": "RJK",
+          "site_url": "https://rajkot.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Sabarkantha - Gujarat",
+          "district_name": "Sabarkantha",
+          "lgd_short_name": "SKA",
+          "site_url": "https://sabarkantha.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Surat - Gujarat",
+          "district_name": "Surat",
+          "lgd_short_name": "SRT",
+          "site_url": "https://surat.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Surendranagar - Gujarat",
+          "district_name": "Surendra Nagar",
+          "lgd_short_name": "SUR",
+          "site_url": "https://surendranagar.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Tapi - Gujarat",
+          "district_name": "Tapi",
+          "lgd_short_name": "TAP",
+          "site_url": "https://tapi.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Vadodara - Gujarat",
+          "district_name": "Vadodara",
+          "lgd_short_name": "VDR",
+          "site_url": "https://vadodara.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Valsad - GUJARAT",
+          "district_name": "Valsad",
+          "lgd_short_name": "VLS",
+          "site_url": "https://valsad.dcourts.gov.in"
+        },
+        {
+          "title": "Industrial and Labour Courts Ahmedabad - Gujarat",
+          "district_name": "Ahmedabad",
+          "lgd_short_name": "AHM",
+          "site_url": "https://indcourtguj.dcourts.gov.in"
+        },
+        {
+          "title": "Metropolitan Magistrates Courts - Ahmedabad - Gujarat",
+          "district_name": "Ahmedabad MMC",
+          "lgd_short_name": "AHM",
+          "site_url": "https://ahmedabad-mmc.dcourts.gov.in"
+        }
+      ]
+    },
+    {
+      "state_name": "Haryana",
+      "state_id": "HR",
+      "state_or_ut": "S",
+      "state_lgd_code": "6",
+      "source_url": "https://haryana.gov.in",
+      "total": 21,
+      "courts": [
+        {
+          "title": "District Court Narnaul",
+          "district_name": "Mahendragarh",
+          "lgd_short_name": "MGH",
+          "site_url": "https://narnaul.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Ambala",
+          "district_name": "Ambala",
+          "lgd_short_name": "AMB",
+          "site_url": "https://ambala.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Bhiwani",
+          "district_name": "Bhiwani",
+          "lgd_short_name": "BHW",
+          "site_url": "https://bhiwani.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Faridabad",
+          "district_name": "Faridabad",
+          "lgd_short_name": "FRB",
+          "site_url": "https://faridabad.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Gurugram",
+          "district_name": "Gurgaon",
+          "lgd_short_name": "GRG",
+          "site_url": "https://gurugram.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Jhajjar",
+          "district_name": "Jhajjar",
+          "lgd_short_name": "JHJ",
+          "site_url": "https://jhajjar.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Jind",
+          "district_name": "Jind",
+          "lgd_short_name": "JND",
+          "site_url": "https://jind.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Karnal",
+          "district_name": "Karnal",
+          "lgd_short_name": "KRL",
+          "site_url": "https://karnal.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Kurukshetra",
+          "district_name": "Kurukshetra",
+          "lgd_short_name": "KRK",
+          "site_url": "https://kurukshetra.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Rohtak",
+          "district_name": "Rohtak",
+          "lgd_short_name": "RHT",
+          "site_url": "https://rohtak.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Yamuna Nagar",
+          "district_name": "Yamuna Nagar",
+          "lgd_short_name": "YMN",
+          "site_url": "https://yamunanagar.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Fatehabad",
+          "district_name": "Fatehabad",
+          "lgd_short_name": "FTB",
+          "site_url": "https://fatehabad.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Hisar",
+          "district_name": "Hisar",
+          "lgd_short_name": "HSR",
+          "site_url": "https://hisar.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Kaithal",
+          "district_name": "Kaithal",
+          "lgd_short_name": "KTL",
+          "site_url": "https://kaithal.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Nuh",
+          "district_name": "Nuh",
+          "lgd_short_name": "MWT",
+          "site_url": "https://nuh.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Palwal",
+          "district_name": "Palwal",
+          "lgd_short_name": "PWL",
+          "site_url": "https://palwal.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Panchkula",
+          "district_name": "Panchkula",
+          "lgd_short_name": "PNK",
+          "site_url": "https://panchkula.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Panipat",
+          "district_name": "Panipat",
+          "lgd_short_name": "PNP",
+          "site_url": "https://panipat.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Rewari",
+          "district_name": "Rewari",
+          "lgd_short_name": "RWR",
+          "site_url": "https://rewari.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Sirsa",
+          "district_name": "Sirsa",
+          "lgd_short_name": "SRS",
+          "site_url": "https://sirsa.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Sonepat",
+          "district_name": "Sonipat",
+          "lgd_short_name": "SNP",
+          "site_url": "https://sonepat.dcourts.gov.in"
+        }
+      ]
+    },
+    {
+      "state_name": "Himachal Pradesh",
+      "state_id": "HP",
+      "state_or_ut": "S",
+      "state_lgd_code": "2",
+      "source_url": "https://himachal.gov.in",
+      "total": 11,
+      "courts": [
+        {
+          "title": "District Court Bilaspur, Himachal Pradesh",
+          "district_name": "Bilaspur (HP)",
+          "lgd_short_name": "BLS",
+          "site_url": "https://bilaspurhp.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Chamba - Himachal Pradesh",
+          "district_name": "Chamba",
+          "lgd_short_name": "CHM",
+          "site_url": "https://chamba.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Hamirpur - Himachal Pradesh",
+          "district_name": "Hamirpur(HP)",
+          "lgd_short_name": "HMP",
+          "site_url": "https://hamirpur.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Kangra-Himachal Pradesh",
+          "district_name": "Kangra",
+          "lgd_short_name": "KNG",
+          "site_url": "https://kangra.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Kinnaur - Himachal Pradesh",
+          "district_name": "Kinnaur",
+          "lgd_short_name": "KIN",
+          "site_url": "https://kinnaur.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Kullu-Himachal Pradesh",
+          "district_name": "Kullu",
+          "lgd_short_name": "KUL",
+          "site_url": "https://kullu.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Mandi",
+          "district_name": "Mandi",
+          "lgd_short_name": "MND",
+          "site_url": "https://mandi.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Shimla-Himachal Pradesh",
+          "district_name": "Shimla",
+          "lgd_short_name": "SHM",
+          "site_url": "https://shimla.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Sirmaur, H.P.",
+          "district_name": "Sirmaur",
+          "lgd_short_name": "SRM",
+          "site_url": "https://sirmaur.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Solan - Himachal Pradesh",
+          "district_name": "Solan",
+          "lgd_short_name": "SLN",
+          "site_url": "https://solan.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Una - Himachal Pradesh",
+          "district_name": "Una",
+          "lgd_short_name": "UNA",
+          "site_url": "https://una.dcourts.gov.in"
+        }
+      ]
+    },
+    {
+      "state_name": "Jammu and Kashmir",
+      "state_id": "JK",
+      "state_or_ut": "U",
+      "state_lgd_code": "1",
+      "source_url": "https://jk.gov.in",
+      "total": 20,
+      "courts": [
+        {
+          "title": "DISTRICT COURT BANDIPORA",
+          "district_name": "Bandipora",
+          "lgd_short_name": "BDP",
+          "site_url": "https://bandipora.dcourts.gov.in"
+        },
+        {
+          "title": "DISTRICT COURT BHADERWAH - (DODA)",
+          "district_name": "Doda",
+          "lgd_short_name": "DOD",
+          "site_url": "https://bhaderwah.dcourts.gov.in"
+        },
+        {
+          "title": "DISTRICT COURT GANDERBAL",
+          "district_name": "Ganderbal",
+          "lgd_short_name": "GDR",
+          "site_url": "https://ganderbal.dcourts.gov.in"
+        },
+        {
+          "title": "DISTRICT COURT PULWAMA",
+          "district_name": "Pulwama",
+          "lgd_short_name": "PLW",
+          "site_url": "https://pulwama.dcourts.gov.in"
+        },
+        {
+          "title": "DISTRICT COURT RAJOURI",
+          "district_name": "Rajouri",
+          "lgd_short_name": "RJR",
+          "site_url": "https://rajouri.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Anantnag",
+          "district_name": "Ananthnag",
+          "lgd_short_name": "ATG",
+          "site_url": "https://anantnag.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Baramulla",
+          "district_name": "Baramulla",
+          "lgd_short_name": "BRM",
+          "site_url": "https://baramulla.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Budgam",
+          "district_name": "Budgam",
+          "lgd_short_name": "BDG",
+          "site_url": "https://budgam.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Jammu, Jammu and Kashmir",
+          "district_name": "Jammu",
+          "lgd_short_name": "JMU",
+          "site_url": "https://jammu.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Kathua, Jammu and kashmir",
+          "district_name": "Kathua",
+          "lgd_short_name": "KTH",
+          "site_url": "https://kathua.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Kishtwar",
+          "district_name": "Kishtwar",
+          "lgd_short_name": "KHT",
+          "site_url": "https://kishtwar.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Kulgam",
+          "district_name": "Kulgam",
+          "lgd_short_name": "KLG",
+          "site_url": "https://kulgam.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Kupwara",
+          "district_name": "Kupwara",
+          "lgd_short_name": "KPW",
+          "site_url": "https://kupwara.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Poonch",
+          "district_name": "Poonch",
+          "lgd_short_name": "PNC",
+          "site_url": "https://poonch.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Ramban",
+          "district_name": "Ramban",
+          "lgd_short_name": "RMB",
+          "site_url": "https://ramban.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Samba",
+          "district_name": "Samba",
+          "lgd_short_name": "SAM",
+          "site_url": "https://samba.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Shopian",
+          "district_name": "Shopian",
+          "lgd_short_name": "SPN",
+          "site_url": "https://shopian.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Srinagar",
+          "district_name": "Srinagar",
+          "lgd_short_name": "SRN",
+          "site_url": "https://srinagar.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Udhampur",
+          "district_name": "Udhampur",
+          "lgd_short_name": "UDM",
+          "site_url": "https://udhampur.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Reasi",
+          "district_name": "Reasi",
+          "lgd_short_name": "REA",
+          "site_url": "https://reasi.dcourts.gov.in"
+        }
+      ]
+    },
+    {
+      "state_name": "Jharkhand",
+      "state_id": "JH",
+      "state_or_ut": "S",
+      "state_lgd_code": "20",
+      "source_url": "https://www.jharkhand.gov.in",
+      "total": 24,
+      "courts": [
+        {
+          "title": "CIVIL COURT HAZARIBAG",
+          "district_name": "Hazaribag",
+          "lgd_short_name": "HZR",
+          "site_url": "https://hazaribag.dcourts.gov.in"
+        },
+        {
+          "title": "CIVIL COURT KHUNTI",
+          "district_name": "Khunti",
+          "lgd_short_name": "KNT",
+          "site_url": "https://khunti.dcourts.gov.in"
+        },
+        {
+          "title": "CIVIL COURT RANCHI",
+          "district_name": "Ranchi",
+          "lgd_short_name": "RNC",
+          "site_url": "https://ranchi.dcourts.gov.in"
+        },
+        {
+          "title": "CIVIL COURT, GARHWA",
+          "district_name": "Garhwa",
+          "lgd_short_name": "GRH",
+          "site_url": "https://garhwa.dcourts.gov.in"
+        },
+        {
+          "title": "CIVIL COURT, GODDA",
+          "district_name": "Godda",
+          "lgd_short_name": "GDD",
+          "site_url": "https://godda.dcourts.gov.in"
+        },
+        {
+          "title": "CIVIL COURT, LATEHAR",
+          "district_name": "Latehar",
+          "lgd_short_name": "LTH",
+          "site_url": "https://latehar.dcourts.gov.in"
+        },
+        {
+          "title": "CIVIL COURT, LOHARDAGA",
+          "district_name": "Lohardaga",
+          "lgd_short_name": "LHR",
+          "site_url": "https://lohardaga.dcourts.gov.in"
+        },
+        {
+          "title": "CIVIL COURTS , DHANBAD",
+          "district_name": "Dhanbad",
+          "lgd_short_name": "DHN",
+          "site_url": "https://dhanbad.dcourts.gov.in"
+        },
+        {
+          "title": "CIVIL COURTS PALAMAU AT DALTONGANJ",
+          "district_name": "Palamu",
+          "lgd_short_name": "PLM",
+          "site_url": "https://palamu.dcourts.gov.in"
+        },
+        {
+          "title": "CIVIL COURTS, RAMGARH",
+          "district_name": "Ramgarh",
+          "lgd_short_name": "RMG",
+          "site_url": "https://ramgarh.dcourts.gov.in"
+        },
+        {
+          "title": "Civil Court Sahibganj",
+          "district_name": "Sahibganj",
+          "lgd_short_name": "SGJ",
+          "site_url": "https://sahibganj.dcourts.gov.in"
+        },
+        {
+          "title": "Civil Court Jamtara",
+          "district_name": "Jamtara",
+          "lgd_short_name": "JMT",
+          "site_url": "https://jamtara.dcourts.gov.in"
+        },
+        {
+          "title": "Civil Court Simdega",
+          "district_name": "Simdega",
+          "lgd_short_name": "SMG",
+          "site_url": "https://simdega.dcourts.gov.in"
+        },
+        {
+          "title": "Civil Court, Chaibasa",
+          "district_name": "West Singhbhum",
+          "lgd_short_name": "WSM",
+          "site_url": "https://chaibasa.dcourts.gov.in"
+        },
+        {
+          "title": "Civil Court, Deoghar",
+          "district_name": "Deoghar",
+          "lgd_short_name": "DGH",
+          "site_url": "https://deoghar.dcourts.gov.in"
+        },
+        {
+          "title": "Civil Court, Dumka",
+          "district_name": "Dumka",
+          "lgd_short_name": "DMK",
+          "site_url": "https://dumka.dcourts.gov.in"
+        },
+        {
+          "title": "Civil Court, Giridih",
+          "district_name": "Giridih",
+          "lgd_short_name": "GIR",
+          "site_url": "https://giridih.dcourts.gov.in"
+        },
+        {
+          "title": "Civil Court, Gumla",
+          "district_name": "Gumla",
+          "lgd_short_name": "GML",
+          "site_url": "https://gumla.dcourts.gov.in"
+        },
+        {
+          "title": "Civil Court, Jamshedpur",
+          "district_name": "East Singhbhum",
+          "lgd_short_name": "ESM",
+          "site_url": "https://jamshedpur.dcourts.gov.in"
+        },
+        {
+          "title": "Civil Court, Koderma",
+          "district_name": "Koderma",
+          "lgd_short_name": "KDR",
+          "site_url": "https://koderma.dcourts.gov.in"
+        },
+        {
+          "title": "Civil Court, Pakur",
+          "district_name": "Pakur",
+          "lgd_short_name": "PKR",
+          "site_url": "https://pakur.dcourts.gov.in"
+        },
+        {
+          "title": "Civil Court, Seraikella",
+          "district_name": "Seraikela-kharsawan",
+          "lgd_short_name": "SKH",
+          "site_url": "https://seraikella.dcourts.gov.in"
+        },
+        {
+          "title": "Civil Courts, Bokaro",
+          "district_name": "Bokaro",
+          "lgd_short_name": "BKR",
+          "site_url": "https://bokaro.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Chatra",
+          "district_name": "Chatra",
+          "lgd_short_name": "CHT",
+          "site_url": "https://chatra.dcourts.gov.in"
+        }
+      ]
+    },
+    {
+      "state_name": "Karnataka",
+      "state_id": "KA",
+      "state_or_ut": "S",
+      "state_lgd_code": "29",
+      "source_url": "https://www.karnataka.gov.in",
+      "total": 30,
+      "courts": [
+        {
+          "title": "BENGALURU URBAN COURTS",
+          "district_name": "Bengaluru Urban",
+          "lgd_short_name": "BUR",
+          "site_url": "https://bengaluru.dcourts.gov.in"
+        },
+        {
+          "title": "DISTRICT COURT BENGALURU RURAL",
+          "district_name": "Bengaluru Rural",
+          "lgd_short_name": "BRR",
+          "site_url": "https://bengalururural.dcourts.gov.in"
+        },
+        {
+          "title": "DISTRICT COURT CHAMARAJANGARA",
+          "district_name": "Chamrajnagar",
+          "lgd_short_name": "CHJ",
+          "site_url": "https://chamarajanagara.dcourts.gov.in"
+        },
+        {
+          "title": "DISTRICT COURT, KODAGU",
+          "district_name": "Kodagu",
+          "lgd_short_name": "KDG",
+          "site_url": "https://kodagu.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Ballari",
+          "district_name": "Ballari",
+          "lgd_short_name": "BLL",
+          "site_url": "https://ballari.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Belagavi",
+          "district_name": "Belagavi",
+          "lgd_short_name": "BLG",
+          "site_url": "https://belagavi.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Bidar",
+          "district_name": "Bidar",
+          "lgd_short_name": "BDR",
+          "site_url": "https://bidar.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Chitradurga",
+          "district_name": "Chitradurga",
+          "lgd_short_name": "CTR",
+          "site_url": "https://chitradurga.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Dakshina Kannada Mangaluru",
+          "district_name": "Dakshina Kannada",
+          "lgd_short_name": "DKD",
+          "site_url": "https://dk.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Dharwad",
+          "district_name": "Dharwad",
+          "lgd_short_name": "DRW",
+          "site_url": "https://dharwad.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Gadag",
+          "district_name": "Gadag",
+          "lgd_short_name": "GDG",
+          "site_url": "https://gadag.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Hassan",
+          "district_name": "Hassan",
+          "lgd_short_name": "HAS",
+          "site_url": "https://hassan.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Haveri",
+          "district_name": "Haveri",
+          "lgd_short_name": "HAV",
+          "site_url": "https://haveri.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Kolar",
+          "district_name": "Kolar",
+          "lgd_short_name": "KLR",
+          "site_url": "https://kolar.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Koppal",
+          "district_name": "Koppal",
+          "lgd_short_name": "KPL",
+          "site_url": "https://koppal.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Mysuru",
+          "district_name": "Mysuru",
+          "lgd_short_name": "MYS",
+          "site_url": "https://mysuru.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Raichur",
+          "district_name": "Raichur",
+          "lgd_short_name": "RCH",
+          "site_url": "https://raichur.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Ramanagara",
+          "district_name": "Ramanagar",
+          "lgd_short_name": "RAM",
+          "site_url": "https://ramanagara.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Shivamogga",
+          "district_name": "Shivamogga",
+          "lgd_short_name": "SVM",
+          "site_url": "https://shivamogga.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Tumakuru",
+          "district_name": "Tumakuru",
+          "lgd_short_name": "TMK",
+          "site_url": "https://tumakuru.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Udupi",
+          "district_name": "Udupi",
+          "lgd_short_name": "UDU",
+          "site_url": "https://udupi.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Uttarakannada",
+          "district_name": "Uttara Kannada",
+          "lgd_short_name": "UKD",
+          "site_url": "https://uttarakannada.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Vijayapura",
+          "district_name": "Vijayapura",
+          "lgd_short_name": "VJP",
+          "site_url": "https://vijayapura.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Yadgir",
+          "district_name": "Yadgir",
+          "lgd_short_name": "YDG",
+          "site_url": "https://yadgir.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Chikkaballapura",
+          "district_name": "Chikkaballapur",
+          "lgd_short_name": "CHB",
+          "site_url": "https://chikkaballapur.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Chikkamagaluru",
+          "district_name": "Chikkamagaluru",
+          "lgd_short_name": "CKM",
+          "site_url": "https://chikkamagaluru.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Davanagere",
+          "district_name": "Davangere",
+          "lgd_short_name": "DAV",
+          "site_url": "https://davanagere.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Kalaburgi",
+          "district_name": "Kalaburagi",
+          "lgd_short_name": "KLB",
+          "site_url": "https://kalaburagi.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Mandya",
+          "district_name": "Mandya",
+          "lgd_short_name": "MDY",
+          "site_url": "https://mandya.dcourts.gov.in"
+        },
+        {
+          "title": "Prl. District and Sessions Court Bagalkot",
+          "district_name": "Bagalkot",
+          "lgd_short_name": "BAG",
+          "site_url": "https://bagalkot.dcourts.gov.in"
+        }
+      ]
+    },
+    {
+      "state_name": "Kerala",
+      "state_id": "KL",
+      "state_or_ut": "S",
+      "state_lgd_code": "32",
+      "source_url": "https://kerala.gov.in",
+      "total": 14,
+      "courts": [
+        {
+          "title": "DISTRICT & SESSIONS COURT , PATHANAMTHITTA",
+          "district_name": "Pathanamthitta",
+          "lgd_short_name": "PTT",
+          "site_url": "https://pathanamthitta.dcourts.gov.in"
+        },
+        {
+          "title": "DISTRICT COURT KASARAGOD",
+          "district_name": "Kasargod",
+          "lgd_short_name": "KSR",
+          "site_url": "https://kasaragod.dcourts.gov.in"
+        },
+        {
+          "title": "DISTRICT COURT THIRUVANANTHAPURAM",
+          "district_name": "Thiruvananthapuram",
+          "lgd_short_name": "TVP",
+          "site_url": "https://thiruvananthapuram.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Alappuzha",
+          "district_name": "Alappuzha",
+          "lgd_short_name": "ALZ",
+          "site_url": "https://alappuzha.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Kollam",
+          "district_name": "Kollam",
+          "lgd_short_name": "KLM",
+          "site_url": "https://kollam.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Kozhikode",
+          "district_name": "Kozhikode",
+          "lgd_short_name": "KOZ",
+          "site_url": "https://kozhikode.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Manjeri",
+          "district_name": "Malappuram",
+          "lgd_short_name": "MLP",
+          "site_url": "https://malappuram.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Palakkad",
+          "district_name": "Palakkad",
+          "lgd_short_name": "PLK",
+          "site_url": "https://palakkad.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Thalassery",
+          "district_name": "Kannur",
+          "lgd_short_name": "KNU",
+          "site_url": "https://kannur.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Thodupuzha",
+          "district_name": "Idukki",
+          "lgd_short_name": "IDK",
+          "site_url": "https://idukki.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Thrissur",
+          "district_name": "Thrissur",
+          "lgd_short_name": "TSR",
+          "site_url": "https://thrissur.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Ernakulam",
+          "district_name": "Ernakulam",
+          "lgd_short_name": "ERN",
+          "site_url": "https://ernakulam.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Kottayam",
+          "district_name": "Kottayam",
+          "lgd_short_name": "KTM",
+          "site_url": "https://kottayam.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Wayanad",
+          "district_name": "Wayanad",
+          "lgd_short_name": "WAY",
+          "site_url": "https://wayanad.dcourts.gov.in"
+        }
+      ]
+    },
+    {
+      "state_name": "Ladakh",
+      "state_id": "LA",
+      "state_or_ut": "U",
+      "state_lgd_code": "37",
+      "source_url": "https://ladakh.gov.in",
+      "total": 2,
+      "courts": [
+        {
+          "title": "District Court Kargil",
+          "district_name": "Kargil",
+          "lgd_short_name": "KRG",
+          "site_url": "https://kargil.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Leh",
+          "district_name": "Leh",
+          "lgd_short_name": "LLD",
+          "site_url": "https://leh.dcourts.gov.in"
+        }
+      ]
+    },
+    {
+      "state_name": "Lakshadweep",
+      "state_id": "LD",
+      "state_or_ut": "U",
+      "state_lgd_code": "31",
+      "source_url": "https://lakshadweep.gov.in",
+      "total": 1,
+      "courts": [
+        {
+          "title": "District Court Kavaratti, UT of Lakshadweep",
+          "district_name": "Lakshadweep",
+          "lgd_short_name": "LKS",
+          "site_url": "https://kavaratti.dcourts.gov.in"
+        }
+      ]
+    },
+    {
+      "state_name": "Madhya Pradesh",
+      "state_id": "MP",
+      "state_or_ut": "S",
+      "state_lgd_code": "23",
+      "source_url": "https://mp.gov.in",
+      "total": 51,
+      "courts": [
+        {
+          "title": "DISTRICT & SESSIONS COURT KATNI (M.P)",
+          "district_name": "Katni",
+          "lgd_short_name": "KTN",
+          "site_url": "https://katni.dcourts.gov.in"
+        },
+        {
+          "title": "District & Seesions Court, Rajgarh",
+          "district_name": "Rajgarh",
+          "lgd_short_name": "RJG",
+          "site_url": "https://rajgarh.dcourts.gov.in"
+        },
+        {
+          "title": "District & Session Court Harda",
+          "district_name": "Harda",
+          "lgd_short_name": "HDA",
+          "site_url": "https://harda.dcourts.gov.in"
+        },
+        {
+          "title": "District & Session Court Jabalpur (M.P)",
+          "district_name": "Jabalpur",
+          "lgd_short_name": "JBL",
+          "site_url": "https://jabalpur.dcourts.gov.in"
+        },
+        {
+          "title": "District & Session Court Shivpuri",
+          "district_name": "Shivpuri",
+          "lgd_short_name": "SVP",
+          "site_url": "https://shivpuri.dcourts.gov.in"
+        },
+        {
+          "title": "District & Session Court, Chhatarpur",
+          "district_name": "Chhatarpur",
+          "lgd_short_name": "CRP",
+          "site_url": "https://chhatarpur.dcourts.gov.in"
+        },
+        {
+          "title": "District & Session Court, Mandsaur",
+          "district_name": "Mandsaur",
+          "lgd_short_name": "MAN",
+          "site_url": "https://mandsaur.dcourts.gov.in"
+        },
+        {
+          "title": "District & Session's Court Indore",
+          "district_name": "Indore",
+          "lgd_short_name": "IND",
+          "site_url": "https://indore.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court Alirajpur (M.P.)",
+          "district_name": "Alirajpur",
+          "lgd_short_name": "ALI",
+          "site_url": "https://alirajpur.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court Dewas",
+          "district_name": "Dewas",
+          "lgd_short_name": "DWS",
+          "site_url": "https://dewas.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court Gwalior",
+          "district_name": "Gwalior",
+          "lgd_short_name": "GWL",
+          "site_url": "https://gwalior.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court Sagar (M.P.)",
+          "district_name": "Sagar",
+          "lgd_short_name": "SGR",
+          "site_url": "https://sagar.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court Sheopur (M.P.)",
+          "district_name": "Sheopur",
+          "lgd_short_name": "SHP",
+          "site_url": "https://sheopur.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court Umaria",
+          "district_name": "Umaria",
+          "lgd_short_name": "UMA",
+          "site_url": "https://umaria.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court, Ashoknagar",
+          "district_name": "Ashok Nagar",
+          "lgd_short_name": "ANR",
+          "site_url": "https://ashoknagar.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court, Bhopal",
+          "district_name": "Bhopal",
+          "lgd_short_name": "BHP",
+          "site_url": "https://bhopal.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court, Damoh",
+          "district_name": "Damoh",
+          "lgd_short_name": "DMH",
+          "site_url": "https://damoh.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court, Guna",
+          "district_name": "Guna",
+          "lgd_short_name": "GUN",
+          "site_url": "https://guna.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court, Mandleshwar",
+          "district_name": "West Nimar",
+          "lgd_short_name": "KHA",
+          "site_url": "https://mandleshwar.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court, Morena",
+          "district_name": "Morena",
+          "lgd_short_name": "MRN",
+          "site_url": "https://morena.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court, Ratlam",
+          "district_name": "Ratlam",
+          "lgd_short_name": "RTL",
+          "site_url": "https://ratlam.dcourts.gov.in"
+        },
+        {
+          "title": "District And Session Court Agar Malwa",
+          "district_name": "Agar-Malwa",
+          "lgd_short_name": "AGM",
+          "site_url": "https://agar.dcourts.gov.in"
+        },
+        {
+          "title": "District And Session Court Raisen (M. P.)",
+          "district_name": "Raisen",
+          "lgd_short_name": "RSN",
+          "site_url": "https://raisen.dcourts.gov.in"
+        },
+        {
+          "title": "District And Session Court, Sidhi",
+          "district_name": "Sidhi",
+          "lgd_short_name": "SDH",
+          "site_url": "https://sidhi.dcourts.gov.in"
+        },
+        {
+          "title": "District And Sessions Court Satna (M.P)",
+          "district_name": "Satna",
+          "lgd_short_name": "STN",
+          "site_url": "https://satna.dcourts.gov.in"
+        },
+        {
+          "title": "District And Sessions Court Singrauli",
+          "district_name": "Singrauli",
+          "lgd_short_name": "SGL",
+          "site_url": "https://singrauli.dcourts.gov.in"
+        },
+        {
+          "title": "District And Sessions Court Vidisha",
+          "district_name": "Vidisha",
+          "lgd_short_name": "VID",
+          "site_url": "https://vidisha.dcourts.gov.in"
+        },
+        {
+          "title": "District And Sessions Court, Narsinghpur",
+          "district_name": "Narsinghpur",
+          "lgd_short_name": "NRS",
+          "site_url": "https://narsinghpur.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Dhar",
+          "district_name": "Dhar",
+          "lgd_short_name": "DHA",
+          "site_url": "https://dhar.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Shahdol",
+          "district_name": "Shahdol",
+          "lgd_short_name": "SHD",
+          "site_url": "https://shahdol.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Tikamgarh Madhya Pradesh",
+          "district_name": "Tikamgarh",
+          "lgd_short_name": "TKM",
+          "site_url": "https://tikamgarh.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Ujjain",
+          "district_name": "Ujjain",
+          "lgd_short_name": "UJJ",
+          "site_url": "https://ujjain.dcourts.gov.in"
+        },
+        {
+          "title": "District and Court Sessions Court Jhabua",
+          "district_name": "Jhabua",
+          "lgd_short_name": "JHA",
+          "site_url": "https://jhabua.dcourts.gov.in"
+        },
+        {
+          "title": "District and Session Court , Rewa",
+          "district_name": "Rewa",
+          "lgd_short_name": "REW",
+          "site_url": "https://rewa.dcourts.gov.in"
+        },
+        {
+          "title": "District and Session Court Anuppur",
+          "district_name": "Anuppur",
+          "lgd_short_name": "ANP",
+          "site_url": "https://anuppur.dcourts.gov.in"
+        },
+        {
+          "title": "District and Session Court Bhind",
+          "district_name": "Bhind",
+          "lgd_short_name": "BHN",
+          "site_url": "https://bhind.dcourts.gov.in"
+        },
+        {
+          "title": "District and Session Court Datia",
+          "district_name": "Datia",
+          "lgd_short_name": "DAT",
+          "site_url": "https://datia.dcourts.gov.in"
+        },
+        {
+          "title": "District and Session Court Shajapur",
+          "district_name": "Shajapur",
+          "lgd_short_name": "SJR",
+          "site_url": "https://shajapur.dcourts.gov.in"
+        },
+        {
+          "title": "District and Session Court, Burhanpur",
+          "district_name": "Burhanpur",
+          "lgd_short_name": "BRH",
+          "site_url": "https://burhanpur.dcourts.gov.in"
+        },
+        {
+          "title": "District and Session Court, Narmadapuram",
+          "district_name": "Narmadapuram",
+          "lgd_short_name": "HSH",
+          "site_url": "https://narmadapuram.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court , Chhindwara",
+          "district_name": "Chhindwara",
+          "lgd_short_name": "CDW",
+          "site_url": "https://chhindwara.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Balaghat",
+          "district_name": "Balaghat",
+          "lgd_short_name": "BGT",
+          "site_url": "https://balaghat.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Barwani MP",
+          "district_name": "Barwani",
+          "lgd_short_name": "BRW",
+          "site_url": "https://barwani.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Dindori",
+          "district_name": "Dindori",
+          "lgd_short_name": "DND",
+          "site_url": "https://dindori.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Khandwa",
+          "district_name": "Khandwa",
+          "lgd_short_name": "ENR",
+          "site_url": "https://khandwa.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Neemuch",
+          "district_name": "Neemuch",
+          "lgd_short_name": "NMC",
+          "site_url": "https://neemuch.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Panna",
+          "district_name": "Panna",
+          "lgd_short_name": "PNN",
+          "site_url": "https://panna.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Sehore",
+          "district_name": "Sehore",
+          "lgd_short_name": "SEH",
+          "site_url": "https://sehore.dcourts.gov.in"
+        },
+        {
+          "title": "Principal District & Sessions Court Betul (MP)",
+          "district_name": "Betul",
+          "lgd_short_name": "BTL",
+          "site_url": "https://betul.dcourts.gov.in"
+        },
+        {
+          "title": "Principal District and Sessions Court Mandla",
+          "district_name": "Mandla",
+          "lgd_short_name": "MDL",
+          "site_url": "https://mandla.dcourts.gov.in"
+        },
+        {
+          "title": "Principal District and Sessions Court Seoni",
+          "district_name": "Seoni",
+          "lgd_short_name": "SEO",
+          "site_url": "https://seoni.dcourts.gov.in"
+        }
+      ]
+    },
+    {
+      "state_name": "Maharashtra",
+      "state_id": "MH",
+      "state_or_ut": "S",
+      "state_lgd_code": "27",
+      "source_url": "https://www.maharashtra.gov.in",
+      "total": 39,
+      "courts": [
+        {
+          "title": "Chief Metropolitan Magistrate Court's, Mumbai",
+          "district_name": "CMM Mumbai",
+          "lgd_short_name": "MMB",
+          "site_url": "https://cmmmumbai.dcourts.gov.in"
+        },
+        {
+          "title": "City Civil & Sessions Court, Mumbai",
+          "district_name": "CCC Mumbai",
+          "lgd_short_name": "MMB",
+          "site_url": "https://cccmumbai.dcourts.gov.in"
+        },
+        {
+          "title": "Court of Small Causes, Mumbai",
+          "district_name": "Mumbai",
+          "lgd_short_name": "MMB",
+          "site_url": "https://sccmumbai.dcourts.gov.in"
+        },
+        {
+          "title": "DISTRICT AND SESSIONS COURT LATUR",
+          "district_name": "Latur",
+          "lgd_short_name": "LTR",
+          "site_url": "https://latur.dcourts.gov.in"
+        },
+        {
+          "title": "DISTRICT COURT BEED",
+          "district_name": "Beed",
+          "lgd_short_name": "BEE",
+          "site_url": "https://beed.dcourts.gov.in"
+        },
+        {
+          "title": "District & Session Court Pune",
+          "district_name": "Pune",
+          "lgd_short_name": "PUN",
+          "site_url": "https://pune.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court, Jalna",
+          "district_name": "Jalna",
+          "lgd_short_name": "JAL",
+          "site_url": "https://jalna.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court, Nanded (Maharashtra)",
+          "district_name": "Nanded",
+          "lgd_short_name": "NAN",
+          "site_url": "https://nanded.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court, Yavatmal",
+          "district_name": "Yavatmal",
+          "lgd_short_name": "YVT",
+          "site_url": "https://yavatmal.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Amravati",
+          "district_name": "Amravati",
+          "lgd_short_name": "AMV",
+          "site_url": "https://amravati.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Nagpur",
+          "district_name": "Nagpur",
+          "lgd_short_name": "NGP",
+          "site_url": "https://nagpur.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Parbhani",
+          "district_name": "Parbhani",
+          "lgd_short_name": "PBN",
+          "site_url": "https://parbhani.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Ratnagiri",
+          "district_name": "Ratnagiri",
+          "lgd_short_name": "RTN",
+          "site_url": "https://ratnagiri.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Bhandara",
+          "district_name": "Bhandara",
+          "lgd_short_name": "BHA",
+          "site_url": "https://bhandara.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Chandrapur",
+          "district_name": "Chandrapur",
+          "lgd_short_name": "CPR",
+          "site_url": "https://chandrapur.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Gadchiroli",
+          "district_name": "Gadchiroli",
+          "lgd_short_name": "GDC",
+          "site_url": "https://gadchiroli.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Gondia",
+          "district_name": "Gondia",
+          "lgd_short_name": "GON",
+          "site_url": "https://gondia.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Osmanabad",
+          "district_name": "Dharashiv",
+          "lgd_short_name": "OSM",
+          "site_url": "https://osmanabad.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Raigad-Alibag",
+          "district_name": "Raigarh(MH)",
+          "lgd_short_name": "RGD",
+          "site_url": "https://raigad.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Solapur",
+          "district_name": "Solapur",
+          "lgd_short_name": "SOL",
+          "site_url": "https://solapur.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Wardha",
+          "district_name": "Wardha",
+          "lgd_short_name": "WRD",
+          "site_url": "https://wardha.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Aurangabad Maharashtra",
+          "district_name": "Aurangabad",
+          "lgd_short_name": "AUR",
+          "site_url": "https://aurangabad.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Dhule",
+          "district_name": "Dhule",
+          "lgd_short_name": "DHU",
+          "site_url": "https://dhule.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Kolhapur",
+          "district_name": "Kolhapur",
+          "lgd_short_name": "KLP",
+          "site_url": "https://kolhapur.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Nandurbar",
+          "district_name": "Nandurbar",
+          "lgd_short_name": "NNR",
+          "site_url": "https://nandurbar.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Sindhudurg",
+          "district_name": "Sindhudurg",
+          "lgd_short_name": "SIN",
+          "site_url": "https://sindhudurg.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Thane",
+          "district_name": "Thane",
+          "lgd_short_name": "THN",
+          "site_url": "https://thane.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court, Ahmednagar",
+          "district_name": "Ahmed Nagar",
+          "lgd_short_name": "AHN",
+          "site_url": "https://ahmednagar.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court, Akola",
+          "district_name": "Akola",
+          "lgd_short_name": "AKO",
+          "site_url": "https://akola.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court, Buldana",
+          "district_name": "Buldhana",
+          "lgd_short_name": "BUL",
+          "site_url": "https://buldana.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court, Jalgaon",
+          "district_name": "Jalgaon",
+          "lgd_short_name": "JLG",
+          "site_url": "https://jalgaon.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court, Sangli",
+          "district_name": "Sangli",
+          "lgd_short_name": "SNG",
+          "site_url": "https://sangli.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court, Satara",
+          "district_name": "Satara",
+          "lgd_short_name": "SAT",
+          "site_url": "https://satara.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court, Washim",
+          "district_name": "Washim",
+          "lgd_short_name": "WSH",
+          "site_url": "https://washim.dcourts.gov.in"
+        },
+        {
+          "title": "Maharashtra Cooperative Courts",
+          "district_name": "Mumbai",
+          "lgd_short_name": "MMB",
+          "site_url": "https://mahcoop.dcourts.gov.in"
+        },
+        {
+          "title": "Maharashtra Family Courts",
+          "district_name": "Mumbai Suburban",
+          "lgd_short_name": "MMS",
+          "site_url": "https://mahafc.dcourts.gov.in"
+        },
+        {
+          "title": "Maharashtra Industrial and Labour Courts",
+          "district_name": "Indus",
+          "lgd_short_name": "MMB",
+          "site_url": "https://indus.dcourts.gov.in"
+        },
+        {
+          "title": "Motor Accident Claims Tribunal, Mumbai",
+          "district_name": "Mumact",
+          "lgd_short_name": "MMB",
+          "site_url": "https://mumact.dcourts.gov.in"
+        },
+        {
+          "title": "Nashik District Court",
+          "district_name": "Nashik",
+          "lgd_short_name": "NSH",
+          "site_url": "https://nashik.dcourts.gov.in"
+        }
+      ]
+    },
+    {
+      "state_name": "Manipur",
+      "state_id": "MN",
+      "state_or_ut": "S",
+      "state_lgd_code": "14",
+      "source_url": "https://manipur.gov.in",
+      "total": 8,
+      "courts": [
+        {
+          "title": "District & Sessions Court, Bishnupur",
+          "district_name": "Bishnupur",
+          "lgd_short_name": "BSH",
+          "site_url": "https://bishnupur.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court, Imphal West",
+          "district_name": "Imphal West",
+          "lgd_short_name": "IMW",
+          "site_url": "https://imphalwest.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court, Churachandpur",
+          "district_name": "Imphal West",
+          "lgd_short_name": "IMW",
+          "site_url": "https://churachandpur.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court, Imphal East",
+          "district_name": "Imphal East",
+          "lgd_short_name": "IME",
+          "site_url": "https://imphaleast.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court, Senapati",
+          "district_name": "Imphal East",
+          "lgd_short_name": "IME",
+          "site_url": "https://senapati.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court, Tamenglong",
+          "district_name": "Tamenglong",
+          "lgd_short_name": "TMN",
+          "site_url": "https://tamenglong.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court, Ukhrul",
+          "district_name": "Ukhrul",
+          "lgd_short_name": "UKH",
+          "site_url": "https://ukhrul.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court,Thoubal",
+          "district_name": "Thoubal",
+          "lgd_short_name": "THB",
+          "site_url": "https://thoubal.dcourts.gov.in"
+        }
+      ]
+    },
+    {
+      "state_name": "Meghalaya",
+      "state_id": "ML",
+      "state_or_ut": "S",
+      "state_lgd_code": "17",
+      "source_url": "https://meghalaya.gov.in",
+      "total": 11,
+      "courts": [
+        {
+          "title": "DISTRICT AND SESSIONS COURT, WEST JAINTIA HILLS DISTRICT, KHLIEHTYRSHI.",
+          "district_name": "West Jaintia Hills",
+          "lgd_short_name": "WJH",
+          "site_url": "https://jowai.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court Khliehriat, East Jaintia Hills",
+          "district_name": "East Jaintia Hills",
+          "lgd_short_name": "EJH",
+          "site_url": "https://khliehriat.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court, Ampati",
+          "district_name": "South West Garo Hills",
+          "lgd_short_name": "WGH",
+          "site_url": "https://ampati.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Tura",
+          "district_name": "West Garo Hills",
+          "lgd_short_name": "WGH",
+          "site_url": "https://tura.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Resubelpara",
+          "district_name": "East Garo Hills",
+          "lgd_short_name": "EGH",
+          "site_url": "https://resubelpara.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court, Ri Bhoi District, Nongpoh",
+          "district_name": "Ri Bhoi",
+          "lgd_short_name": "RGH",
+          "site_url": "https://nongpoh.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court, West Khasi Hills District, Nongstoiñ",
+          "district_name": "West Khasi Hills",
+          "lgd_short_name": "WKA",
+          "site_url": "https://nongstoin.dcourts.gov.in"
+        },
+        {
+          "title": "East Khasi Hills District Court",
+          "district_name": "East Khasi Hills",
+          "lgd_short_name": "EKH",
+          "site_url": "https://shillong.dcourts.gov.in"
+        },
+        {
+          "title": "South Garo Hills District Court",
+          "district_name": "South Garo Hills",
+          "lgd_short_name": "SGH",
+          "site_url": "https://baghmara.dcourts.gov.in"
+        },
+        {
+          "title": "South West Khasi Hills District Court",
+          "district_name": "SOUTH WEST KHASI HILLS",
+          "lgd_short_name": "SWK",
+          "site_url": "https://mawkyrwat.dcourts.gov.in"
+        },
+        {
+          "title": "Williamnagar District Court",
+          "district_name": "East Garo Hills",
+          "lgd_short_name": "EGH",
+          "site_url": "https://williamnagar.dcourts.gov.in"
+        }
+      ]
+    },
+    {
+      "state_name": "Mizoram",
+      "state_id": "MZ",
+      "state_or_ut": "S",
+      "state_lgd_code": "15",
+      "source_url": "https://www.mizoram.gov.in",
+      "total": 7,
+      "courts": [
+        {
+          "title": "District Court, Champhai",
+          "district_name": "Champhai",
+          "lgd_short_name": "CPH",
+          "site_url": "https://champhai.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Kolasib",
+          "district_name": "Kolasib",
+          "lgd_short_name": "KLS",
+          "site_url": "https://kolasib.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Lawngtlai",
+          "district_name": "Lawngtlai",
+          "lgd_short_name": "LWN",
+          "site_url": "https://lawngtlai.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Lunglei",
+          "district_name": "Lunglei",
+          "lgd_short_name": "LNG",
+          "site_url": "https://lunglei.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Mamit",
+          "district_name": "Mammit",
+          "lgd_short_name": "MMT",
+          "site_url": "https://mamit.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Serchhip",
+          "district_name": "Serchhip",
+          "lgd_short_name": "SER",
+          "site_url": "https://serchhip.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Siaha",
+          "district_name": "Saiha",
+          "lgd_short_name": "SAI",
+          "site_url": "https://siaha.dcourts.gov.in"
+        }
+      ]
+    },
+    {
+      "state_name": "Nagaland",
+      "state_id": "NL",
+      "state_or_ut": "S",
+      "state_lgd_code": "13",
+      "source_url": "https://www.nagaland.gov.in",
+      "total": 12,
+      "courts": [
+        {
+          "title": "Dimapur District Court",
+          "district_name": "Dimapur",
+          "lgd_short_name": "DMP",
+          "site_url": "https://dimapur.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Aizawl",
+          "district_name": "Aizawl",
+          "lgd_short_name": "AIZ",
+          "site_url": "https://aizawl.dcourts.gov.in"
+        },
+        {
+          "title": "Kiphire District Court",
+          "district_name": "Kiphire",
+          "lgd_short_name": "KIP",
+          "site_url": "https://kiphire.dcourts.gov.in"
+        },
+        {
+          "title": "Kohima District Court",
+          "district_name": "Kohima",
+          "lgd_short_name": "KHM",
+          "site_url": "https://kohima.dcourts.gov.in"
+        },
+        {
+          "title": "Longleng District Court",
+          "district_name": "Longleng",
+          "lgd_short_name": "LLG",
+          "site_url": "https://longleng.dcourts.gov.in"
+        },
+        {
+          "title": "Mokokchung District Court",
+          "district_name": "Mokokchung",
+          "lgd_short_name": "MKK",
+          "site_url": "https://mokokchung.dcourts.gov.in"
+        },
+        {
+          "title": "Mon District Court",
+          "district_name": "Mon",
+          "lgd_short_name": "MON",
+          "site_url": "https://mon.dcourts.gov.in"
+        },
+        {
+          "title": "Peren District Court",
+          "district_name": "Peren",
+          "lgd_short_name": "PER",
+          "site_url": "https://peren.dcourts.gov.in"
+        },
+        {
+          "title": "Phek District Court",
+          "district_name": "Phek",
+          "lgd_short_name": "PHK",
+          "site_url": "https://phek.dcourts.gov.in"
+        },
+        {
+          "title": "Tuensang District Court",
+          "district_name": "Tuensang",
+          "lgd_short_name": "TNS",
+          "site_url": "https://tuensang.dcourts.gov.in"
+        },
+        {
+          "title": "Wokha District Court",
+          "district_name": "Wokha",
+          "lgd_short_name": "WKH",
+          "site_url": "https://wokha.dcourts.gov.in"
+        },
+        {
+          "title": "Zunheboto District Court",
+          "district_name": "Zunheboto",
+          "lgd_short_name": "ZNH",
+          "site_url": "https://zunheboto.dcourts.gov.in"
+        }
+      ]
+    },
+    {
+      "state_name": "Odisha",
+      "state_id": "OD",
+      "state_or_ut": "S",
+      "state_lgd_code": "21",
+      "source_url": "https://odisha.gov.in",
+      "total": 30,
+      "courts": [
+        {
+          "title": "Balangir District Court",
+          "district_name": "Balangir",
+          "lgd_short_name": "BLN",
+          "site_url": "https://balangir.dcourts.gov.in"
+        },
+        {
+          "title": "Court of District & Sessions Judge, Sundargarh",
+          "district_name": "Sundergarh",
+          "lgd_short_name": "SDG",
+          "site_url": "https://sundargarh.dcourts.gov.in"
+        },
+        {
+          "title": "Dhenkanal District Court",
+          "district_name": "Dhenkanal",
+          "lgd_short_name": "DHK",
+          "site_url": "https://dhenkanal.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court Bargarh",
+          "district_name": "Bargarh",
+          "lgd_short_name": "BRG",
+          "site_url": "https://bargarh.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court, Malkangiri",
+          "district_name": "Malkangiri",
+          "lgd_short_name": "MLK",
+          "site_url": "https://malkangiri.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Judge Court, Bhadrak",
+          "district_name": "Bhadrak",
+          "lgd_short_name": "BDK",
+          "site_url": "https://bhadrak.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Judge Court, Gajapati at Paralakhemundi",
+          "district_name": "Gajapati",
+          "lgd_short_name": "GJP",
+          "site_url": "https://gajapati.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Judge Court, Puri",
+          "district_name": "Puri",
+          "lgd_short_name": "PUR",
+          "site_url": "https://puri.dcourts.gov.in"
+        },
+        {
+          "title": "District Civil & Sessions Court, Balasore",
+          "district_name": "Baleshwar",
+          "lgd_short_name": "BLW",
+          "site_url": "https://balasore.dcourts.gov.in"
+        },
+        {
+          "title": "District Court ,Kendujhar",
+          "district_name": "Kendujhar",
+          "lgd_short_name": "KNH",
+          "site_url": "https://keonjhar.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Jajpur",
+          "district_name": "Jajapur",
+          "lgd_short_name": "JJP",
+          "site_url": "https://jajpur.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Kalahandi",
+          "district_name": "Kalahandi",
+          "lgd_short_name": "KLH",
+          "site_url": "https://kalahandi.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Khurda at Bhubaneswar",
+          "district_name": "Khorda",
+          "lgd_short_name": "KHD",
+          "site_url": "https://khurda.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Nabarangpur",
+          "district_name": "Nabarangapur",
+          "lgd_short_name": "NBR",
+          "site_url": "https://nabarangpur.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Nuapada",
+          "district_name": "Nuapada",
+          "lgd_short_name": "NPD",
+          "site_url": "https://nuapada.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Sambalpur",
+          "district_name": "Sambalpur",
+          "lgd_short_name": "SMB",
+          "site_url": "https://sambalpur.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Angul",
+          "district_name": "Angul",
+          "lgd_short_name": "ANU",
+          "site_url": "https://angul.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Jagatsinghpur",
+          "district_name": "Jagatsinghapur",
+          "lgd_short_name": "JGT",
+          "site_url": "https://jagatsinghpur.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Kandhamal",
+          "district_name": "Kandhamal",
+          "lgd_short_name": "KNM",
+          "site_url": "https://kandhamal.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Kendrapara- Orissa",
+          "district_name": "Kendrapara",
+          "lgd_short_name": "KND",
+          "site_url": "https://kendrapara.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Mayurbhanj",
+          "district_name": "Mayurbhanj",
+          "lgd_short_name": "MYR",
+          "site_url": "https://mayurbhanj.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Nayagarh, Odisha",
+          "district_name": "Nayagarh",
+          "lgd_short_name": "NYG",
+          "site_url": "https://nayagarh.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Rayagada",
+          "district_name": "Rayagada",
+          "lgd_short_name": "RYG",
+          "site_url": "https://rayagada.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Sonepur",
+          "district_name": "Sonapur",
+          "lgd_short_name": "SNE",
+          "site_url": "https://sonepur.dcourts.gov.in"
+        },
+        {
+          "title": "District Court,Koraput at Jeypore",
+          "district_name": "Koraput",
+          "lgd_short_name": "KRP",
+          "site_url": "https://koraput.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Judge Court, Boudh",
+          "district_name": "Boudh",
+          "lgd_short_name": "BDH",
+          "site_url": "https://boudh.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Judge Court, Cuttack",
+          "district_name": "Cuttack",
+          "lgd_short_name": "CTT",
+          "site_url": "https://cuttack.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Judge Court, Deogarh",
+          "district_name": "Deogarh",
+          "lgd_short_name": "DGR",
+          "site_url": "https://deogarh.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Judge Court, Ganjam at Berhampur",
+          "district_name": "Ganjam",
+          "lgd_short_name": "GNJ",
+          "site_url": "https://ganjam.dcourts.gov.in"
+        },
+        {
+          "title": "Distrtict & Sessions Court, Jharsuguda",
+          "district_name": "Jharsuguda",
+          "lgd_short_name": "JHR",
+          "site_url": "https://jharsuguda.dcourts.gov.in"
+        }
+      ]
+    },
+    {
+      "state_name": "Puducherry",
+      "state_id": "PY",
+      "state_or_ut": "U",
+      "state_lgd_code": "34",
+      "source_url": "https://www.py.gov.in",
+      "total": 4,
+      "courts": [
+        {
+          "title": "Karaikal District Court",
+          "district_name": "Karaikal",
+          "lgd_short_name": "KKL",
+          "site_url": "https://karaikal.dcourts.gov.in"
+        },
+        {
+          "title": "Mahe District Court",
+          "district_name": "Mahe",
+          "lgd_short_name": "MHE",
+          "site_url": "https://mahe.dcourts.gov.in"
+        },
+        {
+          "title": "Puducherry District Court",
+          "district_name": "Pondicherry",
+          "lgd_short_name": "PON",
+          "site_url": "https://puducherry.dcourts.gov.in"
+        },
+        {
+          "title": "Yanam District Court",
+          "district_name": "Yanam",
+          "lgd_short_name": "YAN",
+          "site_url": "https://yanam.dcourts.gov.in"
+        }
+      ]
+    },
+    {
+      "state_name": "Punjab",
+      "state_id": "PB",
+      "state_or_ut": "S",
+      "state_lgd_code": "3",
+      "source_url": "https://punjab.gov.in",
+      "total": 22,
+      "courts": [
+        {
+          "title": "District Court Amritsar",
+          "district_name": "Amritsar",
+          "lgd_short_name": "AMT",
+          "site_url": "https://amritsar.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Bathinda",
+          "district_name": "Bathinda",
+          "lgd_short_name": "BTH",
+          "site_url": "https://bathinda.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Fatehgarh Sahib",
+          "district_name": "Fatehgarh Sahib",
+          "lgd_short_name": "FTG",
+          "site_url": "https://fatehgarhsahib.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Gurdaspur",
+          "district_name": "Gurdaspur",
+          "lgd_short_name": "GRD",
+          "site_url": "https://gurdaspur.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Hoshiarpur",
+          "district_name": "Hoshiarpur",
+          "lgd_short_name": "HSP",
+          "site_url": "https://hoshiarpur.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Jalandhar",
+          "district_name": "Jalandhar",
+          "lgd_short_name": "JLN",
+          "site_url": "https://jalandhar.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Ludhiana",
+          "district_name": "Ludhiana",
+          "lgd_short_name": "LDH",
+          "site_url": "https://ludhiana.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Mansa",
+          "district_name": "Mansa",
+          "lgd_short_name": "MNS",
+          "site_url": "https://mansa.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Pathankot",
+          "district_name": "Pathankot",
+          "lgd_short_name": "PTK",
+          "site_url": "https://pathankot.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Rupnagar",
+          "district_name": "Rupnagar",
+          "lgd_short_name": "RPN",
+          "site_url": "https://rupnagar.dcourts.gov.in"
+        },
+        {
+          "title": "District Court SAS Nagar",
+          "district_name": "S.A.S Nagar",
+          "lgd_short_name": "SSR",
+          "site_url": "https://sasnagar.dcourts.gov.in"
+        },
+        {
+          "title": "District Court SBS Nagar",
+          "district_name": "Nawanshahr",
+          "lgd_short_name": "NWN",
+          "site_url": "https://sbsnagar.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Sangrur",
+          "district_name": "Sangrur",
+          "lgd_short_name": "SNR",
+          "site_url": "https://sangrur.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Tarn Taran",
+          "district_name": "Tarn Taran",
+          "lgd_short_name": "TAR",
+          "site_url": "https://tarntaran.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Barnala",
+          "district_name": "Barnala",
+          "lgd_short_name": "BNL",
+          "site_url": "https://barnala.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Faridkot",
+          "district_name": "Faridkot",
+          "lgd_short_name": "FRD",
+          "site_url": "https://faridkot.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Fazilka",
+          "district_name": "Fazilka",
+          "lgd_short_name": "FAZ",
+          "site_url": "https://fazilka.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Ferozepur",
+          "district_name": "Firozpur",
+          "lgd_short_name": "FRZ",
+          "site_url": "https://ferozepur.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Kapurthala",
+          "district_name": "Kapurthala",
+          "lgd_short_name": "KPR",
+          "site_url": "https://kapurthala.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Moga",
+          "district_name": "Moga",
+          "lgd_short_name": "MOG",
+          "site_url": "https://moga.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Patiala",
+          "district_name": "Patiala",
+          "lgd_short_name": "PTL",
+          "site_url": "https://patiala.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Sri Mukatsar Sahib",
+          "district_name": "Muktsar",
+          "lgd_short_name": "SMT",
+          "site_url": "https://muktsarsahib.dcourts.gov.in"
+        }
+      ]
+    },
+    {
+      "state_name": "Rajasthan",
+      "state_id": "RJ",
+      "state_or_ut": "S",
+      "state_lgd_code": "8",
+      "source_url": "https://www.rajasthan.gov.in",
+      "total": 36,
+      "courts": [
+        {
+          "title": "DISTRICT & SESSIONS COURT BALOTRA",
+          "district_name": "Balotra",
+          "lgd_short_name": "BLT",
+          "site_url": "https://balotra.dcourts.gov.in"
+        },
+        {
+          "title": "DISTRICT COURT DAUSA",
+          "district_name": "Dausa",
+          "lgd_short_name": "DAS",
+          "site_url": "https://dausa.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court Jhunjhunu",
+          "district_name": "Jhunjhunu",
+          "lgd_short_name": "JHN",
+          "site_url": "https://jhunjhunu.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court Jodhpur District",
+          "district_name": "Jodhpur",
+          "lgd_short_name": "JDH",
+          "site_url": "https://jodhpur.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court Jodhpur Metropolitan",
+          "district_name": "Jodhpur Metropolitan",
+          "lgd_short_name": "JDH",
+          "site_url": "https://jodhpurmetro.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court Sirohi",
+          "district_name": "Sirohi",
+          "lgd_short_name": "SRH",
+          "site_url": "https://sirohi.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court, Bundi",
+          "district_name": "Bundi",
+          "lgd_short_name": "BND",
+          "site_url": "https://bundi.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court, Jhalawar",
+          "district_name": "Jhalawar",
+          "lgd_short_name": "JHL",
+          "site_url": "https://jhalawar.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court, Kota",
+          "district_name": "Kota",
+          "lgd_short_name": "KOT",
+          "site_url": "https://kota.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court, Udaipur",
+          "district_name": "Udaipur",
+          "lgd_short_name": "UDP",
+          "site_url": "https://udaipur.dcourts.gov.in"
+        },
+        {
+          "title": "District And Sessions Court Sawai Madhopur",
+          "district_name": "Sawai Madhopur",
+          "lgd_short_name": "SMP",
+          "site_url": "https://sawaimadhopur.dcourts.gov.in"
+        },
+        {
+          "title": "District Court - Ajmer",
+          "district_name": "Ajmer",
+          "lgd_short_name": "AJM",
+          "site_url": "https://ajmer.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Alwar",
+          "district_name": "Alwar",
+          "lgd_short_name": "ALW",
+          "site_url": "https://alwar.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Banswara",
+          "district_name": "Banswara",
+          "lgd_short_name": "BNS",
+          "site_url": "https://banswara.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Bhilwara",
+          "district_name": "Bhilwara",
+          "lgd_short_name": "BHL",
+          "site_url": "https://bhilwara.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Bikaner",
+          "district_name": "Bikaner",
+          "lgd_short_name": "BIK",
+          "site_url": "https://bikaner.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Chittorgarh",
+          "district_name": "Chittorgarh",
+          "lgd_short_name": "CGH",
+          "site_url": "https://chittorgarh.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Dholpur",
+          "district_name": "Dholpur",
+          "lgd_short_name": "DLP",
+          "site_url": "https://dholpur.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Dungarpur",
+          "district_name": "Dungarpur",
+          "lgd_short_name": "DNG",
+          "site_url": "https://dungarpur.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Jalore",
+          "district_name": "Jalore",
+          "lgd_short_name": "JLR",
+          "site_url": "https://jalore.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Merta",
+          "district_name": "Nagaur",
+          "lgd_short_name": "NGR",
+          "site_url": "https://nagaur.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Pali",
+          "district_name": "Pali",
+          "lgd_short_name": "PAL",
+          "site_url": "https://pali.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Rajsamand",
+          "district_name": "Rajsamand",
+          "lgd_short_name": "RJS",
+          "site_url": "https://rajsamand.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Sikar",
+          "district_name": "Sikar",
+          "lgd_short_name": "SKR",
+          "site_url": "https://sikar.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Tonk",
+          "district_name": "Tonk",
+          "lgd_short_name": "TNK",
+          "site_url": "https://tonk.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Baran",
+          "district_name": "Baran",
+          "lgd_short_name": "BRN",
+          "site_url": "https://baran.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Churu",
+          "district_name": "Churu",
+          "lgd_short_name": "CHR",
+          "site_url": "https://churu.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Jaipur Metropolitan II",
+          "district_name": "Jaipur Metropolitan II",
+          "lgd_short_name": "JPR",
+          "site_url": "https://jaipurmetro2.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Jaipur Metropolitan I",
+          "district_name": "Jaipur Metropolitan I",
+          "lgd_short_name": "JPR",
+          "site_url": "https://jaipurmetro1.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court, Bharatpur",
+          "district_name": "Bharatpur",
+          "lgd_short_name": "BTR",
+          "site_url": "https://bharatpur.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court, Jaipur District",
+          "district_name": "Jaipur",
+          "lgd_short_name": "JPR",
+          "site_url": "https://jaipurdistrict.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court, Pratapgarh",
+          "district_name": "Pratapgarh",
+          "lgd_short_name": "PPG",
+          "site_url": "https://pratapgarh.dcourts.gov.in"
+        },
+        {
+          "title": "Hanumangarh District Court",
+          "district_name": "Hanumangarh",
+          "lgd_short_name": "HGH",
+          "site_url": "https://hanumangarh.dcourts.gov.in"
+        },
+        {
+          "title": "Jaisalmer District Court",
+          "district_name": "Jaisalmer",
+          "lgd_short_name": "JSL",
+          "site_url": "https://jaisalmer.dcourts.gov.in"
+        },
+        {
+          "title": "Karauli, District Court",
+          "district_name": "Karauli",
+          "lgd_short_name": "KAR",
+          "site_url": "https://karauli.dcourts.gov.in"
+        },
+        {
+          "title": "Sri Ganganagar District Court",
+          "district_name": "Ganganagar",
+          "lgd_short_name": "GNG",
+          "site_url": "https://ganganagar.dcourts.gov.in"
+        }
+      ]
+    },
+    {
+      "state_name": "Sikkim",
+      "state_id": "SK",
+      "state_or_ut": "S",
+      "state_lgd_code": "11",
+      "source_url": "https://sikkim.gov.in",
+      "total": 4,
+      "courts": [
+        {
+          "title": "District & Sessions Court, Mangan",
+          "district_name": "Mangan",
+          "lgd_short_name": "NDT",
+          "site_url": "https://mangan.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court, Namchi, Sikkim",
+          "district_name": "Namchi",
+          "lgd_short_name": "SDT",
+          "site_url": "https://namchi.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Complex Gyalshing",
+          "district_name": "Gyalshing",
+          "lgd_short_name": "WDT",
+          "site_url": "https://gyalshing.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Gangtok",
+          "district_name": "Gangtok",
+          "lgd_short_name": "EDT",
+          "site_url": "https://gangtok.dcourts.gov.in"
+        }
+      ]
+    },
+    {
+      "state_name": "Tamil Nadu",
+      "state_id": "TN",
+      "state_or_ut": "S",
+      "state_lgd_code": "33",
+      "source_url": "https://www.tn.gov.in",
+      "total": 38,
+      "courts": [
+        {
+          "title": "Ariyalur District Court",
+          "district_name": "Ariyalur",
+          "lgd_short_name": "ARI",
+          "site_url": "https://ariyalur.dcourts.gov.in"
+        },
+        {
+          "title": "Chengalpattu District Court",
+          "district_name": "Chengalpattu",
+          "lgd_short_name": "TKS",
+          "site_url": "https://chengalpattu.dcourts.gov.in"
+        },
+        {
+          "title": "Chennai City Courts",
+          "district_name": "Chennai",
+          "lgd_short_name": "CHE",
+          "site_url": "https://chennai.dcourts.gov.in"
+        },
+        {
+          "title": "Coimbatore District Court",
+          "district_name": "Coimbatore",
+          "lgd_short_name": "CMT",
+          "site_url": "https://coimbatore.dcourts.gov.in"
+        },
+        {
+          "title": "Cuddalore District Court",
+          "district_name": "Cuddalore",
+          "lgd_short_name": "CDL",
+          "site_url": "https://cuddalore.dcourts.gov.in"
+        },
+        {
+          "title": "Dharmapuri District Court",
+          "district_name": "Dharmapuri",
+          "lgd_short_name": "DRM",
+          "site_url": "https://dharmapuri.dcourts.gov.in"
+        },
+        {
+          "title": "Dindigul District Court",
+          "district_name": "Dindigul",
+          "lgd_short_name": "DIN",
+          "site_url": "https://dindigul.dcourts.gov.in"
+        },
+        {
+          "title": "Erode District Court",
+          "district_name": "Erode",
+          "lgd_short_name": "ERO",
+          "site_url": "https://erode.dcourts.gov.in"
+        },
+        {
+          "title": "Kallakurichi District Court",
+          "district_name": "Kallakurichi",
+          "lgd_short_name": "KLL",
+          "site_url": "https://kallakurichi.dcourts.gov.in"
+        },
+        {
+          "title": "Kanchipuram District Court",
+          "district_name": "Kanchipuram",
+          "lgd_short_name": "KCP",
+          "site_url": "https://kanchipuram.dcourts.gov.in"
+        },
+        {
+          "title": "Kanniyakumari District Court",
+          "district_name": "Kanniyakumari",
+          "lgd_short_name": "KNY",
+          "site_url": "https://kanniyakumari.dcourts.gov.in"
+        },
+        {
+          "title": "Karur District Court",
+          "district_name": "Karur",
+          "lgd_short_name": "KRR",
+          "site_url": "https://karur.dcourts.gov.in"
+        },
+        {
+          "title": "Krishnagiri District Court",
+          "district_name": "Krishnagiri",
+          "lgd_short_name": "KHN",
+          "site_url": "https://krishnagiri.dcourts.gov.in"
+        },
+        {
+          "title": "Madurai District Court",
+          "district_name": "Madurai",
+          "lgd_short_name": "MDR",
+          "site_url": "https://madurai.dcourts.gov.in"
+        },
+        {
+          "title": "Mayiladuthurai District Court",
+          "district_name": "Mayiladuthurai",
+          "lgd_short_name": "MYL",
+          "site_url": "https://mayiladuthurai.dcourts.gov.in"
+        },
+        {
+          "title": "Nagapattinam District Court",
+          "district_name": "Nagapattinam",
+          "lgd_short_name": "NPM",
+          "site_url": "https://nagapattinam.dcourts.gov.in"
+        },
+        {
+          "title": "Namakkal District Court",
+          "district_name": "Namakkal",
+          "lgd_short_name": "NMK",
+          "site_url": "https://namakkal.dcourts.gov.in"
+        },
+        {
+          "title": "Perambalur District Court",
+          "district_name": "Perambalur",
+          "lgd_short_name": "PRM",
+          "site_url": "https://perambalur.dcourts.gov.in"
+        },
+        {
+          "title": "Pudukkottai District Court",
+          "district_name": "Pudukkottai",
+          "lgd_short_name": "PDK",
+          "site_url": "https://pudukkottai.dcourts.gov.in"
+        },
+        {
+          "title": "Ramanathapuram District Court",
+          "district_name": "Ramanathapuram",
+          "lgd_short_name": "RMN",
+          "site_url": "https://ramanathapuram.dcourts.gov.in"
+        },
+        {
+          "title": "Ranipet District Court",
+          "district_name": "Ranipet",
+          "lgd_short_name": "RNP",
+          "site_url": "https://ranipet.dcourts.gov.in"
+        },
+        {
+          "title": "Salem District Court",
+          "district_name": "Salem",
+          "lgd_short_name": "SLM",
+          "site_url": "https://salem.dcourts.gov.in"
+        },
+        {
+          "title": "Sivagangai District Court",
+          "district_name": "Sivaganga",
+          "lgd_short_name": "SGG",
+          "site_url": "https://sivagangai.dcourts.gov.in"
+        },
+        {
+          "title": "Tenkasi District Court",
+          "district_name": "Tenkasi",
+          "lgd_short_name": "CGL",
+          "site_url": "https://tenkasi.dcourts.gov.in"
+        },
+        {
+          "title": "Thanjavur District Court",
+          "district_name": "Thanjavur",
+          "lgd_short_name": "TJV",
+          "site_url": "https://thanjavur.dcourts.gov.in"
+        },
+        {
+          "title": "The Nilgiris District Court",
+          "district_name": "Nilgiris",
+          "lgd_short_name": "NIL",
+          "site_url": "https://nilgiris.dcourts.gov.in"
+        },
+        {
+          "title": "Theni District Court",
+          "district_name": "Theni",
+          "lgd_short_name": "THE",
+          "site_url": "https://theni.dcourts.gov.in"
+        },
+        {
+          "title": "Thoothukudi District Court",
+          "district_name": "Tuticorin",
+          "lgd_short_name": "VEL",
+          "site_url": "https://thoothukudi.dcourts.gov.in"
+        },
+        {
+          "title": "Tiruchirappalli District Court",
+          "district_name": "Tiruchirappalli",
+          "lgd_short_name": "TRC",
+          "site_url": "https://tiruchirappalli.dcourts.gov.in"
+        },
+        {
+          "title": "Tirunelveli District Court",
+          "district_name": "Tirunelveli",
+          "lgd_short_name": "TRN",
+          "site_url": "https://tirunelveli.dcourts.gov.in"
+        },
+        {
+          "title": "Tirupathur District Court",
+          "district_name": "Tirupathur",
+          "lgd_short_name": "TPR",
+          "site_url": "https://tirupathur.dcourts.gov.in"
+        },
+        {
+          "title": "Tiruppur District Court",
+          "district_name": "Tiruppur",
+          "lgd_short_name": "TRR",
+          "site_url": "https://tiruppur.dcourts.gov.in"
+        },
+        {
+          "title": "Tiruvallur District Court",
+          "district_name": "Tiruvallur",
+          "lgd_short_name": "TRV",
+          "site_url": "https://tiruvallur.dcourts.gov.in"
+        },
+        {
+          "title": "Tiruvannamalai District Court",
+          "district_name": "Tiruvannamalai",
+          "lgd_short_name": "TVN",
+          "site_url": "https://tiruvannamalai.dcourts.gov.in"
+        },
+        {
+          "title": "Tiruvarur District Court",
+          "district_name": "Tiruvarur",
+          "lgd_short_name": "TVV",
+          "site_url": "https://tiruvarur.dcourts.gov.in"
+        },
+        {
+          "title": "Vellore District Court",
+          "district_name": "Vellore",
+          "lgd_short_name": "VEL",
+          "site_url": "https://vellore.dcourts.gov.in"
+        },
+        {
+          "title": "Villupuram District Court",
+          "district_name": "Villupuram",
+          "lgd_short_name": "VIL",
+          "site_url": "https://viluppuram.dcourts.gov.in"
+        },
+        {
+          "title": "Virudhunagar District Court",
+          "district_name": "Virudhunagar",
+          "lgd_short_name": "VIR",
+          "site_url": "https://virudhunagar.dcourts.gov.in"
+        }
+      ]
+    },
+    {
+      "state_name": "Telangana",
+      "state_id": "TS",
+      "state_or_ut": "S",
+      "state_lgd_code": "36",
+      "source_url": "https://telangana.gov.in",
+      "total": 37,
+      "courts": [
+        {
+          "title": "CBI COURT HYDERABAD",
+          "district_name": "Hyderabad",
+          "lgd_short_name": "HYD",
+          "site_url": "https://hcbi.dcourts.gov.in"
+        },
+        {
+          "title": "CITY CIVIL COURTS HYDERABAD AND SECUNDERABAD",
+          "district_name": "Hyderabad",
+          "lgd_short_name": "HYD",
+          "site_url": "https://hccc.dcourts.gov.in"
+        },
+        {
+          "title": "CITY SMALL CAUSES COURT - HYDERABAD",
+          "district_name": "Hyderabad",
+          "lgd_short_name": "HYD",
+          "site_url": "https://hcscc.dcourts.gov.in"
+        },
+        {
+          "title": "DISTRICT COURT - JANGAON",
+          "district_name": "Jangaon",
+          "lgd_short_name": "JNN",
+          "site_url": "https://jangoan.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Medak",
+          "district_name": "Medak",
+          "lgd_short_name": "MDK",
+          "site_url": "https://medak.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Medchal Malkajgiri",
+          "district_name": "Medchal Malkajgiri",
+          "lgd_short_name": "MDC",
+          "site_url": "https://medchalmalkajgiri.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Narayanpet",
+          "district_name": "Narayanpet",
+          "lgd_short_name": "NRN",
+          "site_url": "https://narayanpet.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Siddipet",
+          "district_name": "Siddipet",
+          "lgd_short_name": "SDD",
+          "site_url": "https://siddipet.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Vikarabad",
+          "district_name": "Vikarabad",
+          "lgd_short_name": "VKR",
+          "site_url": "https://vikarabad.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Adilabad",
+          "district_name": "Adilabad",
+          "lgd_short_name": "ADI",
+          "site_url": "https://adilabad.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Jagtial",
+          "district_name": "Jagitial",
+          "lgd_short_name": "JGI",
+          "site_url": "https://jagitial.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Kamareddy",
+          "district_name": "Kamareddy",
+          "lgd_short_name": "KMD",
+          "site_url": "https://kamareddy.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Kumurambheem Asifabad",
+          "district_name": "Kumuram Bheem",
+          "lgd_short_name": "KMB",
+          "site_url": "https://asifabad.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Mancherial",
+          "district_name": "Mancherial",
+          "lgd_short_name": "MNC",
+          "site_url": "https://mancherial.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Nirmal",
+          "district_name": "Nirmal",
+          "lgd_short_name": "NRL",
+          "site_url": "https://nirmal.dcourts.gov.in"
+        },
+        {
+          "title": "District Judiciary Bhadradri Kothagudem",
+          "district_name": "Bhadradri Kothagudem",
+          "lgd_short_name": "BHD",
+          "site_url": "https://kothagudem.dcourts.gov.in"
+        },
+        {
+          "title": "District Judiciary Hanumakonda",
+          "district_name": "Hanumakonda",
+          "lgd_short_name": "WRN",
+          "site_url": "https://hanumakonda.dcourts.gov.in"
+        },
+        {
+          "title": "District Judiciary Mulugu",
+          "district_name": "Mulugu",
+          "lgd_short_name": "MLG",
+          "site_url": "https://mulugu.dcourts.gov.in"
+        },
+        {
+          "title": "District Judiciary Ranga Reddy",
+          "district_name": "Hyderabad",
+          "lgd_short_name": "HYD",
+          "site_url": "https://rangareddy.dcourts.gov.in"
+        },
+        {
+          "title": "District Judiciary Warangal",
+          "district_name": "Warangal",
+          "lgd_short_name": "WAR",
+          "site_url": "https://warangal.dcourts.gov.in"
+        },
+        {
+          "title": "District Judiciary, Khammam",
+          "district_name": "Khammam",
+          "lgd_short_name": "KMM",
+          "site_url": "https://khammam.dcourts.gov.in"
+        },
+        {
+          "title": "District Judiciary, Nizamabad",
+          "district_name": "Nizamabad",
+          "lgd_short_name": "NIZ",
+          "site_url": "https://nizamabad.dcourts.gov.in"
+        },
+        {
+          "title": "Hyderabad Integrated Family Courts",
+          "district_name": "Hyderabad",
+          "lgd_short_name": "HYD",
+          "site_url": "https://hydifc.dcourts.gov.in"
+        },
+        {
+          "title": "JOGULAMBA GADWAL DISTRICT JUDICIARY",
+          "district_name": "Jogulamba Gadwal",
+          "lgd_short_name": "JGL",
+          "site_url": "https://gadwal.dcourts.gov.in"
+        },
+        {
+          "title": "Jayashankar Bhupalapally District Judiciary",
+          "district_name": "Jayashankar Bhupalpalli",
+          "lgd_short_name": "JYS",
+          "site_url": "https://bhupalapally.dcourts.gov.in"
+        },
+        {
+          "title": "Karimnagar District Judiciary",
+          "district_name": "Karim Nagar",
+          "lgd_short_name": "KRM",
+          "site_url": "https://karimnagar.dcourts.gov.in"
+        },
+        {
+          "title": "Mahabubabad District Judiciary",
+          "district_name": "Mahabubabad",
+          "lgd_short_name": "MHD",
+          "site_url": "https://mahabubabad.dcourts.gov.in"
+        },
+        {
+          "title": "Mahabubnagar District Judiciary",
+          "district_name": "Mahabub Nagar",
+          "lgd_short_name": "MAH",
+          "site_url": "https://mahabubnagar.dcourts.gov.in"
+        },
+        {
+          "title": "Metropolitan Sessions Judge, Hyderabad.",
+          "district_name": "Hyderabad",
+          "lgd_short_name": "HYD",
+          "site_url": "https://hmsj.dcourts.gov.in"
+        },
+        {
+          "title": "Nagarkurnool District Judiciary",
+          "district_name": "Nagarkurnool",
+          "lgd_short_name": "NGK",
+          "site_url": "https://nagarkurnool.dcourts.gov.in"
+        },
+        {
+          "title": "Nalgonda District Judiciary",
+          "district_name": "Nalgonda",
+          "lgd_short_name": "NLG",
+          "site_url": "https://nalgonda.dcourts.gov.in"
+        },
+        {
+          "title": "Peddapalli District Judiciary",
+          "district_name": "Peddapally",
+          "lgd_short_name": "PDD",
+          "site_url": "https://peddapalli.dcourts.gov.in"
+        },
+        {
+          "title": "Rajanna Sircilla District Judiciary",
+          "district_name": "Rajanna Sircilla",
+          "lgd_short_name": "RJC",
+          "site_url": "https://rajannasircilla.dcourts.gov.in"
+        },
+        {
+          "title": "Sangareddy Judicial District",
+          "district_name": "Sangareddy",
+          "lgd_short_name": "SND",
+          "site_url": "https://sangareddy.dcourts.gov.in"
+        },
+        {
+          "title": "Suryapet District Judiciary",
+          "district_name": "Suryapet",
+          "lgd_short_name": "SRY",
+          "site_url": "https://suryapet.dcourts.gov.in"
+        },
+        {
+          "title": "WANAPARTHY DISTRICT JUDICIARY",
+          "district_name": "Wanaparthy",
+          "lgd_short_name": "WNP",
+          "site_url": "https://wanaparthy.dcourts.gov.in"
+        },
+        {
+          "title": "Yadadri Bhuvanagiri District Judiciary",
+          "district_name": "Yadadri Bhuvanagiri",
+          "lgd_short_name": "YDD",
+          "site_url": "https://yadadri.dcourts.gov.in"
+        }
+      ]
+    },
+    {
+      "state_name": "Tripura",
+      "state_id": "TR",
+      "state_or_ut": "S",
+      "state_lgd_code": "16",
+      "source_url": "https://tripura.gov.in",
+      "total": 8,
+      "courts": [
+        {
+          "title": "District & Sessions Judge Court, Agartala",
+          "district_name": "West Tripura",
+          "lgd_short_name": "WTR",
+          "site_url": "https://westtripura.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Judge Court, Gomati",
+          "district_name": "Gomati",
+          "lgd_short_name": "GOM",
+          "site_url": "https://gomatitrp.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Judge Court, Unakoti District",
+          "district_name": "Unakoti",
+          "lgd_short_name": "UNK",
+          "site_url": "https://unakotitrp.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Judge Court, Dhalai Tripura",
+          "district_name": "Dhalai",
+          "lgd_short_name": "DHL",
+          "site_url": "https://dhalaitrp.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Judge Court, Khowai District",
+          "district_name": "Khowai",
+          "lgd_short_name": "KHO",
+          "site_url": "https://khowaitrp.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Judge Court, North Tripura",
+          "district_name": "North Tripura",
+          "lgd_short_name": "NTR",
+          "site_url": "https://northtripura.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Judge Court, Sepahijala District",
+          "district_name": "Sepahijala",
+          "lgd_short_name": "SEP",
+          "site_url": "https://sepahijalatrp.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Judge Court, South Tripura District",
+          "district_name": "South Tripura",
+          "lgd_short_name": "STR",
+          "site_url": "https://southtripura.dcourts.gov.in"
+        }
+      ]
+    },
+    {
+      "state_name": "Uttar Pradesh",
+      "state_id": "UP",
+      "state_or_ut": "S",
+      "state_lgd_code": "9",
+      "source_url": "https://up.gov.in",
+      "total": 74,
+      "courts": [
+        {
+          "title": "District And Sessions Court Muzaffarnagar",
+          "district_name": "Muzaffarnagar",
+          "lgd_short_name": "MZN",
+          "site_url": "https://muzaffarnagar.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Lucknow",
+          "district_name": "Lucknow",
+          "lgd_short_name": "LCK",
+          "site_url": "https://lucknow.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sesion Court Ghazipur",
+          "district_name": "Ghazipur",
+          "lgd_short_name": "GZP",
+          "site_url": "https://ghazipur.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court Jalaun at Orai",
+          "district_name": "Jalaun",
+          "lgd_short_name": "JLU",
+          "site_url": "https://jalaun.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court Jaunpur",
+          "district_name": "Jaunpur",
+          "lgd_short_name": "JNP",
+          "site_url": "https://jaunpur.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court, Fatehpur",
+          "district_name": "Fatehpur",
+          "lgd_short_name": "FTP",
+          "site_url": "https://fatehpur.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court, Hardoi",
+          "district_name": "Hardoi",
+          "lgd_short_name": "HAR",
+          "site_url": "https://hardoi.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court, Sant Kabir Nagar",
+          "district_name": "Sant Kabir Nagar",
+          "lgd_short_name": "SKN",
+          "site_url": "https://santkabirnagar.dcourts.gov.in"
+        },
+        {
+          "title": "District And Sessions Court Balrampur",
+          "district_name": "Balrampur",
+          "lgd_short_name": "BRP",
+          "site_url": "https://balrampurup.dcourts.gov.in"
+        },
+        {
+          "title": "District And Sessions Court Sambhal at Chandausi",
+          "district_name": "Sambhal",
+          "lgd_short_name": "SBL",
+          "site_url": "https://sambhal.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Agra",
+          "district_name": "Agra",
+          "lgd_short_name": "AGR",
+          "site_url": "https://agra.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Aligarh",
+          "district_name": "Aligarh",
+          "lgd_short_name": "ALG",
+          "site_url": "https://aligarh.dcourts.gov.in"
+        },
+        {
+          "title": "District Court AmbedkarNagar",
+          "district_name": "Ambedkar Nagar",
+          "lgd_short_name": "AMN",
+          "site_url": "https://ambedkarnagar.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Amroha",
+          "district_name": "Amroha",
+          "lgd_short_name": "AMR",
+          "site_url": "https://amroha.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Auraiya",
+          "district_name": "Auraiya",
+          "lgd_short_name": "ARY",
+          "site_url": "https://auraiya.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Ayodhya",
+          "district_name": "Ayodhya",
+          "lgd_short_name": "FZB",
+          "site_url": "https://ayodhya.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Baghpat",
+          "district_name": "Baghpat",
+          "lgd_short_name": "BGP",
+          "site_url": "https://baghpat.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Bahraich",
+          "district_name": "Bahraich",
+          "lgd_short_name": "BHR",
+          "site_url": "https://bahraich.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Banda",
+          "district_name": "Banda",
+          "lgd_short_name": "BAN",
+          "site_url": "https://banda.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Barabanki",
+          "district_name": "Barabanki",
+          "lgd_short_name": "BRB",
+          "site_url": "https://barabanki.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Bareilly",
+          "district_name": "Bareilly",
+          "lgd_short_name": "BRL",
+          "site_url": "https://bareilly.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Bhadohi at Gyanpur",
+          "district_name": "Bhadohi",
+          "lgd_short_name": "SRD",
+          "site_url": "https://bhadohi.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Bijnor",
+          "district_name": "Bijnor",
+          "lgd_short_name": "BJN",
+          "site_url": "https://bijnor.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Bulandshahr",
+          "district_name": "Bulandshahr",
+          "lgd_short_name": "BLR",
+          "site_url": "https://bulandshahar.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Chandauli",
+          "district_name": "Chandauli",
+          "lgd_short_name": "CHN",
+          "site_url": "https://chandauli.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Etah",
+          "district_name": "Etah",
+          "lgd_short_name": "ETA",
+          "site_url": "https://etah.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Etawah",
+          "district_name": "Etawah",
+          "lgd_short_name": "ETW",
+          "site_url": "https://etawah.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Farrukhabad",
+          "district_name": "Farrukhabad",
+          "lgd_short_name": "FKB",
+          "site_url": "https://farrukhabad.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Firozabad",
+          "district_name": "Firozabad",
+          "lgd_short_name": "FIR",
+          "site_url": "https://firozabad.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Gautam Budh Nagar",
+          "district_name": "Gautam Buddha Nagar",
+          "lgd_short_name": "GBN",
+          "site_url": "https://gbnagar.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Ghaziabad",
+          "district_name": "Ghaziabad",
+          "lgd_short_name": "GZB",
+          "site_url": "https://ghaziabad.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Gorakhpur",
+          "district_name": "Gorakhpur",
+          "lgd_short_name": "GKP",
+          "site_url": "https://gorakhpur.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Hamirpur U.P.",
+          "district_name": "Hamirpur",
+          "lgd_short_name": "HRP",
+          "site_url": "https://hamirpurup.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Hathras",
+          "district_name": "Hathras",
+          "lgd_short_name": "HTR",
+          "site_url": "https://hathras.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Jhansi",
+          "district_name": "Jhansi",
+          "lgd_short_name": "JHS",
+          "site_url": "https://jhansi.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Kasganj",
+          "district_name": "Kasganj",
+          "lgd_short_name": "KAS",
+          "site_url": "https://kasganj.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Kaushambi",
+          "district_name": "Kaushambi",
+          "lgd_short_name": "KSB",
+          "site_url": "https://kaushambi.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Kushianagar",
+          "district_name": "Kushinagar",
+          "lgd_short_name": "KSN",
+          "site_url": "https://kushinagar.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Maharajganj",
+          "district_name": "Maharajganj",
+          "lgd_short_name": "MRG",
+          "site_url": "https://maharajganj.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Mahoba",
+          "district_name": "Mahoba",
+          "lgd_short_name": "MHB",
+          "site_url": "https://mahoba.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Mainpuri",
+          "district_name": "Mainpuri",
+          "lgd_short_name": "MPR",
+          "site_url": "https://mainpuri.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Mathura",
+          "district_name": "Mathura",
+          "lgd_short_name": "MTH",
+          "site_url": "https://mathura.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Meerut",
+          "district_name": "Meerut",
+          "lgd_short_name": "MRT",
+          "site_url": "https://meerut.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Raebareli",
+          "district_name": "Raebareli",
+          "lgd_short_name": "RBL",
+          "site_url": "https://raebareli.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Saharanpur",
+          "district_name": "Saharanpur",
+          "lgd_short_name": "SHR",
+          "site_url": "https://saharanpur.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Shahjahanpur",
+          "district_name": "Shahjahanpur",
+          "lgd_short_name": "SJN",
+          "site_url": "https://shahjahanpur.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Shravasti",
+          "district_name": "Shrawasti",
+          "lgd_short_name": "SHV",
+          "site_url": "https://shravasti.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Sonbhadra",
+          "district_name": "Sonbhadra",
+          "lgd_short_name": "SBD",
+          "site_url": "https://sonbhadra.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Unnao",
+          "district_name": "Unnao",
+          "lgd_short_name": "UNO",
+          "site_url": "https://unnao.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Varanasi",
+          "district_name": "Varanasi",
+          "lgd_short_name": "VRN",
+          "site_url": "https://varanasi.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Moradabad",
+          "district_name": "Moradabad",
+          "lgd_short_name": "MRB",
+          "site_url": "https://moradabad.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Prayagraj",
+          "district_name": "Prayagraj",
+          "lgd_short_name": "ALB",
+          "site_url": "https://prayagraj.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Siddharthnagar",
+          "district_name": "Siddharthnagar",
+          "lgd_short_name": "SDN",
+          "site_url": "https://siddharthnagar.dcourts.gov.in"
+        },
+        {
+          "title": "District and Session Court Lakhimpur-Kheri",
+          "district_name": "Kheri",
+          "lgd_short_name": "KHR",
+          "site_url": "https://kheri.dcourts.gov.in"
+        },
+        {
+          "title": "District and Session Court, Pratapgarh",
+          "district_name": "Pratapgarh",
+          "lgd_short_name": "PPG",
+          "site_url": "https://pratapgarhup.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Azamgarh",
+          "district_name": "Azamgarh",
+          "lgd_short_name": "AZM",
+          "site_url": "https://azamgarh.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Ballia",
+          "district_name": "Ballia",
+          "lgd_short_name": "BAL",
+          "site_url": "https://ballia.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Basti",
+          "district_name": "Basti",
+          "lgd_short_name": "BST",
+          "site_url": "https://basti.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Budaun",
+          "district_name": "Budaun",
+          "lgd_short_name": "BDN",
+          "site_url": "https://budaun.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Chitrakoot",
+          "district_name": "Chitrakoot",
+          "lgd_short_name": "CHK",
+          "site_url": "https://chitrakoot.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Deoria",
+          "district_name": "Deoria",
+          "lgd_short_name": "DER",
+          "site_url": "https://deoria.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Gonda",
+          "district_name": "Gonda",
+          "lgd_short_name": "GND",
+          "site_url": "https://gonda.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Hapur",
+          "district_name": "Hapur",
+          "lgd_short_name": "HAP",
+          "site_url": "https://hapur.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Kannauj",
+          "district_name": "Kannauj",
+          "lgd_short_name": "KNJ",
+          "site_url": "https://kannauj.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Kanpur Dehat",
+          "district_name": "Kanpur Dehat",
+          "lgd_short_name": "KPD",
+          "site_url": "https://kanpurdehat.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Kanpur Nagar",
+          "district_name": "Kanpur Nagar",
+          "lgd_short_name": "KPN",
+          "site_url": "https://kanpurnagar.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Lalitpur",
+          "district_name": "Lalitpur",
+          "lgd_short_name": "LLP",
+          "site_url": "https://lalitpur.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Mirzapur",
+          "district_name": "Mirzapur",
+          "lgd_short_name": "MZP",
+          "site_url": "https://mirzapur.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Pilibhit",
+          "district_name": "Pilibhit",
+          "lgd_short_name": "PLB",
+          "site_url": "https://pilibhit.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Rampur",
+          "district_name": "Rampur",
+          "lgd_short_name": "RMP",
+          "site_url": "https://rampur.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Shamli",
+          "district_name": "Shamli",
+          "lgd_short_name": "SML",
+          "site_url": "https://shamli.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Sitapur",
+          "district_name": "Sitapur",
+          "lgd_short_name": "STP",
+          "site_url": "https://sitapur.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court Sultanpur",
+          "district_name": "Sultanpur",
+          "lgd_short_name": "SLP",
+          "site_url": "https://sultanpur.dcourts.gov.in"
+        },
+        {
+          "title": "District and Sessions Court, Mau",
+          "district_name": "Mau",
+          "lgd_short_name": "MAU",
+          "site_url": "https://mau.dcourts.gov.in"
+        }
+      ]
+    },
+    {
+      "state_name": "Uttarakhand",
+      "state_id": "UK",
+      "state_or_ut": "S",
+      "state_lgd_code": "5",
+      "source_url": "https://uk.gov.in",
+      "total": 13,
+      "courts": [
+        {
+          "title": "District & Sessions Court Pauri Garhwal",
+          "district_name": "Pauri Garhwal",
+          "lgd_short_name": "PGR",
+          "site_url": "https://paurigarhwal.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court Rudraprayag",
+          "district_name": "Rudraprayag",
+          "lgd_short_name": "RPY",
+          "site_url": "https://rudraprayag.dcourts.gov.in"
+        },
+        {
+          "title": "District & Sessions Court, Chamoli",
+          "district_name": "Chamoli",
+          "lgd_short_name": "CHL",
+          "site_url": "https://chamoli.dcourts.gov.in"
+        },
+        {
+          "title": "District And Sessions Court Haridwar",
+          "district_name": "Haridwar",
+          "lgd_short_name": "HRD",
+          "site_url": "https://haridwar.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Almora",
+          "district_name": "Almora",
+          "lgd_short_name": "ALM",
+          "site_url": "https://almora.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Champawat",
+          "district_name": "Champawat",
+          "lgd_short_name": "CHP",
+          "site_url": "https://champawat.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Dehradun",
+          "district_name": "Dehradun",
+          "lgd_short_name": "DHR",
+          "site_url": "https://dehradun.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Nainital",
+          "district_name": "Nainital",
+          "lgd_short_name": "NNT",
+          "site_url": "https://nainital.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Pithoragarh",
+          "district_name": "Pithoragarh",
+          "lgd_short_name": "PTH",
+          "site_url": "https://pithoragarh.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Tehri Garhwal",
+          "district_name": "Tehri Garhwal",
+          "lgd_short_name": "TGR",
+          "site_url": "https://tehrigarhwal.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Udham Singh Nagar",
+          "district_name": "Udham Singh Nagar",
+          "lgd_short_name": "USN",
+          "site_url": "https://usnagar.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Uttarkashi",
+          "district_name": "Uttarkashi",
+          "lgd_short_name": "UKS",
+          "site_url": "https://uttarkashi.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Bageshwar",
+          "district_name": "Bageshwar",
+          "lgd_short_name": "BGS",
+          "site_url": "https://bageshwar.dcourts.gov.in"
+        }
+      ]
+    },
+    {
+      "state_name": "West Bengal",
+      "state_id": "WB",
+      "state_or_ut": "S",
+      "state_lgd_code": "19",
+      "source_url": "https://wb.gov.in",
+      "total": 25,
+      "courts": [
+        {
+          "title": "Alipurduar District Court",
+          "district_name": "Alipurduar",
+          "lgd_short_name": "APD",
+          "site_url": "https://alipurduar.dcourts.gov.in"
+        },
+        {
+          "title": "Bankura District Court",
+          "district_name": "Bankura",
+          "lgd_short_name": "BNR",
+          "site_url": "https://bankura.dcourts.gov.in"
+        },
+        {
+          "title": "City Civil Court, Calcutta",
+          "district_name": "Kolkata",
+          "lgd_short_name": "KLK",
+          "site_url": "https://citycivilcourtcalcutta.dcourts.gov.in"
+        },
+        {
+          "title": "City Sessions Court, Calcutta",
+          "district_name": "Kolkata",
+          "lgd_short_name": "KLK",
+          "site_url": "https://citysessions.dcourts.gov.in"
+        },
+        {
+          "title": "Darjeeling District and Sessions Judge Court",
+          "district_name": "Darjeeling",
+          "lgd_short_name": "DRJ",
+          "site_url": "https://darjeeling.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Hooghly",
+          "district_name": "Hooghly",
+          "lgd_short_name": "HOO",
+          "site_url": "https://hooghly.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Dakshin Dinajpur",
+          "district_name": "South Dinajpur",
+          "lgd_short_name": "DPD",
+          "site_url": "https://dakshindinajpur.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Howrah",
+          "district_name": "Howrah",
+          "lgd_short_name": "HWR",
+          "site_url": "https://howrah.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Kalimpong",
+          "district_name": "Kalimpong",
+          "lgd_short_name": "MPN",
+          "site_url": "https://kalimpong.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Murshidabad",
+          "district_name": "Murshidabad",
+          "lgd_short_name": "MRS",
+          "site_url": "https://murshidabad.dcourts.gov.in"
+        },
+        {
+          "title": "District Court North 24 Parganas",
+          "district_name": "North 24 Parganas",
+          "lgd_short_name": "S24",
+          "site_url": "https://north24parganas.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Paschim Bardhaman",
+          "district_name": "Paschim Bardhaman",
+          "lgd_short_name": "MBR",
+          "site_url": "https://paschimbardhaman.dcourts.gov.in"
+        },
+        {
+          "title": "District Court Purulia",
+          "district_name": "Purulia",
+          "lgd_short_name": "PRL",
+          "site_url": "https://purulia.dcourts.gov.in"
+        },
+        {
+          "title": "District Court of Purba Bardhaman",
+          "district_name": "Purba Bardhaman",
+          "lgd_short_name": "BRD",
+          "site_url": "https://purbabardhaman.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Cooch Behar",
+          "district_name": "Cooch Behar",
+          "lgd_short_name": "CBH",
+          "site_url": "https://coochbehar.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Jhargram",
+          "district_name": "Jhargram",
+          "lgd_short_name": "GRM",
+          "site_url": "https://jhargram.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Malda",
+          "district_name": "Malda",
+          "lgd_short_name": "MLD",
+          "site_url": "https://malda.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, Nadia",
+          "district_name": "Nadia",
+          "lgd_short_name": "NAD",
+          "site_url": "https://nadia.dcourts.gov.in"
+        },
+        {
+          "title": "District Court, South-24 Parganas",
+          "district_name": "South 24 Parganas",
+          "lgd_short_name": "N24",
+          "site_url": "https://south24parganas.dcourts.gov.in"
+        },
+        {
+          "title": "District Judgeship of Birbhum",
+          "district_name": "Birbhum",
+          "lgd_short_name": "BIR",
+          "site_url": "https://birbhum.dcourts.gov.in"
+        },
+        {
+          "title": "Jalpaiguri District Court",
+          "district_name": "Jalpaiguri",
+          "lgd_short_name": "JLP",
+          "site_url": "https://jalpaiguri.dcourts.gov.in"
+        },
+        {
+          "title": "Paschim Medinipur District Court",
+          "district_name": "Paschim Medinipur",
+          "lgd_short_name": "MPW",
+          "site_url": "https://paschimmedinipur.dcourts.gov.in"
+        },
+        {
+          "title": "Presidency Small Cause Court",
+          "district_name": "Kolkata",
+          "lgd_short_name": "KLK",
+          "site_url": "https://psccourt.dcourts.gov.in"
+        },
+        {
+          "title": "Purba Medinipur District Court",
+          "district_name": "Purba Medinipur",
+          "lgd_short_name": "MPE",
+          "site_url": "https://purbamedinipur.dcourts.gov.in"
+        },
+        {
+          "title": "Uttar Dinajpur District Court",
+          "district_name": "Uttar Dinajpur",
+          "lgd_short_name": "DPU",
+          "site_url": "https://northdinajpur.dcourts.gov.in"
+        }
+      ]
+    }
+  ]
+}

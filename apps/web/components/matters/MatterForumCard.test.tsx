@@ -76,6 +76,22 @@ const CATALOG = {
       lineage: "High Court > Karnataka > Karnataka High Court",
       display_order: 21,
     },
+    {
+      id: "district:india-gov:delhi:southwestdelhi",
+      parent_id: null,
+      court_id: null,
+      name: "Dwarka Court South West Delhi | India",
+      forum_type: "district_court",
+      forum_level: "lower_court",
+      state: "Delhi",
+      district: "South West Delhi",
+      city: null,
+      consumer_level: null,
+      source_name: "India.gov.in District Courts Contact Directory",
+      source_url: "https://southwestdelhi.dcourts.gov.in",
+      lineage: "District Court > Delhi > South West Delhi > Dwarka Court South West Delhi | India",
+      display_order: 9004,
+    },
   ],
 };
 
@@ -204,6 +220,67 @@ describe("MatterForumCard", () => {
       forum_consumer_level: null,
     });
   });
+  it("normalizes stale inactive district catalog IDs to editable fallback metadata", async () => {
+    const user = userEvent.setup();
+    render(
+      withClient(
+        <MatterForumCard
+          matter={
+            {
+              id: "m-stale-district",
+              matter_code: "DW-OLD",
+              title: "Legacy Dwarka district matter",
+              status: "active",
+              practice_area: "Commercial",
+              forum_level: "lower_court",
+              court_id: null,
+              court_name: "Dwarka Courts Complex",
+              forum_catalog_entry_id: "district:delhi:dwarka",
+              forum_state: "Delhi",
+              forum_district: "South-West",
+              forum_city: "Dwarka",
+              created_at: "2026-06-23T00:00:00Z",
+            } as WorkspaceMatter
+          }
+        />,
+      ),
+    );
+
+    await user.click(screen.getByTestId("matter-forum-edit"));
+    await waitFor(() => expect(fetchForumCatalogMock).toHaveBeenCalledTimes(1));
+
+    expect(screen.getByTestId("matter-edit-forum-category")).toHaveValue(
+      "district_court",
+    );
+    expect(screen.getByTestId("matter-edit-forum-district-state")).toHaveValue(
+      "Delhi",
+    );
+    expect(screen.getByTestId("matter-edit-forum-district")).toHaveValue(
+      "__uncatalogued_district_court__",
+    );
+    expect(screen.getByTestId("matter-edit-forum-district-name")).toHaveValue(
+      "South-West",
+    );
+    expect(screen.getByTestId("matter-edit-forum-district-court")).toHaveValue(
+      "Dwarka Courts Complex",
+    );
+
+    await user.click(screen.getByTestId("matter-forum-save"));
+
+    await waitFor(() => expect(updateMatterMock).toHaveBeenCalledTimes(1));
+    expect(updateMatterMock).toHaveBeenCalledWith({
+      matterId: "m-stale-district",
+      forum_level: "lower_court",
+      court_id: null,
+      court_name: "Dwarka Courts Complex",
+      forum_catalog_entry_id: null,
+      forum_state: "Delhi",
+      forum_district: "South-West",
+      forum_city: "Dwarka",
+      forum_consumer_level: null,
+    });
+  });
+
   it("shows a catalog error and blocks unsafe structured saves while editing", async () => {
     const user = userEvent.setup();
     fetchForumCatalogMock.mockRejectedValue(new Error("catalog down"));

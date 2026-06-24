@@ -49,13 +49,14 @@ const CONSUMER_LEVELS = [
 ];
 
 const INDIA_DISTRICT_FORUM_STATES = [
-  "Andaman and Nicobar",
+  "Andaman and Nicobar Islands",
   "Andhra Pradesh",
   "Arunachal Pradesh",
   "Assam",
   "Bihar",
   "Chandigarh",
   "Chhattisgarh",
+  "Dadra and Nagar Haveli and Daman and Diu",
   "Delhi",
   "Goa",
   "Gujarat",
@@ -80,10 +81,9 @@ const INDIA_DISTRICT_FORUM_STATES = [
   "Sikkim",
   "Tamil Nadu",
   "Telangana",
-  "The Dadra And Nagar Haveli And Daman And Diu",
   "Tripura",
-  "Uttarakhand",
   "Uttar Pradesh",
+  "Uttarakhand",
   "West Bengal",
 ];
 
@@ -124,16 +124,20 @@ function districtFallbackSelection(
   state: string,
   current: ForumSelection,
 ): ForumSelection {
+  const preserveCurrentFallback =
+    current.forum_state === state &&
+    !current.forum_catalog_entry_id &&
+    !current.court_id;
   return {
     ...EMPTY_FORUM_SELECTION,
     forum_category: "district_court",
     forum_level: "lower_court",
     court_id: null,
-    court_name: current.forum_state === state ? current.court_name : null,
+    court_name: preserveCurrentFallback ? current.court_name : null,
     forum_catalog_entry_id: null,
     forum_state: state,
-    forum_district: current.forum_state === state ? current.forum_district : null,
-    forum_city: current.forum_state === state ? current.forum_city : null,
+    forum_district: preserveCurrentFallback ? current.forum_district : null,
+    forum_city: preserveCurrentFallback ? current.forum_city : null,
     forum_consumer_level: null,
   };
 }
@@ -251,12 +255,17 @@ export function ForumSelector({
       return;
     }
     if (next === "district_court") {
-      const entry = firstEntry(sortedEntries, (item) => item.forum_type === next);
+      const currentState = value.forum_state;
+      const entry =
+        firstEntry(
+          sortedEntries,
+          (item) => item.forum_type === next && item.state === currentState,
+        ) ?? firstEntry(sortedEntries, (item) => item.forum_type === next);
       if (entry) {
         chooseEntry(entry);
         return;
       }
-      onChange(districtFallbackSelection(INDIA_DISTRICT_FORUM_STATES[0], value));
+      onChange(districtFallbackSelection(currentState || INDIA_DISTRICT_FORUM_STATES[0], value));
       return;
     }
     chooseEntry(firstEntry(sortedEntries, (entry) => entry.forum_type === next));

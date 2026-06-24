@@ -287,9 +287,16 @@ describe("ForumSelector", () => {
     expect(
       screen.getByText(/District Court > Delhi > Central & West/i),
     ).toBeInTheDocument();
+
+    await user.selectOptions(
+      screen.getByTestId("test-forum-district"),
+      "__uncatalogued_district_court__",
+    );
+    expect(screen.getByTestId("test-forum-district-name")).toHaveValue("");
+    expect(screen.getByTestId("test-forum-district-court")).toHaveValue("");
   });
 
-  it("keeps every eCourts district state jurisdiction selectable and falls back for uncatalogued states", async () => {
+  it("keeps every India.gov district state jurisdiction selectable and falls back for uncatalogued states", async () => {
     const user = userEvent.setup();
     render(<Harness />);
 
@@ -303,13 +310,14 @@ describe("ForumSelector", () => {
     );
     expect(states).toEqual(
       [
-        "Andaman and Nicobar",
+        "Andaman and Nicobar Islands",
         "Andhra Pradesh",
         "Arunachal Pradesh",
         "Assam",
         "Bihar",
         "Chandigarh",
         "Chhattisgarh",
+        "Dadra and Nagar Haveli and Daman and Diu",
         "Delhi",
         "Goa",
         "Gujarat",
@@ -334,10 +342,9 @@ describe("ForumSelector", () => {
         "Sikkim",
         "Tamil Nadu",
         "Telangana",
-        "The Dadra And Nagar Haveli And Daman And Diu",
         "Tripura",
-        "Uttarakhand",
         "Uttar Pradesh",
+        "Uttarakhand",
         "West Bengal",
       ].sort((left, right) => left.localeCompare(right)),
     );

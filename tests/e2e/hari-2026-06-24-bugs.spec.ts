@@ -2,8 +2,8 @@
  * Hari 2026-06-24 workbook regressions.
  *
  * BUG-001: New Matter District Court hierarchy must expose every official
- * eCourts state/UT jurisdiction and must not block matter creation when a
- * selected state has no seeded district court entry yet.
+ * India.gov state/UT jurisdiction and must still allow "Other" fallback when
+ * a district court is not in the catalog.
  */
 import { expect, request, test } from "@playwright/test";
 import type { APIRequestContext, Page } from "@playwright/test";
@@ -13,13 +13,14 @@ import { apiBaseUrl } from "./support/env";
 const PASSWORD = "HariJun24Bugs!";
 
 const DISTRICT_STATE_JURISDICTIONS = [
-  "Andaman and Nicobar",
+  "Andaman and Nicobar Islands",
   "Andhra Pradesh",
   "Arunachal Pradesh",
   "Assam",
   "Bihar",
   "Chandigarh",
   "Chhattisgarh",
+  "Dadra and Nagar Haveli and Daman and Diu",
   "Delhi",
   "Goa",
   "Gujarat",
@@ -44,10 +45,9 @@ const DISTRICT_STATE_JURISDICTIONS = [
   "Sikkim",
   "Tamil Nadu",
   "Telangana",
-  "The Dadra And Nagar Haveli And Daman And Diu",
   "Tripura",
-  "Uttarakhand",
   "Uttar Pradesh",
+  "Uttarakhand",
   "West Bengal",
 ].sort((left, right) => left.localeCompare(right));
 
@@ -116,14 +116,26 @@ test.describe("Hari 2026-06-24 bugs", () => {
     await expect(stateSelect).toHaveValue("Assam");
 
     const districtSelect = page.getByTestId("new-matter-forum-district");
-    await expect(districtSelect).toHaveValue("__uncatalogued_district_court__");
+    await expect(districtSelect).toHaveValue("district:india-gov:assam:bajali");
     await expect
       .poll(async () =>
         districtSelect.locator("option").evaluateAll((options) =>
           options.map((option) => option.textContent?.trim() ?? ""),
         ),
       )
-      .toEqual(["Other district court in Assam"]);
+      .toEqual(
+        expect.arrayContaining([
+          "Bajali District Judiciary (Bajali)",
+          "Kamrup Metro District Judiciary (Kamrup)",
+          "Other district court in Assam",
+        ]),
+      );
+    await expect
+      .poll(async () => districtSelect.locator("option").count())
+      .toBe(35);
+
+    await districtSelect.selectOption("__uncatalogued_district_court__");
+    await expect(districtSelect).toHaveValue("__uncatalogued_district_court__");
 
     await page.getByLabel("Title").fill("Assam district matter");
     const matterCode = `ASM-${slug.slice(-6).toUpperCase()}`;
