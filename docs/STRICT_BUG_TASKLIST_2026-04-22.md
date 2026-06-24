@@ -700,21 +700,24 @@ Source workbook: `C:\Users\mishr\Downloads\CaseOps Bugs_Hari24Jun2026.xlsx`.
 
 | ID | Severity | Verdict | Area | Notes |
 |----|----------|---------|------|-------|
-| BUG-001 | P1 High | Partially fixed | Matters / Add Matters / District Court forum selector | Valid reopened bug. District Court no longer depends on seed rows for state availability; the selector exposes the complete eCourts state/UT jurisdiction list and provides an explicit uncatalogued district-court fallback requiring typed district and court name. Strict verdict remains `Partially fixed` until the deployed production Playwright spec passes on the shipped commit. |
+| BUG-001 | P1 High | Locally fixed | Matters / Add Matters / District Court forum selector | Valid reopened bug. The shallow all-state fallback was replaced with a scraped India.gov.in District Courts Contact Directory seed: 36 states/UTs, 724 scraped rows, 723 unique active district court catalog entries. The selector still provides typed uncatalogued fallback, but catalog-to-Other now clears inherited catalog metadata so district/court names are required. Strict verdict remains below `Properly fixed` until PR CI, merge, deploy, and production Playwright pass on the shipped commit. |
 
 Regression evidence added:
 
-- `apps/web/components/matters/ForumSelector.test.tsx` - all district jurisdictions plus uncatalogued Assam fallback.
+- `apps/api/alembic/versions/20260624_0001_seed_india_gov_district_courts.py` - India.gov district court seed migration with scrape-count validation.
+- `apps/api/src/caseops_api/scripts/seed_data/india_gov_district_courts.json` - scraped source snapshot: 36 states/UTs, 724 rows, 723 unique active courts.
+- `apps/web/components/matters/ForumSelector.test.tsx` - India.gov state list, Assam fallback, and catalog-to-Other clearing behavior.
 - `apps/web/components/app/NewMatterDialog.test.tsx` - New Matter creates uncatalogued Assam lower-court metadata only after district and court names are supplied.
-- `apps/web/components/matters/MatterForumCard.test.tsx` - edit path preserves no-catalog lower-court state/district/court metadata.
-- `apps/api/tests/test_legalworkspace_forum_selector.py` - backend accepts and preserves uncatalogued lower-court metadata.
-- `tests/e2e/hari-2026-06-24-bugs.spec.ts` - browser workflow for all jurisdictions and Assam fallback.
-- `tests/e2e/hari-2026-06-23-bugs.spec.ts` - prior Delhi complex regression updated for the explicit fallback option.
+- `apps/web/components/matters/MatterForumCard.test.tsx` - edit path preserves no-catalog/stale-catalog lower-court state/district/court metadata without resubmitting inactive catalog IDs.
+- `apps/api/tests/test_legalworkspace_forum_selector.py` - backend exposes 723 active India.gov district courts and accepts uncatalogued lower-court metadata.
+- `tests/e2e/hari-2026-06-24-bugs.spec.ts` - browser workflow for all India.gov jurisdictions, Assam catalog rows, and fallback-required metadata.
+- `tests/e2e/hari-2026-06-23-bugs.spec.ts` - prior Delhi regression updated to India.gov Delhi directory entries.
 
 Local verification on 2026-06-24:
 
-- `npm run test:web -- ForumSelector.test.tsx NewMatterDialog.test.tsx MatterForumCard.test.tsx` - PASS 16/16.
+- `uv --directory apps/api run ruff check alembic/versions/20260624_0001_seed_india_gov_district_courts.py tests/test_legalworkspace_forum_selector.py` - PASS.
 - `uv --directory apps/api run pytest tests/test_legalworkspace_forum_selector.py` - PASS 4/4.
+- `npm run test:web -- ForumSelector.test.tsx MatterForumCard.test.tsx` - PASS 9/9.
 - `npm run typecheck:web` - PASS.
 - `npm run build:web` - PASS.
 - `npx playwright test --config playwright.app.config.ts tests/e2e/hari-2026-06-24-bugs.spec.ts --project app-chromium` - PASS 1/1.

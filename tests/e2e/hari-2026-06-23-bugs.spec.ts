@@ -1,9 +1,9 @@
 /**
  * Hari 2026-06-23 workbook regressions.
  *
- * BUG-001: New Matter District Court hierarchy must expose all seven Delhi
- * district court complexes, including entries that were absent from the
- * original LW-S4 seed.
+ * BUG-001: New Matter District Court hierarchy must expose the India.gov
+ * Delhi district court directory, including entries absent from the original
+ * LW-S4 seed.
  */
 import { expect, request, test } from "@playwright/test";
 import type { APIRequestContext, Page } from "@playwright/test";
@@ -13,13 +13,17 @@ import { apiBaseUrl } from "./support/env";
 const PASSWORD = "HariJun23Bugs!";
 
 const DELHI_DISTRICT_COMPLEXES = [
-  "Tis Hazari Courts Complex (Central & West / Tis Hazari)",
-  "Patiala House Courts Complex (New Delhi / New Delhi)",
-  "Karkardooma Courts Complex (East, North-East & Shahdara / Karkardooma)",
-  "Rohini Courts Complex (North & North-West / Rohini)",
-  "Dwarka Courts Complex (South-West / Dwarka)",
-  "Saket Courts Complex (South & South-East / Saket)",
-  "Rouse Avenue Courts Complex (Special Courts / Central / Rouse Avenue)",
+  "Central District Court, Delhi (Central Delhi)",
+  "District Court North Delhi (North Delhi)",
+  "District Court North West Delhi (North West Delhi)",
+  "Dwarka Court South West Delhi | India (South West Delhi)",
+  "East District Court, Delhi (East Delhi)",
+  "New Delhi District Court, Delhi (New Delhi)",
+  "North East District Court, Delhi (North East Delhi)",
+  "Shahdara District Court, Delhi (Shahdara)",
+  "South District Court, New Delhi (South Delhi)",
+  "South-East District Court, New Delhi (South East)",
+  "West District Court, Delhi (West Delhi)",
   "Other district court in Delhi",
 ];
 
@@ -76,7 +80,7 @@ test.describe("Hari 2026-06-23 bugs", () => {
       .selectOption("district_court");
 
     const districtSelect = page.getByTestId("new-matter-forum-district");
-    await expect(districtSelect).toHaveValue("district:delhi:central");
+    await expect(districtSelect).toHaveValue("district:india-gov:delhi:centraldelhi");
     await expect
       .poll(async () =>
         districtSelect.locator("option").evaluateAll((options) =>
@@ -85,8 +89,8 @@ test.describe("Hari 2026-06-23 bugs", () => {
       )
       .toEqual(DELHI_DISTRICT_COMPLEXES);
 
-    await districtSelect.selectOption("district:delhi:dwarka");
-    await expect(districtSelect).toHaveValue("district:delhi:dwarka");
+    await districtSelect.selectOption("district:india-gov:delhi:southwestdelhi");
+    await expect(districtSelect).toHaveValue("district:india-gov:delhi:southwestdelhi");
 
     await page.getByLabel("Title").fill("Dwarka district matter");
     const matterCode = `DW-${slug.slice(-6)}`;

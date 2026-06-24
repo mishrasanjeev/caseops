@@ -84,31 +84,53 @@ def test_lw_s4_forum_catalog_returns_public_hierarchy(
     assert entries["sc:india"]["state"] is None
     assert entries["hc:delhi"]["forum_type"] == "high_court"
     assert entries["hc:delhi"]["state"] == "Delhi"
-    assert entries["district:delhi:central"]["forum_level"] == "lower_court"
-    assert entries["district:delhi:central"]["name"] == "Tis Hazari Courts Complex"
-    assert entries["district:delhi:central"]["district"] == "Central & West"
+    assert entries["district:india-gov:delhi:centraldelhi"]["forum_level"] == "lower_court"
+    assert (
+        entries["district:india-gov:delhi:centraldelhi"]["name"] == "Central District Court, Delhi"
+    )
+    assert entries["district:india-gov:delhi:centraldelhi"]["district"] == "Central Delhi"
+    assert (
+        entries["district:india-gov:delhi:centraldelhi"]["source_name"]
+        == "India.gov.in District Courts Contact Directory"
+    )
+    district_entries = [
+        entry for entry in entries.values() if entry["forum_type"] == "district_court"
+    ]
+    assert len(district_entries) == 723
+    assert all(
+        entry["source_name"] == "India.gov.in District Courts Contact Directory"
+        for entry in district_entries
+    )
     delhi_districts = [
         entry
         for entry in entries.values()
         if entry["forum_type"] == "district_court" and entry["state"] == "Delhi"
     ]
     assert [entry["id"] for entry in delhi_districts] == [
-        "district:delhi:central",
-        "district:delhi:new-delhi",
-        "district:delhi:karkardooma",
-        "district:delhi:rohini",
-        "district:delhi:dwarka",
-        "district:delhi:south",
-        "district:delhi:rouse-avenue",
+        "district:india-gov:delhi:centraldelhi",
+        "district:india-gov:delhi:northdelhi",
+        "district:india-gov:delhi:rohini",
+        "district:india-gov:delhi:southwestdelhi",
+        "district:india-gov:delhi:eastdelhi",
+        "district:india-gov:delhi:newdelhi",
+        "district:india-gov:delhi:northeast",
+        "district:india-gov:delhi:shahdara",
+        "district:india-gov:delhi:southdelhi",
+        "district:india-gov:delhi:southeastdelhi",
+        "district:india-gov:delhi:westdelhi",
     ]
     assert {entry["name"] for entry in delhi_districts} == {
-        "Tis Hazari Courts Complex",
-        "Patiala House Courts Complex",
-        "Karkardooma Courts Complex",
-        "Rohini Courts Complex",
-        "Dwarka Courts Complex",
-        "Saket Courts Complex",
-        "Rouse Avenue Courts Complex",
+        "Central District Court, Delhi",
+        "District Court North Delhi",
+        "District Court North West Delhi",
+        "Dwarka Court South West Delhi | India",
+        "East District Court, Delhi",
+        "New Delhi District Court, Delhi",
+        "North East District Court, Delhi",
+        "Shahdara District Court, Delhi",
+        "South District Court, New Delhi",
+        "South-East District Court, New Delhi",
+        "West District Court, Delhi",
     }
     assert entries["consumer:ncdrc"]["consumer_level"] == "national"
     assert entries["consumer:scdrc:delhi"]["consumer_level"] == "state"
@@ -175,14 +197,14 @@ def test_lw_s4_catalog_supports_required_forum_shapes(
         token,
         code="LW-S4-DIST",
         forum_level="lower_court",
-        forum_catalog_entry_id="district:delhi:dwarka",
+        forum_catalog_entry_id="district:india-gov:delhi:southwestdelhi",
     )
     assert district["forum_level"] == "lower_court"
     assert district["court_id"] is None
     assert district["forum_state"] == "Delhi"
-    assert district["court_name"] == "Dwarka Courts Complex"
-    assert district["forum_district"] == "South-West"
-    assert district["forum_city"] == "Dwarka"
+    assert district["court_name"] == "Dwarka Court South West Delhi | India"
+    assert district["forum_district"] == "South West Delhi"
+    assert district["forum_city"] is None
 
     uncatalogued_district = _create_matter(
         client,

@@ -65,6 +65,25 @@ export function MatterForumCard({ matter }: { matter: WorkspaceMatter }) {
     queryFn: fetchForumCatalog,
     enabled: editing,
   });
+  const catalogEntries = catalogQuery.data?.entries ?? [];
+  const catalogEmpty = catalogQuery.isSuccess && catalogEntries.length === 0;
+  const catalogFailed = catalogQuery.isError;
+  const catalogUnavailable = catalogFailed || catalogEmpty;
+  const selectedCatalogEntryMissing =
+    catalogQuery.isSuccess &&
+    Boolean(selection.forum_catalog_entry_id) &&
+    !catalogEntries.some((entry) => entry.id === selection.forum_catalog_entry_id);
+  const normalizedSelection: ForumSelection =
+    selectedCatalogEntryMissing &&
+    selection.forum_level === "lower_court" &&
+    Boolean(selection.forum_state)
+      ? {
+          ...selection,
+          forum_category: "district_court",
+          court_id: null,
+          forum_catalog_entry_id: null,
+        }
+      : selection;
 
   useEffect(() => {
     if (!editing) setSelection(selectionFromMatter(matter));
@@ -74,14 +93,14 @@ export function MatterForumCard({ matter }: { matter: WorkspaceMatter }) {
     mutationFn: () =>
       updateMatter({
         matterId: matter.id,
-        forum_level: selection.forum_level,
-        court_id: selection.court_id,
-        court_name: selection.court_name,
-        forum_catalog_entry_id: selection.forum_catalog_entry_id,
-        forum_state: selection.forum_state,
-        forum_district: selection.forum_district,
-        forum_city: selection.forum_city,
-        forum_consumer_level: selection.forum_consumer_level,
+        forum_level: normalizedSelection.forum_level,
+        court_id: normalizedSelection.court_id,
+        court_name: normalizedSelection.court_name,
+        forum_catalog_entry_id: normalizedSelection.forum_catalog_entry_id,
+        forum_state: normalizedSelection.forum_state,
+        forum_district: normalizedSelection.forum_district,
+        forum_city: normalizedSelection.forum_city,
+        forum_consumer_level: normalizedSelection.forum_consumer_level,
       }),
     onSuccess: async () => {
       await Promise.all([
@@ -97,16 +116,15 @@ export function MatterForumCard({ matter }: { matter: WorkspaceMatter }) {
   });
 
   const details = metadataLine(matter);
-  const catalogEntries = catalogQuery.data?.entries ?? [];
-  const catalogEmpty = catalogQuery.isSuccess && catalogEntries.length === 0;
-  const catalogFailed = catalogQuery.isError;
-  const catalogUnavailable = catalogFailed || catalogEmpty;
-  const legacyFallbackSelected = isLegacyForumSelection(selection);
+  const legacyFallbackSelected = isLegacyForumSelection(normalizedSelection);
   const legacyFallbackIncomplete =
-    catalogUnavailable && legacyFallbackSelected && !selection.court_name?.trim();
+    catalogUnavailable &&
+    legacyFallbackSelected &&
+    !normalizedSelection.court_name?.trim();
   const districtFallbackIncomplete =
-    isDistrictFallbackForumSelection(selection) &&
-    (!selection.forum_district?.trim() || !selection.court_name?.trim());
+    isDistrictFallbackForumSelection(normalizedSelection) &&
+    (!normalizedSelection.forum_district?.trim() ||
+      !normalizedSelection.court_name?.trim());
   const forumSaveBlocked =
     catalogQuery.isPending ||
     (catalogUnavailable && !legacyFallbackSelected) ||
@@ -151,7 +169,7 @@ export function MatterForumCard({ matter }: { matter: WorkspaceMatter }) {
           <div className="flex flex-col gap-3">
             <ForumSelector
               entries={catalogEntries}
-              value={selection}
+              value={normalizedSelection}
               onChange={setSelection}
               disabled={catalogQuery.isPending || mutation.isPending}
               idPrefix="matter-edit-forum"
