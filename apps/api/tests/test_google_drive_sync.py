@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from urllib.parse import parse_qs, urlparse
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -12,6 +13,8 @@ from caseops_api.db.session import get_session_factory
 from caseops_api.services.drive_sync import (
     GOOGLE_DRIVE_SCOPES,
     GoogleDriveFileMetadata,
+    GoogleDriveProvider,
+    GoogleDriveRuntimeConfig,
     set_google_drive_provider_for_tests,
 )
 from tests.test_legalworkspace_calendar_sync import _auth, _bootstrap_company
@@ -218,3 +221,35 @@ def test_google_drive_connections_are_cross_tenant_scoped(
     finally:
         set_google_drive_provider_for_tests(None)
         get_settings.cache_clear()
+
+
+def test_google_drive_provider_retries_transient_file_listing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = 0
+
+    def fake_request(method: str, url: str, **kwargs: object) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        request = httpx.Request(method, url)
+        if calls == 1:
+            return httpx.Response(503, request=request, json={"error": "temporary"})
+        return httpx.Response(
+            200,
+            request=request,
+            json={"files": [{"id": "drive-file-1", "name": "Retried.pdf"}]},
+        )
+
+    monkeypatch.setattr(httpx, "request", fake_request)
+    provider = GoogleDriveProvider(
+        GoogleDriveRuntimeConfig(
+            client_id="drive-client",
+            client_secret="drive-secret",
+            redirect_uri="https://api.caseops.ai/api/drive/google/callback",
+        )
+    )
+
+    files = provider.list_files(token_payload={"access_token": "drive-access"}, limit=5)
+
+    assert [file.name for file in files] == ["Retried.pdf"]
+    assert calls == 2

@@ -71,21 +71,26 @@ _NON_LATIN_RANGES = (
     "\\u0900-\\u097F\\u0A00-\\u0A7F\\u0B00-\\u0B7F\\u0B80-\\u0BFF"
     "\\u0C00-\\u0C7F\\u0C80-\\u0CFF\\u0D00-\\u0D7F"
 )
-_DETECTOR_SQL = text(f"""
+_DETECTOR_SQL = text("""
     SELECT id, title, COALESCE(document_text, '') AS document_text
     FROM authority_documents
     WHERE title IS NOT NULL
       AND (
-          title ~* '^({_BENCH_PLACEHOLDER_CITIES})\\s*BEN\\s?CH$'
+          title ~* :bench_placeholder_pattern
           OR title ~* '^BENCH\\s+AT\\s+[A-Z]+$'
           OR title ~* '^(IN\\s+THE\\s+)?(HIGH|SUPREME)\\s+COURT'
           OR char_length(title) < 12
-          OR title ~ '\\(cid:[0-9]+\\)'
-          OR title ~ '[{_NON_LATIN_RANGES}]'
+          OR title ~ :cid_placeholder_pattern
+          OR title ~ :non_latin_pattern
       )
     ORDER BY id
     LIMIT :lim
 """)
+_DETECTOR_SQL_PARAMS = {
+    "bench_placeholder_pattern": rf"^({_BENCH_PLACEHOLDER_CITIES})\s*BEN\s?CH$",
+    "cid_placeholder_pattern": r"\(cid:[0-9]+\)",
+    "non_latin_pattern": f"[{_NON_LATIN_RANGES}]",
+}
 
 
 _SYSTEM_PROMPT = (
@@ -190,7 +195,7 @@ def find_placeholder_title_docs(
                 "document_text": r.document_text or "",
             })())
     else:
-        rows = session.execute(_DETECTOR_SQL, {"lim": limit}).all()
+        rows = session.execute(_DETECTOR_SQL, {"lim": limit, **_DETECTOR_SQL_PARAMS}).all()
     out: list[tuple[str, str, str]] = []
     for row in rows:
         # Reassert via the predicate so edge cases (regex false

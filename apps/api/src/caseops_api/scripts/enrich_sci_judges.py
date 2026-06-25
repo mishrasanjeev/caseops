@@ -9,8 +9,10 @@ import json
 import re
 import sys
 import time
-import urllib.request
+import urllib.parse
 from pathlib import Path
+
+import httpx
 
 # Script now lives under apps/api/src/caseops_api/scripts/. The seed
 # JSON is a sibling `seed_data/` directory; resolve relative to this
@@ -19,6 +21,7 @@ JSON_PATH = Path(__file__).resolve().parent / "seed_data" / "sci_sitting_judges.
 
 USER_AGENT = "CaseOps legal-ops tool (research)"
 SLEEP_SEC = 1.0
+ALLOWED_FETCH_HOSTS = {"sci.gov.in", "www.sci.gov.in"}
 
 MONTHS = {
     "january": 1, "february": 2, "march": 3, "april": 4, "may": 5, "june": 6,
@@ -28,16 +31,29 @@ MONTHS = {
 }
 
 
+def _is_allowed_fetch_url(url: str) -> bool:
+    parsed = urllib.parse.urlparse(url)
+    return parsed.scheme == "https" and parsed.hostname in ALLOWED_FETCH_HOSTS
+
+
 def fetch(url: str) -> str | None:
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    if not _is_allowed_fetch_url(url):
+        print(f"  FETCH REFUSED {url}: unexpected scheme or host", file=sys.stderr)
+        return None
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            raw = resp.read()
-            # Pages are utf-8 in practice; fall back latin-1 to avoid hard fail
-            try:
-                return raw.decode("utf-8")
-            except UnicodeDecodeError:
-                return raw.decode("latin-1", errors="replace")
+        response = httpx.get(
+            url,
+            headers={"User-Agent": USER_AGENT},
+            timeout=30.0,
+            follow_redirects=True,
+        )
+        response.raise_for_status()
+        raw = response.content
+        # Pages are utf-8 in practice; fall back latin-1 to avoid hard fail.
+        try:
+            return raw.decode(response.encoding or "utf-8")
+        except UnicodeDecodeError:
+            return raw.decode("latin-1", errors="replace")
     except Exception as e:
         print(f"  FETCH FAIL {url}: {e}", file=sys.stderr)
         return None

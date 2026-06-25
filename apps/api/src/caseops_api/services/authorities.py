@@ -5,7 +5,7 @@ import re
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 # NOTE for reviewers: the task spec asked for this wiring to land in
@@ -1188,41 +1188,33 @@ def _exact_name_match_document_ids(
     # vector-only fallback missed them.
     # PG will use a seq scan without a trigram index but at ~20k rows
     # the whole table fits in memory and the scan is <10 ms.
-    from sqlalchemy import text
-
-    where_parts: list[str] = []
-    params: dict[str, object] = {
-        "forum": forum_level,
-        "court": court_name,
-        "dtype": document_type,
-        "lim": limit,
-    }
-    for idx, tok in enumerate(tokens):
-        pkey = f"tok{idx}"
-        where_parts.append(
-            f"(d.parties_json ILIKE :{pkey} OR d.title ILIKE :{pkey} "
-            f"OR d.bench_name ILIKE :{pkey})"
+    filters = []
+    for tok in tokens:
+        pattern = f"%{tok}%"
+        filters.append(
+            or_(
+                AuthorityDocument.parties_json.ilike(pattern),
+                AuthorityDocument.title.ilike(pattern),
+                AuthorityDocument.bench_name.ilike(pattern),
+            )
         )
-        params[pkey] = f"%{tok}%"
-    where_sql = " AND ".join(where_parts)
+    if forum_level is not None:
+        filters.append(AuthorityDocument.forum_level == forum_level)
+    if court_name is not None:
+        filters.append(AuthorityDocument.court_name == court_name)
+    if document_type is not None:
+        filters.append(AuthorityDocument.document_type == document_type)
 
     try:
-        rows = session.execute(
-            text(
-                "SELECT d.id FROM authority_documents d "
-                f"WHERE {where_sql} "
-                "AND (cast(:forum as text) IS NULL OR d.forum_level = :forum) "
-                "AND (cast(:court as text) IS NULL OR d.court_name = :court) "
-                "AND (cast(:dtype as text) IS NULL OR d.document_type = :dtype) "
-                "LIMIT :lim"
-            ),
-            params,
-        ).all()
+        ids = list(
+            session.scalars(
+                select(AuthorityDocument.id).where(*filters).limit(limit)
+            )
+        )
     except Exception:
         session.rollback()
         return []
 
-    ids = [r.id for r in rows]
     # Too broad (likely topical token that slipped the stopword list) →
     # DON'T drop entirely — that path was the sc-2023 Pradeep Kumar
     # v. State of Chhattisgarh miss, where 'Pradeep' + 'Kumar' matched

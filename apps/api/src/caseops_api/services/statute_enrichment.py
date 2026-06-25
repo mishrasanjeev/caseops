@@ -34,6 +34,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import ModelRun, Statute, StatuteSection
+from caseops_api.services.http_retries import request_with_retries
 from caseops_api.services.llm import (
     PURPOSE_METADATA_EXTRACT,
     LLMCallContext,
@@ -119,7 +120,7 @@ def _fetch_kanoon_act_html(
     try:
         url = f"https://indiankanoon.org/doc/{doc_id}/"
         try:
-            resp = client.get(url)
+            resp = request_with_retries("GET", url, client=client)
         except httpx.HTTPError as exc:
             logger.info(
                 "kanoon fetch network error for %s: %s", statute_id, exc,
@@ -242,7 +243,7 @@ def scrape_indiacode_section(
         )
     try:
         try:
-            resp = client.get(statute.source_url)
+            resp = request_with_retries("GET", statute.source_url, client=client)
         except httpx.HTTPError as exc:
             logger.info(
                 "indiacode scrape network error for %s/%s: %s",

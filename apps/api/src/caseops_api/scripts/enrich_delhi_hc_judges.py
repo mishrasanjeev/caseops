@@ -25,9 +25,11 @@ import json
 import re
 import sys
 import time
-import urllib.request
+import urllib.parse
 from html.parser import HTMLParser
 from pathlib import Path
+
+import httpx
 
 JSON_PATH = (
     Path(__file__).resolve().parent
@@ -39,13 +41,27 @@ USER_AGENT = (
     "(KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
 )
 SLEEP_SEC = 1.0
+ALLOWED_FETCH_HOSTS = {"delhihighcourt.nic.in"}
+
+
+def _is_allowed_fetch_url(url: str) -> bool:
+    parsed = urllib.parse.urlparse(url)
+    return parsed.scheme == "https" and parsed.hostname in ALLOWED_FETCH_HOSTS
 
 
 def _fetch(url: str) -> str | None:
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    if not _is_allowed_fetch_url(url):
+        print(f"  [warn] refused unexpected URL: {url}", file=sys.stderr)
+        return None
     try:
-        with urllib.request.urlopen(req, timeout=20) as r:
-            return r.read().decode("utf-8", errors="replace")
+        response = httpx.get(
+            url,
+            headers={"User-Agent": USER_AGENT},
+            timeout=20.0,
+            follow_redirects=True,
+        )
+        response.raise_for_status()
+        return response.content.decode(response.encoding or "utf-8", errors="replace")
     except Exception as exc:  # noqa: BLE001 — network/format errors all opaque
         print(f"  [warn] {url} -> {type(exc).__name__}: {exc}", file=sys.stderr)
         return None

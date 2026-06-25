@@ -44,13 +44,14 @@ Why these specific tests:
 """
 from __future__ import annotations
 
+import importlib.util
 import os
 from datetime import UTC, date, datetime
 from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -153,6 +154,22 @@ def _seed_portal_user(session: Session, company_id: str) -> str:
     return pu_id
 
 
+def _fk_index_pairs() -> tuple[tuple[str, str], ...]:
+    migration = (
+        Path(__file__).resolve().parents[1]
+        / "alembic"
+        / "versions"
+        / "20260625_0002_fk_leading_indexes.py"
+    )
+    spec = importlib.util.spec_from_file_location(migration.stem, migration)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)  # type: ignore[union-attr]
+    pairs = module.FK_INDEXES
+    assert isinstance(pairs, tuple)
+    return pairs
+
+
 # ---------- tests ----------
 
 
@@ -174,6 +191,64 @@ def test_alembic_upgrade_to_head_runs_cleanly(pg_engine):
         f"DB at {rows[0][0]} but latest revision file is {latest_rev}; "
         "alembic upgrade head did not advance the DB"
     )
+
+
+def test_foreign_key_indexes_exist_after_head(pg_engine):
+    inspector = inspect(pg_engine)
+    missing: list[tuple[str, str]] = []
+
+    for table, column in _fk_index_pairs():
+        indexes = inspector.get_indexes(table)
+        if not any(index.get("column_names", [None])[0] == column for index in indexes):
+            missing.append((table, column))
+
+    assert not missing, f"Foreign-key columns missing leading indexes: {missing}"
+
+
+def test_authority_exact_name_prefilter_matches_party_tokens_on_postgres(pg_engine):
+    from caseops_api.services.authorities import _exact_name_match_document_ids
+
+    doc_id = str(uuid4())
+    now = datetime.now(UTC)
+    with Session(pg_engine) as session:
+        session.execute(
+            text(
+                "INSERT INTO authority_documents "
+                "(id, source, adapter_name, court_name, forum_level, document_type, "
+                "title, canonical_key, summary, extracted_char_count, parties_json, "
+                "bench_name, ingested_at, created_at, updated_at) "
+                "VALUES (:id, 'pg-test', 'pg-test-adapter', 'Delhi High Court', "
+                "'high_court', 'judgment', 'Acme Logistics v Kumar', :key, "
+                "'Summary', 7, :parties, 'Commercial Bench', :ts, :ts, :ts)"
+            ),
+            {
+                "id": doc_id,
+                "key": f"pg-test::{doc_id}",
+                "parties": '["Acme Logistics", "Kumar"]',
+                "ts": now,
+            },
+        )
+        session.commit()
+
+        matches = _exact_name_match_document_ids(
+            session,
+            query="Acme Kumar",
+            forum_level="high_court",
+            court_name="Delhi High Court",
+            document_type="judgment",
+            limit=10,
+        )
+        court_misses = _exact_name_match_document_ids(
+            session,
+            query="Acme Kumar",
+            forum_level="high_court",
+            court_name="Bombay High Court",
+            document_type="judgment",
+            limit=10,
+        )
+
+    assert doc_id in matches
+    assert doc_id not in court_misses
 
 
 def test_pgvector_extension_and_hnsw_index_work(pg_engine):

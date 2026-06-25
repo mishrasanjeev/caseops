@@ -37,6 +37,7 @@ dependencies = [
   # with a try/except that silently fail-opened on ImportError;
   # making it an explicit top-level dep removes that footgun.
   "cryptography>=48.0.1",
+  "defusedxml>=0.7.1",
   "qrcode==8.2",
 ]
 

@@ -13,6 +13,7 @@ from pdfminer.high_level import extract_text as pdf_extract_text
 
 from caseops_api.db.models import Matter, MatterForumLevel, utcnow
 from caseops_api.schemas.matters import MatterCauseListSyncItem, MatterCourtOrderSyncItem
+from caseops_api.services.http_retries import request_with_retries
 
 DELHI_CAUSE_LIST_URL = "https://delhihighcourt.nic.in/web/cause-lists/cause-list"
 DELHI_HOME_URL = "https://delhihighcourt.nic.in/"
@@ -252,8 +253,7 @@ def _fetch_text(url: str) -> tuple[str, str]:
     # fail closed; operators with genuinely broken chains add the
     # missing CA to REQUESTS_CA_BUNDLE / system trust.
     with httpx.Client(timeout=30, follow_redirects=True) as client:
-        response = client.get(url, headers=BROWSER_HEADERS)
-        response.raise_for_status()
+        response = request_with_retries("GET", url, client=client, headers=BROWSER_HEADERS)
         return response.text, str(response.url)
 
 
@@ -261,8 +261,7 @@ def _fetch_bytes(url: str) -> tuple[bytes, str]:
     # See _fetch_text — TLS verification is mandatory; no insecure
     # retry path for any host.
     with httpx.Client(timeout=30, follow_redirects=True) as client:
-        response = client.get(url, headers=BROWSER_HEADERS)
-        response.raise_for_status()
+        response = request_with_retries("GET", url, client=client, headers=BROWSER_HEADERS)
         return response.content, str(response.url)
 
 

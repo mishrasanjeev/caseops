@@ -56,6 +56,7 @@ from caseops_api.schemas.calendar import (
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.durable_workflows import redact_identifier
 from caseops_api.services.google_workspace import google_workspace_oauth_config
+from caseops_api.services.http_retries import request_with_retries
 from caseops_api.services.matter_access import (
     assert_access,
     visible_matters_filter,
@@ -257,12 +258,12 @@ class MicrosoftGraphOutlookProvider:
             access_token = str(token_payload.get("access_token") or "")
             if not access_token:
                 raise CalendarProviderError("Microsoft Graph did not return an access token.")
-            me_response = httpx.get(
+            me_response = request_with_retries(
+                "GET",
                 "https://graph.microsoft.com/v1.0/me",
                 headers={"Authorization": f"Bearer {access_token}"},
                 timeout=15,
             )
-            me_response.raise_for_status()
             me = me_response.json()
         except httpx.HTTPError as exc:
             raise CalendarProviderError("Microsoft Graph OAuth exchange failed.") from exc
@@ -286,12 +287,12 @@ class MicrosoftGraphOutlookProvider:
         if not access_token:
             raise CalendarProviderError("Stored Outlook token is unavailable.")
         try:
-            me_response = httpx.get(
+            me_response = request_with_retries(
+                "GET",
                 "https://graph.microsoft.com/v1.0/me",
                 headers={"Authorization": f"Bearer {access_token}"},
                 timeout=15,
             )
-            me_response.raise_for_status()
             me = me_response.json()
         except httpx.HTTPError as exc:
             raise CalendarProviderError("Microsoft Graph connection test failed.") from exc
@@ -476,12 +477,12 @@ class GoogleCalendarProvider:
             access_token = str(token_payload.get("access_token") or "")
             if not access_token:
                 raise CalendarProviderError("Google did not return an access token.")
-            userinfo_response = httpx.get(
+            userinfo_response = request_with_retries(
+                "GET",
                 "https://www.googleapis.com/oauth2/v3/userinfo",
                 headers={"Authorization": f"Bearer {access_token}"},
                 timeout=15,
             )
-            userinfo_response.raise_for_status()
             userinfo = userinfo_response.json()
         except httpx.HTTPError as exc:
             raise CalendarProviderError("Google Calendar OAuth exchange failed.") from exc
@@ -503,12 +504,12 @@ class GoogleCalendarProvider:
         if not access_token:
             raise CalendarProviderError("Stored Google Calendar token is unavailable.")
         try:
-            userinfo_response = httpx.get(
+            userinfo_response = request_with_retries(
+                "GET",
                 "https://www.googleapis.com/oauth2/v3/userinfo",
                 headers={"Authorization": f"Bearer {access_token}"},
                 timeout=15,
             )
-            userinfo_response.raise_for_status()
             userinfo = userinfo_response.json()
         except httpx.HTTPError as exc:
             raise CalendarProviderError("Google Calendar connection test failed.") from exc

@@ -54,6 +54,7 @@ from caseops_api.services.case_tracking_providers import (
     get_case_tracking_provider,
     provider_status,
 )
+from caseops_api.services.http_retries import request_with_retries
 from caseops_api.services.llm import (
     LLMCallContext,
     LLMMessage,
@@ -1298,14 +1299,15 @@ def download_case_tracking_source(
             follow_redirects=True,
             transport=transport,
         ) as client:
-            response = client.get(
+            response = request_with_retries(
+                "GET",
                 source_url,
+                client=client,
                 headers={
                     "Authorization": f"Bearer {settings.ecourtsindia_api_token}",
                     "Accept": "application/pdf,application/octet-stream,*/*",
                 },
             )
-            response.raise_for_status()
     except httpx.HTTPError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
