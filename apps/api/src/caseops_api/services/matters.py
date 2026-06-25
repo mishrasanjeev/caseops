@@ -460,6 +460,22 @@ def _resolve_forum_selection(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="forum_level is required when no catalog forum is selected.",
         )
+    if clean_forum_level == "tribunal" and clean_consumer_level:
+        if clean_consumer_level in {"state", "district"} and not clean_state:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Consumer forum fallback selection requires a state.",
+            )
+        if clean_consumer_level == "district" and not clean_district:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="District consumer forum fallback selection requires a district.",
+            )
+        if not clean_court_name:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Consumer forum fallback selection requires a forum name.",
+            )
     return {
         "forum_level": clean_forum_level,
         "court_id": None,

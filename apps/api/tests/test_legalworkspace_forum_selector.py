@@ -43,6 +43,7 @@ def _create_matter(
     forum_state: str | None = None,
     forum_district: str | None = None,
     forum_city: str | None = None,
+    forum_consumer_level: str | None = None,
 ) -> dict:
     payload: dict[str, object] = {
         "title": f"Forum selector {code}",
@@ -65,6 +66,8 @@ def _create_matter(
         payload["forum_district"] = forum_district
     if forum_city is not None:
         payload["forum_city"] = forum_city
+    if forum_consumer_level is not None:
+        payload["forum_consumer_level"] = forum_consumer_level
     response = client.post("/api/matters/", headers=auth_headers(token), json=payload)
     assert response.status_code == 200, response.text
     return response.json()
@@ -133,9 +136,72 @@ def test_lw_s4_forum_catalog_returns_public_hierarchy(
         "West District Court, Delhi",
     }
     assert entries["consumer:ncdrc"]["consumer_level"] == "national"
-    assert entries["consumer:scdrc:delhi"]["consumer_level"] == "state"
-    assert entries["consumer:dcdrc:central-delhi"]["consumer_level"] == "district"
-    assert entries["consumer:dcdrc:central-delhi"]["parent_id"] == "consumer:scdrc:delhi"
+    assert entries["consumer:ncdrc"]["source_name"] == "e-Jagriti master commission directory"
+    assert entries["consumer:scdrc:11070000"]["consumer_level"] == "state"
+    assert entries["consumer:scdrc:11070000"]["state"] == "Delhi"
+    assert (
+        entries["consumer:scdrc:11070000"]["name"]
+        == "Delhi State Consumer Disputes Redressal Commission"
+    )
+    assert entries["consumer:dcdrc:11070077"]["consumer_level"] == "district"
+    assert entries["consumer:dcdrc:11070077"]["state"] == "Delhi"
+    assert entries["consumer:dcdrc:11070077"]["district"] == "Central Delhi"
+    assert entries["consumer:dcdrc:11070077"]["parent_id"] == "consumer:scdrc:11070000"
+    consumer_state_entries = [
+        entry
+        for entry in entries.values()
+        if entry["forum_type"] == "consumer_forum" and entry["consumer_level"] == "state"
+    ]
+    consumer_district_entries = [
+        entry
+        for entry in entries.values()
+        if entry["forum_type"] == "consumer_forum"
+        and entry["consumer_level"] == "district"
+    ]
+    assert {entry["state"] for entry in consumer_state_entries} == {
+        "Andaman and Nicobar Islands",
+        "Andhra Pradesh",
+        "Arunachal Pradesh",
+        "Assam",
+        "Bihar",
+        "Chandigarh",
+        "Chhattisgarh",
+        "Dadra and Nagar Haveli and Daman and Diu",
+        "Delhi",
+        "Goa",
+        "Gujarat",
+        "Haryana",
+        "Himachal Pradesh",
+        "Jammu and Kashmir",
+        "Jharkhand",
+        "Karnataka",
+        "Kerala",
+        "Ladakh",
+        "Lakshadweep",
+        "Madhya Pradesh",
+        "Maharashtra",
+        "Manipur",
+        "Meghalaya",
+        "Mizoram",
+        "Nagaland",
+        "Odisha",
+        "Puducherry",
+        "Punjab",
+        "Rajasthan",
+        "Sikkim",
+        "Tamil Nadu",
+        "Telangana",
+        "Tripura",
+        "Uttar Pradesh",
+        "Uttarakhand",
+        "West Bengal",
+    }
+    assert len(consumer_state_entries) == 54
+    assert len(consumer_district_entries) == 676
+    assert all(
+        entry["source_name"] == "e-Jagriti master commission directory"
+        for entry in consumer_state_entries + consumer_district_entries
+    )
     assert all("company_id" not in entry for entry in entries.values())
     assert all(entry["source_name"] for entry in entries.values())
     assert all(entry["lineage"] for entry in entries.values())
@@ -226,11 +292,29 @@ def test_lw_s4_catalog_supports_required_forum_shapes(
         token,
         code="LW-S4-CONS",
         forum_level="tribunal",
-        forum_catalog_entry_id="consumer:dcdrc:central-delhi",
+        forum_catalog_entry_id="consumer:dcdrc:11070077",
     )
     assert consumer["forum_level"] == "tribunal"
     assert consumer["forum_consumer_level"] == "district"
-    assert consumer["forum_district"] == "Central"
+    assert consumer["forum_district"] == "Central Delhi"
+
+    uncatalogued_consumer = _create_matter(
+        client,
+        token,
+        code="LW-S4-CONS-FALLBACK",
+        forum_level="tribunal",
+        court_name="Jaipur DCDRC Annex",
+        forum_state="Rajasthan",
+        forum_district="Jaipur",
+        forum_consumer_level="district",
+    )
+    assert uncatalogued_consumer["forum_level"] == "tribunal"
+    assert uncatalogued_consumer["court_id"] is None
+    assert uncatalogued_consumer["forum_catalog_entry_id"] is None
+    assert uncatalogued_consumer["court_name"] == "Jaipur DCDRC Annex"
+    assert uncatalogued_consumer["forum_state"] == "Rajasthan"
+    assert uncatalogued_consumer["forum_district"] == "Jaipur"
+    assert uncatalogued_consumer["forum_consumer_level"] == "district"
 
 
 def test_lw_s4_rejects_mismatched_catalog_metadata_and_preserves_legacy_fallback(
@@ -281,6 +365,23 @@ def test_lw_s4_rejects_mismatched_catalog_metadata_and_preserves_legacy_fallback
         },
     )
     assert mapped_court_spoof.status_code == 400, mapped_court_spoof.text
+
+    incomplete_consumer_fallback = client.post(
+        "/api/matters/",
+        headers=auth_headers(token),
+        json={
+            "title": "Bad consumer forum fallback",
+            "matter_code": "LW-S4-BAD-CONS",
+            "status": "intake",
+            "practice_area": "Consumer",
+            "forum_level": "tribunal",
+            "court_name": "Jaipur DCDRC Annex",
+            "forum_state": "Rajasthan",
+            "forum_consumer_level": "district",
+        },
+    )
+    assert incomplete_consumer_fallback.status_code == 400, incomplete_consumer_fallback.text
+    assert "district" in incomplete_consumer_fallback.json()["detail"].lower()
 
     legacy = _create_matter(
         client,

@@ -92,6 +92,56 @@ const CATALOG = {
       lineage: "District Court > Delhi > South West Delhi > Dwarka Court South West Delhi | India",
       display_order: 9004,
     },
+    {
+      id: "consumer:ncdrc",
+      parent_id: null,
+      court_id: null,
+      name: "National Consumer Disputes Redressal Commission",
+      forum_type: "consumer_forum",
+      forum_level: "tribunal",
+      state: null,
+      district: null,
+      city: "New Delhi",
+      consumer_level: "national",
+      source_name: "e-Jagriti master commission directory",
+      source_url: "https://e-jagriti.gov.in/services/master/master/v2/getAllCommission",
+      lineage: "Consumer Forum > NCDRC",
+      display_order: 200,
+    },
+    {
+      id: "consumer:scdrc:11080000",
+      parent_id: "consumer:ncdrc",
+      court_id: null,
+      name: "Rajasthan State Consumer Disputes Redressal Commission",
+      forum_type: "consumer_forum",
+      forum_level: "tribunal",
+      state: "Rajasthan",
+      district: null,
+      city: null,
+      consumer_level: "state",
+      source_name: "e-Jagriti master commission directory",
+      source_url:
+        "https://e-jagriti.gov.in/services/master/master/v2/getCommissionDetailsByStateId?stateId=8",
+      lineage: "Consumer Forum > SCDRC > Rajasthan",
+      display_order: 280,
+    },
+    {
+      id: "consumer:dcdrc:11080086",
+      parent_id: "consumer:scdrc:11080000",
+      court_id: null,
+      name: "Ajmer District Consumer Disputes Redressal Commission",
+      forum_type: "consumer_forum",
+      forum_level: "tribunal",
+      state: "Rajasthan",
+      district: "Ajmer",
+      city: null,
+      consumer_level: "district",
+      source_name: "e-Jagriti master commission directory",
+      source_url:
+        "https://e-jagriti.gov.in/services/master/master/v2/getCommissionDetailsByStateId?stateId=8",
+      lineage: "Consumer Forum > DCDRC > Rajasthan > Ajmer",
+      display_order: 108001,
+    },
   ],
 };
 
@@ -278,6 +328,126 @@ describe("MatterForumCard", () => {
       forum_district: "South-West",
       forum_city: "Dwarka",
       forum_consumer_level: null,
+    });
+  });
+
+  it("normalizes stale inactive consumer catalog IDs to editable DCDRC fallback metadata", async () => {
+    const user = userEvent.setup();
+    render(
+      withClient(
+        <MatterForumCard
+          matter={
+            {
+              id: "m-stale-consumer",
+              matter_code: "CONS-OLD",
+              title: "Legacy consumer matter",
+              status: "active",
+              practice_area: "Consumer",
+              forum_level: "tribunal",
+              court_id: null,
+              court_name: "Central Delhi District Consumer Disputes Redressal Commission",
+              forum_catalog_entry_id: "consumer:dcdrc:central-delhi",
+              forum_state: "Delhi",
+              forum_district: "Central Delhi",
+              forum_city: null,
+              forum_consumer_level: "district",
+              created_at: "2026-06-25T00:00:00Z",
+            } as WorkspaceMatter
+          }
+        />,
+      ),
+    );
+
+    await user.click(screen.getByTestId("matter-forum-edit"));
+    await waitFor(() => expect(fetchForumCatalogMock).toHaveBeenCalledTimes(1));
+
+    expect(screen.getByTestId("matter-edit-forum-category")).toHaveValue(
+      "consumer_forum",
+    );
+    expect(screen.getByTestId("matter-edit-forum-consumer-level")).toHaveValue(
+      "district",
+    );
+    expect(screen.getByTestId("matter-edit-forum-consumer-state")).toHaveValue(
+      "Delhi",
+    );
+    expect(screen.getByTestId("matter-edit-forum-consumer-district")).toHaveValue(
+      "__uncatalogued_consumer_district__",
+    );
+    expect(screen.getByTestId("matter-edit-forum-consumer-district-name")).toHaveValue(
+      "Central Delhi",
+    );
+    expect(screen.getByTestId("matter-edit-forum-consumer-forum-name")).toHaveValue(
+      "Central Delhi District Consumer Disputes Redressal Commission",
+    );
+
+    await user.clear(screen.getByTestId("matter-edit-forum-consumer-forum-name"));
+    expect(screen.getByTestId("matter-forum-save")).toBeDisabled();
+    await user.type(
+      screen.getByTestId("matter-edit-forum-consumer-forum-name"),
+      "Central Delhi DCDRC",
+    );
+    await user.click(screen.getByTestId("matter-forum-save"));
+
+    await waitFor(() => expect(updateMatterMock).toHaveBeenCalledTimes(1));
+    expect(updateMatterMock).toHaveBeenCalledWith({
+      matterId: "m-stale-consumer",
+      forum_level: "tribunal",
+      court_id: null,
+      court_name: "Central Delhi DCDRC",
+      forum_catalog_entry_id: null,
+      forum_state: "Delhi",
+      forum_district: "Central Delhi",
+      forum_city: null,
+      forum_consumer_level: "district",
+    });
+  });
+
+  it("updates a matter to a catalogued e-Jagriti DCDRC entry", async () => {
+    const user = userEvent.setup();
+    render(
+      withClient(
+        <MatterForumCard
+          matter={
+            {
+              id: "m-consumer",
+              matter_code: "CONS-001",
+              title: "Consumer matter",
+              status: "active",
+              practice_area: "Consumer",
+              forum_level: "tribunal",
+              court_name: "NCDRC",
+              forum_consumer_level: "national",
+              created_at: "2026-06-25T00:00:00Z",
+            } as WorkspaceMatter
+          }
+        />,
+      ),
+    );
+
+    await user.click(screen.getByTestId("matter-forum-edit"));
+    await waitFor(() => expect(fetchForumCatalogMock).toHaveBeenCalledTimes(1));
+
+    await user.selectOptions(
+      screen.getByTestId("matter-edit-forum-consumer-level"),
+      "district",
+    );
+    await user.selectOptions(
+      screen.getByTestId("matter-edit-forum-consumer-state"),
+      "Rajasthan",
+    );
+    await user.click(screen.getByTestId("matter-forum-save"));
+
+    await waitFor(() => expect(updateMatterMock).toHaveBeenCalledTimes(1));
+    expect(updateMatterMock).toHaveBeenCalledWith({
+      matterId: "m-consumer",
+      forum_level: "tribunal",
+      court_id: null,
+      court_name: "Ajmer District Consumer Disputes Redressal Commission",
+      forum_catalog_entry_id: "consumer:dcdrc:11080086",
+      forum_state: "Rajasthan",
+      forum_district: "Ajmer",
+      forum_city: null,
+      forum_consumer_level: "district",
     });
   });
 

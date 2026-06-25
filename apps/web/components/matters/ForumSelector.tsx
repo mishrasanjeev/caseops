@@ -88,6 +88,8 @@ const INDIA_DISTRICT_FORUM_STATES = [
 ];
 
 const DISTRICT_FALLBACK_OPTION = "__uncatalogued_district_court__";
+const CONSUMER_FORUM_STATES = INDIA_DISTRICT_FORUM_STATES;
+const CONSUMER_DISTRICT_FALLBACK_OPTION = "__uncatalogued_consumer_district__";
 
 export const EMPTY_FORUM_SELECTION: ForumSelection = {
   forum_category: "high_court",
@@ -120,6 +122,18 @@ export function isDistrictFallbackForumSelection(value: ForumSelection): boolean
   );
 }
 
+export function isConsumerDistrictFallbackForumSelection(
+  value: ForumSelection,
+): boolean {
+  return (
+    value.forum_category === "consumer_forum" &&
+    value.forum_level === "tribunal" &&
+    value.forum_consumer_level === "district" &&
+    !value.forum_catalog_entry_id &&
+    !value.court_id
+  );
+}
+
 function districtFallbackSelection(
   state: string,
   current: ForumSelection,
@@ -139,6 +153,54 @@ function districtFallbackSelection(
     forum_district: preserveCurrentFallback ? current.forum_district : null,
     forum_city: preserveCurrentFallback ? current.forum_city : null,
     forum_consumer_level: null,
+  };
+}
+
+function consumerStateFallbackSelection(
+  state: string,
+  current: ForumSelection,
+): ForumSelection {
+  const preserveCurrentFallback =
+    current.forum_state === state &&
+    current.forum_consumer_level === "state" &&
+    !current.forum_catalog_entry_id &&
+    !current.court_id;
+  return {
+    ...EMPTY_FORUM_SELECTION,
+    forum_category: "consumer_forum",
+    forum_level: "tribunal",
+    court_id: null,
+    court_name: preserveCurrentFallback
+      ? current.court_name
+      : `${state} State Consumer Disputes Redressal Commission`,
+    forum_catalog_entry_id: null,
+    forum_state: state,
+    forum_district: null,
+    forum_city: null,
+    forum_consumer_level: "state",
+  };
+}
+
+function consumerDistrictFallbackSelection(
+  state: string,
+  current: ForumSelection,
+): ForumSelection {
+  const preserveCurrentFallback =
+    current.forum_state === state &&
+    current.forum_consumer_level === "district" &&
+    !current.forum_catalog_entry_id &&
+    !current.court_id;
+  return {
+    ...EMPTY_FORUM_SELECTION,
+    forum_category: "consumer_forum",
+    forum_level: "tribunal",
+    court_id: null,
+    court_name: preserveCurrentFallback ? current.court_name : null,
+    forum_catalog_entry_id: null,
+    forum_state: state,
+    forum_district: preserveCurrentFallback ? current.forum_district : null,
+    forum_city: preserveCurrentFallback ? current.forum_city : null,
+    forum_consumer_level: "district",
   };
 }
 
@@ -268,6 +330,25 @@ export function ForumSelector({
       onChange(districtFallbackSelection(currentState || INDIA_DISTRICT_FORUM_STATES[0], value));
       return;
     }
+    if (next === "consumer_forum") {
+      const entry =
+        firstEntry(sortedEntries, (item) => item.forum_type === next) ??
+        firstEntry(
+          sortedEntries,
+          (item) => item.forum_type === next && item.consumer_level === "state",
+        );
+      if (entry) {
+        chooseEntry(entry);
+        return;
+      }
+      onChange(
+        consumerStateFallbackSelection(
+          value.forum_state || CONSUMER_FORUM_STATES[0],
+          value,
+        ),
+      );
+      return;
+    }
     chooseEntry(firstEntry(sortedEntries, (entry) => entry.forum_type === next));
   };
 
@@ -288,10 +369,19 @@ export function ForumSelector({
   const consumerLevelOptions = consumerForums.filter(
     (entry) => entry.consumer_level === consumerLevel,
   );
-  const consumerStates = unique(consumerLevelOptions.map((entry) => entry.state));
+  const consumerStates = unique([
+    ...CONSUMER_FORUM_STATES,
+    ...consumerLevelOptions.map((entry) => entry.state),
+  ]);
+  const selectedConsumerState =
+    selectedEntry?.state ?? value.forum_state ?? consumerStates[0] ?? "";
   const consumerDistrictOptions = consumerLevelOptions.filter(
-    (entry) => entry.state === (selectedEntry?.state ?? value.forum_state),
+    (entry) => entry.state === selectedConsumerState,
   );
+  const consumerDistrictFallbackSelected =
+    category === "consumer_forum" && isConsumerDistrictFallbackForumSelection(value);
+  const consumerDistrictSelectValue =
+    selectedEntry?.id ?? CONSUMER_DISTRICT_FALLBACK_OPTION;
 
   return (
     <div className="grid gap-3 md:grid-cols-2" data-testid={`${idPrefix}-root`}>
@@ -483,14 +573,55 @@ export function ForumSelector({
               className={`${selectClassName()} mt-1.5`}
               value={consumerLevel}
               disabled={disabled}
-              onChange={(event) =>
-                chooseEntry(
+              onChange={(event) => {
+                const nextLevel = event.target.value;
+                if (nextLevel === "national") {
+                  chooseEntry(
+                    firstEntry(
+                      consumerForums,
+                      (entry) => entry.consumer_level === "national",
+                    ),
+                  );
+                  return;
+                }
+                if (nextLevel === "state") {
+                  const entry =
+                    firstEntry(
+                      consumerForums,
+                      (item) =>
+                        item.consumer_level === "state" &&
+                        item.state === selectedConsumerState,
+                    ) ??
+                    firstEntry(
+                      consumerForums,
+                      (item) => item.consumer_level === "state",
+                    );
+                  if (entry) chooseEntry(entry);
+                  else {
+                    onChange(
+                      consumerStateFallbackSelection(selectedConsumerState, value),
+                    );
+                  }
+                  return;
+                }
+                const entry =
                   firstEntry(
                     consumerForums,
-                    (entry) => entry.consumer_level === event.target.value,
-                  ),
-                )
-              }
+                    (item) =>
+                      item.consumer_level === "district" &&
+                      item.state === selectedConsumerState,
+                  ) ??
+                  firstEntry(
+                    consumerForums,
+                    (item) => item.consumer_level === "district",
+                  );
+                if (entry) chooseEntry(entry);
+                else {
+                  onChange(
+                    consumerDistrictFallbackSelection(selectedConsumerState, value),
+                  );
+                }
+              }}
               data-testid={`${idPrefix}-consumer-level`}
             >
               {CONSUMER_LEVELS.map((option) => (
@@ -506,16 +637,24 @@ export function ForumSelector({
               <select
                 id={`${idPrefix}-consumer-state`}
                 className={`${selectClassName()} mt-1.5`}
-                value={selectedEntry?.state ?? value.forum_state ?? ""}
+                value={selectedConsumerState}
                 disabled={disabled}
-                onChange={(event) =>
-                  chooseEntry(
-                    firstEntry(
-                      consumerLevelOptions,
-                      (entry) => entry.state === event.target.value,
-                    ),
-                  )
-                }
+                onChange={(event) => {
+                  const nextState = event.target.value;
+                  const entry = firstEntry(
+                    consumerLevelOptions,
+                    (item) => item.state === nextState,
+                  );
+                  if (entry) {
+                    chooseEntry(entry);
+                    return;
+                  }
+                  if (consumerLevel === "state") {
+                    onChange(consumerStateFallbackSelection(nextState, value));
+                  } else {
+                    onChange(consumerDistrictFallbackSelection(nextState, value));
+                  }
+                }}
                 data-testid={`${idPrefix}-consumer-state`}
               >
                 {consumerStates.map((state) => (
@@ -532,13 +671,19 @@ export function ForumSelector({
               <select
                 id={`${idPrefix}-consumer-district`}
                 className={`${selectClassName()} mt-1.5`}
-                value={selectedEntry?.id ?? ""}
+                value={consumerDistrictSelectValue}
                 disabled={disabled}
-                onChange={(event) =>
+                onChange={(event) => {
+                  if (event.target.value === CONSUMER_DISTRICT_FALLBACK_OPTION) {
+                    onChange(
+                      consumerDistrictFallbackSelection(selectedConsumerState, value),
+                    );
+                    return;
+                  }
                   chooseEntry(
                     consumerForums.find((entry) => entry.id === event.target.value),
-                  )
-                }
+                  );
+                }}
                 data-testid={`${idPrefix}-consumer-district`}
               >
                 {consumerDistrictOptions.map((entry) => (
@@ -546,8 +691,61 @@ export function ForumSelector({
                     {forumPlaceLabel(entry)}
                   </option>
                 ))}
+                <option value={CONSUMER_DISTRICT_FALLBACK_OPTION}>
+                  Other DCDRC in {selectedConsumerState}
+                </option>
               </select>
             </div>
+          ) : null}
+          {consumerDistrictFallbackSelected ? (
+            <>
+              <div>
+                <Label htmlFor={`${idPrefix}-consumer-district-name`}>District</Label>
+                <Input
+                  id={`${idPrefix}-consumer-district-name`}
+                  className="mt-1.5"
+                  value={value.forum_district ?? ""}
+                  disabled={disabled}
+                  onChange={(event) =>
+                    onChange({
+                      ...value,
+                      forum_category: "consumer_forum",
+                      forum_level: "tribunal",
+                      forum_consumer_level: "district",
+                      forum_district: event.target.value,
+                      forum_catalog_entry_id: null,
+                      court_id: null,
+                    })
+                  }
+                  placeholder="e.g. Jaipur"
+                  data-testid={`${idPrefix}-consumer-district-name`}
+                />
+              </div>
+              <div>
+                <Label htmlFor={`${idPrefix}-consumer-forum-name`}>
+                  Consumer forum name
+                </Label>
+                <Input
+                  id={`${idPrefix}-consumer-forum-name`}
+                  className="mt-1.5"
+                  value={value.court_name ?? ""}
+                  disabled={disabled}
+                  onChange={(event) =>
+                    onChange({
+                      ...value,
+                      forum_category: "consumer_forum",
+                      forum_level: "tribunal",
+                      forum_consumer_level: "district",
+                      court_name: event.target.value,
+                      forum_catalog_entry_id: null,
+                      court_id: null,
+                    })
+                  }
+                  placeholder="e.g. Jaipur DCDRC"
+                  data-testid={`${idPrefix}-consumer-forum-name`}
+                />
+              </div>
+            </>
           ) : null}
         </>
       ) : null}
