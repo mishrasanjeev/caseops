@@ -11,6 +11,7 @@ from urllib.parse import quote
 import httpx
 
 from caseops_api.core.settings import get_settings
+from caseops_api.services.http_retries import request_with_retries
 
 
 class CaseTrackingProviderUnavailable(RuntimeError):
@@ -417,8 +418,10 @@ class EcourtsIndiaApiProvider:
         search_text = query.query or query.case_number
         try:
             with self._client() as client:
-                response = client.get(
+                response = request_with_retries(
+                    "GET",
                     self._url("/search"),
+                    client=client,
                     params={
                         "query": search_text,
                         "litigants": query.query,
@@ -429,7 +432,6 @@ class EcourtsIndiaApiProvider:
                     },
                     headers=self._headers(),
                 )
-                response.raise_for_status()
         except httpx.HTTPError as exc:
             raise CaseTrackingProviderError("Case tracking provider search failed.") from exc
         payload = response.json()
@@ -462,11 +464,12 @@ class EcourtsIndiaApiProvider:
     def get_case_by_cnr(self, *, cnr: str) -> ProviderCaseSnapshot:
         try:
             with self._client() as client:
-                response = client.get(
+                response = request_with_retries(
+                    "GET",
                     self._url(f"/case/{quote(cnr)}"),
+                    client=client,
                     headers=self._headers(),
                 )
-                response.raise_for_status()
         except httpx.HTTPError as exc:
             raise CaseTrackingProviderError("Case tracking provider refresh failed.") from exc
         payload = response.json()

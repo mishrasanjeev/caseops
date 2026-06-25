@@ -11,6 +11,7 @@ import json
 from datetime import UTC, datetime, timedelta
 from urllib.parse import parse_qs, urlparse
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -32,6 +33,8 @@ from caseops_api.services.gmail_sync import (
     GMAIL_SCOPES,
     GmailAttachmentMetadata,
     GmailMessageMetadata,
+    GmailRuntimeConfig,
+    GoogleGmailProvider,
     set_gmail_provider_for_tests,
 )
 from tests.test_legalworkspace_calendar_sync import (
@@ -508,4 +511,37 @@ def test_gmail_watch_and_webhook_are_token_verified_and_idempotent(
     finally:
         set_gmail_provider_for_tests(None)
         get_settings.cache_clear()
+
+
+def test_google_gmail_provider_retries_transient_message_listing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = 0
+
+    def fake_request(method: str, url: str, **kwargs: object) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        request = httpx.Request(method, url)
+        if calls == 1:
+            return httpx.Response(503, request=request, json={"error": "temporary"})
+        return httpx.Response(200, request=request, json={"messages": []})
+
+    monkeypatch.setattr(httpx, "request", fake_request)
+    provider = GoogleGmailProvider(
+        GmailRuntimeConfig(
+            client_id="gmail-client",
+            client_secret="gmail-secret",
+            redirect_uri="https://api.caseops.ai/api/mailbox/gmail/callback",
+            pubsub_topic=None,
+            webhook_verification_token=None,
+        )
+    )
+
+    messages = provider.list_recent_messages(
+        token_payload={"access_token": "gmail-access"},
+        limit=5,
+    )
+
+    assert messages == []
+    assert calls == 2
 

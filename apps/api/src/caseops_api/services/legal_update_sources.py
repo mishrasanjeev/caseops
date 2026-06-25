@@ -35,6 +35,7 @@ from caseops_api.schemas.legal_updates import (
     StatuteChangeEventRecord,
 )
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.http_retries import request_with_retries
 from caseops_api.services.legal_updates import run_legal_update_watchlist
 from caseops_api.services.llm import (
     LLMCallContext,
@@ -180,8 +181,7 @@ class PrsActsParliamentAdapter:
         if self._html is not None:
             return self._html
         with httpx.Client(timeout=30, follow_redirects=True) as client:
-            response = client.get(self.acts_url)
-            response.raise_for_status()
+            response = request_with_retries("GET", self.acts_url, client=client)
             return response.text
 
     def parse(self, html: str) -> list[ParsedLegalUpdateSourceRecord]:

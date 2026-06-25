@@ -72,6 +72,7 @@ from caseops_api.services.calendar_sync import (
 )
 from caseops_api.services.durable_workflows import redact_identifier
 from caseops_api.services.google_workspace import google_workspace_oauth_config
+from caseops_api.services.http_retries import request_with_retries
 from caseops_api.services.matter_access import assert_access, visible_matters_filter
 from caseops_api.services.notification_delivery import redact_provider_error
 from caseops_api.services.session_context import SessionContext
@@ -238,12 +239,12 @@ class GoogleGmailProvider:
             access_token = str(token_payload.get("access_token") or "")
             if not access_token:
                 raise GmailProviderError("Google did not return an access token.")
-            profile_response = httpx.get(
+            profile_response = request_with_retries(
+                "GET",
                 "https://gmail.googleapis.com/gmail/v1/users/me/profile",
                 headers={"Authorization": f"Bearer {access_token}"},
                 timeout=15,
             )
-            profile_response.raise_for_status()
             profile = profile_response.json()
         except httpx.HTTPError as exc:
             raise GmailProviderError("Gmail OAuth exchange failed.") from exc
@@ -292,7 +293,8 @@ class GoogleGmailProvider:
             raise GmailProviderError("Stored Gmail token is unavailable.")
         headers = {"Authorization": f"Bearer {access_token}"}
         try:
-            listed = httpx.get(
+            listed = request_with_retries(
+                "GET",
                 "https://gmail.googleapis.com/gmail/v1/users/me/messages",
                 headers=headers,
                 params={
@@ -301,11 +303,11 @@ class GoogleGmailProvider:
                 },
                 timeout=15,
             )
-            listed.raise_for_status()
             ids = [str(item.get("id") or "") for item in listed.json().get("messages", [])]
             messages: list[GmailMessageMetadata] = []
             for message_id in [value for value in ids if value]:
-                fetched = httpx.get(
+                fetched = request_with_retries(
+                    "GET",
                     f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{message_id}",
                     headers=headers,
                     params={
@@ -314,7 +316,6 @@ class GoogleGmailProvider:
                     },
                     timeout=15,
                 )
-                fetched.raise_for_status()
                 messages.append(_parse_gmail_message_metadata(fetched.json()))
         except httpx.HTTPError as exc:
             raise GmailProviderError("Gmail message metadata import failed.") from exc
@@ -362,13 +363,13 @@ class GoogleGmailProvider:
         if not access_token:
             raise GmailProviderError("Stored Gmail token is unavailable.")
         try:
-            response = httpx.get(
+            response = request_with_retries(
+                "GET",
                 "https://gmail.googleapis.com/gmail/v1/users/me/messages/"
                 f"{message_id}/attachments/{attachment_id}",
                 headers={"Authorization": f"Bearer {access_token}"},
                 timeout=15,
             )
-            response.raise_for_status()
         except httpx.HTTPError as exc:
             raise GmailProviderError("Gmail attachment fetch failed.") from exc
         encoded = str(response.json().get("data") or "")

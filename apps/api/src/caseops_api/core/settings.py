@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     env: str = Field(default="local")
     api_name: str = Field(default="CaseOps API")
     api_version: str = Field(default="0.1.0")
-    api_host: str = Field(default="0.0.0.0")
+    api_host: str = Field(default="127.0.0.1")
     api_port: int = Field(default=8000)
     # Codex's 2026-04-19 cybersecurity review (finding #9): docs were
     # opt-out, which means an accidental cloud deploy with default

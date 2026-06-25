@@ -15,6 +15,7 @@ import httpx
 from fastapi import HTTPException, status
 
 from caseops_api.core.settings import get_settings
+from caseops_api.services.http_retries import request_with_retries
 
 logger = logging.getLogger(__name__)
 
@@ -500,23 +501,27 @@ class PineLabsGatewayClient:
         )
 
     def fetch_payment_status(self, *, provider_order_id: str) -> PineLabsPaymentStatusResult:
-        response = httpx.get(
+        response = request_with_retries(
+            "GET",
             self._build_url(
                 self.settings.pine_labs_payment_status_path,
                 provider_order_id=provider_order_id,
             ),
             headers=self._build_headers(),
             timeout=self.settings.pine_labs_request_timeout_seconds,
+            raise_for_status=False,
         )
         if response.status_code == 401:
             _BearerTokenCache.clear()
-            response = httpx.get(
+            response = request_with_retries(
+                "GET",
                 self._build_url(
                     self.settings.pine_labs_payment_status_path,
                     provider_order_id=provider_order_id,
                 ),
                 headers=self._build_headers(),
                 timeout=self.settings.pine_labs_request_timeout_seconds,
+                raise_for_status=False,
             )
         response.raise_for_status()
         data = response.json()

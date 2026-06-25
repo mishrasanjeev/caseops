@@ -163,6 +163,21 @@ def _xlsx_bytes(headers: list[str], rows: list[list[str]]) -> bytes:
     return buffer.getvalue()
 
 
+def _xlsx_with_external_entity() -> bytes:
+    worksheet = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<!DOCTYPE worksheet [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>'
+        '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        '<sheetData><row r="1">'
+        '<c r="A1" t="inlineStr"><is><t>&xxe;</t></is></c>'
+        "</row></sheetData></worksheet>"
+    )
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("xl/worksheets/sheet1.xml", worksheet)
+    return buffer.getvalue()
+
+
 def _zip_bytes(names: list[str]) -> bytes:
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
@@ -422,3 +437,23 @@ def test_bulk_matter_import_accepts_xlsx_and_zip_filename_dry_run(
     assert body["summary"]["valid_rows"] == 1
     assert body["summary"]["available_document_count"] == 1
     assert body["rows"][0]["document_references"][0]["status"] == "available"
+
+
+def test_bulk_matter_import_rejects_xlsx_xml_entities(client: TestClient) -> None:
+    boot = bootstrap_company(client)
+    token = str(boot["access_token"])
+
+    response = client.post(
+        "/api/matters/imports/dry-run",
+        headers=auth_headers(token),
+        files={
+            "mapping_file": (
+                "matters.xlsx",
+                _xlsx_with_external_entity(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ),
+        },
+    )
+
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == "XLSX matter import file could not be read."

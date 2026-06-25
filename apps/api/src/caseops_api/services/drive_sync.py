@@ -43,6 +43,7 @@ from caseops_api.schemas.drive import (
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.calendar_sync import _decrypt_token_payload, _encrypt_token_payload
 from caseops_api.services.google_workspace import google_workspace_oauth_config
+from caseops_api.services.http_retries import request_with_retries
 from caseops_api.services.matter_access import assert_access, visible_matters_filter
 from caseops_api.services.notification_delivery import redact_provider_error
 from caseops_api.services.session_context import SessionContext
@@ -173,13 +174,13 @@ class GoogleDriveProvider:
             access_token = str(token_payload.get("access_token") or "")
             if not access_token:
                 raise GoogleDriveProviderError("Google did not return an access token.")
-            about_response = httpx.get(
+            about_response = request_with_retries(
+                "GET",
                 "https://www.googleapis.com/drive/v3/about",
                 headers={"Authorization": f"Bearer {access_token}"},
                 params={"fields": "user"},
                 timeout=15,
             )
-            about_response.raise_for_status()
             about = about_response.json()
         except httpx.HTTPError as exc:
             raise GoogleDriveProviderError("Google Drive OAuth exchange failed.") from exc
@@ -206,7 +207,8 @@ class GoogleDriveProvider:
         if not access_token:
             raise GoogleDriveProviderError("Stored Google Drive token is unavailable.")
         try:
-            response = httpx.get(
+            response = request_with_retries(
+                "GET",
                 "https://www.googleapis.com/drive/v3/files",
                 headers={"Authorization": f"Bearer {access_token}"},
                 params={
@@ -219,7 +221,6 @@ class GoogleDriveProvider:
                 },
                 timeout=15,
             )
-            response.raise_for_status()
         except httpx.HTTPError as exc:
             raise GoogleDriveProviderError("Google Drive file listing failed.") from exc
         files = response.json().get("files", [])
@@ -239,13 +240,13 @@ class GoogleDriveProvider:
         if not access_token:
             raise GoogleDriveProviderError("Stored Google Drive token is unavailable.")
         try:
-            response = httpx.get(
+            response = request_with_retries(
+                "GET",
                 f"https://www.googleapis.com/drive/v3/files/{file_id}",
                 headers={"Authorization": f"Bearer {access_token}"},
                 params={"alt": "media"},
                 timeout=30,
             )
-            response.raise_for_status()
         except httpx.HTTPError as exc:
             raise GoogleDriveProviderError("Google Drive file import failed.") from exc
         return bytes(response.content)

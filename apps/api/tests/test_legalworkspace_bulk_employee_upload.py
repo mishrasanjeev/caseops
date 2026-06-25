@@ -136,6 +136,21 @@ def _xlsx_with_formula_cell() -> bytes:
     return buffer.getvalue()
 
 
+def _xlsx_with_external_entity() -> bytes:
+    worksheet = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<!DOCTYPE worksheet [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>'
+        '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        '<sheetData><row r="1">'
+        '<c r="A1" t="inlineStr"><is><t>&xxe;</t></is></c>'
+        "</row></sheetData></worksheet>"
+    )
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("xl/worksheets/sheet1.xml", worksheet)
+    return buffer.getvalue()
+
+
 def _preview(
     client: TestClient,
     token: str,
@@ -399,6 +414,26 @@ def test_employee_import_rejects_xlsx_formula_cells_with_cached_values(
     assert "Unsafe formula-like cell values are not allowed." in row["errors"]
     assert row["raw"]["Mobile"] == "[unsafe formula removed]"
     assert row["normalized"]["mobile"] is None
+
+
+def test_employee_import_rejects_xlsx_xml_entities(client: TestClient) -> None:
+    boot = _bootstrap(
+        client,
+        slug="bulk-xlsx-entity",
+        email="owner@bulk-xlsx-entity.example",
+    )
+    token = str(boot["access_token"])
+
+    preview = _preview(
+        client,
+        token,
+        filename="employees.xlsx",
+        content=_xlsx_with_external_entity(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+    assert preview.status_code == 400, preview.text
+    assert preview.json()["detail"] == "XLSX import file could not be read."
 
 
 def test_employee_import_preview_does_not_leak_cross_tenant_email_existence(
