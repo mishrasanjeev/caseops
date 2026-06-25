@@ -189,7 +189,7 @@ const ENTRIES: ForumCatalogEntry[] = [
     display_order: 200,
   },
   {
-    id: "consumer:scdrc:delhi",
+    id: "consumer:scdrc:11070000",
     parent_id: "consumer:ncdrc",
     court_id: null,
     name: "Delhi State Consumer Disputes Redressal Commission",
@@ -199,26 +199,62 @@ const ENTRIES: ForumCatalogEntry[] = [
     district: null,
     city: "New Delhi",
     consumer_level: "state",
-    source_name: "CaseOps LW-S4 baseline forum catalog",
-    source_url: null,
+    source_name: "e-Jagriti master commission directory",
+    source_url:
+      "https://e-jagriti.gov.in/services/master/master/v2/getCommissionDetailsByStateId?stateId=7",
     lineage: "Consumer Forum > SCDRC > Delhi",
     display_order: 210,
   },
   {
-    id: "consumer:dcdrc:central-delhi",
-    parent_id: "consumer:scdrc:delhi",
+    id: "consumer:scdrc:11080000",
+    parent_id: "consumer:ncdrc",
+    court_id: null,
+    name: "Rajasthan State Consumer Disputes Redressal Commission",
+    forum_type: "consumer_forum",
+    forum_level: "tribunal",
+    state: "Rajasthan",
+    district: null,
+    city: null,
+    consumer_level: "state",
+    source_name: "e-Jagriti master commission directory",
+    source_url:
+      "https://e-jagriti.gov.in/services/master/master/v2/getCommissionDetailsByStateId?stateId=8",
+    lineage: "Consumer Forum > SCDRC > Rajasthan",
+    display_order: 280,
+  },
+  {
+    id: "consumer:dcdrc:11070077",
+    parent_id: "consumer:scdrc:11070000",
     court_id: null,
     name: "Central Delhi District Consumer Disputes Redressal Commission",
     forum_type: "consumer_forum",
     forum_level: "tribunal",
     state: "Delhi",
-    district: "Central",
-    city: "New Delhi",
+    district: "Central Delhi",
+    city: null,
     consumer_level: "district",
-    source_name: "CaseOps LW-S4 baseline forum catalog",
-    source_url: null,
-    lineage: "Consumer Forum > DCDRC > Delhi > Central",
-    display_order: 230,
+    source_name: "e-Jagriti master commission directory",
+    source_url:
+      "https://e-jagriti.gov.in/services/master/master/v2/getCommissionDetailsByStateId?stateId=7",
+    lineage: "Consumer Forum > DCDRC > Delhi > Central Delhi",
+    display_order: 107001,
+  },
+  {
+    id: "consumer:dcdrc:11080086",
+    parent_id: "consumer:scdrc:11080000",
+    court_id: null,
+    name: "Ajmer District Consumer Disputes Redressal Commission",
+    forum_type: "consumer_forum",
+    forum_level: "tribunal",
+    state: "Rajasthan",
+    district: "Ajmer",
+    city: null,
+    consumer_level: "district",
+    source_name: "e-Jagriti master commission directory",
+    source_url:
+      "https://e-jagriti.gov.in/services/master/master/v2/getCommissionDetailsByStateId?stateId=8",
+    lineage: "Consumer Forum > DCDRC > Rajasthan > Ajmer",
+    display_order: 108001,
   },
 ];
 
@@ -387,7 +423,96 @@ describe("ForumSelector", () => {
     await user.selectOptions(screen.getByTestId("test-forum-consumer-level"), "district");
     expect(screen.getByTestId("test-forum-consumer-state")).toHaveValue("Delhi");
     expect(screen.getByTestId("test-forum-consumer-district")).toHaveValue(
-      "consumer:dcdrc:central-delhi",
+      "consumer:dcdrc:11070077",
+    );
+  });
+
+  it("keeps every e-Jagriti consumer state jurisdiction selectable", async () => {
+    const user = userEvent.setup();
+    render(<Harness initial={EMPTY_FORUM_SELECTION} />);
+
+    await user.selectOptions(screen.getByTestId("test-forum-category"), "consumer_forum");
+    await user.selectOptions(screen.getByTestId("test-forum-consumer-level"), "state");
+
+    const stateSelect = screen.getByTestId(
+      "test-forum-consumer-state",
+    ) as HTMLSelectElement;
+    expect(Array.from(stateSelect.options).map((option) => option.textContent)).toEqual(
+      [
+        "Andaman and Nicobar Islands",
+        "Andhra Pradesh",
+        "Arunachal Pradesh",
+        "Assam",
+        "Bihar",
+        "Chandigarh",
+        "Chhattisgarh",
+        "Dadra and Nagar Haveli and Daman and Diu",
+        "Delhi",
+        "Goa",
+        "Gujarat",
+        "Haryana",
+        "Himachal Pradesh",
+        "Jammu and Kashmir",
+        "Jharkhand",
+        "Karnataka",
+        "Kerala",
+        "Ladakh",
+        "Lakshadweep",
+        "Madhya Pradesh",
+        "Maharashtra",
+        "Manipur",
+        "Meghalaya",
+        "Mizoram",
+        "Nagaland",
+        "Odisha",
+        "Puducherry",
+        "Punjab",
+        "Rajasthan",
+        "Sikkim",
+        "Tamil Nadu",
+        "Telangana",
+        "Tripura",
+        "Uttar Pradesh",
+        "Uttarakhand",
+        "West Bengal",
+      ].sort((left, right) => left.localeCompare(right)),
+    );
+
+    await user.selectOptions(stateSelect, "Rajasthan");
+    await waitFor(() => expect(stateSelect).toHaveValue("Rajasthan"));
+    expect(screen.getByText(/Consumer Forum > SCDRC > Rajasthan/i)).toBeInTheDocument();
+  });
+
+  it("supports DCDRC fallback without inheriting catalog district metadata", async () => {
+    const user = userEvent.setup();
+    render(<Harness initial={EMPTY_FORUM_SELECTION} />);
+
+    await user.selectOptions(screen.getByTestId("test-forum-category"), "consumer_forum");
+    await user.selectOptions(screen.getByTestId("test-forum-consumer-level"), "district");
+
+    const districtSelect = screen.getByTestId(
+      "test-forum-consumer-district",
+    ) as HTMLSelectElement;
+    expect(Array.from(districtSelect.options).map((option) => option.textContent)).toEqual([
+      "Central Delhi District Consumer Disputes Redressal Commission (Central Delhi)",
+      "Other DCDRC in Delhi",
+    ]);
+
+    await user.selectOptions(districtSelect, "__uncatalogued_consumer_district__");
+    expect(screen.getByTestId("test-forum-consumer-district-name")).toHaveValue("");
+    expect(screen.getByTestId("test-forum-consumer-forum-name")).toHaveValue("");
+
+    await user.type(screen.getByTestId("test-forum-consumer-district-name"), "South II");
+    await user.type(
+      screen.getByTestId("test-forum-consumer-forum-name"),
+      "South II DCDRC Annex",
+    );
+
+    expect(screen.getByTestId("test-forum-consumer-district-name")).toHaveValue(
+      "South II",
+    );
+    expect(screen.getByTestId("test-forum-consumer-forum-name")).toHaveValue(
+      "South II DCDRC Annex",
     );
   });
 });

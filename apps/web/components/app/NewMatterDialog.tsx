@@ -32,6 +32,7 @@ import {
   EMPTY_FORUM_SELECTION,
   ForumSelector,
   forumSelectionFromEntry,
+  isConsumerDistrictFallbackForumSelection,
   isDistrictFallbackForumSelection,
   isLegacyForumSelection,
   type ForumSelection,
@@ -96,11 +97,15 @@ export function NewMatterDialog() {
   const districtFallbackIncomplete =
     isDistrictFallbackForumSelection(forumSelection) &&
     (!forumSelection.forum_district?.trim() || !forumSelection.court_name?.trim());
+  const consumerDistrictFallbackIncomplete =
+    isConsumerDistrictFallbackForumSelection(forumSelection) &&
+    (!forumSelection.forum_district?.trim() || !forumSelection.court_name?.trim());
   const forumSubmissionBlocked =
     forumCatalogQuery.isPending ||
     (forumCatalogUnavailable && !legacyFallbackSelected) ||
     legacyFallbackIncomplete ||
-    districtFallbackIncomplete;
+    districtFallbackIncomplete ||
+    consumerDistrictFallbackIncomplete;
   const forumCatalogStatusMessage = forumCatalogQuery.isPending
     ? "Loading forum catalog before matter creation."
     : forumCatalogFailed

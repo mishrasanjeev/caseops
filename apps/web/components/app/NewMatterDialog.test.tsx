@@ -93,6 +93,57 @@ describe("NewMatterDialog", () => {
           lineage: "District Court > Delhi > South-West > Dwarka",
           display_order: 104,
         },
+        {
+          id: "consumer:ncdrc",
+          parent_id: null,
+          court_id: null,
+          name: "National Consumer Disputes Redressal Commission",
+          forum_type: "consumer_forum",
+          forum_level: "tribunal",
+          state: null,
+          district: null,
+          city: "New Delhi",
+          consumer_level: "national",
+          source_name: "e-Jagriti master commission directory",
+          source_url:
+            "https://e-jagriti.gov.in/services/master/master/v2/getAllCommission",
+          lineage: "Consumer Forum > NCDRC",
+          display_order: 200,
+        },
+        {
+          id: "consumer:scdrc:11080000",
+          parent_id: "consumer:ncdrc",
+          court_id: null,
+          name: "Rajasthan State Consumer Disputes Redressal Commission",
+          forum_type: "consumer_forum",
+          forum_level: "tribunal",
+          state: "Rajasthan",
+          district: null,
+          city: null,
+          consumer_level: "state",
+          source_name: "e-Jagriti master commission directory",
+          source_url:
+            "https://e-jagriti.gov.in/services/master/master/v2/getCommissionDetailsByStateId?stateId=8",
+          lineage: "Consumer Forum > SCDRC > Rajasthan",
+          display_order: 280,
+        },
+        {
+          id: "consumer:dcdrc:11080086",
+          parent_id: "consumer:scdrc:11080000",
+          court_id: null,
+          name: "Ajmer District Consumer Disputes Redressal Commission",
+          forum_type: "consumer_forum",
+          forum_level: "tribunal",
+          state: "Rajasthan",
+          district: "Ajmer",
+          city: null,
+          consumer_level: "district",
+          source_name: "e-Jagriti master commission directory",
+          source_url:
+            "https://e-jagriti.gov.in/services/master/master/v2/getCommissionDetailsByStateId?stateId=8",
+          lineage: "Consumer Forum > DCDRC > Rajasthan > Ajmer",
+          display_order: 108001,
+        },
       ],
     });
     toastSuccess.mockReset();
@@ -308,6 +359,82 @@ describe("NewMatterDialog", () => {
       }),
     );
   });
+
+  it("can create catalogued and uncatalogued DCDRC matters without stale metadata", async () => {
+    const user = userEvent.setup();
+    createMatterMock.mockResolvedValue({
+      id: "m-consumer",
+      matter_code: "CONS-001",
+      title: "Rajasthan consumer matter",
+      created_at: "2026-06-25T10:00:00Z",
+      status: "intake",
+    });
+    render(withClient(<NewMatterDialog />));
+
+    await openDialog(user);
+    await fillRequiredMatterFields(user);
+    await waitFor(() =>
+      expect(screen.getByTestId("new-matter-forum-state")).toHaveValue("Delhi"),
+    );
+    await user.selectOptions(screen.getByTestId("new-matter-forum-category"), "consumer_forum");
+    await user.selectOptions(screen.getByTestId("new-matter-forum-consumer-level"), "district");
+    await user.selectOptions(screen.getByTestId("new-matter-forum-consumer-state"), "Rajasthan");
+
+    expect(screen.getByTestId("new-matter-forum-consumer-district")).toHaveValue(
+      "consumer:dcdrc:11080086",
+    );
+    await user.click(screen.getByRole("button", { name: /Create matter/i }));
+
+    await waitFor(() => expect(createMatterMock).toHaveBeenCalledTimes(1));
+    expect(createMatterMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        forum_level: "tribunal",
+        court_id: null,
+        court_name: "Ajmer District Consumer Disputes Redressal Commission",
+        forum_catalog_entry_id: "consumer:dcdrc:11080086",
+        forum_state: "Rajasthan",
+        forum_district: "Ajmer",
+        forum_city: null,
+        forum_consumer_level: "district",
+      }),
+    );
+
+    createMatterMock.mockClear();
+    await openDialog(user);
+    await fillRequiredMatterFields(user);
+    await user.selectOptions(screen.getByTestId("new-matter-forum-category"), "consumer_forum");
+    await user.selectOptions(screen.getByTestId("new-matter-forum-consumer-level"), "district");
+    await user.selectOptions(
+      screen.getByTestId("new-matter-forum-consumer-district"),
+      "__uncatalogued_consumer_district__",
+    );
+    expect(screen.getByTestId("new-matter-forum-consumer-district-name")).toHaveValue("");
+    expect(screen.getByTestId("new-matter-forum-consumer-forum-name")).toHaveValue("");
+    expect(screen.getByRole("button", { name: /Create matter/i })).toBeDisabled();
+
+    await user.type(screen.getByTestId("new-matter-forum-consumer-district-name"), "South II");
+    expect(screen.getByRole("button", { name: /Create matter/i })).toBeDisabled();
+    await user.type(
+      screen.getByTestId("new-matter-forum-consumer-forum-name"),
+      "South II DCDRC Annex",
+    );
+    await user.click(screen.getByRole("button", { name: /Create matter/i }));
+
+    await waitFor(() => expect(createMatterMock).toHaveBeenCalledTimes(1));
+    expect(createMatterMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        forum_level: "tribunal",
+        court_id: null,
+        court_name: "South II DCDRC Annex",
+        forum_catalog_entry_id: null,
+        forum_state: "Rajasthan",
+        forum_district: "South II",
+        forum_city: null,
+        forum_consumer_level: "district",
+      }),
+    );
+  });
+
   it("can create a matter against a previously missing Delhi District Court entry", async () => {
     const user = userEvent.setup();
     createMatterMock.mockResolvedValue({

@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import {
   ForumSelector,
+  isConsumerDistrictFallbackForumSelection,
   isDistrictFallbackForumSelection,
   isLegacyForumSelection,
   type ForumSelection,
@@ -28,6 +29,8 @@ function selectionFromMatter(matter: WorkspaceMatter): ForumSelection {
   return {
     forum_category: matter.forum_catalog_entry_id
       ? undefined
+      : matter.forum_level === "tribunal" && matter.forum_consumer_level
+        ? "consumer_forum"
       : matter.forum_level === "lower_court" && matter.forum_state
         ? "district_court"
         : "legacy",
@@ -83,6 +86,15 @@ export function MatterForumCard({ matter }: { matter: WorkspaceMatter }) {
           court_id: null,
           forum_catalog_entry_id: null,
         }
+      : selectedCatalogEntryMissing &&
+          selection.forum_level === "tribunal" &&
+          Boolean(selection.forum_consumer_level)
+        ? {
+            ...selection,
+            forum_category: "consumer_forum",
+            court_id: null,
+            forum_catalog_entry_id: null,
+          }
       : selection;
 
   useEffect(() => {
@@ -125,11 +137,16 @@ export function MatterForumCard({ matter }: { matter: WorkspaceMatter }) {
     isDistrictFallbackForumSelection(normalizedSelection) &&
     (!normalizedSelection.forum_district?.trim() ||
       !normalizedSelection.court_name?.trim());
+  const consumerDistrictFallbackIncomplete =
+    isConsumerDistrictFallbackForumSelection(normalizedSelection) &&
+    (!normalizedSelection.forum_district?.trim() ||
+      !normalizedSelection.court_name?.trim());
   const forumSaveBlocked =
     catalogQuery.isPending ||
     (catalogUnavailable && !legacyFallbackSelected) ||
     legacyFallbackIncomplete ||
-    districtFallbackIncomplete;
+    districtFallbackIncomplete ||
+    consumerDistrictFallbackIncomplete;
   const catalogStatusMessage = catalogQuery.isPending
     ? "Loading forum catalog before editing."
     : catalogFailed
