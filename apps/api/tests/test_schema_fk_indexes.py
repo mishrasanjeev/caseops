@@ -5,7 +5,7 @@ from pathlib import Path
 
 from sqlalchemy import UniqueConstraint
 
-import caseops_api.db.models  # noqa: F401
+from caseops_api.db import models as db_models
 from caseops_api.db.base import Base
 
 _VERSIONS_DIR = Path(__file__).resolve().parents[1] / "alembic" / "versions"
@@ -65,6 +65,8 @@ def _foreign_key_columns() -> set[tuple[str, str]]:
 
 
 def test_foreign_key_columns_have_leading_index_or_migration_coverage() -> None:
+    assert db_models.Matter.__tablename__ in Base.metadata.tables
+
     missing = (
         _foreign_key_columns()
         - _metadata_leading_indexed_columns()

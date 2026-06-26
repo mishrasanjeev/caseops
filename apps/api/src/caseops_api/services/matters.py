@@ -53,6 +53,7 @@ from caseops_api.schemas.billing import (
 from caseops_api.schemas.document_processing import DocumentProcessingJobRecord
 from caseops_api.schemas.matter_tags import MatterTagRecord
 from caseops_api.schemas.matters import (
+    MATTER_CODE_ERROR,
     MatterActivityRecord,
     MatterAttachmentMetadataUpdateRequest,
     MatterAttachmentRecord,
@@ -1350,12 +1351,12 @@ def matter_code_available(
     """
     try:
         normalised = normalize_matter_code(code)
-    except ValueError as exc:
+    except ValueError:
         return {
             "available": False,
             "normalised": (code or "").strip().upper(),
             "suggestion": None,
-            "reason": str(exc),
+            "reason": MATTER_CODE_ERROR,
         }
     existing = session.scalar(
         select(Matter.id).where(

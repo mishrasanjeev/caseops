@@ -32,6 +32,10 @@ REPO=caseops-images
 REGISTRY="${REGION}-docker.pkg.dev/${PROJECT}/${REPO}"
 API_CPU=2
 API_MEMORY=4Gi
+API_SOURCE_DIR=apps/api
+WEB_SOURCE_DIR=apps/web
+WEB_GCLOUDIGNORE_FILE=.gcloudignore
+WEB_GCLOUDIGNORE_PATH="${WEB_SOURCE_DIR}/${WEB_GCLOUDIGNORE_FILE}"
 # 2026-06-08 incident: a blocking request pinned the single Uvicorn
 # event loop and Cloud Run kept routing unrelated API calls to that
 # same instance until each hit the 300s service timeout. Keep
@@ -66,9 +70,20 @@ echo "Web image: ${WEB_IMAGE}"
 
 # Step 1 — build both images in parallel.
 echo "--- 1/5 build images (parallel) ---"
-gcloud builds submit apps/api --tag "${API_IMAGE}" --project "${PROJECT}" &
+if [[ ! -f "${WEB_GCLOUDIGNORE_PATH}" ]]; then
+  echo "Missing ${WEB_GCLOUDIGNORE_PATH}; refusing web build because local node_modules/.next may be uploaded."
+  exit 1
+fi
+
+gcloud builds submit "${API_SOURCE_DIR}" --tag "${API_IMAGE}" --project "${PROJECT}" &
 API_BUILD_PID=$!
-gcloud builds submit apps/web --tag "${WEB_IMAGE}" --project "${PROJECT}" &
+# Explicitly pass the web .gcloudignore. The source directory has local
+# node_modules/.next on Windows deploy hosts, and relying on Docker's
+# .dockerignore is too late because gcloud creates the upload archive first.
+gcloud builds submit "${WEB_SOURCE_DIR}" \
+  --ignore-file "${WEB_GCLOUDIGNORE_FILE}" \
+  --tag "${WEB_IMAGE}" \
+  --project "${PROJECT}" &
 WEB_BUILD_PID=$!
 wait "${API_BUILD_PID}" || { echo "API build FAILED"; exit 1; }
 wait "${WEB_BUILD_PID}" || { echo "Web build FAILED"; exit 1; }
