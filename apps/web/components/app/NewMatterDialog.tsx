@@ -39,13 +39,23 @@ import {
 } from "@/components/matters/ForumSelector";
 import { apiErrorMessage } from "@/lib/api/config";
 import { createMatter, fetchForumCatalog } from "@/lib/api/endpoints";
+import {
+  MATTER_CODE_MESSAGE,
+  normalizeMatterCodeInput,
+} from "@/lib/matter-code";
 
 const schema = z.object({
   title: z.string().min(3, "At least 3 characters."),
   matter_code: z
     .string()
-    .min(2, "At least 2 characters.")
-    .max(40, "Keep it short and unique."),
+    .transform((value) => normalizeMatterCodeInput(value))
+    .pipe(
+      z
+        .string()
+        .min(2, "At least 2 characters.")
+        .max(40, "Keep it short and unique.")
+        .regex(/^[A-Z0-9](?:[A-Z0-9-]*[A-Z0-9])$/, MATTER_CODE_MESSAGE),
+    ),
   practice_area: z.string().min(2, "Practice area helps classify the work."),
   client_name: z.string().optional(),
   opposing_party: z.string().optional(),
@@ -143,7 +153,7 @@ export function NewMatterDialog() {
     mutationFn: (values: FormValues) =>
       createMatter({
         title: values.title.trim(),
-        matter_code: values.matter_code.trim().toUpperCase(),
+        matter_code: normalizeMatterCodeInput(values.matter_code),
         client_name: values.client_name?.trim() || undefined,
         opposing_party: values.opposing_party?.trim() || undefined,
         practice_area: values.practice_area?.trim() || undefined,

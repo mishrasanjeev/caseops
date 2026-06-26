@@ -505,7 +505,7 @@ def test_owner_can_pull_bombay_high_court_live_orders(client: TestClient, monkey
         headers=auth_headers(token),
         json={
             "title": "Acme Industries Ltd vs Beta Projects Pvt Ltd",
-            "matter_code": "COMAPL/123/2026",
+            "matter_code": "COMAPL-123-2026",
             "client_name": "Acme Industries Ltd",
             "opposing_party": "Beta Projects Pvt Ltd",
             "practice_area": "Commercial Litigation",
@@ -515,6 +515,7 @@ def test_owner_can_pull_bombay_high_court_live_orders(client: TestClient, monkey
             "judge_name": "Justice Deshmukh",
         },
     )
+    assert matter_response.status_code == 200, matter_response.text
     matter_id = matter_response.json()["id"]
 
     pull_response = client.post(
@@ -603,7 +604,7 @@ def test_owner_can_pull_hyderabad_high_court_live_cause_list(
         headers=auth_headers(token),
         json={
             "title": "North Arc Projects versus State",
-            "matter_code": "WRIT/220/2026",
+            "matter_code": "WRIT-220-2026",
             "client_name": "North Arc Projects",
             "opposing_party": "State",
             "practice_area": "Writ",
@@ -613,6 +614,7 @@ def test_owner_can_pull_hyderabad_high_court_live_cause_list(
             "judge_name": "Justice Rao",
         },
     )
+    assert matter_response.status_code == 200, matter_response.text
     matter_id = matter_response.json()["id"]
 
     pull_response = client.post(
@@ -696,7 +698,7 @@ def test_owner_can_pull_karnataka_high_court_live_cause_list(
         headers=auth_headers(token),
         json={
             "title": "North Arc Projects versus State",
-            "matter_code": "WRIT/220/2026",
+            "matter_code": "WRIT-220-2026",
             "client_name": "North Arc Projects",
             "opposing_party": "State",
             "practice_area": "Writ",
@@ -705,6 +707,7 @@ def test_owner_can_pull_karnataka_high_court_live_cause_list(
             "court_name": "Karnataka High Court",
         },
     )
+    assert matter_response.status_code == 200, matter_response.text
     matter_id = matter_response.json()["id"]
 
     pull_response = client.post(
@@ -768,7 +771,7 @@ def test_owner_can_pull_chennai_high_court_public_orders(
         headers=auth_headers(token),
         json={
             "title": "Principal Seat operational update",
-            "matter_code": "OPS/55/2026",
+            "matter_code": "OPS-55-2026",
             "client_name": "General Counsel Office",
             "practice_area": "General Litigation",
             "forum_level": "high_court",
@@ -776,6 +779,7 @@ def test_owner_can_pull_chennai_high_court_public_orders(
             "court_name": "Madras High Court",
         },
     )
+    assert matter_response.status_code == 200, matter_response.text
     matter_id = matter_response.json()["id"]
 
     pull_response = client.post(

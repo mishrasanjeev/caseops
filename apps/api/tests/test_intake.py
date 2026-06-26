@@ -226,16 +226,13 @@ def test_matter_code_available_endpoint(client: TestClient) -> None:
     assert isolated.json()["available"] is True
 
 
-def test_intake_promote_accepts_slash_matter_code(client: TestClient) -> None:
-    """Ram-BUG-003 (2026-04-22): user reported "Could not promote
-    request" when entering matter_code ``2065/2026``. Indian court
-    filings often use slash-formatted codes (e.g. ``WRIT/220/2026``,
-    ``COMAPL/123/2026``) so the schema explicitly allows ``/`` in the
-    pattern. This regression pins that contract — if anyone tightens
-    the regex, the canonical Indian filing format breaks. The test
-    also verifies the promote returns 200 (not the generic 500 the
-    bug report described), which would have surfaced as the toast
-    Ram saw."""
+def test_intake_promote_rejects_slash_matter_code(client: TestClient) -> None:
+    """Hari 2026-06-26 supersedes the older slash-code behavior.
+
+    Court filing references may contain slashes, but CaseOps matter
+    identifiers are product identifiers and must use only letters,
+    numbers, and hyphens.
+    """
     session = _bootstrap(client, "intake-slashcode")
     headers = _headers(session["access_token"])
     create = client.post(
@@ -256,8 +253,8 @@ def test_intake_promote_accepts_slash_matter_code(client: TestClient) -> None:
         headers=headers,
         json={"matter_code": "2065/2026"},
     )
-    assert promote.status_code == 200, promote.text
-    assert promote.json()["linked_matter_code"] == "2065/2026"
+    assert promote.status_code == 422, promote.text
+    assert "letters, numbers, and hyphens only" in promote.text
 
 
 def test_intake_status_filter(client: TestClient) -> None:

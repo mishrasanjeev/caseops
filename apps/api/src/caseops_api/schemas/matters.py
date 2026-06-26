@@ -78,6 +78,24 @@ MatterTimelineEventTypeLiteral = Literal[
     "activity",
 ]
 _CLAIM_CURRENCY_PATTERN = re.compile(r"^[A-Z]{3}$")
+MATTER_CODE_PATTERN = re.compile(r"^[A-Z0-9](?:[A-Z0-9-]*[A-Z0-9])$")
+MATTER_CODE_ERROR = (
+    "Matter code may use letters, numbers, and hyphens only. "
+    "Spaces, underscores, slashes, and other special characters are not allowed."
+)
+
+
+def normalize_matter_code(value: object) -> str:
+    if not isinstance(value, str):
+        raise ValueError("Matter code must be text.")
+    normalized = value.strip().upper()
+    if len(normalized) < 2:
+        raise ValueError("Matter code must be at least 2 characters.")
+    if len(normalized) > 80:
+        raise ValueError("Matter code must be at most 80 characters.")
+    if not MATTER_CODE_PATTERN.fullmatch(normalized):
+        raise ValueError(MATTER_CODE_ERROR)
+    return normalized
 
 
 def _normalize_claim_currency(value: object) -> str:
@@ -106,7 +124,11 @@ def normalize_matter_status(value: object) -> object:
 
 class MatterCreateRequest(BaseModel):
     title: str = Field(min_length=3, max_length=255)
-    matter_code: str = Field(min_length=2, max_length=80, pattern=r"^[A-Za-z0-9-_/]+$")
+    matter_code: str = Field(
+        min_length=2,
+        max_length=80,
+        json_schema_extra={"pattern": MATTER_CODE_PATTERN.pattern},
+    )
     client_name: str | None = Field(default=None, min_length=2, max_length=255)
     opposing_party: str | None = Field(default=None, min_length=2, max_length=255)
     case_number: str | None = Field(default=None, max_length=120)
@@ -133,6 +155,11 @@ class MatterCreateRequest(BaseModel):
     @classmethod
     def normalize_claim_currency(cls, value: object) -> str:
         return _normalize_claim_currency(value)
+
+    @field_validator("matter_code", mode="before")
+    @classmethod
+    def normalize_matter_code(cls, value: object) -> str:
+        return normalize_matter_code(value)
 
     @field_validator("status", mode="before")
     @classmethod

@@ -59,6 +59,11 @@ import {
   updateIntakeRequest,
 } from "@/lib/api/endpoints";
 import { useCapability } from "@/lib/capabilities";
+import {
+  isValidMatterCode,
+  MATTER_CODE_MESSAGE,
+  normalizeMatterCodeInput,
+} from "@/lib/matter-code";
 
 const STATUS_ORDER: IntakeStatus[] = [
   "new",
@@ -420,8 +425,13 @@ function PromoteButton({
   const [availability, setAvailability] =
     useState<MatterCodeAvailability | null>(null);
   const trimmedCode = code.trim();
+  const normalisedCode = normalizeMatterCodeInput(code);
+  const codeFormatError =
+    trimmedCode.length >= 2 && !isValidMatterCode(trimmedCode)
+      ? MATTER_CODE_MESSAGE
+      : null;
   useEffect(() => {
-    if (!open || trimmedCode.length < 2) {
+    if (!open || trimmedCode.length < 2 || codeFormatError) {
       setAvailability(null);
       return;
     }
@@ -443,7 +453,7 @@ function PromoteButton({
       };
     }, 350);
     return () => clearTimeout(handle);
-  }, [trimmedCode, open]);
+  }, [trimmedCode, codeFormatError, open]);
 
   // Post-submit error path (backstop for the pre-flight race).
   const codeInUseFromError =
@@ -453,7 +463,7 @@ function PromoteButton({
   // blip) and the user still managed to submit a dup.
   const codeInUse =
     availability !== null
-      ? !availability.available && availability.normalised === trimmedCode.toUpperCase()
+      ? !availability.available && availability.normalised === normalisedCode
       : codeInUseFromError;
   const suggestion =
     availability?.suggestion ??
@@ -485,9 +495,17 @@ function PromoteButton({
             value={code}
             onChange={(event) => setCode(event.target.value.toUpperCase())}
             placeholder="INT-2026-0001"
-            aria-invalid={codeInUse ? true : undefined}
+            aria-invalid={codeInUse || codeFormatError ? true : undefined}
             data-testid="intake-promote-code"
           />
+          {codeFormatError ? (
+            <div
+              className="rounded-md border border-[var(--color-danger-500,#c53030)]/30 bg-red-50 p-2 text-xs text-[var(--color-danger-500,#c53030)]"
+              role="alert"
+            >
+              {codeFormatError}
+            </div>
+          ) : null}
           {codeInUse ? (
             <div
               className="flex flex-col gap-2 rounded-md border border-[var(--color-warn-600)]/30 bg-[var(--color-warn-50)] p-2 text-xs text-[var(--color-warn-700)]"
@@ -514,8 +532,13 @@ function PromoteButton({
             Cancel
           </Button>
           <Button
-            disabled={busy || code.trim().length < 2 || codeInUse}
-            onClick={() => onConfirm(code.trim())}
+            disabled={
+              busy ||
+              normalisedCode.length < 2 ||
+              Boolean(codeFormatError) ||
+              codeInUse
+            }
+            onClick={() => onConfirm(normalisedCode)}
             data-testid="intake-promote-confirm"
           >
             Create matter

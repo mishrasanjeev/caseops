@@ -78,6 +78,7 @@ from caseops_api.schemas.matters import (
     MatterWorkspaceMembership,
     MatterWorkspaceResponse,
     ResolvedBenchMember,
+    normalize_matter_code,
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.conflict_checks import (
@@ -1347,13 +1348,14 @@ def matter_code_available(
     Tenant-scoped: codes from other companies cannot leak in either
     the availability check or the suggestion.
     """
-    normalised = (code or "").strip().upper()
-    if len(normalised) < 2:
+    try:
+        normalised = normalize_matter_code(code)
+    except ValueError as exc:
         return {
             "available": False,
-            "normalised": normalised,
+            "normalised": (code or "").strip().upper(),
             "suggestion": None,
-            "reason": "Matter code must be at least 2 characters.",
+            "reason": str(exc),
         }
     existing = session.scalar(
         select(Matter.id).where(
