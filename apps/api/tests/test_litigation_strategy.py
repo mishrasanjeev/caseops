@@ -126,12 +126,13 @@ def _setup_matter(client: TestClient, *, forum_level: str = "high_court") -> tup
     bootstrap_payload = bootstrap_company(client)
     token = str(bootstrap_payload["access_token"])
     company_slug = str(bootstrap_payload["company"]["slug"])
+    matter_code_for_forum = forum_level.replace("_", "-").upper()
     matter = client.post(
         "/api/matters/",
         headers=auth_headers(token),
         json={
             "title": "Quashing of FIR and prospective SLP if denied",
-            "matter_code": f"LSE-2026-{forum_level}",
+            "matter_code": f"LSE-2026-{matter_code_for_forum}",
             "practice_area": "criminal",
             "forum_level": forum_level,
             "court_name": "Delhi High Court",
