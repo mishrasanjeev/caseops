@@ -275,6 +275,25 @@ describe("NewMatterDialog", () => {
     await waitFor(() => expect(toastSuccess).toHaveBeenCalled());
   });
 
+  it("rejects matter codes with spaces, slashes, or other special characters before submit", async () => {
+    const user = userEvent.setup();
+    render(withClient(<NewMatterDialog />));
+
+    await openDialog(user);
+    await waitFor(() =>
+      expect(screen.getByTestId("new-matter-forum-state")).toHaveValue("Delhi"),
+    );
+    await user.type(await screen.findByLabelText("Title"), "Invalid code matter");
+    await user.type(screen.getByLabelText("Matter code"), "BAD CODE/1");
+    await user.type(screen.getByLabelText("Practice area"), "Commercial");
+    await user.click(screen.getByRole("button", { name: /Create matter/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /letters, numbers, and hyphens only/i,
+    );
+    expect(createMatterMock).not.toHaveBeenCalled();
+  });
+
   it("shows Dispose instead of Close or Closed and submits disposed status", async () => {
     const user = userEvent.setup();
     createMatterMock.mockResolvedValue({

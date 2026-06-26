@@ -55,6 +55,7 @@ class RetrievalCandidate:
     attachment_id: str
     attachment_name: str
     content: str
+    quality_text: str | None = None
     # Optional per-chunk embedding. When present, and when the caller passes
     # a query vector, the hybrid scorer blends cosine similarity with the
     # existing lexical score.
@@ -174,6 +175,12 @@ def rank_candidates(
         else:
             score = lexical_score
 
+        readability = readability_score(
+            candidate.candidate.quality_text or candidate.candidate.content
+        )
+        if readability < 1:
+            score *= readability
+
         if score <= 0:
             continue
 
@@ -225,6 +232,52 @@ def _tokenize(value: str) -> list[str]:
 
 def _normalize_text(value: str) -> str:
     return " ".join(_tokenize(value))
+
+
+def is_low_quality_ocr_text(text: str | None) -> bool:
+    if not text:
+        return False
+    compact = " ".join(text.split())
+    if len(compact) < 40:
+        return False
+
+    replacement_chars = compact.count("\ufffd")
+    if replacement_chars / len(compact) > 0.02:
+        return True
+
+    odd_chars = len(re.findall(r"[\u2500-\u259F\uE000-\uF8FF\u2630-\u2BFF]", compact))
+    if odd_chars / len(compact) > 0.05:
+        return True
+
+    tokens = compact.split()
+    if len(tokens) >= 20:
+        singletons = sum(1 for token in tokens if len(token) == 1)
+        if singletons / len(tokens) > 0.4:
+            return True
+
+    letters = len(re.findall(r"[A-Za-z]", compact))
+    if letters / len(compact) < 0.45 and len(compact) >= 60:
+        return True
+
+    if len(tokens) >= 8:
+        dirty_tokens = sum(
+            1
+            for token in tokens
+            if re.search(r"[^A-Za-z0-9.,;:()\-'/&]", token)
+            or re.search(r"[A-Za-z]\?[A-Za-z]", token)
+            or re.search(r"[A-Za-z]\$[A-Za-z]", token)
+            or re.search(r"[A-Za-z]>[A-Za-z]", token)
+        )
+        if dirty_tokens / len(tokens) > 0.3:
+            return True
+
+    return False
+
+
+def readability_score(text: str | None) -> float:
+    if is_low_quality_ocr_text(text):
+        return 0.08
+    return 1.0
 
 
 def _stem(token: str) -> str:

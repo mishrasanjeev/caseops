@@ -4,7 +4,13 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+
+from caseops_api.schemas.matters import (
+    MATTER_CODE_ERROR,
+    MATTER_CODE_PATTERN,
+    normalize_matter_code,
+)
 
 IntakeStatusLiteral = Literal[
     "new", "triaging", "in_progress", "completed", "rejected"
@@ -51,13 +57,25 @@ class IntakeRequestPromoteRequest(BaseModel):
     """
 
     matter_code: str = Field(
-        min_length=2, max_length=40, pattern=r"^[A-Za-z0-9\-_/]+$"
+        min_length=2,
+        max_length=40,
+        json_schema_extra={"pattern": MATTER_CODE_PATTERN.pattern},
     )
     matter_title: str | None = Field(default=None, min_length=3, max_length=255)
     practice_area: str | None = Field(default=None, max_length=120)
     forum_level: Literal["lower_court", "high_court", "supreme_court", "tribunal"] = (
         "high_court"
     )
+
+    @field_validator("matter_code", mode="before")
+    @classmethod
+    def normalize_intake_matter_code(cls, value: object) -> str:
+        normalized = normalize_matter_code(value)
+        if len(normalized) > 40:
+            raise ValueError("Matter code must be at most 40 characters.")
+        if not MATTER_CODE_PATTERN.fullmatch(normalized):
+            raise ValueError(MATTER_CODE_ERROR)
+        return normalized
 
 
 class IntakeRequestRecord(BaseModel):

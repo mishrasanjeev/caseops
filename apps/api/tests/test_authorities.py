@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import date
+from uuid import uuid4
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -222,6 +223,53 @@ def _seed_contextual_cheque_authority() -> str:
                     "Negotiable Instruments Act."
                 ),
                 token_count=34,
+            )
+        ]
+        session.add(document)
+        session.flush()
+        document_id = document.id
+        session.commit()
+        return document_id
+
+
+def _seed_garbled_contextual_cheque_authority() -> str:
+    factory = get_session_factory()
+    suffix = uuid4().hex[:10]
+    with factory() as session:
+        document = AuthorityDocument(
+            source="test_contextual_garbled_authority_source",
+            adapter_name="caseops-test-contextual-garbled-v1",
+            court_name="High Court of Delhi",
+            forum_level=MatterForumLevel.HIGH_COURT,
+            document_type=AuthorityDocumentType.JUDGMENT,
+            title="Cheque dishonour Section 138 notice delay OCR damaged record",
+            case_reference=f"CRL.A. GARBLED-{suffix}/2026",
+            bench_name="Justice OCR Damaged",
+            neutral_citation=None,
+            decision_date=date(2026, 6, 1),
+            canonical_key=f"test-contextual-garbled-cheque-{suffix}",
+            source_reference="https://official.example.test/garbled-cheque-138.pdf",
+            summary=(
+                "OCR damaged fixture about Section 138 cheque dishonour and "
+                "notice timing. It is intentionally not the source users should "
+                "see when a readable authority is available."
+            ),
+            document_text=(
+                "Section 138 cheque notice insufficient funds after 35 days "
+                "$O ?J '>2> 380 :J $)2J* J!'>) /=, +> +/2J?(=2>) :J ?( "
+                "$!?( ! ?2J: 488 $O 477 .*J.:J. '>2> 420, 427 " * 3
+            ),
+            extracted_char_count=240,
+        )
+        document.chunks = [
+            AuthorityDocumentChunk(
+                chunk_index=0,
+                content=(
+                    "Section 138 cheque notice insufficient funds after 35 days "
+                    "$O ?J '>2> 380 :J $)2J* J!'>) /=, +> +/2J?(=2>) "
+                    ":J ?( $!?( ! ?2J: 488 $O 477 .*J.:J. '>2> 420, 427 " * 3
+                ),
+                token_count=90,
             )
         ]
         session.add(document)
@@ -888,6 +936,37 @@ def test_contextual_cheque_bounce_query_returns_source_backed_result_and_redacte
         ):
             assert forbidden_key not in audit_blob
         assert session.scalar(select(ModelRun)) is None
+
+
+def test_contextual_search_prioritizes_readable_authority_over_garbled_ocr(
+    client: TestClient,
+) -> None:
+    bootstrap_payload = bootstrap_company(client)
+    token = str(bootstrap_payload["access_token"])
+    clean_authority_id = _seed_contextual_cheque_authority()
+    garbled_authority_id = _seed_garbled_contextual_cheque_authority()
+
+    response = client.post(
+        "/api/authorities/search",
+        headers=auth_headers(token),
+        json={
+            "query": (
+                "Cheque bounced due to insufficient funds and notice was sent "
+                "after 35 days."
+            ),
+            "mode": "contextual",
+            "limit": 2,
+            "language": "any",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    ids = [item["authority_document_id"] for item in body["results"]]
+    assert clean_authority_id in ids
+    assert garbled_authority_id in ids
+    assert ids[0] == clean_authority_id
+    assert "$O ?J" not in body["results"][0]["snippet"]
 
 
 def test_contextual_search_returns_limited_coverage_without_model_memory(

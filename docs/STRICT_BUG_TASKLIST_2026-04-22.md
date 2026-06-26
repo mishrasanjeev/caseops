@@ -724,3 +724,30 @@ Local verification on 2026-06-24:
 - `npx playwright test --config playwright.app.config.ts tests/e2e/hari-2026-06-23-bugs.spec.ts --project app-chromium` - PASS 1/1.
 
 Reopen learning: `docs/BUG_REOPEN_LEARNINGS_2026-06-24_HARI.md`.
+
+---
+
+## Hari 2026-06-26 batch
+
+Source workbook: `C:\Users\mishr\Downloads\CaseOps Bugs_Hari26Jun2026.xlsx`.
+
+| ID | Severity | Verdict | Area | Notes |
+|----|----------|---------|------|-------|
+| bug-001 | Medium | Locally fixed | Research / Context Research | Valid bug. Prior UI-only garbled-preview masking was shallow. Retrieval now penalizes low-quality OCR text and the authority route orders readable results ahead of garbled OCR before pagination. Production verdict remains below `Properly fixed` until committed Playwright passes against the deployed build. |
+| bug-002 | Low | Locally fixed | Matters / New Matter | Valid bug. Matter Code now has a shared backend grammar and frontend grammar: uppercase letters, numbers, and hyphens only; spaces, underscores, slashes, and other special characters are rejected. Direct matter create, availability, intake promotion, and New Matter UI are covered. Production verdict remains below `Properly fixed` until committed Playwright passes against the deployed build. |
+
+Regression evidence added:
+
+- `apps/api/src/caseops_api/services/retrieval.py` - OCR readability classifier and rank penalty.
+- `apps/api/src/caseops_api/services/authorities.py` - readable authority results are ordered ahead of low-quality OCR before pagination.
+- `apps/api/src/caseops_api/schemas/matters.py` - shared backend Matter Code grammar and normalization.
+- `apps/api/src/caseops_api/schemas/intake.py` - intake promotion reuses the same grammar.
+- `apps/api/tests/test_authorities.py` - contextual cheque dishonour search ranks readable Section 138/142 authority ahead of a matching garbled OCR authority.
+- `apps/api/tests/test_matter_code_validation.py` - invalid Matter Code rejected by create, availability, and intake promotion paths.
+- `apps/web/lib/matter-code.ts` - shared frontend Matter Code grammar.
+- `apps/web/components/app/NewMatterDialog.test.tsx` - New Matter rejects invalid code before submit.
+- `apps/web/app/app/intake/page.test.tsx` - Intake promotion rejects invalid code before availability check or submit.
+- `tests/e2e/hari-2026-06-26-bugs.spec.ts` - Playwright workflow for Context Research and New Matter validation.
+- `playwright.app.config.ts` - June 26 Playwright regression registered in the normal app suite.
+
+Reopen learning: `docs/BUG_REOPEN_LEARNINGS_2026-06-26_HARI.md`.

@@ -1,18 +1,22 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { listIntakeMock, useCapabilityMock } = vi.hoisted(() => ({
+const { checkMatterCodeAvailableMock, listIntakeMock, promoteIntakeMock, useCapabilityMock } = vi.hoisted(() => ({
+  checkMatterCodeAvailableMock: vi.fn(),
   listIntakeMock: vi.fn(),
+  promoteIntakeMock: vi.fn(),
   useCapabilityMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api/endpoints", () => ({
+  checkMatterCodeAvailable: checkMatterCodeAvailableMock,
   listIntakeRequests: listIntakeMock,
   createIntakeRequest: vi.fn(),
   updateIntakeRequest: vi.fn(),
-  promoteIntakeRequest: vi.fn(),
+  promoteIntakeRequest: promoteIntakeMock,
 }));
 
 vi.mock("@/lib/capabilities", () => ({
@@ -34,7 +38,9 @@ function withClient(children: ReactNode) {
 
 describe("IntakePage", () => {
   beforeEach(() => {
+    checkMatterCodeAvailableMock.mockReset();
     listIntakeMock.mockReset();
+    promoteIntakeMock.mockReset();
     useCapabilityMock.mockReset();
     useCapabilityMock.mockImplementation(() => true);
     listIntakeMock.mockResolvedValue({ requests: [] });
@@ -103,6 +109,47 @@ describe("IntakePage", () => {
       });
     },
   );
+
+  it("blocks promote-to-matter when the matter code contains spaces or symbols", async () => {
+    const user = userEvent.setup();
+    listIntakeMock.mockResolvedValue({
+      requests: [
+        {
+          id: "r-invalid-code",
+          status: "new",
+          title: "Cheque bounce request",
+          category: "litigation_support",
+          requester_name: "Hari",
+          requester_email: null,
+          description: "Please open a matter for a cheque dishonour notice issue.",
+          priority: "medium",
+          submitted_by_membership_id: null,
+          submitted_by_name: null,
+          assigned_to_membership_id: null,
+          assigned_to_name: null,
+          linked_matter_id: null,
+          linked_matter_code: null,
+          triage_notes: null,
+          business_unit: null,
+          desired_by: null,
+          created_at: "2026-06-26T00:00:00Z",
+          updated_at: "2026-06-26T00:00:00Z",
+        },
+      ],
+    });
+
+    render(withClient(<IntakePage />));
+    await user.click(await screen.findByRole("button", { name: /Cheque bounce request/i }));
+    await user.click(await screen.findByRole("button", { name: /Promote to matter/i }));
+    await user.type(screen.getByTestId("intake-promote-code"), "BAD CODE/1");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /letters, numbers, and hyphens only/i,
+    );
+    expect(screen.getByTestId("intake-promote-confirm")).toBeDisabled();
+    expect(checkMatterCodeAvailableMock).not.toHaveBeenCalled();
+    expect(promoteIntakeMock).not.toHaveBeenCalled();
+  });
 });
 
 

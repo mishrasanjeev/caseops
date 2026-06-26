@@ -53,7 +53,11 @@ from caseops_api.services.court_sync_sources import (
 )
 from caseops_api.services.document_processing import _chunk_text
 from caseops_api.services.embeddings import EmbeddingProviderError, build_provider
-from caseops_api.services.retrieval import RetrievalCandidate, rank_candidates
+from caseops_api.services.retrieval import (
+    RetrievalCandidate,
+    is_low_quality_ocr_text,
+    rank_candidates,
+)
 from caseops_api.services.retrieval_normalisers import build_query_variants
 from caseops_api.services.session_context import SessionContext
 
@@ -841,6 +845,7 @@ def search_authority_catalog(
                             ]
                             if part
                         ),
+                        quality_text=chunk.content,
                         embedding=_decode_embedding(chunk.embedding_json),
                     )
                 )
@@ -863,6 +868,7 @@ def search_authority_catalog(
                     ]
                     if part
                 ),
+                quality_text=document.document_text or document.summary,
             )
         )
         candidate_to_document[candidate_id] = document
@@ -972,6 +978,21 @@ def search_authority_catalog(
     return top_n[:limit]
 
 
+def _readable_results_first(
+    results: list[AuthoritySearchResult],
+) -> list[AuthoritySearchResult]:
+    readable: list[AuthoritySearchResult] = []
+    low_quality: list[AuthoritySearchResult] = []
+    for result in results:
+        if is_low_quality_ocr_text(result.snippet):
+            low_quality.append(result)
+        else:
+            readable.append(result)
+    if not readable:
+        return results
+    return [*readable, *low_quality]
+
+
 def search_authorities(
     session: Session,
     *,
@@ -1006,6 +1027,7 @@ def search_authorities(
         filtered = [r for r in raw if _title_is_predominantly_ascii(r.title)]
     else:
         filtered = list(raw)
+    filtered = _readable_results_first(filtered)
     total = len(filtered)
     page = filtered[payload.offset : payload.offset + payload.limit]
 
