@@ -3,7 +3,11 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
+
+from caseops_api.schemas.matters import MATTER_CODE_ERROR
 from caseops_api.scripts.enrich_delhi_hc_judges import extract_bio
+from caseops_api.services import matters as matter_service
 from caseops_api.services.court_sync_sources import _extract_case_references, _strip_html
 from caseops_api.services.retrieval_normalisers import normalise_citation_query
 
@@ -77,6 +81,28 @@ def test_matter_code_suggestion_does_not_use_trailing_digit_regex() -> None:
     ).read_text(encoding="utf-8")
 
     assert 're.match(r"^(.*?)(\\d+)$"' not in source
+
+
+def test_matter_code_available_does_not_expose_validation_exception_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def raise_internal_validation_error(value: object) -> str:
+        raise ValueError(
+            "Traceback: C:\\prod\\caseops\\secret.py SELECT * FROM tenant_tokens"
+        )
+
+    monkeypatch.setattr(
+        matter_service, "normalize_matter_code", raise_internal_validation_error,
+    )
+
+    body = matter_service.matter_code_available(
+        object(), context=object(), code="BAD_CODE",
+    )
+
+    assert body["available"] is False
+    assert body["reason"] == MATTER_CODE_ERROR
+    assert "Traceback" not in body["reason"]
+    assert "tenant_tokens" not in body["reason"]
 
 
 def test_qa_password_reset_does_not_print_secret_fetch_command() -> None:

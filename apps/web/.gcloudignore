@@ -1,0 +1,34 @@
+# Cloud Build source upload guard for `gcloud builds submit apps/web`.
+#
+# Docker uses .dockerignore after the source archive reaches Cloud
+# Build. gcloud uses this file before upload, so local Windows
+# node_modules, Next build caches, env files, and reports never enter
+# the staging archive.
+#
+# Keep the high-risk entries in sync with .dockerignore.
+
+# Local installs / build artifacts.
+node_modules/
+.next/
+
+# Editor + git noise.
+.git/
+.gitignore
+.gcloudignore
+.DS_Store
+
+# Local logs / coverage / test artifacts.
+coverage/
+.coverage
+.nyc_output/
+*.log
+test-results/
+playwright-report/
+
+# Local env overrides - never upload to Cloud Build.
+.env
+.env.local
+.env*.local
+
+# TypeScript build cache (regenerated inside the image).
+tsconfig.tsbuildinfo

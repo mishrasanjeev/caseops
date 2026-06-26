@@ -2,8 +2,9 @@
 # production image. Runs `next start` in production mode (NOT
 # `next dev`); Cloud Run injects PORT.
 #
-# Build context is apps/web/ — the root .dockerignore already
-# excludes node_modules/, .next/, etc., so the COPY layers stay lean.
+# Build context is apps/web/. .dockerignore keeps Docker COPY layers
+# lean; .gcloudignore keeps the source upload archive lean before the
+# context reaches Cloud Build.
 
 # ---- deps ---------------------------------------------------------
 FROM node:22.14.0-alpine AS deps
