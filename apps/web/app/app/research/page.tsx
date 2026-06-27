@@ -48,6 +48,14 @@ import { formatLegalDate } from "@/lib/dates";
 
 type ForumFilter = "any" | AuthorityForumLevel;
 type DocTypeFilter = "any" | AuthorityDocumentType;
+type SearchCriteria = {
+  query: string;
+  forumLevel: ForumFilter;
+  courtName: string;
+  documentType: DocTypeFilter;
+  language: "en" | "any";
+  searchMode: AuthoritySearchMode;
+};
 
 export default function ResearchPage() {
   const canSearch = useCapability("authorities:search");
@@ -55,20 +63,6 @@ export default function ResearchPage() {
   const searchParams = useSearchParams();
   const initialQuery = searchParams?.get("q")?.trim() ?? "";
   const [query, setQuery] = useState(initialQuery);
-  const [pendingQuery, setPendingQuery] = useState(
-    initialQuery.length >= 2 ? initialQuery : "",
-  );
-
-  // When the user arrives via the topbar search (?q=...), re-sync local
-  // state + fire the query if a new ?q= lands while we're on the page.
-  useEffect(() => {
-    const nextQ = searchParams?.get("q")?.trim() ?? "";
-    if (nextQ && nextQ !== pendingQuery) {
-      setQuery(nextQ);
-      if (nextQ.length >= 2) setPendingQuery(nextQ);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
   const [forumLevel, setForumLevel] = useState<ForumFilter>("any");
   const [courtName, setCourtName] = useState("");
   const [documentType, setDocumentType] = useState<DocTypeFilter>("any");
@@ -81,6 +75,39 @@ export default function ResearchPage() {
   const PAGE_SIZE = 10;
   const [language, setLanguage] = useState<"en" | "any">("en");
   const [page, setPage] = useState(0);
+  const [searchCriteria, setSearchCriteria] = useState<SearchCriteria | null>(
+    initialQuery.length >= 2
+      ? {
+          query: initialQuery,
+          forumLevel: "any",
+          courtName: "",
+          documentType: "any",
+          language: "en",
+          searchMode: "keyword",
+        }
+      : null,
+  );
+
+  // When the user arrives via the topbar search (?q=...), re-sync local
+  // state + fire the query if a new ?q= lands while we're on the page.
+  useEffect(() => {
+    const nextQ = searchParams?.get("q")?.trim() ?? "";
+    if (nextQ && nextQ !== searchCriteria?.query) {
+      setQuery(nextQ);
+      if (nextQ.length >= 2) {
+        setPage(0);
+        setSearchCriteria({
+          query: nextQ,
+          forumLevel,
+          courtName,
+          documentType,
+          language,
+          searchMode,
+        });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
   const [savedAuthorityIds, setSavedAuthorityIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -97,27 +124,28 @@ export default function ResearchPage() {
       "authorities",
       "search",
       {
-        q: pendingQuery,
-        forumLevel,
-        courtName,
-        documentType,
-        language,
-        searchMode,
+        criteria: searchCriteria,
         page,
       },
     ],
-    queryFn: () =>
-      searchAuthorities({
-        query: pendingQuery,
-        mode: searchMode,
+    queryFn: () => {
+      if (!searchCriteria) {
+        throw new Error("Search criteria are required before authority search.");
+      }
+      return searchAuthorities({
+        query: searchCriteria.query,
+        mode: searchCriteria.searchMode,
         limit: PAGE_SIZE,
         offset: page * PAGE_SIZE,
-        language,
-        forumLevel: forumLevel === "any" ? null : forumLevel,
-        courtName: courtName.trim() || null,
-        documentType: documentType === "any" ? null : documentType,
-      }),
-    enabled: canSearch && pendingQuery.trim().length >= 2,
+        language: searchCriteria.language,
+        forumLevel:
+          searchCriteria.forumLevel === "any" ? null : searchCriteria.forumLevel,
+        courtName: searchCriteria.courtName.trim() || null,
+        documentType:
+          searchCriteria.documentType === "any" ? null : searchCriteria.documentType,
+      });
+    },
+    enabled: canSearch && (searchCriteria?.query.trim().length ?? 0) >= 2,
   });
 
   const saveMutation = useMutation({
@@ -126,8 +154,8 @@ export default function ResearchPage() {
         authorityId: input.authority_document_id,
         kind: "flag",
         title:
-          pendingQuery.length > 0
-            ? `Research: ${pendingQuery.slice(0, 200)}`
+          searchCriteria?.query
+            ? `Research: ${searchCriteria.query.slice(0, 200)}`
             : input.title.slice(0, 200),
         body: input.snippet.slice(0, 2000),
       }),
@@ -151,24 +179,30 @@ export default function ResearchPage() {
       toast.error("Type at least two characters to search.");
       return;
     }
-    setPendingQuery(trimmed);
     setPage(0); // PG-110: reset pagination on a new query
+    setSearchCriteria({
+      query: trimmed,
+      forumLevel,
+      courtName,
+      documentType,
+      language,
+      searchMode,
+    });
   };
 
-  // Reset to page 0 when the user changes the language filter or any
-  // other filter that changes the result set shape. Otherwise the
-  // current `offset` could land outside the new filtered range.
-  useEffect(() => {
-    setPage(0);
-  }, [language, forumLevel, courtName, documentType, searchMode]);
-
   const results = searchQuery.data?.results ?? [];
+  const readableResults = results.filter(
+    (result) => !isGarbledSnippet(result.snippet),
+  );
+  const visibleResults = readableResults.length > 0 ? readableResults : results;
   const contextualPlan = searchQuery.data?.contextual_plan ?? null;
   const coverageNotice = searchQuery.data?.coverage_notice ?? null;
   const totalAfterFilter = searchQuery.data?.total_after_filter ?? 0;
-  const hasSearched = pendingQuery.length > 0;
+  const hasSearched = Boolean(searchCriteria?.query);
   const hasNextPage = (page + 1) * PAGE_SIZE < totalAfterFilter;
   const hasPrevPage = page > 0;
+  const canSubmitSearch =
+    canSearch && query.trim().length >= 2 && !searchQuery.isFetching;
 
   return (
     <div className="flex flex-col gap-6">
@@ -283,7 +317,7 @@ export default function ResearchPage() {
               <Button
                 type="submit"
                 size="sm"
-                disabled={!canSearch || searchQuery.isFetching}
+                disabled={!canSubmitSearch}
                 data-testid="research-query-submit"
               >
                 {searchQuery.isFetching ? (
@@ -306,7 +340,7 @@ export default function ResearchPage() {
                   value={forumLevel}
                   onValueChange={(value) => setForumLevel(value as ForumFilter)}
                 >
-                  <SelectTrigger id="forum-filter">
+                  <SelectTrigger id="forum-filter" data-testid="research-filter-forum">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -338,7 +372,7 @@ export default function ResearchPage() {
                   value={documentType}
                   onValueChange={(value) => setDocumentType(value as DocTypeFilter)}
                 >
-                  <SelectTrigger id="doctype-filter">
+                  <SelectTrigger id="doctype-filter" data-testid="research-filter-doctype">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -432,7 +466,7 @@ export default function ResearchPage() {
             </Button>
           }
         />
-      ) : results.length === 0 ? (
+      ) : visibleResults.length === 0 ? (
         <EmptyState
           icon={Scale}
           title="No authorities matched"
@@ -479,7 +513,7 @@ export default function ResearchPage() {
             </div>
           ) : null}
           <ul className="flex flex-col gap-3" data-testid="research-results">
-            {results.map((result) => (
+            {visibleResults.map((result) => (
               <AuthorityCard
                 key={result.authority_document_id}
                 result={result}
@@ -505,7 +539,7 @@ export default function ResearchPage() {
                 Showing {page * PAGE_SIZE + 1}–
                 {Math.min((page + 1) * PAGE_SIZE, totalAfterFilter)} of{" "}
                 {totalAfterFilter}
-                {language === "en"
+                {searchCriteria?.language === "en"
                   ? " English-language matches"
                   : " matches across all languages"}
               </span>

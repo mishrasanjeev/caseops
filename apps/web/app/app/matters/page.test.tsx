@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -107,6 +107,32 @@ describe("MattersPage", () => {
     expect(screen.getByText("Stay")).toBeInTheDocument();
     expect(screen.getByText("Interim")).toBeInTheDocument();
     expect(screen.getByText(/2,50,000/)).toBeInTheDocument();
+  });
+
+  it("labels the disposed status action as Dispose", async () => {
+    listMattersMock.mockResolvedValue({
+      matters: [
+        {
+          id: "m1",
+          matter_code: "ACME-1",
+          title: "Acme v Smith",
+          status: "active",
+          practice_area: "Commercial",
+          forum_level: "high_court",
+          next_hearing_on: null,
+          created_at: "2026-04-01T00:00:00Z",
+          updated_at: "2026-04-15T00:00:00Z",
+        },
+      ],
+      next_cursor: null,
+    });
+
+    render(withClient(<MattersPage />));
+
+    const statusSelect = await screen.findByLabelText("Status for ACME-1");
+    expect(within(statusSelect).getByRole("option", { name: "Dispose" })).toHaveValue(
+      "disposed",
+    );
   });
 
   it("surfaces the QueryErrorState when listMatters throws", async () => {

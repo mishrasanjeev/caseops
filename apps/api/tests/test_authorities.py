@@ -964,9 +964,38 @@ def test_contextual_search_prioritizes_readable_authority_over_garbled_ocr(
     body = response.json()
     ids = [item["authority_document_id"] for item in body["results"]]
     assert clean_authority_id in ids
-    assert garbled_authority_id in ids
+    assert garbled_authority_id not in ids
     assert ids[0] == clean_authority_id
-    assert "$O ?J" not in body["results"][0]["snippet"]
+    assert body["total_after_filter"] == 1
+    assert "$O ?J" not in json.dumps(body)
+
+
+def test_contextual_search_uses_garbled_ocr_only_when_no_readable_match_exists(
+    client: TestClient,
+) -> None:
+    bootstrap_payload = bootstrap_company(client)
+    token = str(bootstrap_payload["access_token"])
+    garbled_authority_id = _seed_garbled_contextual_cheque_authority()
+
+    response = client.post(
+        "/api/authorities/search",
+        headers=auth_headers(token),
+        json={
+            "query": (
+                "Cheque bounced due to insufficient funds and notice was sent "
+                "after 35 days."
+            ),
+            "mode": "contextual",
+            "limit": 2,
+            "language": "any",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    ids = [item["authority_document_id"] for item in body["results"]]
+    assert ids == [garbled_authority_id]
+    assert body["total_after_filter"] == 1
 
 
 def test_contextual_search_returns_limited_coverage_without_model_memory(

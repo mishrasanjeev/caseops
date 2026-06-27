@@ -751,3 +751,38 @@ Regression evidence added:
 - `playwright.app.config.ts` - June 26 Playwright regression registered in the normal app suite.
 
 Reopen learning: `docs/BUG_REOPEN_LEARNINGS_2026-06-26_HARI.md`.
+
+---
+
+## Hari 2026-06-27 batch
+
+Source workbook: `C:\Users\mishr\Downloads\CaseOps Bugs_Hari27Jun2026.xlsx`.
+
+| ID | Severity | Verdict | Area | Notes |
+|----|----------|---------|------|-------|
+| bug-001 | Medium | Locally fixed; formal production verdict Inconclusive | Research / Context Research | Valid reopened bug. The June 26 fix still allowed a garbled OCR authority card to occupy result slots when readable authorities existed. Authority search now suppresses low-quality OCR rows whenever readable results are available, while preserving damaged OCR as a last-resort fallback when no readable source exists. |
+| bug-002 | Medium | Locally fixed; formal production verdict Inconclusive | Research | Valid bug. Draft filter controls are now separated from committed search criteria. Filter edits no longer auto-fire stale searches or disable the explicit Search action; keyword and contextual modes both submit the selected filters only when Search is clicked. |
+| case-reopening audit | Medium | Locally fixed; formal production verdict Inconclusive | Matters / status lifecycle | Not a workbook row, but explicitly requested. Backend already normalizes legacy `closed` to `disposed`; added reload/read-back Playwright proof that a disposed matter remains disposed and aligned portfolio terminology to `Dispose`. |
+
+Regression evidence added:
+
+- `apps/api/src/caseops_api/services/authorities.py` - low-quality OCR authority rows are suppressed when readable authority results exist.
+- `apps/api/tests/test_authorities.py` - readable Section 138 / Section 142 authority suppresses the matching garbled OCR authority; garbled OCR remains available only when it is the only match.
+- `apps/web/app/app/research/page.tsx` - draft filter state is committed into `SearchCriteria` only on submit.
+- `apps/web/app/app/research/page.test.tsx` - filter edits stay staged until Search is clicked, and garbled OCR result cards are hidden when readable results exist.
+- `apps/web/app/app/matters/page.tsx` and `apps/web/app/app/matters/page.test.tsx` - portfolio lifecycle label uses `Dispose`.
+- `tests/e2e/hari-2026-06-27-bugs.spec.ts` - browser proof for bug-001, bug-002 in keyword and contextual modes, and disposed-status persistence after reload.
+- `tests/e2e/hari-2026-06-26-bugs.spec.ts` - prior OCR regression strengthened so it no longer preserves the shallow "bad card visible with placeholder" behavior.
+- `playwright.app.config.ts` - June 27 Playwright regression registered in the normal app suite.
+
+Local verification on 2026-06-27:
+
+- `apps\api\.venv\Scripts\pytest.exe apps/api/tests/test_authorities.py::test_contextual_search_prioritizes_readable_authority_over_garbled_ocr apps/api/tests/test_authorities.py::test_contextual_search_uses_garbled_ocr_only_when_no_readable_match_exists` - PASS, 2 tests.
+- `npm --prefix apps/web test -- app/app/research/page.test.tsx app/app/matters/page.test.tsx` - PASS, 11 tests.
+- `npm run typecheck:web` - PASS.
+- `npm run build:web` - PASS.
+- `npx playwright test --config .tmp/hari26.no-webserver.playwright.config.ts tests/e2e/hari-2026-06-27-bugs.spec.ts --project app-chromium` with manually started local e2e API/web servers - PASS, 4 tests.
+- `npx playwright test --config .tmp/hari26.no-webserver.playwright.config.ts tests/e2e/hari-2026-06-26-bugs.spec.ts --project app-chromium` with manually started local e2e API/web servers - PASS, 2 tests.
+- `apps\api\.venv\Scripts\pytest.exe apps/api/tests/test_gba_law_office_prd.py::test_matter_status_closed_input_normalizes_to_disposed` - PASS, 1 test.
+
+Reopen learning: `docs/BUG_REOPEN_LEARNINGS_2026-06-27_HARI.md`.
