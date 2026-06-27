@@ -1,18 +1,19 @@
 /**
- * Hari 2026-06-26 workbook regressions.
+ * Hari 2026-06-27 workbook regressions.
  *
- * BUG-001: Context Research must not expose unreadable OCR cards for
- * natural-language Section 138 / Section 142 cheque-dishonour searches when
- * a readable authority exists.
- * BUG-002: New Matter must reject matter codes with spaces or special
- * characters before submit.
+ * BUG-001: Context Research must suppress low-quality OCR authority cards when
+ * readable authorities match the same natural-language query.
+ * BUG-002: Research filter changes must not disable or auto-fire Search before
+ * the user submits, in both keyword and contextual modes.
+ *
+ * Case-reopening audit: a disposed matter must remain disposed after reload.
  */
 import { expect, request, test } from "@playwright/test";
 import type { APIRequestContext, Page } from "@playwright/test";
 
 import { apiBaseUrl } from "./support/env";
 
-const PASSWORD = "HariJun26Bugs!";
+const PASSWORD = "HariJun27Bugs!";
 const CHEQUE_QUERY =
   "Cheque bounced due to insufficient funds and notice was sent after 35 days";
 
@@ -25,22 +26,41 @@ function unique(prefix: string): string {
 async function bootstrap(
   api: APIRequestContext,
   slug: string,
-): Promise<{ ownerEmail: string }> {
+): Promise<{ token: string; ownerEmail: string }> {
   const ownerEmail = `owner-${slug}@example.com`;
   const resp = await api.post(`${apiBaseUrl}/api/bootstrap/company`, {
     data: {
-      company_name: "Hari 2026-06-26 LLP",
+      company_name: "Hari 2026-06-27 LLP",
       company_slug: slug,
       company_type: "law_firm",
-      owner_full_name: "Hari Jun26 Owner",
+      owner_full_name: "Hari Jun27 Owner",
       owner_email: ownerEmail,
       owner_password: PASSWORD,
     },
   });
-  if (resp.status() !== 200) {
-    throw new Error(`Bootstrap failed with HTTP ${resp.status()}: ${await resp.text()}`);
-  }
-  return { ownerEmail };
+  expect(resp.status(), await resp.text()).toBe(200);
+  const body = (await resp.json()) as { access_token: string };
+  return { token: body.access_token, ownerEmail };
+}
+
+async function createMatter(
+  api: APIRequestContext,
+  token: string,
+  code: string,
+): Promise<string> {
+  const resp = await api.post(`${apiBaseUrl}/api/matters/`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      title: `Hari Jun27 matter ${code}`,
+      matter_code: code,
+      practice_area: "commercial",
+      forum_level: "high_court",
+      status: "intake",
+      court_name: "Delhi High Court",
+    },
+  });
+  expect(resp.status(), await resp.text()).toBe(200);
+  return ((await resp.json()) as { id: string }).id;
 }
 
 async function signIn(page: Page, slug: string, email: string): Promise<void> {
@@ -52,20 +72,21 @@ async function signIn(page: Page, slug: string, email: string): Promise<void> {
   await page.waitForURL(/\/app/);
 }
 
-test.describe("Hari 2026-06-26 bugs", () => {
+async function chooseOption(page: Page, testId: string, name: string): Promise<void> {
+  await page.getByTestId(testId).click();
+  await page.getByRole("option", { name }).click();
+}
+
+test.describe("Hari 2026-06-27 bugs", () => {
   test.setTimeout(120_000);
 
-  test("BUG-001: Context Research suppresses low-quality OCR cards for cheque dishonour query", async ({
+  test("BUG-001: Context Research suppresses unreadable OCR authority cards", async ({
     page,
   }) => {
     const api = await request.newContext();
-    const slug = unique("h62601");
-    let ownerEmail = "";
-    try {
-      ({ ownerEmail } = await bootstrap(api, slug));
-    } finally {
-      await api.dispose();
-    }
+    const slug = unique("h62701");
+    const { ownerEmail } = await bootstrap(api, slug);
+    await api.dispose();
     await signIn(page, slug, ownerEmail);
 
     let searchPayload: Record<string, unknown> | null = null;
@@ -80,7 +101,7 @@ test.describe("Hari 2026-06-26 bugs", () => {
           provider: "caseops-authority-contextual-search-v1",
           generated_at: new Date().toISOString(),
           contextual_plan: {
-            key_facts: ["cheque dishonour", "dishonour for insufficient funds"],
+            key_facts: ["cheque dishonour", "insufficient funds"],
             likely_issues: ["demand notice timing for cheque dishonour"],
             statutes_or_sections: [
               "Section 138 Negotiable Instruments Act",
@@ -109,7 +130,7 @@ test.describe("Hari 2026-06-26 bugs", () => {
               source: "test",
               source_reference: "https://official.example.test/cheque-138.pdf",
               snippet:
-                "A cheque was dishonoured for insufficient funds. The court analysed Section 138 and Section 142 of the Negotiable Instruments Act where demand notice timing was disputed.",
+                "A cheque was dishonoured for insufficient funds. The court analysed Section 138 and Section 142 where demand notice timing was disputed.",
               score: 245,
               matched_terms: ["cheque", "notice", "section", "138"],
               relevance_reason:
@@ -161,38 +182,85 @@ test.describe("Hari 2026-06-26 bugs", () => {
     expect(searchPayload?.query).toBe(CHEQUE_QUERY);
   });
 
-  test("BUG-002: New Matter rejects invalid matter code before API submission", async ({
+  for (const mode of ["keyword", "contextual"] as const) {
+    test(`BUG-002: filter changes keep Search enabled in ${mode} mode`, async ({
+      page,
+    }) => {
+      const api = await request.newContext();
+      const slug = unique(`h62702-${mode}`);
+      const { ownerEmail } = await bootstrap(api, slug);
+      await api.dispose();
+      await signIn(page, slug, ownerEmail);
+
+      const searchPayloads: Record<string, unknown>[] = [];
+      await page.route("**/api/authorities/search", async (route) => {
+        searchPayloads.push(route.request().postDataJSON() as Record<string, unknown>);
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            query: "Section 138 notice delay",
+            mode,
+            provider: "caseops-authority-search-v2",
+            generated_at: new Date().toISOString(),
+            contextual_plan: mode === "contextual" ? null : undefined,
+            coverage_notice: null,
+            total_after_filter: 0,
+            offset: 0,
+            results: [],
+          }),
+        });
+      });
+
+      await page.goto("/app/research");
+      await page.getByTestId(`research-mode-${mode}`).click();
+      await page.getByTestId("research-query-input").fill("Section 138 notice delay");
+      await chooseOption(page, "research-filter-forum", "High Court");
+      await page.getByTestId("research-filter-court").fill("Delhi");
+      await chooseOption(page, "research-filter-doctype", "Judgment");
+
+      await expect(page.getByTestId("research-query-submit")).toBeEnabled();
+      expect(searchPayloads).toHaveLength(0);
+
+      await page.getByTestId("research-query-submit").click();
+
+      await expect.poll(() => searchPayloads.length).toBe(1);
+      expect(searchPayloads[0]).toMatchObject({
+        query: "Section 138 notice delay",
+        mode,
+        forum_level: "high_court",
+        court_name: "Delhi",
+        document_type: "judgment",
+      });
+    });
+  }
+
+  test("case-reopening audit: disposed matter remains disposed after reload", async ({
     page,
   }) => {
     const api = await request.newContext();
-    const slug = unique("h62602");
-    let ownerEmail = "";
-    try {
-      ({ ownerEmail } = await bootstrap(api, slug));
-    } finally {
-      await api.dispose();
-    }
+    const slug = unique("h627status");
+    const { token, ownerEmail } = await bootstrap(api, slug);
+    const matterId = await createMatter(api, token, "H627-STATUS");
+    await api.dispose();
     await signIn(page, slug, ownerEmail);
 
-    const matterCreateRequests: string[] = [];
-    page.on("request", (req) => {
-      if (req.method() === "POST" && req.url().endsWith("/api/matters/")) {
-        matterCreateRequests.push(req.postData() ?? "");
-      }
-    });
-
     await page.goto("/app/matters");
-    await page.getByTestId("new-matter-trigger").first().click();
-    await expect(page.getByTestId("new-matter-forum-state")).toHaveValue("Delhi");
-    await page.getByLabel("Title").fill("Invalid matter code workflow");
-    await page.getByLabel("Matter code").fill("BAD CODE/1");
-    await page.getByLabel("Practice area").fill("Commercial");
-    await page.getByRole("button", { name: /Create matter/i }).click();
+    const statusSelect = page.getByLabel("Status for H627-STATUS");
+    await expect(statusSelect).toBeVisible({ timeout: 15_000 });
 
-    await expect(page.getByRole("alert")).toContainText(
-      /letters, numbers, and hyphens only/i,
+    const patchResponse = page.waitForResponse(
+      (response) =>
+        response.url().includes(`/api/matters/${matterId}`) &&
+        response.request().method() === "PATCH",
     );
-    await expect(page.getByRole("dialog", { name: /New matter/i })).toBeVisible();
-    expect(matterCreateRequests).toEqual([]);
+    await statusSelect.selectOption("disposed");
+    expect((await patchResponse).status()).toBe(200);
+    await expect(page.getByLabel("Status for H627-STATUS")).toHaveValue("disposed");
+
+    await page.reload();
+    await expect(page.getByLabel("Status for H627-STATUS")).toHaveValue("disposed", {
+      timeout: 15_000,
+    });
   });
 });

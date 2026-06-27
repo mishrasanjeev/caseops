@@ -978,9 +978,15 @@ def search_authority_catalog(
     return top_n[:limit]
 
 
-def _readable_results_first(
+def _suppress_low_quality_ocr_when_readable_available(
     results: list[AuthoritySearchResult],
 ) -> list[AuthoritySearchResult]:
+    """Keep damaged OCR only as a last resort.
+
+    A readable authority is materially more useful than a high-scoring
+    mojibake chunk. Once readable matches exist, low-quality OCR rows should
+    not occupy result slots or pagination counts.
+    """
     readable: list[AuthoritySearchResult] = []
     low_quality: list[AuthoritySearchResult] = []
     for result in results:
@@ -990,7 +996,7 @@ def _readable_results_first(
             readable.append(result)
     if not readable:
         return results
-    return [*readable, *low_quality]
+    return readable
 
 
 def search_authorities(
@@ -1027,7 +1033,7 @@ def search_authorities(
         filtered = [r for r in raw if _title_is_predominantly_ascii(r.title)]
     else:
         filtered = list(raw)
-    filtered = _readable_results_first(filtered)
+    filtered = _suppress_low_quality_ocr_when_readable_available(filtered)
     total = len(filtered)
     page = filtered[payload.offset : payload.offset + payload.limit]
 

@@ -68,7 +68,7 @@ const MATTER_STATUSES = [
   { value: "intake", label: "Intake" },
   { value: "active", label: "Active" },
   { value: "on_hold", label: "On hold" },
-  { value: "disposed", label: "Disposed" },
+  { value: "disposed", label: "Dispose" },
 ] as const;
 
 type MatterStatusValue = (typeof MATTER_STATUSES)[number]["value"];
@@ -369,7 +369,7 @@ export default function MattersPage() {
               <SelectItem value="intake">Intake</SelectItem>
               <SelectItem value="active">Active</SelectItem>
               <SelectItem value="on_hold">On hold</SelectItem>
-              <SelectItem value="disposed">Disposed</SelectItem>
+              <SelectItem value="disposed">Dispose</SelectItem>
             </SelectContent>
           </Select>
         </div>
