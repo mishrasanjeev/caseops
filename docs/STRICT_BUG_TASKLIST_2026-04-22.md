@@ -786,3 +786,35 @@ Local verification on 2026-06-27:
 - `apps\api\.venv\Scripts\pytest.exe apps/api/tests/test_gba_law_office_prd.py::test_matter_status_closed_input_normalizes_to_disposed` - PASS, 1 test.
 
 Reopen learning: `docs/BUG_REOPEN_LEARNINGS_2026-06-27_HARI.md`.
+
+---
+
+## Hari 2026-06-29 batch
+
+Source workbook: `C:\Users\mishr\Downloads\CaseOps Bugs_Hari29Jun2026.xlsx`.
+
+| ID | Severity | Verdict | Area | Notes |
+|----|----------|---------|------|-------|
+| bug-001 | Medium | Already fixed in current main; revalidated locally | Research / Context Research | Valid product symptom. Current `main` already suppresses low-quality OCR authorities when readable authorities exist, preserving damaged OCR only as last-resort fallback. No new code path was needed; the existing June 27 regression remains the anchor. |
+| bug-002 | Medium | Locally fixed; formal production verdict Inconclusive | Research | Valid bug. UI promised `Court name contains`, but backend authority search used exact equality across multiple retrieval branches. Search now uses case-insensitive substring court filtering in the exact-name prefilter, pgvector probe/filtered CTE, fallback scan, and boost logic. |
+| case-reopening audit | Medium | Process learning updated | Cross-product regression quality | No new matter-status defect was present in the workbook. Reopen cause here was shallow proof: prior bug-002 tests proved payload submission, not backend filter semantics. |
+
+Regression evidence added:
+
+- `apps/api/src/caseops_api/services/authorities.py` - shared court filter normalization and contains semantics across authority retrieval paths.
+- `apps/api/tests/test_authorities.py` - seeded `Madras High Court` authority returned by partial `court_name: "madras"` for the workbook bail query.
+- `apps/web/app/app/research/page.test.tsx` - partial `Madras` filter is submitted and returned `Madras High Court` result renders.
+- `tests/e2e/hari-2026-06-29-bugs.spec.ts` - browser proof that the Research UI submits `Madras` and renders a matching `Madras High Court` result.
+- `playwright.app.config.ts` - June 29 Playwright regression registered in the normal app suite.
+- `docs/BUG_REOPEN_LEARNINGS_2026-06-29_HARI.md` - root cause and permanent learning added.
+
+Local verification on 2026-06-29:
+
+- `apps\api\.venv\Scripts\pytest.exe apps/api/tests/test_authorities.py::test_authority_search_court_name_filter_is_case_insensitive_contains apps/api/tests/test_authorities.py::test_contextual_search_prioritizes_readable_authority_over_garbled_ocr apps/api/tests/test_authorities.py::test_contextual_search_uses_garbled_ocr_only_when_no_readable_match_exists` - PASS, 3 tests.
+- `npm --prefix apps/web test -- app/app/research/page.test.tsx` - PASS, 6 tests.
+- `apps\api\.venv\Scripts\ruff.exe check apps/api/src/caseops_api/services/authorities.py apps/api/tests/test_authorities.py` - PASS.
+- `npm run typecheck:web` - PASS.
+- `npm run build:web` - PASS.
+- `npx playwright test --config .tmp\hari26.no-webserver.playwright.config.ts tests/e2e/hari-2026-06-29-bugs.spec.ts tests/e2e/hari-2026-06-27-bugs.spec.ts --project app-chromium` with manually started local e2e API/web servers - PASS, 5 tests.
+
+Reopen learning: `docs/BUG_REOPEN_LEARNINGS_2026-06-29_HARI.md`.

@@ -279,6 +279,52 @@ def _seed_garbled_contextual_cheque_authority() -> str:
         return document_id
 
 
+def _seed_madras_bail_authority() -> str:
+    factory = get_session_factory()
+    suffix = uuid4().hex[:10]
+    with factory() as session:
+        document = AuthorityDocument(
+            source="test_madras_court_filter_source",
+            adapter_name="caseops-test-madras-court-filter-v1",
+            court_name="Madras High Court",
+            forum_level=MatterForumLevel.HIGH_COURT,
+            document_type=AuthorityDocumentType.JUDGMENT,
+            title="Triple test for bail under BNSS section 483",
+            case_reference=f"CRL.O.P. MADRAS-{suffix}/2026",
+            bench_name="Justice M. Sundar",
+            neutral_citation=None,
+            decision_date=date(2026, 6, 15),
+            canonical_key=f"test-madras-bnss-483-bail-{suffix}",
+            source_reference="https://official.example.test/madras-bnss-483.pdf",
+            summary=(
+                "Madras High Court judgment applying the triple test for bail, "
+                "parity, and custody duration under BNSS section 483."
+            ),
+            document_text=(
+                "The Madras High Court considered the triple test for bail "
+                "under BNSS section 483, parity with co-accused, and the "
+                "duration of custody before granting relief."
+            ),
+            extracted_char_count=280,
+        )
+        document.chunks = [
+            AuthorityDocumentChunk(
+                chunk_index=0,
+                content=(
+                    "Triple test for bail under BNSS s.483; parity; custody "
+                    "duration. The Madras High Court analysed whether custody "
+                    "duration and parity justified bail."
+                ),
+                token_count=32,
+            )
+        ]
+        session.add(document)
+        session.flush()
+        document_id = document.id
+        session.commit()
+        return document_id
+
+
 def _seed_judgment_alert_authorities() -> tuple[str, str]:
     factory = get_session_factory()
     with factory() as session:
@@ -996,6 +1042,39 @@ def test_contextual_search_uses_garbled_ocr_only_when_no_readable_match_exists(
     ids = [item["authority_document_id"] for item in body["results"]]
     assert ids == [garbled_authority_id]
     assert body["total_after_filter"] == 1
+
+
+def test_authority_search_court_name_filter_is_case_insensitive_contains(
+    client: TestClient,
+) -> None:
+    bootstrap_payload = bootstrap_company(client)
+    token = str(bootstrap_payload["access_token"])
+    madras_authority_id = _seed_madras_bail_authority()
+
+    response = client.post(
+        "/api/authorities/search",
+        headers=auth_headers(token),
+        json={
+            "query": "Triple test for bail under BNSS s.483; parity; custody duration",
+            "mode": "keyword",
+            "limit": 5,
+            "language": "any",
+            "forum_level": "high_court",
+            "court_name": "madras",
+            "document_type": "judgment",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    ids = [item["authority_document_id"] for item in body["results"]]
+    assert madras_authority_id in ids
+    assert body["total_after_filter"] >= 1
+    match = next(
+        item for item in body["results"] if item["authority_document_id"] == madras_authority_id
+    )
+    assert match["court_name"] == "Madras High Court"
+    assert "custody" in match["snippet"].casefold()
 
 
 def test_contextual_search_returns_limited_coverage_without_model_memory(

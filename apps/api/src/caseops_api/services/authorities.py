@@ -150,6 +150,44 @@ def _contains_any(text: str, terms: tuple[str, ...]) -> bool:
     return any(term in text for term in terms)
 
 
+def _normalize_court_filter(court_name: str | None) -> str | None:
+    normalized = re.sub(r"\s+", " ", court_name or "").strip()
+    return normalized or None
+
+
+def _escape_sql_like(value: str) -> str:
+    return (
+        value.replace("\\", "\\\\")
+        .replace("%", "\\%")
+        .replace("_", "\\_")
+    )
+
+
+def _court_name_contains_pattern(court_name: str | None) -> str | None:
+    normalized = _normalize_court_filter(court_name)
+    if normalized is None:
+        return None
+    return f"%{_escape_sql_like(normalized)}%"
+
+
+def _court_name_filter_clause(court_name: str | None):
+    pattern = _court_name_contains_pattern(court_name)
+    if pattern is None:
+        return None
+    return AuthorityDocument.court_name.ilike(pattern, escape="\\")
+
+
+def _court_name_matches_filter(
+    document_court_name: str | None,
+    court_name: str | None,
+) -> bool:
+    needle = _normalize_court_filter(court_name)
+    haystack = _normalize_court_filter(document_court_name)
+    if needle is None or haystack is None:
+        return False
+    return needle.casefold() in haystack.casefold()
+
+
 def _build_contextual_query_plan(query: str) -> AuthorityContextualQueryPlan:
     normalized_query = _compact_text(query, max_chars=600)
     lower = normalized_query.casefold()
@@ -811,8 +849,9 @@ def search_authority_catalog(
         )
     if forum_level:
         stmt = stmt.where(AuthorityDocument.forum_level == forum_level)
-    if court_name:
-        stmt = stmt.where(AuthorityDocument.court_name == court_name)
+    court_clause = _court_name_filter_clause(court_name)
+    if court_clause is not None:
+        stmt = stmt.where(court_clause)
     if document_type:
         stmt = stmt.where(AuthorityDocument.document_type == document_type)
 
@@ -888,7 +927,7 @@ def search_authority_catalog(
             continue
 
         adjusted_score = result.score
-        if court_name and document.court_name == court_name:
+        if _court_name_matches_filter(document.court_name, court_name):
             adjusted_score += 16
         # P4 (2026-04-25): forum-aware precedent boost — replaces the
         # old exact-match `+8 if forum_level == forum_level` with a
@@ -1228,8 +1267,9 @@ def _exact_name_match_document_ids(
         )
     if forum_level is not None:
         filters.append(AuthorityDocument.forum_level == forum_level)
-    if court_name is not None:
-        filters.append(AuthorityDocument.court_name == court_name)
+    court_clause = _court_name_filter_clause(court_name)
+    if court_clause is not None:
+        filters.append(court_clause)
     if document_type is not None:
         filters.append(AuthorityDocument.document_type == document_type)
 
@@ -1289,6 +1329,8 @@ def _pg_prefilter_document_ids(
     # nothing for HNSW to rank, so skip the fast path.
     from sqlalchemy import and_, text
 
+    court_contains = _normalize_court_filter(court_name)
+    court_contains = court_contains.casefold() if court_contains else None
     try:
         probe = session.execute(
             text(
@@ -1296,13 +1338,14 @@ def _pg_prefilter_document_ids(
                 "JOIN authority_documents d ON d.id = c.authority_document_id "
                 "WHERE c.embedding_vector IS NOT NULL "
                 "AND (cast(:forum as text) IS NULL OR d.forum_level = :forum) "
-                "AND (cast(:court as text) IS NULL OR d.court_name = :court) "
+                "AND (cast(:court_contains as text) IS NULL "
+                "OR position(:court_contains in lower(coalesce(d.court_name, ''))) > 0) "
                 "AND (cast(:dtype as text) IS NULL OR d.document_type = :dtype) "
                 "LIMIT 1"
             ),
             {
                 "forum": forum_level,
-                "court": court_name,
+                "court_contains": court_contains,
                 "dtype": document_type,
             },
         ).first()
@@ -1354,7 +1397,8 @@ def _pg_prefilter_document_ids(
                 " FROM top_chunks tc "
                 " JOIN authority_documents d ON d.id = tc.id "
                 " WHERE (cast(:forum as text) IS NULL OR d.forum_level = :forum) "
-                " AND (cast(:court as text) IS NULL OR d.court_name = :court) "
+                " AND (cast(:court_contains as text) IS NULL "
+                "OR position(:court_contains in lower(coalesce(d.court_name, ''))) > 0) "
                 " AND (cast(:dtype as text) IS NULL OR d.document_type = :dtype) "
                 " GROUP BY tc.id"
                 ") "
@@ -1363,7 +1407,7 @@ def _pg_prefilter_document_ids(
             {
                 "q": vec_literal,
                 "forum": forum_level,
-                "court": court_name,
+                "court_contains": court_contains,
                 "dtype": document_type,
                 "limit": limit,
                 "chunk_limit": chunk_limit,
