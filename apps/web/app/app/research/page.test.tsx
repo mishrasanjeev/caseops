@@ -113,6 +113,62 @@ describe("ResearchPage", () => {
     });
   });
 
+  it("submits a partial court filter and renders the matching court result", async () => {
+    searchMock.mockResolvedValue({
+      query: "Triple test for bail under BNSS s.483; parity; custody duration",
+      mode: "keyword",
+      provider: "caseops-authority-search-v2",
+      generated_at: "2026-06-29T00:00:00Z",
+      results: [
+        {
+          authority_document_id: "madras-bnss-483-bail",
+          title: "Triple test for bail under BNSS section 483",
+          court_name: "Madras High Court",
+          forum_level: "high_court",
+          document_type: "judgment",
+          decision_date: "2026-06-15",
+          case_reference: "CRL.O.P. 483/2026",
+          bench_name: "Justice M. Sundar",
+          summary: "Madras High Court judgment on parity and custody duration.",
+          source: "test",
+          source_reference: "https://official.example.test/madras-bail.pdf",
+          snippet:
+            "The Madras High Court applied the triple test for bail under BNSS section 483, considering parity and custody duration.",
+          score: 220,
+          matched_terms: ["triple", "bail", "bnss", "parity", "custody"],
+          relevance_reason: null,
+          worst_treatment: null,
+          adverse_count: 0,
+        },
+      ],
+      contextual_plan: null,
+      coverage_notice: null,
+      total_after_filter: 1,
+      offset: 0,
+    });
+    render(withClient(<ResearchPage />));
+
+    fireEvent.change(screen.getByTestId("research-query-input"), {
+      target: {
+        value: "Triple test for bail under BNSS s.483; parity; custody duration",
+      },
+    });
+    fireEvent.change(screen.getByTestId("research-filter-court"), {
+      target: { value: "Madras" },
+    });
+    fireEvent.click(screen.getByTestId("research-query-submit"));
+
+    expect(
+      await screen.findByText("Triple test for bail under BNSS section 483"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Madras High Court")).toBeInTheDocument();
+    expect(searchMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        courtName: "Madras",
+      }),
+    );
+  });
+
   it("suppresses garbled OCR result cards when readable authority results exist", async () => {
     searchMock.mockResolvedValue({
       query:
