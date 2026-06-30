@@ -174,12 +174,14 @@ def _lookup_health(
 
 def _insert_health_if_missing(session: Session, *, values: dict[str, str]) -> bool:
     dialect_name = session.get_bind().dialect.name
-    if dialect_name == "postgresql":
-        from sqlalchemy.dialects.postgresql import insert as dialect_insert
-    elif dialect_name == "sqlite":
-        from sqlalchemy.dialects.sqlite import insert as dialect_insert
-    else:
+    if dialect_name != "postgresql":
+        # SQLite writes must go through CaseOpsSession.flush(), which holds
+        # the process-wide SQLite write lock until commit/rollback. A direct
+        # Core upsert bypasses that lock and can still fail with
+        # "database is locked" under concurrent TestClient requests.
         return False
+
+    from sqlalchemy.dialects.postgresql import insert as dialect_insert
 
     statement = (
         dialect_insert(ConnectorHealthRecord)
