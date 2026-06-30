@@ -21,6 +21,7 @@ export default defineConfig({
   testMatch: [
     /marketing\.spec\.ts/,
     /app-spine\.spec\.ts/,
+    /functional-qa-regression\.spec\.ts/,
     /a11y\.spec\.ts/,
     /query-states\.spec\.ts/,
     /personas\.spec\.ts/,

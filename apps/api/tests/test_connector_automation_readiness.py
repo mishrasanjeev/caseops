@@ -8,11 +8,19 @@ delivery defaults.
 
 from __future__ import annotations
 
+from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
-from caseops_api.db.models import DriveFileCandidate, InboundEmailEvent, Matter
+from caseops_api.db.models import (
+    ConnectorHealthRecord,
+    DriveFileCandidate,
+    InboundEmailEvent,
+    Matter,
+)
 from caseops_api.db.session import get_session_factory
 from tests.test_legalworkspace_calendar_sync import (
     _auth,
@@ -50,6 +58,50 @@ def test_connector_health_is_durable_and_token_safe(client: TestClient) -> None:
 
     platform = client.get("/api/platform-admin/integrations/health", headers=_auth(token))
     assert platform.status_code == 403, platform.text
+
+
+def test_admin_integrations_concurrent_reads_do_not_duplicate_health_records(
+    client: TestClient,
+) -> None:
+    bootstrap = _bootstrap_company(
+        client,
+        slug="connector-health-race",
+        email="owner@connector-health-race.example",
+    )
+    token = str(bootstrap["access_token"])
+    company_id = str(bootstrap["company"]["id"])
+    paths = [
+        "/api/admin/integrations",
+        "/api/admin/integrations/health",
+        "/api/admin/integrations",
+        "/api/admin/integrations/health",
+        "/api/admin/integrations",
+        "/api/admin/integrations/health",
+    ]
+
+    def request(path: str) -> tuple[int, str]:
+        response = client.get(path, headers=_auth(token))
+        return response.status_code, response.text
+
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        results = list(executor.map(request, paths))
+
+    assert all(status == 200 for status, _ in results), results
+
+    factory = get_session_factory()
+    with factory() as session:
+        rows = list(
+            session.scalars(
+                select(ConnectorHealthRecord).where(
+                    ConnectorHealthRecord.company_id == company_id
+                )
+            )
+        )
+
+    keys = [(row.provider, row.account_ref_hash) for row in rows]
+    duplicates = {key: count for key, count in Counter(keys).items() if count > 1}
+    assert duplicates == {}
+    assert len(rows) >= 11
 
 
 def test_microsoft365_configuration_masks_secret_and_reports_blocked_readiness(
