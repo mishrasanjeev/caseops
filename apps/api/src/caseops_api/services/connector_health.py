@@ -4,6 +4,7 @@ import hashlib
 from datetime import UTC, datetime
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from caseops_api.core.settings import get_settings
@@ -103,22 +104,96 @@ def _get_or_create_health(
     provider: str,
     account_ref_hash: str = _TENANT_ACCOUNT,
 ) -> ConnectorHealthRecord:
-    row = session.scalar(
+    provider_key = str(provider)
+    for candidate in [*session.new, *session.identity_map.values()]:
+        if (
+            isinstance(candidate, ConnectorHealthRecord)
+            and candidate.company_id == company_id
+            and candidate.provider == provider_key
+            and candidate.account_ref_hash == account_ref_hash
+        ):
+            return candidate
+
+    row = _lookup_health(
+        session,
+        company_id=company_id,
+        provider=provider_key,
+        account_ref_hash=account_ref_hash,
+    )
+    if row is not None:
+        return row
+
+    values = {
+        "company_id": company_id,
+        "provider": provider_key,
+        "account_ref_hash": account_ref_hash,
+    }
+    if _insert_health_if_missing(session, values=values):
+        row = _lookup_health(
+            session,
+            company_id=company_id,
+            provider=provider_key,
+            account_ref_hash=account_ref_hash,
+        )
+        if row is not None:
+            return row
+
+    row = ConnectorHealthRecord(**values)
+    try:
+        with session.begin_nested():
+            session.add(row)
+            session.flush()
+    except IntegrityError:
+        row = _lookup_health(
+            session,
+            company_id=company_id,
+            provider=provider_key,
+            account_ref_hash=account_ref_hash,
+        )
+        if row is not None:
+            return row
+        raise
+    return row
+
+
+def _lookup_health(
+    session: Session,
+    *,
+    company_id: str,
+    provider: str,
+    account_ref_hash: str,
+) -> ConnectorHealthRecord | None:
+    return session.scalar(
         select(ConnectorHealthRecord).where(
             ConnectorHealthRecord.company_id == company_id,
             ConnectorHealthRecord.provider == provider,
             ConnectorHealthRecord.account_ref_hash == account_ref_hash,
         )
     )
-    if row is None:
-        row = ConnectorHealthRecord(
-            company_id=company_id,
-            provider=provider,
-            account_ref_hash=account_ref_hash,
+
+
+def _insert_health_if_missing(session: Session, *, values: dict[str, str]) -> bool:
+    dialect_name = session.get_bind().dialect.name
+    if dialect_name == "postgresql":
+        from sqlalchemy.dialects.postgresql import insert as dialect_insert
+    elif dialect_name == "sqlite":
+        from sqlalchemy.dialects.sqlite import insert as dialect_insert
+    else:
+        return False
+
+    statement = (
+        dialect_insert(ConnectorHealthRecord)
+        .values(**values)
+        .on_conflict_do_nothing(
+            index_elements=[
+                ConnectorHealthRecord.company_id,
+                ConnectorHealthRecord.provider,
+                ConnectorHealthRecord.account_ref_hash,
+            ]
         )
-        session.add(row)
-        session.flush()
-    return row
+    )
+    session.execute(statement)
+    return True
 
 
 def _update_health(

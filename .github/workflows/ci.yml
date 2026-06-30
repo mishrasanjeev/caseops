@@ -42,7 +42,11 @@ jobs:
   api-test-shards:
     name: API pytest coverage shard ${{ matrix.shard }}/${{ matrix.total_shards }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Shard 2 currently runs close to 30 minutes under coverage on hosted
+    # runners. Keep enough budget for pytest's final report plus coverage
+    # artifact preparation so a successful shard is not cancelled during
+    # teardown.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
