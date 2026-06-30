@@ -253,6 +253,8 @@ describe("NewMatterDialog", () => {
     await user.type(await screen.findByLabelText("Title"), "  Spine matter  ");
     await user.type(screen.getByLabelText("Matter code"), "  blr-001  ");
     await user.type(screen.getByLabelText("Practice area"), "Commercial");
+    await user.type(screen.getByLabelText("Case number"), " WP(C) 1/2026 ");
+    await user.type(screen.getByLabelText("CNR number"), " dlhc-0100-1234-2026 ");
     await user.click(screen.getByRole("button", { name: /Create matter/i }));
 
     await waitFor(() => expect(createMatterMock).toHaveBeenCalledTimes(1));
@@ -261,6 +263,8 @@ describe("NewMatterDialog", () => {
         title: "Spine matter",
         matter_code: "BLR-001",
         practice_area: "Commercial",
+        case_number: "WP(C) 1/2026",
+        cnr_number: "dlhc-0100-1234-2026",
         forum_level: "high_court",
         court_id: "delhi-hc",
         court_name: "Delhi High Court",

@@ -59,6 +59,8 @@ const schema = z.object({
   practice_area: z.string().min(2, "Practice area helps classify the work."),
   client_name: z.string().optional(),
   opposing_party: z.string().optional(),
+  case_number: z.string().max(120, "Case number is too long.").optional(),
+  cnr_number: z.string().max(32, "CNR number is too long.").optional(),
   status: z.enum(["intake", "active", "on_hold", "disposed"]),
   description: z.string().max(2000).optional(),
 });
@@ -89,6 +91,8 @@ export function NewMatterDialog() {
       matter_code: "",
       client_name: "",
       opposing_party: "",
+      case_number: "",
+      cnr_number: "",
       practice_area: "",
       status: "intake",
       description: "",
@@ -156,6 +160,8 @@ export function NewMatterDialog() {
         matter_code: normalizeMatterCodeInput(values.matter_code),
         client_name: values.client_name?.trim() || undefined,
         opposing_party: values.opposing_party?.trim() || undefined,
+        case_number: values.case_number?.trim() || undefined,
+        cnr_number: values.cnr_number?.trim() || undefined,
         practice_area: values.practice_area?.trim() || undefined,
         description: values.description?.trim() || undefined,
         forum_level: forumSelection.forum_level,
@@ -254,6 +260,28 @@ export function NewMatterDialog() {
                 aria-describedby={errorId}
                 placeholder="State of Karnataka"
                 {...form.register("opposing_party")}
+              />
+            )}
+          </Field>
+          <Field label="Case number" error={form.formState.errors.case_number?.message}>
+            {({ fieldId, errorId, invalid }) => (
+              <Input
+                id={fieldId}
+                aria-invalid={invalid || undefined}
+                aria-describedby={errorId}
+                placeholder="WP(C) 1/2026"
+                {...form.register("case_number")}
+              />
+            )}
+          </Field>
+          <Field label="CNR number" error={form.formState.errors.cnr_number?.message}>
+            {({ fieldId, errorId, invalid }) => (
+              <Input
+                id={fieldId}
+                aria-invalid={invalid || undefined}
+                aria-describedby={errorId}
+                placeholder="DLHC010012342026"
+                {...form.register("cnr_number")}
               />
             )}
           </Field>

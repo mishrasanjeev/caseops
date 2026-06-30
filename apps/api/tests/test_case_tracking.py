@@ -10,10 +10,13 @@ from sqlalchemy import func, select
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     AuditEvent,
+    CaseTrackingSupportMatrix,
     Company,
     CompanyMembership,
+    MatterActivity,
     NotificationDeliveryIntent,
     TrackedCase,
+    TrackedCaseBookmark,
     TrackedCaseUpdate,
     User,
 )
@@ -132,6 +135,176 @@ def test_case_tracking_provider_disabled_state_is_safe(client: TestClient) -> No
     )
     assert search.status_code == 503
     assert "disabled" in search.json()["detail"].lower()
+
+
+def test_matter_create_auto_links_case_tracking_bookmark_when_provider_configured(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    token = _bootstrap(client)
+    monkeypatch.setenv("CASEOPS_CASE_TRACKING_ENABLED", "true")
+    monkeypatch.setenv("CASEOPS_CASE_TRACKING_PROVIDER", "ecourtsindia")
+    monkeypatch.setenv("CASEOPS_ECOURTSINDIA_API_BASE_URL", "https://provider.example")
+    monkeypatch.setenv("CASEOPS_ECOURTSINDIA_API_TOKEN", "server-side-token")
+    get_settings.cache_clear()
+
+    create = client.post(
+        "/api/matters/",
+        headers=auth_headers(token),
+        json={
+            "title": "Hari auto eCourt sync matter",
+            "matter_code": "AUTO-ECT-001",
+            "practice_area": "litigation",
+            "forum_level": "high_court",
+            "court_name": "Delhi High Court",
+            "client_name": "Example Petitioner",
+            "opposing_party": "Example Respondent",
+            "case_number": "WP(C) 1/2026",
+            "cnr_number": "dlhc-0100-1234-2026",
+            "status": "intake",
+        },
+    )
+    assert create.status_code == 200, create.text
+    matter_id = create.json()["id"]
+
+    listed = client.get("/api/case-tracking/bookmarks", headers=auth_headers(token))
+    assert listed.status_code == 200, listed.text
+    bookmarks = listed.json()["bookmarks"]
+    assert len(bookmarks) == 1
+    assert bookmarks[0]["matter_id"] == matter_id
+    assert bookmarks[0]["name"] == "AUTO-ECT-001"
+    assert bookmarks[0]["tracked_case"]["cnr_number"] == "DLHC010012342026"
+    assert bookmarks[0]["tracked_case"]["case_number"] == "WP(C) 1/2026"
+    assert bookmarks[0]["tracked_case"]["court_name"] == "Delhi High Court"
+
+    with get_session_factory()() as session:
+        bookmark = session.scalar(select(TrackedCaseBookmark))
+        assert bookmark is not None
+        assert bookmark.matter_id == matter_id
+        activity = session.scalar(
+            select(MatterActivity).where(
+                MatterActivity.matter_id == matter_id,
+                MatterActivity.event_type == "case_tracking_linked",
+            )
+        )
+        assert activity is not None
+        created_audit = session.scalar(
+            select(AuditEvent).where(
+                AuditEvent.action == "matter.created",
+                AuditEvent.matter_id == matter_id,
+            )
+        )
+        assert created_audit is not None
+        created_metadata = json.loads(created_audit.metadata_json or "{}")
+        assert created_metadata["case_tracking_auto_link"]["status"] == "linked"
+        bookmark_audit = session.scalar(
+            select(AuditEvent).where(
+                AuditEvent.action == "case_tracking.bookmark_created",
+                AuditEvent.matter_id == matter_id,
+            )
+        )
+        assert bookmark_audit is not None
+        bookmark_metadata = json.loads(bookmark_audit.metadata_json or "{}")
+        assert bookmark_metadata["origin"] == "matter_create_auto_link"
+
+
+def test_matter_create_with_case_identity_does_not_fail_when_tracking_disabled(
+    client: TestClient,
+) -> None:
+    token = _bootstrap(client)
+
+    create = client.post(
+        "/api/matters/",
+        headers=auth_headers(token),
+        json={
+            "title": "Disabled tracking matter",
+            "matter_code": "AUTO-ECT-DISABLED",
+            "practice_area": "litigation",
+            "forum_level": "high_court",
+            "court_name": "Delhi High Court",
+            "case_number": "WP(C) 2/2026",
+            "cnr_number": "DLHC010022222026",
+            "status": "intake",
+        },
+    )
+    assert create.status_code == 200, create.text
+    matter_id = create.json()["id"]
+    listed = client.get("/api/case-tracking/bookmarks", headers=auth_headers(token))
+    assert listed.status_code == 200, listed.text
+    assert listed.json()["bookmarks"] == []
+
+    with get_session_factory()() as session:
+        created_audit = session.scalar(
+            select(AuditEvent).where(
+                AuditEvent.action == "matter.created",
+                AuditEvent.matter_id == matter_id,
+            )
+        )
+        assert created_audit is not None
+        created_metadata = json.loads(created_audit.metadata_json or "{}")
+        assert created_metadata["case_tracking_auto_link"] == {
+            "status": "skipped",
+            "reason": "case_tracking_disabled",
+        }
+
+
+def test_matter_create_auto_link_is_non_blocking_when_support_matrix_blocks_court(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    token = _bootstrap(client)
+    monkeypatch.setenv("CASEOPS_CASE_TRACKING_ENABLED", "true")
+    monkeypatch.setenv("CASEOPS_CASE_TRACKING_PROVIDER", "ecourtsindia")
+    monkeypatch.setenv("CASEOPS_ECOURTSINDIA_API_BASE_URL", "https://provider.example")
+    monkeypatch.setenv("CASEOPS_ECOURTSINDIA_API_TOKEN", "server-side-token")
+    get_settings.cache_clear()
+
+    with get_session_factory()() as session:
+        session.add(
+            CaseTrackingSupportMatrix(
+                provider="ecourtsindia",
+                court="Delhi High Court",
+                bench_jurisdiction=None,
+                lookup_method="cnr",
+                enabled=False,
+                tenant_visible=True,
+            )
+        )
+        session.commit()
+
+    create = client.post(
+        "/api/matters/",
+        headers=auth_headers(token),
+        json={
+            "title": "Support matrix blocked matter",
+            "matter_code": "AUTO-ECT-BLOCKED",
+            "practice_area": "litigation",
+            "forum_level": "high_court",
+            "court_name": "Delhi High Court",
+            "case_number": "WP(C) 3/2026",
+            "cnr_number": "DLHC010033332026",
+            "status": "intake",
+        },
+    )
+    assert create.status_code == 200, create.text
+    matter_id = create.json()["id"]
+
+    listed = client.get("/api/case-tracking/bookmarks", headers=auth_headers(token))
+    assert listed.status_code == 200, listed.text
+    assert listed.json()["bookmarks"] == []
+    with get_session_factory()() as session:
+        assert session.scalar(select(TrackedCaseBookmark)) is None
+        created_audit = session.scalar(
+            select(AuditEvent).where(
+                AuditEvent.action == "matter.created",
+                AuditEvent.matter_id == matter_id,
+            )
+        )
+        assert created_audit is not None
+        created_metadata = json.loads(created_audit.metadata_json or "{}")
+        auto_link = created_metadata["case_tracking_auto_link"]
+        assert auto_link["status"] == "blocked"
+        assert "not enabled" in auto_link["reason"]
 
 
 def test_case_tracking_search_accepts_general_party_query(

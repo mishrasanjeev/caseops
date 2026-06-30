@@ -5170,6 +5170,8 @@ export async function createMatter(input: {
   court_id?: string | null;
   client_name?: string;
   opposing_party?: string;
+  case_number?: string;
+  cnr_number?: string;
   description?: string;
   court_name?: string;
   forum_catalog_entry_id?: string | null;

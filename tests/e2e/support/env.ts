@@ -37,5 +37,9 @@ export const e2eEnv: Record<string, string> = {
   CASEOPS_DOCUMENT_STORAGE_PATH: toPosixPath(documentStoragePath),
   CASEOPS_DOCUMENT_STORAGE_CACHE_PATH: toPosixPath(documentCachePath),
   CASEOPS_AUTH_RATE_LIMIT_ENABLED: "false",
+  CASEOPS_CASE_TRACKING_ENABLED: "true",
+  CASEOPS_CASE_TRACKING_PROVIDER: "ecourtsindia",
+  CASEOPS_ECOURTSINDIA_API_BASE_URL: "https://provider.example",
+  CASEOPS_ECOURTSINDIA_API_TOKEN: "e2e-provider-token",
   UV_CACHE_DIR: toPosixPath(uvCacheDir),
 };
