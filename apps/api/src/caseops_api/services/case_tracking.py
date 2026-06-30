@@ -119,6 +119,31 @@ class CaseTrackingWindowState:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class BookmarkMutationResult:
+    bookmark: TrackedCaseBookmark
+    tracked_case: TrackedCase
+    created: bool
+
+
+@dataclass(frozen=True, slots=True)
+class MatterCaseTrackingAutoLinkResult:
+    status: str
+    reason: str | None = None
+    bookmark_id: str | None = None
+    tracked_case_id: str | None = None
+
+    def metadata(self) -> dict[str, object]:
+        data: dict[str, object] = {"status": self.status}
+        if self.reason:
+            data["reason"] = self.reason
+        if self.bookmark_id:
+            data["bookmark_id_sha256"] = _hash_value(self.bookmark_id)
+        if self.tracked_case_id:
+            data["tracked_case_id_sha256"] = _hash_value(self.tracked_case_id)
+        return data
+
+
 def _parse_window_time(value: str, *, field: str) -> datetime_time:
     try:
         hour, minute = value.split(":", 1)
@@ -411,6 +436,91 @@ def _find_tracked_case(
     return session.scalar(statement)
 
 
+def _create_or_get_bookmark(
+    session: Session,
+    *,
+    context: SessionContext,
+    payload: CaseTrackingBookmarkCreateRequest,
+    matter: Matter | None,
+) -> BookmarkMutationResult:
+    normalized_cnr = normalize_cnr(payload.cnr_number)
+    normalized_case = normalize_case_number(payload.case_number)
+    normalized_court = _normalize_court_code(payload.court_code)
+    identity_key = _tracked_case_identity_key(
+        cnr_number=payload.cnr_number,
+        case_number=payload.case_number,
+        court_code=payload.court_code,
+    )
+    tracked_case = _find_tracked_case(
+        session,
+        company_id=context.company.id,
+        provider=payload.provider,
+        cnr_number=payload.cnr_number,
+        case_number=payload.case_number,
+        court_code=payload.court_code,
+    )
+    scope_key = _bookmark_scope_key(matter)
+    if tracked_case is not None:
+        existing = session.scalar(
+            select(TrackedCaseBookmark).where(
+                TrackedCaseBookmark.company_id == context.company.id,
+                TrackedCaseBookmark.tracked_case_id == tracked_case.id,
+                TrackedCaseBookmark.created_by_membership_id == context.membership.id,
+                TrackedCaseBookmark.active_scope_key == scope_key,
+            )
+        )
+        if existing is not None:
+            return BookmarkMutationResult(
+                bookmark=existing,
+                tracked_case=tracked_case,
+                created=False,
+            )
+
+    from caseops_api.services.saas_billing import assert_tracked_case_limit
+
+    assert_tracked_case_limit(session, context=context)
+    if tracked_case is None:
+        tracked_case = TrackedCase(
+            company_id=context.company.id,
+            provider=payload.provider,
+            identity_key=identity_key,
+            cnr_number=normalized_cnr,
+            normalized_cnr_number=normalized_cnr,
+            case_number=payload.case_number,
+            normalized_case_number=normalized_case,
+            court_code=normalized_court,
+            court_name=payload.court_name,
+            case_title=payload.case_title,
+            party_names_json=payload.party_names,
+            current_status=payload.current_status,
+            current_stage=payload.current_stage,
+            next_hearing_on=payload.next_hearing_on,
+            last_snapshot_hash=_hash_value(
+                {
+                    "status": payload.current_status,
+                    "stage": payload.current_stage,
+                    "next_hearing_on": payload.next_hearing_on,
+                }
+            ),
+            metadata_json=payload.metadata,
+        )
+        session.add(tracked_case)
+        session.flush()
+    bookmark = TrackedCaseBookmark(
+        company_id=context.company.id,
+        tracked_case_id=tracked_case.id,
+        created_by_membership_id=context.membership.id,
+        matter_id=matter.id if matter else None,
+        scope_key=scope_key,
+        active_scope_key=scope_key,
+        name=payload.name,
+        notification_enabled=payload.notification_enabled,
+    )
+    session.add(bookmark)
+    session.flush()
+    return BookmarkMutationResult(bookmark=bookmark, tracked_case=tracked_case, created=True)
+
+
 def _tenant_safe_metadata(metadata: dict[str, object]) -> dict[str, object]:
     safe: dict[str, object] = {}
     for key, value in metadata.items():
@@ -481,75 +591,16 @@ def create_bookmark(
         court_name=payload.court_name,
     )
     matter = _matter_or_none(session, context=context, matter_id=payload.matter_id)
-    normalized_cnr = normalize_cnr(payload.cnr_number)
-    normalized_case = normalize_case_number(payload.case_number)
-    normalized_court = _normalize_court_code(payload.court_code)
-    identity_key = _tracked_case_identity_key(
-        cnr_number=payload.cnr_number,
-        case_number=payload.case_number,
-        court_code=payload.court_code,
-    )
-    tracked_case = _find_tracked_case(
+    mutation = _create_or_get_bookmark(
         session,
-        company_id=context.company.id,
-        provider=payload.provider,
-        cnr_number=payload.cnr_number,
-        case_number=payload.case_number,
-        court_code=payload.court_code,
+        context=context,
+        payload=payload,
+        matter=matter,
     )
-    if tracked_case is None:
-        tracked_case = TrackedCase(
-            company_id=context.company.id,
-            provider=payload.provider,
-            identity_key=identity_key,
-            cnr_number=normalized_cnr,
-            normalized_cnr_number=normalized_cnr,
-            case_number=payload.case_number,
-            normalized_case_number=normalized_case,
-            court_code=normalized_court,
-            court_name=payload.court_name,
-            case_title=payload.case_title,
-            party_names_json=payload.party_names,
-            current_status=payload.current_status,
-            current_stage=payload.current_stage,
-            next_hearing_on=payload.next_hearing_on,
-            last_snapshot_hash=_hash_value(
-                {
-                    "status": payload.current_status,
-                    "stage": payload.current_stage,
-                    "next_hearing_on": payload.next_hearing_on,
-                }
-            ),
-            metadata_json=payload.metadata,
-        )
-        session.add(tracked_case)
-        session.flush()
-    scope_key = _bookmark_scope_key(matter)
-    existing = session.scalar(
-        select(TrackedCaseBookmark).where(
-            TrackedCaseBookmark.company_id == context.company.id,
-            TrackedCaseBookmark.tracked_case_id == tracked_case.id,
-            TrackedCaseBookmark.created_by_membership_id == context.membership.id,
-            TrackedCaseBookmark.active_scope_key == scope_key,
-        )
-    )
-    if existing is not None:
-        return _bookmark_record(session, existing)
-    from caseops_api.services.saas_billing import assert_tracked_case_limit
-
-    assert_tracked_case_limit(session, context=context)
-    bookmark = TrackedCaseBookmark(
-        company_id=context.company.id,
-        tracked_case_id=tracked_case.id,
-        created_by_membership_id=context.membership.id,
-        matter_id=matter.id if matter else None,
-        scope_key=scope_key,
-        active_scope_key=scope_key,
-        name=payload.name,
-        notification_enabled=payload.notification_enabled,
-    )
-    session.add(bookmark)
-    session.flush()
+    bookmark = mutation.bookmark
+    tracked_case = mutation.tracked_case
+    if not mutation.created:
+        return _bookmark_record(session, bookmark)
     record_from_context(
         session,
         context,
@@ -568,6 +619,99 @@ def create_bookmark(
     session.commit()
     session.refresh(bookmark)
     return _bookmark_record(session, bookmark)
+
+
+def auto_link_matter_case_tracking(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter: Matter,
+) -> MatterCaseTrackingAutoLinkResult:
+    enabled, provider, configured, reason = provider_status()
+    if not enabled:
+        return MatterCaseTrackingAutoLinkResult(
+            status="skipped",
+            reason="case_tracking_disabled",
+        )
+    if not configured or provider != "ecourtsindia":
+        return MatterCaseTrackingAutoLinkResult(
+            status="skipped",
+            reason=reason or "case_tracking_provider_unconfigured",
+        )
+
+    normalized_cnr = normalize_cnr(matter.cnr_number)
+    cnr_number = matter.cnr_number if normalized_cnr and len(normalized_cnr) >= 8 else None
+    case_number = matter.case_number if normalize_case_number(matter.case_number) else None
+    if not cnr_number and not case_number:
+        return MatterCaseTrackingAutoLinkResult(
+            status="skipped",
+            reason="missing_case_identity",
+        )
+
+    party_names = [
+        value
+        for value in [matter.client_name, matter.opposing_party]
+        if value and value.strip()
+    ]
+    payload = CaseTrackingBookmarkCreateRequest(
+        provider=provider,
+        cnr_number=cnr_number,
+        case_number=case_number,
+        court_name=matter.court_name,
+        case_title=matter.title,
+        party_names=party_names,
+        next_hearing_on=matter.next_hearing_on,
+        matter_id=matter.id,
+        name=matter.matter_code,
+        notification_enabled=True,
+        metadata={
+            "source": "matter_create_auto_link",
+            "matter_code": matter.matter_code,
+        },
+    )
+    try:
+        from caseops_api.services.production_safety import assert_case_tracking_supported
+
+        assert_case_tracking_supported(
+            session,
+            provider=payload.provider,
+            court_code=payload.court_code,
+            court_name=payload.court_name,
+        )
+        mutation = _create_or_get_bookmark(
+            session,
+            context=context,
+            payload=payload,
+            matter=matter,
+        )
+    except HTTPException as exc:
+        return MatterCaseTrackingAutoLinkResult(
+            status="blocked",
+            reason=str(exc.detail),
+        )
+
+    if mutation.created:
+        record_from_context(
+            session,
+            context,
+            action="case_tracking.bookmark_created",
+            target_type="tracked_case_bookmark",
+            target_id=mutation.bookmark.id,
+            matter_id=mutation.bookmark.matter_id,
+            metadata={
+                "tracked_case_id_sha256": _hash_value(mutation.tracked_case.id),
+                "provider": mutation.tracked_case.provider,
+                "has_cnr": bool(mutation.tracked_case.cnr_number),
+                "has_case_number": bool(mutation.tracked_case.case_number),
+                "notification_enabled": mutation.bookmark.notification_enabled,
+                "origin": "matter_create_auto_link",
+            },
+        )
+    return MatterCaseTrackingAutoLinkResult(
+        status="linked" if mutation.created else "already_linked",
+        bookmark_id=mutation.bookmark.id,
+        tracked_case_id=mutation.tracked_case.id,
+    )
 
 
 def _get_bookmark(

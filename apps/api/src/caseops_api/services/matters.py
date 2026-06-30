@@ -82,6 +82,7 @@ from caseops_api.schemas.matters import (
     normalize_matter_code,
 )
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.case_tracking import auto_link_matter_case_tracking
 from caseops_api.services.conflict_checks import (
     ConflictGateDecision,
     evaluate_matter_opening_gate,
@@ -1166,6 +1167,20 @@ def create_matter(
         title="Matter created",
         detail=f"{matter.matter_code} created as {matter.status}.",
     )
+    case_tracking_auto_link = auto_link_matter_case_tracking(
+        session,
+        context=context,
+        matter=matter,
+    )
+    if case_tracking_auto_link.status in {"linked", "already_linked"}:
+        _append_activity(
+            session,
+            matter_id=matter.id,
+            actor_membership_id=context.membership.id,
+            event_type="case_tracking_linked",
+            title="Case tracking linked",
+            detail="eCourt case tracking was linked for this matter.",
+        )
     record_from_context(
         session,
         context,
@@ -1186,6 +1201,7 @@ def create_matter(
             "forum_consumer_level": matter.forum_consumer_level,
             "claim_amount_minor": matter.claim_amount_minor,
             "claim_currency": matter.claim_currency,
+            "case_tracking_auto_link": case_tracking_auto_link.metadata(),
         },
     )
     session.commit()

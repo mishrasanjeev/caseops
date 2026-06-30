@@ -818,3 +818,37 @@ Local verification on 2026-06-29:
 - `npx playwright test --config .tmp\hari26.no-webserver.playwright.config.ts tests/e2e/hari-2026-06-29-bugs.spec.ts tests/e2e/hari-2026-06-27-bugs.spec.ts --project app-chromium` with manually started local e2e API/web servers - PASS, 5 tests.
 
 Reopen learning: `docs/BUG_REOPEN_LEARNINGS_2026-06-29_HARI.md`.
+
+---
+
+## Hari 2026-06-30 batch
+
+Source workbook: `C:\Users\mishr\Downloads\CaseOps Bugs_Hari30Jun2026.xlsx`.
+
+| ID | Severity | Verdict | Area | Notes |
+|----|----------|---------|------|-------|
+| bug-001 | High | Locally fixed; formal production verdict Inconclusive | Matter Management / Matter Creation / eCourt Integration | Valid bug. Direct matter creation now auto-registers a matter-scoped case-tracking bookmark when case tracking is enabled/configured and the matter has a valid CNR or case number. The `/app/matters` New Matter dialog now captures and submits case number + CNR; a backend-only fix would have left the reported UI path broken. |
+| case-reopening audit | High | Process learning updated | Cross-product regression quality | Reopen cause was shallow proof: prior eCourt work tested manual sync/bookmark flows, not the matter-create lifecycle invariant. |
+
+Regression evidence added:
+
+- `apps/api/src/caseops_api/services/case_tracking.py` - reusable bookmark upsert and matter-create auto-link helper.
+- `apps/api/src/caseops_api/services/matters.py` - direct create path calls the helper and records auditable auto-link metadata.
+- `apps/web/components/app/NewMatterDialog.tsx` - New Matter UI captures case number and CNR.
+- `apps/api/tests/test_case_tracking.py` - configured auto-link, disabled-provider non-blocking create, support-matrix-blocked non-blocking create.
+- `apps/web/components/app/NewMatterDialog.test.tsx` - UI submits case identity fields.
+- `tests/e2e/hari-2026-06-30-bugs.spec.ts` - browser workflow creates the matter from `/app/matters` and verifies Case Tracking contains the linked CNR/case.
+- `playwright.app.config.ts` - June 30 Playwright regression registered in the normal app suite.
+- `docs/BUG_REOPEN_LEARNINGS_2026-06-30_HARI.md` - root cause and permanent learning added.
+
+Local verification on 2026-06-30:
+
+- `apps\api\.venv\Scripts\ruff.exe check apps/api/src/caseops_api/services/case_tracking.py apps/api/src/caseops_api/services/matters.py apps/api/tests/test_case_tracking.py` - PASS.
+- `apps\api\.venv\Scripts\pytest.exe apps/api/tests/test_case_tracking.py` - PASS, 11 tests.
+- `apps\api\.venv\Scripts\pytest.exe apps/api/tests/test_audit_events.py` - PASS, 6 tests.
+- `npm --prefix apps/web test -- components/app/NewMatterDialog.test.tsx` - PASS, 10 tests.
+- `npm run typecheck:web` - PASS.
+- `npm run build:web` - PASS.
+- `npx playwright test --config .tmp\hari26.no-webserver.playwright.config.ts tests/e2e/hari-2026-06-30-bugs.spec.ts --project app-chromium` with manually started local e2e API/web servers - PASS, 1 test.
+
+Reopen learning: `docs/BUG_REOPEN_LEARNINGS_2026-06-30_HARI.md`.
