@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import csv
 import hashlib
-import io
 import json
 from collections.abc import Iterable
 from datetime import UTC, date, datetime, time, timedelta
@@ -74,6 +72,7 @@ from caseops_api.schemas.saas_billing import (
     TrialStartRequest,
 )
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.csv_security import csv_bytes
 from caseops_api.services.pine_labs import (
     PineLabsGatewayClient,
     PineLabsPaymentStatusResult,
@@ -1722,18 +1721,9 @@ def list_invoices(session: Session, *, context: SessionContext) -> BillingInvoic
     )
 
 
-def _csv_bytes(headers: list[str], rows: Iterable[Iterable[Any]]) -> bytes:
-    buffer = io.StringIO()
-    writer = csv.writer(buffer)
-    writer.writerow(headers)
-    for row in rows:
-        writer.writerow([str(value) if value is not None else "" for value in row])
-    return buffer.getvalue().encode("utf-8")
-
-
 def credit_ledger_csv(session: Session, *, context: SessionContext) -> bytes:
     rows = credit_ledger(session, context=context).rows
-    return _csv_bytes(
+    return csv_bytes(
         [
             "created_at",
             "bucket",
@@ -1770,7 +1760,7 @@ def payments_csv(session: Session, *, context: SessionContext) -> bytes:
             .order_by(BillingPaymentOrder.created_at.desc())
         )
     )
-    return _csv_bytes(
+    return csv_bytes(
         [
             "created_at",
             "merchant_reference",
@@ -1799,7 +1789,7 @@ def payments_csv(session: Session, *, context: SessionContext) -> bytes:
 
 def spend_csv(session: Session, *, context: SessionContext) -> bytes:
     report = usage_report(session, context=context)
-    return _csv_bytes(
+    return csv_bytes(
         ["key", "label", "quantity", "credits"],
         ((row.key, row.label, row.quantity, row.credits) for row in report.by_feature),
     )
@@ -1819,7 +1809,7 @@ def statement_csv(session: Session, *, context: SessionContext) -> bytes:
         for invoice in invoices
     )
     rows.extend(("credit", row.event_type, row.delta) for row in ledger[:50])
-    return _csv_bytes(["kind", "reference", "amount_or_delta"], rows)
+    return csv_bytes(["kind", "reference", "amount_or_delta"], rows)
 
 
 def _ascii_pdf_text(value: object) -> str:
@@ -2654,7 +2644,7 @@ def _profit_rollup_record(
 
 
 def platform_profit_csv(session: Session) -> bytes:
-    return _csv_bytes(
+    return csv_bytes(
         [
             "company_id",
             "company_name",
@@ -2711,7 +2701,7 @@ def platform_revenue_csv(session: Session) -> bytes:
             .order_by(BillingPaymentOrder.paid_at.desc())
         )
     )
-    return _csv_bytes(
+    return csv_bytes(
         ["paid_at", "company_id", "merchant_reference", "amount_paid_minor", "tax_amount_minor"],
         (
             (

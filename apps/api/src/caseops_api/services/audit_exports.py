@@ -41,6 +41,7 @@ from caseops_api.db.models import (
 )
 from caseops_api.db.session import get_session_factory
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.csv_security import csv_safe_mapping
 from caseops_api.services.document_storage import (
     persist_workspace_attachment,
     resolve_storage_path,
@@ -206,7 +207,7 @@ def _iter_events_csv(events: list[AuditEvent]) -> Iterator[bytes]:
             if row["metadata"] is not None
             else ""
         )
-        writer.writerow(row)
+        writer.writerow(csv_safe_mapping(row))
         yield buffer.getvalue().encode("utf-8")
 
 

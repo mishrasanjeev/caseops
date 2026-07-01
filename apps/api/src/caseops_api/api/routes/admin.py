@@ -75,6 +75,7 @@ from caseops_api.services.calendar_sync import (
     test_outlook_tenant_configuration,
     update_outlook_tenant_configuration,
 )
+from caseops_api.services.csv_security import csv_safe_mapping
 from caseops_api.services.google_workspace import (
     google_workspace_tenant_configuration_status,
     test_google_workspace_tenant_configuration,
@@ -225,7 +226,7 @@ def export_audit_trail(
                     if row["metadata"] is not None
                     else ""
                 )
-                writer.writerow(row)
+                writer.writerow(csv_safe_mapping(row))
                 yield buffer.getvalue().encode("utf-8")
 
         return StreamingResponse(
