@@ -158,6 +158,7 @@ from caseops_api.services.court_sync_jobs import (
     create_matter_court_sync_job,
     run_matter_court_sync_job,
 )
+from caseops_api.services.csv_security import csv_safe_mapping
 from caseops_api.services.deadlines import (
     create_deadline,
     deadline_record,
@@ -686,7 +687,7 @@ async def export_current_company_matter_audit_events(
         for event in events:
             row = matter_audit_event_dict(event)
             row["metadata"] = json.dumps(row.get("metadata") or {}, sort_keys=True)
-            writer.writerow(row)
+            writer.writerow(csv_safe_mapping(row))
         buffer.seek(0)
         return StreamingResponse(
             iter([buffer.getvalue()]),

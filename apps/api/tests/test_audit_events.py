@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import csv
+import io
 import json
+from datetime import UTC, datetime
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -176,6 +179,42 @@ def test_audit_export_supports_csv_format(client: TestClient) -> None:
     exports = [e for e in events if e.action == "audit.exported"]
     assert len(exports) == 1
     assert json.loads(exports[0].metadata_json)["format"] == "csv"
+
+
+def test_audit_csv_export_escapes_formula_like_cells(client: TestClient) -> None:
+    boot = bootstrap_company(client)
+    token = str(boot["access_token"])
+    company_id = boot["company"]["id"]
+    matter_id = _matter_id(client, token, "AUD-FORMULA")
+    actor_label = '=HYPERLINK("https://evil.example")'
+
+    factory = get_session_factory()
+    with factory() as session:
+        session.add(
+            AuditEvent(
+                company_id=company_id,
+                actor_type="human",
+                actor_label=actor_label,
+                matter_id=matter_id,
+                action="audit.formula_probe",
+                target_type="matter",
+                target_id=matter_id,
+                result="success",
+                metadata_json=json.dumps({"note": "formula actor label"}),
+                created_at=datetime.now(UTC),
+            )
+        )
+        session.commit()
+
+    resp = client.get(
+        "/api/admin/audit/export?format=csv&action=audit.formula_probe",
+        headers=auth_headers(token),
+    )
+    assert resp.status_code == 200, resp.text
+    rows = list(csv.DictReader(io.StringIO(resp.text)))
+
+    assert len(rows) == 1
+    assert rows[0]["actor_label"] == f"'{actor_label}"
 
 
 def test_audit_trail_is_tenant_scoped(client: TestClient) -> None:

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import csv
+import io
 import json
 from datetime import UTC, datetime, timedelta
 
@@ -220,6 +222,14 @@ def test_matter_audit_export_is_scoped_to_current_matter_and_tenant(
         action="matter_strategy.created",
         metadata={"title": "Exported plan"},
     )
+    formula_label = '=HYPERLINK("https://evil.example")'
+    _seed_audit_event(
+        company_id=company_a,
+        matter_id=matter_a,
+        action="matter.formula_probe",
+        actor_label=formula_label,
+        metadata={"title": "Formula actor"},
+    )
     _seed_audit_event(
         company_id=company_a,
         matter_id=matter_other,
@@ -248,6 +258,9 @@ def test_matter_audit_export_is_scoped_to_current_matter_and_tenant(
     assert csv_resp.text.splitlines()[0].startswith("id,created_at,company_id")
     assert "Exported plan" in csv_resp.text
     assert "Other matter" not in csv_resp.text
+    csv_rows = list(csv.DictReader(io.StringIO(csv_resp.text)))
+    formula_row = next(row for row in csv_rows if row["action"] == "matter.formula_probe")
+    assert formula_row["actor_label"] == f"'{formula_label}"
 
     boot_b = _bootstrap(client, "lw-s11-audit-export-b")
     token_b = str(boot_b["access_token"])

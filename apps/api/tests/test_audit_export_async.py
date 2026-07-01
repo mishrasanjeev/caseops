@@ -5,9 +5,12 @@ import csv
 import io
 import json
 import time
+from datetime import UTC, datetime
 
 from fastapi.testclient import TestClient
 
+from caseops_api.db.models import AuditEvent
+from caseops_api.db.session import get_session_factory
 from tests.test_auth_company import auth_headers, bootstrap_company
 
 
@@ -99,6 +102,50 @@ def test_enqueue_then_download_csv(client: TestClient) -> None:
     rows = list(reader)
     assert rows, "CSV export had no data rows"
     assert all(r["action"] == "matter.created" for r in rows)
+
+
+def test_async_csv_download_escapes_formula_like_cells(client: TestClient) -> None:
+    boot = bootstrap_company(client)
+    token = str(boot["access_token"])
+    company_id = str(boot["company"]["id"])
+    matter_id = _matter_id(client, token, "ASY-FORMULA")
+    actor_label = '=HYPERLINK("https://evil.example")'
+
+    with get_session_factory()() as session:
+        session.add(
+            AuditEvent(
+                company_id=company_id,
+                actor_type="human",
+                actor_label=actor_label,
+                matter_id=matter_id,
+                action="audit.formula_probe",
+                target_type="matter",
+                target_id=matter_id,
+                result="success",
+                metadata_json=json.dumps({"note": "formula actor label"}),
+                created_at=datetime.now(UTC),
+            )
+        )
+        session.commit()
+
+    resp = client.post(
+        "/api/admin/audit/export/async",
+        headers=auth_headers(token),
+        json={"format": "csv", "action": "audit.formula_probe"},
+    )
+    assert resp.status_code == 202, resp.text
+    job_id = resp.json()["id"]
+    _wait_for_status(client, token, job_id, want="completed")
+
+    resp = client.get(
+        f"/api/admin/audit/export/jobs/{job_id}/download",
+        headers=auth_headers(token),
+    )
+    assert resp.status_code == 200, resp.text
+    rows = list(csv.DictReader(io.StringIO(resp.text)))
+
+    assert len(rows) == 1
+    assert rows[0]["actor_label"] == f"'{actor_label}"
 
 
 def test_download_before_completion_returns_409(client: TestClient) -> None:

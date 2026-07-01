@@ -1,12 +1,8 @@
 from __future__ import annotations
 
-import csv
 import hashlib
-import io
 import json
-from collections.abc import Iterable
 from datetime import UTC, date, datetime
-from typing import Any
 from urllib.parse import urlparse
 
 from fastapi import HTTPException, status
@@ -69,6 +65,7 @@ from caseops_api.schemas.production_safety import (
     TDSReconciliationCreateRequest,
     TenantEnterpriseReadinessResponse,
 )
+from caseops_api.services.csv_security import csv_bytes
 from caseops_api.services.pine_labs import redact_provider_payload
 from caseops_api.services.platform_audit import record_platform_audit
 from caseops_api.services.provider_costs import estimate_payment_gateway_cost_minor
@@ -170,15 +167,6 @@ SECRET_VALUE_MARKERS = (
 
 def _now() -> datetime:
     return datetime.now(UTC)
-
-
-def _csv_bytes(headers: list[str], rows: Iterable[Iterable[Any]]) -> bytes:
-    buffer = io.StringIO()
-    writer = csv.writer(buffer)
-    writer.writerow(headers)
-    for row in rows:
-        writer.writerow([str(value) if value is not None else "" for value in row])
-    return buffer.getvalue().encode("utf-8")
 
 
 def _hash_json(value: object) -> str:
@@ -1394,9 +1382,9 @@ def create_tds_row(
 def finance_export_csv(session: Session, *, report: str) -> bytes:
     rows = list_finance_rows(session, kind=report)
     if not rows:
-        return _csv_bytes(["empty"], [])
+        return csv_bytes(["empty"], [])
     headers = sorted({key for row in rows for key in row})
-    return _csv_bytes(headers, ([row.get(header) for header in headers] for row in rows))
+    return csv_bytes(headers, ([row.get(header) for header in headers] for row in rows))
 
 
 def tenant_enterprise_readiness(
