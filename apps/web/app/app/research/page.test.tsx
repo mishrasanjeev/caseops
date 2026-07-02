@@ -256,6 +256,70 @@ describe("ResearchPage", () => {
     expect(screen.queryByTestId("research-result-garbled")).not.toBeInTheDocument();
   });
 
+  it("omits an unreadable OCR-only authority card instead of rendering corrupted text", async () => {
+    searchMock.mockResolvedValue({
+      query:
+        "Cheque bounced due to insufficient funds and notice was sent after 35 days",
+      mode: "contextual",
+      provider: "caseops-authority-contextual-search-v1",
+      generated_at: "2026-07-02T00:00:00Z",
+      contextual_plan: {
+        key_facts: ["cheque dishonour"],
+        likely_issues: ["demand notice timing for cheque dishonour"],
+        statutes_or_sections: ["Section 138 Negotiable Instruments Act"],
+        procedural_posture: [],
+        jurisdiction_hints: [],
+        timing_signals: ["after 35 days"],
+        planned_query:
+          "Cheque bounced due to insufficient funds and notice was sent after 35 days",
+      },
+      coverage_notice:
+        "Indexed authority records matched the query, but their extracted text is not readable enough to preview.",
+      total_after_filter: 1,
+      offset: 0,
+      results: [
+        {
+          authority_document_id: "screenshot-garbled-cheque-138",
+          title: "[2003] 3 -- f.t 'II'. 178",
+          court_name: "Supreme Court of India",
+          forum_level: "supreme_court",
+          document_type: "judgment",
+          decision_date: "2026-06-20",
+          case_reference: "CRL.A. SCREEN/2026",
+          bench_name: null,
+          summary:
+            "[2003] 3 -- f.t 'II'. 178, ; 3ffillllll mi aRT 'A III' 1Tfffi .mi -- aRT .. 12 -- d, 2002. lila l?1t. tt. 1950, 27 3TR 28 JTR.",
+          source: "test",
+          source_reference: "https://official.example.test/screenshot.pdf",
+          snippet:
+            "Section 138 cheque notice insufficient funds after 35 days. [2003] 3 -- f.t 'II'. 178, ; 3ffillllll mi aRT 'A III' 1Tfffi .mi -- aRT .. 12 -- d, 2002. lila l?1t. tt. 1950, 27 3TR 28 JTR. SIftIII'l cff. fcIrlTT ;ifo1l. C1>lx mt fl 4<1i fclr q1fiun'l llC1>lll1a fcIrq -- fl .wf. fcIrnl -- <ITT -j+t H.",
+          score: 240,
+          matched_terms: ["cheque", "notice", "section", "138"],
+          relevance_reason:
+            "Source-backed match on Section 138 Negotiable Instruments Act.",
+          worst_treatment: null,
+          adverse_count: 0,
+        },
+      ],
+    });
+    render(withClient(<ResearchPage />));
+
+    fireEvent.click(screen.getByTestId("research-mode-contextual"));
+    fireEvent.change(screen.getByTestId("research-query-input"), {
+      target: {
+        value:
+          "Cheque bounced due to insufficient funds and notice was sent after 35 days",
+      },
+    });
+    fireEvent.click(screen.getByTestId("research-query-submit"));
+
+    expect(
+      await screen.findByText(/Matching records were omitted/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/\[2003\] 3 -- f\.t/i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId("research-result-garbled")).not.toBeInTheDocument();
+  });
+
   it("does not render the removed Judgment Alerts submodule", () => {
     render(withClient(<ResearchPage />));
 

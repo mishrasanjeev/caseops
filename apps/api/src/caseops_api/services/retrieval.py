@@ -271,6 +271,63 @@ def is_low_quality_ocr_text(text: str | None) -> bool:
         if dirty_tokens / len(tokens) > 0.3:
             return True
 
+    alpha_tokens = [token for token in tokens if re.search(r"[A-Za-z]", token)]
+    if len(alpha_tokens) >= 12:
+        suspicious = sum(1 for token in alpha_tokens if _looks_like_ocr_fragment(token))
+        if suspicious / len(alpha_tokens) > 0.35:
+            return True
+
+    return False
+
+
+_COMMON_LEGAL_ACRONYMS = {
+    "ai",
+    "arb",
+    "bns",
+    "bnss",
+    "bsa",
+    "cbi",
+    "cpc",
+    "crl",
+    "crpc",
+    "drat",
+    "drt",
+    "fir",
+    "hc",
+    "ipc",
+    "llp",
+    "ltd",
+    "nclat",
+    "nclt",
+    "ni",
+    "pdf",
+    "sc",
+    "slp",
+    "wpc",
+}
+
+
+def _looks_like_ocr_fragment(token: str) -> bool:
+    stripped = token.strip(".,;:()[]{}\"'`")
+    if len(stripped) < 3 or not re.search(r"[A-Za-z]", stripped):
+        return False
+    if re.search(r"[A-Za-z]\d|\d[A-Za-z]", stripped):
+        return True
+
+    letters = re.sub(r"[^A-Za-z]", "", stripped)
+    if len(letters) < 3:
+        return False
+    lowered = letters.lower()
+    if lowered in _COMMON_LEGAL_ACRONYMS:
+        return False
+    if len(letters) >= 4 and re.search(r"([A-Za-z])\1{3,}", letters):
+        return True
+    if len(letters) >= 4 and not re.search(r"[aeiouAEIOU]", letters):
+        return True
+    if re.search(r"[a-z][A-Z]{2,}|[A-Z][a-z][A-Z]", stripped):
+        return True
+    if len(letters) <= 5 and re.search(r"[A-Za-z].*[.:~].*[A-Za-z]", stripped):
+        return True
     return False
 
 

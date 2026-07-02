@@ -852,3 +852,41 @@ Local verification on 2026-06-30:
 - `npx playwright test --config .tmp\hari26.no-webserver.playwright.config.ts tests/e2e/hari-2026-06-30-bugs.spec.ts --project app-chromium` with manually started local e2e API/web servers - PASS, 1 test.
 
 Reopen learning: `docs/BUG_REOPEN_LEARNINGS_2026-06-30_HARI.md`.
+
+---
+
+## Hari 2026-07-02 batch
+
+Source workbook: `C:\Users\mishr\Downloads\CaseOps Bugs_Hari02Jul2026.xlsx`.
+
+| ID | Severity | Verdict | Area | Notes |
+|----|----------|---------|------|-------|
+| BUG-001 | High | Locally fixed; formal production verdict Inconclusive | Research / Context Search | Valid reopened bug. Context Research must not render corrupted authority title, summary, or snippet text. Authority search now omits unreadable preview records entirely and returns an explicit omitted-record notice when the only matches are unreadable. |
+| BUG-00X | High | Locally fixed; formal production verdict Inconclusive | Matter Management / Matter Details | Valid enhancement/bug. Notice documents already existed as attachment metadata, but the matter cockpit did not expose a Notice workflow. Matter details now include a Notices tab with notice-only listing and notice-classified upload. |
+| case-reopening audit | High | Process learning updated | Cross-product regression quality | Reopen cause was shallow OCR proof: previous fixes preserved a corrupted last-resort path and did not test the exact screenshot-shaped corpus path through the real API and browser route. |
+
+Regression evidence added:
+
+- `apps/api/src/caseops_api/services/retrieval.py` - screenshot-shaped ASCII OCR fragment detection.
+- `apps/api/src/caseops_api/services/authorities.py` - unreadable authority card suppression, readable-result backfill before final limit slicing, and contextual omitted-record coverage notice.
+- `apps/api/tests/test_authorities.py` - API proof that the exact July 2 corrupted cheque dishonour authority is omitted when no readable preview exists.
+- `apps/web/app/app/research/page.tsx` - defense-in-depth unreadable result filter and empty-state notice.
+- `apps/web/app/app/research/page.test.tsx` and `apps/web/app/app/research/isGarbledSnippet.test.ts` - UI and detector proof for the July 2 OCR shape.
+- `apps/web/components/app/MatterCockpitNav.tsx` - Notices tab registered in the matter cockpit.
+- `apps/web/app/app/matters/[id]/notices/page.tsx` - notice-only list, summary counters, and notice-classified upload workflow.
+- `apps/web/app/app/matters/[id]/notices/page.test.tsx` - notice listing and upload metadata regression.
+- `tests/e2e/hari-2026-07-02-bugs.spec.ts` - browser proof for Context Research corrupted-content omission and Matter Notices upload.
+- `playwright.app.config.ts` - July 2 Playwright regression registered in the normal app suite.
+- `docs/BUG_REOPEN_LEARNINGS_2026-07-02_HARI.md` - root cause and permanent learning added.
+
+Local verification on 2026-07-02:
+
+- `apps\api\.venv\Scripts\ruff.exe check apps/api/src/caseops_api/services/retrieval.py apps/api/src/caseops_api/services/authorities.py apps/api/tests/test_authorities.py` - PASS.
+- `apps\api\.venv\Scripts\pytest.exe apps/api/tests/test_authorities.py::test_contextual_search_prioritizes_readable_authority_over_garbled_ocr apps/api/tests/test_authorities.py::test_contextual_search_omits_corrupted_authority_when_no_readable_preview_exists` - PASS, 2 tests.
+- `npm --prefix apps/web test -- app/app/research/page.test.tsx app/app/research/isGarbledSnippet.test.ts "app/app/matters/[id]/notices/page.test.tsx"` - PASS, 13 tests.
+- `npm run typecheck:web` - PASS.
+- `npm run build:web` - PASS.
+- `npx playwright test --config .tmp/hari26.no-webserver.playwright.config.ts tests/e2e/hari-2026-07-02-bugs.spec.ts --project app-chromium` with manually started local e2e API/web servers - PASS, 2 tests.
+- `npx playwright test --config playwright.app.config.ts tests/e2e/hari-2026-07-02-bugs.spec.ts --project app-chromium` - both browser tests passed, then the command hit a Windows web-server teardown timeout; the no-webserver replay above is the clean exit-code evidence.
+
+Reopen learning: `docs/BUG_REOPEN_LEARNINGS_2026-07-02_HARI.md`.

@@ -15,6 +15,7 @@ export function MatterCockpitNav({ matterId }: { matterId: string }) {
     { href: `${base}/timeline`, label: "Timeline" },
     { href: `${base}/tasks`, label: "Tasks & Deadlines" },
     { href: `${base}/documents`, label: "Documents" },
+    { href: `${base}/notices`, label: "Notices" },
     { href: `${base}/drafts`, label: "Drafts" },
     { href: `${base}/hearings`, label: "Hearings" },
     { href: `${base}/recommendations`, label: "AI Recommendations" },
