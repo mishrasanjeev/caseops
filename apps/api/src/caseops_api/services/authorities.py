@@ -336,9 +336,16 @@ def _contextual_coverage_notice(
     *,
     total_after_filter: int,
     raw_count: int,
+    unreadable_omitted_count: int = 0,
 ) -> str | None:
     if total_after_filter > 0:
         return None
+    if unreadable_omitted_count > 0:
+        return (
+            "Indexed authority records matched the query, but their extracted "
+            "text is not readable enough to preview. Broaden the query or "
+            "review official source records outside CaseOps before relying on them."
+        )
     if raw_count > 0:
         return (
             "Indexed authorities matched before the current filters were applied; "
@@ -762,6 +769,7 @@ def search_authority_catalog(
     forum_level: str | None = None,
     court_name: str | None = None,
     document_type: str | None = None,
+    suppress_unreadable: bool = True,
 ) -> list[AuthoritySearchResult]:
     # Parties / title exact-match boost: case-name queries ("Wahid State
     # Govt of NCT of Delhi") carry a distinctive proper noun that
@@ -1004,37 +1012,63 @@ def search_authority_catalog(
                 )
                 for r in top_n
             ]
-            ranked = reranker.rerank(query, cands, top_k=limit)
+            ranked = reranker.rerank(
+                query,
+                cands,
+                top_k=len(cands) if suppress_unreadable else limit,
+            )
             by_id = {r.authority_document_id: r for r in top_n}
             reranked = [
                 by_id[c.identifier] for c in ranked if c.identifier in by_id
             ]
             if reranked:
-                return reranked[:limit]
+                return (
+                    _readable_authority_results_only(reranked)[:limit]
+                    if suppress_unreadable
+                    else reranked[:limit]
+                )
         except Exception:  # noqa: BLE001
             # Never let a reranker hiccup break search.
             pass
-    return top_n[:limit]
+    return (
+        _readable_authority_results_only(top_n)[:limit]
+        if suppress_unreadable
+        else top_n[:limit]
+    )
 
 
-def _suppress_low_quality_ocr_when_readable_available(
+def _authority_result_has_unreadable_preview(result: AuthoritySearchResult) -> bool:
+    preview_parts = [result.title, result.summary, result.snippet]
+    if any(is_low_quality_ocr_text(part) for part in preview_parts):
+        return True
+    return is_low_quality_ocr_text(
+        "\n".join(part for part in preview_parts if part)
+    )
+
+
+def _filter_unreadable_authority_results(
     results: list[AuthoritySearchResult],
-) -> list[AuthoritySearchResult]:
-    """Keep damaged OCR only as a last resort.
+) -> tuple[list[AuthoritySearchResult], int]:
+    """Drop authority cards whose preview text is not usable.
 
-    A readable authority is materially more useful than a high-scoring
-    mojibake chunk. Once readable matches exist, low-quality OCR rows should
-    not occupy result slots or pagination counts.
+    A corrupted title/snippet is not a legally useful result. Filtering at this
+    shared layer prevents Research, recommendation prompts, and other authority
+    consumers from treating unreadable OCR as source-backed context.
     """
     readable: list[AuthoritySearchResult] = []
-    low_quality: list[AuthoritySearchResult] = []
+    omitted = 0
     for result in results:
-        if is_low_quality_ocr_text(result.snippet):
-            low_quality.append(result)
+        if _authority_result_has_unreadable_preview(result):
+            omitted += 1
         else:
             readable.append(result)
-    if not readable:
-        return results
+    return readable, omitted
+
+
+def _readable_authority_results_only(
+    results: list[AuthoritySearchResult],
+) -> list[AuthoritySearchResult]:
+    readable, _ = _filter_unreadable_authority_results(results)
     return readable
 
 
@@ -1067,12 +1101,13 @@ def search_authorities(
         forum_level=payload.forum_level,
         court_name=payload.court_name,
         document_type=payload.document_type,
+        suppress_unreadable=False,
     )
     if payload.language == "en":
         filtered = [r for r in raw if _title_is_predominantly_ascii(r.title)]
     else:
         filtered = list(raw)
-    filtered = _suppress_low_quality_ocr_when_readable_available(filtered)
+    filtered, unreadable_omitted_count = _filter_unreadable_authority_results(filtered)
     total = len(filtered)
     page = filtered[payload.offset : payload.offset + payload.limit]
 
@@ -1133,6 +1168,7 @@ def search_authorities(
             _contextual_coverage_notice(
                 total_after_filter=total,
                 raw_count=len(raw),
+                unreadable_omitted_count=unreadable_omitted_count,
             )
             if contextual_plan is not None
             else None

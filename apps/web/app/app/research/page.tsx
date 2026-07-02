@@ -191,14 +191,12 @@ export default function ResearchPage() {
   };
 
   const results = searchQuery.data?.results ?? [];
-  const readableResults = results.filter(
-    (result) => !isGarbledSnippet(result.snippet),
-  );
-  const visibleResults = readableResults.length > 0 ? readableResults : results;
+  const visibleResults = results.filter((result) => !isUnreadableAuthorityResult(result));
   const contextualPlan = searchQuery.data?.contextual_plan ?? null;
   const coverageNotice = searchQuery.data?.coverage_notice ?? null;
   const totalAfterFilter = searchQuery.data?.total_after_filter ?? 0;
   const hasSearched = Boolean(searchCriteria?.query);
+  const unreadableOnlyResults = results.length > 0 && visibleResults.length === 0;
   const hasNextPage = (page + 1) * PAGE_SIZE < totalAfterFilter;
   const hasPrevPage = page > 0;
   const canSubmitSearch =
@@ -471,8 +469,10 @@ export default function ResearchPage() {
           icon={Scale}
           title="No authorities matched"
           description={
-            coverageNotice ??
-            "Broaden your filters or rephrase the query. The corpus is still growing."
+            unreadableOnlyResults
+              ? "Matching records were omitted because their extracted title or text is not readable enough to preview."
+              : coverageNotice ??
+                "Broaden your filters or rephrase the query. The corpus is still growing."
           }
         />
       ) : (
@@ -625,7 +625,64 @@ export function isGarbledSnippet(text: string | null | undefined): boolean {
     ).length;
     if (dirtyTokens / tokens.length > 0.3) return true;
   }
+  const alphaTokens = tokens.filter((t) => /[A-Za-z]/.test(t));
+  if (alphaTokens.length >= 12) {
+    const suspiciousTokens = alphaTokens.filter(looksLikeOcrFragment).length;
+    if (suspiciousTokens / alphaTokens.length > 0.35) return true;
+  }
   return false;
+}
+
+const COMMON_LEGAL_ACRONYMS = new Set([
+  "ai",
+  "arb",
+  "bns",
+  "bnss",
+  "bsa",
+  "cbi",
+  "cpc",
+  "crl",
+  "crpc",
+  "drat",
+  "drt",
+  "fir",
+  "hc",
+  "ipc",
+  "llp",
+  "ltd",
+  "nclat",
+  "nclt",
+  "ni",
+  "pdf",
+  "sc",
+  "slp",
+  "wpc",
+]);
+
+function looksLikeOcrFragment(token: string): boolean {
+  const stripped = token.replace(/^[.,;:()[\]{}"'`]+|[.,;:()[\]{}"'`]+$/g, "");
+  if (stripped.length < 3 || !/[A-Za-z]/.test(stripped)) return false;
+  if (/[A-Za-z]\d|\d[A-Za-z]/.test(stripped)) return true;
+
+  const letters = stripped.replace(/[^A-Za-z]/g, "");
+  if (letters.length < 3) return false;
+  const lowered = letters.toLowerCase();
+  if (COMMON_LEGAL_ACRONYMS.has(lowered)) return false;
+  if (letters.length >= 4 && /([A-Za-z])\1{3,}/.test(letters)) return true;
+  if (letters.length >= 4 && !/[aeiouAEIOU]/.test(letters)) return true;
+  if (/[a-z][A-Z]{2,}|[A-Z][a-z][A-Z]/.test(stripped)) return true;
+  if (letters.length <= 5 && /[A-Za-z].*[.:~].*[A-Za-z]/.test(stripped)) {
+    return true;
+  }
+  return false;
+}
+
+function isUnreadableAuthorityResult(result: AuthoritySearchResult): boolean {
+  const previewParts = [result.title, result.summary, result.snippet];
+  return (
+    previewParts.some((part) => isGarbledSnippet(part)) ||
+    isGarbledSnippet(previewParts.join("\n"))
+  );
 }
 
 function AuthorityCard({

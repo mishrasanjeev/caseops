@@ -279,6 +279,54 @@ def _seed_garbled_contextual_cheque_authority() -> str:
         return document_id
 
 
+def _seed_screenshot_garbled_contextual_cheque_authority() -> str:
+    factory = get_session_factory()
+    suffix = uuid4().hex[:10]
+    garbled_title = "[2003] 3 -- f.t 'II'. 178"
+    garbled_chunk = (
+        "[2003] 3 -- f.t 'II'. 178, ; 3ffillllll mi aRT 'A III' 1Tfffi "
+        ".mi -- aRT .. 12 -- d, 2002. lila l?1t. tt. 1950, 27 3TR 28 "
+        "JTR. SIftIII'l cff. fcIrlTT ;ifo1l. C1>lx mt fl 4<1i fclr q1fiun'l "
+        "llC1>lll1a fcIrq -- fl .wf. fcIrnl -- <ITT -j+t H."
+    )
+    with factory() as session:
+        document = AuthorityDocument(
+            source="test_contextual_screenshot_garbled_source",
+            adapter_name="caseops-test-contextual-screenshot-garbled-v1",
+            court_name="Supreme Court of India",
+            forum_level=MatterForumLevel.SUPREME_COURT,
+            document_type=AuthorityDocumentType.JUDGMENT,
+            title=garbled_title,
+            case_reference=f"CRL.A. SCREEN-{suffix}/2026",
+            bench_name=None,
+            neutral_citation=None,
+            decision_date=date(2026, 6, 20),
+            canonical_key=f"test-contextual-screenshot-garbled-{suffix}",
+            source_reference="https://official.example.test/screenshot-garbled.pdf",
+            summary=garbled_chunk,
+            document_text=(
+                "Section 138 cheque notice insufficient funds after 35 days. "
+                f"{garbled_chunk} {garbled_chunk}"
+            ),
+            extracted_char_count=520,
+        )
+        document.chunks = [
+            AuthorityDocumentChunk(
+                chunk_index=0,
+                content=(
+                    "Section 138 cheque notice insufficient funds after 35 days. "
+                    f"{garbled_chunk} {garbled_chunk}"
+                ),
+                token_count=90,
+            )
+        ]
+        session.add(document)
+        session.flush()
+        document_id = document.id
+        session.commit()
+        return document_id
+
+
 def _seed_madras_bail_authority() -> str:
     factory = get_session_factory()
     suffix = uuid4().hex[:10]
@@ -1016,12 +1064,12 @@ def test_contextual_search_prioritizes_readable_authority_over_garbled_ocr(
     assert "$O ?J" not in json.dumps(body)
 
 
-def test_contextual_search_uses_garbled_ocr_only_when_no_readable_match_exists(
+def test_contextual_search_omits_corrupted_authority_when_no_readable_preview_exists(
     client: TestClient,
 ) -> None:
     bootstrap_payload = bootstrap_company(client)
     token = str(bootstrap_payload["access_token"])
-    garbled_authority_id = _seed_garbled_contextual_cheque_authority()
+    garbled_authority_id = _seed_screenshot_garbled_contextual_cheque_authority()
 
     response = client.post(
         "/api/authorities/search",
@@ -1040,8 +1088,15 @@ def test_contextual_search_uses_garbled_ocr_only_when_no_readable_match_exists(
     assert response.status_code == 200, response.text
     body = response.json()
     ids = [item["authority_document_id"] for item in body["results"]]
-    assert ids == [garbled_authority_id]
-    assert body["total_after_filter"] == 1
+    assert garbled_authority_id not in ids
+    assert body["results"] == []
+    assert body["total_after_filter"] == 0
+    assert body["coverage_notice"] == (
+        "Indexed authority records matched the query, but their extracted "
+        "text is not readable enough to preview. Broaden the query or "
+        "review official source records outside CaseOps before relying on them."
+    )
+    assert "[2003] 3 -- f.t" not in json.dumps(body)
 
 
 def test_authority_search_court_name_filter_is_case_insensitive_contains(

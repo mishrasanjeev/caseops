@@ -31,6 +31,7 @@ import { isGarbledSnippet } from "./page";
 const GARBLED_REAL: string[] = [
   // Anchor — verbatim from Ram's 2026-04-27 prod report.
   "120-?J, '>2> 420, 427, 488 $O 477 .*J.:J. : '>2> 380 ?( '>2> 420 :J $)2J* J!'>) /=, +> +/2J?(=2>) =J ?( $!?( ! ?2J:",
+  "[2003] 3 -- f.t 'II'. 178, ; 3ffillllll mi aRT 'A III' 1Tfffi .mi -- aRT .. 12 -- d, 2002. lila l?1t. tt. 1950, 27 3TR 28 JTR. SIftIII'l cff. fcIrlTT ;ifo1l. C1>lx mt fl 4<1i fclr q1fiun'l llC1>lll1a fcIrq -- fl .wf. fcIrnl -- <ITT -j+t H.",
 ];
 
 const GARBLED_VARIANTS: string[] = [
