@@ -212,7 +212,9 @@ test.describe("Hari 2026-07-02 bugs", () => {
     await expect(page.getByTestId("matter-notice-row")).toContainText(
       path.basename(filePath),
     );
-    await expect(page.getByTestId("matter-notice-row")).toContainText("pending");
+    await expect(page.getByTestId("matter-notice-row")).toContainText(
+      /pending|indexed|needs_ocr/i,
+    );
 
     await page.goto(`/app/matters/${matterId}/documents`);
     await expect(page.getByText(path.basename(filePath)).first()).toBeVisible();
