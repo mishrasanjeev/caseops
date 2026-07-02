@@ -668,7 +668,7 @@ test.describe("Ram batch 2026-04-26 — prod verification of c58305b fixes", () 
     expect(await cta.getAttribute("href")).toContain("/app/matters");
   });
 
-  test("BUG-021 (synthetic): garbled OCR snippet renders the placeholder card, not the raw mojibake", async ({
+  test("BUG-021 (synthetic): garbled OCR snippet is omitted, not rendered as raw mojibake", async ({
     page,
   }) => {
     // Inject a research result with U+FFFD-laden snippet so the
@@ -732,11 +732,13 @@ test.describe("Ram batch 2026-04-26 — prod verification of c58305b fixes", () 
     await searchInput.fill("dishonour negotiable instruments");
     // The page may have a submit button or use Enter. Try Enter first.
     await searchInput.press("Enter");
-    // The garbled placeholder card should appear.
-    await expect(page.getByTestId("research-result-garbled")).toBeVisible({
+    // July 2026 behavior: unreadable OCR authority cards are omitted
+    // entirely, with an explicit no-preview reason. The raw mojibake
+    // must never reach the visible page.
+    await expect(page.getByText(/not readable enough to preview/i)).toBeVisible({
       timeout: 15_000,
     });
-    // The raw mojibake snippet must NOT be visible (placeholder hides it).
+    await expect(page.getByTestId("research-result-garbled")).toHaveCount(0);
     const bodyText = await page.locator("body").innerText();
     expect(bodyText).not.toContain(garbledSnippet);
   });
@@ -1160,11 +1162,13 @@ test.describe("Ram batch 2026-04-26 — prod verification of c58305b fixes", () 
       .first();
     await search.fill("any query");
     await search.press("Enter");
-    // The garbled placeholder card MUST appear (v2 detector catches
-    // ASCII-mojibake). The raw mojibake must NOT be visible.
-    await expect(page.getByTestId("research-result-garbled")).toBeVisible({
+    // July 2026 behavior: v2 detector still catches ASCII-mojibake,
+    // but unreadable authority cards are now omitted instead of shown
+    // as placeholder result cards. The raw mojibake must not be visible.
+    await expect(page.getByText(/not readable enough to preview/i)).toBeVisible({
       timeout: 15_000,
     });
+    await expect(page.getByTestId("research-result-garbled")).toHaveCount(0);
     const bodyText = await page.locator("body").innerText();
     expect(bodyText).not.toContain(garbledSnippet);
   });
