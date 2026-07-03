@@ -14,6 +14,7 @@ const {
   exportMatterFileQANoteMock,
   fetchAffidavitMock,
   analyzeAffidavitMock,
+  bulkDownloadUrlMock,
   fetchGoogleDriveStatusMock,
   listGoogleDriveFilesMock,
   revokeGoogleDriveConnectionMock,
@@ -32,6 +33,7 @@ const {
   exportMatterFileQANoteMock: vi.fn(),
   fetchAffidavitMock: vi.fn(),
   analyzeAffidavitMock: vi.fn(),
+  bulkDownloadUrlMock: vi.fn(),
   fetchGoogleDriveStatusMock: vi.fn(),
   listGoogleDriveFilesMock: vi.fn(),
   revokeGoogleDriveConnectionMock: vi.fn(),
@@ -74,6 +76,7 @@ vi.mock("@/lib/api/endpoints", () => ({
   exportMatterFileQANote: exportMatterFileQANoteMock,
   fetchAffidavitIntelligence: fetchAffidavitMock,
   analyzeAffidavitIntelligence: analyzeAffidavitMock,
+  matterAttachmentBulkDownloadUrl: bulkDownloadUrlMock,
   fetchGoogleDriveStatus: fetchGoogleDriveStatusMock,
   listGoogleDriveFiles: listGoogleDriveFilesMock,
   revokeGoogleDriveConnection: revokeGoogleDriveConnectionMock,
@@ -132,6 +135,13 @@ describe("MatterDocumentsPage", () => {
     exportMatterFileQANoteMock.mockReset();
     fetchAffidavitMock.mockReset();
     analyzeAffidavitMock.mockReset();
+    bulkDownloadUrlMock.mockReset();
+    bulkDownloadUrlMock.mockImplementation(
+      ({ matterId, attachmentIds }: { matterId: string; attachmentIds: string[] }) =>
+        `http://localhost:8000/api/matters/${matterId}/attachments/bulk-download?${attachmentIds
+          .map((id) => `attachment_ids=${id}`)
+          .join("&")}`,
+    );
     fetchGoogleDriveStatusMock.mockReset();
     listGoogleDriveFilesMock.mockReset();
     revokeGoogleDriveConnectionMock.mockReset();
@@ -330,6 +340,56 @@ describe("MatterDocumentsPage", () => {
     expect(screen.getByTestId("matter-document-group-unclassified")).toBeInTheDocument();
     expect(screen.getByText("Seq 20")).toBeInTheDocument();
     expect(screen.getAllByText("Unclassified").length).toBeGreaterThan(0);
+  });
+
+  it("builds a bulk ZIP download link for selected documents", async () => {
+    useCapabilityMock.mockImplementation(() => false);
+    attachments([
+      {
+        id: "a1",
+        original_filename: "pleading.txt",
+        document_type: "pleading_reply",
+        lifecycle_stage: "pleadings",
+        processing_status: "indexed",
+        created_at: "2026-07-03T10:00:00Z",
+        size_bytes: 100,
+      },
+      {
+        id: "a2",
+        original_filename: "evidence.txt",
+        document_type: "evidence",
+        lifecycle_stage: "evidence",
+        processing_status: "indexed",
+        created_at: "2026-07-03T10:05:00Z",
+        size_bytes: 200,
+      },
+    ]);
+
+    render(withClient(<MatterDocumentsPage />));
+
+    expect(screen.getByTestId("matter-documents-bulk-download")).toBeDisabled();
+    await userEvent.click(screen.getByTestId("matter-document-select-a1"));
+
+    expect(screen.getByTestId("matter-documents-selected-count")).toHaveTextContent(
+      "1 selected",
+    );
+    expect(bulkDownloadUrlMock).toHaveBeenCalledWith({
+      matterId: "m1",
+      attachmentIds: ["a1"],
+    });
+    expect(screen.getByTestId("matter-documents-bulk-download")).toHaveAttribute(
+      "href",
+      "http://localhost:8000/api/matters/m1/attachments/bulk-download?attachment_ids=a1",
+    );
+
+    await userEvent.click(screen.getByTestId("matter-documents-select-visible"));
+    expect(screen.getByTestId("matter-documents-selected-count")).toHaveTextContent(
+      "2 selected",
+    );
+    expect(screen.getByTestId("matter-documents-bulk-download")).toHaveAttribute(
+      "href",
+      "http://localhost:8000/api/matters/m1/attachments/bulk-download?attachment_ids=a1&attachment_ids=a2",
+    );
   });
 
   it("lets document managers edit lifecycle metadata", async () => {

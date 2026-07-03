@@ -2310,6 +2310,10 @@ export type MatterAttachmentRecord = {
   document_type: MatterDocumentType | null;
   lifecycle_stage: MatterLifecycleStage | null;
   document_date: string | null;
+  notice_source: string | null;
+  notice_subject: string | null;
+  notice_received_on: string | null;
+  notice_response: string | null;
   sequence_index: number | null;
   linked_court_order_id: string | null;
   hearing_id: string | null;
@@ -2322,6 +2326,10 @@ export async function uploadMatterAttachment(input: {
   documentType?: MatterDocumentType | null;
   lifecycleStage?: MatterLifecycleStage | null;
   documentDate?: string | null;
+  noticeSource?: string | null;
+  noticeSubject?: string | null;
+  noticeReceivedOn?: string | null;
+  noticeResponse?: string | null;
   sequenceIndex?: number | null;
   linkedCourtOrderId?: string | null;
   hearingId?: string | null;
@@ -2331,6 +2339,10 @@ export async function uploadMatterAttachment(input: {
   if (input.documentType) body.append("document_type", input.documentType);
   if (input.lifecycleStage) body.append("lifecycle_stage", input.lifecycleStage);
   if (input.documentDate) body.append("document_date", input.documentDate);
+  if (input.noticeSource) body.append("notice_source", input.noticeSource);
+  if (input.noticeSubject) body.append("notice_subject", input.noticeSubject);
+  if (input.noticeReceivedOn) body.append("notice_received_on", input.noticeReceivedOn);
+  if (input.noticeResponse) body.append("notice_response", input.noticeResponse);
   if (input.sequenceIndex !== undefined && input.sequenceIndex !== null) {
     body.append("sequence_index", String(input.sequenceIndex));
   }
@@ -2353,6 +2365,10 @@ export async function updateMatterAttachmentMetadata(input: {
   document_type?: MatterDocumentType | null;
   lifecycle_stage?: MatterLifecycleStage | null;
   document_date?: string | null;
+  notice_source?: string | null;
+  notice_subject?: string | null;
+  notice_received_on?: string | null;
+  notice_response?: string | null;
   sequence_index?: number | null;
   linked_court_order_id?: string | null;
   hearing_id?: string | null;
@@ -2398,6 +2414,17 @@ export function matterAttachmentDownloadUrl(input: {
   attachmentId: string;
 }): string {
   return `${API_BASE_URL}/api/matters/${input.matterId}/attachments/${input.attachmentId}/download`;
+}
+
+export function matterAttachmentBulkDownloadUrl(input: {
+  matterId: string;
+  attachmentIds: string[];
+}): string {
+  const params = new URLSearchParams();
+  for (const attachmentId of input.attachmentIds) {
+    params.append("attachment_ids", attachmentId);
+  }
+  return `${API_BASE_URL}/api/matters/${input.matterId}/attachments/bulk-download?${params.toString()}`;
 }
 
 // Sprint Q10 — matter attachment annotations CRUD.
@@ -5196,6 +5223,11 @@ export async function createMatter(input: {
 export async function updateMatter(input: {
   matterId: string;
   title?: string;
+  matter_code?: string;
+  client_name?: string | null;
+  opposing_party?: string | null;
+  case_number?: string | null;
+  cnr_number?: string | null;
   practice_area?: string;
   forum_level?: string | null;
   court_id?: string | null;
@@ -5207,6 +5239,10 @@ export async function updateMatter(input: {
   forum_consumer_level?: string | null;
   judge_name?: string | null;
   description?: string | null;
+  next_hearing_on?: string | null;
+  claim_amount_minor?: number | null;
+  claim_currency?: string | null;
+  claim_amount_notes?: string | null;
   status?: "intake" | "active" | "on_hold" | "disposed";
 }): Promise<Matter> {
   const { matterId, ...body } = input;

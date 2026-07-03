@@ -3,7 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Eye, FileText, Inbox, Loader2, Upload } from "lucide-react";
 import { useParams } from "next/navigation";
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/Badge";
@@ -16,7 +16,10 @@ import {
   CardTitle,
 } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { Textarea } from "@/components/ui/Textarea";
 import { apiErrorMessage } from "@/lib/api/config";
 import { uploadMatterAttachment } from "@/lib/api/endpoints";
 import type { WorkspaceAttachment } from "@/lib/api/workspace-types";
@@ -48,11 +51,30 @@ function humanSize(bytes: number | null | undefined): string {
   return `${size.toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
 }
 
+type NoticeUploadDraft = {
+  source: string;
+  subject: string;
+  receivedOn: string;
+  response: string;
+};
+
+const EMPTY_NOTICE_UPLOAD_DRAFT: NoticeUploadDraft = {
+  source: "",
+  subject: "",
+  receivedOn: "",
+  response: "",
+};
+
+function noticeDate(notice: WorkspaceAttachment): string | null | undefined {
+  return notice.notice_received_on ?? notice.document_date ?? notice.created_at;
+}
+
 export default function MatterNoticesPage() {
   const params = useParams<{ id: string }>();
   const matterId = params.id;
   const queryClient = useQueryClient();
   const fileInput = useRef<HTMLInputElement | null>(null);
+  const [noticeDraft, setNoticeDraft] = useState<NoticeUploadDraft>(EMPTY_NOTICE_UPLOAD_DRAFT);
   const canUpload = useCapability("documents:upload");
   const canManageDocuments = useCapability("documents:manage");
   const { data } = useMatterWorkspace(matterId);
@@ -62,8 +84,8 @@ export default function MatterNoticesPage() {
       [...(data?.attachments ?? [])]
         .filter((attachment) => attachment.document_type === "notice")
         .sort((left, right) => {
-          const leftDate = left.document_date ?? left.created_at;
-          const rightDate = right.document_date ?? right.created_at;
+          const leftDate = noticeDate(left) ?? "";
+          const rightDate = noticeDate(right) ?? "";
           return rightDate.localeCompare(leftDate);
         }),
     [data?.attachments],
@@ -80,7 +102,11 @@ export default function MatterNoticesPage() {
         file,
         documentType: "notice",
         lifecycleStage: "initiation",
-        documentDate: null,
+        documentDate: noticeDraft.receivedOn || null,
+        noticeSource: noticeDraft.source || null,
+        noticeSubject: noticeDraft.subject || null,
+        noticeReceivedOn: noticeDraft.receivedOn || null,
+        noticeResponse: noticeDraft.response || null,
         sequenceIndex: null,
         linkedCourtOrderId: null,
         hearingId: null,
@@ -90,6 +116,7 @@ export default function MatterNoticesPage() {
         queryKey: ["matters", matterId, "workspace"],
       });
       toast.success("Notice uploaded.");
+      setNoticeDraft(EMPTY_NOTICE_UPLOAD_DRAFT);
     },
     onError: (err) => {
       toast.error(apiErrorMessage(err, "Could not upload the notice."));
@@ -122,11 +149,11 @@ export default function MatterNoticesPage() {
           </CardHeader>
           <CardContent>
             <div className="text-sm font-medium text-[var(--color-ink)]">
-              {latestNotice ? displayName(latestNotice) : "None"}
+              {latestNotice ? latestNotice.notice_subject ?? displayName(latestNotice) : "None"}
             </div>
             <div className="mt-1 text-xs text-[var(--color-mute)]">
               {latestNotice
-                ? formatDate(latestNotice.document_date ?? latestNotice.created_at)
+                ? formatDate(noticeDate(latestNotice))
                 : "Upload or classify a notice to start."}
             </div>
           </CardContent>
@@ -157,8 +184,78 @@ export default function MatterNoticesPage() {
               <FileText className="h-4 w-4" aria-hidden />
               Documents
             </Button>
-            {canUpload ? (
-              <>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {canUpload ? (
+            <div
+              className="mb-5 rounded-lg border border-[var(--color-line)] bg-[var(--color-bg-2)] p-4"
+              data-testid="matter-notice-upload-template"
+            >
+              <div className="grid gap-3 md:grid-cols-3">
+                <div>
+                  <Label htmlFor="notice-source">Notice source</Label>
+                  <Input
+                    id="notice-source"
+                    className="mt-1.5"
+                    value={noticeDraft.source}
+                    onChange={(event) =>
+                      setNoticeDraft((current) => ({
+                        ...current,
+                        source: event.target.value,
+                      }))
+                    }
+                    data-testid="matter-notice-source"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <Label htmlFor="notice-subject">Notice subject / about</Label>
+                  <Input
+                    id="notice-subject"
+                    className="mt-1.5"
+                    value={noticeDraft.subject}
+                    onChange={(event) =>
+                      setNoticeDraft((current) => ({
+                        ...current,
+                        subject: event.target.value,
+                      }))
+                    }
+                    data-testid="matter-notice-subject"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="notice-received-on">Date received</Label>
+                  <Input
+                    id="notice-received-on"
+                    className="mt-1.5"
+                    type="date"
+                    value={noticeDraft.receivedOn}
+                    onChange={(event) =>
+                      setNoticeDraft((current) => ({
+                        ...current,
+                        receivedOn: event.target.value,
+                      }))
+                    }
+                    data-testid="matter-notice-received-on"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <Label htmlFor="notice-response">Reply / response to notice</Label>
+                  <Textarea
+                    id="notice-response"
+                    className="mt-1.5 min-h-20"
+                    value={noticeDraft.response}
+                    onChange={(event) =>
+                      setNoticeDraft((current) => ({
+                        ...current,
+                        response: event.target.value,
+                      }))
+                    }
+                    data-testid="matter-notice-response"
+                  />
+                </div>
+              </div>
+              <div className="mt-3 flex justify-end">
                 <input
                   ref={fileInput}
                   type="file"
@@ -182,11 +279,9 @@ export default function MatterNoticesPage() {
                   )}
                   Upload notice
                 </Button>
-              </>
-            ) : null}
-          </div>
-        </CardHeader>
-        <CardContent>
+              </div>
+            </div>
+          ) : null}
           {notices.length === 0 ? (
             <EmptyState
               icon={Inbox}
@@ -210,17 +305,25 @@ export default function MatterNoticesPage() {
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <h2 className="truncate text-sm font-semibold text-[var(--color-ink)]">
-                          {displayName(notice)}
+                          {notice.notice_subject ?? displayName(notice)}
                         </h2>
                         <StatusBadge status={notice.processing_status ?? "unknown"} />
+                        {notice.notice_source ? (
+                          <Badge tone="brand">{notice.notice_source}</Badge>
+                        ) : null}
                         {notice.lifecycle_stage ? (
                           <Badge tone="neutral">
                             {notice.lifecycle_stage.replace(/_/g, " ")}
                           </Badge>
                         ) : null}
                       </div>
+                      {notice.notice_subject ? (
+                        <div className="mt-1 truncate text-xs text-[var(--color-mute)]">
+                          {displayName(notice)}
+                        </div>
+                      ) : null}
                       <div className="mt-1 flex flex-wrap gap-2 text-xs text-[var(--color-mute)]">
-                        <span>{formatDate(notice.document_date ?? notice.created_at)}</span>
+                        <span>Received {formatDate(noticeDate(notice))}</span>
                         <span>{humanSize(notice.size_bytes)}</span>
                         <span>{notice.mime_type ?? notice.content_type ?? "file"}</span>
                         {notice.sequence_index !== null &&
@@ -228,6 +331,11 @@ export default function MatterNoticesPage() {
                           <span>Seq {notice.sequence_index}</span>
                         ) : null}
                       </div>
+                      {notice.notice_response ? (
+                        <p className="mt-2 line-clamp-2 text-xs leading-5 text-[var(--color-ink-2)]">
+                          {notice.notice_response}
+                        </p>
+                      ) : null}
                     </div>
                     <div className="flex shrink-0 flex-wrap gap-2">
                       <Button href={viewHref} variant="outline" size="sm">

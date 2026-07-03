@@ -4625,6 +4625,10 @@ class MatterAttachment(Base):
     document_type: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
     lifecycle_stage: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
     document_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    notice_source: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    notice_subject: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    notice_received_on: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    notice_response: Mapped[str | None] = mapped_column(Text, nullable=True)
     sequence_index: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     linked_court_order_id: Mapped[str | None] = mapped_column(
         ForeignKey("matter_court_orders.id", ondelete="SET NULL"),

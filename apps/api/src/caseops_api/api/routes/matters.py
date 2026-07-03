@@ -260,6 +260,7 @@ from caseops_api.services.matters import (
     create_matter_task,
     create_time_entry,
     get_matter,
+    get_matter_attachment_bulk_download,
     get_matter_attachment_download,
     get_matter_invoice_pdf,
     get_matter_workspace,
@@ -2431,6 +2432,10 @@ async def post_current_company_matter_attachment(
     document_type: Annotated[MatterDocumentTypeLiteral | None, Form()] = None,
     lifecycle_stage: Annotated[MatterLifecycleStageLiteral | None, Form()] = None,
     document_date: Annotated[date | None, Form()] = None,
+    notice_source: Annotated[str | None, Form(max_length=255)] = None,
+    notice_subject: Annotated[str | None, Form(max_length=500)] = None,
+    notice_received_on: Annotated[date | None, Form()] = None,
+    notice_response: Annotated[str | None, Form(max_length=4000)] = None,
     sequence_index: Annotated[int | None, Form(ge=0)] = None,
     linked_court_order_id: Annotated[str | None, Form(max_length=36)] = None,
     hearing_id: Annotated[str | None, Form(max_length=36)] = None,
@@ -2445,6 +2450,10 @@ async def post_current_company_matter_attachment(
         document_type=document_type,
         lifecycle_stage=lifecycle_stage,
         document_date=document_date,
+        notice_source=notice_source,
+        notice_subject=notice_subject,
+        notice_received_on=notice_received_on,
+        notice_response=notice_response,
         sequence_index=sequence_index,
         linked_court_order_id=linked_court_order_id,
         hearing_id=hearing_id,
@@ -2518,6 +2527,33 @@ async def reindex_current_company_matter_attachment(
     )
     background_tasks.add_task(run_document_processing_job, job_id)
     return attachment
+
+
+@router.get(
+    "/{matter_id}/attachments/bulk-download",
+    response_class=Response,
+    summary="Download selected matter attachments as a ZIP archive",
+)
+async def download_current_company_matter_attachments_bulk(
+    matter_id: str,
+    context: CurrentContext,
+    session: DbSession,
+    attachment_ids: Annotated[list[str], Query(min_length=1)],
+) -> Response:
+    archive_body, filename, attachment_count = get_matter_attachment_bulk_download(
+        session,
+        context=context,
+        matter_id=matter_id,
+        attachment_ids=attachment_ids,
+    )
+    return Response(
+        content=archive_body,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-CaseOps-Attachment-Count": str(attachment_count),
+        },
+    )
 
 
 @router.get(

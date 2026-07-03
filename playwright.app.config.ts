@@ -55,6 +55,7 @@ export default defineConfig({
     /hari-2026-06-29-bugs\.spec\.ts/,
     /hari-2026-06-30-bugs\.spec\.ts/,
     /hari-2026-07-02-bugs\.spec\.ts/,
+    /hari-2026-07-03-bugs\.spec\.ts/,
     /matter-outside-counsel\.spec\.ts/,
     /mobile-responsive\.spec\.ts/,
   ],
