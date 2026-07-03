@@ -890,3 +890,11 @@ Local verification on 2026-07-02:
 - `npx playwright test --config playwright.app.config.ts tests/e2e/hari-2026-07-02-bugs.spec.ts --project app-chromium` - both browser tests passed, then the command hit a Windows web-server teardown timeout; the no-webserver replay above is the clean exit-code evidence.
 
 Reopen learning: `docs/BUG_REOPEN_LEARNINGS_2026-07-02_HARI.md`.
+
+## Hari 2026-07-03 Matter Management Reopen Rules
+
+- `BUG-003`: Matter edit is not fixed by an API route alone. The reported matter page must expose an editor, persist title/code/parties/case identifiers/status/forum/court/summary fields, reject duplicate matter codes, and show the corrected values after save.
+- `BUG-004`: Multi-document download must be a selected-document ZIP workflow with tenant/matter scoping, deterministic archive names, row selection UI, selected count, browser download proof, and cross-tenant denial coverage.
+- `BUG-005`: Notice upload must capture notice source, notice subject/about, date received, and reply/response as durable schema fields. The Notices page must display those facts, not only the uploaded filename.
+- Every Hari workbook fix must update API schema/service tests, React UI tests, and a registered Playwright spec for the exact reported page flow.
+- Do not mark a workbook item production-fixed until the deployed build has been re-tested with the supplied tester credentials or an explicitly created local equivalent when deployment has not occurred.

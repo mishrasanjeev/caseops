@@ -87,6 +87,10 @@ describe("MatterNoticesPage", () => {
           document_type: "notice",
           lifecycle_stage: "initiation",
           document_date: "2026-07-01",
+          notice_source: "Opposing counsel",
+          notice_subject: "Demand notice",
+          notice_received_on: "2026-07-01",
+          notice_response: "Prepare reply by Friday.",
           sequence_index: 1,
           created_at: "2026-07-01T10:00:00Z",
         },
@@ -108,7 +112,13 @@ describe("MatterNoticesPage", () => {
 
     expect(screen.getByRole("heading", { name: "Notices" })).toBeInTheDocument();
     expect(screen.getByTestId("matter-notice-row")).toHaveTextContent(
-      "Demand notice.pdf",
+      "Demand notice",
+    );
+    expect(screen.getByTestId("matter-notice-row")).toHaveTextContent(
+      "Opposing counsel",
+    );
+    expect(screen.getByTestId("matter-notice-row")).toHaveTextContent(
+      "Prepare reply by Friday.",
     );
     expect(screen.queryByText("Order.pdf")).not.toBeInTheDocument();
     expect(screen.getAllByTestId("matter-notice-row")).toHaveLength(1);
@@ -121,6 +131,13 @@ describe("MatterNoticesPage", () => {
     uploadMock.mockResolvedValue({ id: "notice-2" });
     render(withClient(<MatterNoticesPage />));
 
+    await userEvent.type(screen.getByTestId("matter-notice-source"), "Client");
+    await userEvent.type(screen.getByTestId("matter-notice-subject"), "Lease default notice");
+    await userEvent.type(screen.getByTestId("matter-notice-received-on"), "2026-07-03");
+    await userEvent.type(
+      screen.getByTestId("matter-notice-response"),
+      "Send response denying default.",
+    );
     const file = new File(["notice body"], "legal-notice.txt", {
       type: "text/plain",
     });
@@ -133,7 +150,11 @@ describe("MatterNoticesPage", () => {
           file,
           documentType: "notice",
           lifecycleStage: "initiation",
-          documentDate: null,
+          documentDate: "2026-07-03",
+          noticeSource: "Client",
+          noticeSubject: "Lease default notice",
+          noticeReceivedOn: "2026-07-03",
+          noticeResponse: "Send response denying default.",
           sequenceIndex: null,
           linkedCourtOrderId: null,
           hearingId: null,

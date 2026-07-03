@@ -1,7 +1,10 @@
 "use client";
 
-import { ClipboardList, MessageSquareText } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { ClipboardList, Loader2, MessageSquareText, Pencil, Save, X } from "lucide-react";
 import { useParams } from "next/navigation";
+import { useState } from "react";
+import { toast } from "sonner";
 
 import { CounselRecommendationsCard } from "@/components/app/CounselRecommendationsCard";
 import { BenchStrategyPanel } from "@/components/matter/BenchStrategyPanel";
@@ -17,8 +20,17 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { Textarea } from "@/components/ui/Textarea";
+import { apiErrorMessage } from "@/lib/api/config";
+import { updateMatter } from "@/lib/api/endpoints";
+import type { Matter } from "@/lib/api/schemas";
+import { useCapability } from "@/lib/capabilities";
+import { normalizeMatterCodeInput } from "@/lib/matter-code";
 import { useMatterWorkspace } from "@/lib/use-matter-workspace";
 
 function formatDate(value: string | null | undefined, withTime = false): string {
@@ -43,9 +55,116 @@ function formatDate(value: string | null | undefined, withTime = false): string 
   }
 }
 
+type MatterEditDraft = {
+  title: string;
+  matterCode: string;
+  clientName: string;
+  opposingParty: string;
+  caseNumber: string;
+  cnrNumber: string;
+  status: "intake" | "active" | "on_hold" | "disposed";
+  practiceArea: string;
+  forumLevel: string;
+  courtName: string;
+  judgeName: string;
+  nextHearingOn: string;
+  description: string;
+};
+
+const STATUS_OPTIONS: Array<{ value: MatterEditDraft["status"]; label: string }> = [
+  { value: "intake", label: "Intake" },
+  { value: "active", label: "Active" },
+  { value: "on_hold", label: "On hold" },
+  { value: "disposed", label: "Disposed" },
+];
+
+const FORUM_LEVEL_OPTIONS = [
+  { value: "lower_court", label: "Lower court" },
+  { value: "high_court", label: "High court" },
+  { value: "supreme_court", label: "Supreme Court" },
+  { value: "tribunal", label: "Tribunal" },
+  { value: "arbitration", label: "Arbitration" },
+  { value: "advisory", label: "Advisory" },
+] as const;
+
+function blankToNull(value: string): string | null {
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function draftFromMatter(matter: Matter): MatterEditDraft {
+  return {
+    title: matter.title ?? "",
+    matterCode: matter.matter_code ?? "",
+    clientName: matter.client_name ?? "",
+    opposingParty: matter.opposing_party ?? "",
+    caseNumber: matter.case_number ?? "",
+    cnrNumber: matter.cnr_number ?? "",
+    status: matter.status as MatterEditDraft["status"],
+    practiceArea: matter.practice_area ?? "",
+    forumLevel: matter.forum_level ?? "",
+    courtName: matter.court_name ?? "",
+    judgeName: matter.judge_name ?? "",
+    nextHearingOn: matter.next_hearing_on ?? "",
+    description: matter.description ?? "",
+  };
+}
+
+function MatterDetail({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | null | undefined;
+}) {
+  return (
+    <div>
+      <div className="text-xs font-medium uppercase tracking-[0.06em] text-[var(--color-mute)]">
+        {label}
+      </div>
+      <div className="mt-1 text-sm text-[var(--color-ink)]">{value || "-"}</div>
+    </div>
+  );
+}
+
 export default function MatterOverviewPage() {
   const params = useParams<{ id: string }>();
+  const queryClient = useQueryClient();
   const { data } = useMatterWorkspace(params.id);
+  const canEditMatter = useCapability("matters:edit");
+  const [isEditingMatter, setIsEditingMatter] = useState(false);
+  const [matterDraft, setMatterDraft] = useState<MatterEditDraft | null>(null);
+  const matterMutation = useMutation({
+    mutationFn: (draft: MatterEditDraft) =>
+      updateMatter({
+        matterId: params.id,
+        title: draft.title.trim(),
+        matter_code: normalizeMatterCodeInput(draft.matterCode),
+        client_name: blankToNull(draft.clientName),
+        opposing_party: blankToNull(draft.opposingParty),
+        case_number: blankToNull(draft.caseNumber),
+        cnr_number: blankToNull(draft.cnrNumber),
+        status: draft.status,
+        practice_area: draft.practiceArea.trim(),
+        forum_level: draft.forumLevel.trim(),
+        court_name: blankToNull(draft.courtName),
+        judge_name: blankToNull(draft.judgeName),
+        next_hearing_on: draft.nextHearingOn || null,
+        description: blankToNull(draft.description),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["matters", params.id, "workspace"],
+      });
+      await queryClient.invalidateQueries({ queryKey: ["matters"] });
+      toast.success("Matter updated.");
+      setIsEditingMatter(false);
+      setMatterDraft(null);
+    },
+    onError: (err) => {
+      toast.error(apiErrorMessage(err, "Could not update the matter."));
+    },
+  });
 
   if (!data) return null;
 
@@ -58,6 +177,15 @@ export default function MatterOverviewPage() {
   const recentActivity = data.activity.slice(0, 6);
   const recentNotes = data.notes.slice(0, 3);
 
+  function beginMatterEdit(matter: Matter) {
+    setMatterDraft(draftFromMatter(matter));
+    setIsEditingMatter(true);
+  }
+
+  function updateMatterDraft(patch: Partial<MatterEditDraft>) {
+    setMatterDraft((current) => (current ? { ...current, ...patch } : current));
+  }
+
   return (
     <div className="grid gap-5 lg:grid-cols-3">
       {/* PG-004 follow-up (2026-05-01) — single highest-priority
@@ -69,23 +197,264 @@ export default function MatterOverviewPage() {
       </div>
 
       <Card className="lg:col-span-2">
-        <CardHeader>
-          <CardTitle>Matter summary</CardTitle>
-          <CardDescription>
-            The brief a partner should get in 30 seconds before a status call.
-          </CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+          <div>
+            <CardTitle>Matter summary</CardTitle>
+            <CardDescription>
+              The brief a partner should get in 30 seconds before a status call.
+            </CardDescription>
+          </div>
+          {canEditMatter ? (
+            <Button
+              type="button"
+              variant={isEditingMatter ? "ghost" : "outline"}
+              size="sm"
+              onClick={() => {
+                if (isEditingMatter) {
+                  setIsEditingMatter(false);
+                  setMatterDraft(null);
+                } else {
+                  beginMatterEdit(data.matter as Matter);
+                }
+              }}
+              data-testid="matter-edit-open"
+            >
+              {isEditingMatter ? (
+                <X className="h-4 w-4" aria-hidden />
+              ) : (
+                <Pencil className="h-4 w-4" aria-hidden />
+              )}
+              {isEditingMatter ? "Cancel" : "Edit matter"}
+            </Button>
+          ) : null}
         </CardHeader>
         <CardContent>
-          {data.matter.description ? (
-            <p className="text-prose-wide whitespace-pre-line text-sm leading-relaxed text-[var(--color-ink-2)]">
-              {data.matter.description}
-            </p>
+          {isEditingMatter && matterDraft ? (
+            <form
+              className="grid gap-3 md:grid-cols-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                matterMutation.mutate(matterDraft);
+              }}
+              data-testid="matter-edit-form"
+            >
+              <div className="md:col-span-2">
+                <Label htmlFor="matter-edit-title">Title</Label>
+                <Input
+                  id="matter-edit-title"
+                  className="mt-1.5"
+                  value={matterDraft.title}
+                  onChange={(event) => updateMatterDraft({ title: event.target.value })}
+                  data-testid="matter-edit-title"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="matter-edit-code">Matter code</Label>
+                <Input
+                  id="matter-edit-code"
+                  className="mt-1.5"
+                  value={matterDraft.matterCode}
+                  onChange={(event) => updateMatterDraft({ matterCode: event.target.value })}
+                  data-testid="matter-edit-code"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="matter-edit-status">Status</Label>
+                <select
+                  id="matter-edit-status"
+                  className="mt-1.5 h-10 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
+                  value={matterDraft.status}
+                  onChange={(event) =>
+                    updateMatterDraft({
+                      status: event.target.value as MatterEditDraft["status"],
+                    })
+                  }
+                  data-testid="matter-edit-status"
+                >
+                  {STATUS_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <Label htmlFor="matter-edit-practice-area">Practice area</Label>
+                <Input
+                  id="matter-edit-practice-area"
+                  className="mt-1.5"
+                  value={matterDraft.practiceArea}
+                  onChange={(event) =>
+                    updateMatterDraft({ practiceArea: event.target.value })
+                  }
+                  data-testid="matter-edit-practice-area"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="matter-edit-forum-level">Forum level</Label>
+                <select
+                  id="matter-edit-forum-level"
+                  className="mt-1.5 h-10 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
+                  value={matterDraft.forumLevel}
+                  onChange={(event) => updateMatterDraft({ forumLevel: event.target.value })}
+                  data-testid="matter-edit-forum-level"
+                >
+                  {FORUM_LEVEL_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <Label htmlFor="matter-edit-client">Client name</Label>
+                <Input
+                  id="matter-edit-client"
+                  className="mt-1.5"
+                  value={matterDraft.clientName}
+                  onChange={(event) => updateMatterDraft({ clientName: event.target.value })}
+                  data-testid="matter-edit-client"
+                />
+              </div>
+              <div>
+                <Label htmlFor="matter-edit-opposing">Opposing party</Label>
+                <Input
+                  id="matter-edit-opposing"
+                  className="mt-1.5"
+                  value={matterDraft.opposingParty}
+                  onChange={(event) =>
+                    updateMatterDraft({ opposingParty: event.target.value })
+                  }
+                  data-testid="matter-edit-opposing"
+                />
+              </div>
+              <div>
+                <Label htmlFor="matter-edit-case-number">Case number</Label>
+                <Input
+                  id="matter-edit-case-number"
+                  className="mt-1.5"
+                  value={matterDraft.caseNumber}
+                  onChange={(event) => updateMatterDraft({ caseNumber: event.target.value })}
+                  data-testid="matter-edit-case-number"
+                />
+              </div>
+              <div>
+                <Label htmlFor="matter-edit-cnr-number">CNR number</Label>
+                <Input
+                  id="matter-edit-cnr-number"
+                  className="mt-1.5"
+                  value={matterDraft.cnrNumber}
+                  onChange={(event) => updateMatterDraft({ cnrNumber: event.target.value })}
+                  data-testid="matter-edit-cnr-number"
+                />
+              </div>
+              <div>
+                <Label htmlFor="matter-edit-court">Court / forum name</Label>
+                <Input
+                  id="matter-edit-court"
+                  className="mt-1.5"
+                  value={matterDraft.courtName}
+                  onChange={(event) => updateMatterDraft({ courtName: event.target.value })}
+                  data-testid="matter-edit-court"
+                />
+              </div>
+              <div>
+                <Label htmlFor="matter-edit-judge">Judge / bench</Label>
+                <Input
+                  id="matter-edit-judge"
+                  className="mt-1.5"
+                  value={matterDraft.judgeName}
+                  onChange={(event) => updateMatterDraft({ judgeName: event.target.value })}
+                  data-testid="matter-edit-judge"
+                />
+              </div>
+              <div>
+                <Label htmlFor="matter-edit-next-hearing">Next hearing</Label>
+                <Input
+                  id="matter-edit-next-hearing"
+                  className="mt-1.5"
+                  type="date"
+                  value={matterDraft.nextHearingOn}
+                  onChange={(event) =>
+                    updateMatterDraft({ nextHearingOn: event.target.value })
+                  }
+                  data-testid="matter-edit-next-hearing"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <Label htmlFor="matter-edit-description">Summary</Label>
+                <Textarea
+                  id="matter-edit-description"
+                  className="mt-1.5 min-h-28"
+                  value={matterDraft.description}
+                  onChange={(event) =>
+                    updateMatterDraft({ description: event.target.value })
+                  }
+                  data-testid="matter-edit-description"
+                />
+              </div>
+              <div className="flex justify-end gap-2 md:col-span-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setIsEditingMatter(false);
+                    setMatterDraft(null);
+                  }}
+                  data-testid="matter-edit-cancel"
+                >
+                  <X className="h-4 w-4" aria-hidden />
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={matterMutation.isPending}
+                  data-testid="matter-edit-save"
+                >
+                  {matterMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                  ) : (
+                    <Save className="h-4 w-4" aria-hidden />
+                  )}
+                  Save
+                </Button>
+              </div>
+            </form>
           ) : (
-            <EmptyState
-              icon={ClipboardList}
-              title="No summary yet"
-              description="Add a short description when the matter editor ships. For now, use the intake form."
-            />
+            <div className="space-y-5">
+              {data.matter.description ? (
+                <p className="text-prose-wide whitespace-pre-line text-sm leading-relaxed text-[var(--color-ink-2)]">
+                  {data.matter.description}
+                </p>
+              ) : (
+                <EmptyState
+                  icon={ClipboardList}
+                  title="No summary yet"
+                  description={
+                    canEditMatter
+                      ? "Use Edit matter to add the summary and correct matter details."
+                      : "Matter details will appear here when the team adds a summary."
+                  }
+                />
+              )}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <MatterDetail label="Matter code" value={data.matter.matter_code} />
+                <MatterDetail label="Client" value={data.matter.client_name} />
+                <MatterDetail label="Opposing party" value={data.matter.opposing_party} />
+                <MatterDetail label="Practice area" value={data.matter.practice_area} />
+                <MatterDetail label="Case number" value={data.matter.case_number} />
+                <MatterDetail label="CNR number" value={data.matter.cnr_number} />
+                <MatterDetail label="Court / forum" value={data.matter.court_name} />
+                <MatterDetail label="Judge / bench" value={data.matter.judge_name} />
+                <MatterDetail
+                  label="Next hearing"
+                  value={formatDate(data.matter.next_hearing_on)}
+                />
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>

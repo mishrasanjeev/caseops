@@ -4160,6 +4160,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matters/{matter_id}/attachments/bulk-download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download selected matter attachments as a ZIP archive */
+        get: operations["download_current_company_matter_attachments_bulk_api_matters__matter_id__attachments_bulk_download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matters/{matter_id}/attachments/{attachment_id}/affidavit-intelligence/analyze": {
         parameters: {
             query?: never;
@@ -9020,6 +9037,14 @@ export interface components {
             lifecycle_stage?: ("initiation" | "pleadings" | "interim_applications" | "evidence" | "arguments" | "orders" | "post_order" | "administrative" | "other") | null;
             /** Linked Court Order Id */
             linked_court_order_id?: string | null;
+            /** Notice Received On */
+            notice_received_on?: string | null;
+            /** Notice Response */
+            notice_response?: string | null;
+            /** Notice Source */
+            notice_source?: string | null;
+            /** Notice Subject */
+            notice_subject?: string | null;
             /** Sequence Index */
             sequence_index?: number | null;
         };
@@ -16710,6 +16735,14 @@ export interface components {
             lifecycle_stage?: ("initiation" | "pleadings" | "interim_applications" | "evidence" | "arguments" | "orders" | "post_order" | "administrative" | "other") | null;
             /** Linked Court Order Id */
             linked_court_order_id?: string | null;
+            /** Notice Received On */
+            notice_received_on?: string | null;
+            /** Notice Response */
+            notice_response?: string | null;
+            /** Notice Source */
+            notice_source?: string | null;
+            /** Notice Subject */
+            notice_subject?: string | null;
             /** Sequence Index */
             sequence_index?: number | null;
         };
@@ -16741,6 +16774,14 @@ export interface components {
             linked_court_order_id?: string | null;
             /** Matter Id */
             matter_id: string;
+            /** Notice Received On */
+            notice_received_on?: string | null;
+            /** Notice Response */
+            notice_response?: string | null;
+            /** Notice Source */
+            notice_source?: string | null;
+            /** Notice Subject */
+            notice_subject?: string | null;
             /** Original Filename */
             original_filename: string;
             /** Processed At */
@@ -18806,6 +18847,8 @@ export interface components {
             is_active?: boolean | null;
             /** Judge Name */
             judge_name?: string | null;
+            /** Matter Code */
+            matter_code?: string | null;
             /** Next Hearing Manual Lock */
             next_hearing_manual_lock?: boolean | null;
             /** Next Hearing On */
@@ -31799,6 +31842,37 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["MatterAttachmentRecord"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_current_company_matter_attachments_bulk_api_matters__matter_id__attachments_bulk_download_get: {
+        parameters: {
+            query: {
+                attachment_ids: string[];
+            };
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

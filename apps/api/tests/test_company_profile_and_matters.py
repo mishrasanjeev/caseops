@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import io
 import json
+import zipfile
 
 from fastapi.testclient import TestClient
 
@@ -92,7 +94,7 @@ def test_authenticated_user_can_update_a_matter(client: TestClient) -> None:
         f"/api/matters/{matter_id}/conflict-checks",
         headers=auth_headers(token),
         json={
-            "opposing_party_name": "Beta Projects",
+            "opposing_party_name": "Beta Projects Pvt. Ltd.",
             "related_party_names": [],
         },
     )
@@ -103,17 +105,68 @@ def test_authenticated_user_can_update_a_matter(client: TestClient) -> None:
         f"/api/matters/{matter_id}",
         headers=auth_headers(token),
         json={
+            "matter_code": "ARB-2026-003A",
+            "client_name": "Acme Industries Ltd.",
+            "opposing_party": "Beta Projects Pvt. Ltd.",
+            "case_number": "ARB/44/2026",
+            "cnr_number": "DLHC010123452026",
             "status": "active",
             "court_name": "SIAC",
             "judge_name": "Arbitral Tribunal",
+            "description": "Updated arbitration record after intake correction.",
         },
     )
 
     assert update_response.status_code == 200
     payload = update_response.json()
+    assert payload["matter_code"] == "ARB-2026-003A"
+    assert payload["client_name"] == "Acme Industries Ltd."
+    assert payload["opposing_party"] == "Beta Projects Pvt. Ltd."
+    assert payload["case_number"] == "ARB/44/2026"
+    assert payload["cnr_number"] == "DLHC010123452026"
     assert payload["status"] == "active"
     assert payload["court_name"] == "SIAC"
     assert payload["judge_name"] == "Arbitral Tribunal"
+    assert payload["description"] == "Updated arbitration record after intake correction."
+
+
+def test_matter_code_update_rejects_duplicate_code(client: TestClient) -> None:
+    bootstrap_payload = bootstrap_company(client)
+    token = str(bootstrap_payload["access_token"])
+
+    first_response = client.post(
+        "/api/matters/",
+        headers=auth_headers(token),
+        json={
+            "title": "First commercial matter",
+            "matter_code": "COMM-2026-010",
+            "status": "intake",
+            "practice_area": "Commercial",
+            "forum_level": "high_court",
+        },
+    )
+    second_response = client.post(
+        "/api/matters/",
+        headers=auth_headers(token),
+        json={
+            "title": "Second commercial matter",
+            "matter_code": "COMM-2026-011",
+            "status": "intake",
+            "practice_area": "Commercial",
+            "forum_level": "high_court",
+        },
+    )
+
+    duplicate_response = client.patch(
+        f"/api/matters/{second_response.json()['id']}",
+        headers=auth_headers(token),
+        json={"matter_code": first_response.json()["matter_code"]},
+    )
+
+    assert duplicate_response.status_code == 409
+    assert duplicate_response.json()["detail"] == (
+        "A matter with this code already exists for the current company."
+    )
 
 
 def test_matter_workspace_includes_notes_hearings_activity_and_assignment(
@@ -873,6 +926,121 @@ def test_matter_attachment_upload_and_download_are_available_in_workspace(
     assert download_response.content == b"Detailed chronology and grounds for appeal."
 
 
+def test_notice_upload_persists_structured_notice_metadata(client: TestClient) -> None:
+    bootstrap_payload = bootstrap_company(client)
+    token = str(bootstrap_payload["access_token"])
+
+    matter_response = client.post(
+        "/api/matters/",
+        headers=auth_headers(token),
+        json={
+            "title": "Notice response matter",
+            "matter_code": "NOTICE-2026-001",
+            "practice_area": "Civil",
+            "forum_level": "lower_court",
+            "status": "intake",
+        },
+    )
+    matter_id = matter_response.json()["id"]
+
+    upload_response = client.post(
+        f"/api/matters/{matter_id}/attachments",
+        headers=auth_headers(token),
+        data={
+            "document_type": "notice",
+            "lifecycle_stage": "initiation",
+            "document_date": "2026-07-02",
+            "notice_source": "Opposing counsel",
+            "notice_subject": "Demand notice for unpaid invoice",
+            "notice_received_on": "2026-07-02",
+            "notice_response": "Prepare reply disputing liability by 10 July.",
+        },
+        files={"file": ("demand-notice.txt", b"Notice body", "text/plain")},
+    )
+
+    assert upload_response.status_code == 200, upload_response.text
+    attachment = upload_response.json()
+    assert attachment["document_type"] == "notice"
+    assert attachment["notice_source"] == "Opposing counsel"
+    assert attachment["notice_subject"] == "Demand notice for unpaid invoice"
+    assert attachment["notice_received_on"] == "2026-07-02"
+    assert attachment["notice_response"] == "Prepare reply disputing liability by 10 July."
+
+    workspace_response = client.get(
+        f"/api/matters/{matter_id}/workspace",
+        headers=auth_headers(token),
+    )
+    assert workspace_response.status_code == 200
+    workspace_notice = workspace_response.json()["attachments"][0]
+    assert workspace_notice["notice_subject"] == "Demand notice for unpaid invoice"
+    assert workspace_notice["notice_source"] == "Opposing counsel"
+
+    update_response = client.patch(
+        f"/api/matters/{matter_id}/attachments/{attachment['id']}/metadata",
+        headers=auth_headers(token),
+        json={
+            "notice_source": "Client legal department",
+            "notice_response": "Final reply sent and acknowledged.",
+        },
+    )
+
+    assert update_response.status_code == 200
+    assert update_response.json()["notice_source"] == "Client legal department"
+    assert update_response.json()["notice_response"] == "Final reply sent and acknowledged."
+
+
+def test_selected_matter_attachments_download_as_zip(client: TestClient) -> None:
+    bootstrap_payload = bootstrap_company(client)
+    token = str(bootstrap_payload["access_token"])
+
+    matter_response = client.post(
+        "/api/matters/",
+        headers=auth_headers(token),
+        json={
+            "title": "Bulk document download matter",
+            "matter_code": "BULK-2026-001",
+            "practice_area": "Commercial",
+            "forum_level": "high_court",
+            "status": "intake",
+        },
+    )
+    matter_id = matter_response.json()["id"]
+    first_upload = client.post(
+        f"/api/matters/{matter_id}/attachments",
+        headers=auth_headers(token),
+        files={"file": ("pleading.txt", b"First document", "text/plain")},
+    ).json()
+    second_upload = client.post(
+        f"/api/matters/{matter_id}/attachments",
+        headers=auth_headers(token),
+        files={"file": ("evidence.txt", b"Second document", "text/plain")},
+    ).json()
+
+    bulk_response = client.get(
+        f"/api/matters/{matter_id}/attachments/bulk-download",
+        headers=auth_headers(token),
+        params=[
+            ("attachment_ids", first_upload["id"]),
+            ("attachment_ids", second_upload["id"]),
+        ],
+    )
+
+    assert bulk_response.status_code == 200, bulk_response.text
+    assert bulk_response.headers["content-type"] == "application/zip"
+    assert bulk_response.headers["x-caseops-attachment-count"] == "2"
+    with zipfile.ZipFile(io.BytesIO(bulk_response.content)) as archive:
+        assert archive.namelist() == ["01-pleading.txt", "02-evidence.txt"]
+        assert archive.read("01-pleading.txt") == b"First document"
+        assert archive.read("02-evidence.txt") == b"Second document"
+
+    missing_response = client.get(
+        f"/api/matters/{matter_id}/attachments/bulk-download",
+        headers=auth_headers(token),
+        params=[("attachment_ids", "not-on-this-matter")],
+    )
+    assert missing_response.status_code == 404
+
+
 def test_cross_tenant_user_cannot_download_another_company_attachment(
     client: TestClient,
 ) -> None:
@@ -918,6 +1086,14 @@ def test_cross_tenant_user_cannot_download_another_company_attachment(
     )
 
     assert forbidden_download.status_code == 404
+
+    forbidden_bulk_download = client.get(
+        f"/api/matters/{first_matter_id}/attachments/bulk-download",
+        headers=auth_headers(second_token),
+        params=[("attachment_ids", attachment_id)],
+    )
+
+    assert forbidden_bulk_download.status_code == 404
 
 
 def test_empty_attachment_upload_is_rejected(client: TestClient) -> None:

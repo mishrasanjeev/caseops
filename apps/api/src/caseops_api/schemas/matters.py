@@ -200,6 +200,12 @@ class MatterCreateRequest(BaseModel):
 
 class MatterUpdateRequest(BaseModel):
     title: str | None = Field(default=None, min_length=3, max_length=255)
+    matter_code: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=80,
+        json_schema_extra={"pattern": MATTER_CODE_PATTERN.pattern},
+    )
     assignee_membership_id: str | None = None
     client_name: str | None = Field(default=None, min_length=2, max_length=255)
     opposing_party: str | None = Field(default=None, min_length=2, max_length=255)
@@ -237,6 +243,13 @@ class MatterUpdateRequest(BaseModel):
     @classmethod
     def normalize_claim_currency(cls, value: object) -> str:
         return _normalize_claim_currency(value)
+
+    @field_validator("matter_code", mode="before")
+    @classmethod
+    def normalize_matter_code(cls, value: object) -> object:
+        if value is None:
+            return None
+        return normalize_matter_code(value)
 
     @field_validator("status", mode="before")
     @classmethod
@@ -811,6 +824,10 @@ class MatterAttachmentRecord(BaseModel):
     document_type: MatterDocumentTypeLiteral | None = None
     lifecycle_stage: MatterLifecycleStageLiteral | None = None
     document_date: date | None = None
+    notice_source: str | None = Field(default=None, max_length=255)
+    notice_subject: str | None = Field(default=None, max_length=500)
+    notice_received_on: date | None = None
+    notice_response: str | None = Field(default=None, max_length=4000)
     sequence_index: int | None = None
     linked_court_order_id: str | None = None
     hearing_id: str | None = None
@@ -821,6 +838,10 @@ class MatterAttachmentMetadataUpdateRequest(BaseModel):
     document_type: MatterDocumentTypeLiteral | None = None
     lifecycle_stage: MatterLifecycleStageLiteral | None = None
     document_date: date | None = None
+    notice_source: str | None = Field(default=None, max_length=255)
+    notice_subject: str | None = Field(default=None, max_length=500)
+    notice_received_on: date | None = None
+    notice_response: str | None = Field(default=None, max_length=4000)
     sequence_index: int | None = Field(default=None, ge=0)
     linked_court_order_id: str | None = Field(default=None, max_length=36)
     hearing_id: str | None = Field(default=None, max_length=36)

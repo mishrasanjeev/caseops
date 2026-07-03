@@ -74,6 +74,10 @@ export type WorkspaceAttachment = {
   document_type?: string | null;
   lifecycle_stage?: string | null;
   document_date?: string | null;
+  notice_source?: string | null;
+  notice_subject?: string | null;
+  notice_received_on?: string | null;
+  notice_response?: string | null;
   sequence_index?: number | null;
   linked_court_order_id?: string | null;
   hearing_id?: string | null;

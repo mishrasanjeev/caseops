@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import logging
+import zipfile
 from datetime import UTC, date, datetime, time
 from typing import BinaryIO
 
@@ -742,6 +744,10 @@ def _attachment_record(
         document_type=attachment.document_type,
         lifecycle_stage=attachment.lifecycle_stage,
         document_date=attachment.document_date,
+        notice_source=attachment.notice_source,
+        notice_subject=attachment.notice_subject,
+        notice_received_on=attachment.notice_received_on,
+        notice_response=attachment.notice_response,
         sequence_index=attachment.sequence_index,
         linked_court_order_id=attachment.linked_court_order_id,
         hearing_id=attachment.hearing_id,
@@ -920,6 +926,13 @@ def _validated_sequence_index(sequence_index: int | None) -> int | None:
             detail="sequence_index must be greater than or equal to 0.",
         )
     return sequence_index
+
+
+def _clean_attachment_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None
 
 
 def _attachment_record_map(
@@ -1514,6 +1527,23 @@ def update_matter(
                 )
             matter.team_id = team_id
 
+    if "matter_code" in updates:
+        requested_code = updates.pop("matter_code")
+        if requested_code is not None and requested_code != matter.matter_code:
+            existing_matter = session.scalar(
+                select(Matter).where(
+                    Matter.company_id == context.company.id,
+                    Matter.matter_code == requested_code,
+                    Matter.id != matter.id,
+                )
+            )
+            if existing_matter:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="A matter with this code already exists for the current company.",
+                )
+            matter.matter_code = requested_code
+
     if FORUM_SELECTION_FIELDS & updates.keys():
         forum_selection = _resolve_forum_selection(
             session,
@@ -1542,6 +1572,16 @@ def update_matter(
         if field_name == "claim_amount_notes" and isinstance(value, str):
             value = value.strip() or None
         if field_name in {"case_number", "cnr_number"} and isinstance(value, str):
+            value = value.strip() or None
+        if field_name in {"title", "practice_area"} and isinstance(value, str):
+            value = value.strip()
+        if field_name in {
+            "client_name",
+            "opposing_party",
+            "court_name",
+            "judge_name",
+            "description",
+        } and isinstance(value, str):
             value = value.strip() or None
         setattr(matter, field_name, value)
     if next_hearing_changed and next_hearing_on is not None:
@@ -2277,6 +2317,10 @@ def _attachment_metadata_snapshot(attachment: MatterAttachment) -> dict[str, obj
         "document_type": attachment.document_type,
         "lifecycle_stage": attachment.lifecycle_stage,
         "document_date": attachment.document_date,
+        "notice_source": attachment.notice_source,
+        "notice_subject": attachment.notice_subject,
+        "notice_received_on": attachment.notice_received_on,
+        "notice_response": attachment.notice_response,
         "sequence_index": attachment.sequence_index,
         "linked_court_order_id": attachment.linked_court_order_id,
         "hearing_id": attachment.hearing_id,
@@ -2816,6 +2860,10 @@ def create_matter_attachment(
     document_type: str | None = None,
     lifecycle_stage: str | None = None,
     document_date: date | None = None,
+    notice_source: str | None = None,
+    notice_subject: str | None = None,
+    notice_received_on: date | None = None,
+    notice_response: str | None = None,
     sequence_index: int | None = None,
     linked_court_order_id: str | None = None,
     hearing_id: str | None = None,
@@ -2851,6 +2899,10 @@ def create_matter_attachment(
         document_type=document_type,
         lifecycle_stage=lifecycle_stage,
         document_date=document_date,
+        notice_source=_clean_attachment_text(notice_source),
+        notice_subject=_clean_attachment_text(notice_subject),
+        notice_received_on=notice_received_on,
+        notice_response=_clean_attachment_text(notice_response),
         sequence_index=sequence_index,
         linked_court_order_id=linked_court_order_id,
         hearing_id=hearing_id,
@@ -3018,6 +3070,14 @@ def update_matter_attachment_metadata(
         attachment.lifecycle_stage = updates["lifecycle_stage"]
     if "document_date" in updates:
         attachment.document_date = updates["document_date"]
+    if "notice_source" in updates:
+        attachment.notice_source = _clean_attachment_text(updates["notice_source"])
+    if "notice_subject" in updates:
+        attachment.notice_subject = _clean_attachment_text(updates["notice_subject"])
+    if "notice_received_on" in updates:
+        attachment.notice_received_on = updates["notice_received_on"]
+    if "notice_response" in updates:
+        attachment.notice_response = _clean_attachment_text(updates["notice_response"])
     if "sequence_index" in updates:
         attachment.sequence_index = _validated_sequence_index(updates["sequence_index"])
     if "linked_court_order_id" in updates:
@@ -3180,6 +3240,69 @@ def get_matter_attachment_download(
             detail="Attachment file is no longer available.",
         )
     return attachment, str(storage_path)
+
+
+def get_matter_attachment_bulk_download(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+    attachment_ids: list[str],
+) -> tuple[bytes, str, int]:
+    matter = _get_matter_model(session, context=context, matter_id=matter_id)
+    ordered_ids = list(dict.fromkeys([attachment_id.strip() for attachment_id in attachment_ids]))
+    ordered_ids = [attachment_id for attachment_id in ordered_ids if attachment_id]
+    if not ordered_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Select at least one attachment to download.",
+        )
+    if len(ordered_ids) > 50:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Bulk download supports up to 50 attachments at a time.",
+        )
+
+    attachments = list(
+        session.scalars(
+            select(MatterAttachment).where(
+                MatterAttachment.matter_id == matter.id,
+                MatterAttachment.id.in_(ordered_ids),
+            )
+        )
+    )
+    by_id = {attachment.id: attachment for attachment in attachments}
+    if len(by_id) != len(ordered_ids):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="One or more selected attachments were not found on this matter.",
+        )
+
+    archive = io.BytesIO()
+    used_names: dict[str, int] = {}
+    with zipfile.ZipFile(archive, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for index, attachment_id in enumerate(ordered_ids, start=1):
+            attachment = by_id[attachment_id]
+            storage_path = resolve_storage_path(attachment.storage_key)
+            if not storage_path.exists():
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="One or more selected attachment files are no longer available.",
+                )
+            base_name = sanitize_filename(attachment.original_filename or "document")
+            name_count = used_names.get(base_name, 0)
+            used_names[base_name] = name_count + 1
+            if name_count:
+                stem, dot, suffix = base_name.rpartition(".")
+                duplicate_suffix = str(name_count + 1)
+                if dot:
+                    base_name = f"{stem}-{duplicate_suffix}{dot}{suffix}"
+                else:
+                    base_name = f"{base_name}-{duplicate_suffix}"
+            zf.write(storage_path, arcname=f"{index:02d}-{base_name}")
+
+    archive_name = sanitize_filename(f"{matter.matter_code or matter.id}-documents.zip")
+    return archive.getvalue(), archive_name, len(ordered_ids)
 
 
 def create_time_entry(

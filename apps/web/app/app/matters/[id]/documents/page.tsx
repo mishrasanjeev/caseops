@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   ClipboardList,
+  Download,
   Eye,
   File,
   FileText,
@@ -41,6 +42,7 @@ import {
   fetchGoogleDriveStatus,
   fetchMatterFileQAHistory,
   listGoogleDriveFiles,
+  matterAttachmentBulkDownloadUrl,
   reindexMatterAttachment,
   revokeGoogleDriveConnection,
   retryMatterAttachment,
@@ -437,6 +439,7 @@ export default function MatterDocumentsPage() {
   const [analysisPendingId, setAnalysisPendingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [metadataDraft, setMetadataDraft] = useState<MetadataDraft | null>(null);
+  const [selectedAttachmentIds, setSelectedAttachmentIds] = useState<string[]>([]);
   // BUG-043 (Hari 2026-05-11): client-side search across the loaded
   // attachment set. Matches on filename, document type label, and
   // lifecycle stage label so a lawyer hunting "vakalatnama" or
@@ -639,6 +642,32 @@ export default function MatterDocumentsPage() {
     () => groupAttachments(filteredAttachments),
     [filteredAttachments],
   );
+  const attachmentIdSet = useMemo(
+    () => new Set((data?.attachments ?? []).map((attachment) => attachment.id)),
+    [data?.attachments],
+  );
+  const activeSelectedAttachmentIds = useMemo(
+    () => selectedAttachmentIds.filter((attachmentId) => attachmentIdSet.has(attachmentId)),
+    [attachmentIdSet, selectedAttachmentIds],
+  );
+  const selectedAttachmentSet = useMemo(
+    () => new Set(activeSelectedAttachmentIds),
+    [activeSelectedAttachmentIds],
+  );
+  const visibleAttachmentIds = useMemo(
+    () => filteredAttachments.map((attachment) => attachment.id),
+    [filteredAttachments],
+  );
+  const allVisibleSelected =
+    visibleAttachmentIds.length > 0 &&
+    visibleAttachmentIds.every((attachmentId) => selectedAttachmentSet.has(attachmentId));
+  const bulkDownloadHref =
+    activeSelectedAttachmentIds.length > 0
+      ? matterAttachmentBulkDownloadUrl({
+          matterId,
+          attachmentIds: activeSelectedAttachmentIds,
+        })
+      : null;
 
   if (!data) return null;
   const attachments = data.attachments;
@@ -728,6 +757,27 @@ export default function MatterDocumentsPage() {
 
   function updateDraft(patch: Partial<MetadataDraft>) {
     setMetadataDraft((current) => (current ? { ...current, ...patch } : current));
+  }
+
+  function toggleAttachmentSelection(attachmentId: string) {
+    setSelectedAttachmentIds((current) =>
+      current.includes(attachmentId)
+        ? current.filter((selectedId) => selectedId !== attachmentId)
+        : [...current, attachmentId],
+    );
+  }
+
+  function toggleVisibleAttachmentSelection() {
+    setSelectedAttachmentIds((current) => {
+      const currentSet = new Set(current);
+      if (allVisibleSelected) {
+        return current.filter((attachmentId) => !visibleAttachmentIds.includes(attachmentId));
+      }
+      for (const attachmentId of visibleAttachmentIds) {
+        currentSet.add(attachmentId);
+      }
+      return Array.from(currentSet);
+    });
   }
 
   const uploader = canUpload ? (
@@ -996,6 +1046,61 @@ export default function MatterDocumentsPage() {
           </>
         ) : null}
       </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--color-line)] bg-white px-3 py-2">
+        <label className="inline-flex items-center gap-2 text-sm text-[var(--color-ink-2)]">
+          <input
+            type="checkbox"
+            className="h-4 w-4 rounded border-[var(--color-line)]"
+            checked={allVisibleSelected}
+            disabled={visibleAttachmentIds.length === 0}
+            onChange={toggleVisibleAttachmentSelection}
+            data-testid="matter-documents-select-visible"
+          />
+          Select visible
+        </label>
+        <div className="flex flex-wrap items-center gap-2">
+          <span
+            className="text-xs text-[var(--color-mute)]"
+            data-testid="matter-documents-selected-count"
+          >
+            {activeSelectedAttachmentIds.length} selected
+          </span>
+          {bulkDownloadHref ? (
+            <Button
+              href={bulkDownloadHref}
+              variant="outline"
+              size="sm"
+              data-testid="matter-documents-bulk-download"
+              download
+            >
+              <Download className="h-4 w-4" aria-hidden />
+              Download selected
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled
+              data-testid="matter-documents-bulk-download"
+            >
+              <Download className="h-4 w-4" aria-hidden />
+              Download selected
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={activeSelectedAttachmentIds.length === 0}
+            onClick={() => setSelectedAttachmentIds([])}
+            data-testid="matter-documents-clear-selection"
+          >
+            <X className="h-4 w-4" aria-hidden />
+            Clear
+          </Button>
+        </div>
+      </div>
       {isFiltered && filteredAttachments.length === 0 ? (
         <EmptyState
           icon={Search}
@@ -1024,6 +1129,7 @@ export default function MatterDocumentsPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-[var(--color-line)] text-xs uppercase tracking-[0.06em] text-[var(--color-mute)]">
+                    <th className="w-10 px-4 py-2.5 text-left font-semibold">Select</th>
                     <th className="px-4 py-2.5 text-left font-semibold">File</th>
                     <th className="px-4 py-2.5 text-left font-semibold">Lifecycle</th>
                     <th className="px-4 py-2.5 text-left font-semibold">Date</th>
@@ -1053,6 +1159,16 @@ export default function MatterDocumentsPage() {
                         <tr
                           className="border-b border-[var(--color-line-2)] last:border-0"
                         >
+                          <td className="px-4 py-3 align-top">
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 rounded border-[var(--color-line)]"
+                              checked={selectedAttachmentSet.has(doc.id)}
+                              onChange={() => toggleAttachmentSelection(doc.id)}
+                              aria-label={`Select ${doc.original_filename ?? doc.filename ?? "document"}`}
+                              data-testid={`matter-document-select-${doc.id}`}
+                            />
+                          </td>
                           <td className="px-4 py-3">
                             <Link
                               href={viewHref}
@@ -1171,7 +1287,7 @@ export default function MatterDocumentsPage() {
                         </tr>
                         {editingId === doc.id && metadataDraft ? (
                           <tr className="border-b border-[var(--color-line-2)] bg-[var(--color-bg-2)]">
-                            <td colSpan={7} className="px-4 py-3">
+                            <td colSpan={8} className="px-4 py-3">
                               <div className="grid gap-3 lg:grid-cols-[1.1fr_1.1fr_0.8fr_0.6fr_1.2fr_auto] lg:items-end">
                                 <div>
                                   <Label htmlFor={`document-type-${doc.id}`}>Document type</Label>
