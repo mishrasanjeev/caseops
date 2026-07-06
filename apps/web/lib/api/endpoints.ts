@@ -2314,6 +2314,33 @@ export type MatterAttachmentRecord = {
   notice_subject: string | null;
   notice_received_on: string | null;
   notice_response: string | null;
+  notice_direction: string | null;
+  notice_type: string | null;
+  notice_mode: string | null;
+  notice_authority: string | null;
+  notice_received_from: string | null;
+  notice_summary: string | null;
+  notice_remarks: string | null;
+  notice_status: string | null;
+  notice_department: string | null;
+  notice_internal_spoc: string | null;
+  notice_internal_remarks: string | null;
+  notice_amount_minor: number | null;
+  notice_dispute_amount_minor: number | null;
+  notice_recovered_amount_minor: number | null;
+  notice_currency: string | null;
+  notice_reply_due_on: string | null;
+  notice_reply_required: boolean;
+  notice_reply_sent: boolean;
+  notice_reply_sent_on: string | null;
+  notice_reply_status: string | null;
+  notice_reply_days_remaining: number | null;
+  notice_sent_on: string | null;
+  notice_counsel_engaged: string | null;
+  notice_parent_attachment_id: string | null;
+  notice_document_role: string | null;
+  notice_reply_deadline_id: string | null;
+  notice_reminder_offsets: number[];
   sequence_index: number | null;
   linked_court_order_id: string | null;
   hearing_id: string | null;
@@ -2330,6 +2357,29 @@ export async function uploadMatterAttachment(input: {
   noticeSubject?: string | null;
   noticeReceivedOn?: string | null;
   noticeResponse?: string | null;
+  noticeDirection?: string | null;
+  noticeType?: string | null;
+  noticeMode?: string | null;
+  noticeAuthority?: string | null;
+  noticeReceivedFrom?: string | null;
+  noticeSummary?: string | null;
+  noticeRemarks?: string | null;
+  noticeStatus?: string | null;
+  noticeDepartment?: string | null;
+  noticeInternalSpoc?: string | null;
+  noticeInternalRemarks?: string | null;
+  noticeAmountMinor?: number | null;
+  noticeDisputeAmountMinor?: number | null;
+  noticeRecoveredAmountMinor?: number | null;
+  noticeCurrency?: string | null;
+  noticeReplyDueOn?: string | null;
+  noticeReplyRequired?: boolean | null;
+  noticeReplySent?: boolean | null;
+  noticeReplySentOn?: string | null;
+  noticeSentOn?: string | null;
+  noticeCounselEngaged?: string | null;
+  noticeParentAttachmentId?: string | null;
+  noticeDocumentRole?: string | null;
   sequenceIndex?: number | null;
   linkedCourtOrderId?: string | null;
   hearingId?: string | null;
@@ -2343,6 +2393,51 @@ export async function uploadMatterAttachment(input: {
   if (input.noticeSubject) body.append("notice_subject", input.noticeSubject);
   if (input.noticeReceivedOn) body.append("notice_received_on", input.noticeReceivedOn);
   if (input.noticeResponse) body.append("notice_response", input.noticeResponse);
+  if (input.noticeDirection) body.append("notice_direction", input.noticeDirection);
+  if (input.noticeType) body.append("notice_type", input.noticeType);
+  if (input.noticeMode) body.append("notice_mode", input.noticeMode);
+  if (input.noticeAuthority) body.append("notice_authority", input.noticeAuthority);
+  if (input.noticeReceivedFrom) body.append("notice_received_from", input.noticeReceivedFrom);
+  if (input.noticeSummary) body.append("notice_summary", input.noticeSummary);
+  if (input.noticeRemarks) body.append("notice_remarks", input.noticeRemarks);
+  if (input.noticeStatus) body.append("notice_status", input.noticeStatus);
+  if (input.noticeDepartment) body.append("notice_department", input.noticeDepartment);
+  if (input.noticeInternalSpoc) body.append("notice_internal_spoc", input.noticeInternalSpoc);
+  if (input.noticeInternalRemarks) {
+    body.append("notice_internal_remarks", input.noticeInternalRemarks);
+  }
+  if (input.noticeAmountMinor !== undefined && input.noticeAmountMinor !== null) {
+    body.append("notice_amount_minor", String(input.noticeAmountMinor));
+  }
+  if (
+    input.noticeDisputeAmountMinor !== undefined &&
+    input.noticeDisputeAmountMinor !== null
+  ) {
+    body.append("notice_dispute_amount_minor", String(input.noticeDisputeAmountMinor));
+  }
+  if (
+    input.noticeRecoveredAmountMinor !== undefined &&
+    input.noticeRecoveredAmountMinor !== null
+  ) {
+    body.append("notice_recovered_amount_minor", String(input.noticeRecoveredAmountMinor));
+  }
+  if (input.noticeCurrency) body.append("notice_currency", input.noticeCurrency);
+  if (input.noticeReplyDueOn) body.append("notice_reply_due_on", input.noticeReplyDueOn);
+  if (input.noticeReplyRequired !== undefined && input.noticeReplyRequired !== null) {
+    body.append("notice_reply_required", String(input.noticeReplyRequired));
+  }
+  if (input.noticeReplySent !== undefined && input.noticeReplySent !== null) {
+    body.append("notice_reply_sent", String(input.noticeReplySent));
+  }
+  if (input.noticeReplySentOn) body.append("notice_reply_sent_on", input.noticeReplySentOn);
+  if (input.noticeSentOn) body.append("notice_sent_on", input.noticeSentOn);
+  if (input.noticeCounselEngaged) {
+    body.append("notice_counsel_engaged", input.noticeCounselEngaged);
+  }
+  if (input.noticeParentAttachmentId) {
+    body.append("notice_parent_attachment_id", input.noticeParentAttachmentId);
+  }
+  if (input.noticeDocumentRole) body.append("notice_document_role", input.noticeDocumentRole);
   if (input.sequenceIndex !== undefined && input.sequenceIndex !== null) {
     body.append("sequence_index", String(input.sequenceIndex));
   }
@@ -2369,6 +2464,30 @@ export async function updateMatterAttachmentMetadata(input: {
   notice_subject?: string | null;
   notice_received_on?: string | null;
   notice_response?: string | null;
+  notice_direction?: string | null;
+  notice_type?: string | null;
+  notice_mode?: string | null;
+  notice_authority?: string | null;
+  notice_received_from?: string | null;
+  notice_summary?: string | null;
+  notice_remarks?: string | null;
+  notice_status?: string | null;
+  notice_department?: string | null;
+  notice_internal_spoc?: string | null;
+  notice_internal_remarks?: string | null;
+  notice_amount_minor?: number | null;
+  notice_dispute_amount_minor?: number | null;
+  notice_recovered_amount_minor?: number | null;
+  notice_currency?: string | null;
+  notice_reply_due_on?: string | null;
+  notice_reply_required?: boolean | null;
+  notice_reply_sent?: boolean | null;
+  notice_reply_sent_on?: string | null;
+  notice_sent_on?: string | null;
+  notice_counsel_engaged?: string | null;
+  notice_parent_attachment_id?: string | null;
+  notice_document_role?: string | null;
+  notice_reminder_offsets?: number[] | null;
   sequence_index?: number | null;
   linked_court_order_id?: string | null;
   hearing_id?: string | null;

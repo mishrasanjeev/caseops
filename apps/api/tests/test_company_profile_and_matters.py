@@ -950,9 +950,25 @@ def test_notice_upload_persists_structured_notice_metadata(client: TestClient) -
             "document_type": "notice",
             "lifecycle_stage": "initiation",
             "document_date": "2026-07-02",
+            "notice_direction": "received",
+            "notice_type": "Legal demand",
+            "notice_mode": "Email",
             "notice_source": "Opposing counsel",
             "notice_subject": "Demand notice for unpaid invoice",
             "notice_received_on": "2026-07-02",
+            "notice_authority": "Delhi Police",
+            "notice_received_from": "Lawyer",
+            "notice_summary": "Client received a demand notice with annexures.",
+            "notice_remarks": "Check limitation and invoice ledger.",
+            "notice_status": "Open",
+            "notice_department": "Finance",
+            "notice_internal_spoc": "Asha Mehta",
+            "notice_internal_remarks": "Coordinate with accounts before reply.",
+            "notice_amount_minor": "1250000",
+            "notice_currency": "INR",
+            "notice_reply_due_on": "2099-07-10",
+            "notice_reply_required": "true",
+            "notice_reply_sent": "false",
             "notice_response": "Prepare reply disputing liability by 10 July.",
         },
         files={"file": ("demand-notice.txt", b"Notice body", "text/plain")},
@@ -961,19 +977,82 @@ def test_notice_upload_persists_structured_notice_metadata(client: TestClient) -
     assert upload_response.status_code == 200, upload_response.text
     attachment = upload_response.json()
     assert attachment["document_type"] == "notice"
+    assert attachment["notice_direction"] == "received"
+    assert attachment["notice_type"] == "Legal demand"
+    assert attachment["notice_mode"] == "Email"
     assert attachment["notice_source"] == "Opposing counsel"
     assert attachment["notice_subject"] == "Demand notice for unpaid invoice"
     assert attachment["notice_received_on"] == "2026-07-02"
+    assert attachment["notice_authority"] == "Delhi Police"
+    assert attachment["notice_received_from"] == "Lawyer"
+    assert attachment["notice_summary"] == "Client received a demand notice with annexures."
+    assert attachment["notice_remarks"] == "Check limitation and invoice ledger."
+    assert attachment["notice_status"] == "Open"
+    assert attachment["notice_department"] == "Finance"
+    assert attachment["notice_internal_spoc"] == "Asha Mehta"
+    assert attachment["notice_internal_remarks"] == "Coordinate with accounts before reply."
+    assert attachment["notice_amount_minor"] == 1250000
+    assert attachment["notice_currency"] == "INR"
+    assert attachment["notice_reply_due_on"] == "2099-07-10"
+    assert attachment["notice_reply_required"] is True
+    assert attachment["notice_reply_sent"] is False
+    assert attachment["notice_reply_status"] == "reply_due_in_days"
+    assert attachment["notice_reply_deadline_id"]
+    assert attachment["notice_reminder_offsets"] == [7, 3, 1]
     assert attachment["notice_response"] == "Prepare reply disputing liability by 10 July."
+
+    deadlines_response = client.get(
+        f"/api/matters/{matter_id}/deadlines",
+        headers=auth_headers(token),
+    )
+    assert deadlines_response.status_code == 200
+    notice_deadline = next(
+        row
+        for row in deadlines_response.json()["deadlines"]
+        if row["id"] == attachment["notice_reply_deadline_id"]
+    )
+    assert notice_deadline["source"] == "notice"
+    assert notice_deadline["kind"] == "reply_due"
+    assert notice_deadline["due_on"] == "2099-07-10"
+    assert notice_deadline["source_ref_type"] == "matter_attachment"
+    assert notice_deadline["source_ref_id"] == attachment["id"]
+
+    reply_upload = client.post(
+        f"/api/matters/{matter_id}/attachments",
+        headers=auth_headers(token),
+        data={
+            "document_type": "notice",
+            "document_date": "2099-07-05",
+            "notice_direction": "received",
+            "notice_document_role": "reply",
+            "notice_parent_attachment_id": attachment["id"],
+            "notice_subject": "Reply to demand notice",
+            "notice_reply_sent_on": "2099-07-05",
+        },
+        files={"file": ("reply-notice.txt", b"Reply body", "text/plain")},
+    )
+    assert reply_upload.status_code == 200, reply_upload.text
+    reply_attachment = reply_upload.json()
+    assert reply_attachment["notice_document_role"] == "reply"
+    assert reply_attachment["notice_parent_attachment_id"] == attachment["id"]
 
     workspace_response = client.get(
         f"/api/matters/{matter_id}/workspace",
         headers=auth_headers(token),
     )
     assert workspace_response.status_code == 200
-    workspace_notice = workspace_response.json()["attachments"][0]
+    workspace_attachments = workspace_response.json()["attachments"]
+    workspace_notice = next(row for row in workspace_attachments if row["id"] == attachment["id"])
     assert workspace_notice["notice_subject"] == "Demand notice for unpaid invoice"
     assert workspace_notice["notice_source"] == "Opposing counsel"
+    assert workspace_notice["notice_reply_sent"] is True
+    assert workspace_notice["notice_reply_sent_on"] == "2099-07-05"
+    assert workspace_notice["notice_reply_status"] == "reply_sent"
+    workspace_reply = next(
+        row for row in workspace_attachments if row["id"] == reply_attachment["id"]
+    )
+    assert workspace_reply["notice_parent_attachment_id"] == attachment["id"]
+    assert workspace_reply["notice_document_role"] == "reply"
 
     update_response = client.patch(
         f"/api/matters/{matter_id}/attachments/{attachment['id']}/metadata",
@@ -987,6 +1066,35 @@ def test_notice_upload_persists_structured_notice_metadata(client: TestClient) -
     assert update_response.status_code == 200
     assert update_response.json()["notice_source"] == "Client legal department"
     assert update_response.json()["notice_response"] == "Final reply sent and acknowledged."
+
+    sent_response = client.post(
+        f"/api/matters/{matter_id}/attachments",
+        headers=auth_headers(token),
+        data={
+            "document_type": "notice",
+            "document_date": "2026-07-04",
+            "notice_direction": "sent",
+            "notice_sent_on": "2026-07-04",
+            "notice_type": "Recovery notice",
+            "notice_subject": "Notice sent to debtor",
+            "notice_summary": "Demand sent before recovery action.",
+            "notice_counsel_engaged": "Rao & Co.",
+            "notice_status": "Dispatched",
+            "notice_department": "Collections",
+            "notice_dispute_amount_minor": "1500000",
+            "notice_recovered_amount_minor": "250000",
+            "notice_internal_remarks": "Track settlement response.",
+        },
+        files={"file": ("sent-notice.txt", b"Sent notice body", "text/plain")},
+    )
+    assert sent_response.status_code == 200, sent_response.text
+    sent_notice = sent_response.json()
+    assert sent_notice["notice_direction"] == "sent"
+    assert sent_notice["notice_sent_on"] == "2026-07-04"
+    assert sent_notice["notice_counsel_engaged"] == "Rao & Co."
+    assert sent_notice["notice_dispute_amount_minor"] == 1500000
+    assert sent_notice["notice_recovered_amount_minor"] == 250000
+    assert sent_notice["notice_reply_status"] is None
 
 
 def test_selected_matter_attachments_download_as_zip(client: TestClient) -> None:
@@ -1221,8 +1329,7 @@ def test_scanned_pdf_attachment_can_be_indexed_when_ocr_returns_text(
     monkeypatch.setattr(
         "caseops_api.services.document_processing._extract_scanned_pdf_text",
         lambda path: (
-            "Scanned hearing bundle includes witness statement and next hearing "
-            "on 2026-05-18."
+            "Scanned hearing bundle includes witness statement and next hearing on 2026-05-18."
         ),
     )
 
@@ -1756,8 +1863,7 @@ def test_ai_matter_summary_brief_uses_workspace_data(client: TestClient) -> None
         headers=auth_headers(token),
         json={
             "body": (
-                "Need final chronology, regulator correspondence, and interim relief "
-                "position."
+                "Need final chronology, regulator correspondence, and interim relief position."
             )
         },
     )
@@ -1806,8 +1912,7 @@ def test_ai_matter_summary_brief_uses_workspace_data(client: TestClient) -> None
     assert any("Delhi High Court" in item for item in payload["court_posture"])
     assert any("Cause list source" in item for item in payload["source_provenance"])
     assert any(
-        "Board update and litigation posture" in item
-        for item in payload["recommended_actions"]
+        "Board update and litigation posture" in item for item in payload["recommended_actions"]
     )
 
 

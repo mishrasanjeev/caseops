@@ -198,11 +198,13 @@ async function waitForUrl(url, timeoutMs) {
 }
 
 function runPlaywright() {
+  const playwrightConfig =
+    process.env.CASEOPS_E2E_PLAYWRIGHT_CONFIG ?? "playwright.functional-qa.config.ts";
   const npx = shellCommand("npx", [
     "playwright",
     "test",
     "--config",
-    "playwright.functional-qa.config.ts",
+    playwrightConfig,
     "--reporter=line",
     ...process.argv.slice(2),
   ]);

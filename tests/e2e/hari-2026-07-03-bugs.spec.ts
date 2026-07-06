@@ -146,7 +146,7 @@ test.describe("Hari 2026-07-03 bugs", () => {
     expect((await updateResponse).status()).toBe(200);
     await expect(page.getByText("Corrected summary")).toBeVisible();
     await expect(page.getByText(`${matterCode}-FIX`)).toBeVisible();
-    await expect(page.getByText("Corrected Client", { exact: true })).toBeVisible();
+    await expect(page.getByText("Corrected Client", { exact: true }).first()).toBeVisible();
 
     await page.goto(`/app/matters/${matterId}/documents`);
     await page.getByTestId(`matter-document-select-${firstAttachmentId}`).check();

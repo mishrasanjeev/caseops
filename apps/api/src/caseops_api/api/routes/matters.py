@@ -300,33 +300,15 @@ DraftFinalizer = Annotated[SessionContext, Depends(require_capability("drafts:fi
 HearingPackGenerator = Annotated[
     SessionContext, Depends(require_capability("hearing_packs:generate"))
 ]
-HearingPackReviewer = Annotated[
-    SessionContext, Depends(require_capability("hearing_packs:review"))
-]
-CourtSyncRunner = Annotated[
-    SessionContext, Depends(require_capability("court_sync:run"))
-]
-InvoiceIssuer = Annotated[
-    SessionContext, Depends(require_capability("invoices:issue"))
-]
-TimeEntryWriter = Annotated[
-    SessionContext, Depends(require_capability("time_entries:write"))
-]
-DocumentUploader = Annotated[
-    SessionContext, Depends(require_capability("documents:upload"))
-]
-DocumentManager = Annotated[
-    SessionContext, Depends(require_capability("documents:manage"))
-]
-MatterAccessManager = Annotated[
-    SessionContext, Depends(require_capability("matter_access:manage"))
-]
-MatterAuditExporter = Annotated[
-    SessionContext, Depends(require_capability("audit:export"))
-]
-MatterBulkImporter = Annotated[
-    SessionContext, Depends(require_capability("workspace:admin"))
-]
+HearingPackReviewer = Annotated[SessionContext, Depends(require_capability("hearing_packs:review"))]
+CourtSyncRunner = Annotated[SessionContext, Depends(require_capability("court_sync:run"))]
+InvoiceIssuer = Annotated[SessionContext, Depends(require_capability("invoices:issue"))]
+TimeEntryWriter = Annotated[SessionContext, Depends(require_capability("time_entries:write"))]
+DocumentUploader = Annotated[SessionContext, Depends(require_capability("documents:upload"))]
+DocumentManager = Annotated[SessionContext, Depends(require_capability("documents:manage"))]
+MatterAccessManager = Annotated[SessionContext, Depends(require_capability("matter_access:manage"))]
+MatterAuditExporter = Annotated[SessionContext, Depends(require_capability("audit:export"))]
+MatterBulkImporter = Annotated[SessionContext, Depends(require_capability("workspace:admin"))]
 
 
 @router.get("/", response_model=MatterListResponse, summary="List matters for the current company")
@@ -428,9 +410,7 @@ async def dry_run_current_company_matter_import(
             )
         )
     if document_archive is not None:
-        archive_content = await document_archive.read(
-            MATTER_IMPORT_DOCUMENT_ARCHIVE_MAX_BYTES + 1
-        )
+        archive_content = await document_archive.read(MATTER_IMPORT_DOCUMENT_ARCHIVE_MAX_BYTES + 1)
         document_filenames.extend(
             parse_matter_import_document_archive(
                 filename=document_archive.filename or "documents.zip",
@@ -549,7 +529,9 @@ async def list_current_company_matter_reminders(
     # caller can't see the matter.
     matter = get_matter(session, context=context, matter_id=matter_id)
     rows = list_reminders_for_matter(
-        session, company_id=context.company.id, matter_id=matter.id,
+        session,
+        company_id=context.company.id,
+        matter_id=matter.id,
     )
     return {
         "matter_id": matter.id,
@@ -560,11 +542,9 @@ async def list_current_company_matter_reminders(
                 "recipient_email": r.recipient_email,
                 "channel": r.channel,
                 "status": r.status,
-                "scheduled_for": r.scheduled_for.isoformat()
-                if r.scheduled_for else None,
+                "scheduled_for": r.scheduled_for.isoformat() if r.scheduled_for else None,
                 "sent_at": r.sent_at.isoformat() if r.sent_at else None,
-                "delivered_at": r.delivered_at.isoformat()
-                if r.delivered_at else None,
+                "delivered_at": r.delivered_at.isoformat() if r.delivered_at else None,
                 "last_error": r.last_error,
                 "attempts": r.attempts,
             }
@@ -716,9 +696,7 @@ async def post_current_company_matter_tag(
     context: MatterEditor,
     session: DbSession,
 ) -> MatterTagAssignmentRecord:
-    result = assign_tag_to_matter(
-        session, context=context, matter_id=matter_id, payload=payload
-    )
+    result = assign_tag_to_matter(session, context=context, matter_id=matter_id, payload=payload)
     session.commit()
     return result
 
@@ -734,9 +712,7 @@ async def delete_current_company_matter_tag(
     context: MatterEditor,
     session: DbSession,
 ) -> Response:
-    remove_tag_from_matter(
-        session, context=context, matter_id=matter_id, tag_id=tag_id
-    )
+    remove_tag_from_matter(session, context=context, matter_id=matter_id, tag_id=tag_id)
     session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -1130,9 +1106,7 @@ async def get_current_company_matter_summary(
     context: CurrentContext,
     session: DbSession,
 ) -> MatterExecutiveSummary:
-    return generate_matter_summary(
-        session, context=context, matter_id=matter_id
-    )
+    return generate_matter_summary(session, context=context, matter_id=matter_id)
 
 
 @router.post(
@@ -1169,12 +1143,8 @@ async def get_current_company_matter_summary_docx(
     context: CurrentContext,
     session: DbSession,
 ) -> Response:
-    summary = generate_matter_summary(
-        session, context=context, matter_id=matter_id
-    )
-    timeline = build_matter_timeline_by_id(
-        session=session, context=context, matter_id=matter_id
-    )
+    summary = generate_matter_summary(session, context=context, matter_id=matter_id)
+    timeline = build_matter_timeline_by_id(session=session, context=context, matter_id=matter_id)
     # Loading the matter twice is cheap (SELECT by PK + tenant) and
     # keeps the service layer trivially unit-testable.
     from caseops_api.services.matters import _get_matter_model
@@ -1188,10 +1158,7 @@ async def get_current_company_matter_summary_docx(
     )
     return Response(
         content=body,
-        media_type=(
-            "application/vnd.openxmlformats-officedocument.wordprocessingml"
-            ".document"
-        ),
+        media_type=("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',
         },
@@ -1208,12 +1175,8 @@ async def get_current_company_matter_summary_pdf(
     context: CurrentContext,
     session: DbSession,
 ) -> Response:
-    summary = generate_matter_summary(
-        session, context=context, matter_id=matter_id
-    )
-    timeline = build_matter_timeline_by_id(
-        session=session, context=context, matter_id=matter_id
-    )
+    summary = generate_matter_summary(session, context=context, matter_id=matter_id)
+    timeline = build_matter_timeline_by_id(session=session, context=context, matter_id=matter_id)
     from caseops_api.services.matters import _get_matter_model
 
     matter = _get_matter_model(session, context=context, matter_id=matter_id)
@@ -1396,7 +1359,9 @@ async def get_matter_next_action(
     # matter here — a matter that doesn't belong to the tenant just
     # produces zero candidates and returns null.
     action = build_matter_next_action(
-        session, context=context, matter_id=matter_id,
+        session,
+        context=context,
+        matter_id=matter_id,
     )
     if action is None:
         return None
@@ -1445,8 +1410,7 @@ class DraftCompareResponse(BaseModel):
     "/{matter_id}/drafts/{draft_id}/compare",
     response_model=DraftCompareResponse,
     summary=(
-        "Structured diff between two revisions of the same draft "
-        "(PG-005 Sprint 6, 2026-05-01)."
+        "Structured diff between two revisions of the same draft (PG-005 Sprint 6, 2026-05-01)."
     ),
 )
 async def get_current_company_matter_draft_compare(
@@ -1522,9 +1486,7 @@ async def get_current_company_matter_bench_match(
     context: CurrentContext,
     session: DbSession,
 ) -> BenchMatchResponse:
-    dc = suggest_bench_for_matter_id(
-        session=session, context=context, matter_id=matter_id
-    )
+    dc = suggest_bench_for_matter_id(session=session, context=context, matter_id=matter_id)
     return _bench_suggestion_to_response(dc)
 
 
@@ -1602,9 +1564,7 @@ class BenchStrategyContextResponse(BaseModel):
     drafting_cautions: list[str]
     unsupported_gaps: list[str]
     # Slice C (MOD-TS-001-D, 2026-04-25). Bench-specific block.
-    bench_specific_authorities: list[BenchSpecificAuthorityResponse] = (
-        Field(default_factory=list)
-    )
+    bench_specific_authorities: list[BenchSpecificAuthorityResponse] = Field(default_factory=list)
     bench_specific_limitation_note: str | None = None
     # Echo of the resolved next-listing ID so the UI knows which
     # listing the bench-specific block was anchored to. None when the
@@ -1711,7 +1671,8 @@ async def get_current_company_matter_bench_strategy_context(
         ],
         authorities_frequently_cited=[
             BenchContextCitedAuthorityResponse(
-                citation=c.citation, occurrences=c.occurrences,
+                citation=c.citation,
+                occurrences=c.occurrences,
             )
             for c in ctx.authorities_frequently_cited
         ],
@@ -1754,6 +1715,7 @@ async def get_current_company_matter_bench_strategy_context(
 # Surfaces L-A/L-B/L-C analysis layers as a tenant-scoped per-matter
 # read. Citation-grounded view first; predictive layer (judge tendencies
 # + predicted_disposition) lands when L-E ships.
+
 
 class BenchStrategyAuthorityResponse(BaseModel):
     authority_id: str
@@ -1816,8 +1778,10 @@ async def get_current_company_matter_bench_strategy(
         evidence_quality=payload.evidence_quality,
         top_authorities=[
             BenchStrategyAuthorityResponse(
-                authority_id=a.authority_id, title=a.title,
-                citation_count=a.citation_count, last_year=a.last_year,
+                authority_id=a.authority_id,
+                title=a.title,
+                citation_count=a.citation_count,
+                last_year=a.last_year,
                 sample_judgment_id=a.sample_judgment_id,
             )
             for a in payload.top_authorities
@@ -2269,7 +2233,10 @@ async def post_current_company_matter_court_order(
     storage-backend handling in one place.
     """
     return create_matter_court_order(
-        session, context=context, matter_id=matter_id, payload=payload,
+        session,
+        context=context,
+        matter_id=matter_id,
+        payload=payload,
     )
 
 
@@ -2436,6 +2403,29 @@ async def post_current_company_matter_attachment(
     notice_subject: Annotated[str | None, Form(max_length=500)] = None,
     notice_received_on: Annotated[date | None, Form()] = None,
     notice_response: Annotated[str | None, Form(max_length=4000)] = None,
+    notice_direction: Annotated[str | None, Form(max_length=16)] = None,
+    notice_type: Annotated[str | None, Form(max_length=120)] = None,
+    notice_mode: Annotated[str | None, Form(max_length=80)] = None,
+    notice_authority: Annotated[str | None, Form(max_length=255)] = None,
+    notice_received_from: Annotated[str | None, Form(max_length=120)] = None,
+    notice_summary: Annotated[str | None, Form(max_length=6000)] = None,
+    notice_remarks: Annotated[str | None, Form(max_length=4000)] = None,
+    notice_status: Annotated[str | None, Form(max_length=80)] = None,
+    notice_department: Annotated[str | None, Form(max_length=160)] = None,
+    notice_internal_spoc: Annotated[str | None, Form(max_length=160)] = None,
+    notice_internal_remarks: Annotated[str | None, Form(max_length=4000)] = None,
+    notice_amount_minor: Annotated[int | None, Form(ge=0)] = None,
+    notice_dispute_amount_minor: Annotated[int | None, Form(ge=0)] = None,
+    notice_recovered_amount_minor: Annotated[int | None, Form(ge=0)] = None,
+    notice_currency: Annotated[str | None, Form(min_length=3, max_length=3)] = None,
+    notice_reply_due_on: Annotated[date | None, Form()] = None,
+    notice_reply_required: Annotated[bool | None, Form()] = None,
+    notice_reply_sent: Annotated[bool | None, Form()] = None,
+    notice_reply_sent_on: Annotated[date | None, Form()] = None,
+    notice_sent_on: Annotated[date | None, Form()] = None,
+    notice_counsel_engaged: Annotated[str | None, Form(max_length=255)] = None,
+    notice_parent_attachment_id: Annotated[str | None, Form(max_length=36)] = None,
+    notice_document_role: Annotated[str | None, Form(max_length=24)] = None,
     sequence_index: Annotated[int | None, Form(ge=0)] = None,
     linked_court_order_id: Annotated[str | None, Form(max_length=36)] = None,
     hearing_id: Annotated[str | None, Form(max_length=36)] = None,
@@ -2454,6 +2444,29 @@ async def post_current_company_matter_attachment(
         notice_subject=notice_subject,
         notice_received_on=notice_received_on,
         notice_response=notice_response,
+        notice_direction=notice_direction,
+        notice_type=notice_type,
+        notice_mode=notice_mode,
+        notice_authority=notice_authority,
+        notice_received_from=notice_received_from,
+        notice_summary=notice_summary,
+        notice_remarks=notice_remarks,
+        notice_status=notice_status,
+        notice_department=notice_department,
+        notice_internal_spoc=notice_internal_spoc,
+        notice_internal_remarks=notice_internal_remarks,
+        notice_amount_minor=notice_amount_minor,
+        notice_dispute_amount_minor=notice_dispute_amount_minor,
+        notice_recovered_amount_minor=notice_recovered_amount_minor,
+        notice_currency=notice_currency,
+        notice_reply_due_on=notice_reply_due_on,
+        notice_reply_required=notice_reply_required,
+        notice_reply_sent=notice_reply_sent,
+        notice_reply_sent_on=notice_reply_sent_on,
+        notice_sent_on=notice_sent_on,
+        notice_counsel_engaged=notice_counsel_engaged,
+        notice_parent_attachment_id=notice_parent_attachment_id,
+        notice_document_role=notice_document_role,
         sequence_index=sequence_index,
         linked_court_order_id=linked_court_order_id,
         hearing_id=hearing_id,
@@ -2771,9 +2784,7 @@ async def get_current_company_matter_draft(
     context: CurrentContext,
     session: DbSession,
 ) -> DraftRecord:
-    draft = get_draft(
-        session, context=context, matter_id=matter_id, draft_id=draft_id
-    )
+    draft = get_draft(session, context=context, matter_id=matter_id, draft_id=draft_id)
     return DraftRecord.model_validate(load_draft_record(draft))
 
 
@@ -2952,9 +2963,7 @@ async def get_current_company_matter_draft_docx(
     )
     return Response(
         content=body,
-        media_type=(
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        ),
+        media_type=("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
@@ -3169,7 +3178,6 @@ async def get_current_company_matter_draft_filing_checklist(
     )
 
 
-
 @router.get(
     "/{matter_id}/access",
     response_model=MatterAccessPanelResponse,
@@ -3180,9 +3188,7 @@ async def get_current_company_matter_access(
     context: CurrentContext,
     session: DbSession,
 ) -> MatterAccessPanelResponse:
-    matter, grants, walls = list_access_panel(
-        session, context=context, matter_id=matter_id
-    )
+    matter, grants, walls = list_access_panel(session, context=context, matter_id=matter_id)
     return MatterAccessPanelResponse(
         matter_id=matter.id,
         restricted_access=matter.restricted_access,
