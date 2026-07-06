@@ -1,7 +1,7 @@
 name: Prod verification (Playwright)
 
-# Runs the brutal-honest prod-Playwright suite (tests/e2e/ram-batch-2026-04-26-prod.spec.ts)
-# against the LIVE caseops.ai + api.caseops.ai surface using the dedicated
+# Runs the brutal-honest prod-Playwright suites against the LIVE
+# caseops.ai + api.caseops.ai surface using the dedicated
 # CaseOps QA Bot workspace (caseops-qa). Per
 # .claude/skills/bug-fixing/SKILL.md "Brutal Honest Testing — No Manual
 # QA Dependence": every fix verdict must name the spec line + commit
@@ -41,7 +41,7 @@ permissions:
 
 jobs:
   prod-playwright:
-    name: Prod-Playwright (ram-batch suite)
+    name: Prod-Playwright suites
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -82,6 +82,15 @@ jobs:
           CASEOPS_QA_EMAIL: ${{ vars.CASEOPS_QA_EMAIL }}
           CASEOPS_QA_SLUG: ${{ vars.CASEOPS_QA_SLUG }}
         run: npx playwright test --config=playwright.prod-ram.config.ts --reporter=list
+
+      - name: Run prod-Playwright suite (notice module)
+        env:
+          CASEOPS_QA_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
+          PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
+          PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
+          CASEOPS_QA_EMAIL: ${{ vars.CASEOPS_QA_EMAIL }}
+          CASEOPS_QA_SLUG: ${{ vars.CASEOPS_QA_SLUG }}
+        run: npx playwright test --config=playwright.notice-prod.config.ts --reporter=list
 
       - name: Upload Playwright report on failure
         if: failure()
