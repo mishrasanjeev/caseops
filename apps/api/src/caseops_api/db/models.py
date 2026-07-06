@@ -4629,6 +4629,35 @@ class MatterAttachment(Base):
     notice_subject: Mapped[str | None] = mapped_column(String(500), nullable=True)
     notice_received_on: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
     notice_response: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notice_direction: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
+    notice_type: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    notice_mode: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    notice_authority: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    notice_received_from: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    notice_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notice_remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notice_status: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    notice_department: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    notice_internal_spoc: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    notice_internal_remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notice_amount_minor: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    notice_dispute_amount_minor: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    notice_recovered_amount_minor: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    notice_currency: Mapped[str] = mapped_column(String(3), nullable=False, default="INR")
+    notice_reply_due_on: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    notice_reply_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    notice_reply_sent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    notice_reply_sent_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    notice_sent_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    notice_counsel_engaged: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    notice_parent_attachment_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )
+    notice_document_role: Mapped[str] = mapped_column(String(24), nullable=False, default="notice")
+    notice_reply_deadline_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )
+    notice_reminder_offsets_json: Mapped[list[int] | None] = mapped_column(JSON, nullable=True)
     sequence_index: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     linked_court_order_id: Mapped[str | None] = mapped_column(
         ForeignKey("matter_court_orders.id", ondelete="SET NULL"),
@@ -6680,9 +6709,7 @@ class ConnectorSecretRotationEvidence(Base):
 
 class PlatformOperationalReadinessEvidence(Base):
     __tablename__ = "platform_operational_readiness_evidence"
-    __table_args__ = (
-        UniqueConstraint("category", "gate_code", name="uq_platform_readiness_gate"),
-    )
+    __table_args__ = (UniqueConstraint("category", "gate_code", name="uq_platform_readiness_gate"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     category: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
@@ -6832,9 +6859,7 @@ class TenantSecurityPolicy(Base):
 
 class TenantEnterpriseIdentityConfiguration(Base):
     __tablename__ = "tenant_enterprise_identity_configurations"
-    __table_args__ = (
-        UniqueConstraint("company_id", name="uq_tenant_enterprise_identity_company"),
-    )
+    __table_args__ = (UniqueConstraint("company_id", name="uq_tenant_enterprise_identity_company"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
@@ -6962,9 +6987,7 @@ class AgentToolCall(Base):
     tool_name: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
     scope: Mapped[str | None] = mapped_column(String(160), nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="blocked", index=True)
-    approval_status: Mapped[str] = mapped_column(
-        String(32), nullable=False, default="required"
-    )
+    approval_status: Mapped[str] = mapped_column(String(32), nullable=False, default="required")
     redacted_input_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     redacted_output_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

@@ -27,6 +27,8 @@ from caseops_api.db.models import (
     MatterCourtOrder,
     MatterCourtSyncJob,
     MatterCourtSyncRun,
+    MatterDeadline,
+    MatterDeadlineStatus,
     MatterHearing,
     MatterHearingStatus,
     MatterInvoice,
@@ -149,6 +151,23 @@ DOCUMENT_TYPE_DEFAULT_LIFECYCLE: dict[str, str] = {
     "billing": "administrative",
     "other": "other",
 }
+NOTICE_REMINDER_OFFSETS = [7, 3, 1]
+NOTICE_TEXT_FIELDS = {
+    "notice_source",
+    "notice_subject",
+    "notice_response",
+    "notice_type",
+    "notice_mode",
+    "notice_authority",
+    "notice_received_from",
+    "notice_summary",
+    "notice_remarks",
+    "notice_status",
+    "notice_department",
+    "notice_internal_spoc",
+    "notice_internal_remarks",
+    "notice_counsel_engaged",
+}
 
 
 def _status_value(value: object) -> str | None:
@@ -171,9 +190,7 @@ def _conflict_gate_metadata(
             "reason": decision.reason,
             "latest_check_id": decision.latest_check_id,
             "latest_status": decision.latest_status,
-            "latest_ran_at": decision.latest_ran_at.isoformat()
-            if decision.latest_ran_at
-            else None,
+            "latest_ran_at": decision.latest_ran_at.isoformat() if decision.latest_ran_at else None,
         },
     }
     return metadata
@@ -181,19 +198,13 @@ def _conflict_gate_metadata(
 
 def _conflict_gate_block_detail(decision: ConflictGateDecision) -> str:
     if decision.reason == "missing_check":
-        return (
-            "Matter cannot be activated until a conflict check is completed "
-            "as clear or waived."
-        )
+        return "Matter cannot be activated until a conflict check is completed as clear or waived."
     if decision.latest_status == MatterConflictCheckStatus.CONFLICTED.value:
         return (
             "Matter cannot be activated because the latest conflict check "
             "indicates a possible conflict requiring review."
         )
-    return (
-        "Matter cannot be activated because the latest conflict check "
-        "requires review or waiver."
-    )
+    return "Matter cannot be activated because the latest conflict check requires review or waiver."
 
 
 def _order_has_active_stay(order: MatterCourtOrder) -> bool:
@@ -299,9 +310,7 @@ def _forum_snapshot(matter: Matter) -> dict[str, str | None]:
 def _load_active_court(session: Session, court_id: str | None) -> Court | None:
     if not court_id:
         return None
-    court = session.scalar(
-        select(Court).where(Court.id == court_id, Court.is_active.is_(True))
-    )
+    court = session.scalar(select(Court).where(Court.id == court_id, Court.is_active.is_(True)))
     if court is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -310,9 +319,7 @@ def _load_active_court(session: Session, court_id: str | None) -> Court | None:
     return court
 
 
-def _load_forum_catalog_entry(
-    session: Session, entry_id: str | None
-) -> ForumCatalogEntry | None:
+def _load_forum_catalog_entry(session: Session, entry_id: str | None) -> ForumCatalogEntry | None:
     if not entry_id:
         return None
     entry = session.scalar(
@@ -718,11 +725,87 @@ def _court_sync_job_record(job: MatterCourtSyncJob) -> MatterCourtSyncJobRecord:
     )
 
 
+def _notice_reminder_offsets(value: list[int] | None) -> list[int]:
+    offsets = value if value is not None else NOTICE_REMINDER_OFFSETS
+    cleaned: list[int] = []
+    seen: set[int] = set()
+    for raw in offsets:
+        try:
+            offset = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if offset <= 0 or offset > 365 or offset in seen:
+            continue
+        cleaned.append(offset)
+        seen.add(offset)
+    return cleaned or list(NOTICE_REMINDER_OFFSETS)
+
+
+def _clean_notice_currency(value: str | None) -> str:
+    cleaned = (value or "INR").strip().upper()
+    if len(cleaned) != 3 or not cleaned.isalpha():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Notice currency must be a 3-letter currency code.",
+        )
+    return cleaned
+
+
+def _clean_notice_direction(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = value.strip().lower()
+    if cleaned not in {"received", "sent"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Notice direction must be received or sent.",
+        )
+    return cleaned
+
+
+def _clean_notice_document_role(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = value.strip().lower()
+    if cleaned not in {"notice", "reply", "supporting"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Notice document role must be notice, reply, or supporting.",
+        )
+    return cleaned
+
+
+def _notice_reply_tracking_status(
+    attachment: MatterAttachment,
+    *,
+    today: date | None = None,
+) -> tuple[str | None, int | None]:
+    if attachment.document_type != "notice":
+        return None, None
+    if (attachment.notice_document_role or "notice") != "notice":
+        return None, None
+    if (attachment.notice_direction or "received") != "received":
+        return None, None
+    if not attachment.notice_reply_required:
+        return "not_required", None
+    if attachment.notice_reply_sent:
+        return "reply_sent", None
+    if attachment.notice_reply_due_on is None:
+        return "reply_pending", None
+    days_remaining = (attachment.notice_reply_due_on - (today or datetime.now(UTC).date())).days
+    if days_remaining < 0:
+        return "reply_overdue", days_remaining
+    if days_remaining == 0:
+        return "reply_due_today", 0
+    return "reply_due_in_days", days_remaining
+
+
 def _attachment_record(
     attachment: MatterAttachment,
     *,
     latest_job: DocumentProcessingJobRecord | None = None,
 ) -> MatterAttachmentRecord:
+    reply_status, reply_days_remaining = _notice_reply_tracking_status(attachment)
     return MatterAttachmentRecord(
         id=attachment.id,
         matter_id=attachment.matter_id,
@@ -748,6 +831,33 @@ def _attachment_record(
         notice_subject=attachment.notice_subject,
         notice_received_on=attachment.notice_received_on,
         notice_response=attachment.notice_response,
+        notice_direction=attachment.notice_direction,  # type: ignore[arg-type]
+        notice_type=attachment.notice_type,
+        notice_mode=attachment.notice_mode,
+        notice_authority=attachment.notice_authority,
+        notice_received_from=attachment.notice_received_from,
+        notice_summary=attachment.notice_summary,
+        notice_remarks=attachment.notice_remarks,
+        notice_status=attachment.notice_status,
+        notice_department=attachment.notice_department,
+        notice_internal_spoc=attachment.notice_internal_spoc,
+        notice_internal_remarks=attachment.notice_internal_remarks,
+        notice_amount_minor=attachment.notice_amount_minor,
+        notice_dispute_amount_minor=attachment.notice_dispute_amount_minor,
+        notice_recovered_amount_minor=attachment.notice_recovered_amount_minor,
+        notice_currency=attachment.notice_currency,
+        notice_reply_due_on=attachment.notice_reply_due_on,
+        notice_reply_required=attachment.notice_reply_required,
+        notice_reply_sent=attachment.notice_reply_sent,
+        notice_reply_sent_on=attachment.notice_reply_sent_on,
+        notice_reply_status=reply_status,  # type: ignore[arg-type]
+        notice_reply_days_remaining=reply_days_remaining,
+        notice_sent_on=attachment.notice_sent_on,
+        notice_counsel_engaged=attachment.notice_counsel_engaged,
+        notice_parent_attachment_id=attachment.notice_parent_attachment_id,
+        notice_document_role=attachment.notice_document_role,  # type: ignore[arg-type]
+        notice_reply_deadline_id=attachment.notice_reply_deadline_id,
+        notice_reminder_offsets=_notice_reminder_offsets(attachment.notice_reminder_offsets_json),
         sequence_index=attachment.sequence_index,
         linked_court_order_id=attachment.linked_court_order_id,
         hearing_id=attachment.hearing_id,
@@ -1157,7 +1267,8 @@ def create_matter(
         claim_amount_minor=payload.claim_amount_minor,
         claim_currency=payload.claim_currency.strip().upper(),
         claim_amount_notes=payload.claim_amount_notes.strip()
-        if payload.claim_amount_notes else None,
+        if payload.claim_amount_notes
+        else None,
     )
     session.add(matter)
     session.flush()
@@ -1252,9 +1363,7 @@ def _apply_list_filters(stmt, filters: MatterListFilters):
     if filters.client_name:
         stmt = stmt.where(Matter.client_name.ilike(f"%{filters.client_name.strip()}%"))
     if filters.opposing_party:
-        stmt = stmt.where(
-            Matter.opposing_party.ilike(f"%{filters.opposing_party.strip()}%")
-        )
+        stmt = stmt.where(Matter.opposing_party.ilike(f"%{filters.opposing_party.strip()}%"))
     if filters.forum_level:
         stmt = stmt.where(Matter.forum_level == filters.forum_level)
     if filters.court_id:
@@ -1346,9 +1455,7 @@ def list_matters(
     has_more = len(rows) > page_size
     if has_more:
         rows = rows[:page_size]
-    next_cursor = (
-        encode_cursor(rows[-1].updated_at, rows[-1].id) if has_more and rows else None
-    )
+    next_cursor = encode_cursor(rows[-1].updated_at, rows[-1].id) if has_more and rows else None
     return MatterListResponse(
         company_id=context.company.id,
         matters=[_matter_record(matter) for matter in rows],
@@ -1361,7 +1468,10 @@ def get_matter(session: Session, *, context: SessionContext, matter_id: str) -> 
 
 
 def matter_code_available(
-    session: Session, *, context: SessionContext, code: str,
+    session: Session,
+    *,
+    context: SessionContext,
+    code: str,
 ) -> dict:
     """Pre-submit guard for the intake → matter promotion dialog
     (BUG-021 / Strict Ledger #3). Returns
@@ -1401,7 +1511,9 @@ def matter_code_available(
             "reason": None,
         }
     suggestion = _next_available_code(
-        session, company_id=context.company.id, code=normalised,
+        session,
+        company_id=context.company.id,
+        code=normalised,
     )
     return {
         "available": False,
@@ -1412,7 +1524,11 @@ def matter_code_available(
 
 
 def _next_available_code(
-    session: Session, *, company_id: str, code: str, max_iters: int = 100,
+    session: Session,
+    *,
+    company_id: str,
+    code: str,
+    max_iters: int = 100,
 ) -> str | None:
     """Bump the trailing numeric segment until we find a free code.
     Mirrors the frontend ``suggestNextMatterCode`` so server + client
@@ -1556,9 +1672,7 @@ def update_matter(
             forum_state=updates.pop("forum_state", matter.forum_state),
             forum_district=updates.pop("forum_district", matter.forum_district),
             forum_city=updates.pop("forum_city", matter.forum_city),
-            forum_consumer_level=updates.pop(
-                "forum_consumer_level", matter.forum_consumer_level
-            ),
+            forum_consumer_level=updates.pop("forum_consumer_level", matter.forum_consumer_level),
         )
         _apply_forum_selection(matter, forum_selection)
 
@@ -1718,9 +1832,7 @@ def get_matter_workspace(
     return MatterWorkspaceResponse(
         matter=_matter_record(matter),
         assignee=(
-            _membership_summary(matter.assignee_membership)
-            if matter.assignee_membership
-            else None
+            _membership_summary(matter.assignee_membership) if matter.assignee_membership else None
         ),
         available_assignees=available_assignees,
         storage_governance=get_storage_upload_policy(
@@ -1728,9 +1840,7 @@ def get_matter_workspace(
             company_id=context.company.id,
         ),
         tasks=[_task_record(task) for task in sorted(matter.tasks, key=_task_sort_key)],
-        cause_list_entries=[
-            _cause_list_entry_record(entry) for entry in matter.cause_list_entries
-        ],
+        cause_list_entries=[_cause_list_entry_record(entry) for entry in matter.cause_list_entries],
         court_orders=[_court_order_record(order) for order in matter.court_orders],
         court_sync_runs=[_court_sync_run_record(run) for run in matter.court_sync_runs],
         court_sync_jobs=[_court_sync_job_record(job) for job in matter.court_sync_jobs],
@@ -2034,9 +2144,7 @@ def update_matter_hearing(
         )
     )
     if hearing is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Hearing not found."
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Hearing not found.")
 
     prior_status = hearing.status
     prior_hearing_on = hearing.hearing_on
@@ -2068,15 +2176,11 @@ def update_matter_hearing(
     # the stale old ones; a completed transition just cancels queued
     # rows so the worker doesnt fire a "you have a hearing in 24h"
     # email against a hearing that already happened.
-    rescheduled = (
-        payload.hearing_on is not None and payload.hearing_on != prior_hearing_on
-    )
+    rescheduled = payload.hearing_on is not None and payload.hearing_on != prior_hearing_on
     completed_transition = hearing.status == "completed" and prior_status != "completed"
     cancelled_transition = hearing.status == "cancelled" and prior_status != "cancelled"
     closed_hearing_changed = hearing.status in _CLOSED_HEARING_STATUSES and (
-        completed_transition
-        or cancelled_transition
-        or payload.hearing_on is not None
+        completed_transition or cancelled_transition or payload.hearing_on is not None
     )
     if closed_hearing_changed:
         _reconcile_next_hearing_after_closed_hearing(
@@ -2092,12 +2196,14 @@ def update_matter_hearing(
                 cancel_reminders_for_hearing,
                 schedule_reminders_for_hearing,
             )
+
             cancel_reminders_for_hearing(session, hearing_id=hearing.id)
             if rescheduled and hearing.status not in {"completed", "cancelled"}:
                 schedule_reminders_for_hearing(session, hearing=hearing)
         except Exception as exc:  # noqa: BLE001
             logger.warning(
-                "hearing_reminders sync on update failed: %s", exc,
+                "hearing_reminders sync on update failed: %s",
+                exc,
             )
 
     if cancelled_transition:
@@ -2115,10 +2221,7 @@ def update_matter_hearing(
         except Exception as exc:  # noqa: BLE001
             logger.warning("calendar sync auto-delete on cancellation failed: %s", exc)
 
-    completed = (
-        payload.status == "completed"
-        and prior_status != "completed"
-    )
+    completed = payload.status == "completed" and prior_status != "completed"
     if completed and (payload.create_follow_up is None or payload.create_follow_up):
         from datetime import timedelta
 
@@ -2312,6 +2415,154 @@ def _validated_attachment_hearing_id(
     return found
 
 
+def _validated_notice_parent_attachment_id(
+    session: Session,
+    *,
+    matter_id: str,
+    parent_attachment_id: str | None,
+    current_attachment_id: str | None = None,
+    document_role: str | None = None,
+) -> str | None:
+    if parent_attachment_id is None:
+        if document_role in {"reply", "supporting"}:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Reply and supporting notice documents require a parent notice.",
+            )
+        return None
+    if parent_attachment_id == current_attachment_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A notice document cannot be linked to itself.",
+        )
+    parent = session.scalar(
+        select(MatterAttachment).where(
+            MatterAttachment.id == parent_attachment_id,
+            MatterAttachment.matter_id == matter_id,
+            MatterAttachment.document_type == "notice",
+        )
+    )
+    if parent is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Parent notice was not found on this matter.",
+        )
+    if (parent.notice_document_role or "notice") != "notice":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Parent notice must be a primary notice record.",
+        )
+    return parent.id
+
+
+def _notice_reply_deadline_title(attachment: MatterAttachment) -> str:
+    subject = attachment.notice_subject or attachment.original_filename
+    return f"Reply to notice: {subject}"[:255]
+
+
+def _sync_notice_reply_deadline(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter: Matter,
+    attachment: MatterAttachment,
+) -> None:
+    existing: MatterDeadline | None = None
+    if attachment.notice_reply_deadline_id:
+        existing = session.scalar(
+            select(MatterDeadline).where(
+                MatterDeadline.id == attachment.notice_reply_deadline_id,
+                MatterDeadline.matter_id == matter.id,
+            )
+        )
+    if existing is None:
+        existing = session.scalar(
+            select(MatterDeadline).where(
+                MatterDeadline.matter_id == matter.id,
+                MatterDeadline.source_ref_type == "matter_attachment",
+                MatterDeadline.source_ref_id == attachment.id,
+                MatterDeadline.source == "notice",
+                MatterDeadline.kind == "reply_due",
+            )
+        )
+    should_have_deadline = (
+        attachment.document_type == "notice"
+        and (attachment.notice_document_role or "notice") == "notice"
+        and (attachment.notice_direction or "received") == "received"
+        and bool(attachment.notice_reply_required)
+        and attachment.notice_reply_due_on is not None
+    )
+    if not should_have_deadline:
+        if existing is not None and existing.status not in {
+            MatterDeadlineStatus.DONE,
+            MatterDeadlineStatus.CANCELLED,
+        }:
+            existing.status = MatterDeadlineStatus.CANCELLED
+            existing.completed_at = datetime.now(UTC)
+            session.add(existing)
+        attachment.notice_reply_deadline_id = existing.id if existing is not None else None
+        return
+
+    assert attachment.notice_reply_due_on is not None
+    reply_status, _ = _notice_reply_tracking_status(attachment)
+    if reply_status == "reply_sent":
+        deadline_status = MatterDeadlineStatus.DONE
+        completed_at = datetime.now(UTC)
+    elif reply_status == "reply_overdue":
+        deadline_status = MatterDeadlineStatus.MISSED
+        completed_at = None
+    else:
+        deadline_status = MatterDeadlineStatus.OPEN
+        completed_at = None
+
+    reminder_offsets = ", ".join(
+        str(v) for v in _notice_reminder_offsets(attachment.notice_reminder_offsets_json)
+    )
+    notes = (
+        "Auto-created from Notice Received reply tracking. "
+        f"Reminder offsets: {reminder_offsets} days before due date."
+    )
+    if existing is None:
+        existing = MatterDeadline(
+            matter_id=matter.id,
+            source="notice",
+            kind="reply_due",
+            title=_notice_reply_deadline_title(attachment),
+            notes=notes,
+            due_on=attachment.notice_reply_due_on,
+            status=deadline_status,
+            assignee_membership_id=None,
+            source_ref_type="matter_attachment",
+            source_ref_id=attachment.id,
+            created_by_membership_id=context.membership.id,
+            completed_at=completed_at,
+        )
+        session.add(existing)
+        session.flush()
+        record_from_context(
+            session,
+            context,
+            action="deadline.created",
+            target_type="matter_deadline",
+            target_id=existing.id,
+            matter_id=matter.id,
+            metadata={
+                "source": "notice",
+                "kind": "reply_due",
+                "due_on": attachment.notice_reply_due_on.isoformat(),
+                "source_ref_type": "matter_attachment",
+            },
+        )
+    else:
+        existing.title = _notice_reply_deadline_title(attachment)
+        existing.notes = notes
+        existing.due_on = attachment.notice_reply_due_on
+        existing.status = deadline_status
+        existing.completed_at = completed_at
+        session.add(existing)
+    attachment.notice_reply_deadline_id = existing.id
+
+
 def _attachment_metadata_snapshot(attachment: MatterAttachment) -> dict[str, object]:
     return {
         "document_type": attachment.document_type,
@@ -2321,6 +2572,31 @@ def _attachment_metadata_snapshot(attachment: MatterAttachment) -> dict[str, obj
         "notice_subject": attachment.notice_subject,
         "notice_received_on": attachment.notice_received_on,
         "notice_response": attachment.notice_response,
+        "notice_direction": attachment.notice_direction,
+        "notice_type": attachment.notice_type,
+        "notice_mode": attachment.notice_mode,
+        "notice_authority": attachment.notice_authority,
+        "notice_received_from": attachment.notice_received_from,
+        "notice_summary": attachment.notice_summary,
+        "notice_remarks": attachment.notice_remarks,
+        "notice_status": attachment.notice_status,
+        "notice_department": attachment.notice_department,
+        "notice_internal_spoc": attachment.notice_internal_spoc,
+        "notice_internal_remarks": attachment.notice_internal_remarks,
+        "notice_amount_minor": attachment.notice_amount_minor,
+        "notice_dispute_amount_minor": attachment.notice_dispute_amount_minor,
+        "notice_recovered_amount_minor": attachment.notice_recovered_amount_minor,
+        "notice_currency": attachment.notice_currency,
+        "notice_reply_due_on": attachment.notice_reply_due_on,
+        "notice_reply_required": attachment.notice_reply_required,
+        "notice_reply_sent": attachment.notice_reply_sent,
+        "notice_reply_sent_on": attachment.notice_reply_sent_on,
+        "notice_sent_on": attachment.notice_sent_on,
+        "notice_counsel_engaged": attachment.notice_counsel_engaged,
+        "notice_parent_attachment_id": attachment.notice_parent_attachment_id,
+        "notice_document_role": attachment.notice_document_role,
+        "notice_reply_deadline_id": attachment.notice_reply_deadline_id,
+        "notice_reminder_offsets_json": attachment.notice_reminder_offsets_json,
         "sequence_index": attachment.sequence_index,
         "linked_court_order_id": attachment.linked_court_order_id,
         "hearing_id": attachment.hearing_id,
@@ -2389,9 +2665,7 @@ def create_matter_court_order(
         order_text=payload.order_text,
         source=payload.source.strip() or "manual_upload",
         source_reference=payload.source_reference,
-        bench_name=(
-            payload.bench_name.strip() if payload.bench_name else None
-        ),
+        bench_name=(payload.bench_name.strip() if payload.bench_name else None),
         judge_names_json=payload.judge_names,
         order_attachment_id=attachment_id,
         order_kind=payload.order_kind,
@@ -2616,6 +2890,7 @@ def create_matter_hearing(
             from caseops_api.services.hearing_reminders import (
                 schedule_reminders_for_hearing,
             )
+
             schedule_reminders_for_hearing(session, hearing=hearing)
         except Exception as exc:  # noqa: BLE001
             logger.warning(
@@ -2864,6 +3139,29 @@ def create_matter_attachment(
     notice_subject: str | None = None,
     notice_received_on: date | None = None,
     notice_response: str | None = None,
+    notice_direction: str | None = None,
+    notice_type: str | None = None,
+    notice_mode: str | None = None,
+    notice_authority: str | None = None,
+    notice_received_from: str | None = None,
+    notice_summary: str | None = None,
+    notice_remarks: str | None = None,
+    notice_status: str | None = None,
+    notice_department: str | None = None,
+    notice_internal_spoc: str | None = None,
+    notice_internal_remarks: str | None = None,
+    notice_amount_minor: int | None = None,
+    notice_dispute_amount_minor: int | None = None,
+    notice_recovered_amount_minor: int | None = None,
+    notice_currency: str | None = None,
+    notice_reply_due_on: date | None = None,
+    notice_reply_required: bool | None = None,
+    notice_reply_sent: bool | None = None,
+    notice_reply_sent_on: date | None = None,
+    notice_sent_on: date | None = None,
+    notice_counsel_engaged: str | None = None,
+    notice_parent_attachment_id: str | None = None,
+    notice_document_role: str | None = None,
     sequence_index: int | None = None,
     linked_court_order_id: str | None = None,
     hearing_id: str | None = None,
@@ -2882,6 +3180,17 @@ def create_matter_attachment(
     )
     sequence_index = _validated_sequence_index(sequence_index)
     lifecycle_stage = lifecycle_stage or _default_lifecycle_stage(document_type)
+    notice_direction = _clean_notice_direction(notice_direction)
+    notice_document_role = _clean_notice_document_role(notice_document_role)
+    if document_type == "notice":
+        notice_direction = notice_direction or "received"
+        notice_document_role = notice_document_role or "notice"
+    notice_parent_attachment_id = _validated_notice_parent_attachment_id(
+        session,
+        matter_id=matter.id,
+        parent_attachment_id=notice_parent_attachment_id,
+        document_role=notice_document_role,
+    )
     # §6.3: refuse obviously-wrong uploads before they touch disk.
     # Checks extension whitelist, content-type coherence, and magic
     # bytes; leaves the stream cursor at 0 on success.
@@ -2903,6 +3212,30 @@ def create_matter_attachment(
         notice_subject=_clean_attachment_text(notice_subject),
         notice_received_on=notice_received_on,
         notice_response=_clean_attachment_text(notice_response),
+        notice_direction=notice_direction,
+        notice_type=_clean_attachment_text(notice_type),
+        notice_mode=_clean_attachment_text(notice_mode),
+        notice_authority=_clean_attachment_text(notice_authority),
+        notice_received_from=_clean_attachment_text(notice_received_from),
+        notice_summary=_clean_attachment_text(notice_summary),
+        notice_remarks=_clean_attachment_text(notice_remarks),
+        notice_status=_clean_attachment_text(notice_status),
+        notice_department=_clean_attachment_text(notice_department),
+        notice_internal_spoc=_clean_attachment_text(notice_internal_spoc),
+        notice_internal_remarks=_clean_attachment_text(notice_internal_remarks),
+        notice_amount_minor=notice_amount_minor,
+        notice_dispute_amount_minor=notice_dispute_amount_minor,
+        notice_recovered_amount_minor=notice_recovered_amount_minor,
+        notice_currency=_clean_notice_currency(notice_currency),
+        notice_reply_due_on=notice_reply_due_on,
+        notice_reply_required=bool(notice_reply_required),
+        notice_reply_sent=bool(notice_reply_sent),
+        notice_reply_sent_on=notice_reply_sent_on,
+        notice_sent_on=notice_sent_on,
+        notice_counsel_engaged=_clean_attachment_text(notice_counsel_engaged),
+        notice_parent_attachment_id=notice_parent_attachment_id,
+        notice_document_role=notice_document_role or "notice",
+        notice_reminder_offsets_json=list(NOTICE_REMINDER_OFFSETS),
         sequence_index=sequence_index,
         linked_court_order_id=linked_court_order_id,
         hearing_id=hearing_id,
@@ -2979,6 +3312,38 @@ def create_matter_attachment(
                 attachment_id=attachment.id,
                 linked_court_order_id=linked_court_order_id,
             )
+        if attachment.document_type == "notice":
+            if (
+                attachment.notice_document_role == "reply"
+                and attachment.notice_parent_attachment_id
+            ):
+                parent = session.scalar(
+                    select(MatterAttachment).where(
+                        MatterAttachment.id == attachment.notice_parent_attachment_id,
+                        MatterAttachment.matter_id == matter.id,
+                    )
+                )
+                if parent is not None:
+                    parent.notice_reply_sent = True
+                    parent.notice_reply_sent_on = (
+                        attachment.notice_reply_sent_on
+                        or attachment.document_date
+                        or datetime.now(UTC).date()
+                    )
+                    _sync_notice_reply_deadline(
+                        session,
+                        context=context,
+                        matter=matter,
+                        attachment=parent,
+                    )
+                    session.add(parent)
+            else:
+                _sync_notice_reply_deadline(
+                    session,
+                    context=context,
+                    matter=matter,
+                    attachment=attachment,
+                )
         if linked_court_order_id or document_type == "order_judgment":
             try:
                 from caseops_api.services.compliance_extraction import (
@@ -3047,9 +3412,7 @@ def update_matter_attachment_metadata(
     attachment = session.scalar(
         select(MatterAttachment)
         .options(
-            joinedload(MatterAttachment.uploaded_by_membership).joinedload(
-                CompanyMembership.user
-            ),
+            joinedload(MatterAttachment.uploaded_by_membership).joinedload(CompanyMembership.user),
             joinedload(MatterAttachment.linked_court_order),
         )
         .where(
@@ -3078,6 +3441,68 @@ def update_matter_attachment_metadata(
         attachment.notice_received_on = updates["notice_received_on"]
     if "notice_response" in updates:
         attachment.notice_response = _clean_attachment_text(updates["notice_response"])
+    for field_name in NOTICE_TEXT_FIELDS:
+        if field_name in updates:
+            setattr(attachment, field_name, _clean_attachment_text(updates[field_name]))
+    if "notice_direction" in updates:
+        attachment.notice_direction = updates["notice_direction"]
+    if "notice_amount_minor" in updates:
+        attachment.notice_amount_minor = updates["notice_amount_minor"]
+    if "notice_dispute_amount_minor" in updates:
+        attachment.notice_dispute_amount_minor = updates["notice_dispute_amount_minor"]
+    if "notice_recovered_amount_minor" in updates:
+        attachment.notice_recovered_amount_minor = updates["notice_recovered_amount_minor"]
+    if "notice_currency" in updates:
+        attachment.notice_currency = _clean_notice_currency(updates["notice_currency"])
+    if "notice_reply_due_on" in updates:
+        attachment.notice_reply_due_on = updates["notice_reply_due_on"]
+    if "notice_reply_required" in updates:
+        attachment.notice_reply_required = bool(updates["notice_reply_required"])
+    if "notice_reply_sent" in updates:
+        attachment.notice_reply_sent = bool(updates["notice_reply_sent"])
+    if "notice_reply_sent_on" in updates:
+        attachment.notice_reply_sent_on = updates["notice_reply_sent_on"]
+    if "notice_sent_on" in updates:
+        attachment.notice_sent_on = updates["notice_sent_on"]
+    next_document_role = updates.get("notice_document_role", attachment.notice_document_role)
+    if "notice_parent_attachment_id" in updates:
+        attachment.notice_parent_attachment_id = _validated_notice_parent_attachment_id(
+            session,
+            matter_id=matter.id,
+            parent_attachment_id=updates["notice_parent_attachment_id"],
+            current_attachment_id=attachment.id,
+            document_role=next_document_role,
+        )
+    if "notice_document_role" in updates:
+        attachment.notice_document_role = updates["notice_document_role"] or "notice"
+        if attachment.notice_document_role in {"reply", "supporting"}:
+            attachment.notice_parent_attachment_id = _validated_notice_parent_attachment_id(
+                session,
+                matter_id=matter.id,
+                parent_attachment_id=attachment.notice_parent_attachment_id,
+                current_attachment_id=attachment.id,
+                document_role=attachment.notice_document_role,
+            )
+    if "notice_reply_deadline_id" in updates:
+        if updates["notice_reply_deadline_id"] is None:
+            attachment.notice_reply_deadline_id = None
+        else:
+            deadline_id = session.scalar(
+                select(MatterDeadline.id).where(
+                    MatterDeadline.id == updates["notice_reply_deadline_id"],
+                    MatterDeadline.matter_id == matter.id,
+                )
+            )
+            if deadline_id is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Reply deadline was not found on this matter.",
+                )
+            attachment.notice_reply_deadline_id = deadline_id
+    if "notice_reminder_offsets" in updates:
+        attachment.notice_reminder_offsets_json = _notice_reminder_offsets(
+            updates["notice_reminder_offsets"]
+        )
     if "sequence_index" in updates:
         attachment.sequence_index = _validated_sequence_index(updates["sequence_index"])
     if "linked_court_order_id" in updates:
@@ -3091,6 +3516,14 @@ def update_matter_attachment_metadata(
             session,
             matter_id=matter.id,
             hearing_id=updates["hearing_id"],
+        )
+
+    if attachment.document_type == "notice":
+        _sync_notice_reply_deadline(
+            session,
+            context=context,
+            matter=matter,
+            attachment=attachment,
         )
 
     after = _attachment_metadata_snapshot(attachment)
@@ -3437,8 +3870,7 @@ def create_matter_invoice(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
-                "Add billable uninvoiced time entries or manual items before creating "
-                "an invoice."
+                "Add billable uninvoiced time entries or manual items before creating an invoice."
             ),
         )
 
@@ -3551,8 +3983,7 @@ def create_matter_invoice(
         event_type="invoice_created",
         title="Invoice created",
         detail=(
-            f"{invoice.invoice_number} created with total "
-            f"{invoice.total_amount_minor} minor units."
+            f"{invoice.invoice_number} created with total {invoice.total_amount_minor} minor units."
         ),
     )
     record_from_context(

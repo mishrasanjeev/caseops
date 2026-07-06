@@ -6,12 +6,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   uploadMock,
+  updateMock,
   useCapabilityMock,
   workspaceData,
   toastSuccess,
   toastError,
 } = vi.hoisted(() => ({
   uploadMock: vi.fn(),
+  updateMock: vi.fn(),
   useCapabilityMock: vi.fn(),
   workspaceData: {
     current: {
@@ -37,6 +39,7 @@ vi.mock("@/lib/use-matter-workspace", () => ({
 
 vi.mock("@/lib/api/endpoints", () => ({
   uploadMatterAttachment: uploadMock,
+  updateMatterAttachmentMetadata: updateMock,
 }));
 
 vi.mock("@/lib/capabilities", () => ({
@@ -63,6 +66,7 @@ function withClient(children: ReactNode) {
 describe("MatterNoticesPage", () => {
   beforeEach(() => {
     uploadMock.mockReset();
+    updateMock.mockReset();
     useCapabilityMock.mockReset();
     toastSuccess.mockReset();
     toastError.mockReset();
@@ -72,7 +76,7 @@ describe("MatterNoticesPage", () => {
     };
   });
 
-  it("lists only notice documents for the matter", () => {
+  it("lists received notices with reply tracking and related documents", () => {
     useCapabilityMock.mockImplementation(() => false);
     workspaceData.current = {
       ...(workspaceData.current as object),
@@ -87,12 +91,40 @@ describe("MatterNoticesPage", () => {
           document_type: "notice",
           lifecycle_stage: "initiation",
           document_date: "2026-07-01",
+          notice_direction: "received",
+          notice_document_role: "notice",
+          notice_type: "Legal demand",
+          notice_authority: "Delhi Police",
+          notice_received_from: "Opposing counsel",
           notice_source: "Opposing counsel",
           notice_subject: "Demand notice",
           notice_received_on: "2026-07-01",
-          notice_response: "Prepare reply by Friday.",
+          notice_summary: "Prepare reply by Friday.",
+          notice_status: "Open",
+          notice_department: "Finance",
+          notice_internal_spoc: "Asha Mehta",
+          notice_reply_due_on: "2026-07-04",
+          notice_reply_required: true,
+          notice_reply_sent: false,
+          notice_reply_status: "reply_overdue",
+          notice_reply_days_remaining: -2,
+          notice_reminder_offsets: [7, 3, 1],
           sequence_index: 1,
           created_at: "2026-07-01T10:00:00Z",
+        },
+        {
+          id: "reply-1",
+          original_filename: "Reply notice.pdf",
+          filename: "reply-notice.pdf",
+          mime_type: "application/pdf",
+          size_bytes: 1024,
+          processing_status: "indexed",
+          document_type: "notice",
+          notice_direction: "received",
+          notice_document_role: "reply",
+          notice_parent_attachment_id: "notice-1",
+          document_date: "2026-07-03",
+          created_at: "2026-07-03T10:00:00Z",
         },
         {
           id: "order-1",
@@ -115,28 +147,50 @@ describe("MatterNoticesPage", () => {
       "Demand notice",
     );
     expect(screen.getByTestId("matter-notice-row")).toHaveTextContent(
-      "Opposing counsel",
+      "Reply Overdue",
     );
     expect(screen.getByTestId("matter-notice-row")).toHaveTextContent(
-      "Prepare reply by Friday.",
+      "Delhi Police",
+    );
+    expect(screen.getByTestId("matter-notice-row")).toHaveTextContent(
+      "Finance",
+    );
+    expect(screen.getByTestId("matter-notice-row")).toHaveTextContent(
+      "Reply notice.pdf",
     );
     expect(screen.queryByText("Order.pdf")).not.toBeInTheDocument();
     expect(screen.getAllByTestId("matter-notice-row")).toHaveLength(1);
   });
 
-  it("uploads a new file as a notice in the initiation lifecycle stage", async () => {
+  it("uploads a received notice with structured metadata", async () => {
     useCapabilityMock.mockImplementation((capability: string) =>
       ["documents:upload", "documents:manage"].includes(capability),
     );
     uploadMock.mockResolvedValue({ id: "notice-2" });
     render(withClient(<MatterNoticesPage />));
 
-    await userEvent.type(screen.getByTestId("matter-notice-source"), "Client");
+    await userEvent.type(screen.getByTestId("matter-notice-type"), "Legal demand");
+    await userEvent.type(screen.getByTestId("matter-notice-department"), "Finance");
     await userEvent.type(screen.getByTestId("matter-notice-subject"), "Lease default notice");
+    await userEvent.type(screen.getByTestId("matter-notice-authority"), "Rent Controller");
+    await userEvent.type(screen.getByTestId("matter-notice-internal-spoc"), "Asha Mehta");
     await userEvent.type(screen.getByTestId("matter-notice-received-on"), "2026-07-03");
+    await userEvent.type(screen.getByTestId("matter-notice-mode"), "Email");
+    await userEvent.type(screen.getByTestId("matter-notice-source"), "Client");
+    await userEvent.type(screen.getByTestId("matter-notice-amount"), "12500");
+    await userEvent.type(screen.getByTestId("matter-notice-reply-due-on"), "2026-07-10");
+    await userEvent.type(
+      screen.getByTestId("matter-notice-summary"),
+      "Lease arrears disputed by client.",
+    );
     await userEvent.type(
       screen.getByTestId("matter-notice-response"),
       "Send response denying default.",
+    );
+    await userEvent.type(screen.getByTestId("matter-notice-remarks"), "Urgent.");
+    await userEvent.type(
+      screen.getByTestId("matter-notice-internal-remarks"),
+      "Check ledger.",
     );
     const file = new File(["notice body"], "legal-notice.txt", {
       type: "text/plain",
@@ -151,13 +205,73 @@ describe("MatterNoticesPage", () => {
           documentType: "notice",
           lifecycleStage: "initiation",
           documentDate: "2026-07-03",
+          noticeDirection: "received",
+          noticeDocumentRole: "notice",
+          noticeType: "Legal demand",
+          noticeMode: "Email",
           noticeSource: "Client",
           noticeSubject: "Lease default notice",
           noticeReceivedOn: "2026-07-03",
+          noticeAuthority: "Rent Controller",
+          noticeReceivedFrom: "Client",
+          noticeSummary: "Lease arrears disputed by client.",
+          noticeRemarks: "Urgent.",
+          noticeStatus: "Open",
+          noticeDepartment: "Finance",
+          noticeInternalSpoc: "Asha Mehta",
+          noticeInternalRemarks: "Check ledger.",
+          noticeAmountMinor: 1250000,
+          noticeCurrency: "INR",
+          noticeReplyDueOn: "2026-07-10",
+          noticeReplyRequired: true,
+          noticeReplySent: false,
           noticeResponse: "Send response denying default.",
           sequenceIndex: null,
           linkedCourtOrderId: null,
           hearingId: null,
+        }),
+      );
+    });
+  });
+
+  it("uploads a sent notice from the sent tab", async () => {
+    useCapabilityMock.mockImplementation((capability: string) =>
+      ["documents:upload", "documents:manage"].includes(capability),
+    );
+    uploadMock.mockResolvedValue({ id: "sent-1" });
+    render(withClient(<MatterNoticesPage />));
+
+    await userEvent.click(screen.getByTestId("notice-sent-tab"));
+    await userEvent.type(screen.getByTestId("matter-notice-sent-on"), "2026-07-04");
+    await userEvent.type(screen.getByTestId("matter-notice-type"), "Recovery notice");
+    await userEvent.clear(screen.getByTestId("matter-notice-status"));
+    await userEvent.type(screen.getByTestId("matter-notice-status"), "Dispatched");
+    await userEvent.type(screen.getByTestId("matter-notice-subject"), "Payment notice");
+    await userEvent.type(screen.getByTestId("matter-notice-counsel"), "Rao & Co.");
+    await userEvent.type(screen.getByTestId("matter-notice-dispute-amount"), "15000");
+    await userEvent.type(screen.getByTestId("matter-notice-recovered-amount"), "2500");
+    const file = new File(["sent notice"], "sent-notice.txt", {
+      type: "text/plain",
+    });
+    await userEvent.upload(screen.getByTestId("matter-notice-file-input"), file);
+
+    await waitFor(() => {
+      expect(uploadMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          matterId: "m1",
+          file,
+          documentType: "notice",
+          documentDate: "2026-07-04",
+          noticeDirection: "sent",
+          noticeDocumentRole: "notice",
+          noticeSentOn: "2026-07-04",
+          noticeType: "Recovery notice",
+          noticeStatus: "Dispatched",
+          noticeSubject: "Payment notice",
+          noticeCounselEngaged: "Rao & Co.",
+          noticeDisputeAmountMinor: 1500000,
+          noticeRecoveredAmountMinor: 250000,
+          noticeReplyRequired: false,
         }),
       );
     });

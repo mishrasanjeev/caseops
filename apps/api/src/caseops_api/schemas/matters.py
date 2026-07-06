@@ -26,6 +26,16 @@ MatterTaskPriorityLiteral = Literal["low", "medium", "high", "urgent"]
 MatterTaskSourceTypeLiteral = Literal["user", "proceeding_intelligence"]
 MatterDeadlineStatusLiteral = Literal["open", "done", "cancelled", "missed"]
 MatterDeadlineSourceLiteral = Literal["custom"]
+MatterNoticeDirectionLiteral = Literal["received", "sent"]
+MatterNoticeDocumentRoleLiteral = Literal["notice", "reply", "supporting"]
+MatterNoticeReplyStatusLiteral = Literal[
+    "not_required",
+    "reply_pending",
+    "reply_sent",
+    "reply_overdue",
+    "reply_due_today",
+    "reply_due_in_days",
+]
 MatterCourtOrderKindLiteral = Literal[
     "daily_order",
     "interim_order",
@@ -828,6 +838,33 @@ class MatterAttachmentRecord(BaseModel):
     notice_subject: str | None = Field(default=None, max_length=500)
     notice_received_on: date | None = None
     notice_response: str | None = Field(default=None, max_length=4000)
+    notice_direction: MatterNoticeDirectionLiteral | None = None
+    notice_type: str | None = Field(default=None, max_length=120)
+    notice_mode: str | None = Field(default=None, max_length=80)
+    notice_authority: str | None = Field(default=None, max_length=255)
+    notice_received_from: str | None = Field(default=None, max_length=120)
+    notice_summary: str | None = Field(default=None, max_length=6000)
+    notice_remarks: str | None = Field(default=None, max_length=4000)
+    notice_status: str | None = Field(default=None, max_length=80)
+    notice_department: str | None = Field(default=None, max_length=160)
+    notice_internal_spoc: str | None = Field(default=None, max_length=160)
+    notice_internal_remarks: str | None = Field(default=None, max_length=4000)
+    notice_amount_minor: int | None = Field(default=None, ge=0)
+    notice_dispute_amount_minor: int | None = Field(default=None, ge=0)
+    notice_recovered_amount_minor: int | None = Field(default=None, ge=0)
+    notice_currency: str = Field(default="INR", min_length=3, max_length=3)
+    notice_reply_due_on: date | None = None
+    notice_reply_required: bool = False
+    notice_reply_sent: bool = False
+    notice_reply_sent_on: date | None = None
+    notice_reply_status: MatterNoticeReplyStatusLiteral | None = None
+    notice_reply_days_remaining: int | None = None
+    notice_sent_on: date | None = None
+    notice_counsel_engaged: str | None = Field(default=None, max_length=255)
+    notice_parent_attachment_id: str | None = Field(default=None, max_length=36)
+    notice_document_role: MatterNoticeDocumentRoleLiteral = "notice"
+    notice_reply_deadline_id: str | None = Field(default=None, max_length=36)
+    notice_reminder_offsets: list[int] = Field(default_factory=list)
     sequence_index: int | None = None
     linked_court_order_id: str | None = None
     hearing_id: str | None = None
@@ -842,6 +879,31 @@ class MatterAttachmentMetadataUpdateRequest(BaseModel):
     notice_subject: str | None = Field(default=None, max_length=500)
     notice_received_on: date | None = None
     notice_response: str | None = Field(default=None, max_length=4000)
+    notice_direction: MatterNoticeDirectionLiteral | None = None
+    notice_type: str | None = Field(default=None, max_length=120)
+    notice_mode: str | None = Field(default=None, max_length=80)
+    notice_authority: str | None = Field(default=None, max_length=255)
+    notice_received_from: str | None = Field(default=None, max_length=120)
+    notice_summary: str | None = Field(default=None, max_length=6000)
+    notice_remarks: str | None = Field(default=None, max_length=4000)
+    notice_status: str | None = Field(default=None, max_length=80)
+    notice_department: str | None = Field(default=None, max_length=160)
+    notice_internal_spoc: str | None = Field(default=None, max_length=160)
+    notice_internal_remarks: str | None = Field(default=None, max_length=4000)
+    notice_amount_minor: int | None = Field(default=None, ge=0)
+    notice_dispute_amount_minor: int | None = Field(default=None, ge=0)
+    notice_recovered_amount_minor: int | None = Field(default=None, ge=0)
+    notice_currency: str | None = Field(default=None, min_length=3, max_length=3)
+    notice_reply_due_on: date | None = None
+    notice_reply_required: bool | None = None
+    notice_reply_sent: bool | None = None
+    notice_reply_sent_on: date | None = None
+    notice_sent_on: date | None = None
+    notice_counsel_engaged: str | None = Field(default=None, max_length=255)
+    notice_parent_attachment_id: str | None = Field(default=None, max_length=36)
+    notice_document_role: MatterNoticeDocumentRoleLiteral | None = None
+    notice_reply_deadline_id: str | None = Field(default=None, max_length=36)
+    notice_reminder_offsets: list[int] | None = None
     sequence_index: int | None = Field(default=None, ge=0)
     linked_court_order_id: str | None = Field(default=None, max_length=36)
     hearing_id: str | None = Field(default=None, max_length=36)
