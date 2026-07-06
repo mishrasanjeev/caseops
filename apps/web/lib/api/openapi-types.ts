@@ -9037,14 +9037,60 @@ export interface components {
             lifecycle_stage?: ("initiation" | "pleadings" | "interim_applications" | "evidence" | "arguments" | "orders" | "post_order" | "administrative" | "other") | null;
             /** Linked Court Order Id */
             linked_court_order_id?: string | null;
+            /** Notice Amount Minor */
+            notice_amount_minor?: number | null;
+            /** Notice Authority */
+            notice_authority?: string | null;
+            /** Notice Counsel Engaged */
+            notice_counsel_engaged?: string | null;
+            /** Notice Currency */
+            notice_currency?: string | null;
+            /** Notice Department */
+            notice_department?: string | null;
+            /** Notice Direction */
+            notice_direction?: string | null;
+            /** Notice Dispute Amount Minor */
+            notice_dispute_amount_minor?: number | null;
+            /** Notice Document Role */
+            notice_document_role?: string | null;
+            /** Notice Internal Remarks */
+            notice_internal_remarks?: string | null;
+            /** Notice Internal Spoc */
+            notice_internal_spoc?: string | null;
+            /** Notice Mode */
+            notice_mode?: string | null;
+            /** Notice Parent Attachment Id */
+            notice_parent_attachment_id?: string | null;
+            /** Notice Received From */
+            notice_received_from?: string | null;
             /** Notice Received On */
             notice_received_on?: string | null;
+            /** Notice Recovered Amount Minor */
+            notice_recovered_amount_minor?: number | null;
+            /** Notice Remarks */
+            notice_remarks?: string | null;
+            /** Notice Reply Due On */
+            notice_reply_due_on?: string | null;
+            /** Notice Reply Required */
+            notice_reply_required?: boolean | null;
+            /** Notice Reply Sent */
+            notice_reply_sent?: boolean | null;
+            /** Notice Reply Sent On */
+            notice_reply_sent_on?: string | null;
             /** Notice Response */
             notice_response?: string | null;
+            /** Notice Sent On */
+            notice_sent_on?: string | null;
             /** Notice Source */
             notice_source?: string | null;
+            /** Notice Status */
+            notice_status?: string | null;
             /** Notice Subject */
             notice_subject?: string | null;
+            /** Notice Summary */
+            notice_summary?: string | null;
+            /** Notice Type */
+            notice_type?: string | null;
             /** Sequence Index */
             sequence_index?: number | null;
         };
@@ -16735,14 +16781,64 @@ export interface components {
             lifecycle_stage?: ("initiation" | "pleadings" | "interim_applications" | "evidence" | "arguments" | "orders" | "post_order" | "administrative" | "other") | null;
             /** Linked Court Order Id */
             linked_court_order_id?: string | null;
+            /** Notice Amount Minor */
+            notice_amount_minor?: number | null;
+            /** Notice Authority */
+            notice_authority?: string | null;
+            /** Notice Counsel Engaged */
+            notice_counsel_engaged?: string | null;
+            /** Notice Currency */
+            notice_currency?: string | null;
+            /** Notice Department */
+            notice_department?: string | null;
+            /** Notice Direction */
+            notice_direction?: ("received" | "sent") | null;
+            /** Notice Dispute Amount Minor */
+            notice_dispute_amount_minor?: number | null;
+            /** Notice Document Role */
+            notice_document_role?: ("notice" | "reply" | "supporting") | null;
+            /** Notice Internal Remarks */
+            notice_internal_remarks?: string | null;
+            /** Notice Internal Spoc */
+            notice_internal_spoc?: string | null;
+            /** Notice Mode */
+            notice_mode?: string | null;
+            /** Notice Parent Attachment Id */
+            notice_parent_attachment_id?: string | null;
+            /** Notice Received From */
+            notice_received_from?: string | null;
             /** Notice Received On */
             notice_received_on?: string | null;
+            /** Notice Recovered Amount Minor */
+            notice_recovered_amount_minor?: number | null;
+            /** Notice Remarks */
+            notice_remarks?: string | null;
+            /** Notice Reminder Offsets */
+            notice_reminder_offsets?: number[] | null;
+            /** Notice Reply Deadline Id */
+            notice_reply_deadline_id?: string | null;
+            /** Notice Reply Due On */
+            notice_reply_due_on?: string | null;
+            /** Notice Reply Required */
+            notice_reply_required?: boolean | null;
+            /** Notice Reply Sent */
+            notice_reply_sent?: boolean | null;
+            /** Notice Reply Sent On */
+            notice_reply_sent_on?: string | null;
             /** Notice Response */
             notice_response?: string | null;
+            /** Notice Sent On */
+            notice_sent_on?: string | null;
             /** Notice Source */
             notice_source?: string | null;
+            /** Notice Status */
+            notice_status?: string | null;
             /** Notice Subject */
             notice_subject?: string | null;
+            /** Notice Summary */
+            notice_summary?: string | null;
+            /** Notice Type */
+            notice_type?: string | null;
             /** Sequence Index */
             sequence_index?: number | null;
         };
@@ -16774,14 +16870,81 @@ export interface components {
             linked_court_order_id?: string | null;
             /** Matter Id */
             matter_id: string;
+            /** Notice Amount Minor */
+            notice_amount_minor?: number | null;
+            /** Notice Authority */
+            notice_authority?: string | null;
+            /** Notice Counsel Engaged */
+            notice_counsel_engaged?: string | null;
+            /**
+             * Notice Currency
+             * @default INR
+             */
+            notice_currency: string;
+            /** Notice Department */
+            notice_department?: string | null;
+            /** Notice Direction */
+            notice_direction?: ("received" | "sent") | null;
+            /** Notice Dispute Amount Minor */
+            notice_dispute_amount_minor?: number | null;
+            /**
+             * Notice Document Role
+             * @default notice
+             * @enum {string}
+             */
+            notice_document_role: "notice" | "reply" | "supporting";
+            /** Notice Internal Remarks */
+            notice_internal_remarks?: string | null;
+            /** Notice Internal Spoc */
+            notice_internal_spoc?: string | null;
+            /** Notice Mode */
+            notice_mode?: string | null;
+            /** Notice Parent Attachment Id */
+            notice_parent_attachment_id?: string | null;
+            /** Notice Received From */
+            notice_received_from?: string | null;
             /** Notice Received On */
             notice_received_on?: string | null;
+            /** Notice Recovered Amount Minor */
+            notice_recovered_amount_minor?: number | null;
+            /** Notice Remarks */
+            notice_remarks?: string | null;
+            /** Notice Reminder Offsets */
+            notice_reminder_offsets?: number[];
+            /** Notice Reply Days Remaining */
+            notice_reply_days_remaining?: number | null;
+            /** Notice Reply Deadline Id */
+            notice_reply_deadline_id?: string | null;
+            /** Notice Reply Due On */
+            notice_reply_due_on?: string | null;
+            /**
+             * Notice Reply Required
+             * @default false
+             */
+            notice_reply_required: boolean;
+            /**
+             * Notice Reply Sent
+             * @default false
+             */
+            notice_reply_sent: boolean;
+            /** Notice Reply Sent On */
+            notice_reply_sent_on?: string | null;
+            /** Notice Reply Status */
+            notice_reply_status?: ("not_required" | "reply_pending" | "reply_sent" | "reply_overdue" | "reply_due_today" | "reply_due_in_days") | null;
             /** Notice Response */
             notice_response?: string | null;
+            /** Notice Sent On */
+            notice_sent_on?: string | null;
             /** Notice Source */
             notice_source?: string | null;
+            /** Notice Status */
+            notice_status?: string | null;
             /** Notice Subject */
             notice_subject?: string | null;
+            /** Notice Summary */
+            notice_summary?: string | null;
+            /** Notice Type */
+            notice_type?: string | null;
             /** Original Filename */
             original_filename: string;
             /** Processed At */
