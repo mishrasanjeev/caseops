@@ -218,9 +218,11 @@ test.describe("Ram batch 2026-04-26 — prod verification of c58305b fixes", () 
     //   429 — rate-limited (also success: not a hang)
     //   502 — Anthropic upstream failure surfaced as 502 (also success:
     //         not a hang)
+    //   503 — provider quota/service unavailable surfaced as a bounded
+    //         response (also success: not a hang)
     expect.soft(status).not.toBe(504);
     expect.soft(status).not.toBe(0); // 0 = no response (curl HTTP 000)
-    expect([200, 201, 422, 429, 502]).toContain(status);
+    expect([200, 201, 422, 429, 502, 503]).toContain(status);
   });
 
   test("BUG-019: Calendar shows actionable empty-state banner when tenant has zero events", async ({
