@@ -7,15 +7,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const {
   useMatterWorkspaceMock,
   fetchBenchStrategyMock,
+  listConflictChecksMock,
   updateMatterMock,
   useCapabilityMock,
   toastSuccess,
+  toastError,
 } = vi.hoisted(() => ({
   useMatterWorkspaceMock: vi.fn(),
   fetchBenchStrategyMock: vi.fn(),
+  listConflictChecksMock: vi.fn(),
   updateMatterMock: vi.fn(),
   useCapabilityMock: vi.fn(),
   toastSuccess: vi.fn(),
+  toastError: vi.fn(),
 }));
 
 vi.mock("@/lib/use-matter-workspace", () => ({
@@ -25,6 +29,9 @@ vi.mock("@/lib/use-matter-workspace", () => ({
 vi.mock("@/lib/api/endpoints", () => ({
   fetchBenchStrategy: fetchBenchStrategyMock,
   fetchForumCatalog: vi.fn(),
+  listConflictChecks: listConflictChecksMock,
+  resolveConflictCheck: vi.fn(),
+  runConflictCheck: vi.fn(),
   updateMatter: updateMatterMock,
   fetchCounselRecommendations: vi.fn().mockResolvedValue({
     matter_id: "m-1",
@@ -41,7 +48,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("sonner", () => ({
-  toast: { success: toastSuccess, error: vi.fn() },
+  toast: { success: toastSuccess, error: toastError },
 }));
 
 import MatterOverviewPage from "@/app/app/matters/[id]/page";
@@ -75,8 +82,11 @@ describe("MatterOverviewPage", () => {
     fetchBenchStrategyMock.mockReset();
     updateMatterMock.mockReset();
     updateMatterMock.mockResolvedValue(BASE_DATA.matter);
+    listConflictChecksMock.mockReset();
+    listConflictChecksMock.mockResolvedValue({ matter_id: "m-1", checks: [] });
     useCapabilityMock.mockReset();
     toastSuccess.mockReset();
+    toastError.mockReset();
     useCapabilityMock.mockImplementation(() => false);
   });
 
@@ -209,5 +219,69 @@ describe("MatterOverviewPage", () => {
         cnr_number: "CNR99",
       }),
     );
+  });
+
+  it("keeps conflict-gate activation guidance visible and links to the conflict card", async () => {
+    const scrollIntoView = vi.fn();
+    const focus = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    Object.defineProperty(HTMLElement.prototype, "focus", {
+      configurable: true,
+      value: focus,
+    });
+    useCapabilityMock.mockImplementation((capability: string) =>
+      capability === "matters:edit" || capability === "conflicts:run",
+    );
+    useMatterWorkspaceMock.mockReturnValue({
+      data: {
+        ...BASE_DATA,
+        matter: {
+          ...BASE_DATA.matter,
+          status: "intake",
+          client_name: "Neutral Client",
+          opposing_party: "Existing Client",
+          practice_area: "litigation",
+          court_name: "Delhi High Court",
+        },
+      },
+    });
+    updateMatterMock.mockRejectedValue({
+      name: "ApiError",
+      status: 409,
+      detail:
+        "Matter cannot be activated because the latest conflict check requires review or waiver. Use the Conflict check card to clear or waive it, then save Active again.",
+      problemType: null,
+      data: null,
+    });
+    fetchBenchStrategyMock.mockResolvedValue({
+      matter_id: "m-1",
+      bench_judge_ids: [],
+      total_decisions_indexed: 0,
+      evidence_quality: "insufficient",
+      top_authorities: [],
+      top_statute_sections: [],
+      disclaimer: "Not legal advice.",
+    });
+
+    render(withClient(<MatterOverviewPage />));
+
+    await userEvent.click(screen.getByTestId("matter-edit-open"));
+    await userEvent.selectOptions(screen.getByTestId("matter-edit-status"), "active");
+    expect(screen.getByTestId("matter-edit-active-conflict-hint")).toHaveTextContent(
+      /Conflict check card/i,
+    );
+    await userEvent.click(screen.getByTestId("matter-edit-save"));
+
+    expect(await screen.findByTestId("matter-edit-conflict-gate")).toHaveTextContent(
+      /requires review or waiver/i,
+    );
+    expect(toastError).toHaveBeenCalledWith(expect.stringContaining("Conflict check card"));
+
+    await userEvent.click(screen.getByTestId("matter-edit-review-conflict"));
+    expect(scrollIntoView).toHaveBeenCalled();
+    expect(focus).toHaveBeenCalled();
   });
 });

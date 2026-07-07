@@ -198,13 +198,22 @@ def _conflict_gate_metadata(
 
 def _conflict_gate_block_detail(decision: ConflictGateDecision) -> str:
     if decision.reason == "missing_check":
-        return "Matter cannot be activated until a conflict check is completed as clear or waived."
+        return (
+            "Matter cannot be activated until a conflict check is completed as "
+            "clear or waived. Use the Conflict check card on the matter overview "
+            "to run the scan, then save Active again."
+        )
     if decision.latest_status == MatterConflictCheckStatus.CONFLICTED.value:
         return (
             "Matter cannot be activated because the latest conflict check "
-            "indicates a possible conflict requiring review."
+            "indicates a possible conflict requiring review. Use the Conflict "
+            "check card to resolve or record a waiver before saving Active."
         )
-    return "Matter cannot be activated because the latest conflict check requires review or waiver."
+    return (
+        "Matter cannot be activated because the latest conflict check requires "
+        "review or waiver. Use the Conflict check card to clear or waive it, "
+        "then save Active again."
+    )
 
 
 def _order_has_active_stay(order: MatterCourtOrder) -> bool:

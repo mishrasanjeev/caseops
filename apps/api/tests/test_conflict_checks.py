@@ -7,7 +7,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from caseops_api.db.models import AuditEvent, Matter, MatterConflictCheck
+from caseops_api.db.models import AuditEvent, Client, Matter, MatterConflictCheck
 from caseops_api.db.session import get_session_factory
 from tests.test_auth_company import auth_headers, bootstrap_company
 
@@ -139,6 +139,50 @@ def test_run_conflict_check_with_no_overlap_auto_clears(client: TestClient) -> N
     assert body["resolved_at"] is not None
 
 
+def test_run_conflict_check_flags_existing_client_record_as_pending(
+    client: TestClient,
+) -> None:
+    """Regression for 2026-07-07 production bug: the scanner must read
+    the real Client.name column. The previous stale primary_name
+    reference only failed in tenants that had Client rows."""
+    boot = bootstrap_company(client)
+    token = str(boot["access_token"])
+    company_id = str(boot["company"]["id"])
+    factory = get_session_factory()
+    with factory() as session:
+        session.add(
+            Client(
+                company_id=company_id,
+                name="Tata Sons Pvt Ltd",
+                client_type="corporate",
+            )
+        )
+        session.commit()
+
+    matter_id = _new_matter(
+        client,
+        token=token,
+        code="CLIENT-CONF-001",
+        title="New dispute against existing client",
+        client_name="Neutral Client",
+        opposing="Tata Sons Pvt Ltd",
+    )
+
+    check = _run_check(
+        client,
+        token=token,
+        matter_id=matter_id,
+        opposing_party_name="Tata Sons Pvt Ltd",
+    )
+
+    assert check["status"] == "pending"
+    client_candidates = [
+        candidate for candidate in check["candidates"] if candidate["kind"] == "client"
+    ]
+    assert client_candidates
+    assert client_candidates[0]["name"] == "Tata Sons Pvt Ltd"
+
+
 def test_run_conflict_check_flags_existing_client_as_pending(
     client: TestClient,
 ) -> None:
@@ -200,6 +244,7 @@ def test_intake_to_active_requires_completed_conflict_check(
 
     assert activate.status_code == 409, activate.text
     assert "conflict check" in activate.json()["detail"].lower()
+    assert "Conflict check card" in activate.json()["detail"]
     assert _matter_status(matter_id) == "intake"
     events = _audit_events(
         company_id=company_id,
@@ -411,6 +456,7 @@ def test_pending_conflict_check_blocks_intake_activation(
 
     assert activate.status_code == 409, activate.text
     assert "requires review" in activate.json()["detail"].lower()
+    assert "Conflict check card" in activate.json()["detail"]
     assert _matter_status(matter_id) == "intake"
 
 
@@ -445,6 +491,7 @@ def test_invalid_latest_conflict_check_status_blocks_activation(
 
     assert activate.status_code == 409, activate.text
     assert "requires review" in activate.json()["detail"].lower()
+    assert "Conflict check card" in activate.json()["detail"]
     assert _matter_status(matter_id) == "intake"
 
 
@@ -528,6 +575,7 @@ def test_clear_check_for_different_opposing_party_is_stale_for_activation(
 
     assert activate.status_code == 409, activate.text
     assert "requires review" in activate.json()["detail"].lower()
+    assert "Conflict check card" in activate.json()["detail"]
     assert _matter_status(matter_id) == "intake"
     events = _audit_events(
         company_id=company_id,
@@ -625,6 +673,7 @@ def test_conflicted_check_blocks_and_waived_check_allows_activation(
 
     assert blocked.status_code == 409, blocked.text
     assert "possible conflict" in blocked.json()["detail"].lower()
+    assert "Conflict check card" in blocked.json()["detail"]
 
     waived_matter = _new_matter(
         client,

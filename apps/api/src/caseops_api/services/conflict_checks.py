@@ -106,7 +106,7 @@ def _scan_clients(
     company_id: str,
     query_names: list[str],
 ) -> list[ConflictCandidate]:
-    """Find Client rows whose primary_name overlaps any query name."""
+    """Find Client rows whose name overlaps any query name."""
     rows = list(
         session.scalars(
             select(Client).where(Client.company_id == company_id)
@@ -115,13 +115,13 @@ def _scan_clients(
     out: list[ConflictCandidate] = []
     for client in rows:
         for q in query_names:
-            sim, reason = _score(q, client.primary_name)
+            sim, reason = _score(q, client.name)
             if sim >= 0.5 and reason is not None:
                 out.append(
                     ConflictCandidate(
                         kind="client",
-                        id=client.id,
-                        name=client.primary_name or "(no name)",
+                        id=str(client.id),
+                        name=client.name or "(no name)",
                         overlap_reason=f'"{q}" ↔ {reason}',
                         similarity=round(sim, 3),
                     )
@@ -163,7 +163,7 @@ def _scan_matters(
                     out.append(
                         ConflictCandidate(
                             kind="matter",
-                            id=matter.id,
+                            id=str(matter.id),
                             name=f"{matter.matter_code}: {value}",
                             overlap_reason=f'"{q}" ↔ {col_name} ({reason})',
                             similarity=round(sim, 3),

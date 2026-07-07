@@ -39,8 +39,8 @@ import { useCapability } from "@/lib/capabilities";
  * candidate matches, and lets a fee-earner run a fresh scan or a
  * partner resolve a pending one (cleared / conflicted / waived).
  *
- * V1 scope: surface + run + resolve. V2 will add intake gating
- * (matter status promotion blocked unless cleared/waived).
+ * Intake gating is enforced by the API: matter status promotion is
+ * blocked unless the latest check is cleared or waived.
  */
 export function ConflictCheckCard({
   matterId,
@@ -67,7 +67,7 @@ export function ConflictCheckCard({
   const tone = latest?.status ?? "untested";
 
   return (
-    <Card data-testid="matter-conflict-card">
+    <Card data-testid="matter-conflict-card" tabIndex={-1}>
       <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
         <div>
           <CardTitle>Conflict check</CardTitle>
@@ -104,6 +104,15 @@ export function ConflictCheckCard({
             )}
             {latest.status === "pending" && canResolve ? (
               <ResolveBar checkId={latest.id} onResolved={refreshAll} />
+            ) : null}
+            {latest.status === "pending" && !canResolve ? (
+              <p
+                className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"
+                data-testid="conflict-review-restricted"
+              >
+                A partner or admin must clear, mark conflicted, or waive this
+                result before the matter can move to Active.
+              </p>
             ) : null}
             {latest.resolution_note ? (
               <p
