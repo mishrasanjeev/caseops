@@ -13,7 +13,7 @@ Source workbooks:
 ## Validity
 
 - `Aishwarya BUG-001`: Valid UX/product-completion bug. The backend gate is correct, but the matter edit workflow left the user at a 409 toast instead of showing persistent guidance and a direct route to the Conflict check card.
-- `Ram BUG-001`: Valid backend bug. Reproduced on production with the supplied `legal` test account. The browser showed a CORS/network-style failure, but a direct authenticated API POST returned `500 Internal Server Error`.
+- `Ram BUG-001`: Valid backend bug. Reproduced on production with the supplied `legal` test account. The browser showed a CORS/network-style failure, but direct authenticated API probing first exposed a `500 Internal Server Error`, then exposed a large-tenant timeout after the stale-column crash was fixed.
 
 ## Brutal Root Cause
 
@@ -22,10 +22,12 @@ Source workbooks:
 3. I trusted a happy-path QA tenant too much. The `legal` tenant reproduction exposed the client-table path that the prior regression suite never exercised.
 4. I treated the browser "workspace API unreachable" message as a frontend symptom until direct API probing proved the server was returning 500. Network-looking UI errors still require server-path proof.
 5. I left stale implementation comments in `ConflictCheckCard` saying intake gating was future work even though the API already enforced it. Stale comments are a warning sign that tests and user flows may be out of sync.
+6. I initially fixed the crash without proving the same production tenant could complete the scan inside a normal request budget. That was still shallow: after `Client.name` stopped crashing, the scanner was hydrating and scoring too much tenant data and timed out.
 
 ## Permanent Rules
 
 - Conflict-check regressions must create at least one real `Client` row, not only matters with free-text client names.
+- Conflict-check regressions must include a volume guard that proves unrelated tenant rows are not hydrated/scored for every scan.
 - Mandatory gates must have two tests: one for the enforcement and one for the user recovery path from the page where the block appears.
 - Any browser CORS/network-looking failure on a mutating endpoint must be reproduced with a direct authenticated API request before classifying the bug.
 - UI comments that describe implemented gates as future work must be corrected during the fix. Stale comments are product-risk debt.
@@ -34,6 +36,7 @@ Source workbooks:
 ## Fixes Added
 
 - `apps/api/src/caseops_api/services/conflict_checks.py` now scans `Client.name`, the actual model column, and stores string candidate IDs.
+- `apps/api/src/caseops_api/services/conflict_checks.py` now prefilters client and matter scans in SQL before applying the existing Python similarity scorer, so large tenants do not hydrate and score every row for one conflict check.
 - `apps/api/src/caseops_api/services/matters.py` now returns actionable activation-block messages that point users to the Conflict check card.
 - `apps/web/app/app/matters/[id]/page.tsx` now keeps conflict-gate activation failures visible inline, shows an Active-status pre-save hint, and provides a Review conflict check button that focuses the card.
 - `apps/web/components/matters/ConflictCheckCard.tsx` now documents the real gating behavior, is focusable from the edit form, and tells non-resolver users that a partner/admin must clear, mark conflicted, or waive a pending result.
@@ -41,6 +44,7 @@ Source workbooks:
 ## Regression Anchors Added
 
 - `apps/api/tests/test_conflict_checks.py::test_run_conflict_check_flags_existing_client_record_as_pending` covers the real `Client.name` scan path that failed in production.
+- `apps/api/tests/test_conflict_checks.py::test_run_conflict_check_prefilters_large_client_tables` covers the large-tenant guard by seeding many unrelated client rows and asserting the scorer is not called for them.
 - Existing API gate tests now assert that 409 activation messages include "Conflict check card".
 - `apps/web/app/app/matters/[id]/page.test.tsx` covers the inline conflict-gate guidance and Review conflict check button.
 - `tests/e2e/hari-2026-07-07-bugs.spec.ts` drives the full local browser path: real client creation, matter creation, UI conflict scan, blocked Active save with guidance, clear check, and successful Active save.
@@ -48,7 +52,7 @@ Source workbooks:
 
 ## Local Verification - 2026-07-07
 
-- `apps\api\.venv\Scripts\python.exe -m pytest apps\api\tests\test_conflict_checks.py` - PASS, 20 tests.
+- `apps\api\.venv\Scripts\python.exe -m pytest apps\api\tests\test_conflict_checks.py` - PASS, 21 tests.
 - `apps\api\.venv\Scripts\ruff.exe check apps\api\src\caseops_api\services\conflict_checks.py apps\api\src\caseops_api\services\matters.py apps\api\tests\test_conflict_checks.py` - PASS.
 - `npm --prefix apps/web test -- app/app/matters/[id]/page.test.tsx` - PASS, 6 tests.
 - `npx tsc --noEmit --pretty false --project apps/web/tsconfig.json` - PASS.
@@ -57,4 +61,4 @@ Source workbooks:
 
 ## Current Verdict
 
-Both July 7 conflict-check rows are valid and fixed locally. Production verification must be repeated after the commit is merged and deployed because the original Ram failure reproduced only on the shipped production API.
+Both July 7 conflict-check rows are valid and fixed locally. Production verification must be repeated after the latest commit is deployed because the original Ram failure reproduced only on the shipped production API and the first server fix exposed a second large-tenant timeout.
