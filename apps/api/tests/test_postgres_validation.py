@@ -205,6 +205,31 @@ def test_foreign_key_indexes_exist_after_head(pg_engine):
     assert not missing, f"Foreign-key columns missing leading indexes: {missing}"
 
 
+def test_conflict_check_trigram_indexes_exist_after_head(pg_engine):
+    expected = {
+        "ix_clients_name_trgm",
+        "ix_matters_client_name_trgm",
+        "ix_matters_opposing_party_trgm",
+    }
+    with pg_engine.connect() as conn:
+        rows = conn.execute(
+            text(
+                "SELECT indexname, indexdef "
+                "FROM pg_indexes "
+                "WHERE schemaname = current_schema() "
+                "AND indexname = ANY(:names)"
+            ),
+            {"names": list(expected)},
+        ).mappings()
+        indexes = {str(row["indexname"]): str(row["indexdef"]) for row in rows}
+
+    assert set(indexes) == expected
+    for indexdef in indexes.values():
+        assert "USING gin" in indexdef
+        assert "gin_trgm_ops" in indexdef
+        assert "lower(" in indexdef
+
+
 def test_authority_exact_name_prefilter_matches_party_tokens_on_postgres(pg_engine):
     from caseops_api.services.authorities import _exact_name_match_document_ids
 
