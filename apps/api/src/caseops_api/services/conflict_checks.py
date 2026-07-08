@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
@@ -45,6 +45,29 @@ _GATE_ALLOWED_STATUSES = {
     MatterConflictCheckStatus.CLEARED.value,
     MatterConflictCheckStatus.WAIVED.value,
 }
+_PREFILTER_STOPWORDS = {
+    "and",
+    "client",
+    "co",
+    "company",
+    "conflict",
+    "corp",
+    "corporation",
+    "existing",
+    "inc",
+    "legal",
+    "limited",
+    "llc",
+    "llp",
+    "ltd",
+    "matter",
+    "neutral",
+    "probe",
+    "private",
+    "pvt",
+    "target",
+    "the",
+}
 
 
 @dataclass(frozen=True)
@@ -64,6 +87,32 @@ def _normalise(text: str) -> str:
 
 def _tokens(text: str) -> set[str]:
     return {t for t in _TOKEN_RE.findall(_normalise(text)) if len(t) >= 2}
+
+
+def _prefilter_terms(query_names: list[str]) -> list[str]:
+    """Return distinctive SQL prefilter terms before Python scoring.
+
+    The scorer still decides whether a row is a real candidate. This
+    prefilter only prevents large tenants from hydrating every client
+    and matter row for each scan.
+    """
+    out: list[str] = []
+    for name in query_names:
+        tokens = sorted(_tokens(name))
+        distinctive = [
+            token
+            for token in tokens
+            if len(token) >= 3 and token not in _PREFILTER_STOPWORDS
+        ]
+        source = distinctive or [token for token in tokens if len(token) >= 3]
+        for token in source:
+            if token not in out:
+                out.append(token)
+    return out[:20]
+
+
+def _ilike_any(column, terms: list[str]):
+    return [func.lower(column).like(f"%{term}%") for term in terms]
 
 
 def _jaccard(a: set[str], b: set[str]) -> float:
@@ -107,21 +156,21 @@ def _scan_clients(
     query_names: list[str],
 ) -> list[ConflictCandidate]:
     """Find Client rows whose name overlaps any query name."""
-    rows = list(
-        session.scalars(
-            select(Client).where(Client.company_id == company_id)
-        )
-    )
+    terms = _prefilter_terms(query_names)
+    stmt = select(Client.id, Client.name).where(Client.company_id == company_id)
+    if terms:
+        stmt = stmt.where(or_(*_ilike_any(Client.name, terms)))
+    rows = list(session.execute(stmt))
     out: list[ConflictCandidate] = []
-    for client in rows:
+    for client_id, client_name in rows:
         for q in query_names:
-            sim, reason = _score(q, client.name)
+            sim, reason = _score(q, client_name)
             if sim >= 0.5 and reason is not None:
                 out.append(
                     ConflictCandidate(
                         kind="client",
-                        id=str(client.id),
-                        name=client.name or "(no name)",
+                        id=str(client_id),
+                        name=client_name or "(no name)",
                         overlap_reason=f'"{q}" ↔ {reason}',
                         similarity=round(sim, 3),
                     )
@@ -139,32 +188,42 @@ def _scan_matters(
 ) -> list[ConflictCandidate]:
     """Find existing Matter rows where client_name or opposing_party
     overlaps any query name. Skip the matter being checked itself."""
-    rows = list(
-        session.scalars(
-            select(Matter).where(
-                Matter.company_id == company_id,
-                Matter.id != exclude_matter_id,
-                or_(
-                    Matter.client_name.is_not(None),
-                    Matter.opposing_party.is_not(None),
-                ),
-            )
+    terms = _prefilter_terms(query_names)
+    stmt = select(
+        Matter.id,
+        Matter.matter_code,
+        Matter.client_name,
+        Matter.opposing_party,
+    ).where(
+        Matter.company_id == company_id,
+        Matter.id != exclude_matter_id,
+        or_(
+            Matter.client_name.is_not(None),
+            Matter.opposing_party.is_not(None),
         )
     )
+    if terms:
+        stmt = stmt.where(
+            or_(
+                *_ilike_any(Matter.client_name, terms),
+                *_ilike_any(Matter.opposing_party, terms),
+            )
+        )
+    rows = list(session.execute(stmt))
     out: list[ConflictCandidate] = []
-    for matter in rows:
+    for matter_id, matter_code, matter_client_name, matter_opposing_party in rows:
         for q in query_names:
             for col_name, value in (
-                ("client", matter.client_name),
-                ("opposing_party", matter.opposing_party),
+                ("client", matter_client_name),
+                ("opposing_party", matter_opposing_party),
             ):
                 sim, reason = _score(q, value)
                 if sim >= 0.5 and reason is not None:
                     out.append(
                         ConflictCandidate(
                             kind="matter",
-                            id=str(matter.id),
-                            name=f"{matter.matter_code}: {value}",
+                            id=str(matter_id),
+                            name=f"{matter_code}: {value}",
                             overlap_reason=f'"{q}" ↔ {col_name} ({reason})',
                             similarity=round(sim, 3),
                         )

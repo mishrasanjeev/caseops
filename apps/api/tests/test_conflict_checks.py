@@ -9,6 +9,7 @@ from sqlalchemy import select
 
 from caseops_api.db.models import AuditEvent, Client, Matter, MatterConflictCheck
 from caseops_api.db.session import get_session_factory
+from caseops_api.services import conflict_checks as conflict_check_service
 from tests.test_auth_company import auth_headers, bootstrap_company
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -181,6 +182,65 @@ def test_run_conflict_check_flags_existing_client_record_as_pending(
     ]
     assert client_candidates
     assert client_candidates[0]["name"] == "Tata Sons Pvt Ltd"
+
+
+def test_run_conflict_check_prefilters_large_client_tables(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    """Large tenants must not hydrate/score every Client row for one scan."""
+    boot = bootstrap_company(client)
+    token = str(boot["access_token"])
+    company_id = str(boot["company"]["id"])
+    factory = get_session_factory()
+    with factory() as session:
+        session.add(
+            Client(
+                company_id=company_id,
+                name="Tata Sons Pvt Ltd",
+                client_type="corporate",
+            )
+        )
+        for index in range(150):
+            session.add(
+                Client(
+                    company_id=company_id,
+                    name=f"Unrelated Portfolio Entity {index:03d}",
+                    client_type="corporate",
+                )
+            )
+        session.commit()
+
+    scored_names: list[str | None] = []
+    original_score = conflict_check_service._score
+
+    def counting_score(query_name: str, candidate_name: str | None):
+        scored_names.append(candidate_name)
+        return original_score(query_name, candidate_name)
+
+    monkeypatch.setattr(conflict_check_service, "_score", counting_score)
+    matter_id = _new_matter(
+        client,
+        token=token,
+        code="CLIENT-PREFILTER-001",
+        title="Prefiltered conflict scan",
+        client_name="Neutral Client",
+        opposing="Tata Sons Pvt Ltd",
+    )
+
+    check = _run_check(
+        client,
+        token=token,
+        matter_id=matter_id,
+        opposing_party_name="Tata Sons Pvt Ltd",
+    )
+
+    assert check["status"] == "pending"
+    assert "Tata Sons Pvt Ltd" in scored_names
+    assert not any(
+        name and name.startswith("Unrelated Portfolio Entity")
+        for name in scored_names
+    )
 
 
 def test_run_conflict_check_flags_existing_client_as_pending(
