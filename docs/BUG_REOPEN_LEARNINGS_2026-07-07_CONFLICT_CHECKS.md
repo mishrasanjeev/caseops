@@ -23,6 +23,7 @@ Source workbooks:
 4. I treated the browser "workspace API unreachable" message as a frontend symptom until direct API probing proved the server was returning 500. Network-looking UI errors still require server-path proof.
 5. I left stale implementation comments in `ConflictCheckCard` saying intake gating was future work even though the API already enforced it. Stale comments are a warning sign that tests and user flows may be out of sync.
 6. I initially fixed the crash without proving the same production tenant could complete the scan inside a normal request budget. That was still shallow: after `Client.name` stopped crashing, the scanner was hydrating and scoring too much tenant data and timed out.
+7. I then added SQL prefilters but missed the database-level cost of `%term%` substring predicates on large production tables. A prefilter is not enough unless the database can execute it through an index.
 
 ## Permanent Rules
 
@@ -37,6 +38,7 @@ Source workbooks:
 
 - `apps/api/src/caseops_api/services/conflict_checks.py` now scans `Client.name`, the actual model column, and stores string candidate IDs.
 - `apps/api/src/caseops_api/services/conflict_checks.py` now prefilters client and matter scans in SQL before applying the existing Python similarity scorer, so large tenants do not hydrate and score every row for one conflict check.
+- `apps/api/alembic/versions/20260708_0001_conflict_check_trigram_indexes.py` adds `pg_trgm` GIN indexes for `clients.name`, `matters.client_name`, and `matters.opposing_party`, so the production `%term%` prefilter does not devolve into a sequential scan.
 - `apps/api/src/caseops_api/services/matters.py` now returns actionable activation-block messages that point users to the Conflict check card.
 - `apps/web/app/app/matters/[id]/page.tsx` now keeps conflict-gate activation failures visible inline, shows an Active-status pre-save hint, and provides a Review conflict check button that focuses the card.
 - `apps/web/components/matters/ConflictCheckCard.tsx` now documents the real gating behavior, is focusable from the edit form, and tells non-resolver users that a partner/admin must clear, mark conflicted, or waive a pending result.
@@ -45,6 +47,7 @@ Source workbooks:
 
 - `apps/api/tests/test_conflict_checks.py::test_run_conflict_check_flags_existing_client_record_as_pending` covers the real `Client.name` scan path that failed in production.
 - `apps/api/tests/test_conflict_checks.py::test_run_conflict_check_prefilters_large_client_tables` covers the large-tenant guard by seeding many unrelated client rows and asserting the scorer is not called for them.
+- `apps/api/tests/test_postgres_validation.py::test_conflict_check_trigram_indexes_exist_after_head` proves `alembic upgrade head` creates the production substring-search indexes on real Postgres.
 - Existing API gate tests now assert that 409 activation messages include "Conflict check card".
 - `apps/web/app/app/matters/[id]/page.test.tsx` covers the inline conflict-gate guidance and Review conflict check button.
 - `tests/e2e/hari-2026-07-07-bugs.spec.ts` drives the full local browser path: real client creation, matter creation, UI conflict scan, blocked Active save with guidance, clear check, and successful Active save.
@@ -53,6 +56,8 @@ Source workbooks:
 ## Local Verification - 2026-07-07
 
 - `apps\api\.venv\Scripts\python.exe -m pytest apps\api\tests\test_conflict_checks.py` - PASS, 21 tests.
+- `apps\api\.venv\Scripts\python.exe -m pytest apps\api\tests\test_migration_order.py apps\api\tests\test_conflict_checks.py` - PASS, 25 tests.
+- Local disposable `pgvector/pgvector:pg17` container, `apps\api\.venv\Scripts\python.exe -m pytest -q -m postgres apps\api\tests\test_postgres_validation.py` - PASS, 10 tests.
 - `apps\api\.venv\Scripts\ruff.exe check apps\api\src\caseops_api\services\conflict_checks.py apps\api\src\caseops_api\services\matters.py apps\api\tests\test_conflict_checks.py` - PASS.
 - `npm --prefix apps/web test -- app/app/matters/[id]/page.test.tsx` - PASS, 6 tests.
 - `npx tsc --noEmit --pretty false --project apps/web/tsconfig.json` - PASS.
@@ -61,4 +66,4 @@ Source workbooks:
 
 ## Current Verdict
 
-Both July 7 conflict-check rows are valid and fixed locally. Production verification must be repeated after the latest commit is deployed because the original Ram failure reproduced only on the shipped production API and the first server fix exposed a second large-tenant timeout.
+Both July 7 conflict-check rows are valid and fixed locally. Production verification must be repeated after the latest indexed migration is deployed because the original Ram failure reproduced only on the shipped production API and the first two server fixes exposed the database scan cost.
