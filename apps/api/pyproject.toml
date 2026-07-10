@@ -81,6 +81,7 @@ caseops-reextract-placeholder-titles = "caseops_api.scripts.reextract_placeholde
 caseops-send-hearing-reminders = "caseops_api.scripts.send_hearing_reminders:main"
 caseops-sync-legal-updates = "caseops_api.scripts.sync_legal_updates:main"
 caseops-poll-tracked-cases = "caseops_api.scripts.poll_tracked_cases:main"
+caseops-send-activity-report = "caseops_api.scripts.send_activity_report:main"
 
 [dependency-groups]
 dev = [

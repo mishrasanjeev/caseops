@@ -1,0 +1,30 @@
+apiVersion: run.googleapis.com/v1
+kind: Job
+metadata:
+  name: caseops-activity-report
+spec:
+  template:
+    metadata:
+      annotations:
+        run.googleapis.com/cloudsql-instances: "__PROJECT_ID__:__REGION__:__CLOUD_SQL_INSTANCE__"
+        run.googleapis.com/execution-environment: gen2
+        run.googleapis.com/secrets: "caseops-database-url:projects/__PROJECT_NUMBER__/secrets/caseops-database-url,caseops-sendgrid-api-key:projects/__PROJECT_NUMBER__/secrets/caseops-sendgrid-api-key"
+    spec:
+      taskCount: 1
+      template:
+        spec:
+          maxRetries: 1
+          timeoutSeconds: 900
+          serviceAccountName: "__SERVICE_ACCOUNT__"
+          containers:
+            - image: "__API_IMAGE__"
+              command: ["uv", "run", "caseops-send-activity-report"]
+              env:
+                - name: CASEOPS_ENV
+                  value: "cloud"
+                - name: CASEOPS_AUTO_MIGRATE
+                  value: "false"
+                - name: CASEOPS_DATABASE_URL
+                  valueFrom: {secretKeyRef: {name: "caseops-database-url", key: "latest"}}
+                - name: CASEOPS_SENDGRID_API_KEY
+                  valueFrom: {secretKeyRef: {name: "caseops-sendgrid-api-key", key: "latest"}}

@@ -37,6 +37,8 @@ param(
     [string]$LegalUpdateSchedulerSchedule = "0 0 * * *",
     [string]$CaseTrackingSchedulerJobName = "caseops-case-tracking-poll-1630-ist",
     [string]$CaseTrackingSchedulerSchedule = "30 16 * * *",
+    [string]$ActivityReportSchedulerJobName = "caseops-activity-report-0800-ist",
+    [string]$ActivityReportSchedulerSchedule = "0 8 * * *",
     [string]$SchedulerTimeZone = "Asia/Kolkata",
     [switch]$SkipScheduler
 )
@@ -142,10 +144,16 @@ $apiManifest = Join-Path $renderRoot "api-service.yaml"
 $workerManifest = Join-Path $renderRoot "document-worker-job.yaml"
 $legalUpdateManifest = Join-Path $renderRoot "legal-update-sync-job.yaml"
 $caseTrackingManifest = Join-Path $renderRoot "case-tracking-poll-job.yaml"
+$activityReportManifest = Join-Path $renderRoot "activity-report-job.yaml"
 
 Render-Template `
     -TemplatePath (Join-Path $scriptRoot "api-service.yaml") `
     -OutputPath $apiManifest `
+    -Replacements $replacements
+
+Render-Template `
+    -TemplatePath (Join-Path $scriptRoot "activity-report-job.yaml") `
+    -OutputPath $activityReportManifest `
     -Replacements $replacements
 
 Render-Template `
@@ -172,6 +180,7 @@ Render-Template `
 & gcloud run jobs replace $workerManifest --region $Region --project $ProjectId
 & gcloud run jobs replace $legalUpdateManifest --region $Region --project $ProjectId
 & gcloud run jobs replace $caseTrackingManifest --region $Region --project $ProjectId
+& gcloud run jobs replace $activityReportManifest --region $Region --project $ProjectId
 
 if (-not $SkipScheduler) {
     Ensure-SchedulerJob `
@@ -202,6 +211,16 @@ if (-not $SkipScheduler) {
         -Region $Region `
         -SchedulerServiceAccount $SchedulerServiceAccount `
         -Schedule $CaseTrackingSchedulerSchedule `
+        -TimeZone $SchedulerTimeZone
+
+    Ensure-SchedulerJob `
+        -ProjectId $ProjectId `
+        -Location $SchedulerLocation `
+        -JobName $ActivityReportSchedulerJobName `
+        -RunJobName "caseops-activity-report" `
+        -Region $Region `
+        -SchedulerServiceAccount $SchedulerServiceAccount `
+        -Schedule $ActivityReportSchedulerSchedule `
         -TimeZone $SchedulerTimeZone
 }
 

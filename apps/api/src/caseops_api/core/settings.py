@@ -135,6 +135,8 @@ class Settings(BaseSettings):
     sendgrid_api_key: str | None = Field(default=None)
     sendgrid_sender_email: str | None = Field(default=None)
     sendgrid_sender_name: str = Field(default="CaseOps")
+    activity_report_recipient_email: str = Field(default="mishra.sanjeev@gmail.com")
+    activity_report_enabled: bool = Field(default=True)
     # Public key that SendGrid signs event webhooks with. When set,
     # the webhook endpoint refuses to process events whose signature
     # doesn't verify — keeping an attacker from forging "delivered"
