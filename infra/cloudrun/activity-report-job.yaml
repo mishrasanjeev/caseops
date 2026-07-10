@@ -8,7 +8,7 @@ spec:
       annotations:
         run.googleapis.com/cloudsql-instances: "__PROJECT_ID__:__REGION__:__CLOUD_SQL_INSTANCE__"
         run.googleapis.com/execution-environment: gen2
-        run.googleapis.com/secrets: "caseops-database-url:projects/__PROJECT_NUMBER__/secrets/caseops-database-url,caseops-sendgrid-api-key:projects/__PROJECT_NUMBER__/secrets/caseops-sendgrid-api-key"
+        run.googleapis.com/secrets: "caseops-auth-secret:projects/__PROJECT_NUMBER__/secrets/caseops-auth-secret,caseops-database-url:projects/__PROJECT_NUMBER__/secrets/caseops-database-url,caseops-sendgrid-api-key:projects/__PROJECT_NUMBER__/secrets/caseops-sendgrid-api-key"
     spec:
       taskCount: 1
       template:
@@ -19,11 +19,25 @@ spec:
           containers:
             - image: "__API_IMAGE__"
               command: ["uv", "run", "caseops-send-activity-report"]
+              resources:
+                limits:
+                  cpu: "1"
+                  memory: "2Gi"
               env:
                 - name: CASEOPS_ENV
                   value: "cloud"
                 - name: CASEOPS_AUTO_MIGRATE
                   value: "false"
+                - name: CASEOPS_ACTIVITY_REPORT_ENABLED
+                  value: "true"
+                - name: CASEOPS_ACTIVITY_REPORT_RECIPIENT_EMAIL
+                  value: "mishra.sanjeev@gmail.com"
+                - name: CASEOPS_SENDGRID_SENDER_EMAIL
+                  value: "hearings@caseops.ai"
+                - name: CASEOPS_SENDGRID_SENDER_NAME
+                  value: "CaseOps"
+                - name: CASEOPS_AUTH_SECRET
+                  valueFrom: {secretKeyRef: {name: "caseops-auth-secret", key: "__AUTH_SECRET_VERSION__"}}
                 - name: CASEOPS_DATABASE_URL
                   valueFrom: {secretKeyRef: {name: "caseops-database-url", key: "latest"}}
                 - name: CASEOPS_SENDGRID_API_KEY
