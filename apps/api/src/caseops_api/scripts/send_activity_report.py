@@ -1,7 +1,14 @@
 from __future__ import annotations
-import argparse, json, sys
+
+import argparse
+import json
+import sys
+
 from caseops_api.db.session import get_session_factory
-from caseops_api.services.activity_reports import build_activity_report, send_activity_report
+from caseops_api.services.activity_reports import (
+    build_activity_report,
+    send_activity_report,
+)
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
