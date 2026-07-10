@@ -10,6 +10,7 @@ from caseops_api.services.activity_reports import (
     send_activity_report,
 )
 
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
