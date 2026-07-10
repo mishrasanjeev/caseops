@@ -32,15 +32,15 @@ describe("downloadApiFile", () => {
     const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:cause-list");
     vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(new Blob(["%PDF-1.7"]), {
-        status: 200,
-        headers: {
-          "content-type": "application/pdf",
-          "content-disposition": 'attachment; filename="cause-list.pdf"',
-        },
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      blob: async () => new Blob(["%PDF-1.7"]),
+      headers: new Headers({
+        "content-type": "application/pdf",
+        "content-disposition": 'attachment; filename="cause-list.pdf"',
       }),
-    );
+    } as Response);
     vi.stubGlobal("fetch", fetchMock);
 
     await downloadCauseListPdf({ date: "2026-07-10" });
