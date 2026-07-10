@@ -24,6 +24,10 @@ const ISO_DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 export type LegalDateInput = string | Date | null | undefined;
 
+function padDatePart(value: number): string {
+  return String(value).padStart(2, "0");
+}
+
 /** Default options for legal calendar rendering (e.g. "May 02, 2026"). */
 const DEFAULT_OPTIONS: Intl.DateTimeFormatOptions = {
   year: "numeric",
@@ -68,4 +72,17 @@ export function toLocalCalendarDate(value: LegalDateInput): Date | null {
   // a time component — those carry a timezone and need UTC handling.
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+/**
+ * Return a value suitable for an HTML date input using the user's local
+ * calendar day. UTC conversion can return yesterday or tomorrow around
+ * local midnight.
+ */
+export function todayLocalDateInput(now: Date = new Date()): string {
+  return [
+    now.getFullYear(),
+    padDatePart(now.getMonth() + 1),
+    padDatePart(now.getDate()),
+  ].join("-");
 }

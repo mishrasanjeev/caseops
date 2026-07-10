@@ -37,6 +37,7 @@ import {
   type TodayView,
   fetchTodayView,
 } from "@/lib/api/endpoints";
+import { formatLegalDate } from "@/lib/dates";
 
 export default function TodayPage() {
   const query = useQuery({
@@ -480,7 +481,7 @@ function SkeletonGrid() {
 }
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
+  return formatLegalDate(iso, {
     day: "2-digit",
     month: "short",
     year: "numeric",

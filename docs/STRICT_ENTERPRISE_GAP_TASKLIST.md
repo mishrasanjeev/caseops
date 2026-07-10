@@ -48,6 +48,64 @@ Manager + 90-day rotation runbook + drill executed in
 hardening gaps EG-008 (hotspot decomposition) + EG-009 (exception
 discipline) remain `Partially implemented` but are not stop-ship.
 
+## 2026-07-10 Whole-Repository Audit Addendum
+
+Current audit: docs/STRICT_REPO_QUALITY_AUDIT_2026-07-10.md.
+
+Overall release-quality verdict: **NO-GO**. The critical code defects below
+have local regression fixes, but the affected build has not been deployed and
+the canonical monolithic backend verification process exited -1 before
+completion. Do not treat local green tests as production enforcement.
+
+- JUL10-EG-001 **Partially implemented** Portal authentication boundary.
+  Local code now hides debug tokens and sends magic links for cloud, staging,
+  and unknown managed environment names; invitation matter IDs are
+  tenant-validated, re-invite scopes are replaced, and magic-link consumption
+  uses a conditional single-use claim. Remaining: deploy and run authenticated
+  production portal Playwright against the exact revision.
+- JUL10-EG-002 **Partially implemented** Browser session/error boundary.
+  Local code parses RFC 7807 media types, sends CSRF on logout and cause-list
+  generation, sanitizes post-login redirects, and keeps portal 401 handling
+  separate from employee refresh. Remaining: deployed cookie invalidation,
+  password/MFA redirect, and portal-expiry browser proof.
+- JUL10-EG-003 **Partially implemented** Build provenance and source secrecy.
+  API build contexts now ignore local secret/cache files and deploy-prod
+  rejects mismatched refs and dirty API/web source before gcloud. Remaining:
+  a controlled production deploy proving the exact full SHA/image digest.
+- JUL10-EG-004 **Partially implemented** Cloud Run manifest secret gate.
+  The ineffective grep check is replaced by a YAML-aware scanner with local
+  tests. Remaining: GitHub Security workflow proof and conversion of the
+  document-worker deployment path away from plaintext database substitution.
+- JUL10-EG-005 **Partially implemented** Deployment health certification.
+  Local fake-command tests prove network/degraded health fails closed.
+  Remaining: add a true readiness endpoint covering database and critical
+  dependencies, then prove Cloud Run probes and post-deploy readiness.
+- JUL10-EG-006 **Partially implemented** Legal calendar-date consistency.
+  Audited portal, dashboard, portfolio, hearing, matter, notice, Today,
+  document, predictive-intelligence, and litigation-review paths now use local
+  calendar semantics and pass UTC-negative tests. Remaining: deployed
+  multi-timezone browser proof and a schema-driven guard for future date fields.
+- JUL10-EG-007 **Partially implemented** Test-gate reliability. Twenty stale
+  page-test waivers were removed and future stale waivers fail. Remaining:
+  complete deterministic backend shard evidence, page.tsx numeric coverage,
+  route-wide axe, and provider-gated release proof.
+- JUL10-EG-008 **Missing** Atomic worker claiming/leases. Document and court
+  sync workers can select queued work before claiming it, while schedules may
+  overlap the allowed execution window. Add PostgreSQL concurrency tests and
+  lease ownership/heartbeat semantics.
+- JUL10-EG-009 **Partially implemented** Production test artifact secrecy.
+  Live-tenant Playwright configs now disable traces, screenshots, and videos,
+  with a regression guard. Remaining: audit uploaded text reports and local
+  release/provider artifacts, and use short-lived least-privilege QA sessions.
+- JUL10-EG-010 **Partially implemented** Reproducible containers. API and web
+  image builds still do not install exclusively from committed lockfiles, and
+  some runtime commands can resolve dependencies. Move builds to frozen
+  lockfiles and prove network-disabled startup.
+- JUL10-EG-011 **Partially implemented** Pine Labs callback routing. Local code
+  now returns customers to the existing matter-billing page and derives the
+  webhook from the named API route rather than the frontend origin. Remaining:
+  Pine UAT and deployed signed-webhook/return-navigation proof.
+
 ## Strict Repo Quality Audit (2026-04-24)  - P0 status
 
 All five P0 findings from `docs/STRICT_REPO_QUALITY_AUDIT_2026-04-24.md`

@@ -36,9 +36,12 @@ export default defineConfig({
   reporter: "list",
   use: {
     baseURL: process.env.PROD_BASE_URL ?? "https://caseops.ai",
-    trace: "retain-on-failure",
-    screenshot: "only-on-failure",
-    video: "retain-on-failure",
+    // Production traces, screenshots, and videos can capture authenticated
+    // legal data and session-bearing requests. Keep failure diagnostics in
+    // the text reporter; never persist browser media from the live tenant.
+    trace: "off",
+    screenshot: "off",
+    video: "off",
   },
   projects: [
     {

@@ -26,6 +26,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/DropdownMenu";
 import { Input } from "@/components/ui/Input";
+import { apiErrorMessage } from "@/lib/api/config";
 import { useSession } from "@/lib/use-session";
 
 export function Topbar() {
@@ -46,10 +47,20 @@ export function Topbar() {
   // chosen page without a stale overlay.
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
-  function handleSignOut() {
-    signOut();
-    toast.success("Signed out");
-    router.replace("/sign-in");
+  async function handleSignOut() {
+    try {
+      await signOut();
+      toast.success("Signed out");
+    } catch (error) {
+      toast.error(
+        apiErrorMessage(
+          error,
+          "Signed out locally, but the server session could not be cleared.",
+        ),
+      );
+    } finally {
+      router.replace("/sign-in");
+    }
   }
 
   function handleSearchSubmit(event: FormEvent<HTMLFormElement>) {

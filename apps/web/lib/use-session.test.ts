@@ -1,12 +1,17 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ApiError } from "./api/config";
 import { storeSession } from "./session";
 import { useSession } from "./use-session";
 
-const refreshAccessToken = vi.fn(() => Promise.resolve("new-token"));
+const { apiRequestMock, refreshAccessToken } = vi.hoisted(() => ({
+  apiRequestMock: vi.fn(),
+  refreshAccessToken: vi.fn(() => Promise.resolve("new-token")),
+}));
 
 vi.mock("./api/client", () => ({
+  apiRequest: apiRequestMock,
   refreshAccessToken: () => refreshAccessToken(),
 }));
 
@@ -46,6 +51,8 @@ function buildSession() {
 describe("useSession", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    apiRequestMock.mockReset();
+    apiRequestMock.mockResolvedValue(undefined);
     refreshAccessToken.mockClear();
     vi.useFakeTimers();
   });
@@ -90,17 +97,46 @@ describe("useSession", () => {
     expect(result.current.token).toBeNull();
   });
 
-  it("signOut clears storage and transitions back to anonymous", () => {
+  it("signOut uses the shared API client, then clears local state", async () => {
     storeSession(buildSession());
     const { result } = renderHook(() => useSession());
     expect(result.current.status).toBe("authenticated");
 
-    act(() => {
-      result.current.signOut();
+    await act(async () => {
+      await result.current.signOut();
     });
 
+    expect(apiRequestMock).toHaveBeenCalledWith("/api/auth/logout", {
+      method: "POST",
+    });
     expect(result.current.status).toBe("anonymous");
     expect(window.localStorage.getItem("caseops.session.token")).toBeNull();
+    expect(window.localStorage.getItem("caseops.session.context")).toBeNull();
+  });
+
+  it("propagates a rejected logout while still clearing local state", async () => {
+    apiRequestMock.mockRejectedValue(
+      new ApiError(403, "CSRF token did not match.", null, "csrf_failed"),
+    );
+    storeSession(buildSession());
+    const { result } = renderHook(() => useSession());
+    let logoutError: unknown;
+
+    await act(async () => {
+      try {
+        await result.current.signOut();
+      } catch (error) {
+        logoutError = error;
+      }
+    });
+
+    expect(logoutError).toMatchObject({
+      status: 403,
+      detail: "CSRF token did not match.",
+      problemType: "csrf_failed",
+    });
+    expect(result.current.status).toBe("anonymous");
+    expect(window.localStorage.getItem("caseops.session.context")).toBeNull();
   });
 
   it("schedules a 45-minute refresh while authenticated", () => {
@@ -131,7 +167,7 @@ describe("useSession", () => {
     expect(refreshAccessToken).not.toHaveBeenCalled();
   });
 
-  it("cancels the refresh interval after signOut", () => {
+  it("cancels the refresh interval after signOut", async () => {
     storeSession(buildSession());
     const { result } = renderHook(() => useSession());
 
@@ -140,8 +176,8 @@ describe("useSession", () => {
     });
     expect(refreshAccessToken).toHaveBeenCalledTimes(1);
 
-    act(() => {
-      result.current.signOut();
+    await act(async () => {
+      await result.current.signOut();
     });
 
     // After sign-out, no further refresh should fire even if hours pass.

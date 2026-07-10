@@ -11,6 +11,8 @@ const {
   regenerateMfaRecoveryCodesMock,
   startMfaEnrollmentMock,
   verifyMfaEnrollmentMock,
+  routerReplaceMock,
+  searchParamsGetMock,
 } = vi.hoisted(() => ({
   completeMfaStepUpMock: vi.fn(),
   disableMfaMock: vi.fn(),
@@ -18,6 +20,13 @@ const {
   regenerateMfaRecoveryCodesMock: vi.fn(),
   startMfaEnrollmentMock: vi.fn(),
   verifyMfaEnrollmentMock: vi.fn(),
+  routerReplaceMock: vi.fn(),
+  searchParamsGetMock: vi.fn(),
+}));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: routerReplaceMock }),
+  useSearchParams: () => ({ get: searchParamsGetMock }),
 }));
 
 vi.mock("@/lib/api/endpoints", () => ({
@@ -50,6 +59,11 @@ describe("AccountSecurityPage", () => {
     regenerateMfaRecoveryCodesMock.mockReset();
     startMfaEnrollmentMock.mockReset();
     verifyMfaEnrollmentMock.mockReset();
+    routerReplaceMock.mockReset();
+    searchParamsGetMock.mockReset();
+    searchParamsGetMock.mockImplementation((key: string) =>
+      key === "next" ? "/app/matters" : null,
+    );
     fetchAccountSecurityMock.mockResolvedValue({
       mfa_status: "not_enrolled",
       mfa_required: true,
@@ -98,6 +112,8 @@ describe("AccountSecurityPage", () => {
     await user.type(screen.getByLabelText("MFA verification code"), "123456");
     await user.click(screen.getByRole("button", { name: /^verify$/i }));
     expect(await screen.findByText("caseops-111111")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /continue to workspace/i }));
+    expect(routerReplaceMock).toHaveBeenCalledWith("/app/matters");
 
     await user.type(screen.getByLabelText("Step-up code"), "654321");
     await user.click(screen.getByRole("button", { name: /verify step-up/i }));

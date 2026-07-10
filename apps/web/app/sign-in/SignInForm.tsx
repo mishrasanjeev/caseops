@@ -19,6 +19,7 @@ import { PasswordInput } from "@/components/ui/PasswordInput";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { completeMfaLoginChallenge, signIn } from "@/lib/api/auth";
 import { apiErrorMessage } from "@/lib/api/config";
+import { safePostLoginPath } from "@/lib/safe-next-path";
 import { storeSession } from "@/lib/session";
 
 import { NewWorkspaceForm } from "./NewWorkspaceForm";
@@ -38,7 +39,7 @@ type FormValues = z.infer<typeof schema>;
 export function SignInForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const nextPath = params.get("next") ?? "/app";
+  const nextPath = safePostLoginPath(params.get("next"));
   const initialTab = params.get("tab") === "new" ? "new" : "signin";
   const [tab, setTab] = useState<"signin" | "new">(initialTab);
   const [pendingSession, setPendingSession] =

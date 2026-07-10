@@ -1,0 +1,38 @@
+# Docker receives apps/api as its build context, so the repository-root
+# .dockerignore does not apply. Keep secrets, local environments, and
+# generated caches out of the daemon upload and every COPY layer.
+
+# Local secrets. The example is intentionally included as documentation.
+.env
+.env.*
+!.env.example
+
+# Python environments, bytecode, and tool caches.
+.venv/
+venv/
+.uv-cache/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.pytest-tmp/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.json
+coverage.xml
+htmlcov/
+*.egg-info/
+build/
+dist/
+
+# Version control and local runtime data.
+.git/
+.gitignore
+storage/
+.tmp-sweep/
+tmp/
+*.log
+*.db
+*.sqlite
+*.sqlite3

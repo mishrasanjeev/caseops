@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { formatLegalDate, toLocalCalendarDate } from "./dates";
+import {
+  formatLegalDate,
+  todayLocalDateInput,
+  toLocalCalendarDate,
+} from "./dates";
 
 describe("formatLegalDate", () => {
   it("renders a SQL Date (YYYY-MM-DD) as the same calendar day", () => {
@@ -38,5 +42,10 @@ describe("formatLegalDate", () => {
   it("returns null on garbage input rather than Invalid Date", () => {
     expect(toLocalCalendarDate("not-a-date")).toBeNull();
     expect(toLocalCalendarDate("")).toBeNull();
+  });
+
+  it("builds date-input defaults from local calendar components", () => {
+    const localEarlyMorning = new Date(2026, 0, 2, 0, 15, 0);
+    expect(todayLocalDateInput(localEarlyMorning)).toBe("2026-01-02");
   });
 });

@@ -25,6 +25,16 @@ function readCsrfCookie(): string | null {
   return decodeURIComponent(match.slice(CSRF_COOKIE.length + 1));
 }
 
+/**
+ * Return the double-submit CSRF header for direct fetch call sites that
+ * cannot use apiRequest (for example, blob downloads). An absent cookie
+ * deliberately produces no header so the server remains authoritative.
+ */
+export function getCsrfHeaders(): Record<string, string> {
+  const csrf = readCsrfCookie();
+  return csrf ? { [CSRF_HEADER]: csrf } : {};
+}
+
 // Single-flight refresh: many components may hit a 401 simultaneously;
 // we want exactly one POST to /auth/refresh per expiry window, and all
 // queued requests to await that same promise.
@@ -86,6 +96,18 @@ function resolveUrl(path: string): string {
   return `${API_BASE_URL}${path}`;
 }
 
+function isPortalApiPath(path: string): boolean {
+  try {
+    const pathname = new URL(
+      resolveUrl(path),
+      "https://caseops.invalid",
+    ).pathname;
+    return pathname === "/api/portal" || pathname.startsWith("/api/portal/");
+  } catch {
+    return path === "/api/portal" || path.startsWith("/api/portal/");
+  }
+}
+
 function extractDetail(data: unknown, fallback: string): string {
   if (typeof data === "string") return data;
   if (data && typeof data === "object") {
@@ -114,6 +136,7 @@ export async function apiRequest<TResponse>(
   _retry = false,
 ): Promise<TResponse> {
   const { method = "GET", body, headers = {}, signal } = init;
+  const portalRequest = isPortalApiPath(path);
   // EG-001 (2026-04-23): cookie-first auth. We only attach a Bearer
   // header when the caller explicitly passes ``token`` — that path
   // exists for SDK-style usage (tests, scripts, embedded automation)
@@ -141,10 +164,7 @@ export async function apiRequest<TResponse>(
     MUTATING_METHODS.has(upperMethod) &&
     !requestHeaders[CSRF_HEADER]
   ) {
-    const csrf = readCsrfCookie();
-    if (csrf) {
-      requestHeaders[CSRF_HEADER] = csrf;
-    }
+    Object.assign(requestHeaders, getCsrfHeaders());
   }
 
   const serializedBody = hasBody
@@ -180,8 +200,9 @@ export async function apiRequest<TResponse>(
   }
 
   const contentType = response.headers.get("content-type") ?? "";
+  const mediaType = contentType.split(";", 1)[0]?.trim().toLowerCase() ?? "";
   let parsed: unknown = null;
-  if (contentType.includes("application/json")) {
+  if (mediaType === "application/json" || mediaType.endsWith("+json")) {
     parsed = await response.json().catch(() => null);
   } else {
     const text = await response.text().catch(() => "");
@@ -223,6 +244,7 @@ export async function apiRequest<TResponse>(
     ]);
     if (
       !_retry &&
+      !portalRequest &&
       response.status === 401 &&
       problemType !== null &&
       AUTH_REFRESH_TRIGGERS.has(problemType) &&
@@ -248,15 +270,27 @@ export async function apiRequest<TResponse>(
     // graceful /sign-in redirect when refresh fails.
     if (
       response.status === 401 &&
-      explicitToken === undefined &&
       typeof window !== "undefined" &&
-      !window.location.pathname.startsWith("/sign-in") &&
       !path.endsWith(REFRESH_PATH)
     ) {
-      const next = encodeURIComponent(
-        window.location.pathname + window.location.search,
-      );
-      window.location.assign(`/sign-in?next=${next}`);
+      if (portalRequest) {
+        const onPortalSignIn =
+          window.location.pathname === "/portal/sign-in" ||
+          window.location.pathname.startsWith("/portal/sign-in/");
+        if (!onPortalSignIn) {
+          // Portal cookies have a separate authentication boundary.
+          // Do not leak a magic-link query into a next parameter.
+          window.location.assign("/portal/sign-in");
+        }
+      } else if (
+        explicitToken === undefined &&
+        !window.location.pathname.startsWith("/sign-in")
+      ) {
+        const next = encodeURIComponent(
+          window.location.pathname + window.location.search,
+        );
+        window.location.assign(`/sign-in?next=${next}`);
+      }
     }
 
     throw new ApiError(

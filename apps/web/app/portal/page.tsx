@@ -31,6 +31,7 @@ import {
   logoutPortal,
   type PortalMatter,
 } from "@/lib/api/portal";
+import { formatLegalDate } from "@/lib/dates";
 
 export default function PortalLandingPage() {
   const router = useRouter();
@@ -162,7 +163,7 @@ export default function PortalLandingPage() {
                         m.matter_code,
                         m.court_name,
                         m.next_hearing_on
-                          ? `Next hearing ${new Date(m.next_hearing_on).toLocaleDateString()}`
+                          ? `Next hearing ${formatLegalDate(m.next_hearing_on)}`
                           : null,
                       ]
                         .filter(Boolean)

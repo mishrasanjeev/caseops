@@ -158,21 +158,14 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a
+        with:
+          version: "latest"
       - name: Reject literal secrets in infra/cloudrun
-        # Any env var named *_SECRET / *_KEY / *_TOKEN / *_PASSWORD
-        # whose value is a plain string (not a secretKeyRef) breaks
-        # the build. Allows valueFrom: secretKeyRef and explicit
-        # placeholders matching ${...}.
-        run: |
-          set -euo pipefail
-          fail=0
-          if [ -d infra/cloudrun ]; then
-            while IFS= read -r match; do
-              if [ -n "$match" ]; then
-                echo "::error::Literal secret in Cloud Run manifest: $match"
-                fail=1
-              fi
-            done < <(grep -REn '^\s*value:\s*"?[A-Za-z0-9/+=_-]{20,}"?\s*$' infra/cloudrun/ \
-              | grep -E '_(SECRET|KEY|TOKEN|PASSWORD)' || true)
-          fi
-          exit $fail
+        # Parse YAML env entries structurally so a secret-like name is
+        # associated with its sibling value/valueFrom. The old grep
+        # inspected only the value line and could never see the name
+        # on the preceding line.
+        run: >-
+          uv run --no-project --with PyYAML==6.0.3
+          python scripts/check_cloudrun_manifest_secrets.py infra/cloudrun

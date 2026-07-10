@@ -40,6 +40,7 @@ import {
   submitPortalMatterKyc,
   type PortalKycDocument,
 } from "@/lib/api/portal";
+import { formatLegalDate } from "@/lib/dates";
 
 export default function PortalMatterDetailPage() {
   const params = useParams<{ id: string }>();
@@ -160,7 +161,7 @@ function OverviewCard({
           label="Next hearing"
           value={
             matter.next_hearing_on
-              ? new Date(matter.next_hearing_on).toLocaleDateString()
+              ? formatLegalDate(matter.next_hearing_on)
               : "Not scheduled"
           }
         />
@@ -336,7 +337,7 @@ function HearingsCard({ matterId }: { matterId: string }) {
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-sm font-medium text-[var(--color-ink)]">
-                    {new Date(h.hearing_on).toLocaleDateString()} · {h.purpose}
+                    {formatLegalDate(h.hearing_on)} · {h.purpose}
                   </span>
                   <Badge tone="neutral">{h.status}</Badge>
                 </div>

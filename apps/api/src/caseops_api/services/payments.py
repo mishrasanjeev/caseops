@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, Request, status
@@ -35,6 +36,17 @@ from caseops_api.services.pine_labs import (
 )
 from caseops_api.services.saas_billing import handle_billing_provider_event
 from caseops_api.services.session_context import SessionContext
+
+logger = logging.getLogger(__name__)
+
+_PAYMENT_LINK_PROVIDER_FAILURE_DETAIL = (
+    "Pine Labs could not create the payment link. Please try again; "
+    "if the problem continues, contact support."
+)
+_PAYMENT_STATUS_PROVIDER_FAILURE_DETAIL = (
+    "Pine Labs could not refresh the payment status. Please try again; "
+    "if the problem continues, contact support."
+)
 
 
 def _payment_attempt_record(attempt: MatterInvoicePaymentAttempt) -> InvoicePaymentAttemptRecord:
@@ -121,6 +133,7 @@ def create_invoice_payment_link(
     matter_id: str,
     invoice_id: str,
     payload: PaymentLinkCreateRequest,
+    webhook_url: str,
 ) -> InvoicePaymentAttemptRecord:
     if context.membership.role not in {MembershipRole.OWNER, MembershipRole.ADMIN}:
         raise HTTPException(
@@ -166,8 +179,8 @@ def create_invoice_payment_link(
 
     settings = get_settings()
     gateway_client = _get_gateway_client()
-    return_url = f"{settings.public_app_url}/billing/invoices/{invoice.id}"
-    webhook_url = f"{settings.public_app_url}/api/payments/pine-labs/webhook"
+    public_app_url = str(settings.public_app_url).rstrip("/")
+    return_url = f"{public_app_url}/app/matters/{matter_id}/billing"
 
     try:
         gateway_result = gateway_client.create_payment_link(
@@ -181,14 +194,24 @@ def create_invoice_payment_link(
             return_url=return_url,
             webhook_url=webhook_url,
         )
-    except HTTPException:
-        session.rollback()
-        raise
     except Exception as exc:
         session.rollback()
+        if (
+            isinstance(exc, HTTPException)
+            and exc.status_code != status.HTTP_502_BAD_GATEWAY
+        ):
+            raise
+        logger.error(
+            "Pine Labs payment link creation failed "
+            "company_id=%s matter_id=%s invoice_id=%s provider_error_type=%s",
+            context.company.id,
+            matter_id,
+            invoice_id,
+            type(exc).__name__,
+        )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Pine Labs payment link creation failed: {exc}",
+            detail=_PAYMENT_LINK_PROVIDER_FAILURE_DETAIL,
         ) from exc
 
     attempt.provider_order_id = gateway_result.provider_order_id
@@ -281,12 +304,25 @@ def sync_invoice_payment_link(
         result = gateway_client.fetch_payment_status(
             provider_order_id=latest_attempt.provider_order_id
         )
-    except HTTPException:
-        raise
     except Exception as exc:
+        if (
+            isinstance(exc, HTTPException)
+            and exc.status_code != status.HTTP_502_BAD_GATEWAY
+        ):
+            raise
+        logger.error(
+            "Pine Labs payment status sync failed "
+            "company_id=%s matter_id=%s invoice_id=%s "
+            "payment_attempt_id=%s provider_error_type=%s",
+            context.company.id,
+            matter_id,
+            invoice_id,
+            latest_attempt.id,
+            type(exc).__name__,
+        )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Pine Labs payment status sync failed: {exc}",
+            detail=_PAYMENT_STATUS_PROVIDER_FAILURE_DETAIL,
         ) from exc
 
     _apply_payment_result(

@@ -10,6 +10,16 @@ from fastapi.testclient import TestClient
 
 from tests.test_auth_company import auth_headers, bootstrap_company
 
+_PLANTED_PROVIDER_SECRET = "planted-provider-secret-do-not-return"
+_PAYMENT_LINK_FAILURE_DETAIL = (
+    "Pine Labs could not create the payment link. Please try again; "
+    "if the problem continues, contact support."
+)
+_PAYMENT_SYNC_FAILURE_DETAIL = (
+    "Pine Labs could not refresh the payment status. Please try again; "
+    "if the problem continues, contact support."
+)
+
 
 def test_owner_can_update_company_profile(client: TestClient) -> None:
     bootstrap_payload = bootstrap_company(client)
@@ -1624,6 +1634,46 @@ def test_member_cannot_create_invoice(client: TestClient) -> None:
     assert response.status_code == 403
 
 
+def _create_provider_failure_invoice(
+    client: TestClient,
+    *,
+    token: str,
+    suffix: str,
+) -> tuple[str, str]:
+    matter_response = client.post(
+        "/api/matters/",
+        headers=auth_headers(token),
+        json={
+            "title": f"Provider failure probe {suffix}",
+            "matter_code": f"PAY-{suffix}",
+            "client_name": "Provider Failure Client",
+            "practice_area": "Commercial Litigation",
+            "forum_level": "high_court",
+            "status": "intake",
+        },
+    )
+    assert matter_response.status_code == 200, matter_response.text
+    matter_id = str(matter_response.json()["id"])
+
+    invoice_response = client.post(
+        f"/api/matters/{matter_id}/invoices",
+        headers=auth_headers(token),
+        json={
+            "invoice_number": f"INV-PROVIDER-{suffix}",
+            "issued_on": "2026-04-16",
+            "include_uninvoiced_time_entries": False,
+            "manual_items": [
+                {
+                    "description": "Provider failure regression",
+                    "amount_minor": 10000,
+                }
+            ],
+        },
+    )
+    assert invoice_response.status_code == 200, invoice_response.text
+    return matter_id, str(invoice_response.json()["id"])
+
+
 def test_owner_can_create_and_sync_pine_labs_payment_link(
     client: TestClient,
     monkeypatch,
@@ -1633,8 +1683,11 @@ def test_owner_can_create_and_sync_pine_labs_payment_link(
         PineLabsPaymentStatusResult,
     )
 
+    create_request: dict[str, object] = {}
+
     class FakeGateway:
         def create_payment_link(self, **kwargs):
+            create_request.update(kwargs)
             return PineLabsCreatePaymentLinkResult(
                 provider_order_id="pl-order-001",
                 payment_url="https://pay.pinelabs.test/pl-order-001",
@@ -1718,6 +1771,13 @@ def test_owner_can_create_and_sync_pine_labs_payment_link(
     payment_attempt = payment_link_response.json()
     assert payment_attempt["provider_order_id"] == "pl-order-001"
     assert payment_attempt["payment_url"] == "https://pay.pinelabs.test/pl-order-001"
+    assert str(create_request["return_url"]).endswith(
+        f"/app/matters/{matter_id}/billing"
+    )
+    assert "//app/" not in str(create_request["return_url"])
+    assert create_request["webhook_url"] == (
+        "http://testserver/api/payments/pine-labs/webhook"
+    )
 
     sync_response = client.post(
         f"/api/payments/matters/{matter_id}/invoices/{invoice_id}/pine-labs/sync",
@@ -1735,6 +1795,119 @@ def test_owner_can_create_and_sync_pine_labs_payment_link(
     assert invoice["status"] == "paid"
     assert invoice["balance_due_minor"] == 0
     assert len(invoice["payment_attempts"]) == 1
+
+
+def test_payment_link_provider_failure_does_not_leak_exception_detail(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    logged_errors: list[str] = []
+
+    def capture_exception(message, *args):
+        logged_errors.append(message % args)
+
+    class FailingGateway:
+        def create_payment_link(self, **_kwargs):
+            raise RuntimeError(
+                f"provider rejected api_secret={_PLANTED_PROVIDER_SECRET}"
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.payments._get_gateway_client",
+        lambda: FailingGateway(),
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.payments.logger.error",
+        capture_exception,
+    )
+
+    bootstrap_payload = bootstrap_company(client)
+    token = str(bootstrap_payload["access_token"])
+    matter_id, invoice_id = _create_provider_failure_invoice(
+        client,
+        token=token,
+        suffix="LINK-FAILURE",
+    )
+
+    response = client.post(
+        f"/api/payments/matters/{matter_id}/invoices/{invoice_id}/pine-labs/link",
+        headers=auth_headers(token),
+        json={"customer_email": "billing@provider-failure.example"},
+    )
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == _PAYMENT_LINK_FAILURE_DETAIL
+    assert _PLANTED_PROVIDER_SECRET not in response.text
+    assert len(logged_errors) == 1
+    log_message = logged_errors[0]
+    assert "Pine Labs payment link creation failed" in log_message
+    assert "provider_error_type=RuntimeError" in log_message
+    assert _PLANTED_PROVIDER_SECRET not in log_message
+
+
+def test_payment_status_provider_failure_does_not_leak_exception_detail(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    from caseops_api.services.pine_labs import PineLabsCreatePaymentLinkResult
+
+    logged_errors: list[str] = []
+
+    def capture_exception(message, *args):
+        logged_errors.append(message % args)
+
+    class FailingStatusGateway:
+        def create_payment_link(self, **_kwargs):
+            return PineLabsCreatePaymentLinkResult(
+                provider_order_id="pl-order-secret-regression",
+                payment_url="https://pay.pinelabs.test/pl-order-secret-regression",
+                provider_reference="plink-secret-regression",
+                status="created",
+                raw_payload={"status": "created"},
+            )
+
+        def fetch_payment_status(self, **_kwargs):
+            raise RuntimeError(
+                f"provider rejected api_secret={_PLANTED_PROVIDER_SECRET}"
+            )
+
+    gateway = FailingStatusGateway()
+    monkeypatch.setattr(
+        "caseops_api.services.payments._get_gateway_client",
+        lambda: gateway,
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.payments.logger.error",
+        capture_exception,
+    )
+
+    bootstrap_payload = bootstrap_company(client)
+    token = str(bootstrap_payload["access_token"])
+    matter_id, invoice_id = _create_provider_failure_invoice(
+        client,
+        token=token,
+        suffix="SYNC-FAILURE",
+    )
+    payment_link_response = client.post(
+        f"/api/payments/matters/{matter_id}/invoices/{invoice_id}/pine-labs/link",
+        headers=auth_headers(token),
+        json={"customer_email": "billing@provider-failure.example"},
+    )
+    assert payment_link_response.status_code == 200, payment_link_response.text
+
+    response = client.post(
+        f"/api/payments/matters/{matter_id}/invoices/{invoice_id}/pine-labs/sync",
+        headers=auth_headers(token),
+    )
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == _PAYMENT_SYNC_FAILURE_DETAIL
+    assert _PLANTED_PROVIDER_SECRET not in response.text
+    assert len(logged_errors) == 1
+    log_message = logged_errors[0]
+    assert "Pine Labs payment status sync failed" in log_message
+    assert "provider_error_type=RuntimeError" in log_message
+    assert _PLANTED_PROVIDER_SECRET not in log_message
 
 
 def test_pine_labs_webhook_updates_invoice_status(

@@ -1,4 +1,4 @@
-import { apiRequest } from "./client";
+import { apiRequest, getCsrfHeaders } from "./client";
 import { API_BASE_URL, ApiError, NetworkError } from "./config";
 import {
   type AuthContext,
@@ -5536,7 +5536,11 @@ async function downloadApiFileWithPost(
   const response = await fetch(url, {
     method: "POST",
     credentials: "include",
-    headers: { Accept: "*/*", "Content-Type": "application/json" },
+    headers: {
+      Accept: "*/*",
+      "Content-Type": "application/json",
+      ...getCsrfHeaders(),
+    },
     body: JSON.stringify(body),
   });
   if (!response.ok) {

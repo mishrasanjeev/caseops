@@ -19,7 +19,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { listMatters } from "@/lib/api/endpoints";
 import type { Matter } from "@/lib/api/schemas";
 import { useCapability } from "@/lib/capabilities";
-import { formatLegalDate } from "@/lib/dates";
+import { formatLegalDate, toLocalCalendarDate } from "@/lib/dates";
 
 type BucketKey = "past-due" | "this-week" | "next-7-30" | "later";
 
@@ -35,8 +35,9 @@ const BUCKET_ORDER: BucketKey[] = ["past-due", "this-week", "next-7-30", "later"
 function bucketFor(hearingDate: string): BucketKey {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const date = new Date(hearingDate);
-  const diff = Math.floor((date.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
+  const date = toLocalCalendarDate(hearingDate);
+  if (!date) return "later";
+  const diff = Math.round((date.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
   if (diff < 0) return "past-due";
   if (diff <= 7) return "this-week";
   if (diff <= 30) return "next-7-30";

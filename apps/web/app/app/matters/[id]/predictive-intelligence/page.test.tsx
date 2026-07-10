@@ -439,6 +439,9 @@ describe("PredictiveIntelligencePage", () => {
     expect(screen.getByTestId("predictive-matter-risk")).toHaveTextContent(
       /evidence-backed factors only/i,
     );
+    expect(
+      screen.getAllByText(/(03 Jan 2026|Jan 03, 2026)/i).length,
+    ).toBeGreaterThan(0);
   });
 
   it("renders source-backed bench context with distribution and source links", async () => {

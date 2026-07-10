@@ -51,6 +51,7 @@ async def create_current_company_invoice_payment_link(
     matter_id: str,
     invoice_id: str,
     payload: PaymentLinkCreateRequest,
+    request: Request,
     context: PaymentLinkIssuer,
     session: DbSession,
 ) -> InvoicePaymentAttemptRecord:
@@ -60,6 +61,7 @@ async def create_current_company_invoice_payment_link(
         matter_id=matter_id,
         invoice_id=invoice_id,
         payload=payload,
+        webhook_url=str(request.url_for("pine_labs_webhook")),
     )
 
 

@@ -162,6 +162,7 @@ describe("LitigationIntelligenceReviewPage", () => {
     expect(
       screen.getByTestId("litigation-review-source-link-predictive-signal:p-1"),
     ).toHaveAttribute("href", "/app/matters/m-1/predictive-intelligence");
+    expect(screen.getByText(/(25 May 2026|May 25, 2026)/i)).toBeInTheDocument();
 
     const rendered = document.body.textContent?.toLowerCase() ?? "";
     for (const forbidden of [

@@ -40,7 +40,7 @@ import {
 } from "@/lib/api/endpoints";
 import type { WorkspaceAttachment } from "@/lib/api/workspace-types";
 import { useCapability } from "@/lib/capabilities";
-import { formatLegalDate } from "@/lib/dates";
+import { formatLegalDate, todayLocalDateInput } from "@/lib/dates";
 import { useMatterWorkspace } from "@/lib/use-matter-workspace";
 
 type NoticeDirection = "received" | "sent";
@@ -143,7 +143,7 @@ function formatDate(value: string | null | undefined): string {
 }
 
 function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  return todayLocalDateInput();
 }
 
 function humanSize(bytes: number | null | undefined): string {

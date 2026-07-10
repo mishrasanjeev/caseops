@@ -45,7 +45,7 @@ from caseops_api.core.security import (
     PORTAL_SESSION_TTL_MINUTES,
     create_portal_session_token,
 )
-from caseops_api.core.settings import get_settings
+from caseops_api.core.settings import get_settings, is_non_local_env
 from caseops_api.db.models import AuditActorType, AuditResult, PortalUser
 from caseops_api.services.audit import record_audit, record_from_context
 from caseops_api.services.portal_auth import (
@@ -270,9 +270,10 @@ def _grant_record(grant) -> PortalGrantRecord:
 
 
 def _is_non_prod() -> bool:
-    env = (get_settings().env or "").lower()
-    # The debug_token escape hatch lives in dev / test / e2e only.
-    return env not in {"production", "prod"}
+    # The debug_token escape hatch lives only in the shared, explicit
+    # local/dev/test allow-list. Unknown and managed runtime names such
+    # as ``cloud`` or ``gke`` must fail closed.
+    return not is_non_local_env(get_settings().env)
 
 
 # ---------- public routes ----------

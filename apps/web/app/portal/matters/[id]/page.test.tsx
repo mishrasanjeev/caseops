@@ -98,6 +98,7 @@ describe("PortalMatterDetailPage", () => {
     // Overview Court row) — assert at least one match rather than
     // exactly one.
     expect(screen.getAllByText(/Delhi High Court/).length).toBeGreaterThan(0);
+    expect(screen.getByText("Next hearing").parentElement).toHaveTextContent(/15/);
     // Tabs are wired
     expect(screen.getByRole("tab", { name: /overview/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /comms/i })).toBeInTheDocument();
@@ -180,6 +181,7 @@ describe("PortalMatterDetailPage", () => {
     await waitFor(() =>
       expect(screen.getByTestId("portal-hearing-h-1")).toBeInTheDocument(),
     );
+    expect(screen.getByTestId("portal-hearing-h-1")).toHaveTextContent(/15/);
     expect(screen.getByText(/Court Room 5/)).toBeInTheDocument();
   });
 

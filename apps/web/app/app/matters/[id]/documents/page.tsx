@@ -66,6 +66,7 @@ import type {
   GoogleDriveFileRecord,
 } from "@/lib/api/schemas";
 import { useCapability } from "@/lib/capabilities";
+import { formatLegalDate } from "@/lib/dates";
 import { useMatterWorkspace } from "@/lib/use-matter-workspace";
 import type {
   WorkspaceAttachment,
@@ -217,7 +218,7 @@ function documentDate(doc: WorkspaceAttachment): string | null {
 
 function dateLabel(value: string | null | undefined): string {
   if (!value) return "-";
-  return new Date(value).toLocaleDateString(undefined, {
+  return formatLegalDate(value, {
     day: "2-digit",
     month: "short",
     year: "numeric",

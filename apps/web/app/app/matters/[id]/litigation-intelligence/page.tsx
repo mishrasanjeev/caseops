@@ -35,6 +35,7 @@ import type {
   LitigationIntelligenceReviewResponse,
   LitigationIntelligenceReviewSource,
 } from "@/lib/api/schemas";
+import { formatLegalDate } from "@/lib/dates";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -637,7 +638,9 @@ function formatDateTime(value: string): string {
 }
 
 function formatDate(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("en-IN", { dateStyle: "medium" }).format(date);
+  return formatLegalDate(
+    value,
+    { day: "2-digit", month: "short", year: "numeric" },
+    "en-IN",
+  );
 }

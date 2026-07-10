@@ -19,6 +19,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { listMatters } from "@/lib/api/endpoints";
 import type { Matter } from "@/lib/api/schemas";
+import { toLocalCalendarDate } from "@/lib/dates";
 
 function bucketize<T>(items: T[], key: (item: T) => string): Map<string, T[]> {
   const map = new Map<string, T[]>();
@@ -54,7 +55,8 @@ export default function PortfolioPage() {
 
   const upcomingThisWeek = matters.filter((m) => {
     if (!m.next_hearing_on) return false;
-    const d = new Date(m.next_hearing_on);
+    const d = toLocalCalendarDate(m.next_hearing_on);
+    if (!d) return false;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const weekOut = new Date(today);

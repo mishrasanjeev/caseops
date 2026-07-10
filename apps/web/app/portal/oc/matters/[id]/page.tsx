@@ -40,6 +40,7 @@ import {
   submitPortalOcTimeEntry,
   uploadPortalOcWorkProduct,
 } from "@/lib/api/portal";
+import { formatLegalDate, todayLocalDateInput } from "@/lib/dates";
 
 export default function PortalOcMatterDetailPage() {
   const params = useParams<{ id: string }>();
@@ -155,7 +156,7 @@ function OverviewCard({
           label="Next hearing"
           value={
             matter.next_hearing_on
-              ? new Date(matter.next_hearing_on).toLocaleDateString()
+              ? formatLegalDate(matter.next_hearing_on)
               : "Not scheduled"
           }
         />
@@ -280,7 +281,7 @@ function WorkProductCard({ matterId }: { matterId: string }) {
 
 function InvoicesCard({ matterId }: { matterId: string }) {
   const queryClient = useQueryClient();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocalDateInput();
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [issuedOn, setIssuedOn] = useState(today);
   const [dueOn, setDueOn] = useState("");
@@ -470,7 +471,7 @@ function InvoicesCard({ matterId }: { matterId: string }) {
 
 function TimeEntriesCard({ matterId }: { matterId: string }) {
   const queryClient = useQueryClient();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocalDateInput();
   const [workDate, setWorkDate] = useState(today);
   const [description, setDescription] = useState("");
   const [durationMinutes, setDurationMinutes] = useState<string>("");
