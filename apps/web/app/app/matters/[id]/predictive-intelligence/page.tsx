@@ -41,6 +41,7 @@ import type {
   PredictiveSignal,
 } from "@/lib/api/schemas";
 import { cn } from "@/lib/cn";
+import { formatLegalDate } from "@/lib/dates";
 
 const STATUS_LABEL: Record<string, string> = {
   supported: "Supported",
@@ -941,9 +942,7 @@ function formatDateTime(value: string): string {
 }
 
 function formatDate(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString(undefined, {
+  return formatLegalDate(value, {
     day: "2-digit",
     month: "short",
     year: "numeric",

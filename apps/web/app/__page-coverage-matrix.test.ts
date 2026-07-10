@@ -35,32 +35,12 @@ const ALLOWED_UNTESTED = new Set<string>([
   // AQ-003 batch-1 (2026-04-25): the 5 highest-traffic lawyer-daily
   // pages now have sibling page.test.tsx files (matters list,
   // drafting, recommendations, hearings, clients) — entries removed.
-  "app/page.tsx",
-  "app/admin/notifications/page.tsx",
-  "app/admin/teams/page.tsx",
-  "app/clients/[id]/page.tsx",
-  "app/contracts/page.tsx",
-  "app/contracts/[id]/page.tsx",
-  "app/courts/page.tsx",
-  "app/intake/page.tsx",
-  "app/matters/[id]/page.tsx",
-  "app/matters/[id]/communications/page.tsx",
-  "app/matters/[id]/documents/page.tsx",
-  "app/matters/[id]/drafts/page.tsx",
-  "app/matters/[id]/drafts/[draftId]/page.tsx",
-  "app/matters/[id]/outside-counsel/page.tsx",
-  "app/matters/[id]/recommendations/page.tsx",
-  "app/portfolio/page.tsx",
-  "app/calendar/page.tsx",
   // sign-in is tested via SignInForm.test.tsx + NewWorkspaceForm.test.tsx
   "sign-in/page.tsx",
   // Additional gaps surfaced 2026-04-24 baseline:
   // (drafting / hearings / recommendations entries dropped 2026-04-25
   // by AQ-003 batch-1.)
   "app/admin/email-templates/page.tsx",
-  "app/courts/judges/[judge_id]/page.tsx",
-  "app/courts/[id]/page.tsx",
-  "app/matters/[id]/audit/page.tsx",
   "app/matters/[id]/documents/[attachment_id]/view/page.tsx",
   "app/matters/[id]/drafts/new/page.tsx",
   "app/outside-counsel/page.tsx",
@@ -101,20 +81,21 @@ describe("P1-003 page coverage matrix", () => {
     ).toEqual([]);
   });
 
-  it("ALLOWED_UNTESTED entries all point to real page.tsx files", () => {
+  it("ALLOWED_UNTESTED entries point to real pages that still lack tests", () => {
     // Defensive: drift in either direction (the page is renamed but
     // the waiver isn't, or the page is deleted but the waiver
     // lingers) leaves a useless waiver behind. Surface it.
     const stale: string[] = [];
     for (const relative of ALLOWED_UNTESTED) {
       const abs = path.join(APP_ROOT, relative);
-      if (!fs.existsSync(abs)) {
+      const testFile = abs.replace(/page\.tsx$/, "page.test.tsx");
+      if (!fs.existsSync(abs) || fs.existsSync(testFile)) {
         stale.push(relative);
       }
     }
     expect(
       stale,
-      `ALLOWED_UNTESTED entries pointing to non-existent files (delete the waiver):\n  ${stale.join("\n  ")}`,
+      `stale ALLOWED_UNTESTED entries (page missing or sibling test now exists):\n  ${stale.join("\n  ")}`,
     ).toEqual([]);
   });
 });

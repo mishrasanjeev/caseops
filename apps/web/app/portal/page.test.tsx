@@ -66,7 +66,7 @@ describe("PortalLandingPage", () => {
           practice_area: "criminal",
           forum_level: "high_court",
           court_name: "Delhi High Court",
-          next_hearing_on: null,
+          next_hearing_on: "2026-05-15",
         },
       ],
     });
@@ -78,6 +78,7 @@ describe("PortalLandingPage", () => {
       expect(screen.getByTestId("portal-matter-m-1")).toBeInTheDocument(),
     );
     expect(screen.getByText(/Bail Application/)).toBeInTheDocument();
+    expect(screen.getByText(/Next hearing/)).toHaveTextContent(/15/);
   });
 
   it("shows the empty state when no matters exist (C-2)", async () => {

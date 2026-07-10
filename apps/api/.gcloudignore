@@ -2,13 +2,24 @@
 # back to .gitignore (located at the repo root, not apps/api), which
 # misses the local .venv when builds are submitted from this directory
 # directly. Result: a 448M upload instead of ~16M.
+
+# Local secrets must never enter the Cloud Build source archive. Keep
+# the documented, non-secret example available to the Docker build.
+.env
+.env.*
+!.env.example
+
 .venv/
+.uv-cache/
 __pycache__/
 *.pyc
 .pytest_cache/
+.pytest-tmp/
 .mypy_cache/
 .ruff_cache/
 .coverage
+coverage.json
+coverage.xml
 htmlcov/
 *.egg-info/
 build/

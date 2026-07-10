@@ -38,29 +38,28 @@ import { apiErrorMessage, isApiErrorShape } from "@/lib/api/config";
 import { updateMatter } from "@/lib/api/endpoints";
 import type { Matter } from "@/lib/api/schemas";
 import { useCapability } from "@/lib/capabilities";
+import { formatLegalDate } from "@/lib/dates";
 import { normalizeMatterCodeInput } from "@/lib/matter-code";
 import { useMatterWorkspace } from "@/lib/use-matter-workspace";
 
 function formatDate(value: string | null | undefined, withTime = false): string {
   if (!value) return "—";
-  try {
-    const d = new Date(value);
-    return withTime
-      ? d.toLocaleString(undefined, {
-          day: "2-digit",
-          month: "short",
-          year: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-        })
-      : d.toLocaleDateString(undefined, {
-          day: "2-digit",
-          month: "short",
-          year: "numeric",
-        });
-  } catch {
-    return value;
+  if (!withTime) {
+    return formatLegalDate(value, {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
   }
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleString(undefined, {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 type MatterEditDraft = {

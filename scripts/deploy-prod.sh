@@ -17,12 +17,12 @@
 #
 # Usage:
 #   scripts/deploy-prod.sh                 # tag with current git HEAD short SHA
-#   scripts/deploy-prod.sh <commit-sha>    # tag with a specific commit
+#   scripts/deploy-prod.sh <commit-sha>    # assert this SHA is current HEAD
 #
 # Pre-reqs: gcloud authenticated, project set to perfect-period-305406,
-# region set to asia-south1, working tree clean for the SHA you intend
-# to ship (`git status` shouldn't be relevant — Cloud Build uploads the
-# current working tree).
+# region set to asia-south1, and API/web build contexts clean for the
+# HEAD you intend to ship. Cloud Build uploads current files, so dirty
+# contexts are rejected before any gcloud call.
 
 set -euo pipefail
 
@@ -34,6 +34,8 @@ API_CPU=2
 API_MEMORY=4Gi
 API_SOURCE_DIR=apps/api
 WEB_SOURCE_DIR=apps/web
+API_GCLOUDIGNORE_FILE=.gcloudignore
+API_GCLOUDIGNORE_PATH="${API_SOURCE_DIR}/${API_GCLOUDIGNORE_FILE}"
 WEB_GCLOUDIGNORE_FILE=.gcloudignore
 WEB_GCLOUDIGNORE_PATH="${WEB_SOURCE_DIR}/${WEB_GCLOUDIGNORE_FILE}"
 # 2026-06-08 incident: a blocking request pinned the single Uvicorn
@@ -60,7 +62,37 @@ API_MIN_INSTANCES="${API_MIN_INSTANCES:-1}"
 # warm instance is ~$10-18/mo. Override with WEB_MIN_INSTANCES=0.
 WEB_MIN_INSTANCES="${WEB_MIN_INSTANCES:-1}"
 
-TAG="${1:-$(git rev-parse --short=7 HEAD)}"
+if [[ "$#" -gt 1 ]]; then
+  echo "Usage: scripts/deploy-prod.sh [commit-sha]"
+  exit 2
+fi
+
+HEAD_SHA=$(git rev-parse --verify HEAD)
+if [[ "$#" -eq 1 ]]; then
+  REQUESTED_REF="$1"
+  if [[ ! "${REQUESTED_REF}" =~ ^[0-9a-fA-F]{7,40}$ ]]; then
+    echo "ERROR: commit-sha must be 7-40 hexadecimal characters."
+    exit 2
+  fi
+  if ! REQUESTED_SHA=$(git rev-parse --verify "${REQUESTED_REF}^{commit}" 2>/dev/null); then
+    echo "ERROR: requested commit ${REQUESTED_REF} cannot be resolved."
+    exit 1
+  fi
+  if [[ "${REQUESTED_SHA}" != "${HEAD_SHA}" ]]; then
+    echo "ERROR: requested commit ${REQUESTED_SHA} does not match current HEAD ${HEAD_SHA}."
+    echo "Cloud Build uploads the current tree; refusing to mislabel it."
+    exit 1
+  fi
+fi
+
+DIRTY_BUILD_CONTEXT=$(git status --porcelain --untracked-files=all -- "${API_SOURCE_DIR}" "${WEB_SOURCE_DIR}")
+if [[ -n "${DIRTY_BUILD_CONTEXT}" ]]; then
+  echo "ERROR: API/web build context is dirty; refusing to label it as ${HEAD_SHA}."
+  printf '%s\n' "${DIRTY_BUILD_CONTEXT}"
+  exit 1
+fi
+
+TAG=$(git rev-parse --short=7 "${HEAD_SHA}")
 API_IMAGE="${REGISTRY}/caseops-api:${TAG}"
 WEB_IMAGE="${REGISTRY}/caseops-web:${TAG}"
 
@@ -70,12 +102,16 @@ echo "Web image: ${WEB_IMAGE}"
 
 # Step 1 — build both images in parallel.
 echo "--- 1/5 build images (parallel) ---"
+if [[ ! -f "${API_GCLOUDIGNORE_PATH}" ]]; then
+  echo "Missing ${API_GCLOUDIGNORE_PATH}; refusing API build because local secrets/caches may be uploaded."
+  exit 1
+fi
 if [[ ! -f "${WEB_GCLOUDIGNORE_PATH}" ]]; then
   echo "Missing ${WEB_GCLOUDIGNORE_PATH}; refusing web build because local node_modules/.next may be uploaded."
   exit 1
 fi
 
-gcloud builds submit "${API_SOURCE_DIR}" --tag "${API_IMAGE}" --project "${PROJECT}" &
+gcloud builds submit "${API_SOURCE_DIR}" --ignore-file "${API_GCLOUDIGNORE_FILE}" --tag "${API_IMAGE}" --project "${PROJECT}" &
 API_BUILD_PID=$!
 # Explicitly pass the web .gcloudignore. The source directory has local
 # node_modules/.next on Windows deploy hosts, and relying on Docker's
@@ -131,7 +167,14 @@ if [[ "${LIVE_API_TAG}" != "${TAG}" || "${LIVE_WEB_TAG}" != "${TAG}" ]]; then
   echo "STALENESS DETECTED: api=${LIVE_API_TAG} web=${LIVE_WEB_TAG} expected=${TAG}"
   exit 1
 fi
-HEALTH=$(curl -sf https://api.caseops.ai/api/health || echo '{"status":"FAIL"}')
+if ! HEALTH=$(curl -fsS --connect-timeout 10 --max-time 30 https://api.caseops.ai/api/health); then
+  echo "API health request failed; refusing to certify this deploy."
+  exit 1
+fi
+if ! python -c 'import json, sys; payload = json.loads(sys.argv[1]); raise SystemExit(0 if isinstance(payload, dict) and payload.get("status") == "ok" else 1)' "${HEALTH}"; then
+  echo "API health response is not healthy: ${HEALTH}"
+  exit 1
+fi
 echo "  health=${HEALTH}"
 echo "  api=${LIVE_API_TAG} web=${LIVE_WEB_TAG} (matches HEAD ${TAG})"
 

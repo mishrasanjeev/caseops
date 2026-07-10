@@ -16,11 +16,12 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
     Company,
+    Matter,
     MatterPortalGrant,
     PortalMagicLink,
     PortalUser,
@@ -119,25 +120,34 @@ def verify_magic_link(
     if not token:
         raise InvalidMagicLink()
 
-    link = session.scalars(
-        select(PortalMagicLink).where(
-            PortalMagicLink.token_hash == _hash_token(token)
-        )
-    ).first()
+    token_hash = _hash_token(token)
     now = _utcnow()
-    if link is None or link.consumed_at is not None:
+    claim_result = session.execute(
+        update(PortalMagicLink)
+        .where(
+            PortalMagicLink.token_hash == token_hash,
+            PortalMagicLink.consumed_at.is_(None),
+            PortalMagicLink.expires_at > now,
+        )
+        .values(consumed_at=now)
+    )
+    if claim_result.rowcount != 1:
         raise InvalidMagicLink()
-    expires = link.expires_at
-    if expires.tzinfo is None:
-        expires = expires.replace(tzinfo=UTC)
-    if expires <= now:
+
+    link = session.scalar(
+        select(PortalMagicLink).where(
+            PortalMagicLink.token_hash == token_hash,
+        )
+    )
+    if link is None:
+        session.rollback()
         raise InvalidMagicLink()
 
     portal_user = session.get(PortalUser, link.portal_user_id)
     if portal_user is None or not portal_user.is_active:
+        session.rollback()
         raise InvalidMagicLink()
 
-    link.consumed_at = now
     portal_user.last_signed_in_at = now
     session.commit()
     session.refresh(portal_user)
@@ -197,6 +207,26 @@ def invite_portal_user(
             detail="Full name is required.",
         )
 
+    unique_matter_ids = list(dict.fromkeys(matter_ids))
+    if not unique_matter_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one matter_id is required for the invite scope.",
+        )
+    owned_matter_ids = set(
+        session.scalars(
+            select(Matter.id).where(
+                Matter.company_id == company_id,
+                Matter.id.in_(unique_matter_ids),
+            )
+        )
+    )
+    if len(owned_matter_ids) != len(unique_matter_ids):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Matter not found.",
+        )
+
     portal_user = session.scalars(
         select(PortalUser).where(
             PortalUser.company_id == company_id,
@@ -225,7 +255,7 @@ def invite_portal_user(
         )
 
     grants: list[MatterPortalGrant] = []
-    for matter_id in matter_ids:
+    for matter_id in unique_matter_ids:
         existing = session.scalars(
             select(MatterPortalGrant).where(
                 MatterPortalGrant.portal_user_id == portal_user.id,
@@ -238,7 +268,7 @@ def invite_portal_user(
                 portal_user_id=portal_user.id,
                 matter_id=matter_id,
                 role=role,
-                scope_json=scope_json,
+                scope_json=dict(scope_json) if scope_json is not None else None,
                 granted_by_membership_id=inviting_membership_id,
             )
             session.add(grant)
@@ -248,6 +278,9 @@ def invite_portal_user(
                 existing.revoked_at = None
                 existing.granted_at = _utcnow()
                 existing.granted_by_membership_id = inviting_membership_id
+            existing.scope_json = (
+                dict(scope_json) if scope_json is not None else None
+            )
             grants.append(existing)
     session.flush()
 

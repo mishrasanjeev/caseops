@@ -7,13 +7,23 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // vi.mock factories are hoisted above `const` declarations, so use
 // vi.hoisted() to keep the stubs accessible from both the factory and
 // the tests below.
-const { signInMock, completeMfaLoginChallengeMock, storeSessionMock, toastSuccess, toastError } = vi.hoisted(
+const {
+  signInMock,
+  completeMfaLoginChallengeMock,
+  storeSessionMock,
+  toastSuccess,
+  toastError,
+  routerReplaceMock,
+  searchParamsGetMock,
+} = vi.hoisted(
   () => ({
     signInMock: vi.fn(),
     completeMfaLoginChallengeMock: vi.fn(),
     storeSessionMock: vi.fn(),
     toastSuccess: vi.fn(),
     toastError: vi.fn(),
+    routerReplaceMock: vi.fn(),
+    searchParamsGetMock: vi.fn(),
   }),
 );
 
@@ -30,6 +40,11 @@ vi.mock("sonner", () => ({
   toast: { success: toastSuccess, error: toastError },
 }));
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: routerReplaceMock }),
+  useSearchParams: () => ({ get: searchParamsGetMock }),
+}));
+
 import { SignInForm } from "@/app/sign-in/SignInForm";
 
 function withClient(children: ReactNode) {
@@ -39,6 +54,39 @@ function withClient(children: ReactNode) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
+function buildSession(overrides: Record<string, unknown> = {}) {
+  return {
+    access_token: "t",
+    token_type: "bearer",
+    user: {
+      id: "u1",
+      full_name: "Asha Legal",
+      email: "asha@ex.com",
+      is_active: true,
+      created_at: "",
+    },
+    company: {
+      id: "c1",
+      name: "Aster",
+      slug: "aster",
+      company_type: "law_firm",
+      tenant_key: "k",
+      is_active: true,
+      created_at: "",
+    },
+    membership: {
+      id: "m1",
+      role: "owner",
+      is_active: true,
+      created_at: "",
+    },
+    mfa_required: false,
+    mfa_challenge_required: false,
+    mfa_enrollment_required: false,
+    ...overrides,
+  };
+}
+
 describe("SignInForm", () => {
   beforeEach(() => {
     signInMock.mockReset();
@@ -46,6 +94,9 @@ describe("SignInForm", () => {
     storeSessionMock.mockReset();
     toastSuccess.mockReset();
     toastError.mockReset();
+    routerReplaceMock.mockReset();
+    searchParamsGetMock.mockReset();
+    searchParamsGetMock.mockReturnValue(null);
   });
 
   it("renders the h1 page heading for screen readers", () => {
@@ -86,21 +137,10 @@ describe("SignInForm", () => {
 
   it("calls signIn and stores the session on happy-path submit", async () => {
     const user = userEvent.setup();
-    signInMock.mockResolvedValue({
-      access_token: "t",
-      token_type: "bearer",
-      user: { id: "u1", full_name: "Asha Legal", email: "asha@ex.com", is_active: true, created_at: "" },
-      company: {
-        id: "c1",
-        name: "Aster",
-        slug: "aster",
-        company_type: "law_firm",
-        tenant_key: "k",
-        is_active: true,
-        created_at: "",
-      },
-      membership: { id: "m1", role: "owner", is_active: true, created_at: "" },
-    });
+    searchParamsGetMock.mockImplementation((key: string) =>
+      key === "next" ? "/app/matters?status=open#recent" : null,
+    );
+    signInMock.mockResolvedValue(buildSession());
 
     render(withClient(<SignInForm />));
     await user.type(screen.getByLabelText("Company slug"), "aster");
@@ -116,29 +156,45 @@ describe("SignInForm", () => {
     });
     await waitFor(() => expect(storeSessionMock).toHaveBeenCalledTimes(1));
     expect(toastSuccess).toHaveBeenCalled();
+    expect(routerReplaceMock).toHaveBeenCalledWith(
+      "/app/matters?status=open#recent",
+    );
+  });
+
+  it.each([
+    ["absolute URL", "https://attacker.example/phish"],
+    ["protocol-relative URL", "//attacker.example/phish"],
+    ["script URL", "javascript:alert(document.domain)"],
+    ["backslash authority", "/\\attacker.example/phish"],
+    ["non-workspace path", "/admin/users"],
+  ])("rejects a malicious %s after password login", async (_label, next) => {
+    const user = userEvent.setup();
+    searchParamsGetMock.mockImplementation((key: string) =>
+      key === "next" ? next : null,
+    );
+    signInMock.mockResolvedValue(buildSession());
+
+    render(withClient(<SignInForm />));
+    await user.type(screen.getByLabelText("Company slug"), "aster");
+    await user.type(screen.getByLabelText("Work email"), "asha@ex.com");
+    await user.type(screen.getByLabelText("Password"), "correcthorse");
+    await user.click(screen.getByRole("button", { name: /^Sign in$/ }));
+
+    await waitFor(() =>
+      expect(routerReplaceMock).toHaveBeenCalledWith("/app"),
+    );
   });
 
   it("requires MFA code before storing a policy-challenged session", async () => {
     const user = userEvent.setup();
-    signInMock.mockResolvedValue({
-      access_token: "t",
-      token_type: "bearer",
-      user: { id: "u1", full_name: "Asha Legal", email: "asha@ex.com", is_active: true, created_at: "" },
-      company: {
-        id: "c1",
-        name: "Aster",
-        slug: "aster",
-        company_type: "law_firm",
-        tenant_key: "k",
-        is_active: true,
-        created_at: "",
-      },
-      membership: { id: "m1", role: "owner", is_active: true, created_at: "" },
+    searchParamsGetMock.mockImplementation((key: string) =>
+      key === "next" ? "///attacker.example/phish" : null,
+    );
+    signInMock.mockResolvedValue(buildSession({
       mfa_required: true,
       mfa_challenge_required: true,
-      mfa_enrollment_required: false,
       mfa_challenge_reason: "Complete MFA step-up before workspace access.",
-    });
+    }));
     completeMfaLoginChallengeMock.mockResolvedValue({
       status: "verified",
       expires_at: "2026-06-13T12:00:00Z",
@@ -159,6 +215,7 @@ describe("SignInForm", () => {
       expect(completeMfaLoginChallengeMock).toHaveBeenCalledWith({ code: "123456" }),
     );
     await waitFor(() => expect(storeSessionMock).toHaveBeenCalledTimes(1));
+    expect(routerReplaceMock).toHaveBeenCalledWith("/app");
   });
 
   it("shows a forgot-password link and preserves typed slug and email", async () => {

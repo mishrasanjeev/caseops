@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { KeyRound, Loader2, ShieldCheck } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -24,9 +25,13 @@ import {
   startMfaEnrollment,
   verifyMfaEnrollment,
 } from "@/lib/api/endpoints";
+import { safePostLoginPath } from "@/lib/safe-next-path";
 
 export default function AccountSecurityPage() {
   const queryClient = useQueryClient();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const nextPath = safePostLoginPath(searchParams.get("next"));
   const [verifyCode, setVerifyCode] = useState("");
   const [stepUpCode, setStepUpCode] = useState("");
   const [disableCode, setDisableCode] = useState("");
@@ -192,12 +197,19 @@ export default function AccountSecurityPage() {
             <CardTitle as="h2">Recovery codes</CardTitle>
             <CardDescription>These codes are shown once and are single-use.</CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-2 sm:grid-cols-2">
-            {recoveryCodes.map((code) => (
-              <div key={code} className="rounded border border-[var(--color-line)] p-2 font-mono text-sm">
-                {code}
-              </div>
-            ))}
+          <CardContent className="space-y-4">
+            <div className="grid gap-2 sm:grid-cols-2">
+              {recoveryCodes.map((code) => (
+                <div key={code} className="rounded border border-[var(--color-line)] p-2 font-mono text-sm">
+                  {code}
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-end">
+              <Button type="button" onClick={() => router.replace(nextPath)}>
+                Continue to workspace
+              </Button>
+            </div>
           </CardContent>
         </Card>
       ) : null}

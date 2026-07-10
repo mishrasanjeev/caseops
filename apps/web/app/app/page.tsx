@@ -13,7 +13,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { fetchAuthorityCorpusStats, listMatters } from "@/lib/api/endpoints";
 import type { Matter } from "@/lib/api/schemas";
-import { formatLegalDate } from "@/lib/dates";
+import { formatLegalDate, toLocalCalendarDate } from "@/lib/dates";
 import { useSession } from "@/lib/use-session";
 
 export default function DashboardPage() {
@@ -51,12 +51,13 @@ export default function DashboardPage() {
   // in the next 7 calendar days. Backed by the portfolio we already
   // fetched — no extra API call.
   const today = new Date();
-  const weekOut = new Date();
+  today.setHours(0, 0, 0, 0);
+  const weekOut = new Date(today);
   weekOut.setDate(weekOut.getDate() + 7);
   const hearingsThisWeek = matters.filter((m) => {
     if (!m.next_hearing_on) return false;
-    const d = new Date(m.next_hearing_on);
-    return d >= new Date(today.toDateString()) && d <= weekOut;
+    const d = toLocalCalendarDate(m.next_hearing_on);
+    return d !== null && d >= today && d <= weekOut;
   }).length;
 
   const userFirstName = session.context?.user.full_name.split(" ")[0] ?? "there";

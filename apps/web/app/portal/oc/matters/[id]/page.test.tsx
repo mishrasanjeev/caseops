@@ -93,6 +93,7 @@ describe("PortalOcMatterDetailPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /invoices/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /time/i })).toBeInTheDocument();
+    expect(screen.getByText("Next hearing").parentElement).toHaveTextContent(/30/);
   });
 
   it("uploads a work-product file via the multipart helper", async () => {

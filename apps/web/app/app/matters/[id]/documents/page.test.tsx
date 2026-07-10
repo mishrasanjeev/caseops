@@ -339,6 +339,9 @@ describe("MatterDocumentsPage", () => {
     expect(screen.getByTestId("matter-document-group-evidence")).toBeInTheDocument();
     expect(screen.getByTestId("matter-document-group-unclassified")).toBeInTheDocument();
     expect(screen.getByText("Seq 20")).toBeInTheDocument();
+    expect(
+      screen.getByText(/(02 May 2026|May 02, 2026)/i),
+    ).toBeInTheDocument();
     expect(screen.getAllByText("Unclassified").length).toBeGreaterThan(0);
   });
 

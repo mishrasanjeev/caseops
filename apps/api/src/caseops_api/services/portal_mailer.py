@@ -24,7 +24,7 @@ from urllib.parse import quote
 
 import httpx
 
-from caseops_api.core.settings import get_settings
+from caseops_api.core.settings import get_settings, is_non_local_env
 
 logger = logging.getLogger(__name__)
 
@@ -35,9 +35,8 @@ def portal_verify_url(token: str) -> str:
     return f"{base}/portal/verify?token={quote(token, safe='')}"
 
 
-def _is_prod() -> bool:
-    env = (get_settings().env or "").lower()
-    return env in {"production", "prod"}
+def _delivery_enabled() -> bool:
+    return is_non_local_env(get_settings().env)
 
 
 def send_portal_magic_link(
@@ -55,15 +54,14 @@ def send_portal_magic_link(
     reminders + comms — magic links don't subscribe to that today
     because we never need to retry a one-off auth email.
 
-    In NON-prod this is a no-op (returns ``(False, "non-prod")``) so
-    test runs do not burn SendGrid credit. The route response will
-    surface ``debug_token`` in non-prod for smoke tests that need to
-    drive verify directly.
+    In explicit local/dev/test environments this is a no-op (returns
+    ``(False, "non-prod")``) so tests do not burn SendGrid credit. Every
+    managed or unknown runtime name sends mail and keeps debug tokens hidden.
     """
     settings = get_settings()
     if not (settings.sendgrid_api_key and settings.sendgrid_sender_email):
         return False, "sendgrid not configured"
-    if not _is_prod():
+    if not _delivery_enabled():
         return False, "non-prod"
 
     verify_url = portal_verify_url(token)

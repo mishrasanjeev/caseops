@@ -104,6 +104,9 @@ describe("TodayPage smoke", () => {
     );
     renderWithQuery(<TodayPage />);
     await screen.findByText(/Matter One/);
+    expect(
+      await screen.findByText(/(18 May 2026|May 18, 2026)/i),
+    ).toBeInTheDocument();
     expect(screen.queryByTestId("today-stream-truncated")).toBeNull();
   });
 

@@ -4,10 +4,15 @@ Covers FT-070, FT-071, FT-072, FT-075 from the PRD addendum.
 """
 from __future__ import annotations
 
+import inspect
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
+import pytest
 from fastapi.testclient import TestClient
 
+from caseops_api.api.routes import portal as portal_routes
+from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     Matter,
     MatterPortalGrant,
@@ -15,6 +20,7 @@ from caseops_api.db.models import (
     PortalUser,
 )
 from caseops_api.db.session import get_session_factory
+from caseops_api.services import portal_auth, portal_mailer
 from tests.test_auth_company import auth_headers, bootstrap_company
 
 # ----- helpers ---------------------------------------------------
@@ -54,6 +60,16 @@ def _bootstrap_workspace(client: TestClient, *, slug: str, email: str) -> dict:
     assert resp.status_code == 200, resp.text
     client.cookies.clear()
     return resp.json()
+
+
+def _set_runtime_env(monkeypatch: pytest.MonkeyPatch, runtime_env: str) -> None:
+    monkeypatch.setenv("CASEOPS_ENV", runtime_env)
+    monkeypatch.setenv("CASEOPS_AUTO_MIGRATE", "false")
+    monkeypatch.setenv(
+        "CASEOPS_AUTH_SECRET",
+        "test-secret-should-be-at-least-32-bytes",
+    )
+    get_settings.cache_clear()
 
 
 # ----- invite + verify happy path -------------------------------
@@ -713,6 +729,199 @@ def test_verify_writes_audit_event(client: TestClient) -> None:
             .all()
         )
         assert len(rows) == 1
+
+
+@pytest.mark.parametrize(
+    "runtime_env",
+    ["cloud", "staging", "custom-managed-runtime"],
+)
+def test_portal_mailer_sends_in_every_non_local_environment(
+    monkeypatch: pytest.MonkeyPatch,
+    runtime_env: str,
+) -> None:
+    calls: list[dict[str, object]] = []
+
+    def fake_post(*args, **kwargs):  # type: ignore[no-untyped-def]
+        calls.append({"args": args, "kwargs": kwargs})
+        return SimpleNamespace(status_code=202, text="")
+
+    monkeypatch.setenv("CASEOPS_SENDGRID_API_KEY", "sendgrid-test-key")
+    monkeypatch.setenv("CASEOPS_SENDGRID_SENDER_EMAIL", "security@example.com")
+    _set_runtime_env(monkeypatch, runtime_env)
+    monkeypatch.setattr(portal_mailer.httpx, "post", fake_post)
+
+    delivered, error = portal_mailer.send_portal_magic_link(
+        to_email="portal@example.com",
+        full_name="Portal User",
+        company_display_name="Example LLP",
+        token="one-time-secret",
+    )
+
+    assert delivered is True
+    assert error is None
+    assert len(calls) == 1
+
+
+def test_managed_environments_hide_request_and_invitation_tokens(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    boot = _bootstrap_workspace(
+        client,
+        slug="managed-portal-firm",
+        email="owner@managed-portal.example",
+    )
+    owner_token = str(boot["access_token"])
+    matter_id = _seed_matter(boot["company"]["id"], code="M-MANAGED-1")
+    local_invite = client.post(
+        "/api/admin/portal/invitations",
+        headers=auth_headers(owner_token),
+        json={
+            "email": "existing@managed-portal.example",
+            "full_name": "Existing Portal User",
+            "role": "client",
+            "matter_ids": [matter_id],
+        },
+    )
+    assert local_invite.status_code == 201, local_invite.text
+    assert local_invite.json()["debug_token"]
+
+    delivery_calls: list[str] = []
+
+    def fake_send(**kwargs):  # type: ignore[no-untyped-def]
+        delivery_calls.append(str(kwargs["to_email"]))
+        return True, None
+
+    monkeypatch.setattr(portal_routes, "send_portal_magic_link", fake_send)
+
+    for index, runtime_env in enumerate(
+        ("cloud", "staging", "custom-managed-runtime"),
+    ):
+        _set_runtime_env(monkeypatch, runtime_env)
+        client.cookies.clear()
+        request_link = client.post(
+            "/api/portal/auth/request-link",
+            json={
+                "company_slug": "managed-portal-firm",
+                "email": "existing@managed-portal.example",
+            },
+        )
+        assert request_link.status_code == 200, request_link.text
+        assert request_link.json()["debug_token"] is None
+
+        invitation = client.post(
+            "/api/admin/portal/invitations",
+            headers=auth_headers(owner_token),
+            json={
+                "email": f"managed-{index}@example.com",
+                "full_name": "Managed Portal User",
+                "role": "client",
+                "matter_ids": [matter_id],
+            },
+        )
+        assert invitation.status_code == 201, invitation.text
+        assert invitation.json()["debug_token"] is None
+
+    assert len(delivery_calls) == 6
+
+
+def test_invitation_rejects_foreign_tenant_matter_before_mutation(
+    client: TestClient,
+) -> None:
+    tenant_a = _bootstrap_workspace(
+        client,
+        slug="invite-scope-a",
+        email="owner@invite-scope-a.example",
+    )
+    tenant_b = _bootstrap_workspace(
+        client,
+        slug="invite-scope-b",
+        email="owner@invite-scope-b.example",
+    )
+    matter_a = _seed_matter(tenant_a["company"]["id"], code="M-SCOPE-A")
+    matter_b = _seed_matter(tenant_b["company"]["id"], code="M-SCOPE-B")
+    invite_email = "foreign-scope@example.com"
+
+    response = client.post(
+        "/api/admin/portal/invitations",
+        headers=auth_headers(str(tenant_a["access_token"])),
+        json={
+            "email": invite_email,
+            "full_name": "Foreign Scope",
+            "role": "client",
+            "matter_ids": [matter_a, matter_b],
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Matter not found."
+    Session = get_session_factory()
+    with Session() as session:
+        assert session.query(PortalUser).filter(PortalUser.email == invite_email).first() is None
+
+
+def test_reinvite_deduplicates_matters_and_tightens_grant_scope(
+    client: TestClient,
+) -> None:
+    boot = _bootstrap_workspace(
+        client,
+        slug="reinvite-scope",
+        email="owner@reinvite-scope.example",
+    )
+    token = str(boot["access_token"])
+    matter_id = _seed_matter(boot["company"]["id"], code="M-REINVITE-1")
+    payload = {
+        "email": "outside-counsel@reinvite.example",
+        "full_name": "Outside Counsel",
+        "role": "outside_counsel",
+        "matter_ids": [matter_id],
+        "can_upload": True,
+        "can_invoice": True,
+        "can_reply": True,
+    }
+    first = client.post(
+        "/api/admin/portal/invitations",
+        headers=auth_headers(token),
+        json=payload,
+    )
+    assert first.status_code == 201, first.text
+
+    payload.update(
+        matter_ids=[matter_id, matter_id],
+        can_upload=False,
+        can_invoice=False,
+        can_reply=False,
+    )
+    second = client.post(
+        "/api/admin/portal/invitations",
+        headers=auth_headers(token),
+        json=payload,
+    )
+    assert second.status_code == 201, second.text
+    grants = second.json()["grants"]
+    assert len(grants) == 1
+    assert grants[0]["scope_json"] == {
+        "can_upload": False,
+        "can_invoice": False,
+        "can_reply": False,
+    }
+
+    Session = get_session_factory()
+    with Session() as session:
+        rows = session.query(MatterPortalGrant).filter(
+            MatterPortalGrant.portal_user_id == second.json()["portal_user"]["id"],
+            MatterPortalGrant.matter_id == matter_id,
+        ).all()
+        assert len(rows) == 1
+        assert rows[0].scope_json == grants[0]["scope_json"]
+
+
+def test_magic_link_consumption_uses_an_atomic_conditional_claim() -> None:
+    source = inspect.getsource(portal_auth.verify_magic_link)
+    assert "update(PortalMagicLink)" in source
+    assert "PortalMagicLink.consumed_at.is_(None)" in source
+    assert "PortalMagicLink.expires_at > now" in source
+    assert "claim_result.rowcount != 1" in source
 
 
 # ----- silence pyflakes for the imported PortalUser symbol ------

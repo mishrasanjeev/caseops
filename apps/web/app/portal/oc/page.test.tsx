@@ -64,7 +64,7 @@ describe("PortalOcLandingPage", () => {
           practice_area: "commercial",
           forum_level: "high_court",
           court_name: "Bombay High Court",
-          next_hearing_on: null,
+          next_hearing_on: "2026-05-30",
         },
       ],
     });
@@ -76,6 +76,7 @@ describe("PortalOcLandingPage", () => {
       expect(screen.getByTestId("portal-oc-matter-m-1")).toBeInTheDocument(),
     );
     expect(screen.getByText(/Contract dispute/)).toBeInTheDocument();
+    expect(screen.getByText(/Next hearing/)).toHaveTextContent(/30/);
   });
 
   it("renders an empty state when no matters are assigned", async () => {
