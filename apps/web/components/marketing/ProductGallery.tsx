@@ -81,7 +81,7 @@ function CockpitMock() {
         </div>
 
         <div className="mt-5 flex gap-1 border-b border-[var(--color-line)] text-sm">
-          {["Overview", "Documents", "Compliance", "Hearings", "Cause list", "Billing"].map(
+          {["Overview", "Timeline", "Tasks & Deadlines", "Documents", "Notices", "Hearings"].map(
             (tab, i) => (
               <div
                 key={tab}
@@ -102,7 +102,7 @@ function CockpitMock() {
           {[
             { label: "Parties", v: "2 applicants · 3 respondents", sub: "Counsel assigned" },
             { label: "Documents", v: "41", sub: "38 indexed · 3 pending OCR" },
-            { label: "Compliance", v: "4", sub: "review required · 1 draft deadline" },
+            { label: "Notices", v: "4", sub: "1 reply due · 1 overdue" },
           ].map((s) => (
             <div
               key={s.label}
@@ -130,7 +130,7 @@ function CockpitMock() {
             </li>
             <li className="flex gap-2">
               <span className="font-mono text-[var(--color-mute-2)]">11:02</span>
-              Compliance extraction created <em className="not-italic font-semibold">3 review items</em>
+              R. Iyer logged a received notice with a <em className="not-italic font-semibold">reply deadline</em>
             </li>
             <li className="flex gap-2">
               <span className="font-mono text-[var(--color-mute-2)]">14:31</span>
@@ -335,7 +335,7 @@ const surfaces: Surface[] = [
     tab: "Matter cockpit",
     headline: "Every matter as one system of record.",
     blurb:
-      "Parties, stage, documents, compliance, hearings, cause lists, billing and audit - in one workspace, always in sync.",
+      "Parties, timeline, tasks, documents, notices, drafts, hearings, intelligence, communications, billing and audit - in one workspace, always in sync.",
     render: CockpitMock,
   },
   {
@@ -435,7 +435,7 @@ export function ProductGallery() {
                     <span className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
                   </div>
                   <div className="ml-3 flex-1 rounded-md bg-[var(--color-bg-2)] px-3 py-1 text-left text-xs text-[var(--color-ink-2)]">
-                    caseops.ai / app / {current.id === "cockpit" ? "matters / arbitral-award-challenge" : current.id === "drafting" ? "matters / arbitral-award-challenge / drafts / v3" : "cause-list / 22-apr-2026"}
+                    caseops.ai / app / {current.id === "cockpit" ? "matters / arbitral-award-challenge" : current.id === "drafting" ? "matters / arbitral-award-challenge / drafts / v3" : "cause-list"}
                   </div>
                 </div>
                 {current.render()}

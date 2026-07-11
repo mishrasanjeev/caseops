@@ -9,7 +9,7 @@ import { siteConfig } from "@/lib/site";
 export const metadata: Metadata = {
   title: "User guide",
   description:
-    "The CaseOps user guide. How to onboard a team, open and work a matter, use tracked case refresh, review court-order compliance, generate cause lists, draft with citations, run hearings, manage contracts and invoices, and use recommendations safely.",
+    "The current CaseOps user guide: daily priorities, intake and conflict clearance, matters, notices and reply deadlines, communications, tracked case refresh, compliance review, drafting, hearings, contracts, outside counsel, billing, and safe source-backed intelligence.",
   alternates: { canonical: "/guide" },
   openGraph: {
     type: "article",
@@ -23,9 +23,13 @@ export const metadata: Metadata = {
 const sections: { id: string; title: string }[] = [
   { id: "getting-started", title: "Getting started" },
   { id: "status-labels", title: "Product status labels" },
+  { id: "daily-operations", title: "Today, calendar and portfolio" },
   { id: "workspace", title: "Workspace and roles" },
+  { id: "intake-conflicts", title: "Intake, clients and conflict clearance" },
   { id: "matters", title: "Opening and running a matter" },
   { id: "documents", title: "Documents and indexing" },
+  { id: "notices", title: "Notices and reply deadlines" },
+  { id: "communications", title: "Communications and review queues" },
   { id: "drafting", title: "Drafting with citations" },
   { id: "hearings", title: "Hearing preparation" },
   { id: "case-tracking", title: "Case tracking refresh" },
@@ -33,13 +37,13 @@ const sections: { id: string; title: string }[] = [
   { id: "cause-list", title: "Date-wise cause lists" },
   { id: "litigation-intelligence", title: "Litigation Intelligence" },
   { id: "bench-strategy", title: "Bench-aware appeal drafting" },
-  { id: "statutes", title: "Statutes (BNSS / BNS / CrPC / IPC / Constitution / NI Act)" },
+  { id: "statutes", title: "Statutes and sections" },
   { id: "research", title: "Research and authorities" },
   { id: "contracts", title: "Contracts and playbooks" },
   { id: "recommendations", title: "Recommendations" },
   { id: "outside-counsel", title: "Outside counsel and spend" },
   { id: "billing", title: "Matter billing and invoices" },
-  { id: "admin", title: "Admin, audit and ethical walls" },
+  { id: "admin", title: "Admin, audit and access controls" },
   { id: "security", title: "Security and data boundaries" },
   { id: "troubleshooting", title: "Troubleshooting" },
   { id: "glossary", title: "Glossary" },
@@ -66,14 +70,6 @@ function Section({
   );
 }
 
-function Kbd({ children }: { children: React.ReactNode }) {
-  return (
-    <kbd className="inline-flex items-center rounded border border-[var(--color-line)] bg-[var(--color-bg-2)] px-1.5 py-0.5 font-mono text-[11.5px] font-medium text-[var(--color-ink-2)]">
-      {children}
-    </kbd>
-  );
-}
-
 function Callout({
   tone = "neutral",
   title,
@@ -94,7 +90,7 @@ function Callout({
       className={`mt-4 rounded-lg border ${toneCls} p-4 text-[14px] leading-relaxed`}
       role="note"
     >
-      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-mute-2)]">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-ink-2)]">
         {title}
       </div>
       <div className="mt-1 text-[var(--color-ink-2)]">{children}</div>
@@ -129,28 +125,28 @@ export default function GuidePage() {
         <header className="border-b border-[var(--color-line)] bg-[var(--color-bg-2)] pb-14 pt-16 md:pb-16 md:pt-20">
           <Container>
             <span className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--color-brand-600)]">
-              User guide · v2 · 2026
+              User guide · v3 · 2026
             </span>
             <h1 className="mt-3 max-w-4xl font-display text-4xl font-normal leading-[1.1] tracking-tight text-[var(--color-ink)] md:text-[3.25rem]">
               How to run your practice on CaseOps.
             </h1>
             <p className="mt-5 max-w-2xl text-[17px] leading-relaxed text-[var(--color-mute)]">
               A linear, end-to-end read for partners, associates, general counsel and legal
-              ops. Twenty-one sections. Read front to back the first time; return for the
+              ops. Twenty-six sections. Read front to back the first time; return for the
               section that matches the task in front of you after that.
             </p>
             <div className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm text-[var(--color-ink-2)]">
               <span>
-                <span className="font-mono text-[var(--color-mute-2)]">Audience</span>{" "}
+                <span className="font-mono text-[var(--color-ink-2)]">Audience</span>{" "}
                 Litigation partners · GCs · legal ops · solos
               </span>
               <span>
-                <span className="font-mono text-[var(--color-mute-2)]">Reading time</span>{" "}
-                ~40 min
+                <span className="font-mono text-[var(--color-ink-2)]">Reading time</span>{" "}
+                ~50 min
               </span>
               <span>
-                <span className="font-mono text-[var(--color-mute-2)]">Updated</span>{" "}
-                13 June 2026
+                <span className="font-mono text-[var(--color-ink-2)]">Updated</span>{" "}
+                11 July 2026
               </span>
             </div>
           </Container>
@@ -205,11 +201,10 @@ export default function GuidePage() {
                 <Section id="getting-started" title="1 · Getting started">
                   <p>
                     CaseOps is a workspace for running a legal practice end to end — matters,
-                    documents, drafting, hearings, contracts, outside counsel, billing, and
-                    the audit trail that ties them together. You land on the <strong>home
-                    dashboard</strong> after sign in; everything else is one keystroke away
-                    from the command bar (<Kbd>⌘</Kbd> <Kbd>K</Kbd> or <Kbd>Ctrl</Kbd>{" "}
-                    <Kbd>K</Kbd>).
+                    documents, notices, drafting, hearings, contracts, outside counsel,
+                    billing, and the audit trail that ties them together. After sign in,
+                    use the left navigation to open the Home dashboard, Today queue, matters,
+                    research, or the workspace administration surfaces your role permits.
                   </p>
                   <Steps
                     items={[
@@ -217,7 +212,7 @@ export default function GuidePage() {
                         <strong>Create a workspace.</strong> Visit{" "}
                         <a className="underline" href="/sign-in">/sign-in</a>, pick{" "}
                         <em>New workspace</em>, and enter your firm or company name. You
-                        become the first admin.
+                        become the workspace Owner.
                       </>,
                       <>
                         <strong>Recover access.</strong> Use{" "}
@@ -229,17 +224,29 @@ export default function GuidePage() {
                         whether a workspace or email exists.
                       </>,
                       <>
-                        <strong>Invite colleagues.</strong> From <em>Admin → Members</em>,
-                        send invitations with a role — Partner, Associate, General Counsel,
-                        Legal Ops or Reviewer.
+                        <strong>Add colleagues.</strong> Open{" "}
+                        <a className="underline" href="/app/admin/employees">
+                          Admin → Employees
+                        </a>{" "}
+                        and assign an Owner-managed built-in or custom role. The available
+                        actions remain capability-gated by the API.
                       </>,
                       <>
                         <strong>Verify the brand.</strong> Add your firm logo and a default
                         contact email so draft dispatches and invoices carry them.
                       </>,
                       <>
-                        <strong>Open your first matter.</strong> Skip to section 3 if you are
-                        ready, or continue through sections 2 and 3 together for context.
+                        <strong>Secure your account.</strong> Open{" "}
+                        <a className="underline" href="/account/security">
+                          Account security
+                        </a>{" "}
+                        to enrol MFA, save recovery codes, and complete recent MFA step-up
+                        before protected actions when policy requires it.
+                      </>,
+                      <>
+                        <strong>Open your first matter.</strong> Continue through daily
+                        operations, roles, and conflict clearance before opening an active
+                        file.
                       </>,
                     ]}
                   />
@@ -251,7 +258,7 @@ export default function GuidePage() {
                   </Callout>
                 </Section>
 
-                <Section id="status-labels" title="Product status labels">
+                <Section id="status-labels" title="2 · Product status labels">
                   <p>
                     Public CaseOps claims use six labels. <strong>Live</strong> means the
                     capability is available in the product. <strong>Review-first</strong>{" "}
@@ -274,55 +281,133 @@ export default function GuidePage() {
                   </Callout>
                 </Section>
 
-                <Section id="workspace" title="2 · Workspace and roles">
+                <Section id="daily-operations" title="3 · Today, calendar and portfolio">
+                  <p>
+                    Start routine work at <a className="underline" href="/app/today">Today</a>.
+                    It brings together hearings and deadlines in the next seven days, overdue
+                    or due-soon tasks, drafts pending review, and overdue invoices across the
+                    matters you can see.
+                  </p>
+                  <ul className="mt-3 space-y-2 text-[15px]">
+                    <li>
+                      <strong>Act from the source.</strong> Each Today item links back to its
+                      matter, hearing, draft, or billing surface. Today is a prioritised feed;
+                      the underlying list remains the source of truth.
+                    </li>
+                    <li>
+                      <strong>Know when a stream is capped.</strong> A note appears when a
+                      stream reaches its server-side limit. Open the relevant list view to see
+                      the complete set.
+                    </li>
+                    <li>
+                      <strong>Use Calendar for date work.</strong>{" "}
+                      <a className="underline" href="/app/calendar">Calendar</a> combines
+                      visible hearings, tasks, and matter deadlines. Provider sync conflicts
+                      stay reviewable rather than overwriting manually protected dates.
+                    </li>
+                    <li>
+                      <strong>Use Portfolio for the roll-up.</strong>{" "}
+                      <a className="underline" href="/app/portfolio">Portfolio</a> groups
+                      matters by lifecycle status, forum, and practice area and calls out work
+                      that needs attention.
+                    </li>
+                  </ul>
+                </Section>
+
+                <Section id="workspace" title="4 · Workspace and roles">
                   <p>
                     Every workspace is an isolated tenant. Data never crosses tenant
                     boundaries — the query layer, storage layer and audit trail all filter
                     by tenant id. Users inside a workspace see what their role permits, and
-                    matter-level ethical walls can further restrict access below that.
+                    matter-level access restrictions can further narrow visibility.
                   </p>
                   <h3 className="mt-6 font-display text-lg text-[var(--color-ink)]">
                     Roles at a glance
                   </h3>
                   <ul className="mt-3 space-y-2 text-[15px]">
                     <li>
-                      <strong>Admin.</strong> Full access. Manages members, teams, billing
-                      settings, AI policy and audit exports.
+                      <strong>Owner.</strong> Workspace owner with the broadest built-in
+                      access, including ownership-sensitive employee administration.
                     </li>
                     <li>
-                      <strong>Partner.</strong> Owns matters; approves drafts; signs off
-                      recommendations; sees team-wide portfolios.
+                      <strong>Admin.</strong> Manages employees, roles, teams, workspace
+                      settings, provider operations, billing configuration, and audit tools
+                      according to assigned capabilities.
                     </li>
                     <li>
-                      <strong>Associate.</strong> Opens and works matters; produces drafts;
-                      compiles hearing packs; requests approvals.
+                      <strong>Partner.</strong> Runs matters and can receive approval and
+                      conflict-resolution capabilities without becoming a workspace owner.
                     </li>
                     <li>
-                      <strong>General Counsel.</strong> Portfolio view; intake routing;
-                      contract and obligation oversight; outside-counsel spend.
+                      <strong>Member.</strong> The standard fee-earner or legal-team role for
+                      day-to-day matter work.
                     </li>
                     <li>
-                      <strong>Legal Ops.</strong> Intake, SLAs, reports; no draft
-                      approvals.
+                      <strong>Paralegal.</strong> A narrower operational role for permitted
+                      matter, document, task, and hearing work.
                     </li>
                     <li>
-                      <strong>Reviewer (outside).</strong> Scoped, time-bound access to a
-                      specific matter; read-only by default.
+                      <strong>Viewer.</strong> Read-oriented access where the capability grid
+                      permits it. Custom roles can be configured from Admin → Roles.
                     </li>
                   </ul>
-                  <Callout tone="warn" title="Ethical walls">
-                    Opposing parties or conflicted matters use a matter-level wall. Users
-                    outside the wall cannot see the matter exists, even at admin level. The
-                    wall overrides role access — it does not weaken it.
+                  <Callout tone="warn" title="Roles do not replace matter access">
+                    The API is the source of truth for every capability. Owners and admins
+                    can review an employee&apos;s matter access from Admin → Employees. The
+                    dedicated ethical-walls admin UI is still status-gated and must not be
+                    treated as a live self-service surface.
                   </Callout>
                 </Section>
 
-                <Section id="matters" title="3 · Opening and running a matter">
+                <Section id="intake-conflicts" title="5 · Intake, clients and conflict clearance">
+                  <p>
+                    Use <a className="underline" href="/app/intake">Intake</a> for inbound
+                    business requests before they become matters. Users with the relevant
+                    capabilities can submit, triage, assign, update, reject, complete, or
+                    promote a request once its scope is clear.
+                  </p>
+                  <Steps
+                    items={[
+                      <>
+                        Capture the request, requester, business context, priority, target
+                        date, and proposed matter code where known.
+                      </>,
+                      <>
+                        Triage through <em>New</em>, <em>Triaging</em>, and{" "}
+                        <em>In progress</em>; reject or complete requests with a recorded
+                        reason when appropriate.
+                      </>,
+                      <>
+                        Promote an approved request to a matter. Client records live in{" "}
+                        <a className="underline" href="/app/clients">Clients</a> for users
+                        with client capabilities.
+                      </>,
+                      <>
+                        On the matter Overview, run <strong>Conflict check</strong> against
+                        workspace clients, matters, and contacts, including the opposing and
+                        related parties entered for the scan.
+                      </>,
+                      <>
+                        A partner or admin reviews candidate overlaps and records{" "}
+                        <em>Cleared</em>, <em>Conflicted</em>, or an explicit{" "}
+                        <em>Waiver</em> with a note. Active status requires the latest check
+                        to be cleared or waived.
+                      </>,
+                    ]}
+                  />
+                  <Callout tone="warn" title="Do not treat similarity as clearance">
+                    Candidate matching is a review aid. A pending or conflicted result is not
+                    permission to proceed, and the activation gate intentionally blocks an
+                    unreviewed file.
+                  </Callout>
+                </Section>
+
+                <Section id="matters" title="6 · Opening and running a matter">
                   <p>
                     A new matter takes about a minute to open and is the anchor for every
-                    other workflow. The fields below are the minimum that make downstream
-                    drafting, hearing prep and recommendations useful — a thinner record
-                    will still work but will lean on fact placeholders.
+                    other workflow. Create the shell with enough identifying detail to
+                    support conflict review, then add parties, documents, dates, and work
+                    from the cockpit.
                   </p>
                   <Steps
                     items={[
@@ -332,22 +417,24 @@ export default function GuidePage() {
                         Kappa</em>).
                       </>,
                       <>
-                        Pick a <strong>type</strong> (litigation, arbitration, advisory,
-                        contract, regulatory) and a <strong>forum</strong> (court, tribunal,
-                        internal).
+                        Enter a unique <strong>matter code</strong>, practice area, client,
+                        and opposing party. These fields make lists and conflict review more
+                        useful.
                       </>,
                       <>
-                        Add <strong>parties</strong> on both sides. Each party row carries
-                        its counsel, contact and role.
+                        Add the case number or CNR when available and select the structured
+                        court/forum. If the catalog is unavailable, use the explicit
+                        uncatalogued fallback instead of saving stale forum metadata.
                       </>,
                       <>
-                        Set the <strong>stage</strong> (pleadings, evidence, arguments,
-                        post-judgment). Stages drive deadline templates and surface only
-                        relevant actions in the cockpit.
+                        Keep a pre-engagement file in <strong>Intake</strong> while its
+                        conflict check is pending. Moving to Active requires a cleared or
+                        waived latest check.
                       </>,
                       <>
-                        Attach the first batch of <strong>documents</strong>. See section 4
-                        for how indexing and OCR work.
+                        Add a concise description, create the matter, then attach the first
+                        batch of <strong>documents</strong>. See section 7 for indexing and
+                        OCR.
                       </>,
                     ]}
                   />
@@ -356,15 +443,27 @@ export default function GuidePage() {
                   </h3>
                   <p>
                     Opening any matter puts you in the cockpit. The top bar shows parties,
-                    forum and the next hearing. Tabs run across: <strong>Overview</strong>,{" "}
-                    <strong>Documents</strong>, <strong>Drafts</strong>,{" "}
-                    <strong>Hearings</strong>, <strong>Research</strong>,{" "}
-                    <strong>Contracts</strong>, <strong>Billing</strong>,{" "}
-                    <strong>Team</strong>, <strong>Audit</strong>. Everything that happens
-                    here is recorded in the audit trail with the user, timestamp and before
-                    and after state.
+                    forum and next hearing. The live tabs are <strong>Overview</strong>,{" "}
+                    <strong>Timeline</strong>, <strong>Tasks &amp; Deadlines</strong>,{" "}
+                    <strong>Documents</strong>, <strong>Notices</strong>,{" "}
+                    <strong>Drafts</strong>, <strong>Hearings</strong>,{" "}
+                    <strong>AI Recommendations</strong>, <strong>Strategy Plan</strong>,{" "}
+                    <strong>Predictive Intelligence</strong>,{" "}
+                    <strong>Intelligence Review</strong>, <strong>Knowledge Graph</strong>,{" "}
+                    <strong>Statutes</strong>, <strong>Communications</strong>,{" "}
+                    <strong>Billing</strong>, and <strong>Matter Audit</strong>.
                   </p>
                   <ul className="mt-3 space-y-2 text-[15px]">
+                    <li>
+                      <strong>Timeline.</strong> Review hearings, orders, documents,
+                      deadlines, tasks, and material activity together; filter by event type
+                      and sort oldest- or newest-first.
+                    </li>
+                    <li>
+                      <strong>Tasks &amp; Deadlines.</strong> Keep operational work and legal
+                      dates on the matter. Source-backed compliance and notice workflows may
+                      create linked deadlines; review their source before changing status.
+                    </li>
                     <li>
                       <strong>Status.</strong> Active matters use the normal lifecycle
                       states. A completed matter is marked <strong>Dispose</strong> in the
@@ -387,7 +486,7 @@ export default function GuidePage() {
                   </ul>
                 </Section>
 
-                <Section id="documents" title="4 · Documents and indexing">
+                <Section id="documents" title="7 · Documents and indexing">
                   <p>
                     Every document uploaded to a matter is queued for extraction and
                     embedding so you can search it semantically alongside the CaseOps public
@@ -410,9 +509,9 @@ export default function GuidePage() {
                       Re-indexing a document does not duplicate chunks.
                     </li>
                     <li>
-                      <strong>Private by matter.</strong> Documents inherit the matter's
-                      ethical wall. They are never pooled across tenants or used for
-                      cross-tenant training.
+                      <strong>Private by matter.</strong> Documents inherit the matter&apos;s
+                      server-side access restrictions. They are never pooled across tenants
+                      or used for cross-tenant training.
                     </li>
                   </ul>
                   <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
@@ -438,7 +537,110 @@ export default function GuidePage() {
                   </Callout>
                 </Section>
 
-                <Section id="drafting" title="5 · Drafting with citations">
+                <Section id="notices" title="8 · Notices and reply deadlines">
+                  <p>
+                    Every matter has a <strong>Notices</strong> tab for incoming and outgoing
+                    notice work. Notice files remain normal matter documents, while the
+                    notice view adds direction, operational metadata, reply status, related
+                    files, search, and deadline monitoring.
+                  </p>
+                  <Steps
+                    items={[
+                      <>
+                        Open a matter → <strong>Notices</strong> and choose{" "}
+                        <strong>Notice Received</strong> or <strong>Notice Sent</strong>.
+                      </>,
+                      <>
+                        For a received notice, record the subject, receipt date, type,
+                        authority/source, responsible department or SPOC, amount where
+                        relevant, reply-required flag, reply due date, and response plan.
+                      </>,
+                      <>
+                        Upload the primary file. If a reply is required and a due date is
+                        present, CaseOps creates or updates a linked matter deadline.
+                      </>,
+                      <>
+                        Use <strong>Reply document</strong> for the actual response and{" "}
+                        <strong>Add document</strong> for annexures, proof of service,
+                        acknowledgements, or other support. A reply upload marks the notice
+                        replied and completes its linked deadline.
+                      </>,
+                      <>
+                        If a reply was sent outside CaseOps, enter the reply date and use{" "}
+                        <strong>Mark reply sent</strong>; the document can be added later.
+                      </>,
+                    ]}
+                  />
+                  <ul className="mt-4 space-y-2 text-[15px]">
+                    <li>
+                      <strong>Dashboard.</strong> Pending, overdue, due-today, and due-this-week
+                      counters use primary received notices only.
+                    </li>
+                    <li>
+                      <strong>Filters.</strong> Search metadata and filter received notices by
+                      status, reply status, due range, authority, matter, or department.
+                    </li>
+                    <li>
+                      <strong>Permissions.</strong> Matter access controls visibility;
+                      <code>documents:upload</code> enables uploads and
+                      <code>documents:manage</code> exposes broader metadata management.
+                    </li>
+                  </ul>
+                  <Callout tone="warn" title="Current notice boundaries">
+                    Notices are matter-scoped; there is no global notice dashboard. Sent
+                    notices do not create reply deadlines, and reminder delivery depends on
+                    the configured notification infrastructure.
+                  </Callout>
+                </Section>
+
+                <Section id="communications" title="9 · Communications and review queues">
+                  <p>
+                    Use a matter&apos;s <strong>Communications</strong> tab to review platform
+                    messages, imported email, attachment references, internal notes, and
+                    client- or outside-counsel-visible updates in chronological order.
+                    Permitted users can log phone, meeting, note, SMS, or email activity and
+                    send a template email when an approved delivery provider is configured.
+                  </p>
+                  <ul className="mt-3 space-y-2 text-[15px]">
+                    <li>
+                      <strong>Mailbox.</strong>{" "}
+                      <a className="underline" href="/app/mailbox">Mailbox</a> is a Gmail and
+                      Outlook metadata review queue. Link safe metadata to a matter, request
+                      content import, or ignore a candidate. The queue does not import raw
+                      bodies or attachment bytes by default.
+                    </li>
+                    <li>
+                      <strong>Drive.</strong>{" "}
+                      <a className="underline" href="/app/drive">Drive</a> reviews Google
+                      Drive and OneDrive/SharePoint candidates. Link metadata, explicitly
+                      import a file through the document safety pipeline, retry failures, or
+                      ignore the candidate.
+                    </li>
+                    <li>
+                      <strong>Notification preferences.</strong>{" "}
+                      <a className="underline" href="/app/notification-preferences">
+                        Preferences
+                      </a>{" "}
+                      controls in-app, email, SMS, and WhatsApp choices. An external channel
+                      remains disabled unless its provider and delivery controls are ready.
+                    </li>
+                    <li>
+                      <strong>Client and outside-counsel portals.</strong> External users
+                      request a 30-minute one-time link at{" "}
+                      <a className="underline" href="/portal/sign-in">Portal sign in</a>.
+                      Clients see only explicitly granted matters. Outside counsel is routed
+                      to its assigned-matter portal for permitted work product, time, and
+                      invoice submission; cross-counsel visibility is off unless enabled.
+                    </li>
+                  </ul>
+                  <Callout tone="warn" title="Provider-gated imports and delivery">
+                    Connector sync, content import, and external messaging require the
+                    relevant credentials, consent, signing, and UAT evidence. A visible queue
+                    or preference does not mean an external provider is active.
+                  </Callout>
+                </Section>
+
+                <Section id="drafting" title="10 · Drafting with citations">
                   <p>
                     The Drafting Studio produces a first draft from the matter's own
                     record — parties, stage, documents, focus note — grounded in statutes
@@ -482,7 +684,7 @@ export default function GuidePage() {
                   </Callout>
                 </Section>
 
-                <Section id="hearings" title="6 · Hearing preparation">
+                <Section id="hearings" title="11 · Hearing preparation">
                   <p>
                     The Hearings tab shows manual hearings, tracked case updates, and
                     cause-list entries linked to the matter. Open the next hearing and
@@ -522,7 +724,7 @@ export default function GuidePage() {
                   </Callout>
                 </Section>
 
-                <Section id="case-tracking" title="7 · Case tracking refresh">
+                <Section id="case-tracking" title="12 · Case tracking refresh">
                   <p>
                     Case tracking is opt-in by default. A matter with a CNR or case number
                     is eligible, but the daily job refreshes only cases that a user has
@@ -555,7 +757,7 @@ export default function GuidePage() {
                   </ul>
                 </Section>
 
-                <Section id="compliance" title="8 · Court-order compliance review">
+                <Section id="compliance" title="13 · Court-order compliance review">
                   <p>
                     Court orders can produce compliance items, tasks, and deadlines, but the
                     default workflow is review-first. Deterministic proceeding extraction
@@ -593,7 +795,7 @@ export default function GuidePage() {
                   </ul>
                 </Section>
 
-                <Section id="cause-list" title="9 · Date-wise cause lists">
+                <Section id="cause-list" title="14 · Date-wise cause lists">
                   <p>
                     The cause-list workspace at <code>/app/cause-list</code> creates a
                     printable date-wise list from hearings, imported cause-list entries, or
@@ -602,9 +804,9 @@ export default function GuidePage() {
                   </p>
                   <ul className="mt-3 space-y-2 text-[15px]">
                     <li>
-                      <strong>Filters.</strong> Pick date or date range, court, lawyer or
-                      assignee, practice area, matter status, include/exclude disposed
-                      matters, source, and sort order.
+                      <strong>Filters.</strong> Pick date or date range, court, practice
+                      area, matter status, include/exclude disposed matters, source, and
+                      sort order. Sorting includes date, court, or lawyer.
                     </li>
                     <li>
                       <strong>Required columns.</strong> Serial number, file number, court
@@ -613,8 +815,9 @@ export default function GuidePage() {
                       <em>Not available</em> or a preview warning instead of a blank cell.
                     </li>
                     <li>
-                      <strong>Overrides.</strong> Users can apply manual or derived
-                      overrides before PDF generation where the matter record is incomplete.
+                      <strong>Fix source data first.</strong> The page has no per-row
+                      override editor. If preview data is incomplete, update the underlying
+                      matter, hearing, or imported cause-list entry and run the preview again.
                     </li>
                     <li>
                       <strong>PDF audit.</strong> Each download records filters, row count,
@@ -623,7 +826,7 @@ export default function GuidePage() {
                   </ul>
                 </Section>
 
-                <Section id="litigation-intelligence" title="10 · Litigation Intelligence">
+                <Section id="litigation-intelligence" title="15 · Litigation Intelligence">
                   <p>
                     Litigation Intelligence is the matter-level workspace for source-backed
                     preparation and review. It pulls together proceeding sheets, affidavits,
@@ -664,6 +867,13 @@ export default function GuidePage() {
                       materializes matter-scoped nodes and edges from source-backed LI records
                       with bounded snippets.
                     </li>
+                    <li>
+                      <strong>Strategy Plan.</strong> The matter strategy surface lays out
+                      current posture, primary and alternative routes, forum sequence,
+                      recommended draft pack, missing facts, risks, authorities, and a
+                      lawyer-review workflow. It remains decision support, not an automatic
+                      filing instruction.
+                    </li>
                   </ul>
                   <Callout tone="warn" title="Decision support, not legal advice">
                     These tools are preparation and review aids. They do not replace legal
@@ -673,7 +883,7 @@ export default function GuidePage() {
                   </Callout>
                 </Section>
 
-                <Section id="bench-strategy" title="11 · Bench-aware appeal drafting">
+                <Section id="bench-strategy" title="16 · Bench-aware appeal drafting">
                   <p>
                     When you generate an{" "}
                     <strong>appeal_memorandum</strong> draft for a matter that has
@@ -710,11 +920,13 @@ export default function GuidePage() {
                   </Callout>
                 </Section>
 
-                <Section id="statutes" title="12 · Statutes (BNSS, BNS, CrPC, IPC, NI Act, Constitution)">
+                <Section id="statutes" title="17 · Statutes and sections">
                   <p>
                     Visit <code>/app/statutes</code> to browse the structured
-                    catalog of central Indian Acts. v1 ships with 7 acts and 91
-                    sections, each with a source link to{" "}
+                    catalog of central Indian Acts. The committed catalog as of 11 July
+                    2026 contains 23 Acts and 3,393 sections, including the Constitution,
+                    BNSS, BNS, BSA, CrPC, IPC, CPC, major commercial and regulatory Acts,
+                    and source links to{" "}
                     <a
                       href="https://www.indiacode.nic.in"
                       target="_blank"
@@ -753,12 +965,11 @@ export default function GuidePage() {
                   </Callout>
                 </Section>
 
-                <Section id="research" title="13 · Research and authorities">
+                <Section id="research" title="18 · Research and authorities">
                   <p>
-                    The Research workspace (<Kbd>⌘</Kbd> <Kbd>K</Kbd> then type{" "}
-                    <em>research</em>, or visit <code>/app/research</code>) is the place to
-                    run open-ended queries against the public corpus without tying the
-                    query to a specific draft. It is a search tool, not a chatbot.
+                    Open <code>/app/research</code> from the left navigation to run
+                    open-ended queries against the public authority corpus without tying
+                    the query to a specific draft. It is a search tool, not a chatbot.
                   </p>
                   <ul className="mt-3 space-y-2 text-[15px]">
                     <li>
@@ -767,14 +978,15 @@ export default function GuidePage() {
                       under BNSS s.482</em>.
                     </li>
                     <li>
-                      <strong>Results.</strong> Judgments return with a short extract, court
-                      and date metadata, and a link to open the full PDF. Cosine
-                      distance is surfaced so you can judge strength at a glance.
+                      <strong>Results.</strong> Authority cards show the available title,
+                      citation, court/date metadata, extract, and a generic relevance score.
+                      The current result card does not promise a source-PDF link or expose
+                      raw cosine distance.
                     </li>
                     <li>
-                      <strong>Annotations.</strong> Flag or shortlist an authority for the
-                      current matter. Annotations are tenant-private and travel with the
-                      matter, not the user.
+                      <strong>Save.</strong> Saving a result creates a tenant-private entry
+                      in the workspace research notebook. It is not automatically attached
+                      to the matter currently open in another tab.
                     </li>
                   </ul>
                   <Callout title="Why some searches return no result">
@@ -785,12 +997,11 @@ export default function GuidePage() {
                   </Callout>
                 </Section>
 
-                <Section id="contracts" title="14 · Contracts and playbooks">
+                <Section id="contracts" title="19 · Contracts and playbooks">
                   <p>
-                    Contracts are a first-class matter type. You can open a matter that is a
-                    single contract review, or attach a contract to a litigation matter.
-                    The Contracts tab shows clause extractions, obligations, redlines and
-                    version lineage.
+                    Contracts live in the top-level <strong>Contracts</strong> workspace.
+                    A contract record can hold its document, extracted clauses, playbook
+                    comparison, obligations, and a parsed redline view.
                   </p>
                   <ul className="mt-3 space-y-2 text-[15px]">
                     <li>
@@ -807,13 +1018,14 @@ export default function GuidePage() {
                       dates and owners.
                     </li>
                     <li>
-                      <strong>Redlines.</strong> Track changes export cleanly to Word with
-                      a single summary of what changed and why.
+                      <strong>Redlines.</strong> Upload a DOCX with tracked changes to parse
+                      and review additions/deletions in CaseOps. The current surface does not
+                      export a newly tracked Word document or claim version lineage.
                     </li>
                   </ul>
                 </Section>
 
-                <Section id="recommendations" title="15 · Recommendations">
+                <Section id="recommendations" title="20 · Recommendations">
                   <p>
                     CaseOps produces explainable recommendations — forum choice, supporting
                     authorities, next best action — with rationale, assumptions, missing
@@ -845,31 +1057,34 @@ export default function GuidePage() {
                   </Callout>
                 </Section>
 
-                <Section id="outside-counsel" title="16 · Outside counsel and spend">
+                <Section id="outside-counsel" title="21 · Outside counsel and spend">
                   <p>
                     General Counsel teams run <strong>Outside counsel</strong> from the
-                    top-level nav. The directory carries rate cards, historical outcomes,
-                    speciality tags and conflict flags. A matter can brief one or many
-                    firms; spend and realisation roll up to the portfolio view.
+                    top-level navigation. The live directory records counsel and firm
+                    profiles, contacts, jurisdictions, practice areas, panel status, and
+                    notes. A matter can carry one or more counsel assignments.
                   </p>
                   <ul className="mt-3 space-y-2 text-[15px]">
                     <li>
-                      <strong>Brief.</strong> From a matter, pick a counsel; CaseOps issues
-                      a brief packet that respects the matter's ethical wall.
+                      <strong>Profiles.</strong> Add and maintain the panel identity,
+                      contact information, jurisdiction, and practice-area coverage used
+                      when selecting counsel.
                     </li>
                     <li>
-                      <strong>Budget.</strong> Assign a budget with alert thresholds.
-                      Invoices above the cap require a partner override.
+                      <strong>Assignments.</strong> From a matter&apos;s Outside Counsel
+                      surface, assign a panel record and record the fee arrangement, budget,
+                      scope, dates, and assignment status supported by the form.
                     </li>
                     <li>
-                      <strong>Realisation.</strong> The counsel dashboard shows billed,
-                      collected and aging, with the portfolio roll-up on the home
-                      dashboard.
+                      <strong>Spend and payment state.</strong> Record assignment-level
+                      spend and payment status where available. The current UI does not
+                      promise rate cards, outcome history, generated brief packets, budget
+                      alert enforcement, realization, or aging roll-ups.
                     </li>
                   </ul>
                 </Section>
 
-                <Section id="billing" title="17 · Matter billing and invoices">
+                <Section id="billing" title="22 · Matter billing and invoices">
                   <p>
                     Matter billing is separate from CaseOps SaaS subscription billing.
                     Tenant admins configure law-firm billing at
@@ -911,25 +1126,25 @@ export default function GuidePage() {
                   </ul>
                 </Section>
 
-                <Section id="admin" title="18 · Admin, audit and ethical walls">
+                <Section id="admin" title="23 · Admin, audit and access controls">
                   <p>
                     Admins run the workspace from <code>/app/admin</code>. The important
-                    subsections are <strong>Members</strong>, <strong>Teams</strong>,{" "}
-                    <strong>AI policy</strong>, <strong>Provider operations</strong>,{" "}
-                    <strong>Audit export</strong>, <strong>Ethical walls</strong>, and{" "}
+                    subsections are <strong>Employees</strong>, <strong>Roles</strong>,{" "}
+                    <strong>Teams</strong>, <strong>AI policy</strong>, provider and connector
+                    operations, <strong>Audit export</strong>, and{" "}
                     <strong>Matter billing</strong>. CaseOps SaaS subscription billing stays
-                    separate from GBA matter/client billing.
+                    separate from matter/client billing.
                   </p>
                   <ul className="mt-3 space-y-2 text-[15px]">
                     <li>
-                      <strong>Members.</strong> Invite, change role, deactivate. Deactivation
-                      revokes access immediately; the user's prior actions stay attributed
-                      in the audit log.
+                      <strong>Employees and roles.</strong> Add employees, assign built-in or
+                      custom roles, update employment state, and review per-employee matter
+                      access. Prior activity remains attributed after deactivation.
                     </li>
                     <li>
-                      <strong>Teams.</strong> Matter visibility can be scoped to a team.
-                      Useful for practice groups or conflict segregation short of a full
-                      ethical wall.
+                      <strong>Teams.</strong> Organize employees for practice and operational
+                      workflows; continue to enforce permissions and matter access through
+                      the server-side capability model.
                     </li>
                     <li>
                       <strong>AI policy.</strong> Cap the providers, models and context
@@ -950,31 +1165,34 @@ export default function GuidePage() {
                       <strong>Audit export.</strong> JSONL or CSV for any date range. Large
                       exports run as background jobs; download when complete.
                     </li>
-                    <li>
-                      <strong>Ethical walls.</strong> Add, edit, dissolve. Every change is
-                      itself an audited event.
-                    </li>
                   </ul>
+                  <Callout tone="warn" title="Status-gated admin surfaces">
+                    The dedicated ethical-walls UI is marked Coming soon on the Admin page.
+                    Do not promise self-service wall creation or dissolution until that
+                    surface and its production evidence are live.
+                  </Callout>
                 </Section>
 
-                <Section id="security" title="19 · Security and data boundaries">
+                <Section id="security" title="24 · Security and data boundaries">
                   <p>
                     Security is not a tab — it is the way every other tab is built. The
                     short version:
                   </p>
                   <ul className="mt-3 list-disc space-y-2 pl-6 text-[15px]">
                     <li>
-                      <strong>Tenant isolation</strong> at the query and storage layer,
-                      not only the application layer.
+                      <strong>Tenant-private data isolation</strong> at query and storage
+                      boundaries. Shared public authority records remain deliberately
+                      separate from tenant-owned records and embeddings.
                     </li>
                     <li>
-                      <strong>Matter-level ethical walls</strong> override role access. A
-                      partner outside a wall sees no traces of the walled matter.
+                      <strong>Matter access restrictions</strong> are enforced server-side
+                      in addition to the workspace role and capability grid.
                     </li>
                     <li>
-                      <strong>Audit on every sensitive action</strong> — create, read,
-                      update, delete, export, AI run, recommendation accept, payment state
-                      change.
+                      <strong>Audit on material and sensitive events</strong> — including
+                      administrative changes, exports, AI runs and review decisions,
+                      recommendation decisions, document activity, and payment state changes
+                      where implemented.
                     </li>
                     <li>
                       <strong>Provider and AI data minimisation.</strong> Tenant-facing
@@ -1012,7 +1230,7 @@ export default function GuidePage() {
                   </Callout>
                 </Section>
 
-                <Section id="troubleshooting" title="20 · Troubleshooting">
+                <Section id="troubleshooting" title="25 · Troubleshooting">
                   <h3 className="font-display text-lg text-[var(--color-ink)]">
                     A document won't index
                   </h3>
@@ -1036,18 +1254,17 @@ export default function GuidePage() {
                     Research returned 0 results
                   </h3>
                   <p>
-                    Two common causes. The query is too generic (<em>bail</em>) and the
-                    system refused to narrow arbitrarily — rewrite with the issue and the
-                    statute. Or the corpus does not cover that jurisdiction and year — the
-                    Home dashboard shows corpus coverage by court and year.
+                    The query may be too generic (<em>bail</em>) or the indexed corpus may
+                    not cover that jurisdiction and year. Rewrite with the issue, statute,
+                    forum, and date range rather than assuming the system will narrow it.
                   </p>
                   <h3 className="mt-6 font-display text-lg text-[var(--color-ink)]">
                     A colleague cannot see a matter I opened
                   </h3>
                   <p>
-                    Ethical wall or team scope. Open the matter, check{" "}
-                    <strong>Team</strong>, and either widen the team or dissolve the wall.
-                    Admins can do this; partners inside the wall can too.
+                    Ask an owner or admin to review the employee&apos;s built-in/custom role,
+                    capabilities, active status, and matter access under Admin → Employees.
+                    The dedicated ethical-walls UI is not yet a live self-service remedy.
                   </p>
                   <h3 className="mt-6 font-display text-lg text-[var(--color-ink)]">
                     A tracked case was skipped
@@ -1076,17 +1293,28 @@ export default function GuidePage() {
                     the audit trail for the matter and contact support with the item ID.
                   </p>
                   <h3 className="mt-6 font-display text-lg text-[var(--color-ink)]">
+                    A notice reply deadline is missing or still open
+                  </h3>
+                  <p>
+                    Confirm the record is a primary received notice, <em>Reply required</em>
+                    is enabled, and a reply due date is present. To complete the linked
+                    deadline, upload via <strong>Reply document</strong> or use{" "}
+                    <strong>Mark reply sent</strong>; a supporting document alone does not
+                    change reply status.
+                  </p>
+                  <h3 className="mt-6 font-display text-lg text-[var(--color-ink)]">
                     A cause-list PDF has missing fields
                   </h3>
                   <p>
                     The preview must show <em>Not available</em> or a warning for missing
                     serial number, file number, court, case number, title, judge, court
-                    number, item number, lawyers appearing, or hearing date. Use overrides
-                    before downloading the PDF when the record is incomplete.
+                    number, item number, lawyers appearing, or hearing date. Correct the
+                    underlying matter, hearing, or imported cause-list record, then preview
+                    again before downloading; the page has no per-row override editor.
                   </p>
                 </Section>
 
-                <Section id="glossary" title="21 · Glossary">
+                <Section id="glossary" title="26 · Glossary">
                   <dl className="mt-4 space-y-4 text-[15px]">
                     <div>
                       <dt className="font-semibold text-[var(--color-ink)]">Matter graph</dt>
@@ -1111,10 +1339,11 @@ export default function GuidePage() {
                       </dd>
                     </div>
                     <div>
-                      <dt className="font-semibold text-[var(--color-ink)]">Ethical wall</dt>
+                      <dt className="font-semibold text-[var(--color-ink)]">Matter access restriction</dt>
                       <dd className="text-[var(--color-ink-2)]">
-                        A matter-level access control that restricts a matter to named
-                        users, overriding broader role permissions.
+                        Server-enforced visibility below the workspace role/capability layer.
+                        Employee matter access is live; the dedicated ethical-walls admin UI
+                        remains status-gated.
                       </dd>
                     </div>
                     <div>

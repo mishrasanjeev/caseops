@@ -8,14 +8,14 @@ const flows = [
     bullets: [
       "Tracked/bookmarked cases refresh in the 4-6 PM IST window with blocked/skipped reasons visible to admins.",
       "Court orders create source-backed, review-required compliance items before tasks or deadlines become active.",
-      "Date-wise cause-list PDFs show missing-field warnings, overrides, filters, row count, checksum, and download audit.",
+      "Received notices create a reply queue and linked deadlines; replies and supporting files stay attached to the matter.",
     ],
   },
   {
     persona: "General Counsel",
     headline: "Control the portfolio, not the paperwork.",
     bullets: [
-      "Structured intake for every business request with SLAs.",
+      "Structured intake routes business requests into matters, with a conflict-clearance gate before Active status.",
       "Contract repository with clause extraction and obligation tracking.",
       "Matter intelligence review, outside-counsel spend, aging, realization, and audited provider operations in one dashboard.",
     ],
@@ -24,7 +24,7 @@ const flows = [
     persona: "Solo advocate",
     headline: "Operate like a 20-lawyer practice.",
     bullets: [
-      "One app for matters, drafts, hearings, litigation intelligence, cause lists, billing, and payment adjustments.",
+      "One app for matters, notices, drafts, hearings, litigation intelligence, cause lists, billing, and payment adjustments.",
       "India-ready matter invoices with firm/client GST fields, SAC/HSN, GST split, TDS recording, amount paid, and outstanding.",
       "Dispose completed matters without losing audit history or next-hearing provenance.",
     ],

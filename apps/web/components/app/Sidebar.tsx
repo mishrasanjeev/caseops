@@ -3,6 +3,7 @@
 import {
   Bookmark,
   BookOpenCheck,
+  BookOpenText,
   Briefcase,
   CalendarDays,
   ChevronsRight,
@@ -75,6 +76,7 @@ const NAV: NavItem[] = [
     icon: ListTodo,
     section: "work",
   },
+  { href: "/guide", label: "User guide", icon: BookOpenText, section: "work" },
   { href: "/app/research", label: "Research", icon: LibraryBig, section: "intel" },
   { href: "/app/drafting", label: "Drafting", icon: FileSignature, section: "intel" },
   {

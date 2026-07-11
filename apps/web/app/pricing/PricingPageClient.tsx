@@ -272,8 +272,9 @@ export function PricingPageClient() {
               Start with a trial or assisted plan.
             </h2>
             <p className="mt-3 text-sm leading-relaxed text-[var(--color-mute)]">
-              Self-serve checkout is available inside the workspace for tenant
-              admins. GC and enterprise plans can use manual invoices.
+              Plan activation is assisted while production payment collection
+              remains disabled until UAT evidence and founder go/no-go are complete.
+              Approved GC and enterprise plans can use manual invoices.
             </p>
           </div>
           <form className="grid gap-4" onSubmit={submitDemoRequest}>

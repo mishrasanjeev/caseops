@@ -2,9 +2,10 @@
 
 **The matter-native legal operating system for Indian law firms and corporate legal teams.**
 
-CaseOps unifies matter management, legal research, AI-assisted drafting, hearing preparation,
-tracked case refresh, court-order compliance review, date-wise cause-list PDFs, contract
-workflows, outside-counsel management, and India-ready matter billing into one
+CaseOps unifies legal intake and conflict clearance, matter management, notice and reply-deadline
+tracking, legal research, AI-assisted drafting, hearing preparation, tracked case refresh,
+court-order compliance review, date-wise cause-list PDFs, contract workflows,
+outside-counsel management, and India-ready matter billing into one
 citation-grounded workspace - with tenant isolation, review-first AI assistance, founder-only
 production gates, and audit by default. Autonomous scoped-agent execution is readiness-only
 until the agent trust plane is activated.
@@ -27,6 +28,7 @@ until the agent trust plane is activated.
 | Document worker | Production (Cloud Run Job) | `apps/api/src/caseops_api/workers/` |
 | Hearing reminders worker | Production (Cloud Run Job + Scheduler `*/5 * * * *` Asia/Kolkata, SendGrid sender `hearings@caseops.ai`) | `apps/api/src/caseops_api/scripts/send_hearing_reminders.py` |
 | GBA Law Office operations pack: Dispose matter status, tracked-only case refresh, review-first compliance extraction, next-hearing provenance, cause-list PDF generation, India-ready matter billing/invoice PDFs | Implemented (2026-06-07) | [`docs/GBA_LAW_OFFICE_USER_GUIDE_2026-06-07.md`](./docs/GBA_LAW_OFFICE_USER_GUIDE_2026-06-07.md), [`docs/PRD_GBA_LAW_OFFICE_REQUIREMENTS_2026-06-06.md`](./docs/PRD_GBA_LAW_OFFICE_REQUIREMENTS_2026-06-06.md), `/guide` |
+| Matter notices and pre-engagement conflict clearance: received/sent notice tracking, reply documents and linked deadlines, conflict candidate review, and Active-status gate | Implemented (2026-07-08) | [`docs/NOTICE_MODULE_IMPLEMENTATION_AND_USER_GUIDE_2026-07-07.md`](./docs/NOTICE_MODULE_IMPLEMENTATION_AND_USER_GUIDE_2026-07-07.md), [`docs/BUG_REOPEN_LEARNINGS_2026-07-07_CONFLICT_CHECKS.md`](./docs/BUG_REOPEN_LEARNINGS_2026-07-07_CONFLICT_CHECKS.md), `/guide` |
 | Production readiness, Pine Labs UAT evidence, secret-rotation proof, margin/profit gates, MFA login challenge, enterprise readiness scaffolding | Founder-only / disabled until UAT / planned as labelled | `/app/platform-admin/paid-production`, `/api/platform-admin/production-readiness`, `/api/admin/enterprise-readiness` |
 | Mobile responsive | Hamburger nav + responsive forms verified on Pixel-5 viewport | Playwright `app-mobile` project |
 | PRD | Stable | [`docs/PRD.md`](./docs/PRD.md) |
@@ -42,6 +44,7 @@ until the agent trust plane is activated.
 
 - Deployed user guide: `/guide` on the web app.
 - Detailed GBA Law Office guide: [`docs/GBA_LAW_OFFICE_USER_GUIDE_2026-06-07.md`](./docs/GBA_LAW_OFFICE_USER_GUIDE_2026-06-07.md).
+- Notice workflow guide: [`docs/NOTICE_MODULE_IMPLEMENTATION_AND_USER_GUIDE_2026-07-07.md`](./docs/NOTICE_MODULE_IMPLEMENTATION_AND_USER_GUIDE_2026-07-07.md).
 - Source PRD: [`docs/PRD_GBA_LAW_OFFICE_REQUIREMENTS_2026-06-06.md`](./docs/PRD_GBA_LAW_OFFICE_REQUIREMENTS_2026-06-06.md).
 - Machine-readable public summaries: `/llms.txt` and `/llms-full.txt`.
 
@@ -62,6 +65,20 @@ Public product claims use these labels: `live`, `review-first`, `provider-gated`
   `planned` or readiness-only until UAT, approval, and audit evidence are complete.
 - Platform profit, provider cost, secret rotation, and production signoff surfaces are
   `founder-only` and must not be exposed to tenants.
+
+## Documentation changelog - 2026-07-11
+
+- Refreshed the public landing page and `/guide` for Today, intake, clients, conflict
+  clearance, current matter-cockpit navigation, notices and reply deadlines, communications,
+  mailbox/Drive review queues, notification preferences, portals, and the current statute
+  catalog.
+- Corrected stale or unsupported guide claims for roles, keyboard navigation, cause-list
+  overrides, research result fields, contract redline export, outside-counsel analytics, and
+  the status-gated ethical-walls admin UI.
+- Made `/pricing` the canonical rate card, synchronized visible FAQ content with FAQ JSON-LD,
+  repaired cross-page marketing links, and added all public pages to the sitemap.
+- Added a read-only Playwright public-content gate that can run against both a local production
+  build and the deployed site without submitting forms or mutating application data.
 
 ## Documentation changelog - 2026-06-13
 

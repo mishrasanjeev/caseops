@@ -10,7 +10,7 @@ export function Footer() {
   return (
     <footer className="border-t border-[var(--color-line)] bg-white py-14">
       <Container>
-        <div className="grid gap-10 md:grid-cols-[1.25fr_repeat(4,1fr)]">
+        <div className="grid gap-10 md:grid-cols-[1.25fr_repeat(3,1fr)]">
           <div>
             <Logo />
             <p className="mt-4 max-w-xs text-sm leading-relaxed text-[var(--color-mute)]">

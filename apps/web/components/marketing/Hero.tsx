@@ -6,9 +6,9 @@ import { Container } from "@/components/ui/Container";
 
 const proofPoints = [
   "Citation-grounded AI",
+  "Conflict-gated intake",
+  "Notice reply tracking",
   "Review-first court-order compliance",
-  "Tracked case refresh window",
-  "Multi-tenant by design",
   "India-ready matter billing",
 ];
 
@@ -33,10 +33,10 @@ export function Hero() {
         </h1>
 
         <p className="mt-6 max-w-2xl text-pretty text-lg leading-relaxed text-[var(--color-mute)] md:text-xl">
-          Run every matter, tracked case update, court-order compliance item, cause-list PDF,
-          drafting pass, hearing, contract, invoice, and review queue from a single
-          matter-graph workspace. Grounded in statutes, orders, affidavits, judgments, and
-          your own precedents - never guesses.
+          Run intake and conflict clearance, every matter and notice, tracked case update,
+          court-order compliance item, cause-list PDF, drafting pass, hearing, contract,
+          invoice, and review queue from one matter-graph workspace. Grounded in statutes,
+          orders, affidavits, judgments, and your own precedents - never guesses.
         </p>
 
         <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row">
