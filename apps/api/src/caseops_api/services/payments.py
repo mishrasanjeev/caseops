@@ -147,6 +147,11 @@ def create_invoice_payment_link(
         matter_id=matter_id,
         invoice_id=invoice_id,
     )
+    # Never log request path values. Snapshot the resolved identifiers before a
+    # provider failure can roll back and expire the ORM instances.
+    canonical_company_id = context.company.id
+    canonical_matter_id = invoice.matter_id
+    canonical_invoice_id = invoice.id
     if invoice.status == "void":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -204,9 +209,9 @@ def create_invoice_payment_link(
         logger.error(
             "Pine Labs payment link creation failed "
             "company_id=%s matter_id=%s invoice_id=%s provider_error_type=%s",
-            context.company.id,
-            matter_id,
-            invoice_id,
+            canonical_company_id,
+            canonical_matter_id,
+            canonical_invoice_id,
             type(exc).__name__,
         )
         raise HTTPException(
@@ -282,6 +287,10 @@ def sync_invoice_payment_link(
         matter_id=matter_id,
         invoice_id=invoice_id,
     )
+    # Use only the tenant-scoped identifiers resolved from the database in logs.
+    canonical_company_id = context.company.id
+    canonical_matter_id = invoice.matter_id
+    canonical_invoice_id = invoice.id
     latest_attempt = invoice.payment_attempts[0] if invoice.payment_attempts else None
     if not latest_attempt or not latest_attempt.provider_order_id:
         # BUG-016 Hari 2026-04-21: the raw 404 was confusing when the
@@ -314,9 +323,9 @@ def sync_invoice_payment_link(
             "Pine Labs payment status sync failed "
             "company_id=%s matter_id=%s invoice_id=%s "
             "payment_attempt_id=%s provider_error_type=%s",
-            context.company.id,
-            matter_id,
-            invoice_id,
+            canonical_company_id,
+            canonical_matter_id,
+            canonical_invoice_id,
             latest_attempt.id,
             type(exc).__name__,
         )
