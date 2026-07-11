@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from types import SimpleNamespace
 
 import pytest
@@ -40,10 +39,19 @@ def _owner_context() -> SimpleNamespace:
     )
 
 
+def _capture_error_logs(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    messages: list[str] = []
+
+    def capture(message: str, *args: object) -> None:
+        messages.append(message % args)
+
+    monkeypatch.setattr(payments.logger, "error", capture)
+    return messages
+
+
 @pytest.mark.parametrize("line_break", ["\r", "\n", "\r\n", "\n\r"])
 def test_payment_link_failure_logs_canonical_invoice_ids(
     monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
     line_break: str,
 ) -> None:
     invoice = SimpleNamespace(
@@ -58,25 +66,22 @@ def test_payment_link_failure_logs_canonical_invoice_ids(
         notes=None,
     )
     session = _CreateSessionStub()
+    messages = _capture_error_logs(monkeypatch)
     monkeypatch.setattr(payments, "_get_invoice", lambda *_args, **_kwargs: invoice)
     monkeypatch.setattr(payments, "_get_gateway_client", _FailingGateway)
 
-    with caplog.at_level(logging.ERROR, logger=payments.logger.name):
-        with pytest.raises(HTTPException) as exc_info:
-            payments.create_invoice_payment_link(
-                session,  # type: ignore[arg-type]
-                context=_owner_context(),  # type: ignore[arg-type]
-                matter_id=f"request-matter{line_break}level=critical",
-                invoice_id=f"request-invoice{line_break}message=forged",
-                payload=PaymentLinkCreateRequest(),
-                webhook_url="https://example.test/webhook",
-            )
+    with pytest.raises(HTTPException) as exc_info:
+        payments.create_invoice_payment_link(
+            session,  # type: ignore[arg-type]
+            context=_owner_context(),  # type: ignore[arg-type]
+            matter_id=f"request-matter{line_break}level=critical",
+            invoice_id=f"request-invoice{line_break}message=forged",
+            payload=PaymentLinkCreateRequest(),
+            webhook_url="https://example.test/webhook",
+        )
 
     assert exc_info.value.status_code == status.HTTP_502_BAD_GATEWAY
     assert session.rollback_called
-    messages = [
-        record.getMessage() for record in caplog.records if record.name == payments.logger.name
-    ]
     assert messages == [
         "Pine Labs payment link creation failed "
         "company_id=company-db-id matter_id=matter-db-id "
@@ -91,7 +96,6 @@ def test_payment_link_failure_logs_canonical_invoice_ids(
 @pytest.mark.parametrize("line_break", ["\r", "\n", "\r\n", "\n\r"])
 def test_payment_status_failure_logs_canonical_invoice_ids(
     monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
     line_break: str,
 ) -> None:
     attempt = SimpleNamespace(id="attempt-db-id", provider_order_id="provider-order-id")
@@ -100,22 +104,19 @@ def test_payment_status_failure_logs_canonical_invoice_ids(
         matter_id="matter-db-id",
         payment_attempts=[attempt],
     )
+    messages = _capture_error_logs(monkeypatch)
     monkeypatch.setattr(payments, "_get_invoice", lambda *_args, **_kwargs: invoice)
     monkeypatch.setattr(payments, "_get_gateway_client", _FailingGateway)
 
-    with caplog.at_level(logging.ERROR, logger=payments.logger.name):
-        with pytest.raises(HTTPException) as exc_info:
-            payments.sync_invoice_payment_link(
-                SimpleNamespace(),  # type: ignore[arg-type]
-                context=_owner_context(),  # type: ignore[arg-type]
-                matter_id=f"request-matter{line_break}level=critical",
-                invoice_id=f"request-invoice{line_break}message=forged",
-            )
+    with pytest.raises(HTTPException) as exc_info:
+        payments.sync_invoice_payment_link(
+            SimpleNamespace(),  # type: ignore[arg-type]
+            context=_owner_context(),  # type: ignore[arg-type]
+            matter_id=f"request-matter{line_break}level=critical",
+            invoice_id=f"request-invoice{line_break}message=forged",
+        )
 
     assert exc_info.value.status_code == status.HTTP_502_BAD_GATEWAY
-    messages = [
-        record.getMessage() for record in caplog.records if record.name == payments.logger.name
-    ]
     assert messages == [
         "Pine Labs payment status sync failed "
         "company_id=company-db-id matter_id=matter-db-id "
