@@ -146,7 +146,7 @@ def _find_working_bash() -> str:
             continue
         if result.returncode == 0 and "GNU bash" in result.stdout:
             return candidate
-    pytest.skip("GNU bash is unavailable")
+    return pytest.skip("GNU bash is unavailable")
 
 
 def _bash_path(path: Path) -> str:

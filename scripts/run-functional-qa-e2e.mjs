@@ -1,19 +1,39 @@
 import fs from "node:fs";
 import http from "node:http";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
 
+import {
+  createNodeCliCommand,
+  createPlaywrightCommand,
+  DEFAULT_PLAYWRIGHT_CONFIG,
+  validateTcpPort,
+} from "./functional-qa-process.mjs";
+
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const webRoot = path.join(repoRoot, "apps", "web");
 const runtimeRoot = path.join(repoRoot, ".e2e");
-const apiPort = process.env.CASEOPS_E2E_API_PORT ?? "8000";
-const webPort = process.env.CASEOPS_E2E_WEB_PORT ?? "3100";
+const apiPort = validateTcpPort(
+  process.env.CASEOPS_E2E_API_PORT ?? "8000",
+  "CASEOPS_E2E_API_PORT",
+);
+const webPort = validateTcpPort(
+  process.env.CASEOPS_E2E_WEB_PORT ?? "3100",
+  "CASEOPS_E2E_WEB_PORT",
+);
 const apiBaseUrl = `http://127.0.0.1:${apiPort}`;
 const webBaseUrl = `http://127.0.0.1:${webPort}`;
 const databasePath = path.join(repoRoot, "caseops-e2e.db").replace(/\\/g, "/");
 const documentStoragePath = path.join(runtimeRoot, "documents");
 const documentCachePath = path.join(runtimeRoot, "document-cache");
 const uploadsRoot = path.join(runtimeRoot, "uploads");
+const require = createRequire(import.meta.url);
+const nextCliPath = require.resolve("next/dist/bin/next", { paths: [webRoot] });
+const playwrightCliPath = require.resolve("@playwright/test/cli", {
+  paths: [repoRoot],
+});
 
 const e2eEnv = {
   ...process.env,
@@ -55,13 +75,6 @@ function apiPythonCommand() {
   };
 }
 
-function shellCommand(command, args) {
-  if (process.platform !== "win32") {
-    return { command, args };
-  }
-  return { command: "cmd.exe", args: ["/d", "/s", "/c", command, ...args] };
-}
-
 function prepareRuntime() {
   fs.rmSync(runtimeRoot, { force: true, recursive: true });
   for (const suffix of ["", "-shm", "-wal"]) {
@@ -96,15 +109,16 @@ function buildWeb() {
   if (process.env.CASEOPS_E2E_SKIP_WEB_BUILD === "1") {
     return;
   }
-  const npm = shellCommand("npm", ["run", "build"]);
-  const result = spawnSync(npm.command, npm.args, {
-    cwd: path.join(repoRoot, "apps", "web"),
+  const next = createNodeCliCommand(nextCliPath, ["build"]);
+  const result = spawnSync(next.command, next.args, {
+    cwd: webRoot,
     env: {
       ...e2eEnv,
       NEXT_PUBLIC_API_BASE_URL: apiBaseUrl,
       NEXT_PUBLIC_SITE_URL: "https://caseops.ai",
       NEXT_PUBLIC_APP_URL: "https://caseops.ai/app",
     },
+    shell: false,
     stdio: "inherit",
   });
   if (result.status !== 0) {
@@ -117,6 +131,7 @@ function spawnLogged(name, command, args, options) {
   const child = spawn(command, args, {
     ...options,
     detached: process.platform !== "win32",
+    shell: false,
     stdio: ["ignore", "pipe", "pipe"],
   });
   child.stdout.on("data", (chunk) => process.stdout.write(`[${name}] ${chunk}`));
@@ -146,8 +161,7 @@ function startApi() {
 }
 
 function startWeb() {
-  const npx = shellCommand("npx", [
-    "next",
+  const next = createNodeCliCommand(nextCliPath, [
     "start",
     "--hostname",
     "127.0.0.1",
@@ -156,10 +170,10 @@ function startWeb() {
   ]);
   return spawnLogged(
     "web",
-    npx.command,
-    npx.args,
+    next.command,
+    next.args,
     {
-      cwd: path.join(repoRoot, "apps", "web"),
+      cwd: webRoot,
       env: {
         ...e2eEnv,
         NEXT_PUBLIC_API_BASE_URL: apiBaseUrl,
@@ -199,21 +213,19 @@ async function waitForUrl(url, timeoutMs) {
 
 function runPlaywright() {
   const playwrightConfig =
-    process.env.CASEOPS_E2E_PLAYWRIGHT_CONFIG ?? "playwright.functional-qa.config.ts";
-  const npx = shellCommand("npx", [
-    "playwright",
-    "test",
-    "--config",
+    process.env.CASEOPS_E2E_PLAYWRIGHT_CONFIG ?? DEFAULT_PLAYWRIGHT_CONFIG;
+  const playwright = createPlaywrightCommand(
+    playwrightCliPath,
     playwrightConfig,
-    "--reporter=line",
-    ...process.argv.slice(2),
-  ]);
+    process.argv.slice(2),
+  );
   const result = spawnSync(
-    npx.command,
-    npx.args,
+    playwright.command,
+    playwright.args,
     {
       cwd: repoRoot,
       env: e2eEnv,
+      shell: false,
       stdio: "inherit",
     },
   );

@@ -279,6 +279,9 @@ jobs:
 
       - run: npm ci
 
+      - name: Functional QA runner security tests
+        run: npm run test:functional-qa-runner
+
       - name: Web typecheck
         run: npm run typecheck:web
 
