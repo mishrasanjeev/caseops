@@ -9,6 +9,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
   // disallowed in robots.ts, so listing them here would contradict.
   return [
     { url: `${base}/`, lastModified: now, changeFrequency: "weekly", priority: 1 },
+    { url: `${base}/guide`, lastModified: now, changeFrequency: "weekly", priority: 0.9 },
+    { url: `${base}/pricing`, lastModified: now, changeFrequency: "weekly", priority: 0.8 },
+    { url: `${base}/law-firms`, lastModified: now, changeFrequency: "monthly", priority: 0.8 },
+    { url: `${base}/general-counsels`, lastModified: now, changeFrequency: "monthly", priority: 0.8 },
+    { url: `${base}/solo-lawyers`, lastModified: now, changeFrequency: "monthly", priority: 0.8 },
     { url: `${base}/llms.txt`, lastModified: now, changeFrequency: "weekly", priority: 0.5 },
     { url: `${base}/llms-full.txt`, lastModified: now, changeFrequency: "weekly", priority: 0.5 },
   ];

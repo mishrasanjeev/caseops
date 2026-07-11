@@ -17,7 +17,8 @@
     "test:web": "npm run test --workspace @caseops/web",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
-    "test:e2e:marketing": "playwright test --config playwright.marketing.config.ts",
+    "test:e2e:marketing": "node scripts/run-public-content-e2e.mjs playwright.marketing.config.ts",
+    "test:e2e:public-content": "node scripts/run-public-content-e2e.mjs",
     "test:e2e:app": "playwright test --config playwright.app.config.ts",
     "test:e2e:functional-qa": "node scripts/run-functional-qa-e2e.mjs",
     "test:functional-qa-runner": "node --test scripts/functional-qa-process.test.mjs"

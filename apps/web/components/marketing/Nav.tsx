@@ -13,6 +13,8 @@ import { Logo } from "./Logo";
 export function Nav() {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const marketingHref = (href: string) =>
+    href.startsWith("#") ? `/${href}` : href;
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -44,7 +46,7 @@ export function Nav() {
           {siteConfig.nav.primary.map((item) => (
             <a
               key={item.href}
-              href={item.href}
+              href={marketingHref(item.href)}
               className="text-sm font-medium text-[var(--color-ink-2)] transition-colors hover:text-[var(--color-ink)]"
             >
               {item.label}
@@ -56,7 +58,7 @@ export function Nav() {
           <Button href="/sign-in" variant="ghost" size="sm">
             Sign in
           </Button>
-          <Button href="#cta" variant="primary" size="sm">
+          <Button href="/#cta" variant="primary" size="sm">
             Request a demo
           </Button>
         </div>
@@ -82,7 +84,7 @@ export function Nav() {
             {siteConfig.nav.primary.map((item) => (
               <a
                 key={item.href}
-                href={item.href}
+                href={marketingHref(item.href)}
                 onClick={() => setOpen(false)}
                 className="rounded-md px-3 py-2 text-sm font-medium text-[var(--color-ink-2)] hover:bg-[var(--color-bg-2)]"
               >
@@ -93,7 +95,7 @@ export function Nav() {
               <Button href="/sign-in" variant="outline" size="md">
                 Sign in
               </Button>
-              <Button href="#cta" variant="primary" size="md">
+              <Button href="/#cta" variant="primary" size="md">
                 Request a demo
               </Button>
             </div>

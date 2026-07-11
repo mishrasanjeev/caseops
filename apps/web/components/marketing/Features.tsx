@@ -5,7 +5,9 @@ import {
   Gavel,
   IndianRupee,
   ListTodo,
+  MailCheck,
   Scale,
+  ShieldAlert,
   ShieldCheck,
   Sparkles,
   Users,
@@ -18,7 +20,17 @@ const features = [
   {
     icon: Briefcase,
     title: "Matter Cockpit",
-    body: "A single workspace per matter - parties, stage, documents, hearings, drafts, billing, Dispose status, next-hearing provenance, and audit.",
+    body: "A single workspace per matter - timeline, tasks, documents, notices, drafts, hearings, intelligence, communications, billing, next-hearing provenance, and audit.",
+  },
+  {
+    icon: ShieldAlert,
+    title: "Intake & Conflict Checks",
+    body: "Triage inbound legal requests, promote them into matters, scan clients, matters, and contacts for overlap, and require partner or admin clearance before Active status.",
+  },
+  {
+    icon: MailCheck,
+    title: "Notices & Response Deadlines",
+    body: "Track received and sent notices, reply ownership and due dates, related reply or supporting documents, overdue queues, and linked matter deadlines.",
   },
   {
     icon: BookOpenText,
@@ -33,7 +45,7 @@ const features = [
   {
     icon: Gavel,
     title: "Hearing Prep & Cause Lists",
-    body: "Compile hearing packs and generate date-wise cause-list PDFs with missing-field warnings, overrides, printable court tables, and download audit.",
+    body: "Compile hearing packs and generate date-wise cause-list PDFs with missing-field warnings, printable court tables, and download audit.",
   },
   {
     icon: Sparkles,
@@ -43,7 +55,7 @@ const features = [
   {
     icon: Scale,
     title: "Contract & Playbooks",
-    body: "Clause extraction, playbook comparison, obligation tracking, and redlines with tracked version lineage.",
+    body: "Clause extraction, playbook comparison, obligation tracking, and parsed review of DOCX tracked changes.",
   },
   {
     icon: Users,
@@ -63,7 +75,7 @@ const features = [
   {
     icon: ShieldCheck,
     title: "Trust Plane",
-    body: "Tenant isolation, matter-level ethical walls, audit on every action, and agent grant readiness. Autonomous scoped-agent execution is planned, not live.",
+    body: "Tenant isolation, matter-level access controls, audit on material actions, and agent grant readiness. Autonomous scoped-agent execution is planned, not live.",
   },
 ] as const;
 

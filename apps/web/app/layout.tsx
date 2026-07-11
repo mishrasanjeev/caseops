@@ -52,23 +52,26 @@ const softwareJsonLd = {
   operatingSystem: "Web",
   description: siteConfig.description,
   offers: {
-    "@type": "Offer",
-    price: "0",
+    "@type": "AggregateOffer",
     priceCurrency: "INR",
-    availability: "https://schema.org/PreOrder",
-    description: "Early access pilot",
+    offerCount: 3,
+    url: `${siteConfig.url}/pricing`,
+    availability: "https://schema.org/LimitedAvailability",
+    description: "Versioned plan catalog; assisted activation while production payments remain UAT-gated.",
   },
   featureList: [
     "Matter management",
+    "Pre-engagement conflict checks",
+    "Received and sent notice tracking",
     "AI-assisted legal drafting with citation grounding",
     "Hearing pack generation",
     "Authority research over Supreme Court + High Court corpus",
     "Contract clause and obligation extraction",
     "Outside counsel management and spend tracking",
     "Invoice generation and time tracking",
-    "Tenant isolation and ethical walls for multi-party matters",
+    "Tenant isolation and matter-level access controls",
   ],
-  inLanguage: ["en", "hi"],
+  inLanguage: "en",
 };
 
 // WebSite + SearchAction — tells Google + LLM crawlers the site has

@@ -7,7 +7,7 @@ const pillars = [
   {
     icon: ShieldCheck,
     title: "Tenant isolation by default",
-    body: "Every row, document, vector, and audit event is scoped by tenant. Matter-level ethical walls override broad role access.",
+    body: "Every tenant-owned row, document, vector, and audit event is isolated from other tenants. Shared public authorities remain separate from tenant-private material, and matter access restrictions override broad role access.",
   },
   {
     icon: KeyRound,

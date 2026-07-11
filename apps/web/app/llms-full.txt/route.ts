@@ -31,10 +31,10 @@ Every public claim is classified as one of: live, review-first, provider-gated, 
 ### 1. Matter management
 
 - Intake queue to matter creation
-- Matter cockpit with Overview, Documents, Drafts, Compliance, Hearings, Cause list, Research, Billing, Team, and Audit
+- Matter cockpit with Overview, Timeline, Tasks & Deadlines, Documents, Notices, Drafts, Hearings, AI Recommendations, Strategy Plan, Predictive Intelligence, Intelligence Review, Knowledge Graph, Statutes, Communications, Billing, and Matter Audit
 - Lifecycle terminology uses **Dispose** in the UI and **disposed** in API responses for completed matters
 - Legacy **closed** input is normalized to **disposed** during the compatibility window
-- Matter-level ACLs and ethical walls enforce tenant isolation on route/query/write boundaries
+- Server-side roles, capabilities, and matter access restrictions enforce tenant-private access on route/query/write boundaries
 - Next-hearing provenance records source, source reference, actor, old date, new date, reason, timestamp, manual lock, and conflict suggestions
 
 ### 1a. Sign-in and password reset
@@ -45,6 +45,24 @@ Every public claim is classified as one of: live, review-first, provider-gated, 
 - Reset links point to /account/reset-password?token=..., are single-use, expire after 60 minutes, and never contain or email a raw password
 - Reset completion stores the new session through the existing auth response/cookie path and revokes older sessions for that membership
 - Local/test debug tokens are for automated verification only and are not rendered in browser UI
+
+### 1b. Intake and conflict clearance
+
+- Intake requests move through triage and can be promoted into matters when scope is clear
+- Conflict checks compare the proposed opposing and related parties against workspace clients, matters, and contacts
+- Candidate similarity is a review aid, not automatic clearance
+- A partner or admin records cleared, conflicted, or an explicit waiver with a note
+- Matter Active status requires the latest conflict check to be cleared or waived
+
+### 1c. Notices and reply deadlines
+
+- Route: /app/matters/{matter_id}/notices
+- Primary notices are separated into received and sent tabs and remain visible as matter documents
+- Received notices can track reply-required state, reply due date, ownership/department, reply plan, amounts, and related reply/supporting files
+- A received notice with reply required and a due date creates or updates a linked matter deadline
+- Uploading a reply document or recording "Mark reply sent" completes the linked deadline; supporting files do not
+- Dashboard counters show pending, overdue, due-today, and due-this-week received replies
+- The notice dashboard is matter-scoped; sent notices do not create reply deadlines
 
 ### 2. Tracked case refresh
 
@@ -87,10 +105,10 @@ Every public claim is classified as one of: live, review-first, provider-gated, 
 
 - Route: /app/cause-list
 - API: /api/cause-lists preview and PDF download
-- Filters: date or date range, court, lawyer/assignee, practice area, matter status, include/exclude disposed matters, source, and sort
+- Filters: date or date range, court, practice area, matter status, include/exclude disposed matters, source, and sort
 - Required output: serial number, file number, court name, case number, case title, judge name, court number, item number, lawyers appearing, hearing date, and missing-field warnings
 - Missing values display "Not available" or a professional warning in preview
-- Manual or derived overrides are available before PDF generation where appropriate
+- Incomplete rows are corrected in the underlying matter, hearing, or imported cause-list record; the page does not expose a per-row override editor
 - PDF is A4 portrait, black-and-white printable, with firm header/logo where configured, generated timestamp, filters, repeated table header, pagination, and page number footer
 - Downloads are audited with filters, row count, actor, timestamp, checksum, and file name
 
@@ -99,7 +117,7 @@ Every public claim is classified as one of: live, review-first, provider-gated, 
 - Drafting supports bail applications, quashing petitions, civil reviews, arbitration submissions, replies, and escalation drafts
 - Generation rules: no invented facts, no invented authorities, BNS/BNSS disambiguation, and placeholders for missing matter data
 - Drafts carry inline citations, grounding panels, reviewer findings, version history, and approval audit
-- Research uses indexed Indian authorities, structured extraction, reranking, tenant-private annotations, and explicit no-result behavior when grounding is insufficient
+- Research uses indexed shared public Indian authorities, structured extraction, reranking, tenant-private workspace notebook saves, and explicit no-result behavior when grounding is insufficient
 
 ### 7. Hearing prep and litigation intelligence
 
@@ -109,8 +127,8 @@ Every public claim is classified as one of: live, review-first, provider-gated, 
 
 ### 8. Contracts and outside counsel
 
-- Contracts support clause extraction, playbook comparison, obligation tracking, redline diff extraction, and version lineage
-- Outside counsel supports panel profiles, jurisdiction/practice-area fit, budget thresholds, spend logging, matter briefs, and realization rollups
+- Contracts support clause extraction, playbook comparison, obligation tracking, and parsing/viewing DOCX tracked changes; the current UI does not export a tracked Word redline or claim version lineage
+- Outside counsel supports panel profiles, contacts, jurisdiction/practice-area coverage, matter assignments, fee/budget fields, spend logging, and payment state where supported; it does not promise generated brief packets, alert enforcement, outcome history, realization, or aging rollups
 
 ### 9. Matter billing and invoice PDFs
 
@@ -135,7 +153,7 @@ Every public claim is classified as one of: live, review-first, provider-gated, 
 - No autonomous scoped-agent tool execution; agent grants, execution audit, and revocation are readiness scaffolding until activated
 - No external email/SMS/WhatsApp notifications unless provider delivery is explicitly configured, template/DLT approvals are complete where applicable, and UAT evidence is recorded
 - Durable in-app notification intents are the safe default
-- Strict tenant isolation applies to every route, query, and write
+- Strict tenant isolation applies to tenant-private routes, queries, writes, documents, and embeddings; shared public authority records remain separate from tenant-owned data
 - Auditability is preserved for user, admin, and system actions
 - Raw provider payloads, raw prompts, raw LLM responses, provider tokens, internal costs, and unauthorized tenant-private data are not exposed to tenant-facing users
 - Customer matter data is not used for cross-tenant training by default

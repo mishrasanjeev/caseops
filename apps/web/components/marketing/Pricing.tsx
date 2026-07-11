@@ -8,8 +8,8 @@ import { cn } from "@/lib/cn";
 const tiers = [
   {
     name: "Solo",
-    priceLabel: "Early access",
-    priceNote: "per lawyer / month",
+    priceLabel: "Current catalog",
+    priceNote: "versioned rates and GST treatment",
     description: "For solo practitioners who want one tool that actually runs the practice.",
     features: [
       "Matter, hearing, and drafting workspace",
@@ -17,22 +17,22 @@ const tiers = [
       "Matter invoice PDFs and payment adjustments",
       "E-mail + knowledge base support",
     ],
-    cta: { label: "Join waitlist", href: "#cta" },
+    cta: { label: "View rate card", href: "/pricing" },
     highlighted: false,
   },
   {
     name: "Firm",
-    priceLabel: "Pilot pricing",
-    priceNote: "per seat / month",
+    priceLabel: "Current catalog",
+    priceNote: "versioned rates and usage controls",
     description: "For mid-sized and litigation-heavy Indian law firms.",
     features: [
       "Everything in Solo, for the whole firm",
       "Compliance review, recommendations, authorities, and playbooks",
-      "Matter-level ethical walls and audit",
+      "Matter-level access controls and audit",
       "Admin matter billing profiles and rate cards",
       "Priority support with a named owner",
     ],
-    cta: { label: "Book a demo", href: "#cta" },
+    cta: { label: "View rate card", href: "/pricing" },
     highlighted: true,
   },
   {
@@ -46,7 +46,7 @@ const tiers = [
       "Provider-gated adapters and connectors after UAT",
       "Quarterly evaluation and tuning evidence",
     ],
-    cta: { label: "Talk to sales", href: "#cta" },
+    cta: { label: "View enterprise plans", href: "/pricing" },
     highlighted: false,
   },
 ] as const;
@@ -57,8 +57,8 @@ export function Pricing() {
       <Container>
         <SectionHeader
           eyebrow="Pricing"
-          title="Transparent tiers, honest about the stage."
-          description="CaseOps is in early access. Pricing firms up after we learn how teams get the most value — lock in pilot terms now."
+          title="One versioned rate card."
+          description="The pricing page is the canonical plan catalog for solos, firms, and legal teams. Activation remains assisted while production payments complete UAT and founder signoff."
         />
 
         <div className="mt-14 grid gap-6 md:grid-cols-3">

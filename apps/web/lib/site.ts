@@ -2,7 +2,7 @@ export const siteConfig = {
   name: "CaseOps",
   tagline: "The matter-native legal operating system.",
   description:
-    "CaseOps unifies matter management, legal research, drafting, tracked case refresh, court-order compliance review, cause-list PDFs, contracts, outside counsel, and India-ready matter billing into one citation-grounded workspace for Indian law firms and corporate legal teams.",
+    "CaseOps unifies legal intake and conflict clearance, matter management, notice and reply-deadline tracking, research, drafting, hearings, court-order compliance review, cause-list PDFs, contracts, outside counsel, and India-ready matter billing in one citation-grounded workspace for Indian legal teams.",
   url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://caseops.ai",
   appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "https://caseops.ai/app",
   keywords: [
@@ -39,7 +39,7 @@ export const siteConfig = {
   nav: {
     primary: [
       { label: "Product", href: "#product" },
-      { label: "Pricing", href: "#pricing" },
+      { label: "Pricing", href: "/pricing" },
       { label: "Law firms", href: "/law-firms" },
       { label: "General counsels", href: "/general-counsels" },
       { label: "Solo lawyers", href: "/solo-lawyers" },
@@ -47,15 +47,14 @@ export const siteConfig = {
     ],
     footer: {
       Product: [
-        { label: "Matter Cockpit", href: "#product" },
-        { label: "Research", href: "#product" },
-        { label: "Drafting Studio", href: "#product" },
-        { label: "Hearing Prep", href: "#product" },
-        { label: "Case tracking", href: "#product" },
-        { label: "Cause lists", href: "#product" },
-        { label: "Contracts", href: "#product" },
-        { label: "Matter billing", href: "#product" },
-        { label: "Recommendations", href: "#product" },
+        { label: "Matter Cockpit", href: "/#product" },
+        { label: "Notices", href: "/#product" },
+        { label: "Conflict checks", href: "/#product" },
+        { label: "Research", href: "/#product" },
+        { label: "Drafting Studio", href: "/#product" },
+        { label: "Hearing Prep", href: "/#product" },
+        { label: "Case tracking", href: "/#product" },
+        { label: "Matter billing", href: "/#product" },
       ],
       Company: [
         { label: "For law firms", href: "/law-firms" },
@@ -65,14 +64,9 @@ export const siteConfig = {
         { label: "Contact", href: "mailto:mishra.sanjeev@gmail.com" },
       ],
       Trust: [
-        { label: "Security", href: "#security" },
-        { label: "Multi-tenancy", href: "#security" },
-        { label: "AI governance", href: "#security" },
-      ],
-      Legal: [
-        { label: "Privacy", href: "#" },
-        { label: "Terms", href: "#" },
-        { label: "DPA", href: "#" },
+        { label: "Security", href: "/#security" },
+        { label: "Multi-tenancy", href: "/#security" },
+        { label: "AI governance", href: "/#security" },
       ],
     },
   },
